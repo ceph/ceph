@@ -48,24 +48,25 @@ namespace librbd {
   class WatchCtx;
 
   struct SnapInfo {
-    librados::snap_t id;
+    snap_t id;
     uint64_t size;
-    SnapInfo(librados::snap_t _id, uint64_t _size) : id(_id), size(_size) {};
+    SnapInfo(snap_t _id, uint64_t _size) : id(_id), size(_size) {};
   };
 
   struct ImageCtx {
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
-    vector<librados::snap_t> snaps;
+    vector<snap_t> snaps;
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     std::string name;
+    std::string snapname;
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
     bool needs_refresh;
     Mutex lock;
 
-    ImageCtx(std::string imgname, IoCtx& p) : snapid(0),
+    ImageCtx(std::string imgname, IoCtx& p) : snapid(CEPH_NOSNAP),
 					      name(imgname),
 					      needs_refresh(true),
 					      lock("librbd::ImageCtx::lock") {
@@ -80,14 +81,29 @@ namespace librbd {
     {
       std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end()) {
+	snapname = snap_name;
 	snapid = it->second.id;
 	return 0;
       }
-      snapid = 0;
+      snap_unset();
       return -ENOENT;
     }
 
-    void add_snap(std::string snap_name, librados::snap_t id, uint64_t size)
+    void snap_unset()
+    {
+      snapid = CEPH_NOSNAP;
+      snapname = "";
+    }
+
+    snap_t get_snapid(std::string snap_name)
+    {
+      std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
+      if (it != snaps_by_name.end())
+	return it->second.id;
+      return CEPH_NOSNAP;
+    }
+
+    void add_snap(std::string snap_name, snap_t id, uint64_t size)
     {
       snapc.snaps.push_back(id);
       snaps.push_back(id);
@@ -233,7 +249,7 @@ namespace librbd {
   int write_header(IoCtx& io_ctx, string& md_oid, bufferlist& header);
   int tmap_set(IoCtx& io_ctx, string& imgname);
   int tmap_rm(IoCtx& io_ctx, string& imgname);
-  int rollback_image(ImageCtx *ictx, const char *snap_name);
+  int rollback_image(ImageCtx *ictx, uint64_t snapid);
   void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
   string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
   uint64_t get_max_block(rbd_obj_header_ondisk *header);
@@ -501,14 +517,15 @@ int tmap_rm(IoCtx& io_ctx, string& imgname)
   return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int rollback_image(ImageCtx *ictx, const char *snap_name)
+int rollback_image(ImageCtx *ictx, uint64_t snapid)
 {
   uint64_t numseg = get_max_block(&(ictx->header));
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(&(ictx->header), i);
-    r = ictx->data_ctx.rollback(oid, snap_name);
+    r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
+    dout(10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -542,17 +559,16 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
-  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  r = add_snap(ictx, snap_name);
   if (r < 0)
     return r;
 
-  ictx->data_ctx.snap_set_read(CEPH_NOSNAP);
-  r = add_snap(ictx, snap_name);
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
+
   notify_change(ictx->md_ctx, md_oid, NULL, ictx);
-  return r;
+
+  return 0;
 }
 
 int snap_remove(ImageCtx *ictx, const char *snap_name)
@@ -563,27 +579,24 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
+  snap_t snapid = ictx->get_snapid(snap_name);
+  if (snapid == CEPH_NOSNAP)
+    return -ENOENT;
+
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
-
-  r = ictx->snap_set(snap_name);
-  if (r < 0)
-    return r;
-
-  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-  if (r < 0)
-    return r;
-
-  ictx->data_ctx.snap_set_read(ictx->snapid);
 
   r = rm_snap(ictx->md_ctx, md_oid, snap_name);
   if (r < 0)
     return r;
 
-  r = ictx->data_ctx.selfmanaged_snap_remove(ictx->snapid);
+  r = ictx->data_ctx.selfmanaged_snap_remove(snapid);
+  if (r < 0)
+    return r;
+
   notify_change(ictx->md_ctx, md_oid, NULL, ictx);
 
-  return r;
+  return 0;
 }
 
 int create(IoCtx& io_ctx, string& md_oid, const char *imgname,
@@ -835,10 +848,24 @@ int ictx_check(ImageCtx *ictx)
   bool needs_refresh = ictx->needs_refresh;
   ictx->lock.Unlock();
 
-  int r = 0;
-  if (needs_refresh)
-    r = ictx_refresh(ictx, NULL);
-  return r;
+  if (needs_refresh) {
+    const char *snap = NULL;
+    if (ictx->snapid != CEPH_NOSNAP)
+      snap = ictx->snapname.c_str();
+
+    int r = ictx_refresh(ictx, snap);
+    if (r < 0) {
+      derr << "Error re-reading rbd header: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    // check if the snapshot at which we were reading was removed
+    if (snap && ictx->snapname != snap) {
+      derr << "tried to read from a snapshot that no longer exists: " << snap << dendl;
+      return -ENOENT;
+    }
+  }
+  return 0;
 }
 
 int ictx_refresh(ImageCtx *ictx, const char *snap_name)
@@ -872,7 +899,6 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   bufferlist::iterator iter = bl2.begin();
   ::decode(ictx->snapc.seq, iter);
   ::decode(num_snaps, iter);
-  ictx->snapid = 0;
   for (uint32_t i=0; i < num_snaps; i++) {
     uint64_t id, image_size;
     string s;
@@ -888,11 +914,15 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   }
 
   if (snap_name) {
-    ictx->snap_set(snap_name);
-    if (!ictx->snapid) {
-      return -ENOENT;
+    r = ictx->snap_set(snap_name);
+    if (r < 0) {
+      derr << "could not set snap to " << snap_name << ": " << cpp_strerror(-r) << dendl;
+      return r;
     }
+    ictx->data_ctx.snap_set_read(ictx->snapid);
   }
+
+  ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
 
   ictx->lock.Lock();
   ictx->needs_refresh = false;
@@ -908,21 +938,27 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
+
+  snap_t snapid = ictx->get_snapid(snap_name);
+  if (snapid == CEPH_NOSNAP) {
+    derr << "No such snapshot found." << dendl;
+    return -ENOENT;
+  }
+
+  r = rollback_image(ictx, snapid);
+  if (r < 0) {
+    derr << "Error rolling back image: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  // refresh without setting the snapid we read from
+  ictx_refresh(ictx, NULL);
+  snap_t new_snapid = ictx->get_snapid(snap_name);
+  dout(20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
+
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
-
-  r = ictx->snap_set(snap_name);
-  if (r < 0)
-    return r;
-
-  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-  if (r < 0)
-    return r;
-
-  ictx->data_ctx.snap_set_read(ictx->snapid);
-  r = rollback_image(ictx, snap_name);
-  if (r < 0)
-    return r;
+  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
 
   return 0;
 }
@@ -1001,16 +1037,11 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
 
-  r = ictx->snap_set(snap_name);
-  if (r < 0)
-    return r;
-
-  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-  if (r < 0)
-    return r;
+  if (snap_name)
+    ictx->snap_set(snap_name);
+  else
+    ictx->snap_unset();
 
   ictx->data_ctx.snap_set_read(ictx->snapid);
 
