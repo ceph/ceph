@@ -78,6 +78,7 @@ struct ceph_file_layout g_default_file_layout = {
 #define OPTION_OPT_LONGLONG(section, name, schar, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
      &g_conf.name, 0, def_val, 0, type, schar }
+#define OPTION_OPT_U32 OPTION_OPT_LONGLONG
 #define OPTION_OPT_INT OPTION_OPT_LONGLONG
 #define OPTION_OPT_BOOL OPTION_OPT_INT
 
@@ -344,7 +345,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
   OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
   OPTION(osd_use_stale_snap, 0, OPT_BOOL, false),
-  OPTION(osd_max_notify_timeout, 0, OPT_INT, 30), // max notify timeout in seconds
+  OPTION(osd_max_notify_timeout, 0, OPT_U32, 30), // max notify timeout in seconds
   OPTION(filestore, 0, OPT_BOOL, false),
   OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
   OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
@@ -826,7 +827,7 @@ set_val_impl(const char *val, config_option *opt)
       int f = strict_strtol((const char*)val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
-      *(int*)opt->val_ptr = f;
+      *(uint32_t*)opt->val_ptr = f;
       return 0;
     }
     case OPT_ADDR: {
