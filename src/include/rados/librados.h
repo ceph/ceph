@@ -12,6 +12,7 @@ extern "C" {
 #ifndef CEPH_OSD_TMAP_SET
 #define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'
+#define CEPH_OSD_TMAP_CREATE 'c'
 #define CEPH_OSD_TMAP_RM  'r'
 #endif
 

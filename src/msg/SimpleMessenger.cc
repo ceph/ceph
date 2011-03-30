@@ -2328,7 +2328,6 @@ int SimpleMessenger::start(bool daemonize, uint64_t nonce)
     lock.Unlock();
     return 0;
   }
-  
   if (!did_bind) {
     ms_addr.nonce = nonce;
   }

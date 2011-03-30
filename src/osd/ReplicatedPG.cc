@@ -1807,6 +1807,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      }
 	      break;
 	      
+	    case CEPH_OSD_TMAP_CREATE: // create (new) key
+	      {
+		::decode(key, bp);
+		bufferlist data;
+		::decode(data, bp);
+		if (m.count(key))
+		  return -EEXIST;
+		m[key] = data;
+		changed = true;
+	      }
+	      break;
+
 	    case CEPH_OSD_TMAP_RM: // remove key
 	      ::decode(key, bp);
 	      if (m.count(key)) {
@@ -1870,8 +1882,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
 
 	    // skip existing intervening keys
-	    bool stop = false;
-	    while (have_next && !stop) {
+	    bool key_exists = false;
+	    while (have_next && !key_exists) {
 	      dout(20) << "  (have_next=" << have_next << " nextkey=" << nextkey << ")" << dendl;
 	      if (nextkey > key)
 		break;
@@ -1883,7 +1895,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      } else {
 		// don't copy; discard old value.  and stop.
 		dout(20) << "  drop " << nextkey << " " << nextval.length() << dendl;
-		stop = true;
+		key_exists = true;
 		nkeys--;
 	      }	      
 	      if (!ip.end()) {
@@ -1899,6 +1911,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      ::encode(key, newkeydata);
 	      ::encode(val, newkeydata);
 	      dout(20) << "   set " << key << " " << val.length() << dendl;
+	      nkeys++;
+	    } else if (op == CEPH_OSD_TMAP_CREATE) {
+	      if (key_exists)
+		return -EEXIST;
+	      bufferlist val;
+	      ::decode(val, bp);
+	      ::encode(key, newkeydata);
+	      ::encode(val, newkeydata);
+	      dout(20) << "   create " << key << " " << val.length() << dendl;
 	      nkeys++;
 	    } else if (op == CEPH_OSD_TMAP_RM) {
 	      // do nothing.
@@ -3014,7 +3035,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
     // send ack to acker only if we haven't sent a commit already
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
     ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
-    ack->set_priority(CEPH_MSG_PRIO_HIGH);
+    ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     osd->cluster_messenger->
       send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
@@ -3055,6 +3076,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     last_complete_ondisk = rm->last_complete;
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
+    commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
     osd->cluster_messenger->
       send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));

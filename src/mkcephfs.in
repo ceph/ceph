@@ -311,7 +311,7 @@ if [ $preparemon -eq 1 ]; then
     get_conf crushmap "$usecrushmap" "crush map" mon global
     if [ -n "$crushmap" ]; then
 	echo Importing crush map from $crushmap
-	$BINDIR/osdmaptool --clobber --import-crush $crushmap $dir/osdmap
+	$BINDIR/osdmaptool --import-crush $crushmap $dir/osdmap
     fi
 
     # admin keyring

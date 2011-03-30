@@ -625,9 +625,10 @@ void Journaler::_assimilate_prefetch()
 	     << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
 	     << dendl;
 
-  if (got_any && !was_readable && _is_readable()) {
+  if ((got_any && !was_readable && _is_readable()) ||
+      read_pos == write_pos) {
     // readable!
-    dout(10) << "_finish_read now readable" << dendl;
+    dout(10) << "_finish_read now readable (or at journal end)" << dendl;
     if (on_readable) {
       Context *f = on_readable;
       on_readable = 0;

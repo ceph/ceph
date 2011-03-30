@@ -604,6 +604,20 @@ int main(int argc, const char **argv)
 	cout << "\n";
       }
     }
+    else if (strcmp(nargs[1], "set") == 0 ||
+	     strcmp(nargs[1], "create") == 0) {
+      if (nargs.size() < 5)
+	usage();
+      string oid(nargs[2]);
+      string k(nargs[3]);
+      string v(nargs[4]);
+      bufferlist bl;
+      char c = (strcmp(nargs[1], "set") == 0) ? CEPH_OSD_TMAP_SET : CEPH_OSD_TMAP_CREATE;
+      ::encode(c, bl);
+      ::encode(k, bl);
+      ::encode(v, bl);
+      ret = io_ctx.tmap_update(oid, bl);
+    }
   }
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
@@ -752,6 +766,8 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  if (ret)
+    cerr << "error " << (-ret) << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
   return (ret < 0) ? 1 : 0;
 }
 
