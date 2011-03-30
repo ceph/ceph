@@ -3014,7 +3014,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
     // send ack to acker only if we haven't sent a commit already
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
     ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
-    ack->set_priority(CEPH_MSG_PRIO_HIGH);
+    ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     osd->cluster_messenger->
       send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
@@ -3055,6 +3055,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     last_complete_ondisk = rm->last_complete;
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
+    commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
     osd->cluster_messenger->
       send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
