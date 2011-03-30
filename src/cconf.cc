@@ -62,16 +62,17 @@ Return code will be 0 on success; error code otherwise.\n\
   exit(1);
 }
 
-static int list_sections(const char *s)
+static int list_sections(const char *prefix)
 {
-  if (!g_conf.cf)
+  std::vector <std::string> sections;
+  int ret = g_conf.get_all_sections(sections);
+  if (ret)
     return 2;
-  for (std::list<ConfSection*>::const_iterator p =
-	    g_conf.cf->get_section_list().begin();
-       p != g_conf.cf->get_section_list().end(); ++p)
-  {
-    if (strncmp(s, (*p)->get_name().c_str(), strlen(s)) == 0)
-      cout << (*p)->get_name() << std::endl;
+  for (std::vector<std::string>::const_iterator p = sections.begin();
+       p != sections.end(); ++p) {
+    if (strncmp(prefix, p->c_str(), strlen(prefix)) == 0) {
+      cout << *p << std::endl;
+    }
   }
   return 0;
 }
@@ -91,42 +92,23 @@ static void print_val(const char *val, bool resolve_search)
 static int lookup(const deque<const char *> &sections,
 		  const char *key, bool resolve_search)
 {
-  if (!g_conf.cf)
+  std::vector <std::string> my_sections;
+  for (deque<const char *>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
+    my_sections.push_back(*s);
+  }
+  g_conf.get_my_sections(my_sections);
+  std::string val;
+  int ret = g_conf.get_val_from_conf_file(my_sections, key, val);
+  if (ret == -ENOENT)
+    return 1;
+  else if (ret == 0) {
+    print_val(val.c_str(), resolve_search);
+    return 0;
+  }
+  else {
+    cerr << "error looking up '" << key << "': error " << ret << std::endl;
     return 2;
-
-  char *val;
-  int ret = conf_read_key(NULL, key, OPT_STR, &val);
-  if (ret != -ENOENT) {
-    if (ret == 0) {
-      print_val(val, resolve_search);
-      free(val);
-      return 0;
-    }
-    else {
-      cerr << "error looking up '" << key << "': error " << ret << std::endl;
-      return 1;
-    }
   }
-
-  // Search the sections.
-  for (deque<const char*>::const_iterator s = sections.begin();
-       s != sections.end(); ++s) {
-    std::string sval;
-    int ret = g_conf.cf->read<std::string>(*s, key, &sval);
-    if (ret != -ENOENT) {
-      if (ret == 0) {
-	print_val(sval.c_str(), resolve_search);
-	return 0;
-      }
-      else {
-	cerr << "error looking up '" << key << "': error " << ret << std::endl;
-	return 3;
-      }
-    }
-  }
-
-  // Not found
-  return 1;
 }
 
 int main(int argc, const char **argv)

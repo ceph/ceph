@@ -211,8 +211,7 @@ int main(int argc, const char **argv)
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {
       std::string val;
-      int ret = cf->read<std::string>("global", key_names[i], &val);
-      if (ret == 0) {
+      if (cf->read("global", key_names[i], val) == 0) {
         bufferlist bl;
         ::encode(val, bl);
         string s(key_names[i]);

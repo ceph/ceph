@@ -82,9 +82,6 @@ class ConfFile {
 
 	ConfLine *_add_var(const char *section, const char* var);
 
-	template<typename T>
-	int _write(const char *section, const char *var, const T val);
-
 	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
 	int _parse(const char *filename, ConfSection **psection);
@@ -104,22 +101,10 @@ public:
 
 	int parse();
 
-	template<typename T>
-	int read(const char *section, const char *var, T *val);
-
-	int write(const char *section, const char *var, int val);
-	int write(const char *section, const char *var, unsigned int val);
-	int write(const char *section, const char *var, long long val);
-	int write(const char *section, const char *var, unsigned long long val);
-	int write(const char *section, const char *var, bool val);
-	int write(const char *section, const char *var, float val);
-	int write(const char *section, const char *var, double val);
-	int write(const char *section, const char *var, char *val);
+	int read(const char *section, const char *var, std::string &val);
 
 	void dump();
 	int flush();
-	void set_post_process_func(void (*func)(std::string &)) {post_process_func = func; };
-	void set_global(bool global) { default_global = global; }
 };
 
 #endif

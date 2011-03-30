@@ -109,31 +109,62 @@ int MonClient::build_initial_monmap()
   }
 
   // config file?
-  if (!g_conf.cf) {
+  if (!g_conf.have_conf_file()) {
     cerr << "Unable to find any monitors in the configuration "
          << "file, because there is no configuration file. "
 	 << "Please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
     return -ENOENT;
   }
-  for (list<ConfSection*>::const_iterator q = g_conf.cf->get_section_list().begin();
-       q != g_conf.cf->get_section_list().end(); ++q) {
-    const char *section = (*q)->get_name().c_str();
-    if (strncmp(section, "mon", 3) == 0) {
-      const char *name = section + 3;
-      if (name[0] == '.')
-	name++;
-      std::string val;
-      g_conf.cf->read<std::string>(section, "mon addr", &val);
-      if (val.empty())
-	continue;
-      entity_addr_t addr;
-      if (!addr.parse(val.c_str())) {
-	cerr << "unable to parse mon addr for " << section << " (" << val << ")" << std::endl;
-	continue;
-      }
-      monmap.add(name, addr);
+
+  // What monitors are in the config file?
+  std::vector <std::string> sections;
+  int ret = g_conf.get_all_sections(sections);
+  if (ret) {
+    cerr << "Unable to find any monitors in the configuration "
+         << "file, because there was an error listing the sections. error "
+	 << ret << std::endl;
+    return -ENOENT;
+  }
+  std::vector <std::string> mon_names;
+  for (std::vector <std::string>::const_iterator s = sections.begin();
+       s != sections.end(); ++s) {
+    if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
+      mon_names.push_back(s->substr(4));
+    }
+    else if ((s->substr(0, 3) == "mon") && (s->size() > 3)) {
+      mon_names.push_back(s->substr(3));
     }
   }
+
+  // Find an address for each monitor in the config file.
+  for (std::vector <std::string>::const_iterator m = mon_names.begin();
+       m != mon_names.end(); ++m) {
+    std::vector <std::string> sections;
+    std::string m_name("mon");
+    m_name += ".";
+    m_name += *m;
+    sections.push_back(m_name);
+    std::string m_altname("mon");
+    m_altname += *m;
+    sections.push_back(m_altname);
+    sections.push_back("mon");
+    sections.push_back("global");
+    std::string val;
+    int res = g_conf.get_val_from_conf_file(sections, "mon addr", val);
+    if (res) {
+      cerr << "failed to get an address for mon." << *m << ": error "
+	   << res << std::endl;
+      continue;
+    }
+    entity_addr_t addr;
+    if (!addr.parse(val.c_str())) {
+      cerr << "unable to parse address for mon." << *m
+	   << ": addr='" << val << "'" << std::endl;
+      continue;
+    }
+    monmap.add(m->c_str(), addr);
+  }
+
   if (monmap.size() == 0) {
     cerr << "unable to find any monitors in conf. "
 	 << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;

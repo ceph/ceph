@@ -398,7 +398,7 @@ struct config_option config_optionsp[] = {
   OPTION(bdev_fake_max_mb, 0, OPT_INT, 0),
 };
 
-const int num_config_options = sizeof(config_optionsp) / sizeof(config_option);
+const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
 static void set_conf_name(config_option *opt)
 {
@@ -433,140 +433,6 @@ static void set_conf_name(config_option *opt)
   done:
     opt->section = newsection;
     opt->conf_name = (const char *)newconf;
-}
-
-static const char *CONF_METAVARIABLES[] =
-      { "type", "name", "host", "num", "id" };
-static const int NUM_CONF_METAVARIABLES =
-      (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
-
-void conf_post_process_val(std::string &val)
-{
-  string out;
-  string::size_type sz = val.size();
-  out.reserve(sz);
-  for (string::size_type s = 0; s < sz; ) {
-    if (val[s] != '$') {
-      out += val[s++];
-      continue;
-    }
-    string::size_type rem = sz - (s + 1);
-    int i;
-    for (i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
-      size_t clen = strlen(CONF_METAVARIABLES[i]);
-      if (rem < clen)
-	continue;
-      if (strncmp(val.c_str() + s + 1, CONF_METAVARIABLES[i], clen))
-	continue;
-      if (strcmp(CONF_METAVARIABLES[i], "type")==0)
-	out += g_conf.name->get_type_name();
-      else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
-	out += g_conf.name->to_cstr();
-      else if (strcmp(CONF_METAVARIABLES[i], "host")==0)
-	out += g_conf.host;
-      else if (strcmp(CONF_METAVARIABLES[i], "num")==0)
-	out += g_conf.name->get_id().c_str();
-      else if (strcmp(CONF_METAVARIABLES[i], "id")==0)
-	out += g_conf.name->get_id().c_str();
-      else
-	assert(0); // unreachable
-      break;
-    }
-    if (i == NUM_CONF_METAVARIABLES)
-      out += val[s++];
-    else
-      s += strlen(CONF_METAVARIABLES[i]) + 1;
-  }
-  val = out;
-}
-
-static int conf_read_key_ext_impl(const char *section, const char *key,
-			   opt_type_t type, void* out)
-{
-  switch (type) {
-    case OPT_STR: {
-      std::string str;
-      int ret = g_conf.cf->read<std::string>(section, key, &str);
-      if (ret)
-	return ret;
-      *(char**)out = strdup(str.c_str());
-      return 0;
-    }
-    case OPT_BOOL:
-      return g_conf.cf->read <bool>(section, key, (bool*)out);
-    case OPT_LONGLONG:
-      return g_conf.cf->read<long long>(section, key, (long long*)out);
-    case OPT_INT:
-      return g_conf.cf->read<int>(section, key, (int*)out);
-    case OPT_FLOAT:
-      return g_conf.cf->read<float>(section, key, (float*)out);
-    case OPT_DOUBLE:
-      return g_conf.cf->read<double>(section, key, (double*)out);
-    case OPT_ADDR: {
-      std::string str;
-      int ret = g_conf.cf->read<std::string>(section, key, &str);
-      if (ret)
-	return ret;
-      if (((entity_addr_t*)out)->parse(str.c_str()) == 0) {
-	cerr << "Addr " << str << " failed to parse!" << std::endl;
-	return -EINVAL;
-      }
-      return 0;
-    }
-    case OPT_U32:
-      return g_conf.cf->read<uint32_t>(section, key, (uint32_t*)out);
-    case OPT_NONE:
-      return -ENOSYS;
-  }
-  return -ENOSYS;
-}
-
-int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
-          const char *alt_section, const char *key, opt_type_t type, void *out)
-{
-  for (int s=0; s<5; s++) {
-    const char *section;
-
-    switch (s) {
-      case 0:
-	    section = conf_name;
-	    if (!section)
-	      continue;
-	    break;
-      case 1:
-	    section = conf_alt_name;
-	    if (!section)
-	      continue;
-	    break;
-      case 2:
-            section = conf_type;
-	    if (!section)
-	      continue;
-	    break;
-      case 3:
-            section = alt_section;
-	    if (!section)
-	      continue;
-	    break;
-      case 4:
-	    section = "global";
-	    break;
-    }
-    int ret = conf_read_key_ext_impl(section, key, type, out);
-    if (ret != -ENOENT)
-      return ret;
-  }
-  return -ENOENT;
-}
-
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out)
-{
-  std::string alt_name(g_conf.name->get_type_name());
-  alt_name += g_conf.name->get_id();
-
-  return conf_read_key_ext(g_conf.name->to_cstr(), alt_name.c_str(),
-         g_conf.name->get_type_name(),
-         alt_section, key, type, out);
 }
 
 bool is_bool_param(const char *param)
@@ -605,7 +471,7 @@ md_config_t()
   // However, it's good practice to add your new config option to config_optionsp
   // so that its default value is explicit rather than implicit.
   //
-  for (int i = 0; i < num_config_options; i++) {
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     set_val_from_default(opt);
     set_conf_name(opt);
@@ -615,12 +481,8 @@ md_config_t()
 md_config_t::
 ~md_config_t()
 {
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = &config_optionsp[i];
     if (opt->type == OPT_STR) {
       free(*(char **)opt->val_ptr);
     }
@@ -642,7 +504,6 @@ parse_config_files(const std::list<std::string> &conf_files)
     if (c == conf_files.end())
       return -EINVAL;
     ConfFile *cf_ = new ConfFile(c->c_str());
-    cf_->set_post_process_func(conf_post_process_val);
     int res = cf_->parse();
     if (res == 0) {
       cf = cf_;
@@ -654,28 +515,25 @@ parse_config_files(const std::list<std::string> &conf_files)
     ++c;
   }
 
-  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
-  for (int i=0; i<opt_len; i++) {
+  std::vector <std::string> my_sections;
+  get_my_sections(my_sections);
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
-    conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr);
-  }
-  g_lockdep = false;
-  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep);
-
-  // post-process options
-  for (int i = 0; i<opt_len; i++) {
-    config_option *opt = &config_optionsp[i];
-    if (opt->type == OPT_STR && opt->val_ptr) {
-      char *s = *(char**)opt->val_ptr;
-      if (s) {
-	// this is going away soon...
-	std::string str(s);
-	conf_post_process_val(str);
-	free(s);
-	*(char **)opt->val_ptr = strdup(str.c_str());
-      }
+    std::string val;
+    int ret = get_val_from_conf_file(my_sections, opt->conf_name, val);
+    if (ret == 0) {
+      set_val_impl(val.c_str(), opt);
+    }
+    else if (ret != -ENOENT) {
+      // TODO: complain about parse error
     }
   }
+
+  // This bit of global fiddling needs to go somewhere else eventually.
+  std::string val;
+  g_lockdep =
+    ((get_val_from_conf_file(my_sections, "lockdep", val) == 0) &&
+      ((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0)));
   return 0;
 }
 
@@ -689,14 +547,13 @@ parse_env()
 void md_config_t::
 parse_argv_part2(std::vector<const char*>& args)
 {
-  int opt_len = num_config_options;
   DEFINE_CONF_VARS(NULL);
 
   std::vector<const char*> nargs;
   FOR_EACH_ARG(args) {
     int optn;
 
-    for (optn = 0; optn < opt_len; optn++) {
+    for (optn = 0; optn < NUM_CONFIG_OPTIONS; optn++) {
       if (CEPH_ARGPARSE_EQ("lockdep", '\0')) {
 	CEPH_ARGPARSE_SET_ARG_VAL(&g_lockdep, OPT_INT);
       } else if (CEPH_ARGPARSE_EQ(config_optionsp[optn].name,
@@ -711,7 +568,7 @@ parse_argv_part2(std::vector<const char*>& args)
       break;
     }
 
-    if (optn == opt_len)
+    if (optn == NUM_CONFIG_OPTIONS)
         nargs.push_back(args[i]);
   }
 
@@ -773,82 +630,22 @@ set_val(const char *key, const char *val)
     return -EINVAL;
   if (!val)
     return -EINVAL;
-  for (int i = 0; i<num_config_options; ++i) {
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
-    if (strcmp(opt->conf_name, key))
-      continue;
-
-    switch (opt->type) {
-      case OPT_NONE:
-        return -ENOSYS;
-      case OPT_INT: {
-	std::string err;
-	int f = strict_strtol(val, 10, &err);
-	if (!err.empty())
-	  return -EINVAL;
-	*(int*)opt->val_ptr = f;
-	return 0;
-      }
-      case OPT_LONGLONG: {
-	std::string err;
-	long long f = strict_strtoll(val, 10, &err);
-	if (!err.empty())
-	  return -EINVAL;
-	*(long long*)opt->val_ptr = f;
-	return 0;
-      }
-      case OPT_STR: {
-	char **p = (char**)opt->val_ptr;
-	free(*p);
-	*p = strdup(val);
-	return 0;
-      }
-      case OPT_FLOAT:
-        *(float*)opt->val_ptr = atof(val);
-        return 0;
-      case OPT_DOUBLE:
-        *(double*)opt->val_ptr = atof(val);
-        return 0;
-      case OPT_BOOL:
-	if (strcasecmp(val, "false") == 0)
-	  *(bool*)opt->val_ptr = false;
-	else if (strcasecmp(val, "true") == 0)
-	  *(bool*)opt->val_ptr = true;
-	else {
-	  std::string err;
-	  int b = strict_strtol((const char*)val, 10, &err);
-	  if (!err.empty())
-	    return -EINVAL;
-	  *(bool*)opt->val_ptr = !!b;
-	}
-	return 0;
-      case OPT_U32: {
-	std::string err;
-	int f = strict_strtol((const char*)val, 10, &err);
-	if (!err.empty())
-	  return -EINVAL;
-	*(int*)opt->val_ptr = f;
-	return 0;
-      }
-      case OPT_ADDR: {
-        entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
-        if (!addr->parse(val)) {
-          return -EINVAL;
-        }
-        return 0;
-      }
-    }
+    if (strcmp(opt->conf_name, key) == 0)
+      return set_val_impl(val, opt);
   }
+
   // couldn't find a configuration option with key 'key'
   return -ENOENT;
 }
 
 int md_config_t::
-get_val(const char *key, char **buf, int len)
+get_val(const char *key, char **buf, int len) const
 {
   if (!key)
     return -EINVAL;
-  for (int i = 0; i<num_config_options; ++i) {
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     const config_option *opt = &config_optionsp[i];
     if (strcmp(opt->conf_name, key))
       continue;
@@ -901,6 +698,61 @@ get_val(const char *key, char **buf, int len)
 }
 
 void md_config_t::
+get_my_sections(std::vector <std::string> &sections)
+{
+  sections.push_back(g_conf.name->to_str());
+
+  std::string alt_name(g_conf.name->get_type_name());
+  alt_name += g_conf.name->get_id();
+  sections.push_back(alt_name);
+
+  sections.push_back(g_conf.name->get_type_name());
+
+  sections.push_back("global");
+}
+
+// Return a list of all sections
+int md_config_t::
+get_all_sections(std::vector <std::string> &sections)
+{
+  if (!cf)
+    return -EDOM;
+  for (std::list<ConfSection*>::const_iterator p =
+	    cf->get_section_list().begin();
+       p != cf->get_section_list().end(); ++p)
+  {
+    sections.push_back((*p)->get_name());
+  }
+  return 0;
+}
+
+bool md_config_t::
+have_conf_file() const
+{
+  return !!cf;
+}
+
+int md_config_t::
+get_val_from_conf_file(const std::vector <std::string> &sections,
+		    const char *key, std::string &out) const
+{
+  if (!cf)
+    return -EDOM;
+  std::vector <std::string>::const_iterator s = sections.begin();
+  std::vector <std::string>::const_iterator s_end = sections.end();
+  for (; s != s_end; ++s) {
+    int ret = cf->read(s->c_str(), key, out);
+    if (ret == 0) {
+      conf_post_process_val(out);
+      return 0;
+    }
+    else if (ret != -ENOENT)
+      return ret;
+  }
+  return -ENOENT;
+}
+
+void md_config_t::
 set_val_from_default(const config_option *opt)
 {
   switch (opt->type) {
@@ -945,3 +797,116 @@ set_val_from_default(const config_option *opt)
       break;
    }
 }
+
+int md_config_t::
+set_val_impl(const char *val, config_option *opt)
+{
+  switch (opt->type) {
+    case OPT_NONE:
+      return -ENOSYS;
+    case OPT_INT: {
+      std::string err;
+      int f = strict_strtol(val, 10, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(int*)opt->val_ptr = f;
+      return 0;
+    }
+    case OPT_LONGLONG: {
+      std::string err;
+      long long f = strict_strtoll(val, 10, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(long long*)opt->val_ptr = f;
+      return 0;
+    }
+    case OPT_STR: {
+      char **p = (char**)opt->val_ptr;
+      free(*p);
+      *p = strdup(val);
+      return 0;
+    }
+    case OPT_FLOAT:
+      *(float*)opt->val_ptr = atof(val);
+      return 0;
+    case OPT_DOUBLE:
+      *(double*)opt->val_ptr = atof(val);
+      return 0;
+    case OPT_BOOL:
+      if (strcasecmp(val, "false") == 0)
+	*(bool*)opt->val_ptr = false;
+      else if (strcasecmp(val, "true") == 0)
+	*(bool*)opt->val_ptr = true;
+      else {
+	std::string err;
+	int b = strict_strtol((const char*)val, 10, &err);
+	if (!err.empty())
+	  return -EINVAL;
+	*(bool*)opt->val_ptr = !!b;
+      }
+      return 0;
+    case OPT_U32: {
+      std::string err;
+      int f = strict_strtol((const char*)val, 10, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(int*)opt->val_ptr = f;
+      return 0;
+    }
+    case OPT_ADDR: {
+      entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+      if (!addr->parse(val)) {
+	return -EINVAL;
+      }
+      return 0;
+    }
+  }
+  return -ENOSYS;
+}
+
+static const char *CONF_METAVARIABLES[] =
+      { "type", "name", "host", "num", "id" };
+static const int NUM_CONF_METAVARIABLES =
+      (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
+
+void md_config_t::
+conf_post_process_val(std::string &val) const
+{
+  string out;
+  string::size_type sz = val.size();
+  out.reserve(sz);
+  for (string::size_type s = 0; s < sz; ) {
+    if (val[s] != '$') {
+      out += val[s++];
+      continue;
+    }
+    string::size_type rem = sz - (s + 1);
+    int i;
+    for (i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
+      size_t clen = strlen(CONF_METAVARIABLES[i]);
+      if (rem < clen)
+	continue;
+      if (strncmp(val.c_str() + s + 1, CONF_METAVARIABLES[i], clen))
+	continue;
+      if (strcmp(CONF_METAVARIABLES[i], "type")==0)
+	out += g_conf.name->get_type_name();
+      else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
+	out += g_conf.name->to_cstr();
+      else if (strcmp(CONF_METAVARIABLES[i], "host")==0)
+	out += g_conf.host;
+      else if (strcmp(CONF_METAVARIABLES[i], "num")==0)
+	out += g_conf.name->get_id().c_str();
+      else if (strcmp(CONF_METAVARIABLES[i], "id")==0)
+	out += g_conf.name->get_id().c_str();
+      else
+	assert(0); // unreachable
+      break;
+    }
+    if (i == NUM_CONF_METAVARIABLES)
+      out += val[s++];
+    else
+      s += strlen(CONF_METAVARIABLES[i]) + 1;
+  }
+  val = out;
+}
+

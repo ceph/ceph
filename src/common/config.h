@@ -49,19 +49,48 @@ struct md_config_t
 public:
   md_config_t();
   ~md_config_t();
+
+  // Parse a config file
   int parse_config_files(const std::list<std::string> &conf_files);
+
+  // Absorb config settings from the environment
   void parse_env();
+
+  // Absorb config settings from argv
   void parse_argv_part2(std::vector<const char*>& args);
   void parse_argv(std::vector<const char*>& args);
+
+  // Set a configuration value
   int set_val(const char *key, const char *val);
-  int get_val(const char *key, char **buf, int len);
+
+  // Get a configuration value
+  int get_val(const char *key, char **buf, int len) const;
+
+  // Return a list of all the sections that the current entity is a member of.
+  void get_my_sections(std::vector <std::string> &sections);
+
+  // Return a list of all sections
+  int get_all_sections(std::vector <std::string> &sections);
+
+  bool have_conf_file() const;
+
+  // Get a value from the configuration file we read
+  int get_val_from_conf_file(const std::vector <std::string> &sections,
+			     const char *key, std::string &out) const;
 
 private:
+  // Private function for setting a default for a config option
   void set_val_from_default(const config_option *opt);
 
-public:
+  int set_val_impl(const char *val, config_option *opt);
+
+  // Do metavariable expansions
+  void conf_post_process_val(std::string &val) const;
+
+  // The configuration file we read, or NULL if we haven't read one.
   ConfFile *cf;
 
+public:
   char *host;
 
   int num_client;
@@ -476,9 +505,6 @@ typedef enum {
 	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
 	OPT_ADDR, OPT_U32
 } opt_type_t;
-
-char *conf_post_process_val(const char *val);
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out);
 
 bool ceph_resolve_file_search(string& filename_list, string& result);
 

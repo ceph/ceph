@@ -105,9 +105,6 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
   bufferlist bl;
   bl.append(orig_src, len);
   ConfFile cf(&bl);
-
-  cf.set_global(false);
-
   if (cf.parse() != 0) {
     derr << "cannot parse buffer" << dendl;
     goto done_err;
@@ -117,6 +114,8 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 	    cf.get_section_list().begin();
        p != cf.get_section_list().end(); ++p) {
     string name = (*p)->get_name();
+    if (name == "global")
+      continue;
 
     EntityName ename;
     map<string, bufferlist> caps;
