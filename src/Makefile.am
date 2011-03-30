@@ -434,6 +434,12 @@ unittest_rgw_escape_LDADD = libcommon.a ${UNITTEST_LDADD}
 unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_rgw_escape
 
+unittest_strtol_SOURCES = test/strtol.cc
+unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_strtol_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_strtol
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \

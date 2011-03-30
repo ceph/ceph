@@ -45,6 +45,7 @@ long long strict_strtoll(const char *str, int base, std::string *err)
     *err = oss.str();
     return 0;
   }
+  *err = "";
   return ret;
 }
 
@@ -66,4 +67,60 @@ int strict_strtol(const char *str, int base, std::string *err)
     return 0;
   }
   return static_cast<int>(ret);
+}
+
+double strict_strtod(const char *str, std::string *err)
+{
+  char *endptr;
+  errno = 0; /* To distinguish success/failure after call (see man page) */
+  double ret = strtod(str, &endptr);
+  if (errno == ERANGE) {
+    ostringstream oss;
+    oss << "strict_strtod: floating point overflow or underflow parsing '"
+	<< str << "'";
+    *err = oss.str();
+    return 0.0;
+  }
+  if (endptr == str) {
+    ostringstream oss;
+    oss << "strict_strtod: expected double, got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  if (*endptr != '\0') {
+    ostringstream oss;
+    oss << "strict_strtod: garbage at end of string. got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  *err = "";
+  return ret;
+}
+
+float strict_strtof(const char *str, std::string *err)
+{
+  char *endptr;
+  errno = 0; /* To distinguish success/failure after call (see man page) */
+  float ret = strtof(str, &endptr);
+  if (errno == ERANGE) {
+    ostringstream oss;
+    oss << "strict_strtof: floating point overflow or underflow parsing '"
+	<< str << "'";
+    *err = oss.str();
+    return 0.0;
+  }
+  if (endptr == str) {
+    ostringstream oss;
+    oss << "strict_strtof: expected float, got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  if (*endptr != '\0') {
+    ostringstream oss;
+    oss << "strict_strtof: garbage at end of string. got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  *err = "";
+  return ret;
 }

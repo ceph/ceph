@@ -21,4 +21,8 @@ long long strict_strtoll(const char *str, int base, std::string *err);
 
 int strict_strtol(const char *str, int base, std::string *err);
 
+double strict_strtod(const char *str, std::string *err);
+
+float strict_strtof(const char *str, std::string *err);
+
 #endif
