@@ -130,8 +130,6 @@ public:
 
   std::string chdir;
 
-  int kill_after;
-
   long long max_open_files;
 
   int debug;
