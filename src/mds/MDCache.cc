@@ -68,6 +68,9 @@
 #include "messages/MDentryLink.h"
 #include "messages/MDentryUnlink.h"
 
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+
 #include "messages/MClientRequest.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientSnap.h"
@@ -136,6 +139,7 @@ MDCache::MDCache(MDS *m)
                         (0.9 *(g_conf.osd_max_write_size << 20));
 
   discover_last_tid = 0;
+  find_ino_peer_last_tid = 0;
 
   last_cap_id = 0;
 
@@ -6156,6 +6160,13 @@ void MDCache::dispatch(Message *m)
     break;
     
 
+  case MSG_MDS_FINDINO:
+    handle_find_ino((MMDSFindIno *)m);
+    break;
+  case MSG_MDS_FINDINOREPLY:
+    handle_find_ino_reply((MMDSFindInoReply *)m);
+    break;
+
     
   default:
     dout(7) << "cache unknown message " << m->get_type() << dendl;
@@ -6843,6 +6854,131 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
   dout(15) << "make_trace adding " << *dn << dendl;
   trace.push_back(dn);
 }
+
+
+/* ---------------------------- */
+
+/*
+ * search for a given inode on MDS peers.  optionally start with the given node.
+
+
+ TODO 
+  - recover from mds node failure, recovery
+  - traverse path
+
+ */
+void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
+{
+  dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
+  assert(!have_inode(ino));
+  
+  tid_t tid = ++find_ino_peer_last_tid;
+  find_ino_peer_info_t& fip = find_ino_peer[tid];
+  fip.ino = ino;
+  fip.tid = tid;
+  fip.fin = c;
+  fip.hint = hint;
+  _do_find_ino_peer(fip);
+}
+
+void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
+{
+  set<int> all, active;
+  mds->mdsmap->get_active_mds_set(active);
+  mds->mdsmap->get_mds_set(all);
+
+  dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
+	   << " active " << active << " all " << all
+	   << " checked " << fip.checked
+	   << dendl;
+    
+  int m = -1;
+  if (fip.hint >= 0) {
+    m = fip.hint;
+    fip.hint = -1;
+  } else {
+    for (set<int>::iterator p = active.begin(); p != active.end(); p++)
+      if (fip.checked.count(*p) == 0) {
+	m = *p;
+	break;
+      }
+  }
+  if (m < 0) {
+    if (all.size() > active.size()) {
+      dout(10) << "_do_find_ino_peer waiting for more peers to be active" << dendl;
+    } else {
+      dout(10) << "_do_find_ino_peer failed on " << fip.ino << dendl;
+      fip.fin->finish(-ESTALE);
+      delete fip.fin;
+      find_ino_peer.erase(fip.tid);
+    }
+  } else {
+    fip.checking = m;
+    mds->send_message_mds(new MMDSFindIno(fip.tid, fip.ino), m);
+  }
+}
+
+void MDCache::handle_find_ino(MMDSFindIno *m)
+{
+  dout(10) << "handle_find_ino " << *m << dendl;
+  MMDSFindInoReply *r = new MMDSFindInoReply(m->tid);
+  CInode *in = get_inode(m->ino);
+  if (in) {
+    in->make_path(r->path);
+    dout(10) << " have " << r->path << " " << *in << dendl;
+  }
+  mds->messenger->send_message(r, m->get_connection());
+  m->put();
+}
+
+
+void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
+{
+  map<tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
+  if (p != find_ino_peer.end()) {
+    dout(10) << "handle_find_ino_reply " << *m << dendl;
+    find_ino_peer_info_t& fip = p->second;
+
+    // success?
+    if (get_inode(fip.ino)) {
+      dout(10) << "handle_find_ino_reply successfully found " << fip.ino << dendl;
+      mds->queue_waiter(fip.fin);
+      find_ino_peer.erase(p);
+      m->put();
+      return;
+    }
+
+    int from = m->get_source().num();
+    if (fip.checking == from)
+      fip.checking = -1;
+    fip.checked.insert(from);
+
+    if (!m->path.empty()) {
+      // we got a path!
+      vector<CDentry*> trace;
+      int r = path_traverse(NULL, m, m->path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+      if (r > 0)
+	return; 
+      dout(0) << "handle_find_ino_reply failed with " << r << " on " << m->path 
+	      << ", retrying" << dendl;
+      fip.checked.clear();
+      _do_find_ino_peer(fip);
+    } else {
+      // nope, continue.
+      _do_find_ino_peer(fip);
+    }      
+  } else {
+    dout(10) << "handle_find_ino_reply tid " << m->tid << " dne" << dendl;
+  }  
+  m->put();
+}
+
+
+
+
+
+
+/* ---------------------------- */
 
 /* This function takes over the reference to the passed Message */
 MDRequest *MDCache::request_start(MClientRequest *req)

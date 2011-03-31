@@ -51,6 +51,8 @@ class MDirUpdate;
 class MDentryLink;
 class MDentryUnlink;
 class MLock;
+class MMDSFindIno;
+class MMDSFindInoReply;
 
 class Message;
 class MClientRequest;
@@ -1011,6 +1013,25 @@ public:
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
+  struct find_ino_peer_info_t {
+    inodeno_t ino;
+    tid_t tid;
+    Context *fin;
+    int hint;
+    int checking;
+    set<int> checked;
+
+    find_ino_peer_info_t() : tid(0), fin(NULL), hint(-1), checking(-1) {}
+  };
+
+  map<tid_t, find_ino_peer_info_t> find_ino_peer;
+  tid_t find_ino_peer_last_tid;
+
+  void find_ino_peers(inodeno_t ino, Context *c, int hint=-1);
+  void _do_find_ino_peer(find_ino_peer_info_t& fip);
+  void handle_find_ino(MMDSFindIno *m);
+  void handle_find_ino_reply(MMDSFindInoReply *m);
+
   // -- anchors --
 public:
   void anchor_create_prep_locks(MDRequest *mdr, CInode *in, set<SimpleLock*>& rdlocks,

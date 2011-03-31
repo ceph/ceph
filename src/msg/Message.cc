@@ -88,6 +88,8 @@ using namespace std;
 #include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -412,6 +414,13 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_MDS_DISCOVERREPLY:
     m = new MDiscoverReply();
+    break;
+
+  case MSG_MDS_FINDINO:
+    m = new MMDSFindIno;
+    break;
+  case MSG_MDS_FINDINOREPLY:
+    m = new MMDSFindInoReply;
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:

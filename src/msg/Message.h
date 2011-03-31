@@ -96,6 +96,8 @@
 #define MSG_MDS_FRAGMENTNOTIFY     0x209
 #define MSG_MDS_OFFLOAD_TARGETS    0x20a
 #define MSG_MDS_DENTRYLINK         0x20c
+#define MSG_MDS_FINDINO            0x20d
+#define MSG_MDS_FINDINOREPLY       0x20e
 
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
