@@ -50,7 +50,6 @@ void test_create_and_stat(rados_ioctx_t io_ctx, const char *name, size_t size)
 void test_resize_and_stat(rbd_image_t image, size_t size)
 {
   rbd_image_info_t info;
-  int r;
   assert(rbd_resize(image, size) == 0);
   assert(rbd_stat(image, &info, sizeof(info)) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
@@ -188,7 +187,7 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
 {
   ssize_t written;
   written = rbd_write(image, off, len, test_data);
-  printf("wrote: %d\n", written);
+  printf("wrote: %d\n", (int) written);
   assert(written == len);
 }
 
@@ -219,7 +218,7 @@ void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_
   assert((result = malloc(sizeof(result) * (len + 1))) != 0);
 
   read = rbd_read(image, off, len, result);
-  printf("read: %d\n", read);
+  printf("read: %d\n", (int) read);
   assert(read == len);
   result[len] = '\0';
   printf("read: %s\nexpected: %s\n", result, expected);
