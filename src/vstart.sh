@@ -325,7 +325,7 @@ EOF
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf
 [mon.$f]
-        mon data = "dev/mon.$f"
+        mon data = dev/mon.$f
         mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
 			fi
