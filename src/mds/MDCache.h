@@ -985,8 +985,8 @@ public:
   void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
-  Context *_get_waiter(MDRequest *mdr, Message *req);
-  int path_traverse(MDRequest *mdr, Message *req, const filepath& path,
+  Context *_get_waiter(MDRequest *mdr, Message *req, Context *fin);
+  int path_traverse(MDRequest *mdr, Message *req, Context *c, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
