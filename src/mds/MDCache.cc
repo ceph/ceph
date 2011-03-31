@@ -2440,6 +2440,8 @@ void MDCache::handle_mds_failure(int who)
     finish.pop_front();
   }
 
+  kick_find_ino_peers(who);
+
   show_subtrees();  
 }
 
@@ -2496,6 +2498,8 @@ void MDCache::handle_mds_recovery(int who)
   }
 
   kick_discovers(who);
+
+  kick_find_ino_peers(who);
 
   // queue them up.
   mds->queue_waiters(waiters);
@@ -6973,8 +6977,23 @@ void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
   m->put();
 }
 
-
-
+void MDCache::kick_find_ino_peers(int who)
+{
+  // find_ino_peers requests we should move on from
+  for (map<tid_t,find_ino_peer_info_t>::iterator p = find_ino_peer.begin();
+       p != find_ino_peer.end();
+       ++p) {
+    find_ino_peer_info_t& fip = p->second;
+    if (fip.checking == who) {
+      dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds" << who << dendl;
+      fip.checking = -1;
+      _do_find_ino_peer(fip);
+    } else if (fip.checking == -1) {
+      dout(10) << "kicking find_ino_peer " << fip.tid << " who was waiting" << dendl;
+      _do_find_ino_peer(fip);
+    }
+  }
+}
 
 
 

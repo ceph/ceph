@@ -1031,6 +1031,7 @@ public:
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
   void handle_find_ino(MMDSFindIno *m);
   void handle_find_ino_reply(MMDSFindInoReply *m);
+  void kick_find_ino_peers(int who);
 
   // -- anchors --
 public:
