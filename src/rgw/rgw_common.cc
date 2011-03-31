@@ -29,10 +29,6 @@ void calc_hmac_sha1(const char *key, int key_len,
                     const char *msg, int msg_len, char *dest)
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 {
-  char key_buf[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  memset(key_buf, 0, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-  memcpy(key_buf, key, key_len);
-
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
