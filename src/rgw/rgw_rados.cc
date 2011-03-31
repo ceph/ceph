@@ -688,7 +688,24 @@ int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, 
   ::encode(c, cmdbl);
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
-  // ::encode(emptybl, cmdbl);
+
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.tmap_update(obj, cmdbl);
+  return r;
+}
+
+int RGWRados::tmap_create(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
+{
+  bufferlist cmdbl, emptybl;
+  __u8 c = CEPH_OSD_TMAP_CREATE;
+
+  ::encode(c, cmdbl);
+  ::encode(key, cmdbl);
+  ::encode(bl, cmdbl);
+
   librados::IoCtx io_ctx;
   int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)

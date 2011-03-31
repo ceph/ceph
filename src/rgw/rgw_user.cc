@@ -329,7 +329,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
     string buckets_obj_id;
     get_buckets_obj(user_id, buckets_obj_id);
 
-    ret = rgwstore->tmap_set(ui_bucket, buckets_obj_id, bucket_name, bl);
+    ret = rgwstore->tmap_create(ui_bucket, buckets_obj_id, bucket_name, bl);
     if (ret < 0) {
       RGW_LOG(0) << "error adding bucket to directory: "
 		 << cpp_strerror(-ret)<< std::endl;

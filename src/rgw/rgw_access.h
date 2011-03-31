@@ -171,6 +171,7 @@ public:
   virtual bool supports_tmap() { return false; }
 
   virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
+  virtual int tmap_create(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key) { return -ENOTSUP; }
 
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m) { return -ENOTSUP; }
