@@ -396,6 +396,15 @@ public:
   bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
   bool is_clientreplay_or_active_or_stopping(int m)   { return is_clientreplay(m) || is_active(m) || is_stopping(m); }
 
+  bool is_followable(int m) {
+    return (is_resolve(m) ||
+	    is_replay(m) ||
+	    is_rejoin(m) ||
+	    is_clientreplay(m) ||
+	    is_active(m) ||
+	    is_stopping(m));
+  }
+
   bool is_laggy_gid(uint64_t gid) { return mds_info.count(gid) && mds_info[gid].laggy(); }
 
 

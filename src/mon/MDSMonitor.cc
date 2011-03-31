@@ -355,7 +355,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
         info.standby_for_rank =
             mdsmap.find_by_name(info.standby_for_name)->rank;
     }
-    if (info.standby_for_rank >= 0 && !mdsmap.is_dne(info.standby_for_rank)) {
+    if (info.standby_for_rank >= 0 && 
+	mdsmap.is_followable(info.standby_for_rank)) {
       info.state = MDSMap::STATE_STANDBY_REPLAY;
     }
 
@@ -399,7 +400,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
                   << " to STANDBY_REPLAY for" << dendl;
         const MDSMap::mds_info_t *found_mds = NULL;
         if ((found_mds = mdsmap.find_by_name(m->get_standby_for_name())) &&
-            (found_mds->rank >= 0)) {
+            (found_mds->rank >= 0) &&
+	    mdsmap.is_followable(found_mds->rank)) {
           info.standby_for_rank = found_mds->rank;
           dout(10) <<" found mds " << m->get_standby_for_name()
                        << "; it has rank " << info.standby_for_rank << dendl;
@@ -410,7 +412,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
           return false;
         }
       } else if (m->get_standby_for_rank() >= 0 &&
-                 !mdsmap.is_dne(m->get_standby_for_rank())) {
+		 mdsmap.is_followable(m->get_standby_for_rank())) {
         /* switch to standby-replay for this MDS*/
         info.state = MDSMap::STATE_STANDBY_REPLAY;
         info.state_seq = seq;
@@ -939,7 +941,8 @@ void MDSMonitor::tick()
         for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
             i != pending_mdsmap.mds_info.end();
             ++i) {
-          if (i->second.rank >= 0) {
+          if (i->second.rank >= 0 &&
+	      mdsmap.is_followable(i->second.rank)) {
             if ((gid = pending_mdsmap.find_standby_for(
                 i->second.rank, i->second.name))) {
               dout(20) << "checking rank " << i->second.rank << dendl;
