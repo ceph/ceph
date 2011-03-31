@@ -935,6 +935,13 @@ struct C_Inode_Stored : public Context {
   }
 };
 
+object_t CInode::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
+{
+  char n[60];
+  snprintf(n, sizeof(n), "%llx.%08llx%s", (long long unsigned)ino, (long long unsigned)fg, suffix ? suffix : "");
+  return object_t(n);
+}
+
 void CInode::store(Context *fin)
 {
   dout(10) << "store " << get_version() << dendl;
@@ -951,9 +958,7 @@ void CInode::store(Context *fin)
   ObjectOperation m;
   m.write_full(bl);
 
-  char n[30];
-  snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
-  object_t oid(n);
+  object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
@@ -987,9 +992,7 @@ void CInode::fetch(Context *fin)
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
   C_Gather *gather = new C_Gather(c);
 
-  char n[30];
-  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
-  object_t oid(n);
+  object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   ObjectOperation rd;
@@ -998,8 +1001,7 @@ void CInode::fetch(Context *fin)
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &c->bl, 0, gather->new_sub());
 
   // read from separate object too
-  snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
-  object_t oid2(n);
+  object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
   mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather->new_sub());
 }
 
@@ -1081,9 +1083,7 @@ void CInode::store_parent(Context *fin)
   // write it.
   SnapContext snapc;
 
-  char n[30];
-  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
-  object_t oid(n);
+  object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
