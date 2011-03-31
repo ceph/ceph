@@ -7288,25 +7288,7 @@ void MDCache::dispatch_request(MDRequest *mdr)
 }
 
 
-void MDCache::request_forget_foreign_locks(MDRequest *mdr)
-{
-  // xlocks
-  set<SimpleLock*>::iterator p = mdr->xlocks.begin();
-  while (p != mdr->xlocks.end()) {
-    if ((*p)->get_parent()->is_auth()) 
-      p++;
-    else {
-      dout(10) << "request_forget_foreign_locks " << **p
-	       << " on " << *(*p)->get_parent() << dendl;
-      (*p)->put_xlock();
-      mdr->locks.erase(*p);
-      mdr->xlocks.erase(p++);
-    }
-  }
-}
-
-
-void MDCache::request_drop_locks(MDRequest *mdr)
+void MDCache::request_drop_foreign_locks(MDRequest *mdr)
 {
   // clean up slaves
   //  (will implicitly drop remote dn pins)
@@ -7317,11 +7299,37 @@ void MDCache::request_drop_locks(MDRequest *mdr)
     mds->send_message_mds(r, *p);
   }
 
-  // strip foreign xlocks out of lock lists, since the OP_FINISH drops them implicitly.
-  request_forget_foreign_locks(mdr);
+  /* strip foreign xlocks out of lock lists, since the OP_FINISH drops them
+   * implicitly. Note that we don't call the finishers -- there shouldn't
+   * be any on a remote lock and the request finish wakes up all
+   * the waiters anyway! */
+  set<SimpleLock*>::iterator p = mdr->xlocks.begin();
+  while (p != mdr->xlocks.end()) {
+    if ((*p)->get_parent()->is_auth()) 
+      p++;
+    else {
+      dout(10) << "request_drop_foreign_locks forgetting lock " << **p
+	       << " on " << *(*p)->get_parent() << dendl;
+      (*p)->put_xlock();
+      mdr->locks.erase(*p);
+      mdr->xlocks.erase(p++);
+    }
+  }
 
+  mdr->more()->slaves.clear(); /* we no longer have requests out to them, and
+                                * leaving them in can cause double-notifies as
+                                * this function can get called more than once */
+}
 
-  // drop locks
+void MDCache::request_drop_non_rdlocks(MDRequest *mdr)
+{
+  request_drop_foreign_locks(mdr);
+  mds->locker->drop_non_rdlocks(mdr);
+}
+
+void MDCache::request_drop_locks(MDRequest *mdr)
+{
+  request_drop_foreign_locks(mdr);
   mds->locker->drop_locks(mdr);
 }
 

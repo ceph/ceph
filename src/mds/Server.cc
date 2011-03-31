@@ -887,7 +887,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   client_con->get();
 
   // drop non-rdlocks before replying, so that we can issue leases
-  mds->locker->drop_non_rdlocks(mdr);
+  mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
   if (client_inst.name.is_mds()) {
