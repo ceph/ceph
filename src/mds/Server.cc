@@ -2042,6 +2042,15 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
   reply_request(mdr, 0, in, dn);  // reply
 }
 
+struct C_MDS_LookupHash : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_LookupHash(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  void finish(int r) {
+    server->_lookup_hash(mdr, r);
+  }
+};
+
 /* This function DOES clean up the mdr before returning*/
 void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
@@ -2055,7 +2064,12 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   if (!in) {
     // try the directory
     CInode *diri = mdcache->get_inode(req->get_filepath2().get_ino());
-    if (!diri || diri->state_test(CInode::STATE_PURGING)) {
+    if (!diri) {
+      mdcache->find_ino_peers(req->get_filepath2().get_ino(),
+			      new C_MDS_LookupHash(this, mdr), -1);
+      return;
+    }
+    if (diri->state_test(CInode::STATE_PURGING)) {
       reply_request(mdr, -ESTALE);
       return;
     }
@@ -2097,6 +2111,17 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   dout(10) << "reply to lookup_hash on " << *in << dendl;
   MClientReply *reply = new MClientReply(req, 0);
   reply_request(mdr, reply, in, in->get_parent_dn());
+}
+
+void Server::_lookup_hash(MDRequest *mdr, int r)
+{
+  dout(10) << "_lookup_hash " << mdr << " r=" << r << dendl;
+  if (r < 0) {
+    reply_request(mdr, r);
+    return;
+  }
+
+  dispatch_client_request(mdr);
 }
 
 

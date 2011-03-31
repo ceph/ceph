@@ -137,6 +137,7 @@ public:
   void handle_client_stat(MDRequest *mdr);
   void handle_client_lookup_parent(MDRequest *mdr);
   void handle_client_lookup_hash(MDRequest *mdr);
+  void _lookup_hash(MDRequest *mdr, int r);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_file_setlock(MDRequest *mdr);
   void handle_client_file_readlock(MDRequest *mdr);
