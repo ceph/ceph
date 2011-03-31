@@ -6481,7 +6481,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       pair<int,int> dauth = curdir->authority();
 
       if (onfail == MDS_TRAVERSE_FORWARD &&
-	  snapid && mdr->client_request &&
+	  snapid && mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_retry_attempt()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < retry " << mdr->client_request->get_retry_attempt()
