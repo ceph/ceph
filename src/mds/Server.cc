@@ -5674,6 +5674,16 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     }
 
     // drop our pins
+    if (srcdn->is_auth()) {
+      // we exported, clear out any xlocks that we moved to another MDS
+      set<SimpleLock*>::iterator i = mdr->xlocks.begin();
+      while(i != mdr->xlocks.end()) {
+        SimpleLock *lock = *i;
+        lock->put_xlock();
+        mdr->xlocks.erase(i++);
+        mdr->locks.erase(lock);
+      }
+    }
     mdr->cleanup();
 
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
