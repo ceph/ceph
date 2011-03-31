@@ -197,6 +197,8 @@ namespace librados
 
     int selfmanaged_snap_remove(uint64_t snapid);
 
+    int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
+
     ObjectIterator objects_begin();
     const ObjectIterator& objects_end() const;
 

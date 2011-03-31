@@ -109,11 +109,13 @@ struct librados::IoCtxImpl {
   void set_snap_read(snapid_t s) {
     if (!s)
       s = CEPH_NOSNAP;
+    dout(10) << "set snap read " << snap_seq << " -> " << s << dendl;
     snap_seq = s;
   }
 
   int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps) {
     ::SnapContext n;
+    dout(10) << "set snap write context: seq = " << seq << " and snaps = " << snaps << dendl;
     n.seq = seq;
     n.snaps = snaps;
     if (!n.is_valid())
@@ -1121,7 +1123,7 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::create::mylock");
   Cond cond;
@@ -1154,7 +1156,7 @@ write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t o
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::write::mylock");
   Cond cond;
@@ -1197,7 +1199,7 @@ append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::append::mylock");
   Cond cond;
@@ -1240,7 +1242,7 @@ write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::write_full::mylock");
   Cond cond;
@@ -1383,6 +1385,10 @@ aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 {
   utime_t ut = g_clock.now();
 
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
@@ -1399,6 +1405,10 @@ aio_append(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
           const bufferlist& bl, size_t len)
 {
   utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
 
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
@@ -1417,6 +1427,10 @@ aio_write_full(IoCtxImpl& io, const object_t &oid,
 {
   utime_t ut = g_clock.now();
 
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
@@ -1433,6 +1447,10 @@ remove(IoCtxImpl& io, const object_t& oid)
 {
   ::SnapContext snapc;
   utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
 
   Mutex mylock("RadosClient::remove::mylock");
   Cond cond;
@@ -1471,7 +1489,7 @@ trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::write_full::mylock");
   Cond cond;
@@ -1509,6 +1527,10 @@ int librados::RadosClient::
 tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
 {
   utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
 
   Mutex mylock("RadosClient::tmap_update::mylock");
   Cond cond;
@@ -1768,7 +1790,7 @@ rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::rmxattr::mylock");
   Cond cond;
@@ -1810,7 +1832,7 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
+    return -EROFS;
 
   Mutex mylock("RadosClient::setxattr::mylock");
   Cond cond;
@@ -1849,10 +1871,6 @@ int librados::RadosClient::
 getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attrset)
 {
   utime_t ut = g_clock.now();
-
-  /* can't write to a snapshot */
-  if (io.snap_seq != CEPH_NOSNAP)
-    return -EINVAL;
 
   Mutex mylock("RadosClient::getexattrs::mylock");
   Cond cond;
@@ -2441,6 +2459,15 @@ int librados::IoCtx::
 selfmanaged_snap_remove(uint64_t snapid)
 {
   return io_ctx_impl->client->selfmanaged_snap_remove(io_ctx_impl, snapid);
+}
+
+int librados::IoCtx::
+selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid)
+{
+  return io_ctx_impl->client->selfmanaged_snap_rollback_object(io_ctx_impl,
+							       oid,
+							       io_ctx_impl->snapc,
+							       snapid);
 }
 
 librados::ObjectIterator librados::IoCtx::
@@ -3120,6 +3147,14 @@ extern "C" int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->client->selfmanaged_snap_remove(ctx, snapid);
+}
+
+extern "C" int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io,
+						     const char *oid,
+						     uint64_t snapid)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->selfmanaged_snap_rollback_object(ctx, oid, ctx->snapc, snapid);
 }
 
 extern "C" int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps,
