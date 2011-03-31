@@ -3035,7 +3035,7 @@ int Client::unmount()
 
   if (cwd)
     put_inode(cwd);
-  cwd = 0;
+  cwd = NULL;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
 
