@@ -254,10 +254,34 @@ get_conf_files() const
   return ret;
 }
 
+static void dashes_to_underscores(const char *input, char *output)
+{
+  char c = 0;
+  char *o = output;
+  const char *i = input;
+  // first two characters are copied as-is
+  *o++ = *i++;
+  if (*o == '\0')
+    return;
+  *o++ = *i++;
+  if (*o == '\0')
+    return;
+  for (; ((c = *i)); ++i) {
+     if (c == '-')
+       *o++ = '_';
+     else
+       *o++ = c;
+  }
+  *o++ = '\0';
+}
+
 bool ceph_argparse_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, ...)
 {
   const char *first = *i;
+  char tmp[strlen(first)+1];
+  dashes_to_underscores(first, tmp);
+  first = tmp;
   const char *a;
   va_list ap;
 
@@ -277,6 +301,9 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...)
 {
   const char *first = *i;
+  char tmp[strlen(first)+1];
+  dashes_to_underscores(first, tmp);
+  first = tmp;
   const char *a;
   va_list ap;
   int strlen_a;
