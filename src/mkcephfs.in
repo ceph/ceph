@@ -273,7 +273,7 @@ if [ -n "$prepareosdfs" ]; then
     done
 
     modprobe btrfs || true
-    echo mkfs.btrfs $btrfs_devs
+    mkfs.btrfs $btrfs_devs
     btrfsctl -a
     mount -t btrfs $btrfs_opt $first_dev $btrfs_path
     chown $osd_user $btrfs_path
