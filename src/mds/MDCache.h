@@ -1013,6 +1013,7 @@ public:
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
+  // -- find_ino_peer --
   struct find_ino_peer_info_t {
     inodeno_t ino;
     tid_t tid;
@@ -1032,6 +1033,15 @@ public:
   void handle_find_ino(MMDSFindIno *m);
   void handle_find_ino_reply(MMDSFindInoReply *m);
   void kick_find_ino_peers(int who);
+
+  // -- find_ino_dir --
+  struct find_ino_dir_info_t {
+    inodeno_t ino;
+    Context *fin;
+  };
+
+  void find_ino_dir(inodeno_t ino, Context *c);
+  void _find_ino_dir(inodeno_t ino, Context *c, bufferlist& bl, int r);
 
   // -- anchors --
 public:

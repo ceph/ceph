@@ -6997,6 +6997,54 @@ void MDCache::kick_find_ino_peers(int who)
   }
 }
 
+/* ---------------------------- */
+
+struct C_MDS_FindInoDir : public Context {
+  MDCache *mdcache;
+  inodeno_t ino;
+  Context *fin;
+  bufferlist bl;
+  C_MDS_FindInoDir(MDCache *m, inodeno_t i, Context *f) : mdcache(m), ino(i), fin(f) {}
+  void finish(int r) {
+    mdcache->_find_ino_dir(ino, fin, bl, r);
+  }
+};
+
+void MDCache::find_ino_dir(inodeno_t ino, Context *fin)
+{
+  dout(10) << "find_ino_dir " << ino << dendl;
+  assert(!have_inode(ino));
+
+  // get the backtrace from the dir
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
+  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  
+  C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
+  mds->objecter->getxattr(oid, oloc, "path", CEPH_NOSNAP, &c->bl, 0, c);
+}
+
+void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
+{
+  dout(10) << "_find_ino_dir " << ino << " got " << r << " " << bl.length() << " bytes" << dendl;
+  if (r < 0) {
+    fin->finish(r);
+    delete fin;
+    return;
+  }
+
+  string s(bl.c_str(), bl.length());
+  filepath path(s.c_str());
+  vector<CDentry*> trace;
+
+  Context *c = new C_MDS_FindInoDir(this, ino, fin);
+  r = path_traverse(NULL, NULL, c, path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+  if (r > 0)
+    return; 
+  delete c;  // path_traverse doesn't clean it up for us.
+  
+  fin->finish(r);
+  delete fin;
+}
 
 
 /* ---------------------------- */
