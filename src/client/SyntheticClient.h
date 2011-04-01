@@ -74,6 +74,7 @@
 #define SYNCLIENT_MODE_DUMP 63
 
 #define SYNCLIENT_MODE_LOOKUPHASH     70
+#define SYNCLIENT_MODE_LOOKUPINO     71
 
 #define SYNCLIENT_MODE_TRUNCATE     200
 
@@ -263,6 +264,7 @@ class SyntheticClient {
   void import_find(const char *basedir, const char *find, bool writedata);
 
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name);
+  int lookup_ino(inodeno_t ino);
 
   int chunk_file(string &filename);
 

@@ -4540,6 +4540,20 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   return r;
 }
 
+int Client::lookup_ino(inodeno_t ino)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "lookup_ino enter(" << ino << ") = " << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
+  filepath path(ino);
+  req->set_filepath(path);
+
+  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
+  dout(3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
+  return r;
+}
+
 Fh *Client::_create_fh(Inode *in, int flags, int cmode)
 {
   // yay

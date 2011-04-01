@@ -243,6 +243,9 @@ void parse_syn_options(vector<const char*>& args)
 	syn_sargs.push_back(args[++i]);
 	syn_sargs.push_back(args[++i]);
 	syn_sargs.push_back(args[++i]);
+      } else if (strcmp(args[i], "lookupino") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_LOOKUPINO);
+	syn_sargs.push_back(args[++i]);
 
       } else if (strcmp(args[i], "chunkfile") == 0) {
 	syn_modes.push_back(SYNCLIENT_MODE_CHUNK);
@@ -878,6 +881,16 @@ int SyntheticClient::run()
 	string name = get_sarg(0);
 	if (run_me()) {
 	  lookup_hash(ino, dirino, name.c_str());
+	}
+      }
+      break;
+    case SYNCLIENT_MODE_LOOKUPINO:
+      {
+	inodeno_t ino;
+	string iname = get_sarg(0);
+	sscanf(iname.c_str(), "%llx", (long long unsigned*)&ino.val);
+	if (run_me()) {
+	  lookup_ino(ino);
 	}
       }
       break;
@@ -3338,6 +3351,13 @@ int SyntheticClient::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *na
 {
   int r = client->lookup_hash(ino, dirino, name);
   dout(0) << "lookup_hash(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
+  return r;
+}
+
+int SyntheticClient::lookup_ino(inodeno_t ino)
+{
+  int r = client->lookup_ino(ino);
+  dout(0) << "lookup_ino(" << ino << ") = " << r << dendl;
   return r;
 }
 
