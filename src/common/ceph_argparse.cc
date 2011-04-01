@@ -362,7 +362,7 @@ CephInitParameters ceph_argparse_early_args
     }
     else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
       if (!iparams.name.from_str(val)) {
-	std::cerr << "You must pass a string of the form ID.TYPE to "
+	std::cerr << "You must pass a string of the form TYPE.ID to "
 	  "the --name option." << std::endl;
 	_exit(1);
       }
