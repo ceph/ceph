@@ -202,16 +202,18 @@ int main(int argc, const char **argv)
     cout << "added entity " << ename << " auth " << eauth << std::endl;
   }
   if (caps_fn) {
-    ConfFile *cf = new ConfFile(caps_fn);
-    if (cf->parse() != 0) {
+    ConfFile cf;
+    std::deque<std::string> parse_errors;
+    if (cf.parse_file(caps_fn, &parse_errors) != 0) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
+    complain_about_parse_errors(&parse_errors);
     map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {
       std::string val;
-      if (cf->read("global", key_names[i], val) == 0) {
+      if (cf.read("global", key_names[i], val) == 0) {
         bufferlist bl;
         ::encode(val, bl);
         string s(key_names[i]);

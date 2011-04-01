@@ -510,7 +510,8 @@ md_config_t::
 }
 
 int md_config_t::
-parse_config_files(const std::list<std::string> &conf_files)
+parse_config_files(const std::list<std::string> &conf_files,
+		   std::deque<std::string> *parse_errors)
 {
   // open new conf
   list<string>::const_iterator c = conf_files.begin();
@@ -519,8 +520,8 @@ parse_config_files(const std::list<std::string> &conf_files)
   while (true) {
     if (c == conf_files.end())
       return -EINVAL;
-    ConfFile *cf_ = new ConfFile(c->c_str());
-    int res = cf_->parse();
+    ConfFile *cf_ = new ConfFile();
+    int res = cf_->parse_file(c->c_str(), parse_errors);
     if (res == 0) {
       cf = cf_;
       break;

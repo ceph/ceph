@@ -2,6 +2,7 @@
 #define CEPH_CONFUTILS_H
 
 
+#include <deque>
 #include <string.h>
 #include <map>
 #include <string>
@@ -89,9 +90,9 @@ class ConfFile {
 
 	int _read(int fd, char *buf, size_t size);
 	int _close(int fd);
+	int parse();
 public:
-        ConfFile(const char *fname);
-        ConfFile(ceph::bufferlist *bl);
+        ConfFile();
 	~ConfFile();
 
 	const SectionList& get_section_list() { return sections_list; }
@@ -99,7 +100,9 @@ public:
 
 	ConfLine *_find_var(const char *section, const char* var);
 
-	int parse();
+	int parse_file(const char *fname, std::deque<std::string> *parse_errors);
+	int parse_bufferlist(ceph::bufferlist *bl,
+			     std::deque<std::string> *parse_errors);
 
 	int read(const char *section, const char *var, std::string &val);
 

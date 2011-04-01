@@ -1,6 +1,7 @@
 #ifndef CEPH_COMMON_INIT_H
 #define CEPH_COMMON_INIT_H
 
+#include <deque>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@ enum common_init_flags_t {
 int keyring_init(md_config_t *conf);
 md_config_t *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
+void complain_about_parse_errors(std::deque<std::string> *parse_errors);
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 

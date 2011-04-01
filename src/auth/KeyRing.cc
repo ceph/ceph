@@ -104,8 +104,9 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 
   bufferlist bl;
   bl.append(orig_src, len);
-  ConfFile cf(&bl);
-  if (cf.parse() != 0) {
+  ConfFile cf;
+  std::deque<std::string> parse_errors;
+  if (cf.parse_bufferlist(&bl, &parse_errors) != 0) {
     derr << "cannot parse buffer" << dendl;
     goto done_err;
   }

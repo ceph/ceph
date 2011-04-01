@@ -205,29 +205,36 @@ const char unicode_config_1[] = "\
 ";
 
 TEST(ParseFiles1, ConfUtils) {
+  std::deque<std::string> err;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
-  ConfFile cf1(simple_conf_1_f.c_str());
-  ASSERT_EQ(cf1.parse(), 0);
+  ConfFile cf1;
+  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
 
   std::string simple_conf_2_f(next_tempfile(simple_conf_1));
-  ConfFile cf2(simple_conf_2_f.c_str());
-  ASSERT_EQ(cf2.parse(), 0);
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_file(simple_conf_2_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
 
   bufferlist bl3;
   bl3.append(simple_conf_1, strlen(simple_conf_1));
-  ConfFile cf3(&bl3);
-  ASSERT_EQ(cf3.parse(), 0);
+  ConfFile cf3;
+  ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err), 0);
+  ASSERT_EQ(err.size(), 0U);
 
   bufferlist bl4;
   bl4.append(simple_conf_2, strlen(simple_conf_2));
-  ConfFile cf4(&bl4);
-  ASSERT_EQ(cf4.parse(), 0);
+  ConfFile cf4;
+  ASSERT_EQ(cf4.parse_bufferlist(&bl4, &err), 0);
+  ASSERT_EQ(err.size(), 0U);
 }
 
 TEST(ReadFiles1, ConfUtils) {
+  std::deque<std::string> err;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
-  ConfFile cf1(simple_conf_1_f.c_str());
-  ASSERT_EQ(cf1.parse(), 0);
+  ConfFile cf1;
+  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
 
   std::string val;
   ASSERT_EQ(cf1.read("global", "keyring", val), 0);
@@ -243,8 +250,9 @@ TEST(ReadFiles1, ConfUtils) {
 
   bufferlist bl2;
   bl2.append(simple_conf_2, strlen(simple_conf_2));
-  ConfFile cf2(&bl2);
-  ASSERT_EQ(cf2.parse(), 0);
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err), 0);
+  ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(cf2.read("osd0", "keyring", val), 0);
   ASSERT_EQ(val, "osd_keyring");
 
@@ -254,35 +262,42 @@ TEST(ReadFiles1, ConfUtils) {
 }
 
 TEST(ReadFiles2, ConfUtils) {
+  std::deque<std::string> err;
   std::string conf3_f(next_tempfile(conf3));
-  ConfFile cf1(conf3_f.c_str());
+  ConfFile cf1;
   std::string val;
-  ASSERT_EQ(cf1.parse(), 0);
+  ASSERT_EQ(cf1.parse_file(conf3_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(cf1.read("global", "log file", val), 0);
   ASSERT_EQ(val, "/quite/a/long/path/for/a/log/file");
   ASSERT_EQ(cf1.read("global", "pid file", val), 0);
   ASSERT_EQ(val, "spork");
 
   std::string unicode_config_1f(next_tempfile(unicode_config_1));
-  ConfFile cf2(unicode_config_1f.c_str());
-  ASSERT_EQ(cf2.parse(), 0);
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_file(unicode_config_1f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(cf2.read("global", "log file", val), 0);
   ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
 }
 
 // FIXME: illegal configuration files don't return a parse error currently.
 TEST(IllegalFiles, ConfUtils) {
+  std::deque<std::string> err;
   std::string illegal_conf1_f(next_tempfile(illegal_conf1));
-  ConfFile cf1(illegal_conf1_f.c_str());
+  ConfFile cf1;
   std::string val;
-  ASSERT_EQ(cf1.parse(), 0);
+  ASSERT_EQ(cf1.parse_file(illegal_conf1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U); // FIXME
 
   bufferlist bl2;
   bl2.append(illegal_conf2, strlen(illegal_conf2));
-  ConfFile cf2(&bl2);
-  ASSERT_EQ(cf2.parse(), 0);
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err), 0);
+  ASSERT_EQ(err.size(), 0U); // FIXME
 
   std::string illegal_conf3_f(next_tempfile(illegal_conf3));
-  ConfFile cf3(illegal_conf3_f.c_str());
-  ASSERT_EQ(cf3.parse(), 0);
+  ConfFile cf3;
+  ASSERT_EQ(cf3.parse_file(illegal_conf3_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U); // FIXME
 }

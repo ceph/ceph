@@ -458,22 +458,9 @@ void ConfFile::common_init()
   default_global = true;
 }
 
-ConfFile::ConfFile(const char *fname)
+ConfFile::ConfFile()
   : parse_lock("ConfFile::parse_lock", false, false, false)
 {
-  common_init();
-
-  if (fname)
-    filename = strdup(fname);
-  else
-    filename = NULL;
-}
-
-ConfFile::ConfFile(ceph::bufferlist *_pbl)
-  : parse_lock("ConfFile::parse_lock", false, false, false)
-{
-  common_init();
-  pbl =  _pbl;
 }
 
 ConfFile::~ConfFile()
@@ -725,6 +712,27 @@ done:
 	free(line);
 
 	return ret;
+}
+
+int ConfFile::parse_file(const char *fname, std::deque<std::string> *parse_errors)
+{
+  common_init();
+
+  if (fname)
+    filename = strdup(fname);
+  else
+    filename = NULL;
+
+  return parse();
+}
+
+int ConfFile::parse_bufferlist(ceph::bufferlist *pbl_,
+			       std::deque<std::string> *parse_errors)
+{
+  common_init();
+  pbl =  pbl_;
+
+  return parse();
 }
 
 int ConfFile::parse()

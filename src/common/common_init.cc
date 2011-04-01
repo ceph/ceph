@@ -26,6 +26,7 @@
 #include "include/color.h"
 
 #include <errno.h>
+#include <deque>
 #include <syslog.h>
 
 int keyring_init(md_config_t *conf)
@@ -110,6 +111,26 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
   return conf;
 }
 
+void complain_about_parse_errors(std::deque<std::string> *parse_errors)
+{
+  if (parse_errors->empty())
+    return;
+  derr << "Errors while parsing config file!" << dendl;
+  int cur_err = 0;
+  static const int MAX_PARSE_ERRORS = 20;
+  for (std::deque<std::string>::const_iterator p = parse_errors->begin();
+       p != parse_errors->end(); ++p)
+  {
+    derr << *p << dendl;
+    if (cur_err == MAX_PARSE_ERRORS) {
+      derr << "Suppressed " << (parse_errors->size() - MAX_PARSE_ERRORS)
+	   << " more errors." << dendl;
+      break;
+    }
+    ++cur_err;
+  }
+}
+
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags)
 {
@@ -117,7 +138,8 @@ void common_init(std::vector < const char* >& args,
     ceph_argparse_early_args(args, module_type, flags);
   md_config_t *conf = common_preinit(iparams, code_env, flags);
 
-  int ret = conf->parse_config_files(iparams.get_conf_files());
+  std::deque<std::string> parse_errors;
+  int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
   if (ret == -EDOM) {
     derr << "common_init: error parsing config file." << dendl;
     _exit(1);
@@ -154,6 +176,9 @@ void common_init(std::vector < const char* >& args,
     DoutLocker _dout_locker;
     _dout_open_log();
   }
+
+  // Now we're ready to complain about config file parse errors
+  complain_about_parse_errors(&parse_errors);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };

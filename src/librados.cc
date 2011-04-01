@@ -2828,6 +2828,7 @@ extern "C" int rados_connect(rados_t cluster)
   if (ret)
     return ret;
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+
   return radosp->connect();
 }
 
@@ -2857,11 +2858,15 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 
   std::list<std::string> conf_files;
   get_str_list(path, conf_files);
-  int ret = g_conf.parse_config_files(conf_files);
+  std::deque<std::string> parse_errors;
+  int ret = g_conf.parse_config_files(conf_files, &parse_errors);
   if (ret)
     return ret;
   g_conf.parse_env(); // environment variables override
   g_conf.expand_all_meta(); // handle metavariables in the config
+
+  complain_about_parse_errors(&parse_errors);
+
   return 0;
 }
 
