@@ -811,6 +811,8 @@ bool Journaler::is_readable()
     if (write_pos > read_pos)
       junk_tail_pos = write_pos; // note old tail
     write_pos = flush_pos = ack_pos = safe_pos = read_pos;
+    requested_pos = received_pos = read_pos;
+    read_buf.clear();
     assert(write_buf.length() == 0);
 
     // truncate?
