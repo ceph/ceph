@@ -5475,7 +5475,9 @@ void MDCache::trim_non_auth()
 	     p != ls.end();
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
-	  warn_str_dirs << (*p)->get_inode()->get_parent_dn()->get_name() << "\n";
+	  CInode *diri = (*p)->get_inode();
+	  if (!diri->is_base())
+	    warn_str_dirs << diri->get_parent_dn()->get_name() << "\n";
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
