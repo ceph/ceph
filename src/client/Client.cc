@@ -1570,6 +1570,12 @@ void Client::send_reconnect(int mds)
       in->exporting_mds = -1;
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
+      if (!in->is_any_caps()) {
+	dout(10) << "  removing last cap, closing snaprealm" << dendl;
+	put_snap_realm(in->snaprealm);
+	in->snaprealm = 0;
+	in->snaprealm_item.remove_myself();
+      }
     }
   }
   
