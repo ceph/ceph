@@ -1125,6 +1125,10 @@ void Server::dispatch_client_request(MDRequest *mdr)
     handle_client_lookup_hash(mdr);
     break;
 
+  case CEPH_MDS_OP_LOOKUPINO:
+    handle_client_lookup_ino(mdr);
+    break;
+
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
   case CEPH_MDS_OP_LOOKUPSNAP:
@@ -2073,13 +2077,14 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
       reply_request(mdr, -ESTALE);
       return;
     }
+    if (!in && !dirino) {
+      dout(10) << " no dirino, looking up ino " << ino << " directly" << dendl;
+      _lookup_ino(mdr);
+      return;
+    }
   }
   if (!in) {
     // try the directory
-    if (!dirino) {
-      _lookup_hash_ino(mdr);
-      return;
-    }
     CInode *diri = mdcache->get_inode(dirino);
     if (!diri) {
       mdcache->find_ino_peers(dirino,
@@ -2161,40 +2166,66 @@ void Server::_lookup_hash_3(MDRequest *mdr, int r)
     dispatch_client_request(mdr);
     return;
   }
-  _lookup_hash_ino(mdr);
   dout(10) << "_lookup_hash_3 " << mdr << " trying the ino itself" << dendl;
+  _lookup_ino(mdr);
 }
 
-struct C_MDS_LookupHashIno2 : public Context {
+/***************/
+
+struct C_MDS_LookupIno2 : public Context {
   Server *server;
   MDRequest *mdr;
-  C_MDS_LookupHashIno2(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  C_MDS_LookupIno2(Server *s, MDRequest *r) : server(s), mdr(r) {}
   void finish(int r) {
-    server->_lookup_hash_ino_2(mdr, r);
+    server->_lookup_ino_2(mdr, r);
   }
 };
 
-void Server::_lookup_hash_ino(MDRequest *mdr)
+/* This function DOES clean up the mdr before returning*/
+/*
+ * filepath:  ino
+ */
+void Server::handle_client_lookup_ino(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  inodeno_t ino = req->get_filepath().get_ino();
+  CInode *in = mdcache->get_inode(ino);
+  if (in && in->state_test(CInode::STATE_PURGING)) {
+    reply_request(mdr, -ESTALE);
+    return;
+  }
+  if (!in) {
+    _lookup_ino(mdr);
+    return;
+  }
+
+  dout(10) << "reply to lookup_ino " << *in << dendl;
+  MClientReply *reply = new MClientReply(req, 0);
+  reply_request(mdr, reply, in, in->get_parent_dn());
+}
+
+void Server::_lookup_ino(MDRequest *mdr)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_hash_ino " << mdr << " checking peers for ino " << ino << dendl;
+  dout(10) << "_lookup_ino " << mdr << " checking peers for ino " << ino << dendl;
   mdcache->find_ino_peers(ino,
-			  new C_MDS_LookupHashIno2(this, mdr), -1);
+			  new C_MDS_LookupIno2(this, mdr), -1);
 }
 
-struct C_MDS_LookupHashIno3 : public Context {
+struct C_MDS_LookupIno3 : public Context {
   Server *server;
   MDRequest *mdr;
-  C_MDS_LookupHashIno3(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  C_MDS_LookupIno3(Server *s, MDRequest *r) : server(s), mdr(r) {}
   void finish(int r) {
-    server->_lookup_hash_ino_3(mdr, r);
+    server->_lookup_ino_3(mdr, r);
   }
 };
 
-void Server::_lookup_hash_ino_2(MDRequest *mdr, int r)
+void Server::_lookup_ino_2(MDRequest *mdr, int r)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_hash_ino_2 " << mdr << " checked peers for ino " << ino
+  dout(10) << "_lookup_ino_2 " << mdr << " checked peers for ino " << ino
 	   << " and got r=" << r << dendl;
   if (r == 0) {
     dispatch_client_request(mdr);
@@ -2202,13 +2233,13 @@ void Server::_lookup_hash_ino_2(MDRequest *mdr, int r)
   }
 
   // okay fine, maybe it's a directory though...
-  mdcache->find_ino_dir(ino, new C_MDS_LookupHashIno3(this, mdr));
+  mdcache->find_ino_dir(ino, new C_MDS_LookupIno3(this, mdr));
 }
 
-void Server::_lookup_hash_ino_3(MDRequest *mdr, int r)
+void Server::_lookup_ino_3(MDRequest *mdr, int r)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_hash_ino_3 " << mdr << " checked dir obj for ino " << ino
+  dout(10) << "_lookup_ino_3 " << mdr << " checked dir obj for ino " << ino
 	   << " and got r=" << r << dendl;
   if (r == 0) {
     dispatch_client_request(mdr);
