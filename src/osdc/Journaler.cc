@@ -238,6 +238,9 @@ void Journaler::reprobe(Context *finish)
 void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   assert(new_end >= write_pos);
   assert(r >= 0);
+  dout(1) << "_finish_reprobe new_end = " << new_end 
+	  << " (header had " << write_pos << ")."
+	  << dendl;
   write_pos = flush_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->finish(r);
@@ -676,6 +679,8 @@ void Journaler::_issue_read(int64_t len)
     uint64_t e = requested_pos + period;
     e -= e % period;
     uint64_t l = e - requested_pos;
+    if (l > len)
+      l = len;
     C_Read *c = new C_Read(this, requested_pos);
     filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, c);
     requested_pos += l;
