@@ -78,6 +78,7 @@ struct ceph_file_layout g_default_file_layout = {
 #define OPTION_OPT_LONGLONG(section, name, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
      &g_conf.name, 0, def_val, 0, type }
+#define OPTION_OPT_U64 OPTION_OPT_LONGLONG
 #define OPTION_OPT_U32 OPTION_OPT_LONGLONG
 #define OPTION_OPT_INT OPTION_OPT_LONGLONG
 #define OPTION_OPT_BOOL OPTION_OPT_INT
@@ -159,11 +160,11 @@ struct config_option config_optionsp[] = {
   OPTION(ms_max_backoff, OPT_DOUBLE, 15.0),
   OPTION(ms_nocrc, OPT_BOOL, false),
   OPTION(ms_die_on_bad_msg, OPT_BOOL, false),
-  OPTION(ms_dispatch_throttle_bytes, OPT_LONGLONG, 100 << 20),
+  OPTION(ms_dispatch_throttle_bytes, OPT_U64, 100 << 20),
   OPTION(ms_bind_ipv6, OPT_BOOL, false),
-  OPTION(ms_rwthread_stack_bytes, OPT_LONGLONG, 1024 << 10),
-  OPTION(ms_tcp_read_timeout, OPT_LONGLONG, 900),
-  OPTION(ms_inject_socket_failures, OPT_LONGLONG, 0),
+  OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10),
+  OPTION(ms_tcp_read_timeout, OPT_U64, 900),
+  OPTION(ms_inject_socket_failures, OPT_U64, 0),
   OPTION(mon_data, OPT_STR, 0),
   OPTION(mon_tick_interval, OPT_INT, 5),
   OPTION(mon_subscribe_interval, OPT_DOUBLE, 300),
@@ -208,17 +209,17 @@ struct config_option config_optionsp[] = {
   OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100),    // MB * n  (dirty OR tx.. bigish)
   OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8), // target dirty (keep this smallish)
   // note: the max amount of "in flight" dirty data is roughly (max - target)
-  OPTION(client_oc_max_sync_write, OPT_LONGLONG, 128*1024),   // sync writes >= this use wrlock
+  OPTION(client_oc_max_sync_write, OPT_U64, 128*1024),   // sync writes >= this use wrlock
   OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0),
   OPTION(objecter_mon_retry_interval, OPT_DOUBLE, 5.0),
   OPTION(objecter_timeout, OPT_DOUBLE, 10.0),    // before we ask for a map
-  OPTION(objecter_inflight_op_bytes, OPT_LONGLONG, 1024*1024*100), //max in-flight data (both directions)
+  OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100), //max in-flight data (both directions)
   OPTION(journaler_allow_split_entries, OPT_BOOL, true),
   OPTION(journaler_write_head_interval, OPT_INT, 15),
   OPTION(journaler_prefetch_periods, OPT_INT, 10),   // * journal object size (1~MB? see above)
   OPTION(journaler_batch_interval, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
-  OPTION(journaler_batch_max, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
-  OPTION(mds_max_file_size, OPT_LONGLONG, 1ULL << 40),
+  OPTION(journaler_batch_max, OPT_U64, 0),  // max bytes we'll delay flushing; disable, for now....
+  OPTION(mds_max_file_size, OPT_U64, 1ULL << 40),
   OPTION(mds_cache_size, OPT_INT, 100000),
   OPTION(mds_cache_mid, OPT_FLOAT, .7),
   OPTION(mds_mem_max, OPT_INT, 1048576),        // KB
@@ -301,7 +302,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01),       // min local latency
   OPTION(osd_shed_reads_min_latency_diff, OPT_DOUBLE, .01),  // min latency difference
   OPTION(osd_shed_reads_min_latency_ratio, OPT_DOUBLE, 1.5),  // 1.2 == 20% higher than peer
-  OPTION(osd_client_message_size_cap, OPT_LONGLONG, 500*1024L*1024L), // default to 200MB client data allowed in-memory
+  OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L), // default to 200MB client data allowed in-memory
   OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5),
   OPTION(osd_pg_bits, OPT_INT, 6),  // bits per osd
   OPTION(osd_pgp_bits, OPT_INT, 6),  // bits per osd
@@ -332,7 +333,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_preserve_trimmed_log, OPT_BOOL, true),
   OPTION(osd_recovery_delay_start, OPT_FLOAT, 15),
   OPTION(osd_recovery_max_active, OPT_INT, 5),
-  OPTION(osd_recovery_max_chunk, OPT_LONGLONG, 1<<20),  // max size of push chunk
+  OPTION(osd_recovery_max_chunk, OPT_U64, 1<<20),  // max size of push chunk
   OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false),   // off for now
   OPTION(osd_max_scrubs, OPT_INT, 1),
   OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5),
@@ -373,8 +374,8 @@ struct config_option config_optionsp[] = {
   OPTION(ebofs_commit_ms, OPT_INT, 200),       // 0 = no forced commit timeout (for debugging/tracing)
   OPTION(ebofs_oc_size, OPT_INT, 10000),      // onode cache
   OPTION(ebofs_cc_size, OPT_INT, 10000),      // cnode cache
-  OPTION(ebofs_bc_size, OPT_LONGLONG, 50*256), // 4k blocks, *256 for MB
-  OPTION(ebofs_bc_max_dirty, OPT_LONGLONG, 30*256), // before write() will block
+  OPTION(ebofs_bc_size, OPT_U64, 50*256), // 4k blocks, *256 for MB
+  OPTION(ebofs_bc_max_dirty, OPT_U64, 30*256), // before write() will block
   OPTION(ebofs_max_prefetch, OPT_INT, 1000), // 4k blocks
   OPTION(ebofs_realloc, OPT_BOOL, false),    // hrm, this can cause bad fragmentation, don't use!
   OPTION(ebofs_verify_csum_on_read, OPT_BOOL, true),
@@ -662,6 +663,9 @@ get_val(const char *key, char **buf, int len) const
       case OPT_U32:
         oss << *(uint32_t*)opt->val_ptr;
         break;
+      case OPT_U64:
+        oss << *(uint64_t*)opt->val_ptr;
+        break;
       case OPT_ADDR: {
         oss << *(entity_addr_t*)opt->val_ptr;
         break;
@@ -761,6 +765,9 @@ set_val_from_default(const config_option *opt)
     case OPT_U32:
       *(uint32_t *)opt->val_ptr = (uint32_t)opt->def_longlong;
       break;
+    case OPT_U64:
+      *(uint64_t *)opt->val_ptr = (uint64_t)opt->def_longlong;
+      break;
     case OPT_ADDR: {
       if (!opt->def_str) {
 	// entity_addr_t has a default constructor, so we don't need to
@@ -832,6 +839,14 @@ set_val_impl(const char *val, const config_option *opt)
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->val_ptr = f;
+      return 0;
+    }
+    case OPT_U64: {
+      std::string err;
+      long long f = strict_strtoll((const char*)val, 10, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(uint64_t*)opt->val_ptr = f;
       return 0;
     }
     case OPT_ADDR: {

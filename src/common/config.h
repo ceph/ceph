@@ -247,7 +247,7 @@ public:
   int      client_oc_size;
   int      client_oc_max_dirty;
   int      client_oc_target_dirty;
-  long long unsigned   client_oc_max_sync_write;
+  uint64_t client_oc_max_sync_write;
 
   int      client_notify_timeout;
 
@@ -262,7 +262,7 @@ public:
   int   journaler_write_head_interval;
   int   journaler_prefetch_periods;
   double journaler_batch_interval;
-  long long unsigned journaler_batch_max;
+  uint64_t journaler_batch_max;
 
   // mds
   uint64_t mds_max_file_size;
@@ -458,9 +458,9 @@ public:
   int   ebofs_commit_ms;
   int   ebofs_oc_size;
   int   ebofs_cc_size;
-  unsigned long long ebofs_bc_size;
-  unsigned long long ebofs_bc_max_dirty;
-  unsigned ebofs_max_prefetch;
+  uint64_t ebofs_bc_size;
+  uint64_t ebofs_bc_max_dirty;
+  int ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
 
@@ -501,7 +501,7 @@ extern md_config_t g_conf;
 
 typedef enum {
 	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR, OPT_U32
+	OPT_ADDR, OPT_U32, OPT_U64
 } opt_type_t;
 
 bool ceph_resolve_file_search(const std::string& filename_list,
