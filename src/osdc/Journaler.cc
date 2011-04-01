@@ -679,7 +679,7 @@ void Journaler::_issue_read(int64_t len)
     uint64_t e = requested_pos + period;
     e -= e % period;
     uint64_t l = e - requested_pos;
-    if (l > len)
+    if (l > (uint64_t)len)
       l = len;
     C_Read *c = new C_Read(this, requested_pos);
     filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, c);
