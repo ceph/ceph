@@ -4528,15 +4528,29 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   filepath path(ino);
   req->set_filepath(path);
 
-  uint32_t h = ceph_str_hash(0, name, strlen(name));
+  uint32_t h = ceph_str_hash(CEPH_STR_HASH_RJENKINS, name, strlen(name));
   char f[30];
-  sprintf(f, "%d", h);
+  sprintf(f, "%u", h);
   filepath path2(dirino);
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
   int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
   dout(3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
+  return r;
+}
+
+int Client::lookup_ino(inodeno_t ino)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "lookup_ino enter(" << ino << ") = " << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
+  filepath path(ino);
+  req->set_filepath(path);
+
+  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
+  dout(3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
   return r;
 }
 

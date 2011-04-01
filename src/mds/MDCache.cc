@@ -6884,6 +6884,7 @@ void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
   fip.tid = tid;
   fip.fin = c;
   fip.hint = hint;
+  fip.checked.insert(mds->whoami);
   _do_find_ino_peer(fip);
 }
 
@@ -6904,7 +6905,8 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
     fip.hint = -1;
   } else {
     for (set<int>::iterator p = active.begin(); p != active.end(); p++)
-      if (fip.checked.count(*p) == 0) {
+      if (*p != mds->whoami &&
+	  fip.checked.count(*p) == 0) {
 	m = *p;
 	break;
       }
@@ -7036,7 +7038,10 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
   filepath path(s.c_str());
   vector<CDentry*> trace;
 
-  Context *c = new C_MDS_FindInoDir(this, ino, fin);
+  dout(10) << "_find_ino_dir traversing to path " << path << dendl;
+
+  C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
+  c->bl = bl;
   r = path_traverse(NULL, NULL, c, path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
   if (r > 0)
     return; 
@@ -8099,7 +8104,7 @@ void MDCache::discover_path(CDir *base,
     d.frag = base->get_frag();
     d.snap = snap;
     d.want_path = want_path;
-    d.want_base_dir = true;
+    d.want_base_dir = false;
     d.want_xlocked = want_xlocked;
     _send_discover(d);
   }
