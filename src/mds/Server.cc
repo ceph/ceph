@@ -2113,15 +2113,39 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   reply_request(mdr, reply, in, in->get_parent_dn());
 }
 
+struct C_MDS_LookupHash2 : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_LookupHash2(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  void finish(int r) {
+    server->_lookup_hash_2(mdr, r);
+  }
+};
+
 void Server::_lookup_hash(MDRequest *mdr, int r)
 {
   dout(10) << "_lookup_hash " << mdr << " r=" << r << dendl;
-  if (r < 0) {
-    reply_request(mdr, r);
+  if (r == 0) {
+    dispatch_client_request(mdr);
     return;
   }
 
-  dispatch_client_request(mdr);
+  // okay fine, try the dir object then!
+  mdcache->find_ino_dir(mdr->client_request->get_filepath2().get_ino(), new C_MDS_LookupHash2(this, mdr));
+}
+
+void Server::_lookup_hash_2(MDRequest *mdr, int r)
+{
+  dout(10) << "_lookup_hash_2 " << mdr << " r=" << r << dendl;
+  if (r == 0) {
+    dispatch_client_request(mdr);
+    return;
+  }
+
+  // give up
+  if (r == -ENOENT || r == -ENODATA)
+    r = -ESTALE;
+  reply_request(mdr, r);
 }
 
 
