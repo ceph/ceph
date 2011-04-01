@@ -1763,6 +1763,21 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   return dir;
 }
 
+class C_MDS_TryFindInode : public Context {
+  Server *server;
+  MDRequest *mdr;
+public:
+  C_MDS_TryFindInode(Server *s, MDRequest *r) : server(s), mdr(r) {
+    mdr->get();
+  }
+  virtual void finish(int r) {
+    if (r == -ESTALE) // :( find_ino_peers failed
+      server->reply_request(mdr, r);
+    else
+      server->dispatch_client_request(mdr);
+    mdr->put();
+  }
+};
 
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
@@ -1787,6 +1802,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
       reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);
+    } else if (r == -ESTALE) {
+      Context *c = new C_MDS_TryFindInode(this, mdr);
+      mdcache->find_ino_peers(refpath.get_ino(), c);
     } else {
       reply_request(mdr, r);
     }
