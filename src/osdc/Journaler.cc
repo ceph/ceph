@@ -745,11 +745,17 @@ bool Journaler::_is_readable()
     dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << dendl;
     if (write_pos > read_pos)
       junk_tail_pos = write_pos; // note old tail
+
+    // adjust write_pos
     write_pos = flush_pos = safe_pos = read_pos;
     assert(write_buf.length() == 0);
+
+    // reset read state
+    requested_pos = received_pos = read_pos;
+    read_buf.clear();    
     
-    // truncate?
-    // FIXME: how much?
+    // FIXME: truncate on disk?
+
     return false;
   }
 
