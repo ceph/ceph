@@ -196,7 +196,7 @@ private:
 
   void _finish_read(int r, uint64_t offset, bufferlist &bl); // read completion callback
   void _assimilate_prefetch();
-  void _issue_read(int64_t len);  // read some more
+  void _issue_read(uint64_t len);  // read some more
   void _prefetch();             // maybe read ahead
   class C_Read;
   friend class C_Read;
