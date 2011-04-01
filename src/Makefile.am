@@ -440,6 +440,12 @@ unittest_strtol_LDADD = libcommon.a ${UNITTEST_LDADD}
 unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_strtol
 
+unittest_confutils_SOURCES = test/confutils.cc
+unittest_confutils_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_confutils_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_confutils
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
