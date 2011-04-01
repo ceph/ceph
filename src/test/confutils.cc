@@ -196,6 +196,14 @@ const char illegal_conf3[] = "\
         keyring = osd_keyring          ; osd's keyring\n\
 ";
 
+// unicode config file
+const char unicode_config_1[] = "\
+[global]\n\
+        log file =           \x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae     \n\
+        pid file =           foo-bar\n\
+[osd0]\n\
+";
+
 TEST(ParseFiles1, ConfUtils) {
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
   ConfFile cf1(simple_conf_1_f.c_str());
@@ -254,6 +262,12 @@ TEST(ReadFiles2, ConfUtils) {
   ASSERT_EQ(val, "/quite/a/long/path/for/a/log/file");
   ASSERT_EQ(cf1.read("global", "pid file", val), 0);
   ASSERT_EQ(val, "spork");
+
+  std::string unicode_config_1f(next_tempfile(unicode_config_1));
+  ConfFile cf2(unicode_config_1f.c_str());
+  ASSERT_EQ(cf2.parse(), 0);
+  ASSERT_EQ(cf2.read("global", "log file", val), 0);
+  ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
 }
 
 // FIXME: illegal configuration files don't return a parse error currently.
