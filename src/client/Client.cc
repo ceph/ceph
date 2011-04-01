@@ -4528,7 +4528,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   filepath path(ino);
   req->set_filepath(path);
 
-  uint32_t h = ceph_str_hash(0, name, strlen(name));
+  uint32_t h = ceph_str_hash(CEPH_STR_HASH_RJENKINS, name, strlen(name));
   char f[30];
   sprintf(f, "%d", h);
   filepath path2(dirino);
