@@ -2095,8 +2095,10 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
       reply_request(mdr, -ESTALE);
       return;
     }
+    dout(10) << " have diri " << *diri << dendl;
     unsigned hash = atoi(req->get_filepath2()[0].c_str());
     frag_t fg = diri->dirfragtree[hash];
+    dout(10) << " fg is " << fg << dendl;
     CDir *dir = diri->get_dirfrag(fg);
     if (!dir) {
       if (!diri->is_auth()) {
@@ -2112,6 +2114,7 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
       dir = diri->get_or_open_dirfrag(mdcache, fg);
     }
     assert(dir);
+    dout(10) << " have dir " << *dir << dendl;
     if (!dir->is_auth()) {
       if (dir->is_ambiguous_auth()) {
 	// wait
@@ -2123,7 +2126,7 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
       return;
     }
     if (!dir->is_complete()) {
-      dir->fetch(0, new C_MDS_RetryRequest(mdcache, mdr));
+      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
     reply_request(mdr, -ESTALE);
