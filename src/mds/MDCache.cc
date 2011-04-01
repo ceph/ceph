@@ -6884,6 +6884,7 @@ void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
   fip.tid = tid;
   fip.fin = c;
   fip.hint = hint;
+  fip.checked.insert(mds->whoami);
   _do_find_ino_peer(fip);
 }
 
@@ -6904,7 +6905,8 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
     fip.hint = -1;
   } else {
     for (set<int>::iterator p = active.begin(); p != active.end(); p++)
-      if (fip.checked.count(*p) == 0) {
+      if (*p != mds->whoami &&
+	  fip.checked.count(*p) == 0) {
 	m = *p;
 	break;
       }
