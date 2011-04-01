@@ -8101,7 +8101,7 @@ void MDCache::discover_path(CDir *base,
     d.frag = base->get_frag();
     d.snap = snap;
     d.want_path = want_path;
-    d.want_base_dir = true;
+    d.want_base_dir = false;
     d.want_xlocked = want_xlocked;
     _send_discover(d);
   }
