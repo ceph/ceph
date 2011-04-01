@@ -260,11 +260,11 @@ static void dashes_to_underscores(const char *input, char *output)
   char *o = output;
   const char *i = input;
   // first two characters are copied as-is
-  *o++ = *i++;
-  if (*o == '\0')
+  *o = *i++;
+  if (*o++ == '\0')
     return;
-  *o++ = *i++;
-  if (*o == '\0')
+  *o = *i++;
+  if (*o++ == '\0')
     return;
   for (; ((c = *i)); ++i) {
      if (c == '-')
