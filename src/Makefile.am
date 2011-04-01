@@ -776,6 +776,7 @@ noinst_HEADERS = \
 	common/ceph_crypto.h\
 	common/utf8.h\
 	common/strtol.h\
+	common/static_assert.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

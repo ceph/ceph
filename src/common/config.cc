@@ -14,15 +14,16 @@
 
 #include "auth/Auth.h"
 #include "common/BackTrace.h"
-#include "common/ceph_argparse.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
 #include "common/ProfLogger.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "common/dyn_snprintf.h"
-#include "common/version.h"
 #include "common/config.h"
+#include "common/dyn_snprintf.h"
+#include "common/static_assert.h"
 #include "common/strtol.h"
+#include "common/version.h"
 #include "include/atomic.h"
 #include "include/str_list.h"
 #include "include/types.h"
@@ -67,32 +68,54 @@ struct ceph_file_layout g_default_file_layout = {
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+#define TYCHECK(x, ty) STATIC_ASSERT(sizeof(x) == sizeof(ty))
+
 #define OPTION_OPT_STR(section, name, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(name), \
-     &g_conf.name, def_val, 0, 0, type }
+       { STRINGIFY(section) + TYCHECK(g_conf.name, std::string), \
+	  NULL, STRINGIFY(name), \
+	  &g_conf.name, def_val, 0, 0, type }
 
 #define OPTION_OPT_ADDR(section, name, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(name), \
-     &g_conf.name, def_val, 0, 0, type }
+       { STRINGIFY(section) + TYCHECK(g_conf.name, entity_addr_t), \
+	 NULL, STRINGIFY(name), \
+	 &g_conf.name, def_val, 0, 0, type }
 
 #define OPTION_OPT_LONGLONG(section, name, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(name), \
-     &g_conf.name, 0, def_val, 0, type }
-#define OPTION_OPT_U64 OPTION_OPT_LONGLONG
-#define OPTION_OPT_U32 OPTION_OPT_LONGLONG
-#define OPTION_OPT_INT OPTION_OPT_LONGLONG
-#define OPTION_OPT_BOOL OPTION_OPT_INT
+       { STRINGIFY(section) + TYCHECK(g_conf.name, long long), \
+	 NULL, STRINGIFY(name), \
+         &g_conf.name, 0, def_val, 0, type }
+
+#define OPTION_OPT_INT(section, name, type, def_val) \
+       { STRINGIFY(section) + TYCHECK(g_conf.name, int), \
+	 NULL, STRINGIFY(name), \
+         &g_conf.name, 0, def_val, 0, type }
+
+#define OPTION_OPT_BOOL(section, name, type, def_val) \
+       { STRINGIFY(section) + TYCHECK(g_conf.name, bool), \
+	 NULL, STRINGIFY(name), \
+         &g_conf.name, 0, def_val, 0, type }
+
+#define OPTION_OPT_U32(section, name, type, def_val) \
+       { STRINGIFY(section) + TYCHECK(g_conf.name, uint32_t), \
+	 NULL, STRINGIFY(name), \
+         &g_conf.name, 0, def_val, 0, type }
+
+#define OPTION_OPT_U64(section, name, type, def_val) \
+       { STRINGIFY(section) + TYCHECK(g_conf.name, uint64_t), \
+	 NULL, STRINGIFY(name), \
+         &g_conf.name, 0, def_val, 0, type }
 
 #define OPTION_OPT_DOUBLE(section, name, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(name), \
-     &g_conf.name, 0, 0, def_val, type }
-#define OPTION_OPT_FLOAT OPTION_OPT_DOUBLE
+       { STRINGIFY(section) + TYCHECK(g_conf.name, double), \
+	 NULL, STRINGIFY(name), \
+	 &g_conf.name, 0, 0, def_val, type }
+
+#define OPTION_OPT_FLOAT(section, name, type, def_val) \
+       { STRINGIFY(section) + TYCHECK(g_conf.name, float), \
+	 NULL, STRINGIFY(name), \
+	 &g_conf.name, 0, 0, def_val, type }
 
 #define OPTION(name, type, def_val) OPTION_##type("global", name, type, def_val)
-
-#define OPTION_ALT(section, conf_name, name, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(conf_name), \
-         &g_conf.name, STRINGIFY(def_val), type }
 
 struct config_option config_optionsp[] = {
   OPTION(host, OPT_STR, "localhost"),
