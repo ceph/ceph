@@ -4530,7 +4530,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
 
   uint32_t h = ceph_str_hash(CEPH_STR_HASH_RJENKINS, name, strlen(name));
   char f[30];
-  sprintf(f, "%d", h);
+  sprintf(f, "%u", h);
   filepath path2(dirino);
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
