@@ -1743,7 +1743,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
   // traverse to parent dir
   CInode *diri;
-  int r = mdcache->path_traverse(mdr, 0, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
@@ -1778,7 +1778,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 
 
   // traverse
-  int r = mdcache->path_traverse(mdr, 0, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
@@ -2042,6 +2042,15 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
   reply_request(mdr, 0, in, dn);  // reply
 }
 
+struct C_MDS_LookupHash : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_LookupHash(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  void finish(int r) {
+    server->_lookup_hash(mdr, r);
+  }
+};
+
 /* This function DOES clean up the mdr before returning*/
 void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
@@ -2055,7 +2064,12 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   if (!in) {
     // try the directory
     CInode *diri = mdcache->get_inode(req->get_filepath2().get_ino());
-    if (!diri || diri->state_test(CInode::STATE_PURGING)) {
+    if (!diri) {
+      mdcache->find_ino_peers(req->get_filepath2().get_ino(),
+			      new C_MDS_LookupHash(this, mdr), -1);
+      return;
+    }
+    if (diri->state_test(CInode::STATE_PURGING)) {
       reply_request(mdr, -ESTALE);
       return;
     }
@@ -2097,6 +2111,41 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   dout(10) << "reply to lookup_hash on " << *in << dendl;
   MClientReply *reply = new MClientReply(req, 0);
   reply_request(mdr, reply, in, in->get_parent_dn());
+}
+
+struct C_MDS_LookupHash2 : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_LookupHash2(Server *s, MDRequest *r) : server(s), mdr(r) {}
+  void finish(int r) {
+    server->_lookup_hash_2(mdr, r);
+  }
+};
+
+void Server::_lookup_hash(MDRequest *mdr, int r)
+{
+  dout(10) << "_lookup_hash " << mdr << " r=" << r << dendl;
+  if (r == 0) {
+    dispatch_client_request(mdr);
+    return;
+  }
+
+  // okay fine, try the dir object then!
+  mdcache->find_ino_dir(mdr->client_request->get_filepath2().get_ino(), new C_MDS_LookupHash2(this, mdr));
+}
+
+void Server::_lookup_hash_2(MDRequest *mdr, int r)
+{
+  dout(10) << "_lookup_hash_2 " << mdr << " r=" << r << dendl;
+  if (r == 0) {
+    dispatch_client_request(mdr);
+    return;
+  }
+
+  // give up
+  if (r == -ENOENT || r == -ENODATA)
+    r = -ESTALE;
+  reply_request(mdr, r);
 }
 
 
@@ -4041,7 +4090,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   CInode *in;
-  int r = mdcache->path_traverse(mdr, 0, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r < 0) {
     reply_request(mdr, r);
@@ -4428,7 +4477,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
 
-  int r = mdcache->path_traverse(mdr, 0, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0)
     return; // delayed
   if (r < 0) {
@@ -5184,7 +5233,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, 0, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
       
@@ -5197,7 +5246,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   CInode *srci;
-  r = mdcache->path_traverse(mdr, 0, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
+  r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
       

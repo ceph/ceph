@@ -4519,6 +4519,27 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   return r;
 }
 
+int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ") = " << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPHASH);
+  filepath path(ino);
+  req->set_filepath(path);
+
+  uint32_t h = ceph_str_hash(0, name, strlen(name));
+  char f[30];
+  sprintf(f, "%d", h);
+  filepath path2(dirino);
+  path2.push_dentry(string(f));
+  req->set_filepath2(path2);
+
+  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_mds());
+  dout(3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
+  return r;
+}
+
 Fh *Client::_create_fh(Inode *in, int flags, int cmode)
 {
   // yay

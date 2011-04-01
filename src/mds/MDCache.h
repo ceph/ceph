@@ -51,6 +51,8 @@ class MDirUpdate;
 class MDentryLink;
 class MDentryUnlink;
 class MLock;
+class MMDSFindIno;
+class MMDSFindInoReply;
 
 class Message;
 class MClientRequest;
@@ -983,8 +985,8 @@ public:
   void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
-  Context *_get_waiter(MDRequest *mdr, Message *req);
-  int path_traverse(MDRequest *mdr, Message *req, const filepath& path,
+  Context *_get_waiter(MDRequest *mdr, Message *req, Context *fin);
+  int path_traverse(MDRequest *mdr, Message *req, Context *c, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
@@ -1011,6 +1013,36 @@ public:
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
+  // -- find_ino_peer --
+  struct find_ino_peer_info_t {
+    inodeno_t ino;
+    tid_t tid;
+    Context *fin;
+    int hint;
+    int checking;
+    set<int> checked;
+
+    find_ino_peer_info_t() : tid(0), fin(NULL), hint(-1), checking(-1) {}
+  };
+
+  map<tid_t, find_ino_peer_info_t> find_ino_peer;
+  tid_t find_ino_peer_last_tid;
+
+  void find_ino_peers(inodeno_t ino, Context *c, int hint=-1);
+  void _do_find_ino_peer(find_ino_peer_info_t& fip);
+  void handle_find_ino(MMDSFindIno *m);
+  void handle_find_ino_reply(MMDSFindInoReply *m);
+  void kick_find_ino_peers(int who);
+
+  // -- find_ino_dir --
+  struct find_ino_dir_info_t {
+    inodeno_t ino;
+    Context *fin;
+  };
+
+  void find_ino_dir(inodeno_t ino, Context *c);
+  void _find_ino_dir(inodeno_t ino, Context *c, bufferlist& bl, int r);
+
   // -- anchors --
 public:
   void anchor_create_prep_locks(MDRequest *mdr, CInode *in, set<SimpleLock*>& rdlocks,

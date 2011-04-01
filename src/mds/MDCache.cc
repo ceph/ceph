@@ -68,6 +68,9 @@
 #include "messages/MDentryLink.h"
 #include "messages/MDentryUnlink.h"
 
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+
 #include "messages/MClientRequest.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientSnap.h"
@@ -136,6 +139,7 @@ MDCache::MDCache(MDS *m)
                         (0.9 *(g_conf.osd_max_write_size << 20));
 
   discover_last_tid = 0;
+  find_ino_peer_last_tid = 0;
 
   last_cap_id = 0;
 
@@ -2436,6 +2440,8 @@ void MDCache::handle_mds_failure(int who)
     finish.pop_front();
   }
 
+  kick_find_ino_peers(who);
+
   show_subtrees();  
 }
 
@@ -2492,6 +2498,8 @@ void MDCache::handle_mds_recovery(int who)
   }
 
   kick_discovers(who);
+
+  kick_find_ino_peers(who);
 
   // queue them up.
   mds->queue_waiters(waiters);
@@ -4943,9 +4951,7 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
 void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 {
-  char n[30];
-  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino, 0ull);
-  object_t oid(n);
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
   object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
 
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
@@ -6156,6 +6162,13 @@ void MDCache::dispatch(Message *m)
     break;
     
 
+  case MSG_MDS_FINDINO:
+    handle_find_ino((MMDSFindIno *)m);
+    break;
+  case MSG_MDS_FINDINOREPLY:
+    handle_find_ino_reply((MMDSFindInoReply *)m);
+    break;
+
     
   default:
     dout(7) << "cache unknown message " << m->get_type() << dendl;
@@ -6181,14 +6194,16 @@ void MDCache::dispatch(Message *m)
  *  MDS_TRAVERSE_FAIL          - return an error
  */
 
-Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
+Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
 {
   if (mdr) {
     dout(20) << "_get_waiter retryrequest" << dendl;
     return new C_MDS_RetryRequest(this, mdr);
-  } else {
+  } else if (req) {
     dout(20) << "_get_waiter retrymessage" << dendl;
     return new C_MDS_RetryMessage(mds, req);
+  } else {
+    return fin;
   }
 }
 
@@ -6200,15 +6215,17 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
  * on failure, @pdnvec it is either the full trace, up to and
  *             including the final null dn, or empty.
  */
-int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
+int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
 			   CInode **pin,
                            int onfail)
 {
-  assert(mdr || req);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
   bool forward = (onfail == MDS_TRAVERSE_FORWARD);
+
+  assert(mdr || req || fin);
+  assert(!forward || mdr || req);  // forward requires a request
 
   snapid_t snapid = CEPH_NOSNAP;
   if (mdr)
@@ -6222,7 +6239,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   CInode *cur = get_inode(path.get_ino());
   if (cur == NULL) {
     if (MDS_INO_IS_MDSDIR(path.get_ino())) 
-      open_foreign_mdsdir(path.get_ino(), _get_waiter(mdr, req));
+      open_foreign_mdsdir(path.get_ino(), _get_waiter(mdr, req, fin));
     else {
       //assert(0);  // hrm.. broken
       return -ESTALE;
@@ -6280,14 +6297,14 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         // parent dir frozen_dir?
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << dendl;
-          cur->get_parent_dn()->get_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
+          cur->get_parent_dn()->get_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req, fin));
           return 1;
         }
         curdir = cur->get_or_open_dirfrag(this, fg);
       } else {
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
-	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
@@ -6306,7 +6323,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     // doh!
       // FIXME: traverse is allowed?
       dout(7) << "traverse: " << *curdir << " is frozen, waiting" << dendl;
-      curdir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req));
+      curdir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, req, fin));
       if (onfinish) delete onfinish;
       return 1;
     }
@@ -6317,7 +6334,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     if (!noperm && 
 	!mds->locker->rdlock_try(&cur->authlock, client, 0)) {
       dout(7) << "traverse: waiting on authlock rdlock on " << *cur << dendl;
-      cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
+      cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
       return 1;
     }
 #endif
@@ -6349,7 +6366,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	!dn->lock.can_read(client) &&
 	(dnl->is_null() || forward)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
-      dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
+      dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
       if (mds->logger) mds->logger->inc(l_mds_tlock);
       return 1;
     }
@@ -6368,7 +6385,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req));
+          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
 	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
@@ -6457,7 +6474,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
-        curdir->fetch(_get_waiter(mdr, req), path[depth]);
+        curdir->fetch(_get_waiter(mdr, req, fin), path[depth]);
 	if (mds->logger) mds->logger->inc(l_mds_tdirf);
         return 1;
       }
@@ -6466,7 +6483,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       pair<int,int> dauth = curdir->authority();
 
       if (onfail == MDS_TRAVERSE_FORWARD &&
-	  snapid && mdr->client_request &&
+	  snapid && mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_retry_attempt()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < retry " << mdr->client_request->get_retry_attempt()
@@ -6477,7 +6494,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if ((onfail == MDS_TRAVERSE_DISCOVER ||
            onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
-	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
@@ -6489,7 +6506,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	if (curdir->is_ambiguous_auth()) {
 	  // wait
 	  dout(7) << "traverse: waiting for single auth in " << *curdir << dendl;
-	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, _get_waiter(mdr, req));
+	  curdir->add_waiter(CDir::WAIT_SINGLEAUTH, _get_waiter(mdr, req, fin));
 	  return 1;
 	} 
 
@@ -6843,6 +6860,194 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
   dout(15) << "make_trace adding " << *dn << dendl;
   trace.push_back(dn);
 }
+
+
+/* ---------------------------- */
+
+/*
+ * search for a given inode on MDS peers.  optionally start with the given node.
+
+
+ TODO 
+  - recover from mds node failure, recovery
+  - traverse path
+
+ */
+void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
+{
+  dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
+  assert(!have_inode(ino));
+  
+  tid_t tid = ++find_ino_peer_last_tid;
+  find_ino_peer_info_t& fip = find_ino_peer[tid];
+  fip.ino = ino;
+  fip.tid = tid;
+  fip.fin = c;
+  fip.hint = hint;
+  _do_find_ino_peer(fip);
+}
+
+void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
+{
+  set<int> all, active;
+  mds->mdsmap->get_active_mds_set(active);
+  mds->mdsmap->get_mds_set(all);
+
+  dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
+	   << " active " << active << " all " << all
+	   << " checked " << fip.checked
+	   << dendl;
+    
+  int m = -1;
+  if (fip.hint >= 0) {
+    m = fip.hint;
+    fip.hint = -1;
+  } else {
+    for (set<int>::iterator p = active.begin(); p != active.end(); p++)
+      if (fip.checked.count(*p) == 0) {
+	m = *p;
+	break;
+      }
+  }
+  if (m < 0) {
+    if (all.size() > active.size()) {
+      dout(10) << "_do_find_ino_peer waiting for more peers to be active" << dendl;
+    } else {
+      dout(10) << "_do_find_ino_peer failed on " << fip.ino << dendl;
+      fip.fin->finish(-ESTALE);
+      delete fip.fin;
+      find_ino_peer.erase(fip.tid);
+    }
+  } else {
+    fip.checking = m;
+    mds->send_message_mds(new MMDSFindIno(fip.tid, fip.ino), m);
+  }
+}
+
+void MDCache::handle_find_ino(MMDSFindIno *m)
+{
+  dout(10) << "handle_find_ino " << *m << dendl;
+  MMDSFindInoReply *r = new MMDSFindInoReply(m->tid);
+  CInode *in = get_inode(m->ino);
+  if (in) {
+    in->make_path(r->path);
+    dout(10) << " have " << r->path << " " << *in << dendl;
+  }
+  mds->messenger->send_message(r, m->get_connection());
+  m->put();
+}
+
+
+void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
+{
+  map<tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
+  if (p != find_ino_peer.end()) {
+    dout(10) << "handle_find_ino_reply " << *m << dendl;
+    find_ino_peer_info_t& fip = p->second;
+
+    // success?
+    if (get_inode(fip.ino)) {
+      dout(10) << "handle_find_ino_reply successfully found " << fip.ino << dendl;
+      mds->queue_waiter(fip.fin);
+      find_ino_peer.erase(p);
+      m->put();
+      return;
+    }
+
+    int from = m->get_source().num();
+    if (fip.checking == from)
+      fip.checking = -1;
+    fip.checked.insert(from);
+
+    if (!m->path.empty()) {
+      // we got a path!
+      vector<CDentry*> trace;
+      int r = path_traverse(NULL, m, NULL, m->path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+      if (r > 0)
+	return; 
+      dout(0) << "handle_find_ino_reply failed with " << r << " on " << m->path 
+	      << ", retrying" << dendl;
+      fip.checked.clear();
+      _do_find_ino_peer(fip);
+    } else {
+      // nope, continue.
+      _do_find_ino_peer(fip);
+    }      
+  } else {
+    dout(10) << "handle_find_ino_reply tid " << m->tid << " dne" << dendl;
+  }  
+  m->put();
+}
+
+void MDCache::kick_find_ino_peers(int who)
+{
+  // find_ino_peers requests we should move on from
+  for (map<tid_t,find_ino_peer_info_t>::iterator p = find_ino_peer.begin();
+       p != find_ino_peer.end();
+       ++p) {
+    find_ino_peer_info_t& fip = p->second;
+    if (fip.checking == who) {
+      dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds" << who << dendl;
+      fip.checking = -1;
+      _do_find_ino_peer(fip);
+    } else if (fip.checking == -1) {
+      dout(10) << "kicking find_ino_peer " << fip.tid << " who was waiting" << dendl;
+      _do_find_ino_peer(fip);
+    }
+  }
+}
+
+/* ---------------------------- */
+
+struct C_MDS_FindInoDir : public Context {
+  MDCache *mdcache;
+  inodeno_t ino;
+  Context *fin;
+  bufferlist bl;
+  C_MDS_FindInoDir(MDCache *m, inodeno_t i, Context *f) : mdcache(m), ino(i), fin(f) {}
+  void finish(int r) {
+    mdcache->_find_ino_dir(ino, fin, bl, r);
+  }
+};
+
+void MDCache::find_ino_dir(inodeno_t ino, Context *fin)
+{
+  dout(10) << "find_ino_dir " << ino << dendl;
+  assert(!have_inode(ino));
+
+  // get the backtrace from the dir
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
+  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  
+  C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
+  mds->objecter->getxattr(oid, oloc, "path", CEPH_NOSNAP, &c->bl, 0, c);
+}
+
+void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
+{
+  dout(10) << "_find_ino_dir " << ino << " got " << r << " " << bl.length() << " bytes" << dendl;
+  if (r < 0) {
+    fin->finish(r);
+    delete fin;
+    return;
+  }
+
+  string s(bl.c_str(), bl.length());
+  filepath path(s.c_str());
+  vector<CDentry*> trace;
+
+  Context *c = new C_MDS_FindInoDir(this, ino, fin);
+  r = path_traverse(NULL, NULL, c, path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+  if (r > 0)
+    return; 
+  delete c;  // path_traverse doesn't clean it up for us.
+  
+  fin->finish(r);
+  delete fin;
+}
+
+
+/* ---------------------------- */
 
 /* This function takes over the reference to the passed Message */
 MDRequest *MDCache::request_start(MClientRequest *req)
@@ -8610,7 +8815,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       CInode *in;
       filepath path = m->get_path();
       dout(5) << "trying discover on dir_update for " << path << dendl;
-      int r = path_traverse(0, m, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
+      int r = path_traverse(NULL, m, NULL, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);
