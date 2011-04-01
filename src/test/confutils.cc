@@ -135,21 +135,20 @@ const char * const simple_conf_1 = "\
 [mds.c]\n\
 ";
 
+// we can add whitespace at odd locations and it will get stripped out.
 const char * const simple_conf_2 = "\
 [mds.a]\n\
 	log dir = special_mds_a\n\
 [mds]\n\
 	log sym history = 100\n\
-	log dir = out\n\
+	log dir = out # after a comment, anything # can ### happen ;;; right?\n\
 	log per instance = true\n\
         profiling logger = true\n\
-	profiling logger dir = log\n\
+	profiling                 logger dir = log\n\
 	chdir = ""\n\
-	pid file = out/$name.pid\n\
-\n\
-        mds debug frag = true\n\
+        pid file\t=\tfoo2\n\
 [osd0]\n\
-        keyring = osd_keyring          ; osd's keyring\n\
+        keyring   =       osd_keyring          ; osd's keyring\n\
 \n\
 [global]\n\
 	# I like pound signs as comment markers.\n\
@@ -159,6 +158,42 @@ const char * const simple_conf_2 = "\
 	# Let's just have a line with a lot of whitespace and nothing else.\n\
                          \n\
         lockdep = 1\n\
+";
+
+// test line-combining
+const char * const conf3 = "\
+[global]\n\
+	log file = /quite/a/long/path\\\n\
+/for/a/log/file\n\
+	pid file = \\\n\
+                           spork\\\n\
+\n\
+[mon] #nothing here \n\
+";
+
+// illegal because it contains an invalid utf8 sequence.
+const char illegal_conf1[] = "\
+[global]\n\
+	log file = foo\n\
+	pid file = invalid-utf-\xe2\x28\xa1\n\
+[osd0]\n\
+        keyring = osd_keyring          ; osd's keyring\n\
+";
+
+// illegal because it contains a malformed section header.
+const char illegal_conf2[] = "\
+[global\n\
+	log file = foo\n\
+[osd0]\n\
+        keyring = osd_keyring          ; osd's keyring\n\
+";
+
+// illegal because it contains a line that doesn't parse
+const char illegal_conf3[] = "\
+[global]\n\
+        who_what_where\n\
+[osd0]\n\
+        keyring = osd_keyring          ; osd's keyring\n\
 ";
 
 TEST(ParseFiles1, ConfUtils) {
@@ -205,5 +240,35 @@ TEST(ReadFiles1, ConfUtils) {
   ASSERT_EQ(cf2.read("osd0", "keyring", val), 0);
   ASSERT_EQ(val, "osd_keyring");
 
+  ASSERT_EQ(cf2.read("mds", "pid file", val), 0);
+  ASSERT_EQ(val, "foo2");
   ASSERT_EQ(cf2.read("nonesuch", "keyring", val), -ENOENT);
+}
+
+TEST(ReadFiles2, ConfUtils) {
+  std::string conf3_f(next_tempfile(conf3));
+  ConfFile cf1(conf3_f.c_str());
+  std::string val;
+  ASSERT_EQ(cf1.parse(), 0);
+  ASSERT_EQ(cf1.read("global", "log file", val), 0);
+  ASSERT_EQ(val, "/quite/a/long/path/for/a/log/file");
+  ASSERT_EQ(cf1.read("global", "pid file", val), 0);
+  ASSERT_EQ(val, "spork");
+}
+
+// FIXME: illegal configuration files don't return a parse error currently.
+TEST(IllegalFiles, ConfUtils) {
+  std::string illegal_conf1_f(next_tempfile(illegal_conf1));
+  ConfFile cf1(illegal_conf1_f.c_str());
+  std::string val;
+  ASSERT_EQ(cf1.parse(), 0);
+
+  bufferlist bl2;
+  bl2.append(illegal_conf2, strlen(illegal_conf2));
+  ConfFile cf2(&bl2);
+  ASSERT_EQ(cf2.parse(), 0);
+
+  std::string illegal_conf3_f(next_tempfile(illegal_conf3));
+  ConfFile cf3(illegal_conf3_f.c_str());
+  ASSERT_EQ(cf3.parse(), 0);
 }
