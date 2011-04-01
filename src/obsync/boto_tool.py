@@ -67,10 +67,7 @@ def rmbucket(args):
     if (len(args) < 1):
         print "must give an argument to rmbucket"
         return 255
-    bucket = conn.lookup(opts.delete_bucket)
-    if (bucket == None):
-        print "bucket '%s' no longer exists" % opts.delete_bucket
-        return 255
+    bucket = conn.get_bucket(opts.delete_bucket)
     print "deleting bucket '%s' ..." % opts.delete_bucket
     bucket.delete()
     print "done."
@@ -80,7 +77,7 @@ def bucket_exists(args):
     if (len(args) < 1):
         print "must give an argument to exists"
         return 255
-    bucket = conn.lookup(opts.bucket_exists)
+    bucket = conn.get_bucket(opts.bucket_exists)
     if (bucket == None):
         print "bucket '%s' does not exist"
         return 1
@@ -98,7 +95,7 @@ def put_obj(bucket_name, args):
         return 255
     obj_name = args[0]
     print "uploading to bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.lookup(bucket_name)
+    bucket = conn.get_bucket(bucket_name)
     k = Key(bucket)
     k.key = obj_name
     if (opts.filename == None):
@@ -117,7 +114,7 @@ def get_obj(bucket_name, args):
         return 255
     obj_name = args[0]
     print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.lookup(bucket_name)
+    bucket = conn.get_bucket(bucket_name)
     k = Key(bucket)
     k.key = obj_name
     if (opts.filename == None):
@@ -130,7 +127,7 @@ def list_obj(bucket_name, args):
         prefix = None
     else:
         prefix = args[0]
-    bucket = conn.lookup(bucket_name)
+    bucket = conn.get_bucket(bucket_name)
     for key in bucket.list(prefix = prefix):
         print key.name
 
@@ -140,7 +137,7 @@ def rm_obj(bucket_name, args):
     else:
         obj_name = args[0]
     print "removing from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.lookup(bucket_name)
+    bucket = conn.get_bucket(bucket_name)
     bucket.delete_key(obj_name)
     print "done."
 
@@ -154,7 +151,7 @@ def head_obj(bucket_name, args):
         return 255
     obj_name = args[0]
     print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.lookup(bucket_name)
+    bucket = conn.get_bucket(bucket_name)
     k = bucket.get_key(k, obj_name)
     print k
 
