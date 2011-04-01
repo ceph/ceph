@@ -20,6 +20,7 @@ load_opt="changed"
 
 usage="usage: $0 [option]... [cls_filename]\n"
 usage=$usage"options:\n"
+usage=$usage"\t-b, --bindir <path>\n"
 usage=$usage"\t-L, --libdir <path>\n"
 usage=$usage"\t-l, --load\n"
 usage=$usage"\t-a, --load-all\n"
@@ -41,9 +42,13 @@ err_exit() {
 
 while [ $# -ge 1 ]; do
 case $1 in
+    -b | --bindir )
+	    shift
+	    BINDIR=$1
+	    ;;
     -L | --libdir )
 	    shift
-            libdir=$1
+	    libdir=$1
 	    ;;
     -l | --load )
 	    load=1
