@@ -137,8 +137,8 @@ public:
   void handle_client_stat(MDRequest *mdr);
   void handle_client_lookup_parent(MDRequest *mdr);
   void handle_client_lookup_hash(MDRequest *mdr);
-  void _lookup_hash(MDRequest *mdr, int r);
   void _lookup_hash_2(MDRequest *mdr, int r);
+  void _lookup_hash_3(MDRequest *mdr, int r);
   void _lookup_hash_ino(MDRequest *mdr);
   void _lookup_hash_ino_2(MDRequest *mdr, int r);
   void _lookup_hash_ino_3(MDRequest *mdr, int r);
