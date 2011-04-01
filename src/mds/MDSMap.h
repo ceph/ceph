@@ -458,6 +458,11 @@ public:
       return mds_info[up[m]].inc;
     return 0;
   }
+  int get_inc_gid(uint64_t gid) {
+    if (mds_info.count(gid))
+      return mds_info[gid].inc;
+    return -1;
+  }
 
 
 
