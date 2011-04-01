@@ -77,7 +77,7 @@ int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string&
               off_t ofs, size_t len, time_t *mtime)
 {
   string name = normal_name(data_space, bucket, obj);
-  if (bucket[0] == '.' && ofs == 0) {
+  if ((bucket[0] == '.') && ((ofs == 0) || (ofs == -1))) {
     bufferptr p(len);
     memcpy(p.c_str(), data, len);
     bufferlist bl;

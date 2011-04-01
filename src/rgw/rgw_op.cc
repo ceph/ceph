@@ -397,7 +397,11 @@ void RGWPutObj::execute()
       get_data();
       if (len > 0) {
         hash.Update((unsigned char *)data, len);
-        ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str, s->object_str, data, ofs, len, NULL);
+	// For the first call to put_obj_data, pass -1 as the offset to
+	// do a write_full.
+        ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str,
+				     s->object_str, data,
+				     ((ofs == 0) ? -1 : ofs), len, NULL);
         free(data);
         if (ret < 0)
           goto done;

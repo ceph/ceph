@@ -274,13 +274,15 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
  * bucket: the bucket to store the object in
  * obj: the object name/key
  * data: the object contents/value
+ * offset: the offet to write to in the object
+ *         If this is -1, we will overwrite the whole object.
  * size: the amount of data to write (data must be this long)
  * mtime: if non-NULL, writes the given mtime to the bucket storage
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid, const char *data, off_t ofs, size_t len,
-                  time_t *mtime)
+int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid,
+			   const char *data, off_t ofs, size_t len, time_t *mtime)
 {
   librados::IoCtx io_ctx;
 
@@ -290,7 +292,15 @@ int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oi
 
   bufferlist bl;
   bl.append(data, len);
-  r = io_ctx.write(oid, bl, len, ofs);
+  if (ofs == -1) {
+    // write_full wants to write the complete bufferlist, not part of it
+    assert(bl.length() == len);
+
+    r = io_ctx.write_full(oid, bl);
+  }
+  else {
+    r = io_ctx.write(oid, bl, len, ofs);
+  }
   if (r < 0)
     return r;
 
@@ -327,7 +337,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 {
   int ret, r;
   char *data;
-  off_t ofs = 0, end = -1;
+  off_t end = -1;
   size_t total_len;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
@@ -337,18 +347,22 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   void *handle = NULL;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_bucket, src_obj, ofs, &end, &attrset,
+  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset,
                 mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, err);
 
   if (ret < 0)
     return ret;
 
+  off_t ofs = 0;
   do {
     ret = get_obj(&handle, src_bucket, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
 
-    r = put_obj_data(id, dest_bucket, dest_obj, data, ofs, ret, NULL);
+    // In the first call to put_obj_data, we pass ofs == -1 so that it will do
+    // a write_full, wiping out whatever was in the object before this
+    r = put_obj_data(id, dest_bucket, dest_obj, data,
+		     ((ofs == 0) ? -1 : ofs), ret, NULL);
     free(data);
     if (r < 0)
       goto done_err;

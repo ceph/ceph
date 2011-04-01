@@ -233,12 +233,17 @@ int RGWFS::put_obj_data(std::string& id, std::string& bucket, std::string& obj, 
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
   int fd;
 
-  fd = open(buf, O_CREAT | O_WRONLY, 0755);
+  int open_flags = O_CREAT | O_WRONLY;
+  if (ofs == -1) {
+    open_flags |= O_TRUNC;
+    ofs = 0;
+  }
+
+  fd = open(buf, open_flags, 0755);
   if (fd < 0)
     return -errno;
 
   int r;
-
   r = lseek(fd, ofs, SEEK_SET);
   if (r < 0)
     goto done_err;
