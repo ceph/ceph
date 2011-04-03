@@ -161,9 +161,9 @@ AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
-	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
+	    [AS_HELP_STRING([--with--tcmalloc], [use tcmalloc instead of ptmallc])],
 	    [],
-	    [with_tcmalloc=yes])
+	    [with_tcmalloc=check])
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_CHECK_LIB([tcmalloc], [malloc],
@@ -172,8 +172,11 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	       		 [Define if you have tcmalloc])
 	       HAVE_LIBTCMALLOC=1
 	     ],
-	    [AC_MSG_FAILURE(
-		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
+	    [if test "x$with_tcmalloc" != xcheck; then
+	        AC_MSG_FAILURE(
+		  [--with-tcmalloc was given but test failed])
+	      fi
+	    ])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
 # jni?
