@@ -142,6 +142,8 @@ void common_init(std::vector < const char* >& args,
     conf->log_per_instance = false;
   }
 
+  conf->expand_all_meta();
+
   if (conf->log_to_syslog || conf->clog_to_syslog) {
     closelog();
     openlog(g_conf.name->to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);

@@ -78,6 +78,9 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 			     const char *key, std::string &out) const;
 
+  // Do all metavariable substitutions
+  void expand_all_meta();
+
 private:
   // Private function for setting a default for a config option
   void set_val_from_default(const config_option *opt);
@@ -85,7 +88,7 @@ private:
   int set_val_impl(const char *val, const config_option *opt);
 
   // Do metavariable expansions
-  void conf_post_process_val(std::string &val) const;
+  bool expand_meta(std::string &val) const;
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile *cf;

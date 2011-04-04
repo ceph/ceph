@@ -540,9 +540,6 @@ parse_config_files(const std::list<std::string> &conf_files)
     if (ret == 0) {
       set_val_impl(val.c_str(), opt);
     }
-    else if (ret != -ENOENT) {
-      // TODO: complain about parse error
-    }
   }
 
   // FIXME: This bit of global fiddling needs to go somewhere else eventually.
@@ -753,10 +750,8 @@ get_val_from_conf_file(const std::vector <std::string> &sections,
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
     int ret = cf->read(s->c_str(), key, out);
-    if (ret == 0) {
-      conf_post_process_val(out);
+    if (ret == 0)
       return 0;
-    }
     else if (ret != -ENOENT)
       return ret;
   }
@@ -773,9 +768,25 @@ set_val_from_default(const config_option *opt)
     case OPT_LONGLONG:
       *(long long*)opt->val_ptr = opt->def_longlong;
       break;
-    case OPT_STR:
-      *(std::string *)opt->val_ptr = opt->def_str ? opt->def_str : "";
+    case OPT_STR: {
+      std::string *str = (std::string *)opt->val_ptr;
+      *str = opt->def_str ? opt->def_str : "";
+      if (expand_meta(*str)) {
+	// We don't allow metavariables in default values.  The reason for this
+	// is that default values take effect at global constructor time.  At
+	// global constructor time, we don't have valid values for $host,
+	// $name, $id and so forth. So trying to set default variables would
+	// inevitably lead to the wrong behavior.  Once g_conf is
+	// de-globalized, and we don't have to worry about global constructor
+	// time, this restriction can be eased.
+	ostringstream oss;
+	oss << "found metavariables in the default value for '"
+	    << opt->name << "'. " << "metavariables cannot be "
+	    << "used in default values.";
+	assert(oss.str().c_str() == 0);
+      }
       break;
+    }
     case OPT_FLOAT:
       *(float *)opt->val_ptr = (float)opt->def_double;
       break;
@@ -883,14 +894,27 @@ set_val_impl(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
+void md_config_t::
+expand_all_meta()
+{
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = config_optionsp + i;
+    if (opt->type == OPT_STR) {
+      std::string *str = (std::string *)opt->val_ptr;
+      expand_meta(*str);
+    }
+  }
+}
+
 static const char *CONF_METAVARIABLES[] =
       { "type", "name", "host", "num", "id" };
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
-void md_config_t::
-conf_post_process_val(std::string &val) const
+bool md_config_t::
+expand_meta(std::string &val) const
 {
+  bool found_meta = false;
   string out;
   string::size_type sz = val.size();
   out.reserve(sz);
@@ -919,6 +943,7 @@ conf_post_process_val(std::string &val) const
 	out += name->get_id().c_str();
       else
 	assert(0); // unreachable
+      found_meta = true;
       break;
     }
     if (i == NUM_CONF_METAVARIABLES)
@@ -927,4 +952,5 @@ conf_post_process_val(std::string &val) const
       s += strlen(CONF_METAVARIABLES[i]) + 1;
   }
   val = out;
+  return found_meta;
 }

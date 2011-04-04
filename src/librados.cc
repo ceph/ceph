@@ -2793,6 +2793,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     // configuration
     md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     conf->parse_env(); // environment variables override
+    conf->expand_all_meta(); // future proofing
 
     ++rados_initialized;
   }
@@ -2860,6 +2861,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   if (ret)
     return ret;
   g_conf.parse_env(); // environment variables override
+  g_conf.expand_all_meta(); // handle metavariables in the config
   return 0;
 }
 
