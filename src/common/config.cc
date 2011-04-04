@@ -537,7 +537,7 @@ parse_config_files(const std::list<std::string> &conf_files,
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, opt->conf_name, val);
+    int ret = get_val_from_conf_file(my_sections, opt->conf_name, val, false);
     if (ret == 0) {
       set_val_impl(val.c_str(), opt);
     }
@@ -546,7 +546,7 @@ parse_config_files(const std::list<std::string> &conf_files,
   // FIXME: This bit of global fiddling needs to go somewhere else eventually.
   std::string val;
   g_lockdep =
-    ((get_val_from_conf_file(my_sections, "lockdep", val) == 0) &&
+    ((get_val_from_conf_file(my_sections, "lockdep", val, true) == 0) &&
       ((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0)));
   return 0;
 }
@@ -639,10 +639,12 @@ set_val(const char *key, const char *val)
     return -EINVAL;
   if (!val)
     return -EINVAL;
+  std::string v(val);
+  expand_meta(v);
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
     if (strcmp(opt->conf_name, key) == 0)
-      return set_val_impl(val, opt);
+      return set_val_impl(v.c_str(), opt);
   }
 
   // couldn't find a configuration option with key 'key'
@@ -743,7 +745,7 @@ have_conf_file() const
 
 int md_config_t::
 get_val_from_conf_file(const std::vector <std::string> &sections,
-		    const char *key, std::string &out) const
+		    const char *key, std::string &out, bool emeta) const
 {
   if (!cf)
     return -EDOM;
@@ -751,8 +753,11 @@ get_val_from_conf_file(const std::vector <std::string> &sections,
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
     int ret = cf->read(s->c_str(), key, out);
-    if (ret == 0)
+    if (ret == 0) {
+      if (emeta)
+	expand_meta(out);
       return 0;
+    }
     else if (ret != -ENOENT)
       return ret;
   }
@@ -862,7 +867,7 @@ set_val_impl(const char *val, const config_option *opt)
 	*(bool*)opt->val_ptr = true;
       else {
 	std::string err;
-	int b = strict_strtol((const char*)val, 10, &err);
+	int b = strict_strtol(val, 10, &err);
 	if (!err.empty())
 	  return -EINVAL;
 	*(bool*)opt->val_ptr = !!b;
@@ -870,7 +875,7 @@ set_val_impl(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_strtol((const char*)val, 10, &err);
+      int f = strict_strtol(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->val_ptr = f;
@@ -878,7 +883,7 @@ set_val_impl(const char *val, const config_option *opt)
     }
     case OPT_U64: {
       std::string err;
-      long long f = strict_strtoll((const char*)val, 10, &err);
+      long long f = strict_strtoll(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint64_t*)opt->val_ptr = f;

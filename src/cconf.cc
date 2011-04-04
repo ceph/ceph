@@ -77,18 +77,6 @@ static int list_sections(const char *prefix)
   return 0;
 }
 
-static void print_val(const char *val, bool resolve_search)
-{
-  if (!resolve_search) {
-    puts(val);
-  } else {
-    string search_path(val);
-    string result;
-    if (ceph_resolve_file_search(search_path, result))
-      puts(result.c_str());
-  }
-}
-
 static int lookup(const deque<const char *> &sections,
 		  const char *key, bool resolve_search)
 {
@@ -98,11 +86,18 @@ static int lookup(const deque<const char *> &sections,
   }
   g_conf.get_my_sections(my_sections);
   std::string val;
-  int ret = g_conf.get_val_from_conf_file(my_sections, key, val);
+  int ret = g_conf.get_val_from_conf_file(my_sections, key, val, true);
   if (ret == -ENOENT)
     return 1;
   else if (ret == 0) {
-    print_val(val.c_str(), resolve_search);
+    if (resolve_search) {
+      string result;
+      if (ceph_resolve_file_search(val, result))
+	puts(result.c_str());
+    }
+    else {
+      puts(val.c_str());
+    }
     return 0;
   }
   else {
@@ -118,9 +113,7 @@ int main(int argc, const char **argv)
   deque<const char *> sections;
   DEFINE_CONF_VARS(usage);
   bool resolve_search = false;
-  bool do_help = false;
-  bool do_list = false;
-  bool do_lookup = false;
+  std::string action("lookup");
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -132,11 +125,11 @@ int main(int argc, const char **argv)
     } else if (CEPH_ARGPARSE_EQ("resolve-search", 'r')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&resolve_search, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&do_help, OPT_BOOL);
+      action = "help";
     } else if (CEPH_ARGPARSE_EQ("list-sections", 'l')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&do_list, OPT_BOOL);
+      action = "list-sections";
     } else if (CEPH_ARGPARSE_EQ("lookup", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&do_lookup, OPT_BOOL);
+      action = "lookup";
     }
     else {
       nargs.push_back(args[i]);
@@ -145,27 +138,27 @@ int main(int argc, const char **argv)
 
   common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
-  if (do_help) {
+  if (action == "help") {
     usage();
     exit(0);
   }
-  if (!do_lookup && !do_list)
-    do_lookup = true;
-
-  if (do_list) {
+  else if (action == "list-sections") {
     if (nargs.size() != 1)
       usage();
     return list_sections(nargs[0]);
-  } else if (do_lookup) {
+  }
+  else if (action == "lookup") {
     if (nargs.size() != 1) {
       cerr << "lookup: expected exactly one argument" << std::endl;
       usage();
     }
     return lookup(sections, nargs[0], resolve_search);
-  } else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
+  }
+  else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
     cerr << "Parse error at argument: " << nargs[0] << std::endl;
     usage();
-  } else {
+  }
+  else {
     if (nargs.size() != 1) {
       cerr << "lookup: expected exactly one argument" << std::endl;
       usage();

@@ -61,10 +61,12 @@ public:
   void parse_argv_part2(std::vector<const char*>& args);
   void parse_argv(std::vector<const char*>& args);
 
-  // Set a configuration value
+  // Set a configuration value.
+  // Metavariables will be expanded.
   int set_val(const char *key, const char *val);
 
-  // Get a configuration value
+  // Get a configuration value.
+  // No metavariables will be returned (they will have already been expanded)
   int get_val(const char *key, char **buf, int len) const;
 
   // Return a list of all the sections that the current entity is a member of.
@@ -75,21 +77,23 @@ public:
 
   bool have_conf_file() const;
 
-  // Get a value from the configuration file we read
+  // Get a value from the configuration file that we read earlier.
+  // Metavariables will be expanded if emeta is true.
   int get_val_from_conf_file(const std::vector <std::string> &sections,
-			     const char *key, std::string &out) const;
+		   const char *key, std::string &out, bool emeta) const;
 
-  // Do all metavariable substitutions
+  // Perform metavariable expansion on all the data members of md_config_t.
   void expand_all_meta();
+
+  // Expand metavariables in the provided string.
+  // Returns true if any metavariables were found and expanded.
+  bool expand_meta(std::string &val) const;
 
 private:
   // Private function for setting a default for a config option
   void set_val_from_default(const config_option *opt);
 
   int set_val_impl(const char *val, const config_option *opt);
-
-  // Do metavariable expansions
-  bool expand_meta(std::string &val) const;
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile *cf;

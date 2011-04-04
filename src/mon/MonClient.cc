@@ -150,7 +150,7 @@ int MonClient::build_initial_monmap()
     sections.push_back("mon");
     sections.push_back("global");
     std::string val;
-    int res = g_conf.get_val_from_conf_file(sections, "mon addr", val);
+    int res = g_conf.get_val_from_conf_file(sections, "mon addr", val, true);
     if (res) {
       cerr << "failed to get an address for mon." << *m << ": error "
 	   << res << std::endl;
