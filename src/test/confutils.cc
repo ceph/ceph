@@ -14,6 +14,7 @@
 #include "common/ConfUtils.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
+#include "include/buffer.h"
 
 #include <errno.h>
 #include <iostream>
@@ -23,6 +24,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+using ceph::bufferlist;
 using std::cerr;
 using std::ostringstream;
 
@@ -107,6 +109,14 @@ static std::string next_tempfile(const char *text)
   return oss.str();
 }
 
+const char * const trivial_conf_1 = "";
+
+const char * const trivial_conf_2 = "log dir = foobar";
+
+const char * const trivial_conf_3 = "log dir = barfoo\n";
+
+const char * const trivial_conf_4 = "log dir = \"barbaz\"\n";
+
 const char * const simple_conf_1 = "\
 ; here's a comment\n\
 [global]\n\
@@ -150,6 +160,7 @@ const char * const simple_conf_2 = "\
 [osd0]\n\
         keyring   =       osd_keyring          ; osd's keyring\n\
 \n\
+           \n\
 [global]\n\
 	# I like pound signs as comment markers.\n\
 	; Do you like pound signs as comment markers?\n\
@@ -196,6 +207,14 @@ const char illegal_conf3[] = "\
         keyring = osd_keyring          ; osd's keyring\n\
 ";
 
+// illegal because it has unterminated quotes
+const char illegal_conf4[] = "\
+[global]\n\
+        keyring = \"unterminated quoted string\n\
+[osd0]\n\
+        keyring = osd_keyring          ; osd's keyring\n\
+";
+
 // unicode config file
 const char unicode_config_1[] = "\
 [global]\n\
@@ -203,6 +222,74 @@ const char unicode_config_1[] = "\
         pid file =           foo-bar\n\
 [osd0]\n\
 ";
+
+TEST(Whitespace, ConfUtils) {
+  std::string test0("");
+  ConfFile::trim_whitespace(test0, false);
+  ASSERT_EQ(test0, "");
+
+  std::string test0a("");
+  ConfFile::trim_whitespace(test0a, true);
+  ASSERT_EQ(test0a, "");
+
+  std::string test0b("          ");
+  ConfFile::trim_whitespace(test0b, false);
+  ASSERT_EQ(test0b, "");
+
+  std::string test0c("          ");
+  ConfFile::trim_whitespace(test0c, true);
+  ASSERT_EQ(test0c, "");
+
+  std::string test1(" abc             ");
+  ConfFile::trim_whitespace(test1, false);
+  ASSERT_EQ(test1, "abc");
+
+  std::string test2(" abc        d     ");
+  ConfFile::trim_whitespace(test2, true);
+  ASSERT_EQ(test2, "abc d");
+
+  std::string test3(" abc        d     ");
+  ConfFile::trim_whitespace(test3, false);
+  ASSERT_EQ(test3, "abc        d");
+
+  std::string test4("abcd");
+  ConfFile::trim_whitespace(test4, false);
+  ASSERT_EQ(test4, "abcd");
+
+  std::string test5("abcd");
+  ConfFile::trim_whitespace(test5, true);
+  ASSERT_EQ(test5, "abcd");
+}
+
+TEST(ParseFiles0, ConfUtils) {
+  std::deque<std::string> err;
+  std::string val;
+
+  std::string trivial_conf_1_f(next_tempfile(trivial_conf_1));
+  ConfFile cf1;
+  ASSERT_EQ(cf1.parse_file(trivial_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
+
+  std::string trivial_conf_2_f(next_tempfile(trivial_conf_2));
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_file(trivial_conf_2_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 1U);
+
+  bufferlist bl3;
+  bl3.append(trivial_conf_3, strlen(trivial_conf_3));
+  ConfFile cf3;
+  ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err), 0);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf3.read("global", "log dir", val), 0);
+  ASSERT_EQ(val, "barfoo");
+
+  std::string trivial_conf_4_f(next_tempfile(trivial_conf_4));
+  ConfFile cf4;
+  ASSERT_EQ(cf4.parse_file(trivial_conf_4_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf4.read("global", "log dir", val), 0);
+  ASSERT_EQ(val, "barbaz");
+}
 
 TEST(ParseFiles1, ConfUtils) {
   std::deque<std::string> err;
@@ -281,23 +368,27 @@ TEST(ReadFiles2, ConfUtils) {
   ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
 }
 
-// FIXME: illegal configuration files don't return a parse error currently.
 TEST(IllegalFiles, ConfUtils) {
   std::deque<std::string> err;
   std::string illegal_conf1_f(next_tempfile(illegal_conf1));
   ConfFile cf1;
   std::string val;
   ASSERT_EQ(cf1.parse_file(illegal_conf1_f.c_str(), &err), 0);
-  ASSERT_EQ(err.size(), 0U); // FIXME
+  ASSERT_EQ(err.size(), 1U);
 
   bufferlist bl2;
   bl2.append(illegal_conf2, strlen(illegal_conf2));
   ConfFile cf2;
   ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err), 0);
-  ASSERT_EQ(err.size(), 0U); // FIXME
+  ASSERT_EQ(err.size(), 1U);
 
   std::string illegal_conf3_f(next_tempfile(illegal_conf3));
   ConfFile cf3;
   ASSERT_EQ(cf3.parse_file(illegal_conf3_f.c_str(), &err), 0);
-  ASSERT_EQ(err.size(), 0U); // FIXME
+  ASSERT_EQ(err.size(), 1U);
+
+  std::string illegal_conf4_f(next_tempfile(illegal_conf4));
+  ConfFile cf4;
+  ASSERT_EQ(cf4.parse_file(illegal_conf4_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 1U);
 }

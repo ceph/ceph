@@ -32,15 +32,6 @@ using namespace std;
 
 KeyRing g_keyring;
 
-static string remove_quotes(string& s)
-{
-  int n = s.size();
-  /* remove quotes from string */
-  if (s[0] == '"' && s[n - 1] == '"')
-    return s.substr(1, n-2);
-  return s;
-}
-
 int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps)
 {
   if (!val)
@@ -49,7 +40,6 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
   if (strcmp(type, "key") == 0) {
     CryptoKey key;
     string l(val);
-    l = remove_quotes(l);
     try {
       key.decode_base64(l);
     } catch (const buffer::error& err) {
@@ -61,7 +51,6 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
     if (!*caps_entity)
       return -EINVAL;
       string l(val);
-      l = remove_quotes(l);
       bufferlist bl;
       ::encode(l, bl);
       caps[caps_entity] = bl;
@@ -111,10 +100,9 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
     goto done_err;
   }
 
-  for (std::list<ConfSection*>::const_iterator p =
-	    cf.get_section_list().begin();
-       p != cf.get_section_list().end(); ++p) {
-    string name = (*p)->get_name();
+  for (ConfFile::const_section_iter_t s = cf.sections_begin();
+	    s != cf.sections_end(); ++s) {
+    string name = s->first;
     if (name == "global")
       continue;
 
@@ -125,17 +113,14 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
       goto done_err;
     }
 
-    ConfList& cl = (*p)->get_list();
-    ConfList::iterator cli;
-    for (cli = cl.begin(); cli != cl.end(); ++ cli) {
-      ConfLine *line = *cli;
-      const char *type = line->get_var();
-      if (!type)
+    for (ConfSection::const_line_iter_t l = s->second.lines.begin();
+	 l != s->second.lines.end(); ++l) {
+      if (l->key.empty())
         continue;
-
-      ret = set_modifier(type, line->get_val(), ename, caps);
+      ret = set_modifier(l->key.c_str(), l->val.c_str(), ename, caps);
       if (ret < 0) {
-        derr << "error setting modifier for [" << name << "] type=" << type << " val=" << line->get_val() << dendl;
+        derr << "error setting modifier for [" << name << "] type=" << l->key
+	     << " val=" << l->val << dendl;
         goto done_err;
       }
     }

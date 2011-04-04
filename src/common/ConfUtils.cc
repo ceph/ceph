@@ -1,836 +1,523 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2011 New Dream Network
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
+#include <errno.h>
+#include <list>
+#include <map>
+#include <sstream>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <wctype.h>
-
-#include <map>
-#include <list>
 #include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include "common/safe_io.h"
-#include "ConfUtils.h"
-#include "dyn_snprintf.h"
+#include "include/buffer.h"
+#include "common/errno.h"
+#include "common/utf8.h"
+#include "common/ConfUtils.h"
 
-using namespace std;
+using std::cerr;
+using std::ostringstream;
+using std::pair;
+using std::string;
 
-struct ltstr
+#define MAX_CONFIG_FILE_SZ 0x40000000
+
+////////////////////////////// ConfLine //////////////////////////////
+ConfLine::
+ConfLine(const std::string &key_, const std::string val_,
+      const std::string newsection_, const std::string comment_, int line_no_)
+  : key(key_), val(val_), newsection(newsection_)
 {
-  bool operator()(const char* s1, const char* s2) const
-  {
-    return strcmp(s1, s2) < 0;
+  // If you want to implement writable ConfFile support, you'll need to save
+  // the comment and line_no arguments here.
+}
+
+bool ConfLine::
+operator<(const ConfLine &rhs) const
+{
+  // We only compare keys.
+  // If you have more than one line with the same key in a given section, the
+  // last one wins.
+  if (key < rhs.key)
+    return true;
+  else
+    return false;
+}
+
+std::ostream &operator<<(std::ostream& oss, const ConfLine &l)
+{
+  oss << "ConfLine(key = '" << l.key << "', val='"
+      << l.val << "', newsection='" << l.newsection << "')";
+  return oss;
+}
+///////////////////////// ConfFile //////////////////////////
+ConfFile::
+ConfFile()
+{
+}
+
+ConfFile::
+~ConfFile()
+{
+}
+
+void ConfFile::
+clear()
+{
+  sections.clear();
+}
+
+/* We load the whole file into memory and then parse it.  Although this is not
+ * the optimal approach, it does mean that most of this code can be shared with
+ * the bufferlist loading function. Since bufferlists are always in-memory, the
+ * load_from_buffer interface works well for them.
+ * In general, configuration files should be a few kilobytes at maximum, so
+ * loading the whole configuration into memory shouldn't be a problem.
+ */
+int ConfFile::
+parse_file(const std::string &fname, std::deque<std::string> *errors)
+{
+  int ret = 0;
+  size_t sz;
+  char *buf = NULL;
+  FILE *fp = fopen(fname.c_str(), "r");
+  if (!fp) {
+    ret = errno;
+    ostringstream oss;
+    oss << "read_conf: failed to open '" << fname << "': " << cpp_strerror(ret);
+    errors->push_back(oss.str());
+    return ret;
   }
-};
 
-static const char *_def_delim=" \t\n\r";
-static const char *_eq_delim="= \t\n\r";
-static const char *_eq_nospace_delim="=\t\n\r";
-static const char *_eol_delim="\n\r";
-/* static const char *_pr_delim="[] \t\n\r"; */
+  struct stat st_buf;
+  if (fstat(fileno(fp), &st_buf)) {
+    ret = errno;
+    ostringstream oss;
+    oss << "read_conf: failed to fstat '" << fname << "': " << cpp_strerror(ret);
+    errors->push_back(oss.str());
+    goto done;
+  }
 
+  if (st_buf.st_size > MAX_CONFIG_FILE_SZ) {
+    ostringstream oss;
+    oss << "read_conf: config file '" << fname << "' is " << st_buf.st_size
+	<< " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
+    errors->push_back(oss.str());
+    ret = -EINVAL;
+    goto done;
+  }
 
-static int is_delim(char c, const char *delim)
-{
-	while (*delim) {
-		if (c==*delim)
-			return 1;
-		delim++;
-	}
+  sz = (size_t)st_buf.st_size;
+  buf = (char*)malloc(sz);
 
-	return 0;
+  if (fread(buf, 1, sz, fp) != sz) {
+    if (ferror(fp)) {
+      ret = errno;
+      ostringstream oss;
+      oss << "read_conf: fread error while reading '" << fname << "': "
+	  << cpp_strerror(ret);
+      errors->push_back(oss.str());
+      goto done;
+    }
+    else {
+      ostringstream oss;
+      oss << "read_conf: unexpected EOF while reading '" << fname << "': "
+	  << "possible concurrent modification?";
+      errors->push_back(oss.str());
+      ret = -EIO;
+      goto done;
+    }
+  }
+
+  load_from_buffer(buf, sz, errors);
+  ret = 0;
+
+done:
+  free(buf);
+  fclose(fp);
+  return ret;
 }
 
-static wchar_t get_ucs2(unsigned char **pstr)
+int ConfFile::
+parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors)
 {
-	unsigned char *s = *pstr;
-	wchar_t wc = 0;
-	int b, i;
-	int num_bytes = 0;
-
-	if (*s <= 0x7f) {
-		wc = *s;
-		*pstr = ++s;
-		return wc;
-	}
-
-	b=0x40;
-	while (b & *s) {
-		num_bytes++;
-		b >>= 1;
-	}
-	if (!num_bytes)
-		return *s; /* this is not a correctly encoded utf8 */
-
-	wc = *s & (b-1);
-	wc <<= (num_bytes * 6);
-
-	s++;
-
-	for (i=0; i<num_bytes; i++, s++) {
-		int shift;
-		wchar_t w;
-		if ((*s & 0xc0) != 0x80) {
-			*pstr = s;
-			return 0; /* not a valid utf8 */
-		}
-		shift = (num_bytes - i - 1) * 6;
-		w = *s & 0x3f;
-		w <<= shift;
-		wc |= w;
-	}
-	*pstr = s;
-	return wc;
+  load_from_buffer(bl->c_str(), bl->length(), errors);
+  return 0;
 }
 
-static void skip_whitespace(char **pstr, const char *delim)
+int ConfFile::
+read(const std::string &section, const std::string &key, std::string &val) const
 {
-	unsigned char *str = (unsigned char *)*pstr;
-	wchar_t wc;
-
-	do {
-		while (*str && is_delim((char)*str, delim)) {
-			str++;
-		}
-		if (!*str)
-			return;
-		*pstr = (char *)str;
-		wc = get_ucs2(&str);
-	} while (!iswprint(wc));
+  const_section_iter_t s = sections.find(section);
+  if (s == sections.end())
+    return -ENOENT;
+  ConfLine exemplar(key, "", "", "", 0);
+  ConfSection::const_line_iter_t l = s->second.lines.find(exemplar);
+  if (l == s->second.lines.end())
+    return -ENOENT;
+  val = l->val;
+  return 0;
 }
 
-static char *get_next_tok(char *str, const char *delim, int alloc, char **p)
+ConfFile::const_section_iter_t ConfFile::
+sections_begin() const
 {
-	int i=0;
-	char *out;
-
-        skip_whitespace(&str, delim);
-
-	if (*str == '"') {
-		while (str[i] && !is_delim(str[i], _eol_delim)) {
-			i++;
-			if (str[i] == '"') {
-				i++;
-				break;
-			}
-		}		
-	} else {
-		while (str[i] && !is_delim(str[i], delim)) {
-			i++;
-		}
-	}
-
-	if (alloc) {
-		out = (char *)malloc(i+1);
-		memcpy(out, str, i);
-		out[i] = '\0';
-	} else {
-		out = str;
-	}
-
-	if (p)
-		*p = &str[i];
-
-	return out;
+  return sections.begin();
 }
 
-static char *get_next_name(char *str, int alloc, char **p)
+ConfFile::const_section_iter_t ConfFile::
+sections_end() const
 {
-	int i=0;
-	char *out;
+  return sections.end();
+}
 
-	while (*str && is_delim(*str, _def_delim)) {
-		str++;
-	}
+void ConfFile::
+trim_whitespace(std::string &str, bool strip_internal)
+{
+  // strip preceding
+  const char *in = str.c_str();
+  while (true) {
+    char c = *in;
+    if ((!c) || (!isspace(c)))
+      break;
+    ++in;
+  }
+  char output[strlen(in) + 1];
+  strcpy(output, in);
 
-	if (*str == '"') {
-		while (str[i] && !is_delim(str[i], _eol_delim)) {
-			i++;
-			if (str[i] == '"') {
-				i++;
-				break;
-			}
-		}
-	} else {
-		while (str[i] && !is_delim(str[i], _eq_nospace_delim)) {
-			i++;
-		}
+  // strip trailing
+  char *o = output + strlen(output);
+  while (true) {
+    if (o == output)
+      break;
+    --o;
+    if (!isspace(*o)) {
+      ++o;
+      *o = '\0';
+      break;
+    }
+  }
 
-		i--;
+  if (!strip_internal) {
+    str.assign(output);
+    return;
+  }
 
-		while (str[i] && is_delim(str[i], _def_delim)) {
-			i--;
-		}
+  // strip internal
+  char output2[strlen(output) + 1];
+  char *out2 = output2;
+  bool prev_was_space = false;
+  for (char *u = output; *u; ++u) {
+    char c = *u;
+    if (isspace(c)) {
+      if (!prev_was_space)
+	*out2++ = c;
+      prev_was_space = true;
+    }
+    else {
+      *out2++ = c;
+      prev_was_space = false;
+    }
+  }
+  *out2++ = '\0';
+  str.assign(output2);
+}
 
-		i++;
-	}
+std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
+{
+  for (ConfFile::const_section_iter_t s = cf.sections_begin();
+       s != cf.sections_end(); ++s) {
+    oss << "[" << s->first << "]\n";
+    for (ConfSection::const_line_iter_t l = s->second.lines.begin();
+	 l != s->second.lines.end(); ++l) {
+      if (!l->key.empty()) {
+	oss << "\t" << l->key << " = \"" << l->val << "\"\n";
+      }
+    }
+  }
+  return oss;
+}
 
-	if (alloc) {
-		out = (char *)malloc(i+1);
-		memcpy(out, str, i);
-		out[i] = '\0';
-	} else {
-		out = str;
-	}
+void ConfFile::
+load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors)
+{
+  errors->clear();
 
-	if (p)
-		*p = &str[i];
+  section_iter_t::value_type vt("global", ConfSection());
+  pair < section_iter_t, bool > vr(sections.insert(vt));
+  assert(vr.second);
+  section_iter_t cur_section = vr.first;
+  std::string acc;
 
-	return out;
+  const char *b = buf;
+  int line_no = 0;
+  size_t line_len = -1;
+  size_t rem = sz;
+  while (1) {
+    b += line_len + 1;
+    rem -= line_len + 1;
+    if (rem == 0)
+      break;
+    line_no++;
+
+    // look for the next newline
+    const char *end = (const char*)memchr(b, '\n', rem);
+    if (!end) {
+      ostringstream oss;
+      oss << "read_conf: ignoring line " << line_no << " because it doesn't "
+	  << "end with a newline! Please end the config file with a newline.";
+      errors->push_back(oss.str());
+      break;
+    }
+
+    // find length of line, and search for NULLs
+    line_len = 0;
+    bool found_null = false;
+    for (const char *tmp = b; tmp != end; ++tmp) {
+      line_len++;
+      if (*tmp == '\0') {
+	found_null = true;
+      }
+    }
+
+    if (found_null) {
+      ostringstream oss;
+      oss << "read_conf: ignoring line " << line_no << " because it has "
+	  << "an embedded null.";
+      errors->push_back(oss.str());
+      acc.clear();
+      continue;
+    }
+
+    if (check_utf8(b, line_len)) {
+      ostringstream oss;
+      oss << "read_conf: ignoring line " << line_no << " because it is not "
+	  << "valid UTF8.";
+      errors->push_back(oss.str());
+      acc.clear();
+      continue;
+    }
+
+    if ((line_len >= 1) && (b[line_len-1] == '\\')) {
+      // A backslash at the end of a line serves as a line continuation marker.
+      // Combine the next line with this one.
+      // Remove the backslash itself from the text.
+      acc.append(b, line_len - 1);
+      continue;
+    }
+
+    acc.append(b, line_len);
+
+    //cerr << "acc = '" << acc << "'" << std::endl;
+    ConfLine *cline = process_line(line_no, acc.c_str(), errors);
+    acc.clear();
+    if (!cline)
+      continue;
+    const std::string &csection(cline->newsection);
+    if (!csection.empty()) {
+      std::map <std::string, ConfSection>::value_type nt(csection, ConfSection());
+      pair < section_iter_t, bool > nr(sections.insert(nt));
+      cur_section = nr.first;
+    }
+    else if (!cline->key.empty()) {
+      // add line to current section
+      //std::cerr << "cur_section = " << cur_section->first << ", " << *cline << std::endl;
+      cur_section->second.lines.insert(*cline);
+    }
+    delete cline;
+  }
+
+  if (!acc.empty()) {
+    ostringstream oss;
+    oss << "read_conf: don't end with lines that end in backslashes!";
+    errors->push_back(oss.str());
+  }
 }
 
 /*
- * normalizes a var name, removes extra spaces; e.g., 'foo  bar' -> 'foo bar'
+ * A simple state-machine based parser.
+ * This probably could/should be rewritten with something like boost::spirit
+ * or yacc if the grammar ever gets more complex.
  */
-static char *normalize_name(const char *name)
+ConfLine* ConfFile::
+process_line(int line_no, const char *line, std::deque<std::string> *errors)
 {
-	char *newname, *p;
-	int i, len;
-	int last_delim = 0, had_delim = 0, had_non_delim = 0;
-
-	if (!name)
-		return NULL;
-
-	len = strlen(name);
-	newname = (char *)malloc(len + 1);
-
-	p = newname;
-
-	for (i=0; i < len; i++) {
-		int now_delim = is_delim(name[i], _def_delim);
-
-		if (!now_delim) {
-
-			if (had_delim && had_non_delim)
-				*p++ = ' ';
-
-			*p++ = name[i];
-
-			had_non_delim = 1;
-			had_delim = 0;
-		} else {
-			had_delim = 1;
-		}
-
-		last_delim = now_delim;
+  enum acceptor_state_t {
+    ACCEPT_INIT,
+    ACCEPT_SECTION_NAME,
+    ACCEPT_KEY,
+    ACCEPT_VAL_START,
+    ACCEPT_UNQUOTED_VAL,
+    ACCEPT_QUOTED_VAL,
+    ACCEPT_COMMENT_START,
+    ACCEPT_COMMENT_TEXT,
+  };
+  const char *l = line;
+  acceptor_state_t state = ACCEPT_INIT;
+  string key, val, newsection, comment;
+  while (true) {
+    char c = *l++;
+    switch (state) {
+      case ACCEPT_INIT:
+	if (c == '\0')
+	  return NULL; // blank line. Not an error, but not interesting either.
+	else if (c == '[')
+	  state = ACCEPT_SECTION_NAME;
+	else if ((c == '#') || (c == ';'))
+	  state = ACCEPT_COMMENT_TEXT;
+	else if (c == ']') {
+	  ostringstream oss;
+	  oss << "unexpected right bracket at char " << (l - line)
+	      << ", line " << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
 	}
-	*p = '\0';
-
-	return newname;
-}
-
-#define MAX_LINE 256
-
-static char *get_next_delim(char *str, const char *delim, int alloc, char **p)
-{
-	int i=0;
-	char *out;
-
-	while (str[i] && is_delim(str[i], delim)) {
-		i++;
-	}
-
-	if (alloc) {
-		out = (char *)malloc(i+1);
-		memcpy(out, str, i);
-		out[i] = '\0';
-	} else {
-		out = str;
-	}
-
-	*p = &str[i];
-
-	return out;
-}
-
-static int _parse_section(char *str, ConfLine *parsed)
-{
-	char *name = NULL;
-	char *p;
-	int ret = 0;
-	char *line;
-	size_t max_line = MAX_LINE;
-
-	char *start, *end;
-
-	start = index(str, '[');
-	end = strchr(str, ']');	
-
-	if (!start || !end)
-		return 0;
-
-	start++;
-	*end = '\0';
-
-	if (end <= start)
-		return 0;
-	
-
-	p = start;
-	line = (char *)malloc(max_line);
-	line[0] ='\0';
-
-	do {
-		if (name)
-			free(name);
-		name = get_next_tok(p, _def_delim, 1, &p);
-
-		if (*name) {
-			if (*line)
-				dyn_snprintf(&line, &max_line, 2, "%s %s", line, name);
-			else
-				dyn_snprintf(&line, &max_line, 1, "%s", name);
-		}
-	} while (*name);
-	if (name)
-		free(name);
-	
-	if (*line)	
-		parsed->set_section(line);
-
-	free(line);
-
-	return ret;
-}
-
-int parse_line(char *line, ConfLine *parsed)
-{
-	char *dup=strdup(line);
-	char *p = NULL;
-	char *eq;
-	int ret = 0;
-
-	memset(parsed, 0, sizeof(ConfLine));
-
-	parsed->set_prefix(get_next_delim(dup, _def_delim, 1, &p), false);
-
-	if (!*p)
-		goto out;
-
-	switch (*p) {
-		case ';':
-		case '#':
-			parsed->set_suffix(p);
-			goto out;
-		case '[':
-			parsed->set_suffix(p);
-			ret = _parse_section(p, parsed);
-			free(dup);
-			return ret;
-	}
-
-	parsed->set_var(get_next_name(p, 1, &p), false);
-	if (!*p)
-		goto out;
-
-	parsed->set_mid(get_next_delim(p, _eq_delim, 1, &p), false);
-	if (!*p)
-		goto out;
-
-	eq = get_next_tok(parsed->get_mid(), _def_delim, 0, NULL);
-	if (*eq != '=') {
-		goto out;
-	}
-
-	parsed->set_val(get_next_tok(p, _def_delim, 1, &p), false);
-	if (!*p)
-		goto out;
-
-	ret = 1;
-
-	parsed->set_suffix(p);
-out:
-	free(dup);
-	return ret;
-}
-
-static int _str_cat(char *str1, int max, char *str2)
-{
-	int len = 0;
-
-	if (max)
-		len = snprintf(str1, max, "%s", str2);
-
-	if (len < 0)
-		len = 0;
-
-	return len;
-}
-
-ConfSection::~ConfSection()
-{
-	ConfList::iterator conf_iter, conf_end;
-	ConfLine *cl;
-
-	conf_end = conf_list.end();
-
-	for (conf_iter = conf_list.begin(); conf_iter != conf_end; ++conf_iter) {
-		cl = *conf_iter;
-
-		delete cl;
-	}
-}
-
-void ConfLine::_set(char **dst, const char *val, bool alloc)
-{
-	if (*dst)
-		free((void *)*dst);
-
-	if (!val) {
-		*dst = NULL;
-	} else {
-		if (alloc)
-			*dst = strdup(val);
-		else
-			*dst = (char *)val;
-	}
-}
-
-void ConfLine::set_prefix(const char *val, bool alloc)
-{
-	_set(&prefix, val, alloc);
-}
-
-void ConfLine::set_var(const char *val, bool alloc)
-{
-	_set(&var, val, alloc);
-
-	if (norm_var) {
-		free(norm_var);
-		norm_var = NULL;
-	}
-}
-
-void ConfLine::set_mid(const char *val, bool alloc)
-{
-	_set(&mid, val, alloc);
-}
-
-void ConfLine::set_val(const char *val, bool alloc)
-{
-	_set(&this->val, val, alloc);
-}
-
-void ConfLine::set_suffix(const char *val, bool alloc)
-{
-	_set(&suffix, val, alloc);
-}
-
-void ConfLine::set_section(const char *val, bool alloc)
-{
-	_set(&section, val, alloc);
-}
-
-char *ConfLine::get_norm_var()
-{
-	if (!norm_var)
-		norm_var = normalize_name(var);
-
-	return norm_var;
-}
-
-
-ConfLine::~ConfLine()
-{
-	if (prefix)
-		free(prefix);
-	if(var)
-		free(var);
-	if (mid)
-		free(mid);
-	if (val)
-		free(val);
-	if (suffix)
-		free(suffix);
-	if (section)
-		free(section);
-}
-
-void ConfFile::common_init()
-{
-  filename = NULL;
-  pbl = NULL;
-  buf_pos = 0;
-  post_process_func = NULL;
-  default_global = true;
-}
-
-ConfFile::ConfFile()
-  : parse_lock("ConfFile::parse_lock", false, false, false)
-{
-}
-
-ConfFile::~ConfFile()
-{
-	SectionList::iterator sec_iter, sec_end;
-	ConfSection *sec;
-
-	free(filename);
-
-	sec_end = sections_list.end();
-
-	for (sec_iter = sections_list.begin(); sec_iter != sec_end; ++sec_iter) {
-		sec = *sec_iter;
-
-		delete sec;
-	}
-}
-
-int ConfLine::output(char *line, int max_len)
-{
-	int len = 0;
-
-	if (!max_len)
-		return 0;
-
-	line[0] = '\0';
-	if (prefix)
-		len += _str_cat(&line[len], max_len-len, prefix);
-	if (var)
-		len += _str_cat(&line[len], max_len-len, var);
-	if (mid)
-		len += _str_cat(&line[len], max_len-len, mid);
-	if (val)
-		len += _str_cat(&line[len], max_len-len, val);
-	if (suffix)
-		len += _str_cat(&line[len], max_len-len, suffix);
-
-	return len;
-}
-
-
-void ConfFile::_dump(int fd)
-{
-	SectionList::iterator sec_iter, sec_end;
-	ConfLine *cl;
-	char *line;
-	size_t max_line = MAX_LINE;
-	size_t len;
-	char *p;
-	int r;
-
-	line = (char *)malloc(max_line);
-
-	sec_end=sections_list.end();
-
-	for (sec_iter=sections_list.begin(); sec_iter != sec_end; ++sec_iter) {
-		ConfList::iterator iter, end;
-		ConfSection *sec;
-		sec = *sec_iter;
-
-		end = sec->conf_list.end();
-
-		for (iter = sec->conf_list.begin(); iter != end; ++iter) {
-			cl = *iter;
-			p = line;
-			len = 0;
-
-			if (cl) {
-				line[0] = '\0';
-				do {
-					if (len >= max_line) {
-						max_line *= 2;
-						free(line);
-						line = (char *)malloc(max_line);
-					}
-
-					len = cl->output(line, max_line);
-				} while (len == max_line);
-				r = safe_write(fd, line, strlen(line));
-				if (r < 0)
-					return;
-				r = safe_write(fd, "\n", 1);
-				if (r < 0)
-					return;
-			}
-		}
-	}
-
-	free(line);
-}
-
-void ConfFile::dump()
-{
-	SectionList::iterator sec_iter, sec_end;
-
-	sec_end=sections_list.end();
-
-	_dump(STDOUT_FILENO);
-}
-
-ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
-{
-	ConfSection *sec;
-#define BUF_SIZE 4096
-	char *buf;
-
-	buf = (char *)malloc(BUF_SIZE);
-
-	sec = new ConfSection(section);
-	sections[section] = sec;
-	sections_list.push_back(sec);
-
-	if (!cl) {
-		cl = new ConfLine();
-		snprintf(buf, BUF_SIZE, "[%s]", section);
-		cl->set_prefix(buf);
-	}
-	sec->conf_list.push_back(cl);
-
-	free(buf);
-
-	return sec;
-}
-
-int ConfFile::_read(int fd, char *buf, size_t size)
-{
-	if (filename)
-		return safe_read(fd, buf, size);
-
-	if (!pbl)
-		return -EINVAL;
-
-	size_t left = min(pbl->length() - buf_pos, size);
-
-	if (left) {
-		memcpy(buf, pbl->c_str() + buf_pos, left);
-		buf_pos += left;
-	}
-
-	return left;
-}
-
-int ConfFile::_close(int fd)
-{
-	if (filename)
-		return close(fd);
-
-	if (!pbl)
-		return -EINVAL;
-
-	return 0;
-}
-
-int ConfFile::_parse(const char *filename, ConfSection **psection)
-{
-	char *buf;
-	int len, i, l;
-	char *line;
-	ConfLine *cl;
-	ConfSection *section = *psection;
-	int fd = -1;
-	int max_line = MAX_LINE;
-	int eof = 0;
-	bool ret = 0;
-
-	if (filename) {
-		fd = open(filename, O_RDONLY);
-		if (fd < 0)
-			return -errno;
+	else if (isspace(c)) {
+	  // ignore whitespace here
 	}
 	else {
-		if (!pbl)
-			return -EINVAL;
-		buf_pos = 0;
+	  // try to accept this character as a key
+	  state = ACCEPT_KEY;
+	  --l;
 	}
-
-	line = (char *)malloc(max_line);
-	l = 0;
-
-	buf = (char *)malloc(BUF_SIZE);
-	do {
-		len = _read(fd, buf, BUF_SIZE);
-		if (len < 0) {
-			ret = -EDOM;
-			goto done;
-		}
-
-		if (len < BUF_SIZE) {
-			eof = 1;
-			buf[len] = '\0';
-			len++;
-		}
-
-		for (i=0; i<len; i++) {
-			switch (buf[i]) {
-			case '\r' :
-				continue;
-			case '\0' :
-			case '\n' :
-				if (l > 0 && line[l-1] == '\\') {
-					l--;
-					continue;
-				}
-				line[l] = '\0';
-				cl = new ConfLine();
-				parse_line(line, cl);
-				if (cl->get_var()) {
-					if (strcmp(cl->get_var(), "include") == 0) {
-						if (!filename) { // don't allow including if we're not using files
-							ret = -EDOM;
-							goto done;
-						}
-						if (!_parse(cl->get_val(), &section)) {
-							printf("error parsing %s\n", cl->get_val());
-						}
-					} else {
-						char *norm_var = cl->get_norm_var();
-						if (!section) {
-							ret = -EDOM;
-							goto done;
-						}
-						section->conf_map[norm_var] = cl;
-						free(norm_var);
-						global_list.push_back(cl);
-						section->conf_list.push_back(cl);
-					}
-				} else if (cl->get_section()) {
-					section = _add_section(cl->get_section(), cl);
-				} else {
-					delete cl;
-				}
-				l = 0;
-				break;
-			default:
-				line[l++] = buf[i];
-
-				if (l == max_line-1) {
-					max_line *= 2;
-					line = (char *)realloc(line, max_line);
-				}
-			}
-		}
-	} while (!eof);
-done:
-	free(buf);
-
-	*psection = section;
-	_close(fd);
-	free(line);
-
-	return ret;
-}
-
-int ConfFile::parse_file(const char *fname, std::deque<std::string> *parse_errors)
-{
-  common_init();
-
-  if (fname)
-    filename = strdup(fname);
-  else
-    filename = NULL;
-
-  return parse();
-}
-
-int ConfFile::parse_bufferlist(ceph::bufferlist *pbl_,
-			       std::deque<std::string> *parse_errors)
-{
-  common_init();
-  pbl =  pbl_;
-
-  return parse();
-}
-
-int ConfFile::parse()
-{
-	ConfSection *section = NULL;
-
-	parse_lock.Lock();
-
-	if (default_global) {
-		section = new ConfSection("global");
-		sections["global"] = section;
-		sections_list.push_back(section);
+	break;
+      case ACCEPT_SECTION_NAME:
+	if (c == '\0') {
+	  ostringstream oss;
+	  oss << "error parsing new section name: expected right bracket "
+	      << "at char " << (l - line) << ", line " << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
 	}
-
-	int res = _parse(filename, &section);
-	parse_lock.Unlock();
-	return res;
-}
-
-int ConfFile::flush()
-{
-	int rc;
-	int fd;
-
-	fd = open(filename, O_RDWR | O_CREAT, 0644);
-
-	if (fd < 0) {
-		printf("error opening file %s errno=%d\n", filename, errno);
-		return 0;
+	else if (c == ']') {
+	  trim_whitespace(newsection, true);
+	  if (newsection.empty()) {
+	    ostringstream oss;
+	    oss << "error parsing new section name: no section name found? "
+	        << "at char " << (l - line) << ", line " << line_no;
+	    errors->push_back(oss.str());
+	    return NULL;
+	  }
+	  state = ACCEPT_COMMENT_START;
 	}
-
-	_dump(fd);
-	rc = close(fd);
-
-	if (rc < 0)
-		return 0;
-
-	return 1;
-}
-
-ConfLine *ConfFile::_find_var(const char *section, const char* var)
-{
-	SectionMap::iterator iter = sections.find(section);
-	ConfSection *sec;
-	ConfMap::iterator cm_iter;
-	ConfLine *cl;
-	char *norm_var;
-
-	if (iter == sections.end() )
-		goto notfound;
-
-	sec = iter->second;
-	norm_var = normalize_name(var);
-
-	cm_iter = sec->conf_map.find(norm_var);
-	free(norm_var);
-
-	if (cm_iter == sec->conf_map.end())
-		goto notfound;
-
-	cl = cm_iter->second;
-
-	return cl;
-notfound:
-	return 0;
-}
-
-ConfLine *ConfFile::_add_var(const char *section, const char* var)
-{
-	SectionMap::iterator iter = sections.find(section);
-	ConfSection *sec;
-	ConfMap::iterator cm_iter;
-	ConfLine *cl;
-
-	if (iter == sections.end() ) {
-		sec = _add_section(section, NULL);
-	} else {
-		sec = iter->second;
+	else if ((c == '#') || (c == ';')) {
+	  ostringstream oss;
+	  oss << "unexpected comment marker while parsing new section name, at "
+	      << "char " << (l - line) << ", line " << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
 	}
-
-	cl = new ConfLine();
-
-	cl->set_prefix("\t");
-	cl->set_var(var);
-	cl->set_mid(" = ");
-
-	sec->conf_map[var] = cl;
-	sec->conf_list.push_back(cl);
-
-	return cl;
-}
-
-int ConfFile::read(const char *section, const char *var, std::string &out)
-{
-	ConfLine *cl = _find_var(section, var);
-	if (!cl || !cl->get_val()) {
-		return -ENOENT;
+	else
+	  newsection += c;
+	break;
+      case ACCEPT_KEY:
+	if ((c == '#') || (c == ';') || (c == '\0')) {
+	  ostringstream oss;
+	  oss << "unexpected character while parsing putative key value, "
+	      << "at char " << (l - line) << ", line " << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
 	}
-	out = cl->get_val();
-	return 0;
+	else if (c == '=') {
+	  trim_whitespace(key, true);
+	  if (key.empty()) {
+	    ostringstream oss;
+	    oss << "error parsing key name: no key name found? "
+	        << "at char " << (l - line) << ", line " << line_no;
+	    errors->push_back(oss.str());
+	    return NULL;
+	  }
+	  state = ACCEPT_VAL_START;
+	}
+	else
+	  key += c;
+	break;
+      case ACCEPT_VAL_START:
+	if (c == '\0')
+	  return new ConfLine(key, val, newsection, comment, line_no);
+	else if ((c == '#') || (c == ';'))
+	  state = ACCEPT_COMMENT_TEXT;
+	else if (c == '"')
+	  state = ACCEPT_QUOTED_VAL;
+	else if (isspace(c)) {
+	  // ignore whitespace
+	}
+	else {
+	  // try to accept character as a val
+	  state = ACCEPT_UNQUOTED_VAL;
+	  --l;
+	}
+	break;
+      case ACCEPT_UNQUOTED_VAL:
+	if (c == '\0') {
+	  trim_whitespace(val, false);
+	  return new ConfLine(key, val, newsection, comment, line_no);
+	}
+	else if ((c == '#') || (c == ';')) {
+	  trim_whitespace(val, false);
+	  state = ACCEPT_COMMENT_TEXT;
+	}
+	else
+	  val += c;
+	break;
+      case ACCEPT_QUOTED_VAL:
+	if (c == '\0') {
+	  ostringstream oss;
+	  oss << "found opening quote for value, but not the closing quote. "
+	      << "line " << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
+	}
+	else if (c == '"') {
+	  state = ACCEPT_COMMENT_START;
+	}
+	else {
+	  // Add anything, including whitespace.
+	  val += c;
+	}
+	break;
+      case ACCEPT_COMMENT_START:
+	if (c == '\0') {
+	  return new ConfLine(key, val, newsection, comment, line_no);
+	}
+	else if ((c == '#') || (c == ';')) {
+	  state = ACCEPT_COMMENT_TEXT;
+	}
+	else if (isspace(c)) {
+	  // ignore whitespace
+	}
+	else {
+	  ostringstream oss;
+	  oss << "unexpected character at char " << (l - line) << " of line "
+	      << line_no;
+	  errors->push_back(oss.str());
+	  return NULL;
+	}
+	break;
+      case ACCEPT_COMMENT_TEXT:
+	if (c == '\0')
+	  return new ConfLine(key, val, newsection, comment, line_no);
+	else
+	  comment += c;
+	break;
+      default:
+	assert(0);
+	break;
+    }
+    assert(c != '\0'); // We better not go past the end of the input string.
+  }
 }

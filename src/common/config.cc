@@ -564,7 +564,12 @@ parse_argv(std::vector<const char*>& args)
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
-      cf->dump();
+      if (cf) {
+	cerr << *cf << std::endl;
+      }
+      else {
+	cerr << "(no conf loaded)" << std::endl;
+      }
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
@@ -728,11 +733,9 @@ get_all_sections(std::vector <std::string> &sections)
 {
   if (!cf)
     return -EDOM;
-  for (std::list<ConfSection*>::const_iterator p =
-	    cf->get_section_list().begin();
-       p != cf->get_section_list().end(); ++p)
-  {
-    sections.push_back((*p)->get_name());
+  for (ConfFile::const_section_iter_t s = cf->sections_begin();
+       s != cf->sections_end(); ++s) {
+    sections.push_back(s->first);
   }
   return 0;
 }
