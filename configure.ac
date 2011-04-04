@@ -296,7 +296,7 @@ AC_ARG_WITH([gtk2],
         [with_gtk2=check])
 have_gtk2=no
 AS_IF([test "x$with_gtk2" != "xno"],
-        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 2.13],
+        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 2.12],
                 [have_gtk2=yes
 		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
 		],
