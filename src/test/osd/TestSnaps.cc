@@ -29,8 +29,9 @@ struct SnapTestGenerator : public TestOpGenerator
   int op;
   int ops;
   int objects;
-  SnapTestGenerator(int ops, int objects) : 
-    nextop(0), op(0), ops(ops), objects(objects) 
+  TestOpStat *stats;
+  SnapTestGenerator(int ops, int objects, TestOpStat *stats) : 
+    nextop(0), op(0), ops(ops), objects(objects), stats(stats)
   {}
 
 
@@ -41,7 +42,7 @@ struct SnapTestGenerator : public TestOpGenerator
       stringstream oid;
       oid << op;
       cout << "Writing initial " << oid.str() << std::endl;
-      return new WriteOp(context, oid.str());
+      return new WriteOp(&context, oid.str());
     } else if (op >= ops) {
       return 0;
     }
@@ -56,25 +57,25 @@ struct SnapTestGenerator : public TestOpGenerator
     if (switchval < 20) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Reading " << oid << std::endl;
-      return new ReadOp(context, oid);
+      return new ReadOp(&context, oid, stats);
     } else if (switchval < 40) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Writing " << oid << " current snap is " 
 	   << context.current_snap << std::endl;
-      return new WriteOp(context, oid);
+      return new WriteOp(&context, oid, stats);
     } else if ((switchval < 45) && !context.snaps.empty()) {
       int snap = *(rand_choose(context.snaps));
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "RollingBack " << oid << " to " << snap << std::endl;
-      nextop = new ReadOp(context, oid);
-      return new RollbackOp(context, oid, snap);
+      nextop = new ReadOp(&context, oid, stats);
+      return new RollbackOp(&context, oid, snap);
     } else if ((switchval < 47) && !context.snaps.empty()) {
       int snap = *(rand_choose(context.snaps));
       cout << "RemovingSnap " << snap << std::endl;
-      return new SnapRemoveOp(context, snap);
+      return new SnapRemoveOp(&context, snap, stats);
     } else {
       cout << "Snapping" << std::endl;
-      return new SnapCreateOp(context);
+      return new SnapCreateOp(&context, stats);
     }
   }
 };
@@ -104,9 +105,13 @@ int main(int argc, char **argv)
 		
   string pool_name = "casdata";
   RadosTestContext context(pool_name, max_in_flight);
-  SnapTestGenerator gen = SnapTestGenerator(ops, objects);
-  context.loop(gen);
+
+  TestOpStat stats;
+  SnapTestGenerator gen = SnapTestGenerator(ops, objects, &stats);
+  context.loop(&gen);
+
   context.shutdown();
   cerr << context.errors << " errors." << std::endl;
+  cerr << stats << std::endl;
   return 0;
 }
