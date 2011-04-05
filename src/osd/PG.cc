@@ -257,7 +257,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   }
 
   peer_info[from] = oinfo;
-  dout(10) << " peer osd" << from << " now " << oinfo << dendl;
+  dout(10) << " peer osd" << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
   search_for_missing(oinfo, &omissing, from);
