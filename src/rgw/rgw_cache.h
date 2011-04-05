@@ -98,6 +98,7 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize
   bufferlist bl;
   uint64_t size;
   time_t mtime;
+  int64_t t;
 
   int r = cache.get(name, bl);
   if (r == 0) {
@@ -113,7 +114,7 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize
     return r;
   bl.clear();
   ::encode(size, bl);
-  int64_t t = (int64_t)mtime;
+  t = (int64_t)mtime;
   ::encode(t, bl);
   cache.put(name, bl);
 done:
