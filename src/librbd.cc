@@ -16,23 +16,9 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/rbd/librbd.hpp"
-#include "include/byteorder.h"
-
-#include "include/intarith.h"
 
 #include <errno.h>
 #include <inttypes.h>
-#include <iostream>
-#include <stdlib.h>
-#include <sys/types.h>
-
-#include <sys/ioctl.h>
-
-#include "include/rbd_types.h"
-
-#include <linux/fs.h>
-
-#include "include/fiemap.h"
 
 #define DOUT_SUBSYS rbd
 #undef dout_prefix
