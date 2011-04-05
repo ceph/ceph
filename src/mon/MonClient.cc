@@ -108,14 +108,6 @@ int MonClient::build_initial_monmap()
     cerr << "unable to parse addrs in '" << g_conf.mon_host << "'" << std::endl;
   }
 
-  // config file?
-  if (!g_conf.have_conf_file()) {
-    cerr << "Unable to find any monitors in the configuration "
-         << "file, because there is no configuration file. "
-	 << "Please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
-    return -ENOENT;
-  }
-
   // What monitors are in the config file?
   std::vector <std::string> sections;
   int ret = g_conf.get_all_sections(sections);

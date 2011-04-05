@@ -485,7 +485,6 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 md_config_t::
 md_config_t()
-  : cf(NULL)
 {
   //
   // Note: because our md_config_t structure is a global, the memory used to
@@ -505,8 +504,6 @@ md_config_t()
 md_config_t::
 ~md_config_t()
 {
-  delete cf;
-  cf = NULL;
 }
 
 int md_config_t::
@@ -514,23 +511,17 @@ parse_config_files(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors)
 {
   // open new conf
-  list<string>::const_iterator c = conf_files.begin();
+  list<string>::const_iterator c;
+  for (c = conf_files.begin(); c != conf_files.end(); ++c) {
+    cf.clear();
+    int ret = cf.parse_file(c->c_str(), parse_errors);
+    if (ret == 0)
+      break;
+    else if (ret != -ENOENT)
+      return ret;
+  }
   if (c == conf_files.end())
     return -EINVAL;
-  while (true) {
-    if (c == conf_files.end())
-      return -EINVAL;
-    ConfFile *cf_ = new ConfFile();
-    int res = cf_->parse_file(c->c_str(), parse_errors);
-    if (res == 0) {
-      cf = cf_;
-      break;
-    }
-    delete cf_;
-    if (res == -EDOM)
-      return -EDOM;
-    ++c;
-  }
 
   std::vector <std::string> my_sections;
   get_my_sections(my_sections);
@@ -564,12 +555,7 @@ parse_argv(std::vector<const char*>& args)
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
-      if (cf) {
-	cerr << *cf << std::endl;
-      }
-      else {
-	cerr << "(no conf loaded)" << std::endl;
-      }
+      cerr << cf << std::endl;
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
@@ -731,31 +717,21 @@ get_my_sections(std::vector <std::string> &sections)
 int md_config_t::
 get_all_sections(std::vector <std::string> &sections)
 {
-  if (!cf)
-    return -EDOM;
-  for (ConfFile::const_section_iter_t s = cf->sections_begin();
-       s != cf->sections_end(); ++s) {
+  for (ConfFile::const_section_iter_t s = cf.sections_begin();
+       s != cf.sections_end(); ++s) {
     sections.push_back(s->first);
   }
   return 0;
-}
-
-bool md_config_t::
-have_conf_file() const
-{
-  return !!cf;
 }
 
 int md_config_t::
 get_val_from_conf_file(const std::vector <std::string> &sections,
 		    const char *key, std::string &out, bool emeta) const
 {
-  if (!cf)
-    return -EDOM;
   std::vector <std::string>::const_iterator s = sections.begin();
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
-    int ret = cf->read(s->c_str(), key, out);
+    int ret = cf.read(s->c_str(), key, out);
     if (ret == 0) {
       if (emeta)
 	expand_meta(out);

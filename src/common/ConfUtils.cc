@@ -96,7 +96,7 @@ parse_file(const std::string &fname, std::deque<std::string> *errors)
   char *buf = NULL;
   FILE *fp = fopen(fname.c_str(), "r");
   if (!fp) {
-    ret = errno;
+    ret = -errno;
     ostringstream oss;
     oss << "read_conf: failed to open '" << fname << "': " << cpp_strerror(ret);
     errors->push_back(oss.str());
@@ -105,7 +105,7 @@ parse_file(const std::string &fname, std::deque<std::string> *errors)
 
   struct stat st_buf;
   if (fstat(fileno(fp), &st_buf)) {
-    ret = errno;
+    ret = -errno;
     ostringstream oss;
     oss << "read_conf: failed to fstat '" << fname << "': " << cpp_strerror(ret);
     errors->push_back(oss.str());
@@ -126,7 +126,7 @@ parse_file(const std::string &fname, std::deque<std::string> *errors)
 
   if (fread(buf, 1, sz, fp) != sz) {
     if (ferror(fp)) {
-      ret = errno;
+      ret = -errno;
       ostringstream oss;
       oss << "read_conf: fread error while reading '" << fname << "': "
 	  << cpp_strerror(ret);

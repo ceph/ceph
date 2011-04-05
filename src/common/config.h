@@ -20,29 +20,26 @@ extern struct ceph_file_layout g_default_file_layout;
 #include <vector>
 #include <map>
 
-#include "include/assert.h"
-
+#include "common/ConfUtils.h"
 #include "common/Mutex.h"
+#include "include/assert.h"
+#include "msg/msg_types.h"
 
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
-
-#include "msg/msg_types.h"
-
 struct EntityName;
+
+class config_option;
+
+extern const char *CEPH_CONF_FILE_DEFAULT;
 
 enum log_to_stderr_t {
   LOG_TO_STDERR_NONE = 0,
   LOG_TO_STDERR_SOME = 1,
   LOG_TO_STDERR_ALL = 2,
 };
-
-struct ConfFile;
-class config_option;
-
-extern const char *CEPH_CONF_FILE_DEFAULT;
 
 struct md_config_t
 {
@@ -75,8 +72,6 @@ public:
   // Return a list of all sections
   int get_all_sections(std::vector <std::string> &sections);
 
-  bool have_conf_file() const;
-
   // Get a value from the configuration file that we read earlier.
   // Metavariables will be expanded if emeta is true.
   int get_val_from_conf_file(const std::vector <std::string> &sections,
@@ -96,7 +91,7 @@ private:
   int set_val_impl(const char *val, const config_option *opt);
 
   // The configuration file we read, or NULL if we haven't read one.
-  ConfFile *cf;
+  ConfFile cf;
 
 public:
   std::string host;
