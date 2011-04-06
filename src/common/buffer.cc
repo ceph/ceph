@@ -387,4 +387,9 @@ void buffer::list::hexdump(std::ostream &out) const
   out.unsetf(std::ios::right);
 }
 
+std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
+  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
+}
+
+
 }

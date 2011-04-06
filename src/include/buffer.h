@@ -1107,10 +1107,6 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 }
 
 
-inline std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
-}
-
 inline std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
   if (bp.have_raw())
     out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
