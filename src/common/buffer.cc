@@ -45,6 +45,171 @@ bool buffer_track_alloc = true;
     return buffer_total_alloc.read();
   }
 
+  class buffer::raw {
+  public:
+    char *data;
+    unsigned len;
+    atomic_t nref;
+
+    raw(unsigned l) : len(l), nref(0)
+    { }
+    raw(char *c, unsigned l) : data(c), len(l), nref(0)
+    { }
+    virtual ~raw() {};
+
+    // no copying.
+    raw(const raw &other);
+    const raw& operator=(const raw &other);
+
+    virtual raw* clone_empty() = 0;
+    raw *clone() {
+      raw *c = clone_empty();
+      memcpy(c->data, data, len);
+      return c;
+    }
+
+    bool is_page_aligned() {
+      return ((long)data & ~PAGE_MASK) == 0;
+    }
+    bool is_n_page_sized() {
+      return (len & ~PAGE_MASK) == 0;
+    }
+  };
+
+  class buffer::raw_malloc : public buffer::raw {
+  public:
+    raw_malloc(unsigned l) : raw(l) {
+      if (len)
+	data = (char *)malloc(len);
+      else
+	data = 0;
+      inc_total_alloc(len);
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw_malloc(unsigned l, char *b) : raw(b, l) {
+      inc_total_alloc(len);
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_malloc() {
+      free(data);
+      dec_total_alloc(len);
+      bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() {
+      return new raw_malloc(len);
+    }
+  };
+
+#ifndef __CYGWIN__
+  class buffer::raw_mmap_pages : public buffer::raw {
+  public:
+    raw_mmap_pages(unsigned l) : raw(l) {
+      data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+      if (!data)
+	throw bad_alloc();
+      inc_total_alloc(len);
+      bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_mmap_pages() {
+      ::munmap(data, len);
+      dec_total_alloc(len);
+      bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() {
+      return new raw_mmap_pages(len);
+    }
+  };
+
+  class buffer::raw_posix_aligned : public buffer::raw {
+  public:
+    raw_posix_aligned(unsigned l) : raw(l) {
+#ifdef DARWIN
+      data = (char *) valloc (len);
+#else
+      data = 0;
+      int r = ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
+      if (!data)
+	throw bad_alloc();
+      inc_total_alloc(len);
+      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_posix_aligned() {
+      ::free((void*)data);
+      dec_total_alloc(len);
+      bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() {
+      return new raw_posix_aligned(len);
+    }
+  };
+#endif
+
+#ifdef __CYGWIN__
+  class buffer::raw_hack_aligned : public buffer::raw {
+    char *realdata;
+  public:
+    raw_hack_aligned(unsigned l) : raw(l) {
+      realdata = new char[len+PAGE_SIZE-1];
+      unsigned off = ((unsigned)realdata) & ~PAGE_MASK;
+      if (off)
+	data = realdata + PAGE_SIZE - off;
+      else
+	data = realdata;
+      inc_total_alloc(len+PAGE_SIZE-1);
+      //cout << "hack aligned " << (unsigned)data
+      //<< " in raw " << (unsigned)realdata
+      //<< " off " << off << std::endl;
+      assert(((unsigned)data & (PAGE_SIZE-1)) == 0);
+    }
+    ~raw_hack_aligned() {
+      delete[] realdata;
+      dec_total_alloc(len+PAGE_SIZE-1);
+    }
+    raw* clone_empty() {
+      return new raw_hack_aligned(len);
+    }
+  };
+#endif
+
+  /*
+   * primitive buffer types
+   */
+  class buffer::raw_char : public buffer::raw {
+  public:
+    raw_char(unsigned l) : raw(l) {
+      if (len)
+	data = new char[len];
+      else
+	data = 0;
+      inc_total_alloc(len);
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw_char(unsigned l, char *b) : raw(b, l) {
+      inc_total_alloc(len);
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_char() {
+      delete[] data;
+      dec_total_alloc(len);
+      bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() {
+      return new raw_char(len);
+    }
+  };
+
+  class buffer::raw_static : public buffer::raw {
+  public:
+    raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
+    ~raw_static() {}
+    raw* clone_empty() {
+      return new buffer::raw_char(len);
+    }
+  };
+
   buffer::raw* buffer::copy(const char *c, unsigned len) {
     raw* r = new raw_char(len);
     memcpy(r->data, c, len);
