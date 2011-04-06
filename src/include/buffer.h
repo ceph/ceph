@@ -315,48 +315,12 @@ public:
 
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
-    ptr(raw *r) : _raw(r), _off(0), _len(r->len) {   // no lock needed; this is an unref raw.
-      r->nref.inc();
-      bdout << "ptr " << this << " get " << _raw << bendl;
-    }
-    ptr(unsigned l) : _off(0), _len(l) {
-      _raw = create(l);
-      _raw->nref.inc();
-      bdout << "ptr " << this << " get " << _raw << bendl;
-    }
-    ptr(const char *d, unsigned l) : _off(0), _len(l) {    // ditto.
-      _raw = copy(d, l);
-      _raw->nref.inc();
-      bdout << "ptr " << this << " get " << _raw << bendl;
-    }
-    ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len) {
-      if (_raw) {
-	_raw->nref.inc();
-	bdout << "ptr " << this << " get " << _raw << bendl;
-      }
-    }
-    ptr(const ptr& p, unsigned o, unsigned l) : _raw(p._raw), _off(p._off + o), _len(l) {
-      assert(o+l <= p._len);
-      assert(_raw);
-      _raw->nref.inc();
-      bdout << "ptr " << this << " get " << _raw << bendl;
-    }
-    ptr& operator= (const ptr& p) {
-      // be careful -- we need to properly handle self-assignment.
-      if (p._raw) {
-	p._raw->nref.inc();                      // inc new
-	bdout << "ptr " << this << " get " << _raw << bendl;
-      }
-      release();                                 // dec (+ dealloc) old (if any)
-      if (p._raw) {
-	_raw = p._raw;
-	_off = p._off;
-	_len = p._len;
-      } else {
-	_off = _len = 0;
-      }
-      return *this;
-    }
+    ptr(raw *r);
+    ptr(unsigned l);
+    ptr(const char *d, unsigned l);
+    ptr(const ptr& p);
+    ptr(const ptr& p, unsigned o, unsigned l);
+    ptr& operator= (const ptr& p);
     ~ptr() {
       release();
     }
