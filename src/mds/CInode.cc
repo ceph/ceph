@@ -1512,11 +1512,11 @@ bool CInode::is_dirty_scattered()
     dirfragtreelock.is_dirty_or_flushing();
 }
 
-void CInode::finish_scatter_flushes()
+void CInode::clear_scatter_dirty()
 {
-  filelock.finish_flush();
-  nestlock.finish_flush();
-  dirfragtreelock.finish_flush();
+  filelock.clear_dirty();
+  nestlock.clear_dirty();
+  dirfragtreelock.clear_dirty();
 }
 
 void CInode::clear_dirty_scattered(int type)

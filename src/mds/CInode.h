@@ -727,7 +727,7 @@ public:
 
   void clear_dirty_scattered(int type);
   bool is_dirty_scattered();
-  void finish_scatter_flushes();  // on rejoin ack
+  void clear_scatter_dirty();  // on rejoin ack
 
   void start_scatter(ScatterLock *lock);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,

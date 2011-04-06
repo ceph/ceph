@@ -4049,6 +4049,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     assert(in);
     bufferlist::iterator q = basebl.begin();
     in->_decode_base(q);
+    // auth will send a full inode for any inode it got scatterlock state for.
+    in->clear_scatter_dirty();
     dout(10) << " got inode base " << *in << dendl;
   }
 
