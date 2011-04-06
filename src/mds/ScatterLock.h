@@ -141,12 +141,6 @@ public:
       try_clear_more();
     }
   }
-  void fail_flush() {
-    if (is_flushing()) {
-      _more->dirty = true;
-      _more->flushing = false;
-    }
-  }
   void clear_dirty() {
     start_flush();
     finish_flush();

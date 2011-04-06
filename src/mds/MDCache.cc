@@ -3091,18 +3091,8 @@ void MDCache::rejoin_send_rejoins()
     assert(!dir->is_ambiguous_dir_auth());
 
     // my subtree?
-    if (dir->is_auth()) {
-      // include scatterlock state with parent inode's subtree?
-      if (dir->inode->is_dirty_scattered()) {
-	dir->inode->fail_scatter_flush();  // flushing -> dirty for these locks
-	int inauth = dir->inode->authority().first;
-	if (rejoins.count(inauth)) {
-	  dout(10) << " sending scatterlock state to mds" << inauth << " for " << *dir << dendl;
-	  rejoins[inauth]->add_scatterlock_state(dir->inode);
-	}
-      }
+    if (dir->is_auth())
       continue;  // skip my own regions!
-    }
 
     int auth = dir->get_dir_auth().first;
     assert(auth >= 0);
@@ -3118,8 +3108,13 @@ void MDCache::rejoin_send_rejoins()
        ++p) {
     if (mds->is_rejoin()) {
       // weak
-      if (p->first == 0 && root) 
+      if (p->first == 0 && root) {
 	p->second->add_weak_inode(root->vino());
+	if (root->is_dirty_scattered()) {
+	  dout(10) << " sending scatterlock state on root " << *root << dendl;
+	  p->second->add_scatterlock_state(root);
+	}
+      }
       for (int i = 0; i < NUM_STRAY; ++i) {
 	CInode *s = get_inode(MDS_INO_STRAY(p->first, i)); 
 	if (s)
@@ -3134,6 +3129,10 @@ void MDCache::rejoin_send_rejoins()
 				    root->filelock.get_state(),
 				    root->nestlock.get_state(),
 				    root->dirfragtreelock.get_state());
+	if (root->is_dirty_scattered()) {
+	  dout(10) << " sending scatterlock state on root " << *root << dendl;
+	  p->second->add_scatterlock_state(root);
+	}
       }
       for (int i = 0; i < NUM_STRAY; ++i) {
 	if (CInode *in = get_inode(MDS_INO_STRAY(p->first, i))) {
@@ -3248,6 +3247,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       assert(dnl->get_inode()->is_dir());
       rejoin->add_weak_primary_dentry(dir->ino(), dn->name.c_str(), dn->first, dn->last, in->ino());
       in->get_nested_dirfrags(nested);
+      if (in->is_dirty_scattered()) {
+	dout(10) << " sending scatterlock state" << dendl;
+	rejoin->add_scatterlock_state(in);
+      }
     }
   } else {
     // STRONG
@@ -3275,6 +3278,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->nestlock.get_state(),
 				 in->dirfragtreelock.get_state());
 	in->get_nested_dirfrags(nested);
+	if (in->is_dirty_scattered()) {
+	  dout(10) << " sending scatterlock state" << dendl;
+	  rejoin->add_scatterlock_state(in);
+	}
       }
     }
   }
