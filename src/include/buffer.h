@@ -327,24 +327,10 @@ public:
     
     bool have_raw() const { return _raw ? true:false; }
 
-    raw *clone() {
-      return _raw->clone();
-    }
+    raw *clone();
     
-    void clone_in_place() {
-      raw *newraw = _raw->clone();
-      release();
-      newraw->nref.inc();
-      _raw = newraw;
-    }
-    bool do_cow() {
-      if (_raw->nref.read() > 1) {
-	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
-	clone_in_place();
-	return true;
-      } else
-	return false;
-    }
+    void clone_in_place();
+    bool do_cow();
 
     void swap(ptr& other) {
       raw *r = _raw;

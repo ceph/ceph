@@ -117,6 +117,25 @@ bool buffer_track_alloc = true;
     return *this;
   }
 
+  buffer::raw *buffer::ptr::clone() {
+    return _raw->clone();
+  }
+
+  void buffer::ptr::clone_in_place() {
+    raw *newraw = _raw->clone();
+    release();
+    newraw->nref.inc();
+    _raw = newraw;
+  }
+  bool buffer::ptr::do_cow() {
+    if (_raw->nref.read() > 1) {
+      //std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
+      clone_in_place();
+      return true;
+    } else
+      return false;
+  }
+
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);
