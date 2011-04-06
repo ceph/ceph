@@ -1943,7 +1943,7 @@ bool MDS::_dispatch(Message *m)
     mlogger->inc(l_mdm_capa, g_num_capa);  g_num_capa = 0;
     mlogger->inc(l_mdm_caps, g_num_caps);  g_num_caps = 0;
 
-    mlogger->set(l_mdm_buf, buffer_total_alloc.read());
+    mlogger->set(l_mdm_buf, buffer::get_total_alloc());
 
   }
 

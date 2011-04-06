@@ -78,7 +78,6 @@ extern Spinlock buffer_lock;
 #endif
 
 
-extern atomic_t buffer_total_alloc;
 extern bool buffer_track_alloc;
 
 class buffer {
@@ -114,19 +113,13 @@ public:
   };
 
 
+  static int get_total_alloc();
+
 private:
  
   /* hack for memory utilization debugging. */
-  static void inc_total_alloc(unsigned len) {
-    if (buffer_track_alloc)
-      buffer_total_alloc.add(len);
-  }
-  static void dec_total_alloc(unsigned len) {
-    if (buffer_track_alloc)
-      buffer_total_alloc.sub(len);
-  }
-
- 
+  static void inc_total_alloc(unsigned len);
+  static void dec_total_alloc(unsigned len);
 
   /*
    * an abstract raw buffer.  with a reference count.
@@ -175,16 +168,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);      
-      bdout << "raw_char " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
     raw* clone_empty() {
       return new raw_char(len);
@@ -199,16 +192,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_malloc() {
       free(data);
       dec_total_alloc(len);      
-      bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
     raw* clone_empty() {
       return new raw_malloc(len);
@@ -232,12 +225,12 @@ private:
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
-      bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_mmap_pages() {
       ::munmap(data, len);
       dec_total_alloc(len);
-      bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
     raw* clone_empty() {
       return new raw_mmap_pages(len);
@@ -258,12 +251,12 @@ private:
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
-      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_posix_aligned() {
       ::free((void*)data);
       dec_total_alloc(len);
-      bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
     raw* clone_empty() {
       return new raw_posix_aligned(len);

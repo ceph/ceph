@@ -33,6 +33,17 @@ Spinlock buffer_lock("buffer_lock");
 atomic_t buffer_total_alloc;
 bool buffer_track_alloc = true;
 
+  void buffer::inc_total_alloc(unsigned len) {
+    if (buffer_track_alloc)
+      buffer_total_alloc.add(len);
+  }
+  void buffer::dec_total_alloc(unsigned len) {
+    if (buffer_track_alloc)
+      buffer_total_alloc.sub(len);
+  }
+  int buffer::get_total_alloc() {
+    return buffer_total_alloc.read();
+  }
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);

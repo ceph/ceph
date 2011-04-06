@@ -1729,7 +1729,7 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(5) << "tick" << dendl;
 
-  logger->set(l_osd_buf, buffer_total_alloc.read());
+  logger->set(l_osd_buf, buffer::get_total_alloc());
 
   if (got_sigterm) {
     derr << "got SIGTERM, shutting down" << dendl;
@@ -2497,7 +2497,7 @@ void OSD::_dispatch(Message *m)
     }
   }
 
-  logger->set(l_osd_buf, buffer_total_alloc.read());
+  logger->set(l_osd_buf, buffer::get_total_alloc());
 
   switch (m->get_type()) {
 
@@ -2603,7 +2603,7 @@ void OSD::_dispatch(Message *m)
     }
   }
 
-  logger->set(l_osd_buf, buffer_total_alloc.read());
+  logger->set(l_osd_buf, buffer::get_total_alloc());
 
 }
 
