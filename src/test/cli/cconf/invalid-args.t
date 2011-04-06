@@ -7,6 +7,10 @@
   $ cconf -c test.conf broken
   [1]
 
+  $ cconf -c test.conf --name total.garbage
+  You must pass a string of the form TYPE.ID to the --name option. Valid types are: auth, mon, osd, mds, client
+  [1]
+
 # TODO output an error (missing key), not the whole usage
   $ cconf -c test.conf -s bar
   lookup: expected exactly one argument

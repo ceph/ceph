@@ -15,12 +15,26 @@
 #include "common/entity_name.h"
 #include "include/msgr.h"
 
+#include <errno.h>
 #include <sstream>
 #include <string>
 
 using std::string;
 
 extern const char *ceph_entity_type_name(int type);
+
+struct str_to_entity_type_t {
+  uint32_t type;
+  const char *str;
+};
+
+static const str_to_entity_type_t STR_TO_ENTITY_TYPE[] = {
+  { CEPH_ENTITY_TYPE_AUTH, "auth" },
+  { CEPH_ENTITY_TYPE_MON, "mon" },
+  { CEPH_ENTITY_TYPE_OSD, "osd" },
+  { CEPH_ENTITY_TYPE_MDS, "mds" },
+  { CEPH_ENTITY_TYPE_CLIENT, "client" },
+};
 
 EntityName::
 EntityName()
@@ -50,7 +64,8 @@ from_str(const string& s)
  
   string type_ = s.substr(0, pos);
   string id_ = s.substr(pos + 1);
-  set(type_, id_);
+  if (set(type_, id_))
+    return false;
   return true;
 }
 
@@ -65,10 +80,14 @@ set(uint32_t type_, const std::string &id_)
   type_id = oss.str();
 }
 
-void EntityName::
+int EntityName::
 set(const std::string &type_, const std::string &id_)
 {
-  set(str_to_ceph_entity_type(type_.c_str()), id_);
+  uint32_t t = str_to_ceph_entity_type(type_.c_str());
+  if (t == CEPH_ENTITY_TYPE_ANY)
+    return -EINVAL;
+  set(t, id_);
+  return 0;
 }
 
 void EntityName::
@@ -77,10 +96,10 @@ set_type(uint32_t type_)
   set(type_, id);
 }
 
-void EntityName::
+int EntityName::
 set_type(const char *type_)
 {
-  set(type_, id);
+  return set(type_, id);
 }
 
 void EntityName::
@@ -125,6 +144,20 @@ has_default_id() const
   return (id == "admin");
 }
 
+std::string EntityName::
+get_valid_types_as_str()
+{
+  std::string out;
+  size_t i;
+  std::string sep("");
+  for (i = 0; i < sizeof(STR_TO_ENTITY_TYPE)/sizeof(STR_TO_ENTITY_TYPE[0]); ++i) {
+    out += sep;
+    out += STR_TO_ENTITY_TYPE[i].str;
+    sep = ", ";
+  }
+  return out;
+}
+
 bool operator<(const EntityName& a, const EntityName& b)
 {
   return (a.type < b.type) || (a.type == b.type && a.id < b.id);
@@ -137,15 +170,10 @@ std::ostream& operator<<(std::ostream& out, const EntityName& n)
 
 uint32_t str_to_ceph_entity_type(const char * str)
 {
-  if (strcmp(str, "auth") == 0) {
-    return CEPH_ENTITY_TYPE_AUTH;
-  } else if (strcmp(str, "mon") == 0) {
-    return CEPH_ENTITY_TYPE_MON;
-  } else if (strcmp(str, "osd") == 0) {
-    return CEPH_ENTITY_TYPE_OSD;
-  } else if (strcmp(str, "mds") == 0) {
-    return CEPH_ENTITY_TYPE_MDS;
-  } else {
-    return CEPH_ENTITY_TYPE_CLIENT;
+  size_t i;
+  for (i = 0; i < sizeof(STR_TO_ENTITY_TYPE)/sizeof(STR_TO_ENTITY_TYPE[0]); ++i) {
+    if (strcmp(str, STR_TO_ENTITY_TYPE[i].str) == 0)
+      return STR_TO_ENTITY_TYPE[i].type;
   }
+  return CEPH_ENTITY_TYPE_ANY;
 }

@@ -47,9 +47,9 @@ struct EntityName
   const char *to_cstr() const;
   bool from_str(const std::string& s);
   void set(uint32_t type_, const std::string &id_);
-  void set(const std::string &type_, const std::string &id_);
+  int set(const std::string &type_, const std::string &id_);
   void set_type(uint32_t type_);
-  void set_type(const char *type);
+  int set_type(const char *type);
   void set_id(const std::string &id_);
 
   const char* get_type_str() const;
@@ -58,6 +58,8 @@ struct EntityName
   const char * get_type_name() const;
   const std::string &get_id() const;
   bool has_default_id() const;
+
+  static std::string get_valid_types_as_str();
 
   friend bool operator<(const EntityName& a, const EntityName& b);
   friend std::ostream& operator<<(std::ostream& out, const EntityName& n);
