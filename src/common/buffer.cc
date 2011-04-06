@@ -20,6 +20,7 @@
 #include "common/config.h"
 #include "include/Spinlock.h"
 #include "include/types.h"
+#include "include/atomic.h"
 
 #include <errno.h>
 #include <fstream>

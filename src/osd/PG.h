@@ -20,6 +20,7 @@
 #include "osd_types.h"
 #include "include/buffer.h"
 #include "include/xlist.h"
+#include "include/atomic.h"
 
 #include "OSDMap.h"
 #include "os/ObjectStore.h"

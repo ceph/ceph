@@ -135,6 +135,7 @@ using std::list;
 #include "include/buffer.h"
 #include "common/Throttle.h"
 #include "msg_types.h"
+#include "include/atomic.h"
 
 #include "common/debug.h"
 

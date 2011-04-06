@@ -52,7 +52,6 @@ void	*valloc(size_t);
 #include <string>
 #include <exception>
 
-#include "atomic.h"
 #include "page.h"
 #include "crc32c.h"
 
