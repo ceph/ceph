@@ -344,16 +344,7 @@ public:
       other._len = l;
     }
 
-    void release() {
-      if (_raw) {
-	bdout << "ptr " << this << " release " << _raw << bendl;
-        if (_raw->nref.dec() == 0) {
-          //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-          delete _raw;  // dealloc old (if any)
-	}
-	_raw = 0;
-      }
-    }
+    void release();
 
     // misc
     bool at_buffer_head() const { return _off == 0; }

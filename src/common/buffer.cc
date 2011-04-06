@@ -136,6 +136,17 @@ bool buffer_track_alloc = true;
       return false;
   }
 
+  void buffer::ptr::release() {
+    if (_raw) {
+      bdout << "ptr " << this << " release " << _raw << bendl;
+      if (_raw->nref.dec() == 0) {
+	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
+	delete _raw;  // dealloc old (if any)
+      }
+      _raw = 0;
+    }
+  }
+
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);
