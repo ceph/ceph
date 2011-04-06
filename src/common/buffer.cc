@@ -44,6 +44,36 @@ bool buffer_track_alloc = true;
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
   }
+
+  buffer::raw* buffer::copy(const char *c, unsigned len) {
+    raw* r = new raw_char(len);
+    memcpy(r->data, c, len);
+    return r;
+  }
+  buffer::raw* buffer::create(unsigned len) {
+    return new raw_char(len);
+  }
+  buffer::raw* buffer::claim_char(unsigned len, char *buf) {
+    return new raw_char(len, buf);
+  }
+  buffer::raw* buffer::create_malloc(unsigned len) {
+    return new raw_malloc(len);
+  }
+  buffer::raw* buffer::claim_malloc(unsigned len, char *buf) {
+    return new raw_malloc(len, buf);
+  }
+  buffer::raw* buffer::create_static(unsigned len, char *buf) {
+    return new raw_static(buf, len);
+  }
+  buffer::raw* buffer::create_page_aligned(unsigned len) {
+#ifndef __CYGWIN__
+    //return new raw_mmap_pages(len);
+    return new raw_posix_aligned(len);
+#else
+    return new raw_hack_aligned(len);
+#endif
+  }
+
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);

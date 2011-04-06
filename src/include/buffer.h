@@ -297,35 +297,13 @@ public:
    * named constructors 
    */
 
-  static raw* copy(const char *c, unsigned len) {
-    raw* r = new raw_char(len);
-    memcpy(r->data, c, len);
-    return r;
-  }
-  static raw* create(unsigned len) {
-    return new raw_char(len);
-  }
-  static raw* claim_char(unsigned len, char *buf) {
-    return new raw_char(len, buf);
-  }
-  static raw* create_malloc(unsigned len) {
-    return new raw_malloc(len);
-  }
-  static raw* claim_malloc(unsigned len, char *buf) {
-    return new raw_malloc(len, buf);
-  }
-  static raw* create_static(unsigned len, char *buf) {
-    return new raw_static(buf, len);
-  }
-
-  static raw* create_page_aligned(unsigned len) {
-#ifndef __CYGWIN__
-    //return new raw_mmap_pages(len);
-    return new raw_posix_aligned(len);
-#else
-    return new raw_hack_aligned(len);
-#endif
-  }
+  static raw* copy(const char *c, unsigned len);
+  static raw* create(unsigned len);
+  static raw* claim_char(unsigned len, char *buf);
+  static raw* create_malloc(unsigned len);
+  static raw* claim_malloc(unsigned len, char *buf);
+  static raw* create_static(unsigned len, char *buf);
+  static raw* create_page_aligned(unsigned len);
   
   
   /*
