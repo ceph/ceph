@@ -3093,10 +3093,13 @@ void MDCache::rejoin_send_rejoins()
     // my subtree?
     if (dir->is_auth()) {
       // include scatterlock state with parent inode's subtree?
-      int inauth = dir->inode->authority().first;
-      if (rejoins.count(inauth)) {
-	dout(10) << " sending scatterlock state to mds" << inauth << " for " << *dir << dendl;
-	rejoins[inauth]->add_scatterlock_state(dir->inode);
+      if (dir->inode->is_dirty_scattered()) {
+	dir->inode->fail_scatter_flush();  // flushing -> dirty for these locks
+	int inauth = dir->inode->authority().first;
+	if (rejoins.count(inauth)) {
+	  dout(10) << " sending scatterlock state to mds" << inauth << " for " << *dir << dendl;
+	  rejoins[inauth]->add_scatterlock_state(dir->inode);
+	}
       }
       continue;  // skip my own regions!
     }

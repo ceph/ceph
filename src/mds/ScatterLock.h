@@ -116,6 +116,9 @@ public:
   bool is_flushing() const {
     return have_more() ? _more->flushing : false;
   }
+  bool is_dirty_or_flushing() const {
+    return have_more() ? (_more->dirty || _more->flushing) : false;
+  }
 
   void mark_dirty() { 
     if (!more()->dirty) {
@@ -136,6 +139,12 @@ public:
 	parent->clear_dirty_scattered(get_type());
       }
       try_clear_more();
+    }
+  }
+  void fail_flush() {
+    if (is_flushing()) {
+      _more->dirty = true;
+      _more->flushing = false;
     }
   }
   void clear_dirty() {

@@ -1504,6 +1504,20 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 }
 
 
+bool CInode::is_dirty_scattered()
+{
+  return
+    filelock.is_dirty_or_flushing() ||
+    nestlock.is_dirty_or_flushing() ||
+    dirfragtreelock.is_dirty_or_flushing();
+}
+
+void CInode::fail_scatter_flush()
+{
+  filelock.fail_flush();
+  nestlock.fail_flush();
+  dirfragtreelock.fail_flush();
+}
 
 void CInode::clear_dirty_scattered(int type)
 {

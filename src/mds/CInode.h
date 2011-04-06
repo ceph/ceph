@@ -726,6 +726,8 @@ public:
   void _finish_frag_update(CDir *dir, Mutation *mut);
 
   void clear_dirty_scattered(int type);
+  bool is_dirty_scattered();
+  void fail_scatter_flush();
 
   void start_scatter(ScatterLock *lock);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
