@@ -711,6 +711,10 @@ dist-hook:
 
 python_PYTHON = pybind/rados.py
 
+if WITH_DEBUG
+bin_SCRIPTS += test/ceph-pybind-test.py
+endif
+
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
