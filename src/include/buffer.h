@@ -348,39 +348,26 @@ public:
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
-    bool at_buffer_tail() const { return _off + _len == _raw->len; }
+    bool at_buffer_tail() const;
 
     bool is_page_aligned() const { return ((long)c_str() & ~PAGE_MASK) == 0; }
     bool is_n_page_sized() const { return (length() & ~PAGE_MASK) == 0; }
 
     // accessors
     raw *get_raw() const { return _raw; }
-    const char *c_str() const { assert(_raw); return _raw->data + _off; }
-    char *c_str() { assert(_raw); return _raw->data + _off; }
+    const char *c_str() const;
+    char *c_str();
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
     unsigned start() const { return _off; }
     unsigned end() const { return _off + _len; }
-    unsigned unused_tail_length() const { 
-      if (_raw)
-	return _raw->len - (_off+_len); 
-      else
-	return 0;
-    }
-    const char& operator[](unsigned n) const { 
-      assert(_raw); 
-      assert(n < _len);
-      return _raw->data[_off + n];
-    }
-    char& operator[](unsigned n) { 
-      assert(_raw); 
-      assert(n < _len);
-      return _raw->data[_off + n];
-    }
+    unsigned unused_tail_length() const;
+    const char& operator[](unsigned n) const;
+    char& operator[](unsigned n);
 
-    const char *raw_c_str() const { assert(_raw); return _raw->data; }
-    unsigned raw_length() const { assert(_raw); return _raw->len; }
-    int raw_nref() const { assert(_raw); return _raw->nref.read(); }
+    const char *raw_c_str() const;
+    unsigned raw_length() const;
+    int raw_nref() const;
 
     void copy_out(unsigned o, unsigned l, char *dest) const {
       assert(_raw);
@@ -389,10 +376,7 @@ public:
       memcpy(dest, c_str()+o, l);
     }
 
-    unsigned wasted() {
-      assert(_raw);
-      return _raw->len - _len;
-    }
+    unsigned wasted();
 
     int cmp(const ptr& o) {
       int l = _len < o._len ? _len : o._len;

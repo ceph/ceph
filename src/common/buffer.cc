@@ -147,6 +147,36 @@ bool buffer_track_alloc = true;
     }
   }
 
+  bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
+
+  const char *buffer::ptr::c_str() const { assert(_raw); return _raw->data + _off; }
+  char *buffer::ptr::c_str() { assert(_raw); return _raw->data + _off; }
+  unsigned buffer::ptr::unused_tail_length() const {
+    if (_raw)
+      return _raw->len - (_off+_len);
+    else
+      return 0;
+  }
+  const char& buffer::ptr::operator[](unsigned n) const {
+    assert(_raw);
+    assert(n < _len);
+    return _raw->data[_off + n];
+  }
+  char& buffer::ptr::operator[](unsigned n) {
+    assert(_raw);
+    assert(n < _len);
+    return _raw->data[_off + n];
+  }
+
+  const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
+  unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
+  int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
+
+  unsigned buffer::ptr::wasted() {
+    assert(_raw);
+    return _raw->len - _len;
+  }
+
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);
