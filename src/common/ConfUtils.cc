@@ -91,6 +91,8 @@ clear()
 int ConfFile::
 parse_file(const std::string &fname, std::deque<std::string> *errors)
 {
+  clear();
+
   int ret = 0;
   size_t sz;
   char *buf = NULL;
@@ -155,6 +157,8 @@ done:
 int ConfFile::
 parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors)
 {
+  clear();
+
   load_from_buffer(bl->c_str(), bl->length(), errors);
   return 0;
 }
@@ -369,6 +373,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
   const char *l = line;
   acceptor_state_t state = ACCEPT_INIT;
   string key, val, newsection, comment;
+  bool escaping = false;
   while (true) {
     char c = *l++;
     switch (state) {
@@ -403,7 +408,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  errors->push_back(oss.str());
 	  return NULL;
 	}
-	else if (c == ']') {
+	else if ((c == ']') && (!escaping)) {
 	  trim_whitespace(newsection, true);
 	  if (newsection.empty()) {
 	    ostringstream oss;
@@ -414,25 +419,30 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  }
 	  state = ACCEPT_COMMENT_START;
 	}
-	else if ((c == '#') || (c == ';')) {
+	else if (((c == '#') || (c == ';')) && (!escaping)) {
 	  ostringstream oss;
 	  oss << "unexpected comment marker while parsing new section name, at "
 	      << "char " << (l - line) << ", line " << line_no;
 	  errors->push_back(oss.str());
 	  return NULL;
 	}
-	else
+	else if ((c == '\\') && (!escaping)) {
+	  escaping = true;
+	}
+	else {
+	  escaping = false;
 	  newsection += c;
+	}
 	break;
       case ACCEPT_KEY:
-	if ((c == '#') || (c == ';') || (c == '\0')) {
+	if ((((c == '#') || (c == ';')) && (!escaping)) || (c == '\0')) {
 	  ostringstream oss;
 	  oss << "unexpected character while parsing putative key value, "
 	      << "at char " << (l - line) << ", line " << line_no;
 	  errors->push_back(oss.str());
 	  return NULL;
 	}
-	else if (c == '=') {
+	else if ((c == '=') && (!escaping)) {
 	  trim_whitespace(key, true);
 	  if (key.empty()) {
 	    ostringstream oss;
@@ -443,8 +453,13 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  }
 	  state = ACCEPT_VAL_START;
 	}
-	else
+	else if ((c == '\\') && (!escaping)) {
+	  escaping = true;
+	}
+	else {
+	  escaping = false;
 	  key += c;
+	}
 	break;
       case ACCEPT_VAL_START:
 	if (c == '\0')
@@ -464,15 +479,27 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	break;
       case ACCEPT_UNQUOTED_VAL:
 	if (c == '\0') {
+	  if (escaping) {
+	    ostringstream oss;
+	    oss << "error parsing value name: unterminated escape sequence "
+	        << "at char " << (l - line) << ", line " << line_no;
+	    errors->push_back(oss.str());
+	    return NULL;
+	  }
 	  trim_whitespace(val, false);
 	  return new ConfLine(key, val, newsection, comment, line_no);
 	}
-	else if ((c == '#') || (c == ';')) {
+	else if (((c == '#') || (c == ';')) && (!escaping)) {
 	  trim_whitespace(val, false);
 	  state = ACCEPT_COMMENT_TEXT;
 	}
-	else
+	else if ((c == '\\') && (!escaping)) {
+	  escaping = true;
+	}
+	else {
+	  escaping = false;
 	  val += c;
+	}
 	break;
       case ACCEPT_QUOTED_VAL:
 	if (c == '\0') {
@@ -482,10 +509,14 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  errors->push_back(oss.str());
 	  return NULL;
 	}
-	else if (c == '"') {
+	else if ((c == '"') && (!escaping)) {
 	  state = ACCEPT_COMMENT_START;
 	}
+	else if ((c == '\\') && (!escaping)) {
+	  escaping = true;
+	}
 	else {
+	  escaping = false;
 	  // Add anything, including whitespace.
 	  val += c;
 	}

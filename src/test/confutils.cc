@@ -182,6 +182,22 @@ const char * const conf3 = "\
 [mon] #nothing here \n\
 ";
 
+const char * const escaping_conf_1 = "\
+[global]\n\
+	log file = the \"scare quotes\"\n\
+	pid file = a \\\n\
+pid file\n\
+[mon]\n\
+	keyring = \"nested \\\"quotes\\\"\"\n\
+";
+
+const char * const escaping_conf_2 = "\
+[apple \\]\\[]\n\
+	log file = floppy disk\n\
+[mon]\n\
+	keyring = \"backslash\\\\\"\n\
+";
+
 // illegal because it contains an invalid utf8 sequence.
 const char illegal_conf1[] = "\
 [global]\n\
@@ -213,6 +229,12 @@ const char illegal_conf4[] = "\
         keyring = \"unterminated quoted string\n\
 [osd0]\n\
         keyring = osd_keyring          ; osd's keyring\n\
+";
+
+// illegal because it has a backslash at the very end
+const char illegal_conf5[] = "\
+[global]\n\
+        keyring = something awful\\\\\n\
 ";
 
 // unicode config file
@@ -391,4 +413,35 @@ TEST(IllegalFiles, ConfUtils) {
   ConfFile cf4;
   ASSERT_EQ(cf4.parse_file(illegal_conf4_f.c_str(), &err), 0);
   ASSERT_EQ(err.size(), 1U);
+
+  std::string illegal_conf5_f(next_tempfile(illegal_conf5));
+  ConfFile cf5;
+  ASSERT_EQ(cf5.parse_file(illegal_conf5_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 1U);
+}
+
+TEST(EscapingFiles, ConfUtils) {
+  std::deque<std::string> err;
+  std::string escaping_conf_1_f(next_tempfile(escaping_conf_1));
+  ConfFile cf1;
+  std::string val;
+  ASSERT_EQ(cf1.parse_file(escaping_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
+
+  ASSERT_EQ(cf1.read("global", "log file", val), 0);
+  ASSERT_EQ(val, "the \"scare quotes\"");
+  ASSERT_EQ(cf1.read("global", "pid file", val), 0);
+  ASSERT_EQ(val, "a pid file");
+  ASSERT_EQ(cf1.read("mon", "keyring", val), 0);
+  ASSERT_EQ(val, "nested \"quotes\"");
+
+  std::string escaping_conf_2_f(next_tempfile(escaping_conf_2));
+  ConfFile cf2;
+  ASSERT_EQ(cf2.parse_file(escaping_conf_2_f.c_str(), &err), 0);
+  ASSERT_EQ(err.size(), 0U);
+
+  ASSERT_EQ(cf2.read("apple ][", "log file", val), 0);
+  ASSERT_EQ(val, "floppy disk");
+  ASSERT_EQ(cf2.read("mon", "keyring", val), 0);
+  ASSERT_EQ(val, "backslash\\");
 }
