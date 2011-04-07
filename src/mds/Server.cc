@@ -5353,7 +5353,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
 	    i !=  mdr->xlocks.end();
 	    ++i)
-	  destdnl->get_inode()->auth_pin(*i);
+	  if (!(*i)->is_locallock() &&
+	      (*i)->get_parent() == destdnl->get_inode())
+	    destdnl->get_inode()->auth_pin(*i);
       }
       
       // hack: fix auth bit
