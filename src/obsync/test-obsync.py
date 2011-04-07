@@ -247,6 +247,24 @@ if (len(opts.buckets) >= 1):
     if (opts.verbose):
         print "successfully copied the sample directory to the test bucket."
 
+    # test --follow-symlinks
+    os.mkdir("%s/sym_test_dir" % tdir)
+    f = open("%s/sym_test_dir/a" % tdir, 'w')
+    f.write("a")
+    f.close()
+    os.symlink("./a", "%s/sym_test_dir/b" % tdir)
+    obsync_check("file://%s/sym_test_dir" % tdir,
+        "file://%s/sym_test_dir2" % tdir,
+        ["-c", "--follow-symlinks"])
+    os.unlink("%s/sym_test_dir2/a" % tdir)
+    f = open("%s/sym_test_dir2/b" % tdir, 'r')
+    whole_file = f.read()
+    f.close()
+    if (whole_file != "a"):
+        raise RuntimeError("error! unexpected value in %s/sym_test_dir2/b" % tdir)
+    if (opts.verbose):
+        print "successfully copied a directory with --follow-symlinks"
+
 if (len(opts.buckets) >= 2):
     if (opts.verbose):
         print "copying dir1 to bucket0..."
