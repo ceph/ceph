@@ -1471,7 +1471,8 @@ void FileStore::start_logger(int whoami, utime_t tare)
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
   logger = new ProfLogger(name, (ProfLogType*)&fs_logtype);
-  journal->logger = logger;
+  if (journal)
+    journal->logger = logger;
   logger_add(logger);  
   logger_tare(tare);
   logger_start();
@@ -1481,7 +1482,8 @@ void FileStore::stop_logger()
 {
   dout(10) << "stop_logger" << dendl;
   if (logger) {
-    journal->logger = NULL;
+    if (journal)
+      journal->logger = NULL;
     logger_remove(logger);
     delete logger;
     logger = NULL;
