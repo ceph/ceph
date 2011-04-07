@@ -1198,18 +1198,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_STAT:
       {
-	::encode(oi.size, odata);
-	::encode(oi.mtime, odata);
-	dout(10) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
-	if (1) {  // REMOVE ME LATER!
-	  struct stat st;
-	  memset(&st, 0, sizeof(st));
-	  result = osd->store->stat(coll, soid, &st);
-	  if ((result && result != -ENOENT) ||
-	      (uint64_t)st.st_size != oi.size) {
-	    osd->clog.error() << info.pgid << " " << soid << " oi.size " << oi.size
-			      << " but stat got " << result << " size " << st.st_size << "\n";
-	    assert(0 == "oi disagrees with stat, or error code on stat");
+	if (ctx->obs->exists) {
+	  ::encode(oi.size, odata);
+	  ::encode(oi.mtime, odata);
+	  dout(10) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
+	  if (1) {  // REMOVE ME LATER!
+	    struct stat st;
+	    memset(&st, 0, sizeof(st));
+	    result = osd->store->stat(coll, soid, &st);
+	    if (result || (uint64_t)st.st_size != oi.size) {
+	      osd->clog.error() << info.pgid << " " << soid << " oi.size " << oi.size
+				<< " but stat got " << result << " size " << st.st_size << "\n";
+	      assert(0 == "oi disagrees with stat, or error code on stat");
+	    }
 	  }
 	}
 	info.stats.num_rd++;
