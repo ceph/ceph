@@ -15,7 +15,6 @@
 				'n' => '1 + $cnode + $nummds + $numosd' ],
 	
 	# parameters
-	#'fs' => 'ebofs',
 	'fs' => 'fakestore',
 
 	'until' => 300,     # --syn until $n    ... when to stop clients

@@ -153,7 +153,6 @@ public:
   int debug_objectcacher;
   int debug_client;
   int debug_osd;
-  int debug_ebofs;
   int debug_filestore;
   int debug_journal;
   int debug_bdev;
@@ -453,19 +452,6 @@ public:
   int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
   float filestore_commit_timeout;
-
-  // ebofs
-  bool  ebofs;
-  bool  ebofs_cloneable;
-  bool  ebofs_verify;
-  int   ebofs_commit_ms;
-  int   ebofs_oc_size;
-  int   ebofs_cc_size;
-  uint64_t ebofs_bc_size;
-  uint64_t ebofs_bc_max_dirty;
-  int ebofs_max_prefetch;
-  bool  ebofs_realloc;
-  bool ebofs_verify_csum_on_read;
 
   // journal
   bool journal_dio;

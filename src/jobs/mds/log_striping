@@ -11,7 +11,7 @@
 	'n' => 16,
 
 	# parameters
-	'fs' => ['ebofs','fakestore'],
+	'fs' => ['fakestore'],
 	'meta_log_ssize' => [ 128, 256, 1024, 1 << 15, 1 << 20 ],
 	'meta_log_scount' => 4,#[ 1, 2, 4, 8 ],
 

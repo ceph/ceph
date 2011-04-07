@@ -13,8 +13,8 @@
  */
 
 
-#ifndef CEPH_EBOFS_FILEJOURNAL_H
-#define CEPH_EBOFS_FILEJOURNAL_H
+#ifndef CEPH_FILEJOURNAL_H
+#define CEPH_FILEJOURNAL_H
 
 #include <deque>
 using std::deque;

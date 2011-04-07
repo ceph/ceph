@@ -163,7 +163,6 @@ struct config_option config_optionsp[] = {
   OPTION(debug_objectcacher, OPT_INT, 0),
   OPTION(debug_client, OPT_INT, 0),
   OPTION(debug_osd, OPT_INT, 0),
-  OPTION(debug_ebofs, OPT_INT, 1),
   OPTION(debug_filestore, OPT_INT, 1),
   OPTION(debug_journal, OPT_INT, 1),
   OPTION(debug_bdev, OPT_INT, 1),         // block device
@@ -391,17 +390,6 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20), //  "
   OPTION(filestore_op_threads, OPT_INT, 2),
   OPTION(filestore_commit_timeout, OPT_FLOAT, 600),
-  OPTION(ebofs, OPT_BOOL, false),
-  OPTION(ebofs_cloneable, OPT_BOOL, true),
-  OPTION(ebofs_verify, OPT_BOOL, false),
-  OPTION(ebofs_commit_ms, OPT_INT, 200),       // 0 = no forced commit timeout (for debugging/tracing)
-  OPTION(ebofs_oc_size, OPT_INT, 10000),      // onode cache
-  OPTION(ebofs_cc_size, OPT_INT, 10000),      // cnode cache
-  OPTION(ebofs_bc_size, OPT_U64, 50*256), // 4k blocks, *256 for MB
-  OPTION(ebofs_bc_max_dirty, OPT_U64, 30*256), // before write() will block
-  OPTION(ebofs_max_prefetch, OPT_INT, 1000), // 4k blocks
-  OPTION(ebofs_realloc, OPT_BOOL, false),    // hrm, this can cause bad fragmentation, don't use!
-  OPTION(ebofs_verify_csum_on_read, OPT_BOOL, true),
   OPTION(journal_dio, OPT_BOOL, true),
   OPTION(journal_block_align, OPT_BOOL, true),
   OPTION(journal_max_write_bytes, OPT_INT, 10 << 20),

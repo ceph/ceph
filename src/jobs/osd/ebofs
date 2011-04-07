@@ -32,9 +32,6 @@
 						  ],
 	'writefile_mb' => 1000,
 	
-	'ebofs_idle_commit_ms' => [ 100, 500 ],
-	'ebofs_abp_max_alloc' => [ 4096*16, 4096*64 ],
-
 #	'custom' => '--tcp_skip_rank0',# --osd_maxthreads 0',
 			'custom' => '--debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5',
 
