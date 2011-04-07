@@ -67,8 +67,8 @@ def rmbucket(args):
     if (len(args) < 1):
         print "must give an argument to rmbucket"
         return 255
-    bucket = conn.get_bucket(opts.delete_bucket)
-    print "deleting bucket '%s' ..." % opts.delete_bucket
+    bucket = conn.get_bucket(args[0])
+    print "deleting bucket '%s' ..." % args[0]
     bucket.delete()
     print "done."
     return 0
