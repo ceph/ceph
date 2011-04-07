@@ -23,11 +23,6 @@
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
 
-#ifdef USE_OSBDB
-#include "osbdb/OSBDB.h"
-#endif // USE_OSBDB
-
-
 #include "ReplicatedPG.h"
 //#include "RAID4PG.h"
 

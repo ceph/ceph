@@ -11,7 +11,6 @@ Foundation.  See file COPYING. */
 
 #include "osd/ObjectStore.h"
 #include "ebofs/Ebofs.h"
-#include "osbdb/OSBDB.h"
 #include "include/buffer.h"
 
 #include <iostream>
@@ -139,15 +138,6 @@ int main (int argc, char **argv)
           fclose (f);
         }
       os = new Ebofs (osd_file);
-    }
-  else if (strcasecmp (osd_name, "osbdb") == 0)
-    {
-      os = new OSBDB (osd_file);
-    }
-  else if (strcasecmp (osd_name, "osbdb-btree") == 0)
-    {
-      g_conf.bdbstore_btree = true;
-      os = new OSBDB (osd_file);
     }
   else
     {

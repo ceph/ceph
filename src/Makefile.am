@@ -1024,15 +1024,12 @@ noinst_HEADERS = \
         msg/tcp.h\
 	objclass/objclass.h\
 	os/btrfs_ioctl.h\
-        os/BDBMap.h\
         os/Fake.h\
-        os/FakeStoreBDBCollections.h\
         os/FileJournal.h\
         os/FileStore.h\
         os/Journal.h\
         os/JournalingObjectStore.h\
         os/ObjectStore.h\
-        osbdb/OSBDB.h\
         osd/Ager.h\
         osd/OSD.h\
         osd/OSDCaps.h\

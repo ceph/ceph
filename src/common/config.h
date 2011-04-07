@@ -488,16 +488,6 @@ public:
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
 
-#ifdef USE_OSBDB
-  bool bdbstore;
-  int debug_bdbstore;
-  bool bdbstore_btree;
-  int bdbstore_ffactor;
-  int bdbstore_nelem;
-  int bdbstore_pagesize;
-  int bdbstore_cachesize;
-  bool bdbstore_transactional;
-#endif // USE_OSBDB
 };
 
 extern md_config_t g_conf;
