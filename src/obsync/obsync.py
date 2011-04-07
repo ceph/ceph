@@ -232,7 +232,10 @@ class FileStoreIterator(object):
     """FileStore iterator"""
     def __init__(self, base):
         self.base = base
-        self.generator = os.walk(base)
+        if (opts.follow_symlinks):
+            self.generator = os.walk(base, followlinks=True)
+        else:
+            self.generator = os.walk(base)
         self.path = ""
         self.files = []
     def __iter__(self):
@@ -353,6 +356,9 @@ DESTINATION before transferring any objects")
 parser.add_option("-d", "--delete-after", action="store_true", \
     dest="delete_after", help="delete objects that aren't in SOURCE from \
 DESTINATION after doing all transfers.")
+parser.add_option("-L", "--follow-symlinks", action="store_true", \
+    dest="follow_symlinks", help="follow symlinks (please avoid symlink " + \
+    "loops when using this option!)")
 parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
