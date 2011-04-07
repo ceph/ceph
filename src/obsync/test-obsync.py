@@ -49,6 +49,11 @@ def obsync(src, dst, misc):
     else:
         full.append(dst)
     full.extend(misc)
+    if (opts.more_verbose):
+        for f in full:
+            print f,
+            print " ",
+        print
     return subprocess.call(full, stderr=opts.error_out, env=e)
 
 def obsync_check(src, dst, opts):
@@ -80,12 +85,12 @@ class ObSyncTestBucket(object):
         self.skey = skey
 
 ###### Main #######
-# change directory to osync directory
+# change directory to obsync directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # parse options
-parser = OptionParser("""osync-test.sh
-A system test for osync.
+parser = OptionParser("""test-obsync.sh
+A system test for obsync.
 
 Important environment variables:
 URL1, SKEY1, AKEY1: to set up bucket1 (optional)
@@ -120,6 +125,10 @@ else:
     if (opts.verbose):
         print "have both scratch1_url and scratch2_url: will test \
 bucket-to-bucket transfers."
+
+if (len(opts.buckets) == 0):
+    print >>sys.stderr, "invalid usage. -h for help."
+    sys.exit(1)
 
 # set up temporary directory
 tdir = tempfile.mkdtemp()
@@ -162,22 +171,22 @@ subprocess.check_call(["cp", "-r", "%s/dir1" % tdir, "%s/dir1a" % tdir])
 compare_directories("%s/dir1" % tdir, "%s/dir1a" % tdir)
 
 # we should fail here, because we didn't supply -c
-ret = subprocess.call(["./osync.py", "file://%s/dir1" % tdir,
+ret = subprocess.call(["./obsync.py", "file://%s/dir1" % tdir,
                 "file://%s/dir2" % tdir], stderr=opts.error_out)
 if (ret == 0):
-    raise RuntimeError("expected this call to osync to fail, because \
+    raise RuntimeError("expected this call to obsync to fail, because \
 we didn't supply -c. But it succeeded.")
 if (opts.verbose):
     print "first call failed as expected."
 
 # now supply -c and it should work
-ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
+ret = subprocess.check_call(["./obsync.py", "-c", "file://%s/dir1" % tdir,
                 "file://%s/dir2" % tdir], stderr=opts.error_out)
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 
 # test the alternate syntax where we leave off the file://, and it is assumed
 # because the url begins with / or ./
-ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
+ret = subprocess.check_call(["./obsync.py", "-c", "file://%s/dir1" % tdir,
                 "/%s/dir2" % tdir], stderr=opts.error_out)
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 
@@ -187,28 +196,28 @@ if (opts.verbose):
 if (opts.verbose):
     print "test a dry run between local directories"
 os.mkdir("%s/dir1b" % tdir)
-osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, ["-n"])
+obsync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, ["-n"])
 if (count_obj_in_dir("/%s/dir1b" % tdir) != 0):
     raise RuntimeError("error! the dry run copied some files!")
 
 if (opts.verbose):
     print "dry run didn't do anything. good."
-osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, [])
+obsync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, [])
 compare_directories("%s/dir1" % tdir, "%s/dir1b" % tdir)
 if (opts.verbose):
     print "regular run synchronized the directories."
 
 if (opts.verbose):
     print "test running without --delete-after or --delete-before..."
-osync_check("file://%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["-c"])
+obsync_check("file://%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["-c"])
 os.unlink("%s/dir1b/a" % tdir)
-osync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, [])
+obsync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, [])
 if not os.path.exists("/%s/dir1c/a" % tdir):
     raise RuntimeError("error: running without --delete-after or \
 --delete-before still deleted files from the destination!")
 if (opts.verbose):
     print "test running _with_ --delete-after..."
-osync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["--delete-after"])
+obsync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["--delete-after"])
 if os.path.exists("/%s/dir1c/a" % tdir):
     raise RuntimeError("error: running with --delete-after \
 failed to delete files from the destination!")
@@ -218,11 +227,11 @@ if (len(opts.buckets) >= 1):
     os.mkdir("%s/empty1" % tdir)
     if (opts.verbose):
         print "emptying out bucket1..."
-    osync_check("file://%s/empty1" % tdir, opts.buckets[0],
+    obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
                 ["-c", "--delete-after"])
 
     # make sure that the empty worked
-    osync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
+    obsync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
     compare_directories("%s/empty1" % tdir, "%s/empty2" % tdir)
     if (opts.verbose):
         print "successfully emptied out the bucket."
@@ -230,10 +239,10 @@ if (len(opts.buckets) >= 1):
     if (opts.verbose):
         print "copying the sample directory to the test bucket..."
     # now copy the sample files to the test bucket
-    osync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
+    obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 
     # make sure that the copy worked
-    osync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
+    obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
     compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
     if (opts.verbose):
         print "successfully copied the sample directory to the test bucket."
@@ -241,13 +250,13 @@ if (len(opts.buckets) >= 1):
 if (len(opts.buckets) >= 2):
     if (opts.verbose):
         print "copying dir1 to bucket0..."
-    osync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
+    obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
     if (opts.verbose):
         print "copying bucket0 to bucket1..."
-    osync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
+    obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
     if (opts.verbose):
         print "copying bucket1 to dir4..."
-    osync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
+    obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
     compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
     if (opts.verbose):
         print "successfully copied one bucket to another."
@@ -257,9 +266,9 @@ if (len(opts.buckets) >= 2):
     f = open("%s/small/new_thing" % tdir, 'w')
     f.write("a new object!!!")
     f.close()
-    osync_check("%s/small" % tdir, opts.buckets[1], [])
-    osync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["-c"])
-    osync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["-c"])
+    obsync_check("%s/small" % tdir, opts.buckets[1], [])
+    obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["-c"])
+    obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["-c"])
     bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
     bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
     if (bucket1_count != bucket0_count + 1):
@@ -267,9 +276,9 @@ if (len(opts.buckets) >= 2):
 bucket0_count=%d, bucket1_count=%d" % (bucket0_count, bucket1_count))
     if (opts.verbose):
         print "copying bucket0 to bucket1..."
-    osync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
-    osync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
-    osync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
+    obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
+    obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
+    obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
     bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
     bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
     if (bucket0_count != bucket1_count):
