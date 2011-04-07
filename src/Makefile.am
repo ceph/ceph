@@ -691,7 +691,6 @@ libosd_a_SOURCES = \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
         common/ClassHandler.cc
-#	osd/RAID4PG.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \
@@ -1037,7 +1036,6 @@ noinst_HEADERS = \
         osd/ObjectVersioner.h\
         osd/PG.h\
         osd/PGLS.h\
-        osd/RAID4PG.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\

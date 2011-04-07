@@ -441,7 +441,6 @@ private:
 
   friend class PG;
   friend class ReplicatedPG;
-  //friend class RAID4PG;
 
 
  protected:

@@ -24,7 +24,6 @@
 #include "os/FileStore.h"
 
 #include "ReplicatedPG.h"
-//#include "RAID4PG.h"
 
 #include "Ager.h"
 
@@ -956,8 +955,6 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   sobject_t infooid = make_pg_biginfo_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
     pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
-  //else if (pgid.is_raid4())
-  //pg = new RAID4PG(this, pgid);
   else 
     assert(0);
 
