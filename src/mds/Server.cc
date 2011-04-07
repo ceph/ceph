@@ -1803,9 +1803,11 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
       reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);
     } else if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
       Context *c = new C_MDS_TryFindInode(this, mdr);
       mdcache->find_ino_peers(refpath.get_ino(), c);
     } else {
+      dout(10) << "FAIL on error " << r << dendl;
       reply_request(mdr, r);
     }
     return 0;
@@ -4607,8 +4609,16 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (r > 0)
     return; // delayed
   if (r < 0) {
-    reply_request(mdr, r);
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      Context *c = new C_MDS_TryFindInode(this, mdr);
+      mdcache->find_ino_peers(srcpath.get_ino(), c);
+    } else {
+      dout(10) << "FAIL on error " << r << dendl;
+      reply_request(mdr, r);
+    }
     return;
+
   }
   assert(!srctrace.empty());
   CDentry *srcdn = srctrace[srctrace.size()-1];
