@@ -33,7 +33,6 @@ An apache example configuration for using the RADOS gateway:
 
   <IfModule mod_fcgid.c>
     SuexecUserGroup web1 web1
-    PHP_Fix_Pathinfo_Enable 1
     <Directory /var/www/web1/web/>
       Options +ExecCGI
       AllowOverride All
