@@ -26,6 +26,7 @@ import errno
 import hashlib
 import mimetypes
 import os
+import re
 import shutil
 import string
 import sys
@@ -33,6 +34,12 @@ import tempfile
 import traceback
 
 global opts
+
+class LocalFileIsAcl(Exception):
+    pass
+
+class InvalidLocalName(Exception):
+    pass
 
 ###### Helper functions #######
 def mkdir_p(path):
@@ -80,6 +87,54 @@ def getenv(a, b):
     else:
         return None
 
+# Escaping functions.
+#
+# Valid names for local files are a little different than valid object
+# names for S3. So these functions are needed to translate.
+#
+# Basically, in local names, every sequence starting with a dollar sign is
+# reserved as a special escape sequence. If you want to create an S3 object
+# with a dollar sign in the name, the local file should have a double dollar
+# sign ($$).
+#
+# TODO: translate local files' control characters into escape sequences.
+# Most S3 clients (boto included) cannot handle control characters in S3 object
+# names.
+# TODO: check for invalid utf-8 in local file names. Ideally, escape it, but
+# if not, just reject the local file name. S3 object names must be valid
+# utf-8.
+#
+# ----------		-----------
+# In S3				Locally
+# ----------		-----------
+# foo/				foo$slash
+#
+# $money			$$money
+#
+# obj-with-acl		obj-with-acl
+#					.obj-with-acl$acl
+def s3_name_to_local_name(s3_name):
+    s3_name = re.sub(r'\$', "$$", s3_name)
+    if (s3_name[-1:] == "/"):
+        s3_name = s3_name[:-1] + "$slash"
+    return s3_name
+
+def local_name_to_s3_name(local_name):
+    if local_name.find(r'$acl') != -1:
+        raise LocalFileIsAcl()
+    local_name = re.sub(r'\$slash', "/", local_name)
+    mre = re.compile("[$][^$]")
+    if mre.match(local_name):
+        raise InvalidLocalName("Local name contains a dollar sign escape \
+sequence we don't understand.")
+    local_name = re.sub(r'\$\$', "$", local_name)
+    return local_name
+
+def get_local_acl_file_name(local_name):
+    if local_name.find(r'\$acl') != 0:
+        raise LocalFileIsAcl()
+    return "." + local_name + "$acl"
+
 ###### NonexistentStore #######
 class NonexistentStore(Exception):
     pass
@@ -98,6 +153,8 @@ class Object(object):
         if (self.size != rhs.size):
             return False
         return True
+    def local_name(self):
+        return s3_name_to_local_name(self.name)
     @staticmethod
     def from_file(obj_name, path):
         f = open(path)
@@ -247,8 +304,13 @@ class FileStoreIterator(object):
                 continue
             path = self.path + "/" + self.files[0]
             self.files = self.files[1:]
-            obj_name = path[len(self.base)+1:]
+            # Ignore non-files when iterating.
             if (not os.path.isfile(path)):
+                continue
+            try:
+                obj_name = local_name_to_s3_name(path[len(self.base)+1:])
+            except LocalFileIsAcl as e:
+                # ignore ACL side files when iterating
                 continue
             return Object.from_file(obj_name, path)
 
@@ -274,11 +336,11 @@ class FileStore(Store):
     def __str__(self):
         return "file://" + self.base
     def make_local_copy(self, obj):
-        return FileStoreLocalCopy(self.base + "/" + obj.name)
+        return FileStoreLocalCopy(self.base + "/" + obj.local_name())
     def all_objects(self):
         return FileStoreIterator(self.base)
     def locate_object(self, obj):
-        path = self.base + "/" + obj.name
+        path = self.base + "/" + obj.local_name()
         found = os.path.isfile(path)
         if (opts.more_verbose):
             if (found):
@@ -294,7 +356,7 @@ class FileStore(Store):
         if (opts.dry_run):
             return
         s = local_copy.path
-        d = self.base + "/" + obj.name
+        d = self.base + "/" + obj.local_name()
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)

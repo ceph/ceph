@@ -265,6 +265,18 @@ if (len(opts.buckets) >= 1):
     if (opts.verbose):
         print "successfully copied a directory with --follow-symlinks"
 
+    # test escaping
+    os.mkdir("%s/escape_dir1" % tdir)
+    f = open("%s/escape_dir1/$$foo" % tdir, 'w')
+    f.write("$foo")
+    f.close()
+    f = open("%s/escape_dir1/blarg$slash" % tdir, 'w')
+    f.write("blarg/")
+    f.close()
+    obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
+    obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
+    compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
+
 if (len(opts.buckets) >= 2):
     if (opts.verbose):
         print "copying dir1 to bucket0..."
