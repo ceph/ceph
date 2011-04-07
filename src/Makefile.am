@@ -10,6 +10,7 @@ bin_PROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
 bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack crbdnamer
+dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
 # tests to actually run on "make check"; if you need extra, non-test,
@@ -712,7 +713,7 @@ dist-hook:
 python_PYTHON = pybind/rados.py
 
 if WITH_DEBUG
-bin_SCRIPTS += test/ceph-pybind-test.py
+dist_bin_SCRIPTS += test/ceph-pybind-test.py
 endif
 
 # headers... and everything else we want to include in a 'make dist' 
