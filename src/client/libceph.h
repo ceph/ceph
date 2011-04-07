@@ -9,6 +9,12 @@
 #include <unistd.h>
 #include <dirent.h>
 
+#ifdef __cplusplus
+# define CEPH_DEFAULT_ARG(v) =v
+#else
+# define CEPH_DEFAULT_ARG(v)
+#endif
+
 struct stat_precise {
   ino_t st_ino;
   dev_t st_dev;
@@ -28,7 +34,9 @@ struct stat_precise {
   time_t st_ctime_micro;
 };
 
+#ifdef __cplusplus
 extern "C" {
+#endif
 
 const char *ceph_version(int *major, int *minor, int *patch);
 
@@ -79,12 +87,12 @@ int ceph_utime(const char *path, struct utimbuf *buf);
 int ceph_truncate(const char *path, loff_t size);
 
 // file ops
-int ceph_mknod(const char *path, mode_t mode, dev_t rdev=0);
-int ceph_open(const char *path, int flags, mode_t mode=0);
+int ceph_mknod(const char *path, mode_t mode, dev_t rdev CEPH_DEFAULT_ARG(0));
+int ceph_open(const char *path, int flags, mode_t mode CEPH_DEFAULT_ARG(0));
 int ceph_close(int fd);
 loff_t ceph_lseek(int fd, loff_t offset, int whence);
-int ceph_read(int fd, char *buf, loff_t size, loff_t offset=-1);
-int ceph_write(int fd, const char *buf, loff_t size, loff_t offset=-1);
+int ceph_read(int fd, char *buf, loff_t size, loff_t offset CEPH_DEFAULT_ARG(-1));
+int ceph_write(int fd, const char *buf, loff_t size, loff_t offset CEPH_DEFAULT_ARG(-1));
 int ceph_ftruncate(int fd, loff_t size);
 int ceph_fsync(int fd, bool syncdataonly);
 int ceph_fstat(int fd, struct stat *stbuf);
@@ -100,6 +108,9 @@ int ceph_set_default_object_size(int size);
 int ceph_set_default_file_replication(int replication);
 int ceph_set_default_preferred_pg(int pg);
 int ceph_localize_reads(int val);
+
+#ifdef __cplusplus
 }
+#endif
 
 #endif
