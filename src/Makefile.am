@@ -529,11 +529,8 @@ rados_include_DATA = \
 	$(srcdir)/include/rados/librados.h \
 	$(srcdir)/include/rados/librados.hpp \
 	$(srcdir)/include/buffer.h \
-	$(srcdir)/include/atomic.h \
 	$(srcdir)/include/page.h \
-	$(srcdir)/include/crc32c.h \
-	$(srcdir)/include/Spinlock.h  \
-	$(srcdir)/include/assert.h
+	$(srcdir)/include/crc32c.h
 
 crush_includedir = $(includedir)/crush
 crush_include_DATA = \
@@ -847,7 +844,6 @@ noinst_HEADERS = \
         include/xlist.h\
 	include/rados/librados.h\
 	include/rados/librados.hpp\
-	include/rados/atomic.h\
 	include/rados/page.h\
 	include/rados/crc32c.h\
 	include/rados/buffer.h\
