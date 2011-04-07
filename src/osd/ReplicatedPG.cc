@@ -776,20 +776,22 @@ bool ReplicatedPG::snap_trimmer()
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
 	coi.snaps.swap(newsnaps);
+	vector<snapid_t>& oldsnaps = newsnaps;
 	coi.prior_version = coi.version;
 	coi.version = ctx->at_version;
 	bl.clear();
 	::encode(coi, bl);
 	t->setattr(coll, coid, OI_ATTR, bl);
 
-	if (snaps[0] != newsnaps[0]) {
-	  t->collection_remove(coll_t(info.pgid, snaps[0]), coid);
-	  t->collection_add(coll_t(info.pgid, newsnaps[0]), coll, coid);
+	if (oldsnaps[0] != snaps[0]) {
+	  t->collection_remove(coll_t(info.pgid, oldsnaps[0]), coid);
+	  if (oldsnaps.size() > 1 && oldsnaps[snaps.size() - 1] != snaps[0])
+	    t->collection_add(coll_t(info.pgid, snaps[0]), coll, coid);
 	}
-	if (snaps.size() > 1 && snaps[snaps.size()-1] != newsnaps[newsnaps.size()-1]) {
-	  t->collection_remove(coll_t(info.pgid, snaps[snaps.size()-1]), coid);
-	  if (newsnaps.size() > 1)
-	    t->collection_add(coll_t(info.pgid, newsnaps[newsnaps.size()-1]), coll, coid);
+	if (oldsnaps.size() > 1 && oldsnaps[oldsnaps.size()-1] != snaps[snaps.size()-1]) {
+	  t->collection_remove(coll_t(info.pgid, oldsnaps[oldsnaps.size()-1]), coid);
+	  if (snaps.size() > 1)
+	    t->collection_add(coll_t(info.pgid, snaps[snaps.size()-1]), coll, coid);
 	}	      
 
 	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
