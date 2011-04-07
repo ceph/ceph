@@ -32,7 +32,7 @@ public:
   }
 
   bool can_xlock_local() const {
-    return !is_wrlocked();
+    return !is_wrlocked() && (get_xlock_by() == 0);
   }
 
   bool can_wrlock() const {
