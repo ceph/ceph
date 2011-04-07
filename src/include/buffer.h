@@ -56,7 +56,9 @@ void	*valloc(size_t);
 #include "page.h"
 #include "crc32c.h"
 
-#ifndef __CEPH__
+#ifdef __CEPH__
+# include "include/assert.h"
+#else
 # include <assert.h>
 #endif
 

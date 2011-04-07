@@ -55,6 +55,7 @@ public:
  * crappy slow implementation that uses a pthreads spinlock.
  */
 #include "include/Spinlock.h"
+#include "include/assert.h"
 
 namespace ceph {
 
