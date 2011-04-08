@@ -518,34 +518,49 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
 
   // go go gadget fuse
   struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
-  struct fuse_chan *ch;
-  char *mountpoint;
-  int err = -1;
+  struct fuse_chan *ch = NULL;
+  struct fuse_session *se = NULL;
+  char *mountpoint = NULL;
+  int ret = 0;
   
-  if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
-      (ch = fuse_mount(mountpoint, &args)) != NULL) {
-    struct fuse_session *se;
-    
-    // init fuse
-    se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper),
-			   NULL);
-    if (se != NULL) {
-      if (fuse_set_signal_handlers(se) != -1) {
-	fuse_session_add_chan(se, ch);
-	err = fuse_session_loop(se);
-	fuse_remove_signal_handlers(se);
-	fuse_session_remove_chan(ch);
-      }
-      fuse_session_destroy(se);
-    }
-    fuse_unmount(mountpoint, ch);
-    err = 0;
-  } else {
-    err = -errno;
+  if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) == -1) {
+    derr << "fuse_parse_cmdline failed." << dendl;
+    ret = EINVAL;
+    goto done;
   }
+
+  ch = fuse_mount(mountpoint, &args);
+  if (!ch) {
+    derr << "fuse_mount(mountpoint=" << mountpoint << ") failed." << dendl;
+    ret = EIO;
+    goto done;
+  }
+
+  se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper), NULL);
+  if (!se) {
+    derr << "fuse_lowlevel_new failed" << dendl;
+    ret = EDOM;
+    goto done;
+  }
+    
+  if (fuse_set_signal_handlers(se) == -1) {
+    derr << "fuse_set_signal_handlers failed" << dendl;
+    ret = ENOSYS;
+    goto done;
+  }
+
+  fuse_session_add_chan(se, ch);
+  ret = fuse_session_loop(se);
+  fuse_remove_signal_handlers(se);
+  fuse_session_remove_chan(ch);
+
+done:
+  if (se)
+    fuse_session_destroy(se);
+  if (ch)
+    fuse_unmount(mountpoint, ch);
   fuse_opt_free_args(&args);
-  
   //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
-  return err;
+  return ret;
 }
 
