@@ -5715,8 +5715,8 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
   tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
-  // only user xattrs, for now
-  if (strncmp(name, "user.", 5))
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
     return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
