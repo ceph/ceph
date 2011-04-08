@@ -131,9 +131,10 @@ sequence we don't understand.")
     return local_name
 
 def get_local_acl_file_name(local_name):
-    if local_name.find(r'\$acl') != 0:
+    if local_name.find(r'$acl') != -1:
         raise LocalFileIsAcl()
-    return "." + local_name + "$acl"
+    return os.path.dirname(local_name) + "/." + \
+        os.path.basename(local_name) + "$acl"
 
 ###### NonexistentStore #######
 class NonexistentStore(Exception):
@@ -157,7 +158,7 @@ class Object(object):
         return s3_name_to_local_name(self.name)
     @staticmethod
     def from_file(obj_name, path):
-        f = open(path)
+        f = open(path, 'r')
         try:
             md5 = get_md5(f)
         finally:
@@ -187,14 +188,18 @@ Cannot handle this URL.")
 
 ###### S3 store #######
 class S3StoreLocalCopy(object):
-    def __init__(self, path):
+    def __init__(self, path, acl_path):
         self.path = path
+        self.acl_path = acl_path
     def __del__(self):
         self.remove()
     def remove(self):
         if (self.path):
             os.unlink(self.path)
             self.path = None
+        if (self.acl_path):
+            os.unlink(self.acl_path)
+            self.acl_path = None
 
 class S3StoreIterator(object):
     """S3Store iterator"""
@@ -249,13 +254,25 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
     def make_local_copy(self, obj):
         k = Key(self.bucket)
         k.key = obj.name
-        temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
+        temp_file = None
+        temp_acl_file = None
         try:
+            temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
             k.get_contents_to_filename(temp_file.name)
+            if (opts.preserve_acls):
+                temp_acl_file = tempfile.NamedTemporaryFile(mode='w+b',
+                                                            delete=False)
+                acl_xml = self.bucket.get_xml_acl(k)
+                temp_acl_file_f = open(temp_acl_file.name, 'w')
+                temp_acl_file_f.write(acl_xml)
+                temp_acl_file_f.close()
         except:
-            os.unlink(temp_file.name)
+            if (temp_file):
+                os.unlink(temp_file.name)
+            if (temp_acl_file):
+                os.unlink(temp_acl_file.name)
             raise
-        return S3StoreLocalCopy(temp_file.name)
+        return S3StoreLocalCopy(temp_file.name, temp_acl_file.name)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs.__iter__())
@@ -270,6 +287,12 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
                 "obj='" + obj.name + "'"
         if (opts.dry_run):
             return
+        if (opts.preserve_acls and local_copy.acl_path):
+            f = open(local_copy.acl_path, 'r')
+            try:
+                acl_xml = f.read()
+            finally:
+                f.close()
 #        mime = mimetypes.guess_type(local_copy.path)[0]
 #        if (mime == NoneType):
 #            mime = "application/octet-stream"
@@ -277,6 +300,9 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         k.key = obj.name
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
+        if (opts.preserve_acls and local_copy.acl_path):
+            self.bucket.set_acl(acl_xml, k)
+
     def remove(self, obj):
         if (opts.dry_run):
             return
@@ -315,8 +341,9 @@ class FileStoreIterator(object):
             return Object.from_file(obj_name, path)
 
 class FileStoreLocalCopy(object):
-    def __init__(self, path):
+    def __init__(self, path, acl_path):
         self.path = path
+        self.acl_path = acl_path
     def remove(self):
         self.path = None
 
@@ -336,7 +363,13 @@ class FileStore(Store):
     def __str__(self):
         return "file://" + self.base
     def make_local_copy(self, obj):
-        return FileStoreLocalCopy(self.base + "/" + obj.local_name())
+        local_name = obj.local_name()
+        acl_name = get_local_acl_file_name(local_name)
+        if (opts.preserve_acls and os.path.exists(acl_name)):
+            full_acl_name = self.base + "/" + acl_name
+        else:
+            full_acl_name = None
+        return FileStoreLocalCopy(self.base + "/" + local_name, full_acl_name)
     def all_objects(self):
         return FileStoreIterator(self.base)
     def locate_object(self, obj):
@@ -356,10 +389,14 @@ class FileStore(Store):
         if (opts.dry_run):
             return
         s = local_copy.path
-        d = self.base + "/" + obj.local_name()
+        lname = obj.local_name()
+        d = self.base + "/" + lname
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
+        if (opts.preserve_acls and local_copy.acl_path):
+            shutil.copy(local_copy.acl_path,
+                self.base + "/" + get_local_acl_file_name(lname))
     def remove(self, obj):
         if (opts.dry_run):
             return
@@ -421,11 +458,15 @@ DESTINATION after doing all transfers.")
 parser.add_option("-L", "--follow-symlinks", action="store_true", \
     dest="follow_symlinks", help="follow symlinks (please avoid symlink " + \
     "loops when using this option!)")
+parser.add_option("--no-preserve-acls", action="store_true", \
+    dest="no_preserve_acls", help="don't preserve ACLs when copying objects.")
 parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
 (opts, args) = parser.parse_args()
+if (not opts.no_preserve_acls):
+    opts.preserve_acls = True
 if (opts.create and opts.dry_run):
     raise Exception("You can't run with both --create-dest and --dry-run! \
 By definition, a dry run never changes anything.")

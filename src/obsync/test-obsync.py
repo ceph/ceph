@@ -68,12 +68,15 @@ def cleanup_tempdir():
 def compare_directories(dir_a, dir_b):
     if (opts.verbose):
         print "comparing directories %s and %s" % (dir_a, dir_b)
-    subprocess.check_call(["diff", "-r", dir_a, dir_b])
+    subprocess.check_call(["diff", "-x", "*$acl", "-r", dir_a, dir_b])
 
 def count_obj_in_dir(d):
     """counts the number of objects in a directory (WITHOUT recursing)"""
     num_objects = 0
     for f in os.listdir(d):
+        # skip ACL side files
+        if (f.find(r'$acl') != -1):
+            continue
         num_objects = num_objects + 1
     return num_objects
 
