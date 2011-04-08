@@ -186,7 +186,8 @@ struct RadosTestContext
   int max_in_flight;
 	
   RadosTestContext(const string &pool_name, 
-		   int max_in_flight) :
+		   int max_in_flight,
+		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
     current_snap(0),
@@ -194,7 +195,7 @@ struct RadosTestContext
     errors(0),
     max_in_flight(max_in_flight)
   {
-    rados.init(NULL);
+    rados.init(id);
     rados.conf_read_file("ceph.conf");
     rados.connect();
     rados.ioctx_create(pool_name.c_str(), io_ctx);

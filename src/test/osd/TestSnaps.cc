@@ -102,9 +102,12 @@ int main(int argc, char **argv)
 	 << std::endl;
     return 0;
   }
+
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) cerr << "Client id is: " << id << dendl;
 		
   string pool_name = "casdata";
-  RadosTestContext context(pool_name, max_in_flight);
+  RadosTestContext context(pool_name, max_in_flight, id);
 
   TestOpStat stats;
   SnapTestGenerator gen = SnapTestGenerator(ops, objects, &stats);
