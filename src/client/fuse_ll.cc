@@ -543,6 +543,8 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
     goto done;
   }
     
+  signal(SIGTERM, SIG_DFL);
+  signal(SIGINT, SIG_DFL);
   if (fuse_set_signal_handlers(se) == -1) {
     derr << "fuse_set_signal_handlers failed" << dendl;
     ret = ENOSYS;
