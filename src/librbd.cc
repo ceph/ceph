@@ -242,6 +242,7 @@ namespace librbd {
   uint64_t get_block_size(rbd_obj_header_ondisk *header);
   uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs);
   uint64_t get_block_ofs(rbd_obj_header_ondisk *header, uint64_t ofs);
+  int check_io(ImageCtx *ictx, uint64_t off, uint64_t len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 			      uint64_t size, int *order, uint64_t bid);
@@ -1079,6 +1080,10 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   if (r < 0)
     return r;
 
+  r = check_io(ictx, off, len);
+  if (r < 0)
+    return r;
+
   int64_t ret;
   int64_t total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
@@ -1164,6 +1169,10 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
     return 0;
 
   int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  r = check_io(ictx, off, len);
   if (r < 0)
     return r;
 
@@ -1265,6 +1274,13 @@ void rados_cb(rados_completion_t c, void *arg)
   delete block_completion;
 }
 
+int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
+{
+  if ((uint64_t)(off + len) > (uint64_t)ictx->header.image_size)
+    return -EINVAL;
+  return 0;
+}
+
 int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 			         AioCompletion *c)
 {
@@ -1283,8 +1299,9 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   uint64_t block_size = get_block_size(&ictx->header);
   uint64_t left = len;
 
-  if ((uint64_t)(off + len) > (uint64_t)ictx->header.image_size)
-    return -EINVAL;
+  r = check_io(ictx, off, len);
+  if (r < 0)
+    return r;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
@@ -1324,6 +1341,10 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   dout(20) << "aio_read " << ictx << " off = " << off << " len = " << len << dendl;
 
   int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  r = check_io(ictx, off, len);
   if (r < 0)
     return r;
 
