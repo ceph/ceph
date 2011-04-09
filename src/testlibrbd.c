@@ -247,6 +247,15 @@ void test_io(rados_ioctx_t io, rbd_image_t image)
 
   for (i = 5; i < 10; ++i)
     aio_read_test_data(image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+
+  rbd_image_info_t info;
+  rbd_completion_t comp;
+  assert(rbd_stat(image, &info, sizeof(info)) == 0);
+  assert(rbd_write(image, info.size, 1, test_data) == -EINVAL);
+  assert(rbd_read(image, info.size, 1, test_data) == -EINVAL);
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  assert(rbd_aio_write(image, info.size, 1, test_data, comp) == -EINVAL);
+  assert(rbd_aio_read(image, info.size, 1, test_data, comp) == -EINVAL);
 }
 
 void test_io_to_snapshot(rados_ioctx_t io_ctx, rbd_image_t image, size_t isize)
