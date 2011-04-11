@@ -3248,7 +3248,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       rejoin->add_weak_primary_dentry(dir->ino(), dn->name.c_str(), dn->first, dn->last, in->ino());
       in->get_nested_dirfrags(nested);
       if (in->is_dirty_scattered()) {
-	dout(10) << " sending scatterlock state" << dendl;
+	dout(10) << " sending scatterlock state on " << *in << dendl;
 	rejoin->add_scatterlock_state(in);
       }
     }
@@ -3279,7 +3279,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->dirfragtreelock.get_state());
 	in->get_nested_dirfrags(nested);
 	if (in->is_dirty_scattered()) {
-	  dout(10) << " sending scatterlock state" << dendl;
+	  dout(10) << " sending scatterlock state on " << *in << dendl;
 	  rejoin->add_scatterlock_state(in);
 	}
       }
