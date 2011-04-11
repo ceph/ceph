@@ -787,12 +787,11 @@ public:
   }
 };
 
-void MDCache::try_subtree_merge_at(CDir *dir)
+void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
 {
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
   assert(subtrees.count(dir));
 
-  bool do_eval = true;
   if (mds->is_any_replay() || mds->is_resolve())
     do_eval = false;
 
@@ -1210,7 +1209,8 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
   assert(failed == 0);
 }
 
-void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
+void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
+                                          bool imported)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
@@ -1274,7 +1274,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
     // un-force dir to subtree root
     if (dir->dir_auth == pair<int,int>(dir->dir_auth.first, dir->dir_auth.first)) {
       adjust_subtree_auth(dir, dir->dir_auth.first);
-      try_subtree_merge_at(dir);
+      try_subtree_merge_at(dir, !imported);
     }
   }
 

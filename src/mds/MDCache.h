@@ -548,7 +548,7 @@ public:
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root);
+  void try_subtree_merge_at(CDir *root, bool do_eval=true);
   void subtree_merge_writebehind_finish(CInode *in, Mutation *mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
@@ -563,7 +563,8 @@ public:
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
-  void adjust_subtree_after_rename(CInode *diri, CDir *olddir);
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir,
+                                   bool imported = false);
 
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);

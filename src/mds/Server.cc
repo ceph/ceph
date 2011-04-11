@@ -5273,6 +5273,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   CInode *oldin = destdnl->get_inode();
   
+  bool imported_inode = false;
+
   // primary+remote link merge?
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
@@ -5348,6 +5350,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       
       // hack: fix auth bit
       destdnl->get_inode()->state_set(CInode::STATE_AUTH);
+      imported_inode = true;
     }
 
     if (destdn->is_auth()) {
@@ -5375,7 +5378,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   // update subtree map?
   if (destdnl->is_primary() && destdnl->get_inode()->is_dir()) 
-    mdcache->adjust_subtree_after_rename(destdnl->get_inode(), srcdn->get_dir());
+    mdcache->adjust_subtree_after_rename(destdnl->get_inode(),
+                                         srcdn->get_dir(),
+                                         imported_inode);
 
   // removing a new dn?
   if (srcdn->is_auth())
