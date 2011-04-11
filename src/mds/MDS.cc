@@ -781,9 +781,9 @@ void MDS::handle_command(MMonCommand *m)
 	CInode *in = mdcache->cache_traverse(fp);
 	if (in) {
 	  CDir *dir = in->get_dirfrag(frag_t());
-	  if (dir) {
+	  if (dir && dir->is_auth()) {
 	    mdcache->migrator->export_dir(dir, target);
-	  } else dout(0) << "bad migrate_dir path dirfrag frag_t()" << dendl;
+	  } else dout(0) << "bad migrate_dir path dirfrag frag_t() or dir not auth" << dendl;
 	} else dout(0) << "bad migrate_dir path" << dendl;
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
