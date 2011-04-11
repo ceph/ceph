@@ -1129,14 +1129,12 @@ enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
   int num_in_osds = osdmap.get_num_in_osds();
 
   if (num_osds == 0) {
-    ss << " osdmonitor: no OSDS in osdmap!";
+    ss << " no osds";
     ret = HEALTH_ERR;
   }
   else if ((num_up_osds != num_osds) ||
 	   (num_in_osds != num_osds)) {
-    ss << " osdmonitor: num_osds = " << num_osds << ", ";
-    ss << "num_up_osds = " << num_up_osds << ", num_in_osds = ";
-    ss << num_in_osds;
+    ss << " " << num_up_osds << "/" << num_in_osds << "/" << num_osds << " osds up/in";
     ret = HEALTH_WARN;
   }
   return ret;
