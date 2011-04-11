@@ -5259,6 +5259,7 @@ void OSD::handle_op(MOSDOp *op)
     stat_rd_ops_in_queue++;
   }
 
+  pg->get();
   if (g_conf.osd_op_threads < 1) {
     // do it now.
     if (op->get_type() == CEPH_MSG_OSD_OP)
@@ -5273,8 +5274,8 @@ void OSD::handle_op(MOSDOp *op)
     // queue for worker threads
     enqueue_op(pg, op);         
   }
-  
   pg->unlock();
+  pg->put();
 }
 
 
