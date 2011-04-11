@@ -12,9 +12,8 @@
 	'n' => 12,
 
 	# parameters
-	'fs' => 'fakestore',#['ebofs', 'fakestore','obfs'],
+	'fs' => 'fakestore',#['fakestore','obfs'],
 	#'fs' => 'ebofs',
-	#'ebofs_commit_ms' => [ 1000, 5000 ],
 	#'osd_maxthreads' => [ 0, 1, 2, 4, 8 ],
 
 	'until' => 100,     # --syn until $n    ... when to stop clients

@@ -15,7 +15,7 @@ use Data::Dumper;
 	'numclient' => 400,#[10, 50, 100, 200, 400],
 
 	# parameters
-	'fs' => [ 'ebofs', 'fakestore' ],
+	'fs' => [ 'fakestore' ],
 	'until' => 150,     # --syn until $n    ... when to stop clients
 	'writefile' => 1,
 	'writefile_size' => [ 4096, 65526, 256000, 1024000, 2560000 ],
@@ -205,11 +205,6 @@ sub run {
 	$c .= " --syn readfile $h->{'readfile_mb'} $h->{'readfile_size'}" if $h->{'readfile'};
 	$c .= " --syn makedirs $h->{'makedirs_dirs'} $h->{'makedirs_files'} $h->{'makedirs_depth'}" if $h->{'makedirs'};
 
-	if ($h->{'ebofs_freelist'}) {
-		system "cp freelist/ebofs.freelist.$h->{'ebofs_freelist'} ebofs.freelist";
-		$c .= " --osd_age_time -1";
-	}
-
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'mds_bal_rep', 'mds_bal_interval', 'mds_bal_max','mds_decay_halflife',
@@ -218,14 +213,13 @@ sub run {
 			   'mds_local_osd',
 			   'osd_age_time','osd_age',
 			   'osd_rep',
-			   'osd_pad_pg_log','ebofs_realloc',
+			   'osd_pad_pg_log',
 			   'osd_balance_reads',
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'client_oc',
 			   'fake_osdmap_updates',
-			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
-			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
+			   'bdev_el_bidir',
 			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',
 			   'meta_dir_layout_ssize','meta_dir_layout_scount','meta_dir_layout_osize','meta_dir_layout_num_rep',
 			   'meta_log_layout_ssize','meta_log_layout_scount','meta_log_layout_osize','meta_log_layout_num_rep') {

@@ -17,10 +17,6 @@ Copyright:
     Copyright (C) 2010 Canonical
 License: GPL2
 
-Files: src/osbdb/OSBDB.h
-Copyright: Copyright (C) 2007 Casey Marshall <csm@soe.ucsc.edu>
-License: LGPL2.1
-
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL2 or later

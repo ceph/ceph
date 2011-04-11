@@ -691,7 +691,6 @@ libosd_a_SOURCES = \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
         common/ClassHandler.cc
-#	osd/RAID4PG.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \
@@ -1024,15 +1023,12 @@ noinst_HEADERS = \
         msg/tcp.h\
 	objclass/objclass.h\
 	os/btrfs_ioctl.h\
-        os/BDBMap.h\
         os/Fake.h\
-        os/FakeStoreBDBCollections.h\
         os/FileJournal.h\
         os/FileStore.h\
         os/Journal.h\
         os/JournalingObjectStore.h\
         os/ObjectStore.h\
-        osbdb/OSBDB.h\
         osd/Ager.h\
         osd/OSD.h\
         osd/OSDCaps.h\
@@ -1040,7 +1036,6 @@ noinst_HEADERS = \
         osd/ObjectVersioner.h\
         osd/PG.h\
         osd/PGLS.h\
-        osd/RAID4PG.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\

@@ -41,10 +41,6 @@
 	
 	'file_layout_num_rep'=> 1,#[1,2],
 
-
-#	'ebofs_idle_commit_ms' => [ 100, 500 ],
-#	'ebofs_abp_max_alloc' => [ 4096*16, 4096*64 ],
-
 	'custom' => '--debug_after 110 --debug_mds 15 --debug 5 --mds_shutdown_check 60',
 
 	# for final summation (script/sum.pl)

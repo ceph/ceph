@@ -13,7 +13,6 @@
  */
 
 #include <iostream>
-//#include "ebofs/Ebofs.h"
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
 #include "common/common_init.h"

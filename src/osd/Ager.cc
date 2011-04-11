@@ -10,7 +10,6 @@
 #include "common/Clock.h"
 
 // ick
-//#include "ebofs/Ebofs.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -91,7 +90,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
     generic_dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << poid << dec << " sz " << s << dendl;
     
 
-    if (false && !g_conf.ebofs_verify && start_debug && wrote > 1000000ULL) { 
+    if (false && start_debug && wrote > 1000000ULL) { 
       /*
 
 
@@ -107,8 +106,6 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
 
 //  99  1000500 ? 1000750 1006000
 */
-      g_conf.debug_ebofs = 30;
-      g_conf.ebofs_verify = true;      
     }
 
     off_t off = 0;
@@ -132,8 +129,6 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
 void Ager::age_empty(float pc) {
   int nper = 20;
   int n = nper;
-
-  //g_conf.ebofs_verify = true;
 
   while (1) {
     struct statfs st;
@@ -166,8 +161,6 @@ void Ager::age_empty(float pc) {
     store->apply_transaction(t);
     age_free_oids.push_back(poid);
   }
-
-  g_conf.ebofs_verify = false;
 }
 
 void pfrag(uint64_t written, ObjectStore::FragmentationStat &st)

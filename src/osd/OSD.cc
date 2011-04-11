@@ -23,13 +23,7 @@
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
 
-#ifdef USE_OSBDB
-#include "osbdb/OSBDB.h"
-#endif // USE_OSBDB
-
-
 #include "ReplicatedPG.h"
-//#include "RAID4PG.h"
 
 #include "Ager.h"
 
@@ -137,8 +131,6 @@ create_object_store(const std::string &dev, const std::string &jdev)
   if (::stat(dev.c_str(), &st) != 0)
     return 0;
 
-  //if (g_conf.ebofs) 
-  //return new Ebofs(dev, jdev);
   if (g_conf.filestore)
     return new FileStore(dev, jdev);
 
@@ -146,7 +138,6 @@ create_object_store(const std::string &dev, const std::string &jdev)
     return new FileStore(dev, jdev);
   else
     return 0;
-  //return new Ebofs(dev, jdev);
 }
 
 #undef dout_prefix
@@ -717,7 +708,6 @@ int OSD::shutdown()
   g_conf.debug_osd = 100;
   g_conf.debug_journal = 100;
   g_conf.debug_filestore = 100;
-  g_conf.debug_ebofs = 100;
   g_conf.debug_ms = 100;
   
   derr << "OSD::shutdown" << dendl;
@@ -965,8 +955,6 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   sobject_t infooid = make_pg_biginfo_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
     pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
-  //else if (pgid.is_raid4())
-  //pg = new RAID4PG(this, pgid);
   else 
     assert(0);
 

@@ -2331,13 +2331,6 @@ void PG::write_log(ObjectStore::Transaction& t)
       // we reached a new block. *p was the last entry with bytes in previous block
       ondisklog.block_map[startoff] = p->version;
     }
-
-    /*
-    if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
-      bufferptr bp(4096 - sizeof(*p));
-      bl.push_back(bp);
-    }
-    */
   }
   ondisklog.head = bl.length();
   ondisklog.has_checksums = true;
