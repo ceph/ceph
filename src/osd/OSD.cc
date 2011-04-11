@@ -5382,8 +5382,6 @@ void OSD::enqueue_op(PG *pg, Message *op)
   pending_ops++;
   logger->set(l_osd_opq, pending_ops);
   
-  // add pg to threadpool queue
-  pg->get();   // we're exposing the pointer, here.
   op_wq.queue(pg);
 }
 
