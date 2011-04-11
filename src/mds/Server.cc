@@ -5681,7 +5681,17 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
       while(i != mdr->xlocks.end()) {
         SimpleLock *lock = *i;
+        assert(lock->get_parent() == destdnl->inode ||
+               lock->get_parent() == srcdn);
+        /* if that assert fails then this unlocking code isn't
+         * intelligent enough. */
         lock->put_xlock();
+        if((!lock->is_stable() &&
+            lock->get_sm()->states[lock->get_next_state()].next == 0) &&
+            !lock->is_locallock()) {
+          dout(20) << "lock will be stable, unpinning" << dendl;
+          lock->get_parent()->auth_unpin(lock);
+        }
         mdr->xlocks.erase(i++);
         mdr->locks.erase(lock);
       }
