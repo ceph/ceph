@@ -2969,6 +2969,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   
   RepModify *rm = new RepModify;
   rm->pg = this;
+  get();
   rm->op = op;
   rm->ctx = 0;
   rm->ackerosd = ackerosd;
