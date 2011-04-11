@@ -104,7 +104,7 @@ int main(int argc, char **argv)
   }
 
   char *id = getenv("CEPH_CLIENT_ID");
-  if (id) cerr << "Client id is: " << id << dendl;
+  if (id) cerr << "Client id is: " << id << std::endl;
 		
   string pool_name = "casdata";
   RadosTestContext context(pool_name, max_in_flight, id);
