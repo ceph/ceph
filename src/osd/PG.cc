@@ -3406,8 +3406,6 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
       errorstream << "extra attr " << i->first;
     }
   }
-  if (ok)
-    errorstream << " is ok!";
   return ok;
 }
 
@@ -3442,14 +3440,14 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 	  auth = j;
 	} else {
 	  // Compare 
-	  errorstream << info.pgid << " osd" << acting[j->first]
-		      << ": soid " << *k;
+	  stringstream ss;
 	  if (!_compare_scrub_objects(auth->second->objects[*k],
 				      j->second->objects[*k],
-				      errorstream)) {
+				      ss)) {
 	    cur_inconsistent.insert(j->first);
+	    errorstream << info.pgid << " osd" << acting[j->first]
+			<< ": soid " << *k << ss.str() << std::endl;
 	  }
-	  errorstream << std::endl;
 	}
       } else {
 	cur_missing.insert(j->first);
