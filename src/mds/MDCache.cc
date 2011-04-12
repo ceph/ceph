@@ -4046,7 +4046,6 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   p = ack->inode_locks.begin();
   //dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
   while (!p.end()) {
-    dout(10) << " p pos is " << p.get_off() << dendl;
     inodeno_t ino;
     snapid_t last;
     __u32 nonce;
