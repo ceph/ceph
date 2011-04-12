@@ -310,7 +310,7 @@ int main(int argc, const char **argv)
 
   // open rados
   Rados rados;
-  if (rados.init(NULL) < 0) {
+  if (rados.init_with_config(&g_conf) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
   }
