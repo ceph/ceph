@@ -354,6 +354,10 @@ struct WriteOp : public TestOp
     context->state_lock.Lock();
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
+    if (int err = completion->get_return_value()) {
+      cerr << "Error: oid " << oid << " write returned error code "
+	   << err << std::endl;
+    }
     context->kick();
     done = true;
     context->state_lock.Unlock();
@@ -403,13 +407,18 @@ struct ReadOp : public TestOp
     context->state_lock.Lock();
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
-    string to_check;
-    result.copy(0, old_value.length(), to_check);
-    if (to_check != old_value) {
-      context->errors++;
-      cerr << "Error: oid " << oid << " read returned \n"
-	   << to_check << "\nShould have returned\n"
-	   << old_value << "\nCurrent snap is " << context->current_snap << std::endl;
+    if (int err = completion->get_return_value()) {
+      cerr << "Error: oid " << oid << " read returned error code "
+	   << err << std::endl;
+    } else {
+      string to_check;
+      result.copy(0, result.length(), to_check);
+      if (to_check != old_value) {
+	context->errors++;
+	cerr << "Error: oid " << oid << " read returned \n"
+	     << to_check << "\nShould have returned\n"
+	     << old_value << "\nCurrent snap is " << context->current_snap << std::endl;
+      }
     }
     context->kick();
     done = true;
