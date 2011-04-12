@@ -367,7 +367,8 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
     CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
     stringstream name;
     name << "stray" << i;
-    mydir->add_primary_dentry(name.str(), stray);
+    CDentry *sdn = mydir->add_primary_dentry(name.str(), stray);
+    sdn->_mark_dirty(mds->mdlog->get_current_segment());
 
     stray->inode.dirstat = straydir->fnode.fragstat;
 
@@ -381,7 +382,8 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
 
   CInode *journal = create_system_inode(MDS_INO_LOG_OFFSET + mds->whoami, S_IFREG);
   string name = "journal";
-  mydir->add_primary_dentry(name, journal);
+  CDentry *jdn = mydir->add_primary_dentry(name, journal);
+  jdn->_mark_dirty(mds->mdlog->get_current_segment());
 
   mydir->fnode.fragstat.nfiles++;
   mydir->fnode.rstat.rfiles++;
