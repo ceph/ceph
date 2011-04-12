@@ -971,7 +971,8 @@ void MDSMonitor::tick()
       // and is there a non-laggy standby that can take over for us?
       uint64_t sgid;
       if (info.rank >= 0 &&
-	  info.state != CEPH_MDS_STATE_STANDBY &&
+	  info.state != MDSMap::STATE_STANDBY &&
+	  info.state != MDSMap::STATE_STANDBY_REPLAY &&
 	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
@@ -982,7 +983,6 @@ void MDSMonitor::tick()
 	case MDSMap::STATE_STARTING:
 	  si.state = info.state;
 	  break;
-        case MDSMap::STATE_STANDBY_REPLAY:
 	case MDSMap::STATE_REPLAY:
 	case MDSMap::STATE_RESOLVE:
 	case MDSMap::STATE_RECONNECT:
@@ -1022,7 +1022,8 @@ void MDSMonitor::tick()
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
-	if (info.state == MDSMap::STATE_STANDBY) {
+	if (info.state == MDSMap::STATE_STANDBY ||
+	    info.state == MDSMap::STATE_STANDBY_REPLAY) {
 	  // remove it
 	  dout(10) << " removing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
