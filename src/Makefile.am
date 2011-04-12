@@ -151,6 +151,10 @@ psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += psim
 
+test_mutate_SOURCES = test/test_mutate.cc msg/SimpleMessenger.cc
+test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_PROGRAMS += test_mutate
+
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += testmsgr

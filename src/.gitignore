@@ -36,6 +36,7 @@
 /testlibrbd
 /testlibrbdpp
 /testsnaps
+/test_mutate
 dev
 mondata
 log
