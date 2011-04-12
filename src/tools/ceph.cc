@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <vector>
@@ -140,6 +141,8 @@ int main(int argc, const char **argv)
     derr << "ceph_tool_common_init failed." << dendl;
     return 1;
   }
+  signal(SIGINT, SIG_DFL);
+  signal(SIGTERM, SIG_DFL);
 
   int ret = 0;
   switch (mode) {
