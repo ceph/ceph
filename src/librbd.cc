@@ -276,7 +276,7 @@ void WatchCtx::invalidate()
 void WatchCtx::notify(uint8_t opcode, uint64_t ver)
 {
   Mutex::Locker l(lock);
-  cout <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << std::endl;
+  dout(1) <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << dendl;
   if (valid) {
     Mutex::Locker lictx(ictx->lock);
     ictx->needs_refresh = true;
