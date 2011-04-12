@@ -410,10 +410,12 @@ struct C_MDC_CreateSystemFile : public Context {
   MDCache *cache;
   Mutation *mut;
   CDentry *dn;
+  version_t dpv;
   Context *fin;
-  C_MDC_CreateSystemFile(MDCache *c, Mutation *mu, CDentry *d, Context *f) : cache(c), mut(mu), dn(d), fin(f) {}
+  C_MDC_CreateSystemFile(MDCache *c, Mutation *mu, CDentry *d, version_t v, Context *f) :
+    cache(c), mut(mu), dn(d), dpv(v), fin(f) {}
   void finish(int r) {
-    cache->_create_system_file_finish(mut, dn, fin);
+    cache->_create_system_file_finish(mut, dn, dpv, fin);
   }
 };
 
@@ -423,7 +425,8 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   CDentry *dn = dir->add_null_dentry(name);
 
   dn->push_projected_linkage(in);
-
+  version_t dpv = dn->pre_dirty();
+  
   CDir *mdir = 0;
   if (in->inode.is_dir()) {
     in->inode.rstat.rsubdirs = 1;
@@ -462,15 +465,16 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
     le->metablob.add_dir(mdir, true, true, true); // dirty AND complete AND new
 
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, fin));
+  mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
   mds->mdlog->flush();
 }
 
-void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, Context *fin)
+void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t dpv, Context *fin)
 {
   dout(10) << "_create_system_file_finish " << *dn << dendl;
   
   dn->pop_projected_linkage();
+  dn->mark_dirty(dpv, mut->ls);
 
   CInode *in = dn->get_linkage()->get_inode();
   in->inode.version--;

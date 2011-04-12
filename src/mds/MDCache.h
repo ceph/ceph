@@ -985,7 +985,7 @@ public:
   void populate_mydir();
 
   void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
-  void _create_system_file_finish(Mutation *mut, CDentry *dn, Context *fin);
+  void _create_system_file_finish(Mutation *mut, CDentry *dn, version_t dpv, Context *fin);
 
   void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
