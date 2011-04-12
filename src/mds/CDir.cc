@@ -205,8 +205,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 bool CDir::check_rstats()
 {
   dout(25) << "check_rstats on " << this << dendl;
-  if (!is_complete()) {
-    dout(10) << "check_rstats bailing out -- incomplete dir!" << dendl;
+  if (!is_complete() || !is_auth() || is_frozen()) {
+    dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
     return true;
   }
   // first, check basic counts
