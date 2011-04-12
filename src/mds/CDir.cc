@@ -2442,7 +2442,9 @@ bool CDir::freeze_dir()
 void CDir::_freeze_dir()
 {
   dout(10) << "_freeze_dir " << *this << dendl;
-  assert(is_freezeable_dir(true));
+  //assert(is_freezeable_dir(true));
+  // not always true during split because the original fragment may have frozen a while
+  // ago and we're just now getting around to breaking it up.
 
   state_clear(STATE_FREEZINGDIR);
   state_set(STATE_FROZENDIR);
