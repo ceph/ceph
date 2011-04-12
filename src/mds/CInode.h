@@ -824,17 +824,21 @@ public:
     int shift = lock->get_cap_shift();
     int issued = (allissued >> shift) & lock->get_cap_mask();
     if (is_auth()) {
-      if (issued & CEPH_CAP_GEXCL)
-	lock->set_state(LOCK_EXCL);
-      else if (issued & CEPH_CAP_GWR)
-	lock->set_state(LOCK_MIX);
-      else if (lock->is_dirty()) {
-	if (is_replicated())
+      if (lock->is_xlocked()) {
+	// do nothing here
+      } else {
+	if (issued & CEPH_CAP_GEXCL)
+	  lock->set_state(LOCK_EXCL);
+	else if (issued & CEPH_CAP_GWR)
 	  lock->set_state(LOCK_MIX);
-	else
-	  lock->set_state(LOCK_LOCK);
-      } else
-	lock->set_state(LOCK_SYNC);
+	else if (lock->is_dirty()) {
+	  if (is_replicated())
+	    lock->set_state(LOCK_MIX);
+	  else
+	    lock->set_state(LOCK_LOCK);
+	} else
+	  lock->set_state(LOCK_SYNC);
+      }
     } else {
       // our states have already been chosen during rejoin.
       if (lock->is_xlocked())
