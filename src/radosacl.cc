@@ -128,6 +128,10 @@ int main(int argc, const char **argv)
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
   }
+  if (rados.conf_read_file(NULL)) {
+     cerr << "couldn't read Ceph configuration file!" << std::endl;
+     exit(1);
+  }
   if (rados.connect() < 0) {
      cerr << "couldn't connect to cluster!" << std::endl;
      exit(1);
