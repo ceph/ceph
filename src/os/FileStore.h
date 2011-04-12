@@ -249,6 +249,7 @@ public:
   int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
+  int get_max_object_name_length();
   int wipe_subvol(const char *s);
   int mkfs();
   int mkjournal();

@@ -75,6 +75,7 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/safe_io.h"
+#include "include/color.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
@@ -100,6 +101,14 @@
 #define DOUT_SUBSYS osd
 #undef dout_prefix
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
+
+/* Maximum supported object name length for Ceph, in bytes.
+ *
+ * This comes directly out of the ext3/ext4/btrfs limits. We will issue a
+ * nasty warning message in the (unlikely) event that you are not using one of
+ * those filesystems, and your filesystem can't handle the full 255 characters.
+ */
+#define MAX_CEPH_OBJECT_NAME_LEN 255
 
 static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
   return out << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
@@ -143,6 +152,23 @@ create_object_store(const std::string &dev, const std::string &jdev)
 #undef dout_prefix
 #define dout_prefix *_dout
 
+/* Complain about flaky object stores.
+ */
+void OSD::validate_max_object_name_length(ObjectStore *store)
+{
+  int len = store->get_max_object_name_length();
+  if (len <= 0) {
+    derr << "store->get_max_object_name_length failed with error " << len << dendl;
+    return;
+  }
+  else if (len < MAX_CEPH_OBJECT_NAME_LEN) {
+    derr << TEXT_RED << " ** ERROR: error: object store can only handle objects "
+         << "whose names are no more than " << len << " bytes.\n"
+	 << "** Please use an object store that can handle object names of at least "
+	 << MAX_CEPH_OBJECT_NAME_LEN << " bytes for safety." << TEXT_NORMAL << dendl;
+  }
+}
+
 int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
 {
   int ret;
@@ -167,6 +193,8 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
     }
+    validate_max_object_name_length(store);
+
     ret = write_meta(dev, fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
@@ -534,6 +562,8 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+
+  validate_max_object_name_length(store);
 
   dout(2) << "boot" << dendl;
 
@@ -5075,6 +5105,14 @@ void OSD::handle_op(MOSDOp *op)
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch()))
     return;
+
+  // object name too long?
+  if (op->get_oid().name.size() > MAX_CEPH_OBJECT_NAME_LEN) {
+    dout(4) << "handle_op '" << op->get_oid().name << "' is longer than "
+	    << MAX_CEPH_OBJECT_NAME_LEN << " bytes!" << dendl;
+    reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
 
   // blacklisted?
   if (osdmap->is_blacklisted(op->get_source_addr())) {

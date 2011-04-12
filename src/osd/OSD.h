@@ -1059,6 +1059,7 @@ protected:
   // static bits
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
+  static void validate_max_object_name_length(ObjectStore *store);
   static int mkfs(const std::string &dev, const std::string &jdev,
 		  ceph_fsid_t fsid, int whoami);
   static int mkjournal(const std::string &dev, const std::string &jdev);
