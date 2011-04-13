@@ -1072,7 +1072,8 @@ noinst_HEADERS = \
 	tools/gui.h\
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
-	common/pidfile.h
+	common/pidfile.h\
+	common/sync_filesystem.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \

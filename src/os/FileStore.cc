@@ -29,6 +29,7 @@
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/ProfLogger.h"
+#include "common/sync_filesystem.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -2706,7 +2707,7 @@ void FileStore::sync_entry()
 	  ::fsync(op_fd);  
 	} else {
 	  dout(15) << "sync_entry doing a full sync (!)" << dendl;
-	  ::sync();
+	  sync_filesystem(basedir_fd);
 	}
       }
       
