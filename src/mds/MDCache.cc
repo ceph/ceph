@@ -2479,7 +2479,8 @@ void MDCache::handle_mds_recovery(int who)
        ++p) {
     CDir *dir = p->first;
 
-    if (dir->authority().first != who) continue;
+    if (dir->authority().first != who)
+      continue;
     assert(!dir->is_auth());
    
     // wake any waiters

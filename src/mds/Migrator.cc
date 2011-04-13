@@ -903,7 +903,7 @@ void Migrator::export_go_synced(CDir *dir)
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
-  cache->adjust_subtree_auth(dir, dest, mds->get_nodeid());
+  cache->adjust_subtree_auth(dir, mds->get_nodeid(), dest);
 
   // take away the popularity we're sending.
   mds->balancer->subtract_export(dir, now);
