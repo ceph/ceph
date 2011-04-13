@@ -2812,21 +2812,28 @@ void Locker::handle_lock(MLock *m)
 // ==========================================================================
 // simple lock
 
-void Locker::handle_reqrdlock(SimpleLock *lock)
+/** This function may take a reference to m if it needs one, but does
+ * not put references. */
+void Locker::handle_reqrdlock(SimpleLock *lock, MLock *m)
 {
   MDSCacheObject *parent = lock->get_parent();
   if (parent->is_auth() &&
-      lock->is_stable() &&
       lock->get_state() != LOCK_SYNC &&
       !parent->is_frozen()) {
     dout(7) << "handle_reqrdlock got rdlock request on " << *lock
 	    << " on " << *parent << dendl;
     assert(parent->is_auth()); // replica auth pinned if they're doing this!
-    simple_sync(lock);
+    if (lock->is_stable()) {
+      simple_sync(lock);
+    } else {
+      dout(7) << "handle_reqrdlock delaying request until lock is stable" << dendl;
+      lock->add_waiter(SimpleLock::WAIT_STABLE | MDSCacheObject::WAIT_UNFREEZE,
+                       new C_MDS_RetryMessage(mds, m->get()));
+    }
   } else {
-    dout(7) << "handle_reqrdlock ignoring rdlock request on " << *lock
+    dout(7) << "handle_reqrdlock dropping rdlock request on " << *lock
 	    << " on " << *parent << dendl;
-    // replica will retry.
+    // replica should retry
   }
 }
 
@@ -2894,7 +2901,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQRDLOCK:
-    handle_reqrdlock(lock);
+    handle_reqrdlock(lock, m);
     break;
 
   }
@@ -4079,7 +4086,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQRDLOCK:
-    handle_reqrdlock(lock);
+    handle_reqrdlock(lock, m);
     break;
 
   case LOCK_AC_NUDGE:

@@ -184,7 +184,7 @@ public:
   void mark_updated_scatterlock(ScatterLock *lock);
 
 
-  void handle_reqrdlock(SimpleLock *lock);
+  void handle_reqrdlock(SimpleLock *lock, MLock *m);
 
 
 
