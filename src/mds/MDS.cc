@@ -1396,10 +1396,6 @@ void MDS::standby_trim_segments()
 void MDS::reopen_log()
 {
   dout(1) << "reopen_log" << dendl;
-
-  // start new segment
-  mdlog->start_new_segment(0);
-
   mdcache->rollback_uncommitted_fragments();
 }
 
