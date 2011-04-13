@@ -4087,14 +4087,18 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   // done?
   assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
-  if (mds->is_rejoin() && 
-      rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
-      rejoin_ack_gather.empty()) {
-    // finally, kickstart past snap parent opens
-    open_snap_parents();
+  if (mds->is_rejoin()) {
+    if (rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
+	rejoin_ack_gather.empty()) {
+      // finally, kickstart past snap parent opens
+      open_snap_parents();
+    } else {
+      dout(7) << "still need rejoin from (" << rejoin_gather << ")"
+	      << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
+    }
   } else {
-    dout(7) << "still need rejoin from (" << rejoin_gather << ")"
-	    << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
+    // survivor.
+    mds->queue_waiters(rejoin_waiters);
   }
 }
 
