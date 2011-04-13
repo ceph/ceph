@@ -302,11 +302,21 @@ done:
 
 void RGWCreateBucket::execute()
 {
-  RGWAccessControlPolicy policy;
+  RGWAccessControlPolicy policy, old_policy;
   map<string, bufferlist> attrs;
   bufferlist aclbl;
+  bool existed;
+  bool pol_ret;
 
-  bool pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  int r = get_policy_from_attr(&old_policy, rgw_root_bucket, s->bucket_str);
+  if (r >= 0)  {
+    if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
+      ret = -EEXIST;
+      goto done;
+    }
+  }
+
+  pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!pol_ret) {
     ret = -EINVAL;
     goto done;
@@ -321,10 +331,15 @@ void RGWCreateBucket::execute()
   if (ret && ret != -EEXIST)   
     goto done;
 
+  existed = (ret == -EEXIST);
+
   ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
 				s->user.auid);
-  if (ret && ret != -EEXIST)   /* if it exists, don't remove it! */
+  if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_remove_bucket(s->user.user_id, s->bucket_str);
+
+  if (ret == -EEXIST)
+    ret = 0;
 
 done:
   send_response();

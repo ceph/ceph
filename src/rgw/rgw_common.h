@@ -28,6 +28,10 @@ using namespace std;
 
 using ceph::crypto::MD5;
 
+extern string rgw_root_bucket;
+
+#define RGW_ROOT_BUCKET ".rgw"
+
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"

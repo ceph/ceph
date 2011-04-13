@@ -15,7 +15,8 @@ using namespace std;
 static string ui_bucket = USER_INFO_BUCKET_NAME;
 static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
 static string ui_openstack_bucket = USER_INFO_OPENSTACK_BUCKET_NAME;
-static string root_bucket = ".rgw"; //keep this synced to rgw_rados.cc::ROOT_BUCKET!
+
+string rgw_root_bucket = RGW_ROOT_BUCKET;
 
 #define READ_CHUNK_LEN (16 * 1024)
 /**
@@ -402,7 +403,7 @@ int rgw_delete_user(RGWUserInfo& info) {
        i != buckets.end();
        ++i) {
     string bucket_name = i->first;
-    rgwstore->delete_obj(info.user_id, root_bucket, bucket_name);
+    rgwstore->delete_obj(info.user_id, rgw_root_bucket, bucket_name);
   }
   rgwstore->delete_obj(info.user_id, ui_bucket, info.user_id);
   rgwstore->delete_obj(info.user_id, ui_email_bucket, info.user_email);

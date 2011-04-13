@@ -17,9 +17,6 @@ using namespace std;
 
 Rados *rados = NULL;
 
-#define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
-
-static string root_bucket(ROOT_BUCKET);
 static librados::IoCtx root_pool_ctx;
 
 /** 
@@ -52,13 +49,13 @@ int RGWRados::initialize(md_config_t *conf)
  */
 int RGWRados::open_root_pool_ctx()
 {
-  int r = rados->ioctx_create(root_bucket.c_str(), root_pool_ctx);
+  int r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
   if (r == -ENOENT) {
-    r = rados->pool_create(root_bucket.c_str());
+    r = rados->pool_create(RGW_ROOT_BUCKET);
     if (r < 0)
       return r;
 
-    r = rados->ioctx_create(root_bucket.c_str(), root_pool_ctx);
+    r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
   }
 
   return r;
@@ -398,7 +395,7 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
     return r;
 
   librados::IoCtx io_ctx;
-  r = rados->ioctx_create(ROOT_BUCKET, io_ctx);
+  r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
   if (r < 0) {
     RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << std::endl;
     return r;
@@ -449,7 +446,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket;
-    actual_bucket = root_bucket;
+    actual_bucket = rgw_root_bucket;
   }
 
   int r = rados->ioctx_create(actual_bucket.c_str(), io_ctx);
@@ -480,7 +477,7 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket;
-    actual_bucket = root_bucket;
+    actual_bucket = rgw_root_bucket;
   }
 
   int r = rados->ioctx_create(actual_bucket.c_str(), io_ctx);
@@ -703,11 +700,15 @@ int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, 
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
 
+RGW_LOG(0) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << std::endl;
+
   librados::IoCtx io_ctx;
   int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
   r = io_ctx.tmap_update(obj, cmdbl);
+RGW_LOG(0) << "tmap_set done" << std::endl;
+
   return r;
 }
 
