@@ -266,7 +266,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_state.erase(dir); // clean up
 	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
-	export_unlock(dir);
 	break;
 
       case EXPORT_LOGGINGFINISH:
@@ -1304,6 +1303,8 @@ void Migrator::export_reverse(CDir *dir)
 
   // unfreeze
   dir->unfreeze_tree();
+
+  export_unlock(dir);
 
   cache->show_cache();
 }
