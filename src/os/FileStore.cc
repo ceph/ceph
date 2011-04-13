@@ -874,9 +874,9 @@ int FileStore::_detect_fs()
     int y = x+1;
     snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
     int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
-    if (!ret)
+    if (ret >= 0)
       ret = do_getxattr(fn, "user.test", &y, sizeof(y));
-    if (ret || (x != y)) {
+    if ((ret < 0) || (x != y)) {
       derr << "Extended attributes don't appear to work. ";
       if (ret)
 	*_dout << "Got error " + cpp_strerror(ret) + ". ";
