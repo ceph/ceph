@@ -2320,6 +2320,9 @@ void MDCache::send_resolve_now(int who)
     // only our subtrees
     if (dir->authority().first != mds->get_nodeid()) 
       continue;
+
+    if (mds->is_resolve() && my_ambiguous_imports.count(dir->dirfrag()))
+      continue;  // we'll add it below
     
     if (migrator->is_importing(dir->dirfrag())) {
       // ambiguous (mid-import)
@@ -2331,25 +2334,31 @@ void MDCache::send_resolve_now(int who)
       for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
 	dfls.push_back((*p)->dirfrag());
       m->add_ambiguous_import(dir->dirfrag(), dfls);
+      dout(10) << " ambig " << dir->dirfrag() << " " << dfls << dendl;
     } else {
       // not ambiguous.
       m->add_subtree(dir->dirfrag());
       
       // bounds too
+      vector<dirfrag_t> dfls;
       for (set<CDir*>::iterator q = subtrees[dir].begin();
 	   q != subtrees[dir].end();
 	   ++q) {
 	CDir *bound = *q;
 	m->add_subtree_bound(dir->dirfrag(), bound->dirfrag());
+	dfls.push_back(bound->dirfrag());
       }
+      dout(10) << " claim " << dir->dirfrag() << " " << dfls << dendl;
     }
   }
 
   // ambiguous
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
        p != my_ambiguous_imports.end();
-       ++p) 
+       ++p) {
     m->add_ambiguous_import(p->first, p->second);
+    dout(10) << " ambig " << p->first << " " << p->second << dendl;
+  }
   
 
   // list prepare requests lacking a commit
@@ -2374,7 +2383,6 @@ void MDCache::send_resolve_now(int who)
     dout(10) << " will need resolve ack from mds" << who << dendl;
     need_resolve_ack.insert(who);
   }
-
 
   // send
   mds->send_message_mds(m, who);
@@ -2767,8 +2775,7 @@ void MDCache::disambiguate_imports()
       CDir *dir = get_force_dirfrag(q->first);
       if (!dir) continue;
       
-      if (dir->authority().first == CDIR_AUTH_UNKNOWN ||   // if i am resolving
-	  dir->is_ambiguous_auth()) {                      // if i am a surviving bystander
+      if (dir->is_ambiguous_auth()) {     // works for me_ambig or if i am a surviving bystander
 	dout(10) << "  mds" << who << " did import " << *dir << dendl;
 	adjust_bounded_subtree_auth(dir, q->second, who);
 	try_subtree_merge(dir);
@@ -2780,18 +2787,19 @@ void MDCache::disambiguate_imports()
   other_ambiguous_imports.clear();
 
   // my ambiguous imports
+  pair<int,int> me_ambig(mds->whoami, mds->whoami);
   while (!my_ambiguous_imports.empty()) {
     map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
 
     CDir *dir = get_dirfrag(q->first);
     if (!dir) continue;
     
-    if (dir->authority().first != CDIR_AUTH_UNKNOWN) {
+    if (dir->authority() != me_ambig) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
       cancel_ambiguous_import(q->first);
       mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
-      dout(10) << "ambiguous import auth unknown, must be me " << *dir << dendl;
+      dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
       finish_ambiguous_import(q->first);
       mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
     }
