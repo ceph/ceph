@@ -9,12 +9,15 @@
 #include <sys/wait.h>
 
 #include "common/armor.h"
+#include "common/secret.h"
 
 #ifndef MS_RELATIME
 # define MS_RELATIME (1<<21)
 #endif
 
 #define BUF_SIZE 128
+#define MAX_SECRET_LEN 1000
+#define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
 
 int verboseflag = 0;
 static const char * const EMPTY_STRING = "";
@@ -189,7 +192,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 	int skip;
 	int pos = 0;
 	char *newdata = 0;
-	char secret[1000];
+	char secret[MAX_SECRET_LEN];
 	char *saw_name = NULL;
 	char *saw_secret = NULL;
 
@@ -253,36 +256,15 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = 1;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
-			char *fn = value;
-			char *end = fn;
-			int fd;
-			int len;
-
-			if (!fn || !*fn) {
+			if (!value || !*value) {
 				printf("keyword secretfile found, but no secret file specified\n");
 				return NULL;
 			}
 
-			while (*end)
-				end++;
-			fd = open(fn, O_RDONLY);
-			if (fd < 0) {
-				perror("unable to read secretfile");
+			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
+				printf("error reading secret file\n");
 				return NULL;
 			}
-			len = read(fd, secret, 1000);
-			if (len <= 0) {
-				perror("unable to read secret from secretfile");
-				return NULL;
-			}
-			end = secret;
-			while (end < secret + len && *end && *end != '\n' && *end != '\r')
-				end++;
-			*end = '\0';
-			close(fd);
-
-			if (verboseflag)
-				printf("read secret of len %d from %s\n", len, fn);
 
 			/* see comment for "secret" */
 			saw_secret = secret;
@@ -345,46 +327,24 @@ static char *parse_options(const char *data, int *filesys_flags)
 	} while (data);
 
 	if (saw_secret) {
-		/* try to submit key to kernel via the keys api */
-		key_serial_t serial;
 		int ret;
-		int secret_len = strlen(saw_secret);
-		char payload[((secret_len * 3) / 4) + 4];
+		char secret_option[MAX_SECRET_OPTION_LEN];
 		char *name = NULL;
 		int name_len = 0;
 		int name_pos = 0;
-
-		ret = ceph_unarmor(payload, payload+sizeof(payload), saw_secret, saw_secret+secret_len);
-		if (ret < 0) {
-			printf("secret is not valid base64: %s.\n", strerror(-ret));
-			return NULL;
-		}
-
 		name_pos = safe_cat(&name, &name_len, name_pos, "client.");
 		if (!saw_name) {
 			name_pos = safe_cat(&name, &name_len, name_pos, CEPH_AUTH_NAME_DEFAULT);
 		} else {
 			name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
 		}
-		serial = add_key("ceph", name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
-		if (serial < 0) {
-			if (errno == ENODEV || errno == ENOSYS) {
-				/* running against older kernel; fall back to secret= in options */
-				if (pos)
-					pos = safe_cat(&out, &out_len, pos, ",");
-				pos = safe_cat(&out, &out_len, pos, "secret=");
-				pos = safe_cat(&out, &out_len, pos, saw_secret);
-			} else {
-				perror("adding ceph secret key to kernel failed");
-			}
+		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
+		if (ret < 0) {
+			return NULL;
 		} else {
-			if (verboseflag)
-				printf("added key %s with serial %d\n", name, serial);
-			/* add key= option to identify key to use */
 			if (pos)
 				pos = safe_cat(&out, &out_len, pos, ",");
-			pos = safe_cat(&out, &out_len, pos, "key=");
-			pos = safe_cat(&out, &out_len, pos, name);
+			pos = safe_cat(&out, &out_len, pos, secret_option);
 		}
 	}
 
