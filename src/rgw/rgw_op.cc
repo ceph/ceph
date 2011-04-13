@@ -123,7 +123,7 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
     else
       ret = -ENOENT;
   } else if (ret == -ENOENT) {
-      ret = -NO_SUCH_BUCKET;
+      ret = -ERR_NO_SUCH_BUCKET;
   }
 
   return ret;

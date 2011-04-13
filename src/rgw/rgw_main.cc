@@ -104,6 +104,8 @@ int main(int argc, const char **argv)
     op = handler->get_op();
     if (op) {
       op->execute();
+    } else {
+      abort_early(&s, -ERR_METHOD_NOT_ALLOWED);
     }
 done:
     rgw_log_op(&s);

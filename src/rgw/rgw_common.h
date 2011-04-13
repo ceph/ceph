@@ -63,9 +63,10 @@ extern string rgw_root_bucket;
 } while (0)
 
 
-#define INVALID_BUCKET_NAME 2000
-#define INVALID_OBJECT_NAME 2001
-#define NO_SUCH_BUCKET      2002
+#define ERR_INVALID_BUCKET_NAME 2000
+#define ERR_INVALID_OBJECT_NAME 2001
+#define ERR_NO_SUCH_BUCKET      2002
+#define ERR_METHOD_NOT_ALLOWED  2003
 
 typedef void *RGWAccessHandle;
 

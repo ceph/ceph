@@ -40,12 +40,13 @@ const static struct errno_http hterrs[] = {
     { 204, "204", "NoContent" },
     { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
-    { INVALID_BUCKET_NAME, "400", "InvalidBucketName" },
-    { INVALID_OBJECT_NAME, "400", "InvalidObjectName" },
+    { ERR_INVALID_BUCKET_NAME, "400", "InvalidBucketName" },
+    { ERR_INVALID_OBJECT_NAME, "400", "InvalidObjectName" },
     { EACCES, "403", "AccessDenied" },
     { EPERM, "403", "AccessDenied" },
     { ENOENT, "404", "NoSuchKey" },
-    { NO_SUCH_BUCKET, "404", "NoSuchBucket" },
+    { ERR_NO_SUCH_BUCKET, "404", "NoSuchBucket" },
+    { ERR_METHOD_NOT_ALLOWED, "405", "MethodNotAllowed" },
     { ETIMEDOUT, "408", "RequestTimeout" },
     { EEXIST, "409", "BucketAlreadyExists" },
     { ENOTEMPTY, "409", "BucketNotEmpty" },
@@ -549,16 +550,16 @@ static int validate_bucket_name(const char *bucket)
       return 0;
     }
     // Name too short
-    return INVALID_BUCKET_NAME;
+    return ERR_INVALID_BUCKET_NAME;
   }
   else if (len > 255) {
     // Name too long
-    return INVALID_BUCKET_NAME;
+    return ERR_INVALID_BUCKET_NAME;
   }
 
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
-    return INVALID_BUCKET_NAME;
+    return ERR_INVALID_BUCKET_NAME;
   }
 
   for (const char *s = bucket; *s; ++s) {
@@ -570,11 +571,11 @@ static int validate_bucket_name(const char *bucket)
     if ((c == '-') || (c == '_'))
       continue;
     // Invalid character
-    return INVALID_BUCKET_NAME;
+    return ERR_INVALID_BUCKET_NAME;
   }
 
   if (looks_like_ip_address(bucket))
-    return INVALID_BUCKET_NAME;
+    return ERR_INVALID_BUCKET_NAME;
   return 0;
 }
 
@@ -587,12 +588,12 @@ static int validate_object_name(const char *object)
   int len = strlen(object);
   if (len > 1024) {
     // Name too long
-    return INVALID_OBJECT_NAME;
+    return ERR_INVALID_OBJECT_NAME;
   }
 
   if (check_utf8(object, len)) {
     // Object names must be valid UTF-8.
-    return INVALID_OBJECT_NAME;
+    return ERR_INVALID_OBJECT_NAME;
   }
   return 0;
 }
