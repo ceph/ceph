@@ -641,6 +641,7 @@ int FileStore::mkfs()
 
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(buf, O_CREAT|O_WRONLY, 0644);
+
   if (fsid_fd < 0) {
     ret = -errno;
     derr << "FileStore::mkfs: failed to open " << buf << ": "
@@ -852,6 +853,7 @@ bool FileStore::test_mount_in_use()
   return inuse;
 }
 
+
 int FileStore::_detect_fs()
 {
   char buf[80];
@@ -871,16 +873,16 @@ int FileStore::_detect_fs()
     int x = rand();
     int y = x+1;
     snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-    do_setxattr(fn, "user.test", &x, sizeof(x));
-    do_getxattr(fn, "user.test", &y, sizeof(y));
-    /*dout(10) << "x = " << x << "   y = " << y 
-	     << "  r1 = " << r1 << "  r2 = " << r2
-	     << " " << strerror(errno)
-	     << dendl;*/
-    if (x != y) {
-      dout(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
-	      << ") on " << fn << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
-      return -errno;
+    int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
+    if (!ret)
+      ret = do_getxattr(fn, "user.test", &y, sizeof(y));
+    if (ret || (x != y)) {
+      derr << "Extended attributes don't appear to work. ";
+      if (ret)
+	*_dout << "Got error " + cpp_strerror(ret) + ". ";
+      *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
+	     << "file system with the 'user_xattr' option." << dendl;
+      return -ENOTSUP;
     }
   }
 
@@ -1230,7 +1232,7 @@ int FileStore::mount()
       }
 
       if (cp != curr_seq) {
-        dout(0) << "WARNING: user forced start with data sequence mismatch: curr=" << curr_seq << " snap_seq=" << cp << dendl;
+        derr << "WARNING: user forced start with data sequence mismatch: curr=" << curr_seq << " snap_seq=" << cp << dendl;
         cerr << TEXT_YELLOW
 	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
       }
