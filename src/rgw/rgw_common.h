@@ -59,6 +59,10 @@ using ceph::crypto::MD5;
 } while (0)
 
 
+#define INVALID_BUCKET_NAME 2000
+#define INVALID_OBJECT_NAME 2001
+#define NO_SUCH_BUCKET      2002
+
 typedef void *RGWAccessHandle;
 
 /** Store error returns for output at a different point in the program */

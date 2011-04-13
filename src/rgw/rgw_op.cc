@@ -122,6 +122,8 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
       ret = -EACCES;
     else
       ret = -ENOENT;
+  } else if (ret == -ENOENT) {
+      ret = -NO_SUCH_BUCKET;
   }
 
   return ret;

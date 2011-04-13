@@ -34,9 +34,6 @@ struct errno_http {
   const char *default_code;
 };
 
-#define INVALID_BUCKET_NAME 2000
-#define INVALID_OBJECT_NAME 2001
-
 const static struct errno_http hterrs[] = {
     { 0, "200", "" },
     { 201, "201", "Created" },
@@ -48,6 +45,7 @@ const static struct errno_http hterrs[] = {
     { EACCES, "403", "AccessDenied" },
     { EPERM, "403", "AccessDenied" },
     { ENOENT, "404", "NoSuchKey" },
+    { NO_SUCH_BUCKET, "404", "NoSuchBucket" },
     { ETIMEDOUT, "408", "RequestTimeout" },
     { EEXIST, "409", "BucketAlreadyExists" },
     { ENOTEMPTY, "409", "BucketNotEmpty" },
