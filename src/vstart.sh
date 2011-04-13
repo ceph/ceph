@@ -251,7 +251,7 @@ do
 done
 
 DAEMONOPTS="
-	log file = out/\$name.log
+	log file = out/\$host
 	log per instance = true
 	log sym history = 100
         profiling logger = true

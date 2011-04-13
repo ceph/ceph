@@ -426,7 +426,14 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 
   // If g_conf.log_file was specified, that takes the highest priority
   if (!g_conf.log_file.empty()) {
-    return normalize_relative(g_conf.log_file.c_str());
+    string log_file(normalize_relative(g_conf.log_file.c_str()));
+    if (g_conf.log_per_instance) {
+      ostringstream oss;
+      oss << log_file << "." << getpid();
+      return oss.str();
+    }
+    else
+      return log_file;
   }
 
   string log_dir;
@@ -481,7 +488,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     return 1;
   }
 
-  if (g_conf.log_file.empty() && g_conf.log_per_instance) {
+  if (g_conf.log_per_instance) {
     // Calculate instance symlink path (isym_path)
     ostringstream iss;
     std::string symlink_dir(_get_symlink_dir());
