@@ -110,7 +110,8 @@ public:
     string standby_for_name;
     set<int32_t> export_targets;
 
-    mds_info_t() : global_id(0), rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
+    mds_info_t() : global_id(0), rank(-1), inc(0), state(STATE_STANDBY), state_seq(0),
+		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
