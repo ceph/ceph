@@ -29,6 +29,14 @@ using namespace __gnu_cxx;
 #include "encoding.h"
 #include "ceph_hash.h"
 
+/* Maximum supported object name length for Ceph, in bytes.
+ *
+ * This comes directly out of the ext3/ext4/btrfs limits. We will issue a
+ * nasty warning message in the (unlikely) event that you are not using one of
+ * those filesystems, and your filesystem can't handle the full 255 characters.
+ */
+#define MAX_CEPH_OBJECT_NAME_LEN 255
+
 struct object_t {
   string name;
 

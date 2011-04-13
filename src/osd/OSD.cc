@@ -102,14 +102,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
-/* Maximum supported object name length for Ceph, in bytes.
- *
- * This comes directly out of the ext3/ext4/btrfs limits. We will issue a
- * nasty warning message in the (unlikely) event that you are not using one of
- * those filesystems, and your filesystem can't handle the full 255 characters.
- */
-#define MAX_CEPH_OBJECT_NAME_LEN 255
-
 static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
   return out << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
