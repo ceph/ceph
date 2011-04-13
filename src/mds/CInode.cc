@@ -386,13 +386,14 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
   dout(10) << "pop_projected_snaprealm " << next_snaprealm
           << " seq" << next_snaprealm->seq << dendl;
   bool invalidate_cached_snaps = false;
-  if (!snaprealm)
+  if (!snaprealm) {
     open_snaprealm();
-  else if (next_snaprealm->past_parents.size() !=
-           snaprealm->srnode.past_parents.size()) {
+  } else if (next_snaprealm->past_parents.size() !=
+	     snaprealm->srnode.past_parents.size()) {
     invalidate_cached_snaps = true;
 
     // update parent pointer
+    assert(snaprealm->open);
     assert(snaprealm->parent);   // had a parent before
     SnapRealm *new_parent = get_parent_inode()->find_snaprealm();
     assert(new_parent);
@@ -407,6 +408,10 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
   }
   snaprealm->srnode = *next_snaprealm;
   delete next_snaprealm;
+
+  // we should be able to open these up (or have them already be open).
+  bool ok = snaprealm->_open_parents(NULL);
+  assert(ok);
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
