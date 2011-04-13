@@ -1521,7 +1521,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   }
 
   // am i retrying after ancient path_traverse results?
-  if (import_state.count(df) == 0 &&
+  if (import_state.count(df) == 0 ||
       import_state[df] != IMPORT_DISCOVERING) {
     dout(7) << "hmm import_state is off, i must be obsolete lookup" << dendl;
     m->put();
