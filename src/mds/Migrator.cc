@@ -208,7 +208,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
     if (export_peer[dir] == who ||
 	p->second == EXPORT_DISCOVERING || p->second == EXPORT_FREEZING) { 
       // the guy i'm exporting to failed, or we're just freezing.
-      dout(10) << "cleaning up export state " << p->second << " of " << *dir << dendl;
+      dout(10) << "cleaning up export state (" << p->second << ")" << get_export_statename(p->second)
+	       << " of " << *dir << dendl;
       
       switch (p->second) {
       case EXPORT_DISCOVERING:
@@ -339,6 +340,9 @@ void Migrator::handle_mds_failure_or_stop(int who)
     CDir *dir = mds->mdcache->get_dirfrag(df);
 
     if (import_peer[df] == who) {
+      dout(10) << "cleaning up export state (" << q->second << ")" << get_import_statename(q->second)
+	       << " of " << *dir << dendl;
+
       switch (q->second) {
       case IMPORT_DISCOVERING:
 	dout(10) << "import state=discovering : clearing state" << dendl;
