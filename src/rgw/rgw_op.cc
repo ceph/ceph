@@ -688,6 +688,7 @@ void RGWPutACLs::execute()
   stringstream ss;
   char *orig_data = data;
   char *new_data = NULL;
+  ACLOwner owner;
 
   if (!verify_permission(s, RGW_PERM_WRITE_ACP)) {
     ret = -EACCES;
@@ -707,6 +708,10 @@ void RGWPutACLs::execute()
        ret = -ENOMEM;
        goto done;
      }
+     owner.set_id(s->user.user_id);
+     owner.set_name(s->user.display_name);
+  } else {
+     owner = s->acl->get_owner();
   }
 
   if (get_params() < 0)
@@ -720,7 +725,7 @@ void RGWPutACLs::execute()
   }
   if (!s->canned_acl.empty()) {
     RGWAccessControlPolicy canned_policy;
-    bool r = canned_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+    bool r = canned_policy.create_canned(owner.get_id(), owner.get_display_name(), s->canned_acl);
     if (!r) {
       ret = -EINVAL;
       goto done;
@@ -754,7 +759,7 @@ void RGWPutACLs::execute()
 
   if (rgw_log_level >= 15) {
     RGW_LOG(15) << "New AccessControlPolicy" << endl;
-    new_policy.to_xml(cerr);
+    new_policy.to_xml(cout);
     RGW_LOG(15) << endl;
   }
 

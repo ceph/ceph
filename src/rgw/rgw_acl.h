@@ -373,6 +373,7 @@ public:
   void set_name(string& name) { display_name = name; }
 
   string& get_id() { return id; }
+  string& get_display_name() { return display_name; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
