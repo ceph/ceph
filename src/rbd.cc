@@ -577,7 +577,7 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   DEFINE_CONF_VARS(usage_exit);
-  // TODO: use rados conf api
+
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
@@ -687,7 +687,7 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (rados.init(NULL) < 0) {
+  if (rados.init_with_config(&g_conf) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }
@@ -697,7 +697,6 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  // TODO: add conf
   int r = rados.ioctx_create(poolname, io_ctx);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
