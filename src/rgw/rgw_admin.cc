@@ -30,6 +30,7 @@ void usage()
   cerr << "  user info                  get user info\n";
   cerr << "  user rm                    remove user\n";
   cerr << "  buckets list               list buckets\n";
+  cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific bucket, date\n";
   cerr << "options:\n";
@@ -54,6 +55,7 @@ enum {
   OPT_USER_MODIFY,
   OPT_USER_RM,
   OPT_BUCKETS_LIST,
+  OPT_BUCKET_UNLINK,
   OPT_POLICY,
   OPT_LOG_SHOW,
 };
@@ -63,6 +65,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   *need_more = false;
   if (strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
+      strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "log") == 0) {
     *need_more = true;
     return 0;
@@ -86,6 +89,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
+  } else if (strcmp(prev_cmd, "bucket") == 0) {
+    if (strcmp(cmd, "unlink") == 0)
+      return OPT_BUCKET_UNLINK;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
@@ -260,7 +266,7 @@ int main(int argc, char **argv)
   }
 
 
-  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_INFO) {
+  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       return 0;
@@ -391,6 +397,18 @@ int main(int argc, char **argv)
         }
       }
     }
+  }
+
+  if (opt_cmd == OPT_BUCKET_UNLINK) {
+    if (!bucket) {
+      cerr << "bucket name was not specified" << std::endl;
+      usage();
+    }
+    string bucket_str(bucket);
+    int r = rgw_remove_bucket(user_id, bucket_str);
+    if (r < 0)
+      cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
+    return -r;
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
