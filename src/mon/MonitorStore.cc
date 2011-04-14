@@ -20,6 +20,7 @@
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/config.h"
+#include "common/sync_filesystem.h"
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
@@ -132,7 +133,7 @@ int MonitorStore::mkfs()
 void MonitorStore::sync()
 {
   dout(10) << "sync" << dendl;
-  ::sync();
+  sync_filesystem(lock_fd);
 }
 
 version_t MonitorStore::get_int(const char *a, const char *b)
