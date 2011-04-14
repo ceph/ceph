@@ -699,6 +699,11 @@ get_val(const char *key, char **buf, int len) const
   return -ENOENT;
 }
 
+/* The order of the sections here is important.  The first section in the
+ * vector is the "highest priority" section; if we find it there, we'll stop
+ * looking. The lowest priority section is the one we look in only if all
+ * others had nothing.  This should always be the global section.
+ */
 void md_config_t::
 get_my_sections(std::vector <std::string> &sections)
 {

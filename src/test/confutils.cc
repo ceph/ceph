@@ -12,6 +12,7 @@
  *
  */
 #include "common/ConfUtils.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
 #include "include/buffer.h"
@@ -245,6 +246,17 @@ const char unicode_config_1[] = "\
 [osd0]\n\
 ";
 
+const char override_config_1[] = "\
+[global]\n\
+        log file =           global_log\n\
+[mds]\n\
+        log file =           mds_log\n\
+[osd]\n\
+        log file =           osd_log\n\
+[osd0]\n\
+        log file =           osd0_log\n\
+";
+
 TEST(Whitespace, ConfUtils) {
   std::string test0("");
   ConfFile::trim_whitespace(test0, false);
@@ -444,4 +456,27 @@ TEST(EscapingFiles, ConfUtils) {
   ASSERT_EQ(val, "floppy disk");
   ASSERT_EQ(cf2.read("mon", "keyring", val), 0);
   ASSERT_EQ(val, "backslash\\");
+}
+
+TEST(Overrides, ConfUtils) {
+  md_config_t conf;
+  std::deque<std::string> err;
+  std::string override_conf_1_f(next_tempfile(override_config_1));
+
+  std::list<std::string> conf_files;
+  conf_files.push_back(override_conf_1_f);
+  conf.name.set(CEPH_ENTITY_TYPE_MON, "0");
+  conf.parse_config_files(conf_files, &err);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(conf.log_file, "global_log");
+
+  conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
+  conf.parse_config_files(conf_files, &err);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(conf.log_file, "mds_log");
+
+  conf.name.set(CEPH_ENTITY_TYPE_OSD, "0");
+  conf.parse_config_files(conf_files, &err);
+  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(conf.log_file, "osd0_log");
 }
