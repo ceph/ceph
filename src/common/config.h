@@ -489,13 +489,19 @@ struct config_option {
   const char *section;
   const char *conf_name;
   const char *name;
-  void *val_ptr;
+  size_t md_conf_off;
 
   const char *def_str;
   long long def_longlong;
   double def_double;
 
   opt_type_t type;
+
+  // Given a configuration, return a pointer to this option inside
+  // that configuration.
+  void *conf_ptr(md_config_t *conf) const;
+
+  const void *conf_ptr(const md_config_t *conf) const;
 };
 
 #include "common/debug.h"

@@ -486,6 +486,7 @@ AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
 endif
 
 AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
+AM_CXXFLAGS += -Wno-invalid-offsetof
 AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC

@@ -73,49 +73,61 @@ struct ceph_file_layout g_default_file_layout = {
 #define OPTION_OPT_STR(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, std::string), \
 	  NULL, STRINGIFY(name), \
-	  &g_conf.name, def_val, 0, 0, type }
+	  offsetof(struct md_config_t, name), def_val, 0, 0, type }
 
 #define OPTION_OPT_ADDR(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, entity_addr_t), \
 	 NULL, STRINGIFY(name), \
-	 &g_conf.name, def_val, 0, 0, type }
+	 offsetof(struct md_config_t, name), def_val, 0, 0, type }
 
 #define OPTION_OPT_LONGLONG(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, long long), \
 	 NULL, STRINGIFY(name), \
-         &g_conf.name, 0, def_val, 0, type }
+         offsetof(struct md_config_t, name), 0, def_val, 0, type }
 
 #define OPTION_OPT_INT(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, int), \
 	 NULL, STRINGIFY(name), \
-         &g_conf.name, 0, def_val, 0, type }
+         offsetof(struct md_config_t, name), 0, def_val, 0, type }
 
 #define OPTION_OPT_BOOL(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, bool), \
 	 NULL, STRINGIFY(name), \
-         &g_conf.name, 0, def_val, 0, type }
+         offsetof(struct md_config_t, name), 0, def_val, 0, type }
 
 #define OPTION_OPT_U32(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, uint32_t), \
 	 NULL, STRINGIFY(name), \
-         &g_conf.name, 0, def_val, 0, type }
+         offsetof(struct md_config_t, name), 0, def_val, 0, type }
 
 #define OPTION_OPT_U64(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, uint64_t), \
 	 NULL, STRINGIFY(name), \
-         &g_conf.name, 0, def_val, 0, type }
+         offsetof(struct md_config_t, name), 0, def_val, 0, type }
 
 #define OPTION_OPT_DOUBLE(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, double), \
 	 NULL, STRINGIFY(name), \
-	 &g_conf.name, 0, 0, def_val, type }
+	 offsetof(struct md_config_t, name), 0, 0, def_val, type }
 
 #define OPTION_OPT_FLOAT(section, name, type, def_val) \
        { STRINGIFY(section) + TYCHECK(g_conf.name, float), \
 	 NULL, STRINGIFY(name), \
-	 &g_conf.name, 0, 0, def_val, type }
+	 offsetof(struct md_config_t, name), 0, 0, def_val, type }
 
 #define OPTION(name, type, def_val) OPTION_##type("global", name, type, def_val)
+
+void *config_option::conf_ptr(md_config_t *conf) const
+{
+  void *v = (void*)(((char*)conf) + md_conf_off);
+  return v;
+}
+
+const void *config_option::conf_ptr(const md_config_t *conf) const
+{
+  const void *v = (const void*)(((const char*)conf) + md_conf_off);
+  return v;
+}
 
 struct config_option config_optionsp[] = {
   OPTION(host, OPT_STR, "localhost"),
@@ -645,31 +657,31 @@ get_val(const char *key, char **buf, int len) const
       case OPT_NONE:
         return -ENOSYS;
       case OPT_INT:
-        oss << *(int*)opt->val_ptr;
+        oss << *(int*)opt->conf_ptr(this);
         break;
       case OPT_LONGLONG:
-        oss << *(long long*)opt->val_ptr;
+        oss << *(long long*)opt->conf_ptr(this);
         break;
       case OPT_STR:
-	oss << *((std::string*)opt->val_ptr);
+	oss << *((std::string*)opt->conf_ptr(this));
 	break;
       case OPT_FLOAT:
-        oss << *(float*)opt->val_ptr;
+        oss << *(float*)opt->conf_ptr(this);
         break;
       case OPT_DOUBLE:
-        oss << *(double*)opt->val_ptr;
+        oss << *(double*)opt->conf_ptr(this);
         break;
       case OPT_BOOL:
-        oss << *(bool*)opt->val_ptr;
+        oss << *(bool*)opt->conf_ptr(this);
         break;
       case OPT_U32:
-        oss << *(uint32_t*)opt->val_ptr;
+        oss << *(uint32_t*)opt->conf_ptr(this);
         break;
       case OPT_U64:
-        oss << *(uint64_t*)opt->val_ptr;
+        oss << *(uint64_t*)opt->conf_ptr(this);
         break;
       case OPT_ADDR: {
-        oss << *(entity_addr_t*)opt->val_ptr;
+        oss << *(entity_addr_t*)opt->conf_ptr(this);
         break;
       }
     }
@@ -736,13 +748,13 @@ set_val_from_default(const config_option *opt)
 {
   switch (opt->type) {
     case OPT_INT:
-      *(int*)opt->val_ptr = opt->def_longlong;
+      *(int*)opt->conf_ptr(this) = opt->def_longlong;
       break;
     case OPT_LONGLONG:
-      *(long long*)opt->val_ptr = opt->def_longlong;
+      *(long long*)opt->conf_ptr(this) = opt->def_longlong;
       break;
     case OPT_STR: {
-      std::string *str = (std::string *)opt->val_ptr;
+      std::string *str = (std::string *)opt->conf_ptr(this);
       *str = opt->def_str ? opt->def_str : "";
       if (expand_meta(*str)) {
 	// We don't allow metavariables in default values.  The reason for this
@@ -761,19 +773,19 @@ set_val_from_default(const config_option *opt)
       break;
     }
     case OPT_FLOAT:
-      *(float *)opt->val_ptr = (float)opt->def_double;
+      *(float *)opt->conf_ptr(this) = (float)opt->def_double;
       break;
     case OPT_DOUBLE:
-      *(double *)opt->val_ptr = opt->def_double;
+      *(double *)opt->conf_ptr(this) = opt->def_double;
       break;
     case OPT_BOOL:
-      *(bool *)opt->val_ptr = (bool)opt->def_longlong;
+      *(bool *)opt->conf_ptr(this) = (bool)opt->def_longlong;
       break;
     case OPT_U32:
-      *(uint32_t *)opt->val_ptr = (uint32_t)opt->def_longlong;
+      *(uint32_t *)opt->conf_ptr(this) = (uint32_t)opt->def_longlong;
       break;
     case OPT_U64:
-      *(uint64_t *)opt->val_ptr = (uint64_t)opt->def_longlong;
+      *(uint64_t *)opt->conf_ptr(this) = (uint64_t)opt->def_longlong;
       break;
     case OPT_ADDR: {
       if (!opt->def_str) {
@@ -781,7 +793,7 @@ set_val_from_default(const config_option *opt)
 	// do anything here.
 	break;
       }
-      entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+      entity_addr_t *addr = (entity_addr_t*)opt->conf_ptr(this);
       if (!addr->parse(opt->def_str)) {
 	ostringstream oss;
 	oss << "Default value for " << opt->conf_name << " cannot be parsed."
@@ -807,7 +819,7 @@ set_val_impl(const char *val, const config_option *opt)
       int f = strict_strtol(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
-      *(int*)opt->val_ptr = f;
+      *(int*)opt->conf_ptr(this) = f;
       return 0;
     }
     case OPT_LONGLONG: {
@@ -815,29 +827,29 @@ set_val_impl(const char *val, const config_option *opt)
       long long f = strict_strtoll(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
-      *(long long*)opt->val_ptr = f;
+      *(long long*)opt->conf_ptr(this) = f;
       return 0;
     }
     case OPT_STR:
-      *(std::string*)opt->val_ptr = val ? val : "";
+      *(std::string*)opt->conf_ptr(this) = val ? val : "";
       return 0;
     case OPT_FLOAT:
-      *(float*)opt->val_ptr = atof(val);
+      *(float*)opt->conf_ptr(this) = atof(val);
       return 0;
     case OPT_DOUBLE:
-      *(double*)opt->val_ptr = atof(val);
+      *(double*)opt->conf_ptr(this) = atof(val);
       return 0;
     case OPT_BOOL:
       if (strcasecmp(val, "false") == 0)
-	*(bool*)opt->val_ptr = false;
+	*(bool*)opt->conf_ptr(this) = false;
       else if (strcasecmp(val, "true") == 0)
-	*(bool*)opt->val_ptr = true;
+	*(bool*)opt->conf_ptr(this) = true;
       else {
 	std::string err;
 	int b = strict_strtol(val, 10, &err);
 	if (!err.empty())
 	  return -EINVAL;
-	*(bool*)opt->val_ptr = !!b;
+	*(bool*)opt->conf_ptr(this) = !!b;
       }
       return 0;
     case OPT_U32: {
@@ -845,7 +857,7 @@ set_val_impl(const char *val, const config_option *opt)
       int f = strict_strtol(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
-      *(uint32_t*)opt->val_ptr = f;
+      *(uint32_t*)opt->conf_ptr(this) = f;
       return 0;
     }
     case OPT_U64: {
@@ -853,11 +865,11 @@ set_val_impl(const char *val, const config_option *opt)
       long long f = strict_strtoll(val, 10, &err);
       if (!err.empty())
 	return -EINVAL;
-      *(uint64_t*)opt->val_ptr = f;
+      *(uint64_t*)opt->conf_ptr(this) = f;
       return 0;
     }
     case OPT_ADDR: {
-      entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+      entity_addr_t *addr = (entity_addr_t*)opt->conf_ptr(this);
       if (!addr->parse(val)) {
 	return -EINVAL;
       }
@@ -873,7 +885,7 @@ expand_all_meta()
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     if (opt->type == OPT_STR) {
-      std::string *str = (std::string *)opt->val_ptr;
+      std::string *str = (std::string *)opt->conf_ptr(this);
       expand_meta(*str);
     }
   }
