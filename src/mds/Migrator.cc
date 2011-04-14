@@ -1787,7 +1787,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num());
 
   // start the journal entry
-  EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds);
+  EImportStart *le = new EImportStart(mds->mdlog, dir->dirfrag(), m->bounds);
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir);

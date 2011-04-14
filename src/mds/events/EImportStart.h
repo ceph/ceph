@@ -32,9 +32,11 @@ protected:
   bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv;
 
-  EImportStart(dirfrag_t di,
+  EImportStart(MDLog *log,
+	       dirfrag_t di,
 	       vector<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
-				       base(di), bounds(b) { }
+				       base(di), bounds(b),
+				       metablob(log) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
   void print(ostream& out) {
