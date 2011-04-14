@@ -253,6 +253,9 @@ public:
 public:
   void import_reverse(CDir *dir);
 protected:
+  void import_reverse_discovering(dirfrag_t df);
+  void import_reverse_discovered(dirfrag_t df, CInode *diri);
+  void import_reverse_prepping(CDir *dir);
   void import_remove_pins(CDir *dir, set<CDir*>& bounds);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);

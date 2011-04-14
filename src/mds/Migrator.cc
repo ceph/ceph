@@ -236,7 +236,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dout(10) << "export state=warning : unpinning bounds, unfreezing, notifying" << dendl;
 	// fall-thru
 
-	//case EXPORT_LOGGINGSTART:
       case EXPORT_PREPPING:
 	if (p->second != EXPORT_WARNING) 
 	  dout(10) << "export state=loggingstart|prepping : unpinning bounds, unfreezing" << dendl;
@@ -346,30 +345,19 @@ void Migrator::handle_mds_failure_or_stop(int who)
       switch (q->second) {
       case IMPORT_DISCOVERING:
 	dout(10) << "import state=discovering : clearing state" << dendl;
-	import_state.erase(df);
-	import_peer.erase(df);
+	import_reverse_discovering(df);
 	break;
 
       case IMPORT_DISCOVERED:
 	dout(10) << "import state=discovered : unpinning inode " << *diri << dendl;
 	assert(diri);
-	// unpin base
-	diri->put(CInode::PIN_IMPORTING);
-	import_state.erase(df);
-	import_peer.erase(df);
+	import_reverse_discovered(df, diri);
 	break;
 
       case IMPORT_PREPPING:
-	if (q->second == IMPORT_PREPPING) {
-	  dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
-	}
+	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
 	assert(dir);
-	{
-	  set<CDir*> bounds;
-	  cache->map_dirfrag_set(import_bound_ls[dir], bounds);
-	  import_remove_pins(dir, bounds);
-	  import_reverse_final(dir);
-	}
+	import_reverse_prepping(dir);
 	break;
 
       case IMPORT_PREPPED:
@@ -1567,22 +1555,46 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   assert (g_conf.mds_kill_import_at != 2);  
 }
 
+void Migrator::import_reverse_discovering(dirfrag_t df)
+{
+  import_state.erase(df);
+  import_peer.erase(df);
+}
+
+void Migrator::import_reverse_discovered(dirfrag_t df, CInode *diri)
+{
+  // unpin base
+  diri->put(CInode::PIN_IMPORTING);
+  import_state.erase(df);
+  import_peer.erase(df);
+}
+
+void Migrator::import_reverse_prepping(CDir *dir)
+{
+  set<CDir*> bounds;
+  cache->map_dirfrag_set(import_bound_ls[dir], bounds);
+  import_remove_pins(dir, bounds);
+  import_reverse_final(dir);
+}
+
 /* This function DOES put the passed message before returning*/
 void Migrator::handle_export_cancel(MExportDirCancel *m)
 {
   dout(7) << "handle_export_cancel on " << m->get_dirfrag() << dendl;
-
-  if (import_state[m->get_dirfrag()] == IMPORT_DISCOVERED) {
-    CInode *in = cache->get_inode(m->get_dirfrag().ino);
+  dirfrag_t df = m->get_dirfrag();
+  if (import_state[df] == IMPORT_DISCOVERING) {
+    import_reverse_discovering(df);
+  } else if (import_state[df] == IMPORT_DISCOVERED) {
+    CInode *in = cache->get_inode(df.ino);
     assert(in);
-    in->put(CInode::PIN_IMPORTING);
+    import_reverse_discovered(df, in);
+  } else if (import_state[df] == IMPORT_PREPPING) {
+    CDir *dir = mds->mdcache->get_dirfrag(df);
+    assert(dir);
+    import_reverse_prepping(dir);
   } else {
-    assert(import_state[m->get_dirfrag()] == IMPORT_DISCOVERING);
+    assert(0 == "got export_cancel in weird state");
   }
-
-  import_state.erase(m->get_dirfrag());
-  import_peer.erase(m->get_dirfrag());
-
   m->put();
 }
 
