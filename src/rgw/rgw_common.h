@@ -67,16 +67,22 @@ extern string rgw_root_bucket;
 #define ERR_INVALID_OBJECT_NAME 2001
 #define ERR_NO_SUCH_BUCKET      2002
 #define ERR_METHOD_NOT_ALLOWED  2003
+#define ERR_INVALID_DIGEST      2004
+#define ERR_BAD_DIGEST		2005
 
 typedef void *RGWAccessHandle;
 
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
-  const char *num;
-  const char *code;
-  const char *message;
+  rgw_err();
+  rgw_err(int code_, const std::string &message_);
+  std::string code_to_str() const;
+  void clear();
+  bool is_clear() const;
+  friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
 
-  rgw_err() : num(NULL), code(NULL), message(NULL) {}
+  int code;
+  std::string message;
 };
 
 /* Helper class used for XMLArgs parsing */
@@ -228,7 +234,6 @@ struct req_state {
    const char *query;
    const char *length;
    const char *content_type;
-   bool err_exist;
    struct rgw_err err;
    const char *status;
    bool expect_cont;

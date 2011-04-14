@@ -7,6 +7,45 @@
 
 using namespace ceph::crypto;
 
+rgw_err::
+rgw_err()
+{
+  clear();
+}
+
+rgw_err::
+rgw_err(int code_, const std::string &message_)
+    : code(code_), message(message_)
+{
+}
+
+std::string rgw_err::
+code_to_str() const
+{
+  char buf[20];
+  snprintf(buf, sizeof(buf), "%d", code);
+  return std::string(buf);
+}
+
+void rgw_err::
+clear()
+{
+  code = 200;
+  message.clear();
+}
+
+bool rgw_err::
+is_clear() const
+{
+  return (code == 200);
+}
+
+std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
+{
+  oss << "rgw_err(code=" << err.code << ", message='" << err.message << "') ";
+  return oss;
+}
+
 /* Loglevel of the gateway */
 int rgw_log_level = 20;
 

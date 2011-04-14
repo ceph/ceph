@@ -47,8 +47,8 @@ int rgw_log_op(struct req_state *s)
   else
     entry.http_status = "200"; // default
 
-  if (s->err_exist)
-    entry.error_code = s->err.code;
+  if (!s->err.is_clear())
+    entry.error_code = s->err.code_to_str();
   else
     entry.error_code = "-";
 

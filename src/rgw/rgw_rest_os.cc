@@ -4,7 +4,8 @@
 
 void RGWListBuckets_REST_OS::send_response()
 {
-  dump_errno(s, ret);
+  set_req_state_err(s, ret);
+  dump_errno(s);
 
   dump_start(s);
 
@@ -50,7 +51,8 @@ RGW_LOG(0) << "formatter->get_len=" << s->formatter->get_len() << std::endl;
 
 void RGWListBucket_REST_OS::send_response()
 {
-  dump_errno(s, (ret < 0 ? ret : 0));
+  set_req_state_err(s, (ret < 0 ? ret : 0));
+  dump_errno(s);
 
   dump_start(s);
   if (ret < 0) {
@@ -120,7 +122,9 @@ void RGWStatBucket_REST_OS::send_response()
   if (ret >= 0)
     dump_container_metadata(s, bucket);
 
-  dump_errno(s, (ret < 0 ? ret : 0));
+  if (ret < 0)
+    set_req_state_err(s, ret);
+  dump_errno(s);
 
   end_header(s);
   dump_start(s);
@@ -129,7 +133,9 @@ void RGWStatBucket_REST_OS::send_response()
 
 void RGWCreateBucket_REST_OS::send_response()
 {
-  dump_errno(s, ret);
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
   end_header(s);
   s->formatter->flush();
 }
@@ -140,7 +146,8 @@ void RGWDeleteBucket_REST_OS::send_response()
   if (!r)
     r = 204;
 
-  dump_errno(s, r);
+  set_req_state_err(s, r);
+  dump_errno(s);
   end_header(s);
   s->formatter->flush();
 }
@@ -150,7 +157,8 @@ void RGWPutObj_REST_OS::send_response()
   if (!ret)
     ret = 201; // "created"
   dump_etag(s, etag.c_str());
-  dump_errno(s, ret, &err);
+  set_req_state_err(s, ret);
+  dump_errno(s);
   end_header(s);
   s->formatter->flush();
 }
@@ -161,7 +169,8 @@ void RGWDeleteObj_REST_OS::send_response()
   if (!r)
     r = 204;
 
-  dump_errno(s, r);
+  set_req_state_err(s, r);
+  dump_errno(s);
   end_header(s);
   s->formatter->flush();
 }
@@ -204,7 +213,9 @@ int RGWGetObj_REST_OS::send_response(void *handle)
   if (range_str && !ret)
     ret = 206; /* partial content */
 
-  dump_errno(s, ret, &err);
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);

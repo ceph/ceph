@@ -202,9 +202,9 @@ void RGW_OS_Auth_Get::execute()
   ret = 204;
 
 done:
-  dump_errno(s, ret);
+  set_req_state_err(s, ret);
+  dump_errno(s);
   end_header(s);
-
 }
 
 bool RGWHandler_OS_Auth::authorize(struct req_state *s)

@@ -28,64 +28,54 @@ static void dump_status(struct req_state *s, const char *status)
   CGI_PRINTF(s,"Status: %s\n", status);
 }
 
-struct errno_http {
-  int err;
-  const char *http_str;
-  const char *default_code;
+struct rgw_html_errors {
+  int err_no;
+  int code;
+  const char *message;
 };
 
-const static struct errno_http hterrs[] = {
-    { 0, "200", "" },
-    { 201, "201", "Created" },
-    { 204, "204", "NoContent" },
-    { 206, "206", "" },
-    { EINVAL, "400", "InvalidArgument" },
-    { ERR_INVALID_BUCKET_NAME, "400", "InvalidBucketName" },
-    { ERR_INVALID_OBJECT_NAME, "400", "InvalidObjectName" },
-    { EACCES, "403", "AccessDenied" },
-    { EPERM, "403", "AccessDenied" },
-    { ENOENT, "404", "NoSuchKey" },
-    { ERR_NO_SUCH_BUCKET, "404", "NoSuchBucket" },
-    { ERR_METHOD_NOT_ALLOWED, "405", "MethodNotAllowed" },
-    { ETIMEDOUT, "408", "RequestTimeout" },
-    { EEXIST, "409", "BucketAlreadyExists" },
-    { ENOTEMPTY, "409", "BucketNotEmpty" },
-    { ERANGE, "416", "InvalidRange" },
-    { 0, NULL, NULL }};
+const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
+    { 0, 200, "" },
+    { 201, 201, "Created" },
+    { 204, 204, "NoContent" },
+    { 206, 206, "" },
+    { EINVAL, 400, "InvalidArgument" },
+    { ERR_INVALID_DIGEST, 500, "InvalidDigest" },
+    { ERR_BAD_DIGEST, 500, "BadDigest" },
+    { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
+    { ERR_INVALID_OBJECT_NAME, 400, "InvalidObjectName" },
+    { EACCES, 403, "AccessDenied" },
+    { EPERM, 403, "AccessDenied" },
+    { ENOENT, 404, "NoSuchKey" },
+    { ERR_NO_SUCH_BUCKET, 404, "NoSuchBucket" },
+    { ERR_METHOD_NOT_ALLOWED, 405, "MethodNotAllowed" },
+    { ETIMEDOUT, 408, "RequestTimeout" },
+    { EEXIST, 409, "BucketAlreadyExists" },
+    { ENOTEMPTY, 409, "BucketNotEmpty" },
+    { ERANGE, 416, "InvalidRange" },
+};
 
-void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
+void set_req_state_err(struct req_state *s, int err_no)
 {
-  int orig_err = err;
-  const char *err_str;
-  const char *code = (rgwerr ? rgwerr->code : NULL);
-
-  if (!rgwerr || !rgwerr->num) {  
-    err_str = "500";
-
-    if (err < 0)
-      err = -err;
-
-    int i=0;
-    while (hterrs[i].http_str) {
-      if (err == hterrs[i].err) {
-        err_str = hterrs[i].http_str;
-        if (!code)
-          code = hterrs[i].default_code;
-        break;
-      }
-
-      i++;
+  if (err_no < 0)
+    err_no = -err_no;
+  for (size_t i = 0; i < sizeof(RGW_HTML_ERRORS)/sizeof(RGW_HTML_ERRORS[0]); ++i) {
+    const struct rgw_html_errors *r = RGW_HTML_ERRORS + i;
+    if (err_no == r->err_no) {
+      s->err.code = r->code;
+      s->err.message = r->message;
+      return;
     }
-  } else {
-    err_str = rgwerr->num;
   }
+  s->err.code = 500;
+  s->err.message = "UnknownError";
+}
 
-  dump_status(s, err_str);
-  if (orig_err < 0) {
-    s->err_exist = true;
-    s->err.code = code;
-    s->err.message = (rgwerr ? rgwerr->message : NULL);
-  }
+void dump_errno(struct req_state *s)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", s->err.code);
+  dump_status(s, buf);
 }
 
 void dump_content_length(struct req_state *s, size_t len)
@@ -170,22 +160,22 @@ void end_header(struct req_state *s, const char *content_type)
     }
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  if (s->err_exist) {
+  if (!s->err.is_clear()) {
     dump_start(s);
-    struct rgw_err &err = s->err;
     s->formatter->open_obj_section("Error");
-    if (err.code)
-      s->formatter->dump_value_int("Code", "%s", err.code);
-    if (err.message)
-      s->formatter->dump_value_str("Message", err.message);
+    if (s->err.code)
+      s->formatter->dump_value_int("Code", "%d", s->err.code);
+    if (!s->err.message.empty())
+      s->formatter->dump_value_str("Message", s->err.message.c_str());
     s->formatter->close_section("Error");
   }
   s->header_ended = true;
 }
 
-void abort_early(struct req_state *s, int err)
+void abort_early(struct req_state *s, int err_no)
 {
-  dump_errno(s, err);
+  set_req_state_err(s, err_no);
+  dump_errno(s);
   end_header(s);
   s->formatter->flush();
 }
@@ -308,7 +298,6 @@ void init_entities_from_header(struct req_state *s)
   s->object_str = "";
 
   s->status = NULL;
-  s->err_exist = false;
   s->header_ended = false;
   s->bytes_sent = 0;
 

@@ -570,8 +570,9 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (mod_ptr) {
     RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << endl;
     if (ctime < *mod_ptr) {
-      err->num = "304";
-      err->code = "NotModified";
+      err->code = 304;
+      err->message = "NotModified";
+
       goto done_err;
     }
   }
@@ -579,8 +580,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (unmod_ptr) {
     RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << endl;
     if (ctime > *unmod_ptr) {
-      err->num = "412";
-      err->code = "PreconditionFailed";
+      err->code = 412;
+      err->message = "PreconditionFailed";
       goto done_err;
     }
   }
@@ -593,8 +594,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     if (if_match) {
       RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << endl;
       if (strcmp(if_match, etag.c_str())) {
-        err->num = "412";
-        err->code = "PreconditionFailed";
+        err->code = 412;
+        err->message = "PreconditionFailed";
         goto done_err;
       }
     }
@@ -602,8 +603,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     if (if_nomatch) {
       RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << endl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
-        err->num = "304";
-        err->code = "NotModified";
+        err->code = 304;
+        err->message = "NotModified";
         goto done_err;
       }
     }

@@ -34,14 +34,12 @@ extern int read_acls(struct req_state *s, bool only_bucket = false);
 class RGWOp {
 protected:
   struct req_state *s;
-  struct rgw_err err;
 public:
   RGWOp() {}
   virtual ~RGWOp() {}
 
   virtual void init(struct req_state *s) {
     this->s = s;
-    memset(&err, 0, sizeof(err));
   }
   virtual void execute() = 0;
 };

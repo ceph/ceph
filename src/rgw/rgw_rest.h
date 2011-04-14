@@ -110,7 +110,8 @@ public:
 				  int *init_error);
 };
 
-extern void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr = NULL);
+extern void set_req_state_err(struct req_state *s, int err_no);
+extern void dump_errno(struct req_state *s);
 extern void end_header(struct req_state *s, const char *content_type = NULL);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);

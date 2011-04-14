@@ -172,7 +172,7 @@ void RGWGetObj::execute()
   init_common();
 
   ret = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
-                                  unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &err);
+                                  unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &s->err);
   if (ret < 0)
     goto done;
 
@@ -384,7 +384,6 @@ void RGWPutObj::execute()
 
     ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
     if (!ret) {
-       err.code = "InvalidArgument";
        ret = -EINVAL;
        goto done;
     }
@@ -400,8 +399,7 @@ void RGWPutObj::execute()
 			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
       RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
       if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-        err.code = "InvalidDigest";
-        ret = -EINVAL;
+        ret = -ERR_INVALID_DIGEST;
         goto done;
       }
 
@@ -431,8 +429,7 @@ void RGWPutObj::execute()
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
     if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-       err.code = "BadDigest";
-       ret = -EINVAL;
+       ret = -ERR_BAD_DIGEST;
        goto done;
     }
     bufferlist aclbl;
@@ -498,7 +495,6 @@ static bool parse_copy_source(const char *src, string& bucket, string& object)
 
 int RGWCopyObj::init_common()
 {
-  struct rgw_err err;
   RGWAccessControlPolicy dest_policy;
   bufferlist aclbl;
   bufferlist bl;
@@ -516,14 +512,12 @@ int RGWCopyObj::init_common()
 
   ret = dest_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!ret) {
-     err.code = "InvalidArgument";
      ret = -EINVAL;
      return ret;
   }
 
   ret = parse_copy_source(s->copy_source, src_bucket, src_object);
   if (!ret) {
-     err.code = "InvalidArgument";
      ret = -EINVAL;
      return ret;
   }
@@ -578,7 +572,7 @@ void RGWCopyObj::execute()
                         unmod_ptr,
                         if_match,
                         if_nomatch,
-                        attrs, &err);
+                        attrs, &s->err);
 
 done:
   send_response();
@@ -798,9 +792,8 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   }
   s->fcgx = fcgx;
   s->content_started = false;
-  s->err_exist = false;
+  s->err.clear();
   s->format = 0;
-  memset(&s->err, 0, sizeof(s->err));
   if (s->acl) {
      delete s->acl;
      s->acl = new RGWAccessControlPolicy;
