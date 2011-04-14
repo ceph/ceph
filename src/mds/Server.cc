@@ -5669,14 +5669,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       
       // unfreeze
       assert(destdnl->get_inode()->is_frozen_inode() ||
-	     destdnl->get_inode()->is_freezing_inode());
+             destdnl->get_inode()->is_freezing_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
       
       mds->queue_waiters(finished);
-    }
 
-    // drop our pins
-    if (srcdn->is_auth()) {
+      // drop our pins
       // we exported, clear out any xlocks that we moved to another MDS
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
       while(i != mdr->xlocks.end()) {
