@@ -8,6 +8,7 @@
     user info                  get user info
     user rm                    remove user
     buckets list               list buckets
+    bucket unlink              unlink bucket from specified user
     policy                     read bucket/object policy
     log show                   dump a log from specific bucket, date
   options:
