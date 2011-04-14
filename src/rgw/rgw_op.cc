@@ -682,9 +682,12 @@ void RGWPutACLs::execute()
 {
   bufferlist bl;
 
-  RGWAccessControlPolicy *policy;
+  RGWAccessControlPolicy *policy = NULL;
   RGWXMLParser parser;
   RGWAccessControlPolicy new_policy;
+  stringstream ss;
+  char *orig_data = data;
+  char *new_data = NULL;
 
   if (!verify_permission(s, RGW_PERM_WRITE_ACP)) {
     ret = -EACCES;
@@ -709,7 +712,25 @@ void RGWPutACLs::execute()
   if (get_params() < 0)
     goto done;
 
-  RGW_LOG(15) << "read data=" << data << " len=" << len << endl;
+  RGW_LOG(15) << "read len=" << len << " data=" << (data ? data : "") << endl;
+
+  if (!s->canned_acl.empty() && len) {
+    ret = -EINVAL;
+    goto done;
+  }
+  if (!s->canned_acl.empty()) {
+    RGWAccessControlPolicy canned_policy;
+    bool r = canned_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+    if (!r) {
+      ret = -EINVAL;
+      goto done;
+    }
+    canned_policy.to_xml(ss);
+    new_data = strdup(ss.str().c_str());
+    data = new_data;
+    len = ss.str().size();
+  }
+
 
   if (!parser.parse(data, len, 1)) {
     ret = -EACCES;
@@ -720,9 +741,10 @@ void RGWPutACLs::execute()
     ret = -EINVAL;
     goto done;
   }
+
   if (rgw_log_level >= 15) {
     RGW_LOG(15) << "Old AccessControlPolicy" << endl;
-    policy->to_xml(cerr);
+    policy->to_xml(cout);
     RGW_LOG(15) << endl;
   }
 
@@ -741,7 +763,8 @@ void RGWPutACLs::execute()
                        RGW_ATTR_ACL, bl);
 
 done:
-  free(data);
+  free(orig_data);
+  free(new_data);
 
   send_response();
   return;
