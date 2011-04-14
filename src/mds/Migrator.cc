@@ -205,8 +205,11 @@ void Migrator::handle_mds_failure_or_stop(int who)
     // abort exports:
     //  - that are going to the failed node
     //  - that aren't frozen yet (to avoid auth_pin deadlock)
+    //  - they havne't prepped yet (they may need to discover bounds to do that)
     if (export_peer[dir] == who ||
-	p->second == EXPORT_DISCOVERING || p->second == EXPORT_FREEZING) { 
+	p->second == EXPORT_DISCOVERING ||
+	p->second == EXPORT_FREEZING ||
+	p->second == EXPORT_PREPPING) { 
       // the guy i'm exporting to failed, or we're just freezing.
       dout(10) << "cleaning up export state (" << p->second << ")" << get_export_statename(p->second)
 	       << " of " << *dir << dendl;
@@ -258,6 +261,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_state.erase(dir); // clean up
 	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
+	if (export_peer[dir] != who) // tell them.
+	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 	
       case EXPORT_EXPORTING:
