@@ -690,13 +690,13 @@ get_val(const char *key, char **buf, int len) const
 void md_config_t::
 get_my_sections(std::vector <std::string> &sections)
 {
-  sections.push_back(name->to_str());
+  sections.push_back(name.to_str());
 
-  std::string alt_name(name->get_type_name());
-  alt_name += name->get_id();
+  std::string alt_name(name.get_type_name());
+  alt_name += name.get_id();
   sections.push_back(alt_name);
 
-  sections.push_back(name->get_type_name());
+  sections.push_back(name.get_type_name());
 
   sections.push_back("global");
 }
@@ -905,15 +905,15 @@ expand_meta(std::string &val) const
       if (strncmp(val.c_str() + s + 1, CONF_METAVARIABLES[i], clen))
 	continue;
       if (strcmp(CONF_METAVARIABLES[i], "type")==0)
-	out += name->get_type_name();
+	out += name.get_type_name();
       else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
-	out += name->to_cstr();
+	out += name.to_cstr();
       else if (strcmp(CONF_METAVARIABLES[i], "host")==0)
 	out += host;
       else if (strcmp(CONF_METAVARIABLES[i], "num")==0)
-	out += name->get_id().c_str();
+	out += name.get_id().c_str();
       else if (strcmp(CONF_METAVARIABLES[i], "id")==0)
-	out += name->get_id().c_str();
+	out += name.get_id().c_str();
       else
 	assert(0); // unreachable
       found_meta = true;

@@ -43,7 +43,7 @@ int keyring_init(md_config_t *conf)
   if (!conf->key.empty()) {
     EntityAuth ea;
     ea.key.decode_base64(conf->key);
-    g_keyring.add(*conf->name, ea);
+    g_keyring.add(conf->name, ea);
 
     ret = 0;
   } else if (!conf->keyfile.empty()) {
@@ -70,7 +70,7 @@ int keyring_init(md_config_t *conf)
     EntityAuth ea;
     ea.key.decode_base64(k);
 
-    g_keyring.add(*conf->name, ea);
+    g_keyring.add(conf->name, ea);
 
     ret = 0;
   }
@@ -91,7 +91,7 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
   md_config_t *conf = &g_conf; //new md_config_t();
 
   // Set up our entity name.
-  conf->name = new EntityName(iparams.name);
+  conf->name = iparams.name;
 
   // Set some defaults based on code type
   switch (code_env) {
@@ -168,7 +168,7 @@ void common_init(std::vector < const char* >& args,
 
   if (conf->log_to_syslog || conf->clog_to_syslog) {
     closelog();
-    openlog(g_conf.name->to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
+    openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
   }
 
   {

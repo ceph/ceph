@@ -126,7 +126,7 @@ int MonitorStore::mkfs()
   }
 
   dout(0) << "created monfs at " << dir.c_str() << " for "
-	  << g_conf.name->get_id() << dendl;
+	  << g_conf.name.get_id() << dendl;
   return 0;
 }
 

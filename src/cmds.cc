@@ -107,7 +107,7 @@ int main(int argc, const char **argv)
       usage();
     }
   }
-  if (g_conf.name->has_default_id() && dump_journal < 0 && reset_journal < 0) {
+  if (g_conf.name.has_default_id() && dump_journal < 0 && reset_journal < 0) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
@@ -131,7 +131,7 @@ int main(int argc, const char **argv)
     jr->reset();
     mc.shutdown();
   } else {
-    cout << "starting " << *g_conf.name << " at " << messenger->get_ms_addr()
+    cout << "starting " << g_conf.name << " at " << messenger->get_ms_addr()
 	 << std::endl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
@@ -156,7 +156,7 @@ int main(int argc, const char **argv)
     messenger->start(g_conf.daemonize);
 
     // start mds
-    MDS *mds = new MDS(g_conf.name->get_id().c_str(), messenger, &mc);
+    MDS *mds = new MDS(g_conf.name.get_id().c_str(), messenger, &mc);
 
     // in case we have to respawn...
     mds->orig_argc = argc;

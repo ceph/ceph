@@ -77,7 +77,7 @@ void MDLog::open_logger()
 
   // logger
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.log", g_conf.name->get_id().c_str());
+  snprintf(name, sizeof(name), "mds.%s.log", g_conf.name.get_id().c_str());
   logger = new ProfLogger(name, &mdlog_logtype);
   logger_add(logger);
 }

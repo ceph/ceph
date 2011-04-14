@@ -25,7 +25,7 @@ bool ceph_using_tcmalloc()
 void ceph_heap_profiler_init()
 {
   char profile_name[PATH_MAX];
-  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name->to_cstr());
+  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name.to_cstr());
   char *val = new char[sizeof(int)*8+1];
   sprintf(val, "%i", g_conf.profiler_allocation_interval);
   setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
@@ -55,7 +55,7 @@ bool ceph_heap_profiler_running()
 void ceph_heap_profiler_start()
 {
   char profile_name[PATH_MAX];
-  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name->to_cstr());
+  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name.to_cstr());
   char *val = new char[sizeof(int)*8+1];
   sprintf(val, "%i", g_conf.profiler_allocation_interval);
   setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);

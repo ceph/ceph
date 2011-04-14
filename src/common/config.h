@@ -21,6 +21,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #include <map>
 
 #include "common/ConfUtils.h"
+#include "common/entity_name.h"
 #include "common/Mutex.h"
 #include "include/assert.h"
 #include "msg/msg_types.h"
@@ -28,8 +29,6 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
-
-struct EntityName;
 
 class config_option;
 
@@ -223,7 +222,7 @@ public:
   std::string auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
-  EntityName *name;
+  EntityName name;
 
   double mon_client_hunt_interval;
   double mon_client_ping_interval;

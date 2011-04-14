@@ -107,7 +107,7 @@ int main(int argc, const char **argv)
 
   // whoami
   char *end;
-  const char *id = g_conf.name->get_id().c_str();
+  const char *id = g_conf.name.get_id().c_str();
   int whoami = strtol(id, &end, 10);
   if (*end || end == id || whoami < 0) {
     derr << "must specify '-i #' where # is the osd number" << dendl;

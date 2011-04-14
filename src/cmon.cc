@@ -109,10 +109,10 @@ int main(int argc, const char **argv)
 
     // go
     MonitorStore store(g_conf.mon_data);
-    Monitor mon(g_conf.name->get_id(), &store, 0, &monmap);
+    Monitor mon(g_conf.name.get_id(), &store, 0, &monmap);
     mon.mkfs(osdmapbl);
     cout << argv[0] << ": created monfs at " << g_conf.mon_data 
-	 << " for " << *g_conf.name << std::endl;
+	 << " for " << g_conf.name << std::endl;
     return 0;
   }
 
@@ -221,12 +221,12 @@ int main(int argc, const char **argv)
     assert(v == monmap.get_epoch());
   }
 
-  if (!monmap.contains(g_conf.name->get_id())) {
-    cerr << *g_conf.name << " does not exist in monmap" << std::endl;
+  if (!monmap.contains(g_conf.name.get_id())) {
+    cerr << g_conf.name << " does not exist in monmap" << std::endl;
     exit(1);
   }
 
-  entity_addr_t ipaddr = monmap.get_addr(g_conf.name->get_id());
+  entity_addr_t ipaddr = monmap.get_addr(g_conf.name.get_id());
   entity_addr_t conf_addr;
   std::vector <std::string> my_sections;
   g_conf.get_my_sections(my_sections);
@@ -244,21 +244,21 @@ int main(int argc, const char **argv)
   // bind
   SimpleMessenger *messenger = new SimpleMessenger();
 
-  int rank = monmap.get_rank(g_conf.name->get_id());
+  int rank = monmap.get_rank(g_conf.name.get_id());
 
-  cout << "starting " << *g_conf.name << " rank " << rank
-       << " at " << monmap.get_addr(g_conf.name->get_id())
+  cout << "starting " << g_conf.name << " rank " << rank
+       << " at " << monmap.get_addr(g_conf.name.get_id())
        << " mon_data " << g_conf.mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  err = messenger->bind(monmap.get_addr(g_conf.name->get_id()), 0);
+  err = messenger->bind(monmap.get_addr(g_conf.name.get_id()), 0);
   if (err < 0)
     return 1;
 
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(g_conf.name->get_id(), &store, messenger, &monmap);
+  Monitor *mon = new Monitor(g_conf.name.get_id(), &store, messenger, &monmap);
 
   messenger->start(g_conf.daemonize);
 

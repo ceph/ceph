@@ -659,7 +659,7 @@ connect()
 
   int err = monclient.authenticate(g_conf.client_mount_timeout);
   if (err) {
-    dout(0) << *g_conf.name << " authentication error " << strerror(-err) << dendl;
+    dout(0) << g_conf.name << " authentication error " << strerror(-err) << dendl;
     shutdown();
     return err;
   }
