@@ -219,7 +219,7 @@ public:
   }
   snapid_t get_oldest_snap();
 
-  loff_t last_journaled;       // log offset for the last time i was journaled
+  uint64_t last_journaled;       // log offset for the last time i was journaled
   //loff_t last_open_journaled;  // log offset for the last journaled EOpen
   utime_t last_dirstat_prop;
 

@@ -428,7 +428,7 @@ private:
 
 
   // soft stateadd
-  off_t last_subtree_map;
+  uint64_t last_subtree_map;
   uint64_t my_offset;
 
   // for replay, in certain cases
