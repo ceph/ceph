@@ -136,9 +136,6 @@ int MonClient::build_initial_monmap()
     m_name += ".";
     m_name += *m;
     sections.push_back(m_name);
-    std::string m_altname("mon");
-    m_altname += *m;
-    sections.push_back(m_altname);
     sections.push_back("mon");
     sections.push_back("global");
     std::string val;

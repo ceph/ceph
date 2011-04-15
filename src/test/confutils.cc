@@ -253,7 +253,7 @@ const char override_config_1[] = "\
         log file =           mds_log\n\
 [osd]\n\
         log file =           osd_log\n\
-[osd0]\n\
+[osd.0]\n\
         log file =           osd0_log\n\
 ";
 

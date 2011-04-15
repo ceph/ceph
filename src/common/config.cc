@@ -668,10 +668,6 @@ get_my_sections(std::vector <std::string> &sections)
 {
   sections.push_back(name.to_str());
 
-  std::string alt_name(name.get_type_name());
-  alt_name += name.get_id();
-  sections.push_back(alt_name);
-
   sections.push_back(name.get_type_name());
 
   sections.push_back("global");
