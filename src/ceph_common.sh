@@ -124,7 +124,7 @@ get_name_list() {
     for f in $orig; do
 	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
-	all=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
+	all=`$CCONF -c $conf -l $type | egrep -v "^$type$" || true`
 	case $f in
 	    mon | osd | mds)
 		what="$what $all"
