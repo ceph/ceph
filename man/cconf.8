@@ -3,40 +3,70 @@
 cconf \- ceph conf file tool
 .SH SYNOPSIS
 .B cconf
+\fB\-c \fIconffile\fR \fB\--list-all-sections
+.br
+.B cconf
+\fB\-c \fIconffile\fR \fB\-L
+.br
+.B cconf
 \fB\-c \fIconffile\fR \fB\-l \fIprefix\fR
 .br
 .B cconf
-\fIkey\fR [ \fIdefault\fR ] \fB\-s \fIsection1\fR ...
+\fIkey\fR \fB\-s \fIsection1\fR ...
 .br
 .B cconf
-\fIkey\fR [ \fIdefault\fR ] \fB\-i \fIid\fR \fB\-t \fItype\fR
+[\fB-s\fR \fIsection\fR] \fB--lookup\fR \fIkey\fR
+.br
+.B cconf
+[\fB-s\fR \fIsection\fR] \fIkey\fR
+.br
 .SH DESCRIPTION
 .B cconf
-is a utility for extracting values from a "INI" style configuration files.  It has
-three basic modes of operation.
+is a utility for getting information about a ceph configuration file. As with
+most Ceph programs, you can specify which Ceph configuration file to use with
+the \fB-c\fR flag.
 .PP
-The first mode simply prints all section names that begin with \fIprefix\fP.
+.SH ACTIONS
+\fBcconf\fR will perform one of the following actions:
 .PP
-The second mode extracts an option value by searching through one or more \fIsection\fPs,
-in the order specified on the command line.  If the option does not exist in
+\fB--list-all-sections\fR or \fB-L\fR prints out a list of all the section
+names in the configuration file.
 .PP
-The third mode will look in the standard section names for the given daemon \fIid\fR
-of type \fItype\fR.
-\fIconffile\fP, an optional \fIdefault\fP value may be output instead.
+\fB--list-sections\fR or \fB-l\fR prints out a list of all the sections that
+begin with a given prefix. For example, \fB--list-sections \fImon\fR\fR would list all
+sections beginning with \fImon\fR.
+.PP
+\fB--lookup\fR will search the configuration for a given value.
+By default, the sections that are searched are determined by the Ceph name that we are
+using. The Ceph name defaults to client.admin. It can be specified with \fB--name\fR.
+.PP
+For example, if we specify \fB--name\fR \fIosd.0\fR, the following sections will be
+searched: \fI[osd.0], [osd], [global]\fR
+.PP
+You can specify additional sections to search with \fB--section\fR or \fB-s\fR.
+These additional sections will be searched \fIbefore\fR the sections that would
+normally be searched. As always, the first matching entry we find will be returned.
+.PP
+Note: \fB--lookup\fR is the default action. If no other actions are given on the
+command line, we will default to doing a lookup.
 .PP
 .SH EXAMPLES
-To extract the value of the "osd data" option for the \fIosd0\fP daemon,
+To find out what value osd 0 will use for the "osd data" option:
 .IP
-cconf -c foo.conf "osd data" -i 0 -t osd
+cconf -c foo.conf  --name osd.0 --lookup "osd data"
 .PP
-This is equivalent to doing specifying sections \fI[osd0]\fP, \fI[osd.0]\fP,
-\fI[osd]\fP, or \fI[global]\fP, in that order of preference:
+To find out what value will mds a use for the "log file" option:
 .IP
-cconf -c foo.conf "osd data" -s osd0 -s osd.0 -s osd -s global
+cconf -c foo.conf  --name mds.a "log file"
 .PP
 To list all sections that begin with \fIosd\fP:
 .IP
 cconf -c foo.conf -l osd
+.PP
+To list all sections:
+.IP
+cconf -c foo.conf -L
+.PP
 .SH AVAILABILITY
 .B cconf
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
