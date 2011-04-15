@@ -78,6 +78,13 @@ void dump_errno(struct req_state *s)
   dump_status(s, buf);
 }
 
+void dump_errno(struct req_state *s, int err)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", err);
+  dump_status(s, buf);
+}
+
 void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
@@ -146,7 +153,7 @@ void dump_start(struct req_state *s)
 
 void end_header(struct req_state *s, const char *content_type)
 {
-  if (!content_type) {
+  if (!content_type || s->err.is_err()) {
     switch (s->format) {
     case RGW_FORMAT_XML:
       content_type = "application/xml";
@@ -159,8 +166,7 @@ void end_header(struct req_state *s, const char *content_type)
       break;
     }
   }
-  CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  if (!s->err.is_clear()) {
+  if (s->err.is_err()) {
     dump_start(s);
     s->formatter->open_obj_section("Error");
     if (!s->err.s3_code.empty())
@@ -168,7 +174,10 @@ void end_header(struct req_state *s, const char *content_type)
     if (!s->err.message.empty())
       s->formatter->dump_value_str("Message", s->err.message.c_str());
     s->formatter->close_section("Error");
+    dump_content_length(s, s->formatter->get_len());
   }
+  CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
+  s->formatter->flush();
   s->header_ended = true;
 }
 

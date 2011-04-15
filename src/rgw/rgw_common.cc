@@ -32,6 +32,12 @@ is_clear() const
   return (http_ret == 200);
 }
 
+bool rgw_err::
+is_err() const
+{
+  return (http_ret != 200 && http_ret != 204);
+}
+
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
   oss << "rgw_err(http_ret=" << err.http_ret << ", s3='" << err.s3_code << "') ";

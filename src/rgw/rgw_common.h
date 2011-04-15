@@ -78,6 +78,7 @@ struct rgw_err {
   rgw_err(int http, const std::string &s3);
   void clear();
   bool is_clear() const;
+  bool is_err() const;
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
 
   int http_ret;

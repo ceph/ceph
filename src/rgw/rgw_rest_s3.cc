@@ -34,6 +34,9 @@ int RGWGetObj_REST_S3::send_response(void *handle)
   const char *content_type = NULL;
   int orig_ret = ret;
 
+  if (ret)
+    goto done;
+
   if (sent_header)
     goto send_data;
 
@@ -66,15 +69,14 @@ int RGWGetObj_REST_S3::send_response(void *handle)
 
   if (range_str && !ret)
     ret = 206; /* partial content */
-
-  if (ret)
+done:
+  if (orig_ret)
     set_req_state_err(s, ret);
+
   dump_errno(s);
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);
-  s->formatter->flush();
- 
   sent_header = true;
 
 send_data:
@@ -164,7 +166,6 @@ void RGWCreateBucket_REST_S3::send_response()
     set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
-  s->formatter->flush();
 }
 
 void RGWDeleteBucket_REST_S3::send_response()
@@ -173,11 +174,9 @@ void RGWDeleteBucket_REST_S3::send_response()
   if (!r)
     r = 204;
 
-  if (ret)
-    set_req_state_err(s, r);
+  set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
-  s->formatter->flush();
 }
 
 void RGWPutObj_REST_S3::send_response()
@@ -187,7 +186,6 @@ void RGWPutObj_REST_S3::send_response()
     set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
-  s->formatter->flush();
 }
 
 void RGWDeleteObj_REST_S3::send_response()
@@ -199,7 +197,6 @@ void RGWDeleteObj_REST_S3::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
-  s->formatter->flush();
 }
 
 void RGWCopyObj_REST_S3::send_response()
@@ -221,8 +218,8 @@ void RGWCopyObj_REST_S3::send_response()
       }
     }
     s->formatter->close_section("CopyObjectResult");
+    s->formatter->flush();
   }
-  s->formatter->flush();
 }
 
 void RGWGetACLs_REST_S3::send_response()
@@ -232,7 +229,6 @@ void RGWGetACLs_REST_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
-  s->formatter->flush();
   FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
 }
 
@@ -243,7 +239,6 @@ void RGWPutACLs_REST_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
-  s->formatter->flush();
 }
 
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
