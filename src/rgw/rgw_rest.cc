@@ -30,8 +30,8 @@ static void dump_status(struct req_state *s, const char *status)
 
 struct rgw_html_errors {
   int err_no;
-  int code;
-  const char *message;
+  int http_ret;
+  const char *s3_code;
 };
 
 const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
@@ -62,19 +62,19 @@ void set_req_state_err(struct req_state *s, int err_no)
   for (size_t i = 0; i < sizeof(RGW_HTML_ERRORS)/sizeof(RGW_HTML_ERRORS[0]); ++i) {
     const struct rgw_html_errors *r = RGW_HTML_ERRORS + i;
     if (err_no == r->err_no) {
-      s->err.code = r->code;
-      s->err.message = r->message;
+      s->err.http_ret = r->http_ret;
+      s->err.s3_code = r->s3_code;
       return;
     }
   }
-  s->err.code = 500;
-  s->err.message = "UnknownError";
+  s->err.http_ret = 500;
+  s->err.s3_code = "UnknownError";
 }
 
 void dump_errno(struct req_state *s)
 {
   char buf[32];
-  snprintf(buf, sizeof(buf), "%d", s->err.code);
+  snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
   dump_status(s, buf);
 }
 
@@ -163,8 +163,8 @@ void end_header(struct req_state *s, const char *content_type)
   if (!s->err.is_clear()) {
     dump_start(s);
     s->formatter->open_obj_section("Error");
-    if (s->err.code)
-      s->formatter->dump_value_int("Code", "%d", s->err.code);
+    if (!s->err.s3_code.empty())
+      s->formatter->dump_value_int("Code", "%s", s->err.s3_code.c_str());
     if (!s->err.message.empty())
       s->formatter->dump_value_str("Message", s->err.message.c_str());
     s->formatter->close_section("Error");

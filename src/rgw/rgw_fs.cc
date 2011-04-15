@@ -480,16 +480,16 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
   r = -ECANCELED;
   if (mod_ptr) {
     if (st.st_mtime < *mod_ptr) {
-      err->code = 304;
-      err->message = "NotModified";
+      err->http_ret = 304;
+      err->s3_code = "NotModified";
       goto done_err;
     }
   }
 
   if (unmod_ptr) {
     if (st.st_mtime >= *unmod_ptr) {
-      err->code = 412;
-      err->message = "PreconditionFailed";
+      err->http_ret = 412;
+      err->s3_code = "PreconditionFailed";
       goto done_err;
     }
   }
@@ -502,8 +502,8 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
     if (if_match) {
       RGW_LOG(10) << "ETag: " << etag << " " << " If-Match: " << if_match << endl;
       if (strcmp(if_match, etag)) {
-        err->code = 412;
-        err->message = "PreconditionFailed";
+        err->http_ret = 412;
+        err->s3_code = "PreconditionFailed";
         goto done_err;
       }
     }
@@ -511,8 +511,8 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
     if (if_nomatch) {
       RGW_LOG(10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << endl;
       if (strcmp(if_nomatch, etag) == 0) {
-        err->code = 412;
-        err->message = "PreconditionFailed";
+        err->http_ret = 412;
+        err->s3_code = "PreconditionFailed";
         goto done_err;
       }
     }

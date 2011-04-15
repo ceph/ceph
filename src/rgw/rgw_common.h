@@ -75,13 +75,13 @@ typedef void *RGWAccessHandle;
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
-  rgw_err(int code_, const std::string &message_);
-  std::string code_to_str() const;
+  rgw_err(int http, const std::string &s3);
   void clear();
   bool is_clear() const;
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
 
-  int code;
+  int http_ret;
+  std::string s3_code;
   std::string message;
 };
 

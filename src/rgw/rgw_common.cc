@@ -14,35 +14,27 @@ rgw_err()
 }
 
 rgw_err::
-rgw_err(int code_, const std::string &message_)
-    : code(code_), message(message_)
+rgw_err(int http, const std::string& s3)
+    : http_ret(http), s3_code(s3)
 {
-}
-
-std::string rgw_err::
-code_to_str() const
-{
-  char buf[20];
-  snprintf(buf, sizeof(buf), "%d", code);
-  return std::string(buf);
 }
 
 void rgw_err::
 clear()
 {
-  code = 200;
-  message.clear();
+  http_ret = 200;
+  s3_code.clear();
 }
 
 bool rgw_err::
 is_clear() const
 {
-  return (code == 200);
+  return (http_ret == 200);
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
-  oss << "rgw_err(code=" << err.code << ", message='" << err.message << "') ";
+  oss << "rgw_err(http_ret=" << err.http_ret << ", s3='" << err.s3_code << "') ";
   return oss;
 }
 
