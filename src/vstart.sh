@@ -368,7 +368,7 @@ if [ "$start_osd" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 		    cat <<EOF >> $conf
-[osd$osd]
+[osd.$osd]
         osd data = dev/osd$osd
         osd journal = dev/osd$osd/journal
         osd journal size = 100
