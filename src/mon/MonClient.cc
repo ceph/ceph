@@ -86,8 +86,7 @@ int MonClient::build_initial_monmap()
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
       char *old_addrs = new char[g_conf.mon_host.size() + 1];
-      strcpy(old_addrs, g_conf.mon_host.c_str());
-      hosts = mount_resolve_dest(old_addrs);
+      hosts = resolve_addrs(old_addrs);
       delete [] old_addrs;
       if (!hosts)
         return -EINVAL;

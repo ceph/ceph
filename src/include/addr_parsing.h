@@ -19,7 +19,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2);
 /*
  * returns a string allocated by malloc; caller must free
  */
-char *mount_resolve_dest(char *orig_str);
+char *resolve_addrs(const char *orig_str);
 
 #ifdef __cplusplus
 }
