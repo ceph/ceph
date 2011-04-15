@@ -1593,7 +1593,8 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
     CInode *in = cache->get_inode(df.ino);
     assert(in);
     import_reverse_discovered(df, in);
-  } else if (import_state[df] == IMPORT_PREPPING) {
+  } else if (import_state[df] == IMPORT_PREPPING ||
+	     import_state[df] == IMPORT_PREPPED) {
     CDir *dir = mds->mdcache->get_dirfrag(df);
     assert(dir);
     import_reverse_prepping(dir);
@@ -1877,18 +1878,26 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
   dir->put(CDir::PIN_IMPORTING);
   dir->state_clear(CDir::STATE_IMPORTING);
 
-  // bounds
-  set<CInode*> didinodes;
-  for (set<CDir*>::iterator it = bounds.begin();
-       it != bounds.end();
-       it++) {
-    CDir *bd = *it;
-    bd->put(CDir::PIN_IMPORTBOUND);
-    bd->state_clear(CDir::STATE_IMPORTBOUND);
-    CInode *bdi = bd->get_inode();
-    if (didinodes.count(bdi) == 0) {
-      bdi->put_stickydirs();
-      didinodes.insert(bdi);
+  // bounding inodes
+  set<inodeno_t> did;
+  for (list<dirfrag_t>::iterator p = import_bound_ls[dir].begin();
+       p != import_bound_ls[dir].end();
+       p++) {
+    if (did.count(p->ino))
+      continue;
+    did.insert(p->ino);
+    CInode *in = cache->get_inode(p->ino);
+      in->put_stickydirs();
+  }
+
+  if (import_state[dir->dirfrag()] >= IMPORT_PREPPED) {
+    // bounding dirfrags
+    for (set<CDir*>::iterator it = bounds.begin();
+	 it != bounds.end();
+	 it++) {
+      CDir *bd = *it;
+      bd->put(CDir::PIN_IMPORTBOUND);
+      bd->state_clear(CDir::STATE_IMPORTBOUND);
     }
   }
 }
