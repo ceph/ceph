@@ -43,6 +43,17 @@ const char *ceph_version(int *major, int *minor, int *patch);
 int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 
+/* Sets a configuration value from a string.
+ * Returns 0 on success, error code otherwise. */
+int ceph_conf_set(const char *option, const char *value);
+
+/* Returns a configuration value as a string.
+ * If len is positive, that is the maximum number of bytes we'll write into the
+ * buffer. If len == -1, we'll call malloc() and set *buf.
+ * Returns 0 on success, error code otherwise. Returns ENAMETOOLONG if the
+ * buffer is too short. */
+int ceph_conf_get(const char *option, char *buf, size_t len);
+
 int ceph_mount();
 int ceph_umount();
 
