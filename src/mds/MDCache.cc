@@ -5536,16 +5536,17 @@ void MDCache::trim_non_auth()
  * Note that it doesn't clear the passed-in directory, since that's not
  * always safe.
  */
-bool MDCache::trim_non_auth_subtree(CDir *directory)
+bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
-  dout(10) << "trim_non_auth_subtree " << directory << dendl;
-  bool keep_directory = false;
-  CDir::map_t::iterator j = directory->begin();
+  dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
+
+  bool keep_dir = false;
+  CDir::map_t::iterator j = dir->begin();
   CDir::map_t::iterator i = j;
-  while (j != directory->end()) {
+  while (j != dir->end()) {
     i = j++;
     CDentry *dn = i->second;
-    dout(10) << "Checking dentry " << dn << dendl;
+    dout(10) << "trim_non_auth_subtree(" << dir << ") Checking dentry " << dn << dendl;
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (dnl->is_primary()) { // check for subdirectories, etc
       CInode *in = dnl->get_inode();
@@ -5558,41 +5559,41 @@ bool MDCache::trim_non_auth_subtree(CDir *directory)
             ++subdir) {
           if ((*subdir)->is_subtree_root()) {
             keep_inode = true;
-            dout(10) << "subdir " << *subdir << "is kept!" << dendl;
+            dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
           }
           else {
             if (trim_non_auth_subtree(*subdir))
               keep_inode = true;
             else {
               in->close_dirfrag((*subdir)->get_frag());
-              directory->state_clear(CDir::STATE_COMPLETE);  // now incomplete!
+              dir->state_clear(CDir::STATE_COMPLETE);  // now incomplete!
             }
           }
         }
 
       }
       if (!keep_inode) { // remove it!
-        dout(20) << "removing inode " << in << " with dentry" << dn << dendl;
-        directory->unlink_inode(dn);
+        dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << " with dentry" << dn << dendl;
+        dir->unlink_inode(dn);
         remove_inode(in);
-        directory->add_to_bloom(dn);
-        directory->remove_dentry(dn);
+        dir->add_to_bloom(dn);
+        dir->remove_dentry(dn);
       } else {
-        dout(20) << "keeping inode " << in << "with dentry " << dn <<dendl;
-        keep_directory = true;
+        dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
+        keep_dir = true;
       }
     } else { // just remove it
-      dout(20) << "removing dentry " << dn << dendl;
+      dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
       if (dnl->is_remote())
-        directory->unlink_inode(dn);
-      directory->remove_dentry(dn);
+        dir->unlink_inode(dn);
+      dir->remove_dentry(dn);
     }
   }
   /**
    * We've now checked all our children and deleted those that need it.
    * Now return to caller, and tell them if *we're* a keeper.
    */
-  return keep_directory;
+  return keep_dir;
 }
 
 /*
