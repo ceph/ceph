@@ -26,6 +26,9 @@
 #include "common/config.h"
 #include "include/str_list.h"
 
+using std::deque;
+using std::string;
+
 static void usage()
 {
   // TODO: add generic_usage once cerr/derr issues are resolved
@@ -35,7 +38,8 @@ USAGE\n\
 cconf <flags> <action>\n\
 \n\
 ACTIONS\n\
-  -l|--list-sections <prefix>     List sections in prefix\n\
+  -L|--list-all-sections          List all sections\n\
+  -l|--list-sections <prefix>     List sections with the given prefix\n\
   --lookup <key>                  Print a configuration setting to stdout.\n\
                                   Returns 0 (success) if the configuration setting is\n\
                                   found; 1 otherwise.\n\
@@ -50,8 +54,8 @@ FLAGS\n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
-$ cconf --name client.cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr'\n\
-Find out if there is a 'mon addr' defined in /etc/ceph/ceph.conf\n\
+$ cconf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
+Find out what the value of 'mon add' is for monitor 0.\n\
 \n\
 $ cconf -l mon\n\
 List sections beginning with 'mon'.\n\
@@ -62,7 +66,7 @@ Return code will be 0 on success; error code otherwise.\n\
   exit(1);
 }
 
-static int list_sections(const char *prefix)
+static int list_sections(const std::string &prefix)
 {
   std::vector <std::string> sections;
   int ret = g_conf.get_all_sections(sections);
@@ -70,23 +74,23 @@ static int list_sections(const char *prefix)
     return 2;
   for (std::vector<std::string>::const_iterator p = sections.begin();
        p != sections.end(); ++p) {
-    if (strncmp(prefix, p->c_str(), strlen(prefix)) == 0) {
+    if (strncmp(prefix.c_str(), p->c_str(), prefix.size()) == 0) {
       cout << *p << std::endl;
     }
   }
   return 0;
 }
 
-static int lookup(const deque<const char *> &sections,
-		  const char *key, bool resolve_search)
+static int lookup(const std::deque<std::string> &sections,
+		  const std::string &key, bool resolve_search)
 {
   std::vector <std::string> my_sections;
-  for (deque<const char *>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
+  for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
     my_sections.push_back(*s);
   }
   g_conf.get_my_sections(my_sections);
   std::string val;
-  int ret = g_conf.get_val_from_conf_file(my_sections, key, val, true);
+  int ret = g_conf.get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
     return 1;
   else if (ret == 0) {
@@ -108,61 +112,56 @@ static int lookup(const deque<const char *> &sections,
 
 int main(int argc, const char **argv)
 {
-  char *section;
-  vector<const char*> args, nargs;
-  deque<const char *> sections;
-  DEFINE_CONF_VARS(usage);
+  vector<const char*> args;
+  deque<std::string> sections;
   bool resolve_search = false;
-  std::string action("lookup");
+  std::string action;
+  std::string lookup_key;
+  std::string section_list_prefix;
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("section", 's')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&section, OPT_STR);
-      sections.push_back(section);
-    } else if (CEPH_ARGPARSE_EQ("resolve-search", 'r')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&resolve_search, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_witharg(args, i, &val, "-s", "--section", (char*)NULL)) {
+      sections.push_back(val);
+    } else if (ceph_argparse_flag(args, i, "-r", "--resolve_search", (char*)NULL)) {
+      resolve_search = true;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       action = "help";
-    } else if (CEPH_ARGPARSE_EQ("list-sections", 'l')) {
-      action = "list-sections";
-    } else if (CEPH_ARGPARSE_EQ("lookup", '\0')) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lookup", (char*)NULL)) {
       action = "lookup";
-    }
-    else {
-      nargs.push_back(args[i]);
+      lookup_key = val;
+    } else if (ceph_argparse_flag(args, i, "-L", "--list_all_sections", (char*)NULL)) {
+      action = "list-sections";
+      section_list_prefix = "";
+    } else if (ceph_argparse_witharg(args, i, &val, "-l", "--list_sections", (char*)NULL)) {
+      action = "list-sections";
+      section_list_prefix = val;
+    } else {
+      if (((action == "lookup") || (action == "")) && (lookup_key.empty())) {
+	action = "lookup";
+	lookup_key = *i++;
+      } else {
+	cerr << "unable to parse option: '" << *i << "'" << std::endl;
+	usage();
+	exit(1);
+      }
     }
   }
-
-  common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   if (action == "help") {
     usage();
     exit(0);
-  }
-  else if (action == "list-sections") {
-    if (nargs.size() != 1)
-      usage();
-    return list_sections(nargs[0]);
-  }
-  else if (action == "lookup") {
-    if (nargs.size() != 1) {
-      cerr << "lookup: expected exactly one argument" << std::endl;
-      usage();
-    }
-    return lookup(sections, nargs[0], resolve_search);
-  }
-  else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
-    cerr << "Parse error at argument: " << nargs[0] << std::endl;
-    usage();
-  }
-  else {
-    if (nargs.size() != 1) {
-      cerr << "lookup: expected exactly one argument" << std::endl;
-      usage();
-    }
-    return lookup(sections, nargs[0], resolve_search);
+  } else if (action == "list-sections") {
+    return list_sections(section_list_prefix);
+  } else if (action == "lookup") {
+    return lookup(sections, lookup_key, resolve_search);
+  } else {
+    cerr << "You must give an action, such as --lookup or --list-all-sections." << std::endl;
+    cerr << "Pass --help for more help." << std::endl;
+    exit(1);
   }
 }

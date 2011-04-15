@@ -5,7 +5,8 @@
   cconf <flags> <action>
   
   ACTIONS
-    -l|--list-sections <prefix>     List sections in prefix
+    -L|--list-all-sections          List all sections
+    -l|--list-sections <prefix>     List sections with the given prefix
     --lookup <key>                  Print a configuration setting to stdout.
                                     Returns 0 (success) if the configuration setting is
                                     found; 1 otherwise.
@@ -20,8 +21,8 @@
   If there is no action given, the action will default to --lookup.
   
   EXAMPLES
-  [$] cconf --name client.cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr' (re)
-  Find out if there is a 'mon addr' defined in /etc/ceph/ceph.conf
+  [$] cconf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr' (re)
+  Find out what the value of 'mon add' is for monitor 0.
   
   [$] cconf -l mon (re)
   List sections beginning with 'mon'.

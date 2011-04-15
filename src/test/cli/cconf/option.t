@@ -18,6 +18,30 @@
   $ cconf --conf=test.conf bar -s foo
   blue
 
+  $ cconf --conf=test.conf -L
+  bar
+  baz
+  foo
+  global
+  nobar
+  thud
+
+  $ cconf --conf=test.conf --list-all-sections
+  bar
+  baz
+  foo
+  global
+  nobar
+  thud
+
+  $ cconf --conf=test.conf --list_all_sections
+  bar
+  baz
+  foo
+  global
+  nobar
+  thud
+
 # TODO man page stops in the middle of a sentence
 
   $ cconf -c test.conf bar -s xyzzy
