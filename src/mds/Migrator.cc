@@ -53,8 +53,25 @@
 #include "messages/MExportCapsAck.h"
 
 
-
-
+/*
+ * this is what the dir->dir_auth values look like
+ *
+ *   dir_auth  authbits  
+ * export
+ *   me         me      - before
+ *   me, me     me      - still me, but preparing for export
+ *   me, them   me      - send MExportDir (peer is preparing)
+ *   them, me   me      - journaled EExport
+ *   them       them    - done
+ *
+ * import:
+ *   them       them    - before
+ *   me, them   me      - journaled EImportStart
+ *   me         me      - done
+ *
+ * which implies:
+ *  - auth bit is set if i am listed as first _or_ second dir_auth.
+ */
 
 #include "common/config.h"
 
@@ -1216,6 +1233,11 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   assert (g_conf.mds_kill_export_at != 9);
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
+
+  // list us second, them first.
+  // this keeps authority().first in sync with subtree auth state in the journal.
+  int target = export_peer[dir];
+  cache->adjust_subtree_auth(dir, target, mds->get_nodeid());
 
   // log completion. 
   //  include export bounds, to ensure they're in the journal.

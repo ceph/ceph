@@ -2198,9 +2198,25 @@ ESubtreeMap *MDCache::create_subtree_map()
        p != subtrees.end();
        ++p) {
     CDir *dir = p->first;
-    if (!dir->is_auth()) continue;
 
-    dout(15) << " subtree " << *dir << dendl;
+    // journal subtree as "ours" if we are
+    //   me, -2
+    //   me, me
+    //   me, !me (may be importing and ambiguous!)
+
+    // so not
+    //   !me, *
+    if (dir->get_dir_auth().first != mds->whoami)
+      continue;
+
+    if (dir->is_ambiguous_dir_auth() &&
+	migrator->is_importing(dir->dirfrag())) {
+      dout(15) << " ambig subtree " << *dir << dendl;
+      le->ambiguous_subtrees.insert(dir->dirfrag());
+    } else {
+      dout(15) << " subtree " << *dir << dendl;
+    }
+
     le->subtrees[dir->dirfrag()].clear();
     le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
@@ -2479,7 +2495,8 @@ void MDCache::handle_mds_recovery(int who)
        ++p) {
     CDir *dir = p->first;
 
-    if (dir->authority().first != who)
+    if (dir->authority().first != who ||
+	dir->authority().second == mds->whoami)
       continue;
     assert(!dir->is_auth());
    

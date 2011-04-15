@@ -22,21 +22,24 @@ class ESubtreeMap : public LogEvent {
 public:
   EMetaBlob metablob;
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
+  set<dirfrag_t> ambiguous_subtrees;
   uint64_t expire_pos;
 
   ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0) { }
   
   void print(ostream& out) {
-    out << "subtree_map " << subtrees.size() << " subtrees " 
+    out << "ESubtreeMap " << subtrees.size() << " subtrees " 
+	<< ", " << ambiguous_subtrees.size() << " ambiguous "
 	<< metablob;
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 3;
+    __u8 struct_v = 4;
     ::encode(struct_v, bl);
     ::encode(stamp, bl);
     ::encode(metablob, bl);
     ::encode(subtrees, bl);
+    ::encode(ambiguous_subtrees, bl);
     ::encode(expire_pos, bl);
   } 
   void decode(bufferlist::iterator &bl) {
@@ -46,6 +49,8 @@ public:
       ::decode(stamp, bl);
     ::decode(metablob, bl);
     ::decode(subtrees, bl);
+    if (struct_v >= 4)
+      ::decode(ambiguous_subtrees, bl);
     if (struct_v >= 3)
       ::decode(expire_pos, bl);
   }

@@ -1067,7 +1067,15 @@ void ESubtreeMap::replay(MDS *mds)
        p != subtrees.end();
        ++p) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
-    mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
+    if (ambiguous_subtrees.count(p->first)) {
+      // ambiguous!
+      mds->mdcache->add_ambiguous_import(p->first, p->second);
+      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second,
+						pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
+    } else {
+      // not ambiguous
+      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
+    }
   }
   
   mds->mdcache->show_subtrees();
@@ -1201,9 +1209,9 @@ void EImportFinish::replay(MDS *mds)
     }
   } else {
     dout(10) << "EImportFinish.replay " << base << " success=" << success
-	     << ", predates my subtree_map start point, ignoring" 
+	     << " on subtree not marked as ambiguous" 
 	     << dendl;
-    // verify that?
+    assert(0 == "this shouldn't happen unless this is an old journal");
   }
 }
 
