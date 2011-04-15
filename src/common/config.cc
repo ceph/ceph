@@ -489,6 +489,29 @@ parse_config_files(const std::list<std::string> &conf_files,
   g_lockdep =
     ((get_val_from_conf_file(my_sections, "lockdep", val, true) == 0) &&
       ((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0)));
+
+  // Warn about section names that look like old-style section names
+  std::deque < std::string > old_style_section_names;
+  for (ConfFile::const_section_iter_t s = cf.sections_begin();
+       s != cf.sections_end(); ++s) {
+    const string &str(s->first);
+    if (((str.find("mds") == 0) || (str.find("mon") == 0) ||
+	 (str.find("osd") == 0)) && (str.size() > 3) && (str[3] != '.')) {
+      old_style_section_names.push_back(str);
+    }
+  }
+  if (!old_style_section_names.empty()) {
+    ostringstream oss;
+    oss << "ERROR! old-style section name(s) found: ";
+    string sep;
+    for (std::deque < std::string >::const_iterator os = old_style_section_names.begin();
+	 os != old_style_section_names.end(); ++os) {
+      oss << sep << *os;
+      sep = ", ";
+    }
+    oss << ". Please use the new style section names that include a period.";
+    parse_errors->push_back(oss.str());
+  }
   return 0;
 }
 
