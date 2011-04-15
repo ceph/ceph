@@ -527,7 +527,7 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
     maybe_request_map();
  } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
 	    osdmap->test_flag(CEPH_OSDMAP_FULL)) {
-    dout(10) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
+    dout(0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
   } else if (op->session) {
