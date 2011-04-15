@@ -361,8 +361,12 @@ void Migrator::handle_mds_failure_or_stop(int who)
     CDir *dir = mds->mdcache->get_dirfrag(df);
 
     if (import_peer[df] == who) {
-      dout(10) << "cleaning up export state (" << q->second << ")" << get_import_statename(q->second)
-	       << " of " << *dir << dendl;
+      if (dir)
+	dout(10) << "cleaning up import state (" << q->second << ")" << get_import_statename(q->second)
+		 << " of " << *dir << dendl;
+      else
+	dout(10) << "cleaning up import state (" << q->second << ")" << get_import_statename(q->second)
+		 << " of " << df << dendl;
 
       switch (q->second) {
       case IMPORT_DISCOVERING:
