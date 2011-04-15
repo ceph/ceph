@@ -624,7 +624,8 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	common/pidfile.cc
+	common/pidfile.cc \
+	include/addr_parsing.c
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
