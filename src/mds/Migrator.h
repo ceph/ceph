@@ -235,7 +235,7 @@ public:
 
 public:
   void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
-			   LogSegment *ls,
+			   LogSegment *ls, uint64_t log_offset,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in,

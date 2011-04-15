@@ -633,47 +633,7 @@ private:
   static const int TO_AUTH_SUBTREE_ROOT = 0;  // default.
   static const int TO_ROOT = 1;
   
-  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT) {
-    // already have this dir?  (we must always add in order)
-    if (lump_map.count(dir->dirfrag())) 
-      return;
-
-    if (mode == TO_AUTH_SUBTREE_ROOT) {
-      //return;  // hack: for comparison purposes.. what if NO context?
-
-      // subtree root?
-      if (dir->is_subtree_root() && dir->is_auth())
-	return;
-
-      // was the inode journaled since the last subtree_map?
-      if (//false &&  // for benchmarking
-	  last_subtree_map &&
-	  dir->inode->last_journaled >= last_subtree_map) {
-	/*
-	cout << " inode " << dir->inode->inode.ino 
-	     << " last journaled at " << dir->inode->last_journaled
-	     << " and last_subtree_map is " << last_subtree_map 
-	     << std::endl;
-	*/
-	return;
-      }
-    }
-    
-    // stop at root/stray
-    CInode *diri = dir->get_inode();
-    if (!diri->get_projected_parent_dn())
-      return;
-
-    // journaled?
-
-    // add parent dn
-    CDentry *parent = diri->get_projected_parent_dn();
-    add_dir_context(parent->get_dir(), mode);
-    add_dentry(parent, false);
-  }
-
-
-
+  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT);
  
   void print(ostream& out) const {
     out << "[metablob";

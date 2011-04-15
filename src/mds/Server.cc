@@ -5016,7 +5016,7 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
   list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
   mdcache->migrator->decode_import_inode(srcdn, blp, 
 					 srcdn->authority().first,
-					 mdr->ls,
+					 mdr->ls, 0,
 					 mdr->more()->cap_imports, updated_scatterlocks);
   srcdnl->get_inode()->filelock.clear_dirty();  
   srcdnl->get_inode()->nestlock.clear_dirty();  

@@ -2142,7 +2142,7 @@ void Migrator::import_finish(CDir *dir)
 
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth,
-				   LogSegment *ls,
+				   LogSegment *ls, uint64_t log_offset,
 				   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 				   list<ScatterLock*>& updated_scatterlocks)
 {  
@@ -2164,6 +2164,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
 
   // state after link  -- or not!  -sage
   in->decode_import(blp, ls);  // cap imports are noted for later action
+
+  // note that we are journaled at this log offset
+  in->last_journaled = log_offset;
 
   // caps
   decode_import_inode_caps(in, blp, cap_imports);
@@ -2338,7 +2341,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     }
     else if (icode == 'I') {
       // inode
-      decode_import_inode(dn, blp, oldauth, ls, cap_imports, updated_scatterlocks);
+      decode_import_inode(dn, blp, oldauth, ls, le->get_start_off(), cap_imports, updated_scatterlocks);
     }
     
     // add dentry to journal entry
