@@ -117,9 +117,11 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 	 l != s->second.lines.end(); ++l) {
       if (l->key.empty())
         continue;
-      ret = set_modifier(l->key.c_str(), l->val.c_str(), ename, caps);
+      string k(l->key);
+      std::replace(k.begin(), k.end(), '_', ' ');
+      ret = set_modifier(k.c_str(), l->val.c_str(), ename, caps);
       if (ret < 0) {
-        derr << "error setting modifier for [" << name << "] type=" << l->key
+        derr << "error setting modifier for [" << name << "] type=" << k
 	     << " val=" << l->val << dendl;
         goto done_err;
       }

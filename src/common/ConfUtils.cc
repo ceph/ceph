@@ -12,6 +12,7 @@
  *
  */
 
+#include <algorithm>
 #include <errno.h>
 #include <list>
 #include <map>
@@ -166,10 +167,12 @@ parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors)
 int ConfFile::
 read(const std::string &section, const std::string &key, std::string &val) const
 {
+  string k(normalize_key_name(key));
+
   const_section_iter_t s = sections.find(section);
   if (s == sections.end())
     return -ENOENT;
-  ConfLine exemplar(key, "", "", "", 0);
+  ConfLine exemplar(k, "", "", "", 0);
   ConfSection::const_line_iter_t l = s->second.lines.find(exemplar);
   if (l == s->second.lines.end())
     return -ENOENT;
@@ -239,6 +242,22 @@ trim_whitespace(std::string &str, bool strip_internal)
   }
   *out2++ = '\0';
   str.assign(output2);
+}
+
+/* Normalize a key name.
+ *
+ * Normalized key names have no leading or trailing whitespace, and all
+ * whitespace is stored as underscores.  The main reason for selecting this
+ * normal form is so that in common/config.cc, we can use a macro to stringify
+ * the field names of md_config_t and get a key in normal form.
+ */
+std::string ConfFile::
+normalize_key_name(const std::string &key)
+{
+  string k(key);
+  ConfFile::trim_whitespace(k, true);
+  std::replace(k.begin(), k.end(), ' ', '_');
+  return k;
 }
 
 std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
@@ -443,7 +462,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  return NULL;
 	}
 	else if ((c == '=') && (!escaping)) {
-	  trim_whitespace(key, true);
+	  key = normalize_key_name(key);
 	  if (key.empty()) {
 	    ostringstream oss;
 	    oss << "error parsing key name: no key name found? "

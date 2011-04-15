@@ -70,52 +70,43 @@ struct ceph_file_layout g_default_file_layout = {
 
 #define TYCHECK(x, ty) STATIC_ASSERT(sizeof(x) == sizeof(ty))
 
-#define OPTION_OPT_STR(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, std::string), \
-	  NULL, STRINGIFY(name), \
-	  offsetof(struct md_config_t, name), def_val, 0, 0, type }
+#define OPTION_OPT_STR(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, std::string), \
+	  offsetof(struct md_config_t, name), def_val, 0, 0, OPT_STR }
 
-#define OPTION_OPT_ADDR(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, entity_addr_t), \
-	 NULL, STRINGIFY(name), \
-	 offsetof(struct md_config_t, name), def_val, 0, 0, type }
+#define OPTION_OPT_ADDR(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, entity_addr_t), \
+	 offsetof(struct md_config_t, name), def_val, 0, 0, OPT_ADDR }
 
-#define OPTION_OPT_LONGLONG(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, long long), \
-	 NULL, STRINGIFY(name), \
-         offsetof(struct md_config_t, name), 0, def_val, 0, type }
+#define OPTION_OPT_LONGLONG(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, long long), \
+         offsetof(struct md_config_t, name), 0, def_val, 0, OPT_LONGLONG }
 
-#define OPTION_OPT_INT(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, int), \
-	 NULL, STRINGIFY(name), \
-         offsetof(struct md_config_t, name), 0, def_val, 0, type }
+#define OPTION_OPT_INT(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, int), \
+         offsetof(struct md_config_t, name), 0, def_val, 0, OPT_INT }
 
-#define OPTION_OPT_BOOL(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, bool), \
-	 NULL, STRINGIFY(name), \
-         offsetof(struct md_config_t, name), 0, def_val, 0, type }
+#define OPTION_OPT_BOOL(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, bool), \
+         offsetof(struct md_config_t, name), 0, def_val, 0, OPT_BOOL }
 
-#define OPTION_OPT_U32(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, uint32_t), \
-	 NULL, STRINGIFY(name), \
-         offsetof(struct md_config_t, name), 0, def_val, 0, type }
+#define OPTION_OPT_U32(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, uint32_t), \
+         offsetof(struct md_config_t, name), 0, def_val, 0, OPT_U32 }
 
-#define OPTION_OPT_U64(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, uint64_t), \
-	 NULL, STRINGIFY(name), \
-         offsetof(struct md_config_t, name), 0, def_val, 0, type }
+#define OPTION_OPT_U64(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, uint64_t), \
+         offsetof(struct md_config_t, name), 0, def_val, 0, OPT_U64 }
 
-#define OPTION_OPT_DOUBLE(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, double), \
-	 NULL, STRINGIFY(name), \
-	 offsetof(struct md_config_t, name), 0, 0, def_val, type }
+#define OPTION_OPT_DOUBLE(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, double), \
+	 offsetof(struct md_config_t, name), 0, 0, def_val, OPT_DOUBLE }
 
-#define OPTION_OPT_FLOAT(section, name, type, def_val) \
-       { STRINGIFY(section) + TYCHECK(g_conf.name, float), \
-	 NULL, STRINGIFY(name), \
-	 offsetof(struct md_config_t, name), 0, 0, def_val, type }
+#define OPTION_OPT_FLOAT(name, def_val) \
+       { STRINGIFY(name) + TYCHECK(g_conf.name, float), \
+	 offsetof(struct md_config_t, name), 0, 0, def_val, OPT_FLOAT }
 
-#define OPTION(name, type, def_val) OPTION_##type("global", name, type, def_val)
+#define OPTION(name, type, def_val) OPTION_##type(name, def_val)
 
 void *config_option::conf_ptr(md_config_t *conf) const
 {
@@ -423,46 +414,6 @@ struct config_option config_optionsp[] = {
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
-static void set_conf_name(config_option *opt)
-{
-  char *newsection = (char *)opt->section;
-  char *newconf = (char *)opt->name;
-  int i;
-
-  if (opt->section[0] == 0) {
-    newsection = strdup("global");
-  }
-
-  if (strncmp(newsection, opt->name, strlen(newsection)) == 0) {
-    /* if key starts with the name of the section, remove name of the section
-       unless key equals to it */
-
-    if (strcmp(newsection, opt->name) == 0)
-      goto done;
-
-    newconf = strdup(&opt->name[strlen(newsection)+1]);
-  } else {
-    newconf = strdup(opt->name);
-  }
-
-  i = 0;
-  while (newconf[i]) {
-    if (newconf[i] == '_')
-      newconf[i] = ' ';
-
-    ++i;
-  }
-
-  done:
-    opt->section = newsection;
-    opt->conf_name = (const char *)newconf;
-}
-
-bool is_bool_param(const char *param)
-{
-  return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
-}
-
 bool ceph_resolve_file_search(const std::string& filename_list,
 			      std::string& result)
 {
@@ -497,7 +448,6 @@ md_config_t()
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     set_val_from_default(opt);
-    set_conf_name(opt);
   }
 }
 
@@ -528,7 +478,7 @@ parse_config_files(const std::list<std::string> &conf_files,
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = &config_optionsp[i];
     std::string val;
-    int ret = get_val_from_conf_file(my_sections, opt->conf_name, val, false);
+    int ret = get_val_from_conf_file(my_sections, opt->name, val, false);
     if (ret == 0) {
       set_val_impl(val.c_str(), opt);
     }
@@ -630,11 +580,15 @@ set_val(const char *key, const char *val)
     return -EINVAL;
   if (!val)
     return -EINVAL;
+
   std::string v(val);
   expand_meta(v);
+
+  string k(ConfFile::normalize_key_name(key));
+
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
-    if (strcmp(opt->conf_name, key) == 0)
+    if (strcmp(opt->name, k.c_str()) == 0)
       return set_val_impl(v.c_str(), opt);
   }
 
@@ -647,9 +601,14 @@ get_val(const char *key, char **buf, int len) const
 {
   if (!key)
     return -EINVAL;
+
+  // In key names, leading and trailing whitespace are not significant.
+  string k(ConfFile::normalize_key_name(key));
+
+  cout << "get_val(key='" << key << "'): k = '" << k << "'" << std::endl;
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     const config_option *opt = &config_optionsp[i];
-    if (strcmp(opt->conf_name, key))
+    if (strcmp(opt->name, k.c_str()))
       continue;
 
     ostringstream oss;
@@ -695,7 +654,7 @@ get_val(const char *key, char **buf, int len) const
     snprintf(*buf, len, "%s", str.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
-  // couldn't find a configuration option with key 'key'
+  // couldn't find a configuration option with key 'k'
   return -ENOENT;
 }
 
@@ -801,7 +760,7 @@ set_val_from_default(const config_option *opt)
       entity_addr_t *addr = (entity_addr_t*)opt->conf_ptr(this);
       if (!addr->parse(opt->def_str)) {
 	ostringstream oss;
-	oss << "Default value for " << opt->conf_name << " cannot be parsed."
+	oss << "Default value for " << opt->name << " cannot be parsed."
 	    << std::endl;
 	assert(oss.str() == 0);
       }

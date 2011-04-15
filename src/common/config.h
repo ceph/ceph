@@ -486,8 +486,6 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 			      std::string& result);
 
 struct config_option {
-  const char *section;
-  const char *conf_name;
   const char *name;
   size_t md_conf_off;
 
