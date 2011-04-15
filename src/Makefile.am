@@ -275,9 +275,9 @@ radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += testrados testradospp radosacl
 endif
 
-rbd_SOURCES = rbd.cc common/fiemap.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
 if WITH_DEBUG
