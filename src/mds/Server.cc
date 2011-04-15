@@ -5687,8 +5687,14 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
         if((!lock->is_stable() &&
             lock->get_sm()->states[lock->get_next_state()].next == 0) &&
             !lock->is_locallock()) {
-          dout(20) << "lock will be stable, unpinning" << dendl;
+          dout(20) << "removing lock " << lock << ", will be stable, unpinning" << dendl;
           lock->get_parent()->auth_unpin(lock);
+        } else if (!lock->is_stable()) {
+          dout(5) << "erasing unstable lock " << lock << lock->get_type()
+                  << " on " << *lock->get_parent() << " without removing pins!"
+                  << dendl;
+        } else {
+          dout(20) << "removing lock " << lock << dendl;
         }
         mdr->xlocks.erase(i++);
         mdr->locks.erase(lock);
