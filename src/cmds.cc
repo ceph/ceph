@@ -40,7 +40,7 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: cmds -i name [flags] [[--journal_check]|[--hot-standby][rank]]\n"
+  derr << "usage: cmds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
