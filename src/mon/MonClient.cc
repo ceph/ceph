@@ -123,9 +123,6 @@ int MonClient::build_initial_monmap()
     if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
       mon_names.push_back(s->substr(4));
     }
-    else if ((s->substr(0, 3) == "mon") && (s->size() > 3)) {
-      mon_names.push_back(s->substr(3));
-    }
   }
 
   // Find an address for each monitor in the config file.
