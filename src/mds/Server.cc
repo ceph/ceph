@@ -5658,22 +5658,6 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       list<Context*> finished;
 
-      dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished); 
-      mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
-
-      // singleauth
-      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
-      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
-      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
-      
-      // unfreeze
-      assert(destdnl->get_inode()->is_frozen_inode() ||
-             destdnl->get_inode()->is_freezing_inode());
-      destdnl->get_inode()->unfreeze_inode(finished);
-      
-      mds->queue_waiters(finished);
-
       // drop our pins
       // we exported, clear out any xlocks that we moved to another MDS
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
@@ -5699,6 +5683,22 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
         mdr->xlocks.erase(i++);
         mdr->locks.erase(lock);
       }
+
+      dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
+      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);
+      mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
+
+      // singleauth
+      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
+      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
+      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
+
+      // unfreeze
+      assert(destdnl->get_inode()->is_frozen_inode() ||
+             destdnl->get_inode()->is_freezing_inode());
+      destdnl->get_inode()->unfreeze_inode(finished);
+
+      mds->queue_waiters(finished);
     }
     mdr->cleanup();
 
