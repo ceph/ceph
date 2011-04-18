@@ -478,9 +478,11 @@ void Journaler::_do_flush(unsigned amount)
       waiting_for_zero = true;
       return;
     }
-    dout(10) << "_do_flush wanted to do " << flush_pos << "~" << len << " but hit prezero_pos " << prezero_pos
-	     << ", will do " << flush_pos << "~" << newlen << dendl;
-    len = newlen;
+    if (newlen < len) {
+      dout(10) << "_do_flush wanted to do " << flush_pos << "~" << len << " but hit prezero_pos " << prezero_pos
+	       << ", will do " << flush_pos << "~" << newlen << dendl;
+      len = newlen;
+    }
   }
   dout(10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
   
