@@ -4493,35 +4493,11 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
         continue;
       }
 
-      if (role < 0) {
-        dout(10) << " pg " << pgid << " dne, and i am not an active replica" << dendl;
-        PG::Info empty(pgid);
-        notify_list[from].push_back(empty);
-        continue;
-      }
-      assert(role > 0);
-
-      if (!history.epoch_created) {
-	dout(10) << " pg " << pgid << " not created, replying with empty info" << dendl;
-        PG::Info empty(pgid);
-        notify_list[from].push_back(empty);
-	continue;
-      }
-
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg = _create_lock_pg(pgid, *t);
-      pg->acting.swap( acting );
-      pg->up.swap( up );
-      pg->set_role(role);
-      pg->info.history = history;
-      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-      pg->write_info(*t);
-      pg->write_log(*t);
-      int tr = store->queue_transaction(&pg->osr, t);
-      assert(tr == 0);
-      created++;
-
-      dout(10) << *pg << " dne (before), but i am role " << role << dendl;
+      assert(role != 0);
+      dout(10) << " pg " << pgid << " dne" << dendl;
+      PG::Info empty(pgid);
+      notify_list[from].push_back(empty);
+      continue;
     } else {
       pg = _lookup_lock_pg(pgid);
       if (m->get_epoch() < pg->info.history.same_acting_since) {
