@@ -24,7 +24,7 @@ void _dout_open_log()
   if (!_doss) {
     _doss = new DoutStreambuf <char>();
   }
-  _doss->read_global_config();
+  _doss->read_global_config(&g_conf);
   if (!_dout) {
     _dout = new std::ostream(_doss);
   }
@@ -48,7 +48,7 @@ int dout_handle_daemonize()
 
   assert(_doss);
   _doss->handle_stderr_closed();
-  return _doss->handle_pid_change();
+  return _doss->handle_pid_change(&g_conf);
 }
 
 int dout_create_rank_symlink(int n)

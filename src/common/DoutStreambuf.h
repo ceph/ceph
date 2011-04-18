@@ -23,6 +23,8 @@
 #include <iosfwd>
 #include <string>
 
+class md_config_t;
+
 template <typename charT, typename traits = std::char_traits<charT> >
 class DoutStreambuf : public std::basic_streambuf<charT, traits>
 {
@@ -53,7 +55,7 @@ public:
   void handle_stderr_closed();
 
   // Set the flags based on the global configuration
-  void read_global_config();
+  void read_global_config(const md_config_t *conf);
 
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
@@ -61,7 +63,7 @@ public:
   // Call after calling daemon()
   // A change in the process ID sometimes requires us to change our output
   // path name.
-  int handle_pid_change();
+  int handle_pid_change(const md_config_t *conf);
 
   // Create a rank symlink to the log file
   int create_rank_symlink(int n);
@@ -87,10 +89,12 @@ private:
   friend void dout_emergency(const std::string &str);
 
   void _clear_output_buffer();
-  std::string _calculate_opath() const;
-  std::string _get_symlink_dir() const;
-  int _read_ofile_config();
-  int _rotate_files(const std::string &base);
+  std::string _calculate_opath(const md_config_t *conf) const;
+  std::string _get_symlink_dir(const md_config_t *conf) const;
+  int _read_ofile_config(const md_config_t *conf);
+  int _rotate_files(const md_config_t *conf, const std::string &base);
+
+  std::string type_name;
 
   // Output buffer
   charT obuf[OBUF_SZ];
@@ -101,8 +105,7 @@ private:
   // ofile stuff
   int ofd;
   std::string opath;
-
-  // symlinks
+  std::string symlink_dir;
   std::string isym_path;
   std::string rsym_path;
 };

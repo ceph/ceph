@@ -42,7 +42,7 @@ int main(int argc, const char **argv)
 
   {
     DoutLocker _dout_locker;
-    dos->read_global_config();
+    dos->read_global_config(&g_conf);
   }
   derr << "using configuration: " << dos->config_to_str() << dendl;
 
