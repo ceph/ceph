@@ -850,7 +850,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   addr = messenger->get_myaddr();
   whoami = mdsmap->get_rank_gid(monc->get_global_id());
   state = mdsmap->get_state_gid(monc->get_global_id());
-  dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
+  incarnation = mdsmap->get_inc_gid(monc->get_global_id());
+  dout(10) << "map says i am " << addr << " mds" << whoami << "." << incarnation
+	   << " state " << ceph_mds_state_name(state) << dendl;
 
   // mark down any failed peers
   for (map<uint64_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
@@ -899,7 +901,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // ??
-  incarnation = mdsmap->get_inc(whoami);
 
   if (oldwhoami != whoami)
     dout_create_rank_symlink(whoami);

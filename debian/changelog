@@ -1,5 +1,6 @@
-ceph (0.26~rc-1) experimental; urgency=low
+ceph (0.26-1) experimental; urgency=low
 
+  * New upstream release.
   * Make Ceph Linux only and build on all Linux archs (closes: #614890),
     but only build-depend google-perftools on x86 and x64 archs only.
   * Correct section of libcrush1, librados1, librbd1 and libceph1 to libs.
@@ -9,7 +10,7 @@ ceph (0.26~rc-1) experimental; urgency=low
   * Rename librados1{,-dbg,-dev} packages to librados2{,-dbg,-dev} ones;
     conflict with and replace the former ones.
 
- -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Fri, 25 Mar 2011 19:42:11 +0100
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Fri, 01 Apr 2011 16:28:11 +0100
 
 ceph (0.25.2-1) experimental; urgency=low
 

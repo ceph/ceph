@@ -4280,7 +4280,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	queue_for_recovery(pg);  // in case we found something.
       }
     }
-    else if ((!log.empty()) && missing) {
+    else if (missing) {
       // PG is INACTIVE
       pg->proc_replica_log(*t, info, log, *missing, from);
       
