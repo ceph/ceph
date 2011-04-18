@@ -12,7 +12,8 @@
     policy                     read bucket/object policy
     log show                   dump a log from specific bucket, date
   options:
-     --uid=<id>                S3 uid
+     --uid=<id>                user id
+     --access-key=<id>         S3 access key
      --os-user=<group:name>    OpenStack user
      --email=<email>
      --auth_uid=<auid>         librados uid

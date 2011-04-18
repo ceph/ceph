@@ -9,7 +9,7 @@
   > 
   > [osd]
   > 	osd data = /mnt/osd$id
-  > [osd3]
+  > [osd.3]
   > 	host = cosd3
   > EOF
 
@@ -30,4 +30,4 @@ To list all sections that begin with osd:
 
   $ cconf -c foo.conf -l osd
   osd
-  osd3
+  osd.3
