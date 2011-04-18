@@ -138,7 +138,7 @@ private:
 
   // header
   utime_t last_wrote_head;
-  void _finish_write_head(Header &wrote, Context *oncommit);
+  void _finish_write_head(int r, Header &wrote, Context *oncommit);
   class C_WriteHead;
   friend class C_WriteHead;
 

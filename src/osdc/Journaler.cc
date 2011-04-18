@@ -309,7 +309,7 @@ public:
   Context *oncommit;
   C_WriteHead(Journaler *l, Header& h_, Context *c) : ls(l), h(h_), oncommit(c) {}
   void finish(int r) {
-    ls->_finish_write_head(h, oncommit);
+    ls->_finish_write_head(r, h, oncommit);
   }
 };
 
@@ -336,8 +336,9 @@ void Journaler::write_head(Context *oncommit)
 		       new C_WriteHead(this, last_written, oncommit));
 }
 
-void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
+void Journaler::_finish_write_head(int r, Header &wrote, Context *oncommit)
 {
+  assert(r >= 0); // we can't really recover from write errors here
   assert(!readonly);
   dout(10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
