@@ -636,8 +636,6 @@ get_val(const char *key, char **buf, int len) const
 
     ostringstream oss;
     switch (opt->type) {
-      case OPT_NONE:
-        return -ENOSYS;
       case OPT_INT:
         oss << *(int*)opt->conf_ptr(this);
         break;
@@ -795,8 +793,6 @@ int md_config_t::
 set_val_impl(const char *val, const config_option *opt)
 {
   switch (opt->type) {
-    case OPT_NONE:
-      return -ENOSYS;
     case OPT_INT: {
       std::string err;
       int f = strict_strtol(val, 10, &err);

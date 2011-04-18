@@ -478,7 +478,7 @@ public:
 extern md_config_t g_conf;
 
 typedef enum {
-	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
+	OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
 	OPT_ADDR, OPT_U32, OPT_U64
 } opt_type_t;
 
