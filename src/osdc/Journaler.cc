@@ -34,7 +34,7 @@ void Journaler::create(ceph_file_layout *l)
 
   set_layout(l);
 
-  write_pos = flush_pos = safe_pos =
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
 }
@@ -166,7 +166,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   Header h;
   bufferlist::iterator p = bl.begin();
   ::decode(h, p);
-  write_pos = flush_pos = h.write_pos;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = h.write_pos;
   expire_pos = h.expire_pos;
   trimmed_pos = h.trimmed_pos;
   init_headers(h);
@@ -202,7 +202,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
-  write_pos = flush_pos = safe_pos = h.write_pos;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
@@ -241,7 +241,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   dout(1) << "_finish_reprobe new_end = " << new_end 
 	  << " (header had " << write_pos << ")."
 	  << dendl;
-  write_pos = flush_pos = safe_pos = new_end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->finish(r);
   delete onfinish;
@@ -267,7 +267,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
   state = STATE_ACTIVE;
 
-  write_pos = flush_pos = safe_pos = end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = end;
   
   // done.
   list<Context*> ls;
@@ -389,8 +389,8 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 
   dout(10) << "_finish_flush safe from " << start
 	   << ", pending_safe " << pending_safe
-	   << ", write positions now " << write_pos << "/" << flush_pos
-	   << "/" << safe_pos
+	   << ", (prezeroing/prezero)/write/flush/safe positions now "
+	   << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos
 	   << dendl;
 
   // kick waiters <= safe_pos
@@ -439,10 +439,10 @@ uint64_t Journaler::append_entry(bufferlist& bl)
   write_pos += sizeof(s) + s;
 
   // flush previous object?
-  int su = layout.fl_stripe_unit;
-  int write_off = write_pos % su;
-  int write_obj = write_pos / su;
-  int flush_obj = flush_pos / su;
+  uint64_t su = get_layout_period();
+  uint64_t write_off = write_pos % su;
+  uint64_t write_obj = write_pos / su;
+  uint64_t flush_obj = flush_pos / su;
   if (write_obj != flush_obj) {
     dout(10) << " flushing completed object(s) (su " << su << " wro " << write_obj << " flo " << flush_obj << ")" << dendl;
     _do_flush(write_buf.length() - write_off);
@@ -454,7 +454,8 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
 void Journaler::_do_flush(unsigned amount)
 {
-  if (write_pos == flush_pos) return;
+  if (write_pos == flush_pos)
+    return;
   assert(write_pos > flush_pos);
   assert(!readonly);
 
@@ -463,6 +464,24 @@ void Journaler::_do_flush(unsigned amount)
   assert(len == write_buf.length());
   if (amount && amount < len)
     len = amount;
+
+  // zero at least two full periods ahead.  this ensures
+  // that the next object will not exist.
+  uint64_t period = get_layout_period();
+  if (flush_pos + len + 2*period > prezero_pos) {
+    _issue_prezero();
+
+    int64_t newlen = prezero_pos - flush_pos - period;
+    if (newlen <= 0) {
+      dout(10) << "_do_flush wanted to do " << flush_pos << "~" << len
+	       << " already too close to prezero_pos " << prezero_pos << ", zeroing first" << dendl;
+      waiting_for_zero = true;
+      return;
+    }
+    dout(10) << "_do_flush wanted to do " << flush_pos << "~" << len << " but hit prezero_pos " << prezero_pos
+	     << ", will do " << flush_pos << "~" << newlen << dendl;
+    len = newlen;
+  }
   dout(10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
   
   // submit write for anything pending
@@ -490,7 +509,10 @@ void Journaler::_do_flush(unsigned amount)
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
     
-  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+  dout(10) << "_do_flush (prezeroing/prezero)/write/flush/safe pointers now at "
+	   << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+
+  _issue_prezero();
 }
 
 
@@ -502,8 +524,8 @@ void Journaler::wait_for_flush(Context *onsafe)
   // all flushed and safe?
   if (write_pos == safe_pos) {
     assert(write_buf.length() == 0);
-    dout(10) << "flush nothing to flush, write pointers at " 
-	     << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+    dout(10) << "flush nothing to flush, (prezeroing/prezero)/write/flush/safe pointers at " 
+	     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
     if (onsafe) {
       onsafe->finish(0);
       delete onsafe;
@@ -526,8 +548,8 @@ void Journaler::flush(Context *onsafe)
 
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
-    dout(10) << "flush nothing to flush, write pointers at "
-	     << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+    dout(10) << "flush nothing to flush, (prezeroing/prezero)/write/flush/safe pointers at "
+	     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
   } else {
     if (1) {
       // maybe buffer
@@ -552,6 +574,83 @@ void Journaler::flush(Context *onsafe)
   if (last_wrote_head.sec() + g_conf.journaler_write_head_interval < g_clock.now().sec()) {
     write_head();
   }
+}
+
+
+/*************** prezeroing ******************/
+
+struct C_Journaler_Prezero : public Context {
+  Journaler *journaler;
+  uint64_t from, len;
+  C_Journaler_Prezero(Journaler *j, uint64_t f, uint64_t l) : journaler(j), from(f), len(l) {}
+  void finish(int r) {
+    journaler->_prezeroed(r, from, len);
+  }
+};
+
+void Journaler::_issue_prezero()
+{
+  assert(prezeroing_pos >= flush_pos);
+
+  // we need to zero at least two periods, minimum, to ensure that we have a full
+  // empty object/period in front of us.
+  uint64_t num_periods = MAX(2, g_conf.journaler_prezero_periods);
+
+  /*
+   * issue zero requests based on write_pos, even though the invariant
+   * is that we zero ahead of flush_pos.
+   */
+  uint64_t period = get_layout_period();
+  uint64_t to = write_pos + period * num_periods  + period - 1;
+  to -= to % period;
+
+  if (prezeroing_pos >= to) {
+    dout(20) << "_issue_prezero target " << to << " <= prezeroing_pos " << prezeroing_pos << dendl;
+    return;
+  }
+
+  while (prezeroing_pos < to) {
+    uint64_t len;
+    if (prezeroing_pos % period == 0) {
+      len = period;
+      dout(10) << "_issue_prezero removing " << prezeroing_pos << "~" << period << " (full period)" << dendl;
+    } else {
+      len = period - (prezeroing_pos % period);
+      dout(10) << "_issue_prezero zeroing " << prezeroing_pos << "~" << len << " (partial period)" << dendl;
+    }
+    SnapContext snapc;
+    Context *c = new C_Journaler_Prezero(this, prezeroing_pos, len);
+    filer.zero(ino, &layout, snapc, prezeroing_pos, len, g_clock.now(), 0, NULL, c);
+    prezeroing_pos += len;
+  }
+}
+
+void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
+{
+  dout(10) << "_prezeroed to " << start << "~" << len
+	   << ", prezeroing/prezero was " << prezeroing_pos << "/" << prezero_pos
+	   << ", pending " << pending_zero
+	   << dendl;
+  assert(r == 0);
+
+  if (start == prezero_pos) {
+    prezero_pos += len;
+    while (!pending_zero.empty() &&
+	   pending_zero.begin().get_start() == prezero_pos) {
+      prezero_pos += pending_zero.begin().get_len();
+      pending_zero.erase(pending_zero.begin());
+    }
+
+    if (waiting_for_zero) {
+      waiting_for_zero = false;
+      _do_flush();
+    }
+  } else {
+    pending_zero.insert(start, len);
+  }
+  dout(10) << "_prezeroed prezeroing/prezero now " << prezeroing_pos << "/" << prezero_pos
+	   << ", pending " << pending_zero
+	   << dendl;
 }
 
 
@@ -744,11 +843,9 @@ bool Journaler::_is_readable()
   // partial fragment at the end?
   if (received_pos == write_pos) {
     dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << dendl;
-    if (write_pos > read_pos)
-      junk_tail_pos = write_pos; // note old tail
 
     // adjust write_pos
-    write_pos = flush_pos = safe_pos = read_pos;
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = read_pos;
     assert(write_buf.length() == 0);
 
     // reset read state
@@ -777,22 +874,6 @@ bool Journaler::is_readable()
   bool r =_is_readable();
   _prefetch();
   return r;
-}
-
-bool Journaler::truncate_tail_junk(Context *c)
-{
-  if(readonly)
-    return true; //can't touch journal in readonly mode!
-  if (!junk_tail_pos) {
-    dout(10) << "truncate_tail_junk -- no trailing junk" << dendl;
-    return true;
-  }
-
-  int64_t len = junk_tail_pos - write_pos;
-  dout(10) << "truncate_tail_junk " << write_pos << "~" << len << dendl;
-  SnapContext snapc;
-  filer.zero(ino, &layout, snapc, write_pos, len, g_clock.now(), 0, NULL, c);
-  return false;
 }
 
 

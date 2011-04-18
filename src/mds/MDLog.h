@@ -96,8 +96,6 @@ protected:
 
   void _replay();         // old way
   void _replay_thread();  // new way
-  void _replay_truncated();
-  friend class C_MDL_ReplayTruncated;
 
 
   // -- segments --

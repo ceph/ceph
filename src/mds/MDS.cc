@@ -1337,6 +1337,7 @@ void MDS::replay_done()
   }
 
   mdlog->get_journaler()->set_writeable();
+  mdlog->get_journaler()->trim_tail();
 
   if (g_conf.mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;

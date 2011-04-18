@@ -449,14 +449,6 @@ public:
   }
 };
 
-struct C_MDL_ReplayTruncated : public Context {
-  MDLog *mdl;
-  C_MDL_ReplayTruncated(MDLog *l) : mdl(l) {}
-  void finish(int r) {
-    mdl->_replay_truncated();
-  }
-};
-
 
 
 // i am a separate thread
@@ -571,29 +563,13 @@ void MDLog::_replay_thread()
 	     << " events" << dendl;
 
     logger->set(l_mdl_expos, journaler->get_expire_pos());
-
-    dout(10) << "_replay - truncating at " << journaler->get_write_pos() << dendl;
-    Context *c = new C_MDL_ReplayTruncated(this);
-    if (journaler->truncate_tail_junk(c)) {
-      delete c;
-      
-      dout(10) << "_replay_thread nothing to truncate, kicking waiters" << dendl;
-      finish_contexts(waitfor_replay, 0);  
-    }
-  } else {
-    dout(10) << "_replay_thread kicking waiters" << dendl;
-    finish_contexts(waitfor_replay, r);  
   }
+
+  dout(10) << "_replay_thread kicking waiters" << dendl;
+  finish_contexts(waitfor_replay, 0);  
 
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();
-}
-
-
-void MDLog::_replay_truncated()
-{
-  dout(10) << "_replay_truncated" << dendl;
-  finish_contexts(waitfor_replay, 0);  
 }
 
 

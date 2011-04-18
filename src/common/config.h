@@ -262,6 +262,7 @@ public:
   bool  journaler_allow_split_entries;
   int   journaler_write_head_interval;
   int   journaler_prefetch_periods;
+  int   journaler_prezero_periods;
   double journaler_batch_interval;
   uint64_t journaler_batch_max;
 
