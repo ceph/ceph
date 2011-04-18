@@ -35,7 +35,7 @@ void usage()
   cerr << "  log show                   dump a log from specific bucket, date\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
-  cerr << "   --s3-key=<id>             S3 access key\n";
+  cerr << "   --access-key=<id>         S3 access key\n";
   cerr << "   --os-user=<group:name>    OpenStack user\n";
   cerr << "   --email=<email>\n";
   cerr << "   --auth_uid=<auid>         librados uid\n";
@@ -256,6 +256,14 @@ int main(int argc, char **argv)
 	found = true;
       } else {
 	cerr << "could not find user by specified email" << std::endl;
+      }
+    }
+    if (!found && access_key) {
+      s = access_key;
+      if (rgw_get_uid_by_access_key(s, user_id_str, info) >= 0) {
+	found = true;
+      } else {
+	cerr << "could not find user by specified access key" << std::endl;
       }
     }
     if (!found && openstack_user) {
