@@ -91,6 +91,10 @@ void OSDMap::print_summary(ostream& out) const
       << get_num_osds() << " osds: "
       << get_num_up_osds() << " up, " 
       << get_num_in_osds() << " in";
+  if (test_flag(CEPH_OSDMAP_FULL))
+    out << " full";
+  else if (test_flag(CEPH_OSDMAP_NEARFULL))
+    out << " nearfull";
 }
 
 
