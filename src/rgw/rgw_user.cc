@@ -120,15 +120,15 @@ int rgw_store_user_info(RGWUserInfo& info)
     }
   }
 
-  ret = put_obj(info.user_id, ui_uid_bucket, info.user_id, data, bl.length());
-  if (ret < 0)
-    return ret;
-
   bufferlist uid_bl;
   RGWUID ui;
   ui.user_id = info.user_id;
   ::encode(ui, uid_bl);
   ::encode(info, uid_bl);
+
+  ret = put_obj(info.user_id, ui_uid_bucket, info.user_id, uid_bl.c_str(), uid_bl.length());
+  if (ret < 0)
+    return ret;
 
   if (info.user_email.size()) {
     ret = put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length());
