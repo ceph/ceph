@@ -4517,7 +4517,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
        * get an old query from an old primary.. which we can safely
        * ignore.
        */
-      dout(10) << *pg << " query on deleting pg; ignoring" << dendl;
+      dout(0) << *pg << " query on deleting pg" << dendl;
+      assert(0 == "this should not happen");
       pg->unlock();
       continue;
     }
