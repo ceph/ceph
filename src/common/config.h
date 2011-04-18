@@ -487,13 +487,12 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 struct config_option {
   const char *name;
+  opt_type_t type;
   size_t md_conf_off;
 
   const char *def_str;
   long long def_longlong;
   double def_double;
-
-  opt_type_t type;
 
   // Given a configuration, return a pointer to this option inside
   // that configuration.
