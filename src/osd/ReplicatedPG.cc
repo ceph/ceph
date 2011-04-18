@@ -1503,19 +1503,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_ZERO:
       { // zero
 	assert(op.extent.length);
-	if (!ctx->obs->exists)
-	  t.touch(coll, soid);
-	t.zero(coll, soid, op.extent.offset, op.extent.length);
-	if (ssc->snapset.clones.size()) {
-	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  interval_set<uint64_t> ch;
-	  ch.insert(op.extent.offset, op.extent.length);
-	  ch.intersection_of(ssc->snapset.clone_overlap[newest]);
-	  ssc->snapset.clone_overlap[newest].subtract(ch);
-	  add_interval_usage(ch, info.stats);
+	if (ctx->obs->exists) {
+	  t.zero(coll, soid, op.extent.offset, op.extent.length);
+	  if (ssc->snapset.clones.size()) {
+	    snapid_t newest = *ssc->snapset.clones.rbegin();
+	    interval_set<uint64_t> ch;
+	    ch.insert(op.extent.offset, op.extent.length);
+	    ch.intersection_of(ssc->snapset.clone_overlap[newest]);
+	    ssc->snapset.clone_overlap[newest].subtract(ch);
+	    add_interval_usage(ch, info.stats);
+	  }
+	  info.stats.num_wr++;
+	  ssc->snapset.head_exists = true;
+	} else {
+	  // no-op
 	}
-	info.stats.num_wr++;
-	ssc->snapset.head_exists = true;
       }
       break;
     case CEPH_OSD_OP_CREATE:
