@@ -44,6 +44,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_BAD_DIGEST, 500, "BadDigest" },
     { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
     { ERR_INVALID_OBJECT_NAME, 400, "InvalidObjectName" },
+    { ERR_UNRESOLVABLE_EMAIL, 400, "UnresolvableGrantByEmailAddress" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
     { ENOENT, 404, "NoSuchKey" },

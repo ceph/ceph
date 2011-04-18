@@ -68,7 +68,8 @@ extern string rgw_root_bucket;
 #define ERR_NO_SUCH_BUCKET      2002
 #define ERR_METHOD_NOT_ALLOWED  2003
 #define ERR_INVALID_DIGEST      2004
-#define ERR_BAD_DIGEST		2005
+#define ERR_BAD_DIGEST          2005
+#define ERR_UNRESOLVABLE_EMAIL  2006
 
 typedef void *RGWAccessHandle;
 

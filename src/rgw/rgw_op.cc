@@ -632,7 +632,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
         RGW_LOG(10) << "grant user email=" << email << endl;
         if (rgw_get_user_info_by_email(email, grant_user) < 0) {
           RGW_LOG(10) << "grant user email not found or other error" << endl;
-          break;
+          return -ERR_UNRESOLVABLE_EMAIL;
         }
         id = grant_user.user_id;
       }
