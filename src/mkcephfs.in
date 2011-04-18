@@ -291,7 +291,7 @@ if [ $preparemon -eq 1 ]; then
     echo "Building osdmap"
 
     # find highest osd id - assumes the conf file complies with osd numbering requirements
-    maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | sed 's/^\.//' | cut -c 4- | sort -n | tail -1`
+    maxosd=`$CCONF -c $conf -l osd | grep -v ^osd\$ | cut -c 5- | sort -n | tail -1`
     echo " highest numbered osd in $conf is osd.$maxosd"
     lastosd=$(($maxosd + 1))
 
