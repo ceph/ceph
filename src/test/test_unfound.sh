@@ -49,7 +49,7 @@ osd_resurrection_1_impl() {
         echo "Got unfound objects."
 
         (
-                ./rados -p data get obj01 $TEMPDIR/obj01 || die "radostool failed"
+                ./rados -c ./ceph.conf -p data get obj01 $TEMPDIR/obj01 || die "radostool failed"
         ) &
         sleep 5
         [ -e $TEMPDIR/obj01 ] && die "unexpected error: fetched unfound object?"

@@ -95,8 +95,8 @@ write_objects() {
                 chr=`perl -e "print chr(48+$v)"`
                 head -c $obj_size /dev/zero  | tr '\0' "$chr" > $TEMPDIR/ver$v
                 for i in `seq -w 1 $num_objs`; do
-                        ./rados -p $pool rm obj$i || die "radostool failed"
-                        ./rados -p $pool put obj$i $TEMPDIR/ver$v || die "radostool failed"
+                        ./rados -c ./ceph.conf -p $pool rm obj$i || die "radostool failed"
+                        ./rados -c ./ceph.conf -p $pool put obj$i $TEMPDIR/ver$v || die "radostool failed"
                 done
         done
 }
@@ -109,7 +109,7 @@ read_objects() {
 	chr=`perl -e "print chr(48+$ver)"`
 	head -c $obj_size /dev/zero  | tr '\0' "$chr" > $TEMPDIR/exemplar
         for i in `seq -w 1 $num_objs`; do
-                ./rados -p $pool get obj$i $TEMPDIR/out$i || die "radostool failed"
+                ./rados -c ./ceph.conf -p $pool get obj$i $TEMPDIR/out$i || die "radostool failed"
 		cmp $TEMPDIR/out$i $TEMPDIR/exemplar || die "got back incorrect obj$i"
         done
 }
@@ -145,7 +145,7 @@ start_recovery() {
         CEPH_NUM_OSD=$1
         osd=0
         while [ $osd -lt $CEPH_NUM_OSD ]; do
-                ./ceph osd tell $osd debug kick_recovery_wq 0
+                ./ceph -c ./ceph.conf osd tell $osd debug kick_recovery_wq 0
                 osd=$((osd+1))
         done
 }

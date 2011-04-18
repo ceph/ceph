@@ -20,7 +20,7 @@ osd max scrubs = 0' || die "vstart failed"
 }
 
 csyn_simple1_impl() {
-  ./csyn --syn writefile 100 1000 --syn writefile 100 1000 || die "csyn failed"
+  ./csyn -c ./ceph.conf --syn writefile 100 1000 --syn writefile 100 1000 || die "csyn failed"
 }
 
 csyn_simple1() {

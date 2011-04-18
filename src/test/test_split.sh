@@ -22,7 +22,7 @@ setup() {
 }
 
 get_pgp_num() {
-        ./ceph osd pool get data pgp_num > $TEMPDIR/pgp_num
+        ./ceph -c ./ceph.conf osd pool get data pgp_num > $TEMPDIR/pgp_num
         [ $? -eq 0 ] || die "failed to get pgp_num"
         PGP_NUM=`grep PGP_NUM $TEMPDIR/pgp_num | sed 's/.*PGP_NUM:\([ 0123456789]*\).*$/\1/'`
 }
@@ -37,7 +37,7 @@ split1_impl() {
         # Double the number of PGs
         PGP_NUM=$((PGP_NUM*2))
         echo "doubling PGP_NUM to $PGP_NUM..."
-        ./ceph osd pool set data pgp_num $PGP_NUM
+        ./ceph -c ./ceph.conf osd pool set data pgp_num $PGP_NUM
 
         sleep 30
 
@@ -53,7 +53,7 @@ split1() {
 many_pools() {
         setup 3
         for i in `seq 1 3000`; do
-                ./rados mkpool "pool${i}" || die "mkpool failed"
+                ./rados -c ./ceph.conf mkpool "pool${i}" || die "mkpool failed"
         done
         my_write_objects 1 10
 }

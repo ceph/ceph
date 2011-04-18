@@ -94,7 +94,7 @@ lost1_impl() {
 	  # verify we get woken to an error when it's declared lost.
 	  echo "trying to get one of the unfound objects"
 	  (
-	  ./rados -p data get obj02 $TEMPDIR/obj02 &&\
+	  ./rados -c ./ceph.conf -p data get obj02 $TEMPDIR/obj02 &&\
 	    die "expected radostool error"
 	  ) &
 	fi
@@ -108,7 +108,7 @@ lost1_impl() {
 
 	# Reading from a lost object gives back an error code.
 	# TODO: check error code
-	./rados -p data get obj01 $TEMPDIR/obj01 &&\
+	./rados -c ./ceph.conf -p data get obj01 $TEMPDIR/obj01 &&\
 	  die "expected radostool error"
 
 	if [ "$try_to_fetch_unfound" -eq 1 ]; then

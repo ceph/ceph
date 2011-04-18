@@ -2,7 +2,7 @@
 
 CEPH_NUM_OSD=3 ./vstart.sh -d -n -x -o 'osd recovery max active = 1'
 
-./ceph osd pool set data size 3
+./ceph -c ./ceph.conf osd pool set data size 3
 
 sleep 20
 
@@ -11,7 +11,7 @@ sleep 20
 
 for f in `seq 1 100`
 do
-    ./rados -p data put test_$f /etc/passwd
+    ./rados -c ./ceph.conf -p data put test_$f /etc/passwd
 done
 
 # zap some objects on both replicas
