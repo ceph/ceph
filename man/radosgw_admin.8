@@ -2,14 +2,23 @@
 .SH NAME
 radosgw_admin \- rados REST gateway user administration utility
 .SH SYNOPSIS
-.B radosgw_admin
-[ \fB\-\-user\-gen\fR ]
-[ \fB\-\-user\-modify\fR ]
-[ \fB\-\-read\-policy\fR ]
-[ \fB\-\-list\-buckets\fR ] [ options ... ]
+.B radosgw_admin <cmd> [options..]
 .SH DESCRIPTION
 .B radosgw_admin
 is a RADOS gateway user administration utility. It allows creating and modifying users.
+.SH COMMANDS
+.TP
+\fBcmd\fR can be one of the following options:
+.IP
+ user create    Create a new user
+ user modify    Modify a user
+ user info      Display information of a user
+ user rm        Remove a user
+ bucket list    List all buckets
+ bucket unlink  Remove a bucket
+ policy         Display bucket/object policy
+ log show       Show the log of a bucket (with a specified date)
+.PP
 .SH OPTIONS
 .TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
@@ -19,39 +28,54 @@ to determine monitor addresses during startup.
 \fB\-m\fI monaddress[:port]\fR
 Connect to specified monitor (instead of looking through \fIceph.conf\fR).
 .TP
-\fB\-\-user\-gen\fR
-Generate a new user.
+\fB\-\-uid=\fIuid\fR
+The S3 user/access key.
 .TP
-\fB\-\-user\-modify\fR
-Modify an existing user.
-.TP
-\fB\-\-read\-policy\fR
-Show the ACL policy of an bucket or object.
-.TP
-\fB\-\-list\-buckets\fR
-Dump the list of buckets that belong to a specific user.
-.TP
-\fB\-\-uid=\fIid\fR
-Specify the user id for this operation.
-.TP
-\fB\-\-secret=\fIkey\fR
-Configure the secret key for this user.
+\fB\-\-secret=\fIsecret\fR
+The S3 secret.
 .TP
 \fB\-\-display\-name=\fIname\fR
 Configure the display name of the user.
+.TP
+\fB\-\-email=\fIemail\fR
+The e-mail address of the user
 .TP
 \fB\-\-bucket=\fIbucket\fR
 Specify the bucket name.
 .TP
 \fB\-\-object=\fIobject\fR
 Specify the object name.
+.TP
+\fB\-\-date=\fIyyyy-mm-dd\fR
+The date need for some commands
+.TP
+\fB\-\-os\-user=\fIgroup:name\fR
+The OpenStack user (only needed for use with OpenStack)
+.TP
+\fB\-\-os\-secret=\fIkey\fR
+The OpenStack key
+.TP
+\fB\-\-auth\-uid=\fIauid\fR
+The librados auid
 .SH EXAMPLES
-To generate a new user:
+Generate a new user
 .IP
- $ ./radosgw_admin --user-gen --display-name="johnny rotten" --email=johnny@rotten.com
+ $ radosgw_admin user gen --display-name="johnny rotten" --email=johnny@rotten.com
  User ID: CHBQFRTG26I8DGJDGQLW
  Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
  Display Name: johnny rotten
+.PP
+Remove a user
+.IP
+ $ radosgw_admin user rm --uid=CHBQFRTG26I8DGJDGQLW
+.PP
+Remove a bucket
+.IP
+ $ radosgw_admin bucket unlink --bucket=foo
+.PP
+Thow the logs of a bucket from April 1st 2011
+.IP
+ $ radosgw_admin log show --bucket=foo --date=2011=04-01
 .PP
 .SH AVAILABILITY
 .B radosgw_admin
