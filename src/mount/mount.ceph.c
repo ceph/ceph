@@ -368,7 +368,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		}
 		serial = add_key("ceph", name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
 		if (serial < 0) {
-			if (errno == ENODEV) {
+			if (errno == ENODEV || errno == ENOSYS) {
 				/* running against older kernel; fall back to secret= in options */
 				if (pos)
 					pos = safe_cat(&out, &out_len, pos, ",");
