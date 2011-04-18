@@ -31,11 +31,6 @@ struct RGWUID
 WRITE_CLASS_ENCODER(RGWUID)
 
 /**
- * Get the info for a user out of storage.
- * Returns: 0 on success, -ERR# on failure
- */
-extern int rgw_get_user_info(string user_id, RGWUserInfo& info);
-/**
  * Get the anonymous (ie, unauthenticated) user info.
  */
 extern void rgw_get_anon_user(RGWUserInfo& info);
@@ -45,20 +40,25 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
  */
 extern int rgw_store_user_info(RGWUserInfo& info);
 /**
- * Given an email, finds the user_id associated with it.
+ * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_email(string& email, string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_uid(string& user_id, RGWUserInfo& info);
 /**
- * Given an openstack username, finds the user_id associated with it.
+ * Given an openstack username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_email(string& email, RGWUserInfo& info);
 /**
- * Given an access key, finds the user_id associated with it.
+ * Given an openstack username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_access_key(string& access_key, string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_openstack(string& openstack_name, RGWUserInfo& info);
+/**
+ * Given an access key, finds the user info associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+extern int rgw_get_user_info_by_access_key(string& access_key, RGWUserInfo& info);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */

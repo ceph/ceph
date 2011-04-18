@@ -606,7 +606,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
     return -EINVAL;
 
   RGWUserInfo owner_info;
-  if (rgw_get_user_info(owner->get_id(), owner_info) < 0) {
+  if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
     RGW_LOG(10) << "owner info does not exist" << endl;
     return -EINVAL;
   }
@@ -630,17 +630,18 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
       {
         string email = src_grant->get_id();
         RGW_LOG(10) << "grant user email=" << email << endl;
-        if (rgw_get_uid_by_email(email, id, grant_user) < 0) {
+        if (rgw_get_user_info_by_email(email, grant_user) < 0) {
           RGW_LOG(10) << "grant user email not found or other error" << endl;
           break;
         }
+        id = grant_user.user_id;
       }
     case ACL_TYPE_CANON_USER:
       {
         if (type.get_type() == ACL_TYPE_CANON_USER)
           id = src_grant->get_id();
     
-        if (grant_user.user_id.empty() && rgw_get_user_info(id, grant_user) < 0) {
+        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(id, grant_user) < 0) {
           RGW_LOG(10) << "grant user does not exist:" << id << endl;
         } else {
           ACLPermission& perm = src_grant->get_permission();

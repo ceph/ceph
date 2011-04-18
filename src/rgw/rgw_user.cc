@@ -20,45 +20,6 @@ static string ui_uid_bucket = USER_INFO_UID_BUCKET_NAME;
 string rgw_root_bucket = RGW_ROOT_BUCKET;
 
 #define READ_CHUNK_LEN (16 * 1024)
-/**
- * Get the info for a user out of storage.
- * Returns: 0 on success, -ERR# on failure
- */
-int rgw_get_user_info(string user_id, RGWUserInfo& info)
-{
-  bufferlist bl;
-  int ret;
-  char *data;
-  struct rgw_err err;
-  void *handle = NULL;
-  int request_len = READ_CHUNK_LEN;
-  time_t lastmod;
-  bufferlist::iterator iter;
-  ret = rgwstore->prepare_get_obj(ui_uid_bucket, user_id, 0, NULL, NULL, NULL, NULL, &lastmod, NULL, NULL, NULL, &handle, &err);
-  if (ret < 0)
-    return ret;
-  do { // we want to read the whole user info in one chunk to avoid any possible race
-    ret = rgwstore->get_obj(&handle, ui_uid_bucket, user_id, &data, 0, request_len - 1);
-    if (ret < 0) {
-      goto done;
-    }
-    if (ret < request_len)
-      break;
-
-    free(data);
-    request_len *= 2;
-  } while (true);
-
-  bl.append(data, ret);
-  free(data);
-
-  iter = bl.begin();
-  info.decode(iter); 
-  ret = 0;
-done:
-  rgwstore->finish_get_obj(&handle);
-  return ret;
-}
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -93,17 +54,15 @@ int rgw_store_user_info(RGWUserInfo& info)
 {
   bufferlist bl;
   info.encode(bl);
-  const char *data = bl.c_str();
   string md5;
   int ret;
   map<string,bufferlist> attrs;
 
   if (info.openstack_name.size()) {
     /* check if openstack mapping exists */
-    string os_uid;
     RGWUserInfo inf;
-    int r = rgw_get_uid_by_openstack(info.openstack_name, os_uid, inf);
-    if (r >= 0 && os_uid.compare(info.user_id) != 0) {
+    int r = rgw_get_user_info_by_openstack(info.openstack_name, inf);
+    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
       RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << std::endl;
       return -EEXIST;
     }
@@ -111,10 +70,9 @@ int rgw_store_user_info(RGWUserInfo& info)
 
   if (info.access_key.size()) {
     /* check if openstack mapping exists */
-    string uid;
     RGWUserInfo inf;
-    int r = rgw_get_uid_by_access_key(info.access_key, uid, inf);
-    if (r >= 0 && uid.compare(info.user_id) != 0) {
+    int r = rgw_get_user_info_by_access_key(info.access_key, inf);
+    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
       RGW_LOG(0) << "can't store user info, access key already mapped to another user" << std::endl;
       return -EEXIST;
     }
@@ -148,7 +106,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   return ret;
 }
 
-int rgw_get_uid_from_index(string& key, string& bucket, string& user_id, RGWUserInfo& info)
+int rgw_get_user_info_from_index(string& key, string& bucket, RGWUserInfo& info)
 {
   bufferlist bl;
   int ret;
@@ -178,7 +136,6 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id, RGWUser
 
   iter = bl.begin();
   ::decode(uid, iter);
-  user_id = uid.user_id;
   if (!iter.end()) {
     info.decode(iter);
   }
@@ -189,30 +146,39 @@ done:
 }
 
 /**
- * Given an email, finds the user_id associated with it.
+ * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_uid_by_email(string& email, string& user_id, RGWUserInfo& info)
+int rgw_get_user_info_by_uid(string& uid, RGWUserInfo& info)
 {
-  return rgw_get_uid_from_index(email, ui_email_bucket, user_id, info);
+  return rgw_get_user_info_from_index(uid, ui_uid_bucket, info);
 }
 
 /**
- * Given an openstack username, finds the user_id associated with it.
+ * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id, RGWUserInfo& info)
+int rgw_get_user_info_by_email(string& email, RGWUserInfo& info)
 {
-  return rgw_get_uid_from_index(openstack_name, ui_openstack_bucket, user_id, info);
+  return rgw_get_user_info_from_index(email, ui_email_bucket, info);
 }
 
 /**
- * Given an access key, finds the user_id associated with it.
+ * Given an openstack username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_access_key(string& access_key, string& user_id, RGWUserInfo& info)
+extern int rgw_get_user_info_by_openstack(string& openstack_name, RGWUserInfo& info)
 {
-  return rgw_get_uid_from_index(access_key, ui_key_bucket, user_id, info);
+  return rgw_get_user_info_from_index(openstack_name, ui_openstack_bucket, info);
+}
+
+/**
+ * Given an access key, finds the user info associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+extern int rgw_get_user_info_by_access_key(string& access_key, RGWUserInfo& info)
+{
+  return rgw_get_user_info_from_index(access_key, ui_key_bucket, info);
 }
 
 static void get_buckets_obj(string& user_id, string& buckets_obj_id)

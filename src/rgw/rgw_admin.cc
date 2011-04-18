@@ -245,14 +245,12 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
-  string user_id_str;
-
   if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && !user_id) {
     bool found = false;
     string s;
     if (user_email) {
       s = user_email;
-      if (rgw_get_uid_by_email(s, user_id_str, info) >= 0) {
+      if (rgw_get_user_info_by_email(s, info) >= 0) {
 	found = true;
       } else {
 	cerr << "could not find user by specified email" << std::endl;
@@ -260,7 +258,7 @@ int main(int argc, char **argv)
     }
     if (!found && access_key) {
       s = access_key;
-      if (rgw_get_uid_by_access_key(s, user_id_str, info) >= 0) {
+      if (rgw_get_user_info_by_access_key(s, info) >= 0) {
 	found = true;
       } else {
 	cerr << "could not find user by specified access key" << std::endl;
@@ -268,13 +266,13 @@ int main(int argc, char **argv)
     }
     if (!found && openstack_user) {
       s = openstack_user;
-      if (rgw_get_uid_by_openstack(s, user_id_str, info) >= 0) {
+      if (rgw_get_user_info_by_openstack(s, info) >= 0) {
 	found = true;
       } else
         cerr << "could not find user by specified openstack username" << std::endl;
     }
     if (found)
-      user_id = user_id_str.c_str();
+      user_id = info.user_id.c_str();
   }
 
 
@@ -289,7 +287,7 @@ int main(int argc, char **argv)
 
     if (opt_cmd != OPT_USER_CREATE &&
         info.user_id.empty() &&
-        rgw_get_user_info(user_id_str, info) < 0) {
+        rgw_get_user_info_by_uid(user_id_str, info) < 0) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
     }
@@ -316,7 +314,6 @@ int main(int argc, char **argv)
     if (!access_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
-      string uid;
       do {
 	ret = gen_rand_alphanumeric(public_id_buf, sizeof(public_id_buf));
 	if (ret < 0) {
@@ -325,7 +322,7 @@ int main(int argc, char **argv)
 	}
 	access_key = public_id_buf;
 	duplicate_check_id = access_key;
-      } while (!rgw_get_uid_by_access_key(duplicate_check_id, uid, duplicate_check));
+      } while (!rgw_get_user_info_by_access_key(duplicate_check_id, duplicate_check));
     }
   }
 

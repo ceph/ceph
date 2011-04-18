@@ -414,7 +414,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   }
 
   /* first get the user info */
-  if (rgw_get_user_info(auth_id, s->user) < 0) {
+  if (rgw_get_user_info_by_access_key(auth_id, s->user) < 0) {
     RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << endl;
     return false;
   }
