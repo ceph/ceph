@@ -42,7 +42,7 @@ extern string rgw_root_bucket;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 4
+#define USER_INFO_VER 5
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
@@ -147,6 +147,7 @@ struct RGWUserInfo
 {
   uint64_t auid;
   string user_id;
+  string access_key;
   string secret_key;
   string display_name;
   string user_email;
@@ -159,28 +160,34 @@ struct RGWUserInfo
      __u32 ver = USER_INFO_VER;
      ::encode(ver, bl);
      ::encode(auid, bl);
-     ::encode(user_id, bl);
+     ::encode(access_key, bl);
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
      ::encode(user_email, bl);
      ::encode(openstack_name, bl);
      ::encode(openstack_key, bl);
+     ::encode(user_id, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
     ::decode(ver, bl);
      if (ver >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
-    ::decode(user_id, bl);
+    ::decode(access_key, bl);
     ::decode(secret_key, bl);
     ::decode(display_name, bl);
     ::decode(user_email, bl);
     if (ver >= 3) ::decode(openstack_name, bl);
     if (ver >= 4) ::decode(openstack_key, bl);
+    if (ver >= 5)
+      ::decode(user_id, bl);
+    else
+      user_id = access_key;
   }
 
   void clear() {
     user_id.clear();
+    access_key.clear();
     secret_key.clear();
     display_name.clear();
     user_email.clear();

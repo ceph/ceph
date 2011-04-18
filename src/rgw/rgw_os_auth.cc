@@ -113,7 +113,6 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
   uint64_t nonce;
   utime_t expiration;
   string os_user;
-  string s3_user;
 
   try {
     ::decode(os_user, iter);
@@ -128,7 +127,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     return -EPERM;
   }
 
-  if ((ret = rgw_get_uid_by_openstack(os_user, s3_user, info)) < 0)
+  if ((ret = rgw_get_user_info_by_openstack(os_user, info)) < 0)
     return ret;
 
   RGW_LOG(0) << "os_user=" << os_user << std::endl;
@@ -165,7 +164,6 @@ void RGW_OS_Auth_Get::execute()
   const char *os_url = FCGX_GetParam("RGW_OPENSTACK_URL", s->fcgx->envp);
 
   string user_str = user;
-  string user_id;
   RGWUserInfo info;
   bufferlist bl;
 
@@ -178,7 +176,7 @@ void RGW_OS_Auth_Get::execute()
   if (!key || !user)
     goto done;
 
-  if ((ret = rgw_get_uid_by_openstack(user_str, user_id, info)) < 0)
+  if ((ret = rgw_get_user_info_by_openstack(user_str, info)) < 0)
     goto done;
 
   if (info.openstack_key.compare(key) != 0) {

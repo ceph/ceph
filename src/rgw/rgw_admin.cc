@@ -34,7 +34,8 @@ void usage()
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific bucket, date\n";
   cerr << "options:\n";
-  cerr << "   --uid=<id>                S3 uid\n";
+  cerr << "   --uid=<id>                user id\n";
+  cerr << "   --access-key=<id>         S3 access key\n";
   cerr << "   --os-user=<group:name>    OpenStack user\n";
   cerr << "   --email=<email>\n";
   cerr << "   --auth_uid=<auid>         librados uid\n";
@@ -178,6 +179,7 @@ int main(int argc, char **argv)
   keyring_init(&g_conf);
 
   const char *user_id = 0;
+  const char *access_key = 0;
   const char *secret_key = 0;
   const char *user_email = 0;
   const char *display_name = 0;
@@ -196,6 +198,8 @@ int main(int argc, char **argv)
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&access_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("secret", 's')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&secret_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("email", 'e')) {
@@ -241,40 +245,49 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
-  string user_id_str;
-
   if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && !user_id) {
     bool found = false;
     string s;
     if (user_email) {
       s = user_email;
-      if (rgw_get_uid_by_email(s, user_id_str, info) >= 0) {
+      if (rgw_get_user_info_by_email(s, info) >= 0) {
 	found = true;
       } else {
 	cerr << "could not find user by specified email" << std::endl;
       }
     }
+    if (!found && access_key) {
+      s = access_key;
+      if (rgw_get_user_info_by_access_key(s, info) >= 0) {
+	found = true;
+      } else {
+	cerr << "could not find user by specified access key" << std::endl;
+      }
+    }
     if (!found && openstack_user) {
       s = openstack_user;
-      if (rgw_get_uid_by_openstack(s, user_id_str, info) >= 0) {
+      if (rgw_get_user_info_by_openstack(s, info) >= 0) {
 	found = true;
       } else
         cerr << "could not find user by specified openstack username" << std::endl;
     }
     if (found)
-      user_id = user_id_str.c_str();
+      user_id = info.user_id.c_str();
   }
 
 
-  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
+  if (opt_cmd == OPT_USER_CREATE || opt_cmd == OPT_USER_MODIFY ||
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
-      return 0;
+      usage();
     }
 
     string user_id_str = user_id;
 
-    if (info.user_id.empty() && rgw_get_user_info(user_id_str, info) < 0) {
+    if (opt_cmd != OPT_USER_CREATE &&
+        info.user_id.empty() &&
+        rgw_get_user_info_by_uid(user_id_str, info) < 0) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
     }
@@ -298,7 +311,7 @@ int main(int argc, char **argv)
       }
       secret_key = secret_key_buf;
     }
-    if (!user_id) {
+    if (!access_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
@@ -307,9 +320,9 @@ int main(int argc, char **argv)
 	  cerr << "aborting" << std::endl;
 	  exit(1);
 	}
-	user_id = public_id_buf;
-	duplicate_check_id = user_id;
-      } while (!rgw_get_user_info(duplicate_check_id, duplicate_check));
+	access_key = public_id_buf;
+	duplicate_check_id = access_key;
+      } while (!rgw_get_user_info_by_access_key(duplicate_check_id, duplicate_check));
     }
   }
 
@@ -320,6 +333,8 @@ int main(int argc, char **argv)
   case OPT_USER_MODIFY:
     if (user_id)
       info.user_id = user_id;
+    if (access_key)
+      info.access_key = access_key;
     if (secret_key)
       info.secret_key = secret_key;
     if (display_name)
@@ -342,6 +357,7 @@ int main(int argc, char **argv)
 
   case OPT_USER_INFO:
     cout << "User ID: " << info.user_id << std::endl;
+    cout << "Access Key: " << info.access_key << std::endl;
     cout << "Secret Key: " << info.secret_key << std::endl;
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
