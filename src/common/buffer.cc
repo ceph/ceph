@@ -16,6 +16,7 @@
 #include "armor.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/environment.h"
 #include "common/safe_io.h"
 #include "common/config.h"
 #include "include/Spinlock.h"
@@ -32,7 +33,7 @@ namespace ceph {
 
 Spinlock buffer_lock("buffer_lock");
 atomic_t buffer_total_alloc;
-bool buffer_track_alloc = true;
+bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::inc_total_alloc(unsigned len) {
     if (buffer_track_alloc)

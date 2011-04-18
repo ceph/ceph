@@ -79,8 +79,6 @@ extern Spinlock buffer_lock;
 #endif
 
 
-extern bool buffer_track_alloc;
-
 class buffer {
   /*
    * exceptions

@@ -192,8 +192,5 @@ void common_init(std::vector < const char* >& args,
 	 << "with important data.       **" << TEXT_NORMAL << std::endl;
   }
 
-  // this probably belongs somewhere else...
-  buffer_track_alloc = g_conf.buffer_track_alloc;
-
   ceph::crypto::init();
 }

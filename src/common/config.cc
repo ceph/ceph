@@ -128,9 +128,6 @@ struct config_option config_optionsp[] = {
   OPTION(monmap, OPT_STR, 0),
   OPTION(mon_host, OPT_STR, 0),
   OPTION(daemonize, OPT_BOOL, false),
-  OPTION(tcmalloc_profiler_run, OPT_BOOL, false),
-  OPTION(profiler_allocation_interval, OPT_INT, 1073741824),
-  OPTION(profiler_highwater_interval, OPT_INT, 104857600),
   OPTION(profiling_logger, OPT_BOOL, false),
   OPTION(profiling_logger_interval, OPT_INT, 1),
   OPTION(profiling_logger_calc_variance, OPT_BOOL, false),
@@ -179,7 +176,6 @@ struct config_option config_optionsp[] = {
   OPTION(key, OPT_STR, 0),
   OPTION(keyfile, OPT_STR, 0),
   OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
-  OPTION(buffer_track_alloc, OPT_BOOL, false),
   OPTION(ms_tcp_nodelay, OPT_BOOL, true),
   OPTION(ms_initial_backoff, OPT_DOUBLE, .2),
   OPTION(ms_max_backoff, OPT_DOUBLE, 15.0),
@@ -485,12 +481,6 @@ parse_config_files(const std::list<std::string> &conf_files,
     }
   }
 
-  // FIXME: This bit of global fiddling needs to go somewhere else eventually.
-  std::string val;
-  g_lockdep =
-    ((get_val_from_conf_file(my_sections, "lockdep", val, true) == 0) &&
-      ((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0)));
-
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
@@ -566,11 +556,6 @@ parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
       client_mountpoint = val;
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--lockdep", (char*)NULL)) {
-      // FIXME: This bit of global fiddling needs to go somewhere else eventually.
-      g_lockdep =
-	((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0));
     }
     else {
       int o;

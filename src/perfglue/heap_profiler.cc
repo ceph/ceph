@@ -15,6 +15,7 @@
 #include <google/heap-profiler.h>
 #include <google/malloc_extension.h>
 #include "heap_profiler.h"
+#include "common/environment.h"
 #include "common/LogClient.h"
 
 bool ceph_using_tcmalloc()
@@ -24,16 +25,10 @@ bool ceph_using_tcmalloc()
 
 void ceph_heap_profiler_init()
 {
-  char profile_name[PATH_MAX];
-  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name.to_cstr());
-  char *val = new char[sizeof(int)*8+1];
-  sprintf(val, "%i", g_conf.profiler_allocation_interval);
-  setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-  sprintf(val, "%i", g_conf.profiler_highwater_interval);
-  setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-  if (g_conf.tcmalloc_profiler_run) {
-    generic_dout(0) << "turning on heap profiler with prefix " << profile_name << dendl;
-    HeapProfilerStart(profile_name);
+  // Two other interesting environment variables to set are:
+  // HEAP_PROFILE_ALLOCATION_INTERVAL, HEAP_PROFILE_INUSE_INTERVAL
+  if (get_env_bool("CEPH_HEAP_PROFILER_INIT")) {
+    ceph_heap_profiler_start();
   }
 }
 
@@ -55,13 +50,10 @@ bool ceph_heap_profiler_running()
 void ceph_heap_profiler_start()
 {
   char profile_name[PATH_MAX];
-  sprintf(profile_name, "%s/%s", g_conf.log_dir.c_str(), g_conf.name.to_cstr());
-  char *val = new char[sizeof(int)*8+1];
-  sprintf(val, "%i", g_conf.profiler_allocation_interval);
-  setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-  sprintf(val, "%i", g_conf.profiler_highwater_interval);
-  setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-  generic_dout(0) << "turning on heap profiler with prefix " << profile_name << dendl;
+  snprintf(profile_name, sizeof(profile_name),
+	   "%s/%s", g_conf.log_dir.c_str(), g_conf.name.to_cstr());
+  generic_dout(0) << "turning on heap profiler with prefix "
+		  << profile_name << dendl;
   HeapProfilerStart(profile_name);
 }
 
@@ -88,14 +80,6 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
 		  << heap_stats << std::endl;
       ceph_heap_profiler_dump("admin request");
     }
-  } else if (cmd.size() == 2 && cmd[1] == "export_config") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from "
-                << "current config";
   } else if (cmd.size() == 2 && cmd[1] == "start_profiler") {
     ceph_heap_profiler_start();
     clog.info() << g_conf.name << " started profiler \n";

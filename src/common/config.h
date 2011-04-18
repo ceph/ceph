@@ -54,7 +54,6 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  void parse_argv_part2(std::vector<const char*>& args);
   void parse_argv(std::vector<const char*>& args);
 
   // Set a configuration value.
@@ -97,16 +96,9 @@ public:
 
   int num_client;
 
-  //bool mkfs;
-
   std::string monmap;
   std::string mon_host;
   bool daemonize;
-
-  //profiling
-  bool tcmalloc_profiler_run;
-  int profiler_allocation_interval;
-  int profiler_highwater_interval;
 
   // profiling logger
   bool profiling_logger;
@@ -167,9 +159,6 @@ public:
   std::string key;
   std::string keyfile;
   std::string keyring;
-
-  // buffer
-  bool buffer_track_alloc;
 
   // messenger
 

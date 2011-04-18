@@ -588,6 +588,7 @@ libcommon_files = \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
+	common/environment.cc\
 	common/sctp_crc32.c\
 	common/assert.cc \
 	common/dyn_snprintf.c \
@@ -758,6 +759,7 @@ noinst_HEADERS = \
 	common/hex.h\
 	common/entity_name.h\
 	common/errno.h\
+	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
         common/ClassHandler.h\
