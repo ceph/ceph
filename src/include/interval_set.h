@@ -91,6 +91,7 @@ class interval_set {
 
     protected:
         typename map<T,T>::iterator _iter;
+    friend class interval_set<T>;
   };
 
   class const_iterator : public std::iterator <std::forward_iterator_tag, T>
@@ -365,6 +366,11 @@ class interval_set {
     other._size = t;
   }    
   
+  void erase(const iterator i) {
+    _size -= i.get_len();
+    m.erase(i._iter);
+  }
+
   void erase(T val) {
     erase(val, 1);
   }
