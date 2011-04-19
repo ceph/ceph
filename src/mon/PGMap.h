@@ -84,10 +84,17 @@ public:
   void apply_incremental(const Incremental& inc) {
     assert(inc.version == version+1);
     version++;
-    if (inc.full_ratio != 0)
+    bool ratios_changed = false;
+    if (inc.full_ratio != 0) {
       full_ratio = inc.full_ratio;
-    if (inc.nearfull_ratio != 0)
+      ratios_changed = true;
+    }
+    if (inc.nearfull_ratio != 0) {
       nearfull_ratio = inc.nearfull_ratio;
+      ratios_changed = true;
+    }
+    if (ratios_changed)
+      redo_full_sets();
     for (map<pg_t,pg_stat_t>::const_iterator p = inc.pg_stat_updates.begin();
 	 p != inc.pg_stat_updates.end();
 	 ++p) {
@@ -177,6 +184,20 @@ public:
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   
+  void redo_full_sets() {
+    full_osds.clear();
+    nearfull_osds.clear();
+    for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
+        i != osd_stat.end();
+        ++i) {
+      float ratio = ((float)i->second.kb_used) / ((float)i->second.kb);
+      if ( ratio > full_ratio )
+        full_osds.insert(i->first);
+      else if ( ratio > nearfull_ratio )
+        nearfull_osds.insert(i->first);
+    }
+  }
+
   void stat_zero() {
     num_pg = 0;
     num_pg_by_state.clear();
