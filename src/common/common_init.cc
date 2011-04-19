@@ -30,6 +30,9 @@
 #include <deque>
 #include <syslog.h>
 
+#define _STR(x) #x
+#define STRINGIFY(x) _STR(x)
+
 int keyring_init(md_config_t *conf)
 {
   if (!is_supported_auth(CEPH_AUTH_CEPHX))
@@ -90,6 +93,7 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
   // Create a configuration object
   // TODO: de-globalize
   md_config_t *conf = &g_conf; //new md_config_t();
+  // add config observers here
 
   // Set up our entity name.
   conf->name = iparams.name;
@@ -99,13 +103,13 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
     case CODE_ENVIRONMENT_DAEMON:
       conf->daemonize = true;
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
-	conf->log_dir = "/var/log/ceph";
-	conf->pid_file = "/var/run/ceph/$type.$id.pid";
+	conf->set_val_or_die("log_dir", "/var/log/ceph");
+	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
       }
-      conf->log_to_stderr = LOG_TO_STDERR_SOME;
+      conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
       break;
     default:
-      conf->daemonize = false;
+      conf->set_val_or_die("daemonize", "false");
       break;
   }
 
@@ -165,15 +169,8 @@ void common_init(std::vector < const char* >& args,
     conf->log_per_instance = false;
   }
 
-  conf->expand_all_meta();
-
-  if (conf->log_to_syslog || conf->clog_to_syslog) {
-    closelog();
-    openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
-  }
-
-  // Force a reopen of dout() with the configuration we have just read.
-  _doss->read_global_config(&g_conf);
+  // Expand metavariables. Invoke configuration observers.
+  conf->apply_changes();
 
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(&parse_errors);

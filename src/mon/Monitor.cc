@@ -333,7 +333,7 @@ void Monitor::handle_command(MMonCommand *m)
 
     if (m->cmd[0] == "_injectargs") {
       dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-      parse_config_option_string(m->cmd[1]);
+      g_conf.injectargs(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "class") {

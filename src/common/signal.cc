@@ -51,8 +51,10 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 
 void sighup_handler(int signum)
 {
-  // do nothing
-  // logger_reopen_all
+  /* In the past, users had to send a SIGHUP to the process after making a
+   * change to certain parts of the logging configuration. Now, this is no
+   * longer necessary. Now we want to ignore SIGHUP signals.
+   */
 }
 
 static void reraise_fatal(int signum)

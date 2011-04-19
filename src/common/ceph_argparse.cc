@@ -219,23 +219,6 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   return true;
 }
 
-void parse_config_option_string(std::string& s)
-{
-  char b[s.length()+1];
-  strcpy(b, s.c_str());
-  std::vector<const char*> nargs;
-  char *p = b;
-  while (*p) {
-    nargs.push_back(p);
-    while (*p && *p != ' ') p++;
-    if (!*p)
-      break;
-    *p++ = 0;
-    while (*p && *p == ' ') p++;
-  }
-  g_conf.parse_argv(nargs);
-}
-
 // The defaults for CephInitParameters
 CephInitParameters::CephInitParameters(uint32_t module_type, const char *conf_file_)
   : conf_file(conf_file_)

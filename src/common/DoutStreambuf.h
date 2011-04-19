@@ -20,13 +20,16 @@
 #ifndef CEPH_DOUT_STREAMBUF_H
 #define CEPH_DOUT_STREAMBUF_H
 
+#include "common/config.h"
+
 #include <iosfwd>
 #include <string>
 
 class md_config_t;
 
 template <typename charT, typename traits = std::char_traits<charT> >
-class DoutStreambuf : public std::basic_streambuf<charT, traits>
+class DoutStreambuf : public std::basic_streambuf<charT, traits>,
+		      public md_config_obs_t
 {
 public:
   enum dout_streambuf_flags_t {
@@ -53,8 +56,10 @@ public:
   // for the error to happen.
   void handle_stderr_closed();
 
-  // Set the flags based on the global configuration
-  void read_global_config(const md_config_t *conf);
+  virtual const char** get_tracked_conf_keys() const;
+
+  virtual void handle_conf_change(const md_config_t *conf,
+			     const std::set <std::string> &changed);
 
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);

@@ -76,13 +76,6 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  * Returns 0 on success, error code otherwise. */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
 
-/* Reopens the log file.
- * You must do this after changing the logging configuration.
- * It is also good practice to call this from your SIGHUP signal handler, so that users can send you
- * a SIGHUP to reopen the log.
- */
-void rados_reopen_log(rados_t cluster);
-
 /* Returns a configuration value as a string.
  * If len is positive, that is the maximum number of bytes we'll write into the
  * buffer. If len == -1, we'll call malloc() and set *buf.

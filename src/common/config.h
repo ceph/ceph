@@ -19,6 +19,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include <vector>
 #include <map>
+#include <set>
 
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
@@ -31,23 +32,39 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_CHAIN   2
 
 class config_option;
+class md_config_obs_t;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
-enum log_to_stderr_t {
-  LOG_TO_STDERR_NONE = 0,
-  LOG_TO_STDERR_SOME = 1,
-  LOG_TO_STDERR_ALL = 2,
-};
+#define LOG_TO_STDERR_NONE 0
+#define LOG_TO_STDERR_SOME 1
+#define LOG_TO_STDERR_ALL 2
 
 template <typename T, typename U>
 class DoutStreambuf;
 
-struct md_config_t
-{
+struct md_config_t {
 public:
+  /* Maps configuration options to the observer listening for them. */
+  typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
+
+  /* Set of configuration options that have changed since the last
+   * apply_changes */
+  typedef std::set < std::string > changed_set_t;
+
+  // Create a new md_config_t structure.
   md_config_t();
   ~md_config_t();
+
+  // Adds a new observer to this configuration. You can do this at any time,
+  // but it will only receive notifications for the changes that happen after
+  // you attach it, obviously.
+  //
+  // Most developers will probably attach their observers after common_init,
+  // but before anyone can call injectargs.
+  //
+  // The caller is responsible for allocating observers.
+  void add_observer(md_config_obs_t* observer_);
 
   // Parse a config file
   int parse_config_files(const std::list<std::string> &conf_files,
@@ -58,6 +75,16 @@ public:
 
   // Absorb config settings from argv
   void parse_argv(std::vector<const char*>& args);
+
+  // Expand all metavariables. Make any pending observer callbacks.
+  void apply_changes();
+
+  // Called by the Ceph daemons to make configuration changes at runtime
+  void injectargs(const std::string &s);
+
+  // Set a configuration value, or crash
+  // Metavariables will be expanded.
+  void set_val_or_die(const char *key, const char *val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
@@ -78,9 +105,6 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 		   const char *key, std::string &out, bool emeta) const;
 
-  // Perform metavariable expansion on all the data members of md_config_t.
-  void expand_all_meta();
-
   // Expand metavariables in the provided string.
   // Returns true if any metavariables were found and expanded.
   bool expand_meta(std::string &val) const;
@@ -90,9 +114,13 @@ private:
   void set_val_from_default(const config_option *opt);
 
   int set_val_impl(const char *val, const config_option *opt);
+  int set_val_raw(const char *val, const config_option *opt);
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+
+  obs_map_t observers;
+  changed_set_t changed;
 
 public:
   std::string host;
@@ -494,6 +522,14 @@ struct config_option {
   void *conf_ptr(md_config_t *conf) const;
 
   const void *conf_ptr(const md_config_t *conf) const;
+};
+
+class md_config_obs_t {
+public:
+  virtual ~md_config_obs_t();
+  virtual const char** get_tracked_conf_keys() const = 0;
+  virtual void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed) = 0;
 };
 
 #include "common/debug.h"

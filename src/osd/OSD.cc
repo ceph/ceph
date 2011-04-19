@@ -2169,7 +2169,7 @@ void OSD::handle_command(MMonCommand *m)
 
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
-    parse_config_option_string(m->cmd[1]);
+    g_conf.injectargs(m->cmd[1]);
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
     shutdown();

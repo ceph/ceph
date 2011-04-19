@@ -143,10 +143,6 @@ Rados object in state %s." % (self.state))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
 
-    def reopen_log(self):
-        self.require_state("configuring", "connected")
-        self.librados.rados_reopen_log(self.cluster);
-
     def connect(self):
         self.require_state("configuring")
         ret = self.librados.rados_connect(self.cluster)

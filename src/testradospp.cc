@@ -66,7 +66,6 @@ int main(int argc, const char **argv)
     printf("error: error setting log_to_stderr\n");
     exit(1);
   }
-  rados.reopen_log();
   std::string tmp;
   if (rados.conf_get("log to stderr", tmp)) {
     printf("error: failed to read log_to_stderr from config\n");

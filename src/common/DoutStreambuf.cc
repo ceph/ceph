@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/code_environment.h"
 #include "common/config.h"
 #include "common/DoutStreambuf.h"
 #include "common/entity_name.h"
@@ -225,7 +226,19 @@ void DoutStreambuf<charT, traits>::handle_stderr_closed()
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::read_global_config(const md_config_t *conf)
+const char** DoutStreambuf<charT, traits>::
+get_tracked_conf_keys() const
+{
+  static const char *KEYS[] =
+	{ "log_file", "log_dir", "log_sym_dir",
+	 "log_sym_history", "log_to_stderr",
+	 "log_to_syslog", "log_per_instance", NULL };
+  return KEYS;
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+handle_conf_change(const md_config_t *conf, const std::set <std::string> &changed)
 {
   DoutLocker _dout_locker;
   type_name = conf->name.get_type_name();
@@ -238,6 +251,11 @@ void DoutStreambuf<charT, traits>::read_global_config(const md_config_t *conf)
   }
 
   if (conf->log_to_syslog) {
+    if ((changed.count("log_to_syslog") || changed.count("name")) &&
+        (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
+      closelog();
+      openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
+    }
     flags |= DOUTSB_FLAG_SYSLOG;
   }
 
@@ -252,7 +270,7 @@ void DoutStreambuf<charT, traits>::read_global_config(const md_config_t *conf)
 	break;
       default:
 	ostringstream oss;
-	oss << "DoutStreambuf::read_global_config: can't understand "
+	oss << "DoutStreambuf::handle_conf_change: can't understand "
 	    << "conf->log_to_stderr = " << conf->log_to_stderr << "\n";
 	dout_emergency(oss.str());
 	break;

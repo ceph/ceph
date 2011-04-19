@@ -335,7 +335,6 @@ int main(int argc, const char **argv)
 
   assert(rados_create(&cluster, NULL) == 0);
   assert(rados_conf_read_file(cluster, NULL) == 0);
-  rados_reopen_log(cluster);
   assert(rados_connect(cluster) == 0);
 
   if (rados_pool_lookup(cluster, TEST_POOL) != -ENOENT) {
