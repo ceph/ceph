@@ -66,8 +66,6 @@
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
 
-#include "messages/MClass.h"
-
 #include "messages/MWatchNotify.h"
 
 #include "common/ProfLogger.h"

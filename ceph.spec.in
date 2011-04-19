@@ -133,7 +133,6 @@ fi
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/cconf
-%{_bindir}/cclass
 %{_bindir}/cclsinfo
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
@@ -180,7 +179,6 @@ fi
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/cauthtool.8*
 %{_mandir}/man8/cdebugpack.8*
-%{_mandir}/man8/cclass.8.gz
 %{_mandir}/man8/cclsinfo.8.gz
 %{python_sitelib}/rados.py
 %{python_sitelib}/rados.pyc

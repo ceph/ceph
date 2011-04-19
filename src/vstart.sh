@@ -355,9 +355,6 @@ EOF
 		done
 		sleep 1
 	fi
-
-	# load classes
-	$CEPH_BIN/cclass -c $conf -a -L .libs
 fi
 
 rm $osdmap_fn

@@ -2,7 +2,6 @@
 #include "include/types.h"
 #include "msg/Message.h"
 #include "osd/OSD.h"
-#include "messages/MClass.h"
 #include "ClassHandler.h"
 
 #include <dlfcn.h>

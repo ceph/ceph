@@ -125,9 +125,6 @@ using namespace std;
 
 #include "messages/MLock.h"
 
-#include "messages/MClass.h"
-#include "messages/MClassAck.h"
-
 #include "messages/MWatchNotify.h"
 
 #include "common/config.h"
@@ -508,14 +505,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_SHUTDOWN:
     m = new MGenericMessage(type);
-    break;
-
-  case MSG_CLASS:
-    m = new MClass();
-    break;
-
-  case MSG_CLASS_ACK:
-    m = new MClassAck();
     break;
 
   default:

@@ -2,13 +2,11 @@
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
-#include "include/ClassLibrary.h"
 
 #include "objclass/objclass.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ClassVersion.h"
 
 
 class ClassHandler
