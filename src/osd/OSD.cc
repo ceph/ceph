@@ -79,7 +79,7 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
-#include "common/ClassHandler.h"
+#include "osd/ClassHandler.h"
 
 #include "auth/AuthAuthorizeHandler.h"
 

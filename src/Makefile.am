@@ -695,7 +695,7 @@ libosd_a_SOURCES = \
 	osd/OSD.cc \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
-        common/ClassHandler.cc
+        osd/ClassHandler.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \
@@ -760,7 +760,6 @@ noinst_HEADERS = \
 	common/errno.h\
 	common/likely.h\
 	common/lockdep.h\
-        common/ClassHandler.h\
         common/ClassVersion.h\
         common/Clock.h\
         common/Cond.h\
@@ -1035,6 +1034,7 @@ noinst_HEADERS = \
         os/JournalingObjectStore.h\
         os/ObjectStore.h\
         osd/Ager.h\
+	osd/ClassHandler.h\
         osd/OSD.h\
         osd/OSDCaps.h\
         osd/OSDMap.h\

@@ -4,7 +4,7 @@
 #include "objclass/objclass.h"
 #include "osd/ReplicatedPG.h"
 
-#include "common/ClassHandler.h"
+#include "osd/ClassHandler.h"
 
 static ClassHandler *ch;
 

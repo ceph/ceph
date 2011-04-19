@@ -28,7 +28,7 @@
 #include "OSDCaps.h"
 
 #include "common/DecayCounter.h"
-#include "common/ClassHandler.h"
+#include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"
 
