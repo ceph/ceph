@@ -4902,19 +4902,20 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
-  dout(10) << "activate_pg" << dendl;
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
+    dout(10) << "activate_pg " << *pg << dendl;
     if (pg->is_active() &&
 	pg->is_replay() &&
 	pg->get_role() == 0 &&
 	pg->replay_until == activate_at) {
-
       pg->replay_queued_ops();
     }
     pg->unlock();
+  } else {
+    dout(10) << "activate_pg pgid " << pgid << " (not found)" << dendl;
   }
-
+  
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();
 }
