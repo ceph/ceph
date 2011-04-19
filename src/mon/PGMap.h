@@ -66,8 +66,7 @@ public:
       ::decode(osd_stat_rm, bl);
       ::decode(osdmap_epoch, bl);
       ::decode(pg_scan, bl);
-      if (!bl.end())
-	::decode(pg_remove, bl);
+      ::decode(pg_remove, bl);
     }
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
