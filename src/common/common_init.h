@@ -25,5 +25,6 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
 void complain_about_parse_errors(std::deque<std::string> *parse_errors);
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
+void output_ceph_version();
 
 #endif

@@ -29,13 +29,6 @@ void _dout_open_log()
     _dout = new std::ostream(_doss);
   }
 
-  char buf[1024];
-  snprintf(buf, sizeof(buf), "ceph version %s.commit: %s. process: %s. "
-      "pid: %d\n",
-      ceph_version_to_str(), git_version_to_str(), get_process_name_cpp().c_str(),
-      getpid());
-  _doss->dout_emergency_to_file_and_syslog(buf);
-
   _dout_need_open = false;
 }
 
@@ -60,4 +53,13 @@ int dout_create_rank_symlink(int n)
 
   assert(_doss);
   return _doss->create_rank_symlink(n);
+}
+
+void output_ceph_version()
+{
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "ceph version %s.commit: %s. process: %s. "
+	    "pid: %d", ceph_version_to_str(), git_version_to_str(),
+	    get_process_name_cpp().c_str(), getpid());
+  generic_dout(0) << buf << dendl;
 }

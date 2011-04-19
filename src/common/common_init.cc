@@ -190,6 +190,7 @@ void common_init(std::vector < const char* >& args,
 	 << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
 	 << "with important data.       **" << TEXT_NORMAL << std::endl;
+    output_ceph_version();
   }
 
   ceph::crypto::init();
