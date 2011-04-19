@@ -36,8 +36,6 @@ extern void _dout_open_log();
 
 extern int dout_handle_daemonize();
 
-extern int dout_create_rank_symlink(int n);
-
 extern void dout_emergency(const char * const str);
 
 extern void dout_emergency(const std::string &str);

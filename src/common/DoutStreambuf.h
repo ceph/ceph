@@ -65,9 +65,6 @@ public:
   // path name.
   int handle_pid_change(const md_config_t *conf);
 
-  // Create a rank symlink to the log file
-  int create_rank_symlink(int n);
-
   std::string config_to_str() const;
 
   // Output a string directly to the file and to syslog
@@ -107,7 +104,6 @@ private:
   std::string opath;
   std::string symlink_dir;
   std::string isym_path;
-  std::string rsym_path;
 };
 
 // Secret evil interfaces for writing logs without taking the lock.

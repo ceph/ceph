@@ -44,17 +44,6 @@ int dout_handle_daemonize()
   return _doss->handle_pid_change(&g_conf);
 }
 
-int dout_create_rank_symlink(int n)
-{
-  DoutLocker _dout_locker;
-
-  if (_dout_need_open)
-    _dout_open_log();
-
-  assert(_doss);
-  return _doss->create_rank_symlink(n);
-}
-
 void output_ceph_version()
 {
   char buf[1024];

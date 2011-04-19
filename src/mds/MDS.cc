@@ -902,9 +902,6 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // ??
 
-  if (oldwhoami != whoami)
-    dout_create_rank_symlink(whoami);
-  
   if (oldwhoami != whoami || oldstate != state) {
     // update messenger.
     if (state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY) {

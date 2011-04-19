@@ -131,7 +131,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_shutdown;
     }
     
-    dout_create_rank_symlink(client->get_nodeid().v);
     cerr << "cfuse[" << getpid() << "]: starting fuse" << std::endl;
     r = ceph_fuse_ll_main(client, argc, argv, fd[1]);
     cerr << "cfuse[" << getpid() << "]: fuse finished with error " << r << std::endl;

@@ -304,17 +304,6 @@ handle_pid_change(const md_config_t *conf)
     }
   }
 
-  if (!rsym_path.empty()) {
-    // Re-create the rank symlink
-    int ret = create_symlink(new_opath, rsym_path);
-    if (ret) {
-      ostringstream oss;
-      oss << __func__ << ": failed to (re)create rank symlink\n";
-      dout_emergency(oss.str());
-      return ret;
-    }
-  }
-
   int ret = ::rename(opath.c_str(), new_opath.c_str());
   if (ret) {
     int err = errno;
@@ -331,32 +320,6 @@ handle_pid_change(const md_config_t *conf)
 }
 
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::
-create_rank_symlink(int n)
-{
-  // should hold the dout_lock here
-
-  if (!(flags & DOUTSB_FLAG_OFILE))
-    return 0;
-
-  ostringstream rss;
-  rss << symlink_dir << "/" << type_name << "." << n;
-
-  string rsym_path_(rss.str());
-  int ret = create_symlink(opath, rsym_path_);
-  if (ret) {
-    ostringstream oss;
-    oss << __func__ << ": failed to create rank symlink with n = "
-	<< n << "\n";
-    dout_emergency(oss.str());
-    return ret;
-  }
-
-  rsym_path = rsym_path_;
-  return 0;
-}
-
-template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::config_to_str() const
 {
   // should hold the dout_lock here
@@ -365,7 +328,6 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   oss << "ofd = " << ofd << "\n";
   oss << "opath = '" << opath << "'\n";
   oss << "isym_path = '" << isym_path << "'\n";
-  oss << "rsym_path = '" << rsym_path << "'\n";
   return oss.str();
 }
 
@@ -480,7 +442,6 @@ _read_ofile_config(const md_config_t *conf)
   opath.clear();
   symlink_dir.clear();
   isym_path.clear();
-  rsym_path.clear();
 
   opath = _calculate_opath(conf);
   if (opath.empty()) {
