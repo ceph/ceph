@@ -16,6 +16,7 @@
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
+#include "common/DoutStreambuf.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
@@ -171,11 +172,8 @@ void common_init(std::vector < const char* >& args,
     openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
   }
 
-  {
-    // Force a reopen of dout() with the configuration we have just read.
-    DoutLocker _dout_locker;
-    _dout_open_log();
-  }
+  // Force a reopen of dout() with the configuration we have just read.
+  _doss->read_global_config(&g_conf);
 
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(&parse_errors);

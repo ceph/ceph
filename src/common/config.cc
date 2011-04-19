@@ -16,6 +16,7 @@
 #include "common/BackTrace.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
+#include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -433,6 +434,8 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 md_config_t::
 md_config_t()
+  : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
+    _dout(_doss)
 {
   //
   // Note: because our md_config_t structure is a global, the memory used to

@@ -7,41 +7,22 @@
 #include <iostream>
 #include <sstream>
 
-// debug output
-std::ostream *_dout = NULL;
-DoutStreambuf <char> *_doss = NULL;
-bool _dout_need_open = true;
+// Originally, dout was global. Now, there is one for each md_config_t structure.
+// These variables are here temporarily to make the transition easier.
+std::ostream *_dout = &g_conf._dout;
+DoutStreambuf <char> *_doss = g_conf._doss;
 
 /*
  * The dout lock protects calls to dout()
  */
 pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
 
-void _dout_open_log()
-{
-  // should hold _dout_lock here
-
-  if (!_doss) {
-    _doss = new DoutStreambuf <char>();
-  }
-  _doss->read_global_config(&g_conf);
-  if (!_dout) {
-    _dout = new std::ostream(_doss);
-  }
-
-  _dout_need_open = false;
-}
-
-int dout_handle_daemonize()
+int dout_handle_daemonize(md_config_t *conf)
 {
   DoutLocker _dout_locker;
 
-  if (_dout_need_open)
-       _dout_open_log();
-
-  assert(_doss);
-  _doss->handle_stderr_closed();
-  return _doss->handle_pid_change(&g_conf);
+  conf->_doss->handle_stderr_closed();
+  return conf->_doss->handle_pid_change(&g_conf);
 }
 
 void output_ceph_version()

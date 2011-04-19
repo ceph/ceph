@@ -2357,7 +2357,7 @@ int SimpleMessenger::start(bool daemonize, uint64_t nonce)
 	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;
       }
     }
-    dout_handle_daemonize();
+    dout_handle_daemonize(&g_conf);
     dout(1) << "messenger.start daemonized" << dendl;
   }
 

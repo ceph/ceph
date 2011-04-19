@@ -227,9 +227,9 @@ void DoutStreambuf<charT, traits>::handle_stderr_closed()
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::read_global_config(const md_config_t *conf)
 {
+  DoutLocker _dout_locker;
   type_name = conf->name.get_type_name();
 
-  // should hold the dout_lock here
   flags = 0;
 
   if (ofd != -1) {

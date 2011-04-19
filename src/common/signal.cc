@@ -51,10 +51,8 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 
 void sighup_handler(int signum)
 {
-  // All this does is set a few bits telling us to re-open our logfiles and
-  // restart our central logging service.
-  _dout_need_open = true;
-  logger_reopen_all();
+  // do nothing
+  // logger_reopen_all
 }
 
 static void reraise_fatal(int signum)

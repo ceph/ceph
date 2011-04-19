@@ -40,6 +40,9 @@ enum log_to_stderr_t {
   LOG_TO_STDERR_ALL = 2,
 };
 
+template <typename T, typename U>
+class DoutStreambuf;
+
 struct md_config_t
 {
 public:
@@ -463,6 +466,8 @@ public:
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
 
+  DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
+  std::ostream _dout;
 };
 
 extern md_config_t g_conf;
