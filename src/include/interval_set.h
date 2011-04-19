@@ -366,7 +366,7 @@ class interval_set {
     other._size = t;
   }    
   
-  void erase(const iterator i) {
+  void erase(iterator &i) {
     _size -= i.get_len();
     m.erase(i._iter);
   }

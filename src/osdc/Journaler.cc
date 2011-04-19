@@ -639,8 +639,9 @@ void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
     prezero_pos += len;
     while (!pending_zero.empty() &&
 	   pending_zero.begin().get_start() == prezero_pos) {
-      prezero_pos += pending_zero.begin().get_len();
-      pending_zero.erase(pending_zero.begin());
+      interval_set<uint64_t>::iterator b(pending_zero.begin());
+      prezero_pos += b.get_len();
+      pending_zero.erase(b);
     }
 
     if (waiting_for_zero) {
