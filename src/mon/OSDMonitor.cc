@@ -1025,8 +1025,8 @@ void OSDMonitor::tick()
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
-    } else {
-      dout(10) << "No full osds, removing full flag (if it's set)" << dendl;
+    } else if (osdmap.test_flag(CEPH_OSDMAP_FULL)){
+      dout(10) << "No full osds, removing full flag" << dendl;
       remove_flag(CEPH_OSDMAP_FULL);
     }
     if (pending_inc.new_flags != -1 &&
