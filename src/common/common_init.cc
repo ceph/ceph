@@ -141,17 +141,17 @@ void common_init(std::vector < const char* >& args,
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
   if (ret == -EDOM) {
-    derr << "common_init: error parsing config file." << dendl;
+    dout_emergency("common_init: error parsing config file.\n");
     _exit(1);
   }
   else if (ret == -EINVAL) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-      derr << "common_init: unable to open config file." << dendl;
+      dout_emergency("common_init: unable to open config file.\n");
       _exit(1);
     }
   }
   else if (ret) {
-    derr << "common_init: error reading config file." << dendl;
+    dout_emergency("common_init: error reading config file.\n");
     _exit(1);
   }
 

@@ -194,16 +194,12 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
     syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s",
 	   obuf + TIME_FMT_SZ + 1);
   }
-  if (flags & DOUTSB_FLAG_STDOUT) {
-    // Just write directly out to the stdout fileno. There's no point in
-    // using something like fputs to write to a temporary buffer,
-    // because we would just have to flush that temporary buffer
-    // immediately.
-    if (safe_write(STDOUT_FILENO, obuf, len))
-      flags &= ~DOUTSB_FLAG_STDOUT;
-  }
   if (flags & DOUTSB_FLAG_STDERR) {
     if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
+      // Just write directly out to the stderr fileno. There's no point in
+      // using something like fputs to write to a temporary buffer,
+      // because we would just have to flush that temporary buffer
+      // immediately.
       if (safe_write(STDERR_FILENO, obuf, len))
 	flags &= ~DOUTSB_FLAG_STDERR;
     }
@@ -576,9 +572,6 @@ void dout_emergency(const char * const str)
   if (safe_write(STDERR_FILENO, str, len)) {
     // ignore errors
     ;
-  }
-  if (safe_write(STDOUT_FILENO, str, len)) {
-    ; // ignore error code
   }
   /* Normally we would take the lock before even checking _doss, but since
    * this is an emergency, we can't do that. */

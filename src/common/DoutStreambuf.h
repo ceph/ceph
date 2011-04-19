@@ -31,7 +31,6 @@ class DoutStreambuf : public std::basic_streambuf<charT, traits>
 public:
   enum dout_streambuf_flags_t {
     DOUTSB_FLAG_SYSLOG =          0x01,
-    DOUTSB_FLAG_STDOUT =          0x02,
     DOUTSB_FLAG_STDERR_SOME =     0x04,
     DOUTSB_FLAG_STDERR_ALL =      0x08,
     DOUTSB_FLAG_STDERR =          0x0c,
