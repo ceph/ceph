@@ -454,7 +454,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"), map_cache_keep_from(0),
-  class_lock("OSD::class_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -514,7 +513,7 @@ void handle_signal(int signal)
   }
 }
 
-void cls_initialize(OSD *_osd);
+void cls_initialize(ClassHandler *ch);
 
 
 int OSD::pre_init()
@@ -568,10 +567,10 @@ int OSD::init()
     return -1;
   }
 
-  class_handler = new ClassHandler(this);
+  class_handler = new ClassHandler();
   if (!class_handler)
     return -ENOMEM;
-  cls_initialize(this);
+  cls_initialize(class_handler);
 
   // load up "current" osdmap
   assert_warn(!osdmap);
@@ -1833,7 +1832,6 @@ void OSD::ms_handle_connect(Connection *con)
     send_pg_temp();
     send_failures();
     send_pg_stats(g_clock.now());
-    class_handler->resend_class_requests();
   }
 }
 
@@ -2552,10 +2550,6 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_REP_SCRUB:
     handle_rep_scrub((MOSDRepScrub*)m);
     break;    
-
-  case MSG_CLASS:
-    handle_class((MClass*)m);
-    break;
 
     // -- need OSDMap --
 
@@ -5110,7 +5104,11 @@ void OSD::handle_op(MOSDOp *op)
 
   utime_t now = g_clock.now();
 
-  init_op_flags(op);
+  int r = init_op_flags(op);
+  if (r) {
+    reply_op_error(op, r);
+    return;
+  }
 
   // calc actual pgid
   pg_t pgid = op->get_pg();
@@ -5471,78 +5469,7 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m,
-		   ClassHandler::ClassData **pcls)
-{
-  Mutex::Locker l(class_lock);
-  dout(10) << "get_class '" << cname << "' by " << m << dendl;
-
-  ClassHandler::ClassData *cls = class_handler->get_class(cname, version);
-  if (cls) {
-    switch (cls->status) {
-    case ClassHandler::ClassData::CLASS_LOADED:
-      *pcls = cls;
-      return 0;
-    case ClassHandler::ClassData::CLASS_INVALID:
-      dout(1) << "class " << cname << " not supported" << dendl;
-      return -EOPNOTSUPP;
-    case ClassHandler::ClassData::CLASS_ERROR:
-      dout(0) << "error loading class!" << dendl;
-      return -EIO;
-    default:
-      assert(0);
-    }
-  }
-
-  dout(10) << "get_class '" << cname << "' by " << m << " waiting for missing class" << dendl;
-  waiting_for_missing_class[cname].push_back(m);
-  return -EAGAIN;
-}
-
-void OSD::got_class(const string& cname)
-{
-  // no lock.. this is an upcall from handle_class
-  dout(10) << "got_class '" << cname << "'" << dendl;
-
-  if (waiting_for_missing_class.count(cname)) {
-    take_waiters(waiting_for_missing_class[cname]);
-    waiting_for_missing_class.erase(cname);
-  }
-}
-
-void OSD::handle_class(MClass *m)
-{
-  if (!require_mon_peer(m))
-    return;
-
-  Mutex::Locker l(class_lock);
-  dout(10) << "handle_class action=" << m->action << dendl;
-
-  switch (m->action) {
-  case CLASS_RESPONSE:
-    class_handler->handle_class(m);
-    break;
-
-  default:
-    assert(0);
-  }
-  m->put();
-}
-
-void OSD::send_class_request(const char *cname, ClassVersion& version)
-{
-  dout(10) << "send_class_request class=" << cname << " version=" << version << dendl;
-  MClass *m = new MClass(monc->get_fsid(), 0);
-  ClassInfo info;
-  info.name = cname;
-  info.version = version;
-  m->info.push_back(info);
-  m->action = CLASS_GET;
-  monc->send_mon_message(m);
-}
-
-
-void OSD::init_op_flags(MOSDOp *op)
+int OSD::init_op_flags(MOSDOp *op)
 {
   vector<OSDOp>::iterator iter;
 
@@ -5568,7 +5495,12 @@ void OSD::init_op_flags(MOSDOp *op)
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
 	bp.copy(iter->op.cls.method_len, mname);
-        int flags =  class_handler->get_method_flags(cname, mname);
+
+	ClassHandler::ClassData *cls;
+	int r = class_handler->open_class(cname, &cls);
+	if (r)
+	  return r;
+	int flags = cls->get_method_flags(mname.c_str());
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
         is_public = flags & CLS_METHOD_PUBLIC;
@@ -5590,4 +5522,6 @@ void OSD::init_op_flags(MOSDOp *op)
       break;
     }
   }
+
+  return 0;
 }

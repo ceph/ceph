@@ -286,6 +286,7 @@ $CMDSDEBUG
 [osd]
 $DAEMONOPTS
         osd class tmp = out
+        osd class dir = .libs
         osd scrub load threshold = 5.0
 $COSDDEBUG
 [mon]

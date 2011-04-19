@@ -2,21 +2,20 @@
 #include "common/config.h"
 
 #include "objclass/objclass.h"
-#include "osd/OSD.h"
 #include "osd/ReplicatedPG.h"
 
 #include "common/ClassHandler.h"
 
-static OSD *osd;
+static ClassHandler *ch;
 
-void cls_initialize(OSD *_osd)
+void cls_initialize(ClassHandler *h)
 {
-    osd = _osd;
+  ch = h;
 }
 
 void cls_finalize()
 {
-    osd = NULL;
+  ch = NULL;
 }
 
 
@@ -32,21 +31,15 @@ void cls_free(void *p)
 
 int cls_register(const char *name, cls_handle_t *handle)
 {
-  ClassHandler::ClassData *cd;
-
-  cd = osd->class_handler->register_class(name);
-
-  *handle = (cls_handle_t)cd;
-
-  return (cd != NULL);
+  ClassHandler::ClassData *cls = ch->register_class(name);
+  *handle = (cls_handle_t)cls;
+  return (cls != NULL);
 }
 
 int cls_unregister(cls_handle_t handle)
 {
-  ClassHandler::ClassData *cd;
-  cd = (ClassHandler::ClassData *)handle;
-
-  osd->class_handler->unregister_class(cd);
+  ClassHandler::ClassData *cls = (ClassHandler::ClassData *)handle;
+  ch->unregister_class(cls);
   return 1;
 }
 
@@ -54,11 +47,8 @@ int cls_register_method(cls_handle_t hclass, const char *method,
                         int flags,
                         cls_method_call_t class_call, cls_method_handle_t *handle)
 {
-  ClassHandler::ClassData *cd;
-  cls_method_handle_t hmethod;
-
-  cd = (ClassHandler::ClassData *)hclass;
-  hmethod  = (cls_method_handle_t)cd->register_method(method, flags, class_call);
+  ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
+  cls_method_handle_t hmethod =(cls_method_handle_t)cls->register_method(method, flags, class_call);
   if (handle)
     *handle = hmethod;
   return (hmethod != NULL);
@@ -68,11 +58,8 @@ int cls_register_cxx_method(cls_handle_t hclass, const char *method,
                             int flags,
 			    cls_method_cxx_call_t class_call, cls_method_handle_t *handle)
 {
-  ClassHandler::ClassData *cd;
-  cls_method_handle_t hmethod;
-
-  cd = (ClassHandler::ClassData *)hclass;
-  hmethod  = (cls_method_handle_t)cd->register_cxx_method(method, flags, class_call);
+  ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
+  cls_method_handle_t hmethod = (cls_method_handle_t)cls->register_cxx_method(method, flags, class_call);
   if (handle)
     *handle = hmethod;
   return (hmethod != NULL);
@@ -82,7 +69,6 @@ int cls_unregister_method(cls_method_handle_t handle)
 {
   ClassHandler::ClassMethod *method = (ClassHandler::ClassMethod *)handle;
   method->unregister();
-
   return 1;
 }
 

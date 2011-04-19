@@ -492,17 +492,6 @@ protected:
 
 
 protected:
-  // -- classes --
-  Mutex class_lock;
-  map<string, list<Message*> > waiting_for_missing_class;
-
-  int get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
-  void handle_class(MClass *m);
-public:
-  void got_class(const string& cname);
-  void send_class_request(const char *n, ClassVersion& version);
-
-protected:
   // -- placement groups --
   map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
@@ -1102,7 +1091,7 @@ public:
 
   void force_remount();
 
-  void init_op_flags(MOSDOp *op);
+  int init_op_flags(MOSDOp *op);
 
 
   void put_object_context(void *_obc, pg_t pgid);

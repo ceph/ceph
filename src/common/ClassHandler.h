@@ -11,15 +11,8 @@
 #include "common/ClassVersion.h"
 
 
-class OSD;
-class MClass;
-
-
-
 class ClassHandler
 {
-  OSD *osd;
-
 public:
   class ClassData;
 
@@ -37,68 +30,55 @@ public:
   };
 
   struct ClassData {
-    Mutex *mutex;
-    bool _add_dependency(cls_deps_t *dep);
-    void _add_dependent(ClassData& dependent);
-
-    void satisfy_dependency(ClassData *cls);
-
     enum Status { 
       CLASS_UNKNOWN,
-      CLASS_INVALID,
-      CLASS_ERROR,
-      CLASS_LOADED,
-      CLASS_REQUESTED,
+      CLASS_MISSING,         // missing
+      CLASS_MISSING_DEPS,    // missing dependencies
+      CLASS_INITIALIZING,    // calling init() right now
+      CLASS_OPEN,            // initialized, usable
     } status;
-    ClassVersion version;
-    utime_t expires;
-    ClassImpl impl;
+
     string name;
-    OSD *osd;
     ClassHandler *handler;
     void *handle;
-    bool registered;
+
     map<string, ClassMethod> methods_map;
 
-    map<string, ClassData *> dependencies; /* our dependencies */
-    map<string, ClassData *> missing_dependencies; /* only missing dependencies */
-    list<ClassData *> dependents;          /* classes that depend on us */
+    set<ClassData *> dependencies;         /* our dependencies */
+    set<ClassData *> missing_dependencies; /* only missing dependencies */
 
-    bool has_missing_deps() { return (missing_dependencies.size() > 0); }
+    ClassMethod *_get_method(const char *mname);
 
-    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
-    ~ClassData() { if (mutex) delete mutex; }
+    ClassData() : status(CLASS_UNKNOWN), 
+		  handle(NULL) {}
+    ~ClassData() { }
 
     ClassMethod *register_method(const char *mname, int flags, cls_method_call_t func);
     ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
-    ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
 
-    int load();
-    void init();
-
-    void set_status(Status _status);
-    bool cache_timed_out();
+    ClassMethod *get_method(const char *mname) {
+      Mutex::Locker l(handler->mutex);
+      return _get_method(mname);
+    }
+    int get_method_flags(const char *mname);
   };
+
+private:
   Mutex mutex;
   map<string, ClassData> classes;
 
-  ClassData& get_obj(const string& cname);
+  ClassData *_get_class(const string& cname);
+  int _load_class(ClassData *cls);
 
-  int load_class(const string& cname);
-  int _load_class(ClassData &data);
-
-  ClassHandler(OSD *_osd) : osd(_osd), mutex("ClassHandler") {}
-
-  ClassData *get_class(const string& cname, ClassVersion& version);
-  void resend_class_requests();
-
-  void handle_class(MClass *m);
-
+public:
+  ClassHandler() : mutex("ClassHandler") {}
+  
+  int open_class(const string& cname, ClassData **pcls);
+  
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
-
-  int get_method_flags(const string& cname, const string& mname);
+  
 };
 
 
