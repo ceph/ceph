@@ -527,7 +527,8 @@ struct config_option {
 
 class md_config_obs_t {
 public:
-  virtual ~md_config_obs_t();
+  virtual ~md_config_obs_t(); // we won't actually use this, but it's safest
+  // when you have virtual functions
   virtual const char** get_tracked_conf_keys() const = 0;
   virtual void handle_conf_change(const md_config_t *conf,
 			  const std::set <std::string> &changed) = 0;
