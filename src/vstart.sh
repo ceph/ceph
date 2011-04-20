@@ -286,6 +286,7 @@ $CMDSDEBUG
 [osd]
 $DAEMONOPTS
         osd class tmp = out
+        osd class dir = .libs
         osd scrub load threshold = 5.0
 $COSDDEBUG
 [mon]
@@ -354,9 +355,6 @@ EOF
 		done
 		sleep 1
 	fi
-
-	# load classes
-	$CEPH_BIN/cclass -c $conf -a -L .libs
 fi
 
 rm $osdmap_fn

@@ -69,7 +69,6 @@ Context *resend_event = 0;
 #include "osd/OSDMap.h"
 #include "mds/MDSMap.h"
 #include "common/LogEntry.h"
-#include "include/ClassLibrary.h"
 
 #include "mon/mon_types.h"
 
@@ -160,35 +159,6 @@ static void handle_notify(MMonObserveNotify *notify)
 	while (!p.end()) {
 	  le.decode(p);
 	  *g.log << now << "   log " << le << std::endl;
-	}
-      }
-      break;
-    }
-
-  case PAXOS_CLASS:
-    {
-      bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	ClassLibrary list;
-	::decode(list, p);
-	// show the first class info
-        map<string, ClassVersionMap>::iterator mapiter = list.library_map.begin();
-	if (mapiter != list.library_map.end()) {
-          ClassVersionMap& map = mapiter->second;
-          tClassVersionMap::iterator iter = map.begin();
-
-          if (iter != map.end())
-	    *g.log << now << "   class " <<  iter->second << std::endl;
-	}
-      } else {
-	__u8 v;
-	::decode(v, p);
-	while (!p.end()) {
-	  ClassLibraryIncremental inc;
-          ::decode(inc, p);
-	  ClassInfo info;
-	  inc.decode_info(info);
-	  *g.log << now << "   class " << info << std::endl;
 	}
       }
       break;

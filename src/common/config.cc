@@ -371,7 +371,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_auto_weight, OPT_BOOL, false),
   OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0),  // seconds
   OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0), // seconds
-  OPTION(osd_class_tmp, OPT_STR, "/var/lib/ceph/tmp"),
+  OPTION(osd_class_dir, OPT_STR, "/usr/lib/rados-classes"),
   OPTION(osd_check_for_log_corruption, OPT_BOOL, false),
   OPTION(osd_use_stale_snap, OPT_BOOL, false),
   OPTION(osd_max_notify_timeout, OPT_U32, 30), // max notify timeout in seconds

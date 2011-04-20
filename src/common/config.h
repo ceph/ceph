@@ -436,7 +436,7 @@ public:
 
   double osd_class_error_timeout;
   double osd_class_timeout;
-  std::string osd_class_tmp;
+  std::string osd_class_dir;
 
   int osd_max_scrubs;
   float osd_scrub_load_threshold;

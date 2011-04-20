@@ -9,7 +9,7 @@ CLEANFILES =
 bin_PROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
-bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack crbdnamer
+bin_SCRIPTS = crun $(srcdir)/cclsinfo cdebugpack crbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -459,7 +459,7 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs cclass cdebugpack: init-ceph.in mkcephfs.in cclass.in Makefile cdebugpack.in
+init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -470,7 +470,6 @@ BUILT_SOURCES += init-ceph
 sbin_SCRIPTS += mkcephfs
 
 CLEANFILES += \
-	cclass \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
@@ -504,7 +503,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
-	$(srcdir)/cclass.in $(srcdir)/cdebugpack.in \
+	$(srcdir)/cdebugpack.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/crbdnamer \
@@ -584,7 +583,6 @@ libcommon_files = \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
 	common/ProfLogger.cc \
-	common/ClassLibrary.cc \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
@@ -652,7 +650,6 @@ libmon_a_SOURCES = \
 	mon/MonmapMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
-	mon/ClassMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
@@ -696,7 +693,7 @@ libosd_a_SOURCES = \
 	osd/OSD.cc \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
-        common/ClassHandler.cc
+        osd/ClassHandler.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \
@@ -762,8 +759,6 @@ noinst_HEADERS = \
 	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
-        common/ClassHandler.h\
-        common/ClassVersion.h\
         common/Clock.h\
         common/Cond.h\
         common/ConfUtils.h\
@@ -802,7 +797,6 @@ noinst_HEADERS = \
         crush/types.h\
 	fetch_config\
 	include/bloom_filter.hpp\
-	include/ClassLibrary.h\
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
@@ -911,8 +905,6 @@ noinst_HEADERS = \
         messages/MAuth.h\
         messages/MAuthReply.h\
 	messages/MCacheExpire.h\
-	messages/MClass.h\
-	messages/MClassAck.h\
         messages/MClientCaps.h\
         messages/MClientCapRelease.h\
         messages/MClientLease.h\
@@ -1002,7 +994,6 @@ noinst_HEADERS = \
         messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
-        mon/ClassMonitor.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\
@@ -1037,6 +1028,7 @@ noinst_HEADERS = \
         os/JournalingObjectStore.h\
         os/ObjectStore.h\
         osd/Ager.h\
+	osd/ClassHandler.h\
         osd/OSD.h\
         osd/OSDCaps.h\
         osd/OSDMap.h\

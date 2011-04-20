@@ -15,7 +15,6 @@
 #include "OSD.h"
 #include "PGLS.h"
 
-#include "common/arch.h"
 #include "common/errno.h"
 #include "common/ProfLogger.h"
 
@@ -979,16 +978,10 @@ int ReplicatedPG::prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
 			       bufferlist::iterator& bp,
 			       ClassHandler::ClassMethod **pmethod)
 {
-  int result;
-
   ClassHandler::ClassData *cls;
-  ClassVersion version;
-  version.set_arch(get_arch());
-  result = osd->get_class(cname, version, info.pgid, osd_op, &cls);
-  if (result) {
-    dout(10) << "call class " << cname << " does not exist" << dendl;
-    return result;
-  }
+  int result = osd->class_handler->open_class(cname, &cls);
+  assert(result == 0);
+
   bufferlist outdata;
   ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
   if (!method) {
@@ -1022,6 +1015,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
     // modify?
+    int flags;
     bool is_modify;
     string cname, mname;
     bufferlist::iterator bp = osd_op.data.begin();
@@ -1029,7 +1023,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_CALL:
       bp.copy(op.cls.class_len, cname);
       bp.copy(op.cls.method_len, mname);
-      is_modify = osd->class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
+      {
+	ClassHandler::ClassData *cls;
+	int r = osd->class_handler->open_class(cname, &cls);
+	assert(r == 0);
+	flags = cls->get_method_flags(mname.c_str());
+      }
+      is_modify = flags & CLS_METHOD_WR;
+      dout(10) << " class " << cname << "." << mname << " flags " << flags << " is_modify " << is_modify << dendl;
       break;
 
     default:
