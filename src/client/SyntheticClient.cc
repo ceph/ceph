@@ -1398,7 +1398,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       object_t oid = file_object_t(oh, ol);
       lock.Lock();
-      object_locator_t oloc(CEPH_CASDATA_RULE);
+      object_locator_t oloc(CEPH_DATA_RULE);
       uint64_t size;
       utime_t mtime;
       client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
@@ -1411,7 +1411,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_CASDATA_RULE);
+      object_locator_t oloc(CEPH_DATA_RULE);
       lock.Lock();
       bufferlist bl;
       client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
@@ -1424,7 +1424,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_CASDATA_RULE);
+      object_locator_t oloc(CEPH_DATA_RULE);
       lock.Lock();
       bufferptr bp(len);
       bufferlist bl;
@@ -1442,7 +1442,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_CASDATA_RULE);
+      object_locator_t oloc(CEPH_DATA_RULE);
       lock.Lock();
       SnapContext snapc;
       client->objecter->zero(oid, oloc, off, len, snapc, g_clock.now(), 0,
@@ -2203,7 +2203,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid = file_object_t(999, i);
-    object_locator_t oloc(CEPH_CASDATA_RULE);
+    object_locator_t oloc(CEPH_DATA_RULE);
     SnapContext snapc;
     
     if (i % inflight == 0) {
@@ -2304,7 +2304,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
     }
     object_t oid = file_object_t(999, o);
-    object_locator_t oloc(CEPH_CASDATA_RULE);
+    object_locator_t oloc(CEPH_DATA_RULE);
     SnapContext snapc;
     
     client->client_lock.Lock();
