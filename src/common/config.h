@@ -496,6 +496,7 @@ public:
 
   DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
   std::ostream _dout;
+  md_config_obs_t *_prof_logger_conf_obs;
 };
 
 extern md_config_t g_conf;

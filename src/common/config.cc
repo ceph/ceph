@@ -441,7 +441,8 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 md_config_t::
 md_config_t()
   : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
-    _dout(_doss)
+    _dout(_doss),
+    _prof_logger_conf_obs(new ProfLoggerConfObs())
 {
   //
   // Note: because our md_config_t structure is a global, the memory used to
@@ -457,11 +458,16 @@ md_config_t()
   }
 
   add_observer(_doss);
+  add_observer(_prof_logger_conf_obs);
 }
 
 md_config_t::
 ~md_config_t()
 {
+  free(_doss);
+  _doss = NULL;
+  free(_prof_logger_conf_obs);
+  _prof_logger_conf_obs = NULL;
 }
 
 void md_config_t::

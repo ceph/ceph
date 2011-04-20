@@ -60,6 +60,27 @@ public:
   }
 };
 
+ProfLoggerConfObs::~ProfLoggerConfObs()
+{
+}
+
+const char **ProfLoggerConfObs::get_tracked_conf_keys() const
+{
+  static const char *KEYS[] = {
+    "profiling_logger", "profiling_logger_interval", "profiling_logger_calc_variance",
+    "profiling_logger_subdir", "profiling_logger_dir"
+  };
+  return KEYS;
+}
+
+void ProfLoggerConfObs::handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed)
+{
+  // This could be done a *lot* smarter, if anyone cares to spend time
+  // fixing this up.
+  // We could probably just take the mutex and call _open_log from here.
+  logger_reopen_all();
+}
 
 void logger_reopen_all()
 {
