@@ -45,7 +45,7 @@ class InvalidLocalName(Exception):
 def mkdir_p(path):
     try:
         os.makedirs(path)
-    except OSError as exc:
+    except OSError, exc:
         if exc.errno != errno.EEXIST:
             raise
         if (not os.path.isdir(path)):
@@ -335,7 +335,7 @@ class FileStoreIterator(object):
                 continue
             try:
                 obj_name = local_name_to_s3_name(path[len(self.base)+1:])
-            except LocalFileIsAcl as e:
+            except LocalFileIsAcl, e:
                 # ignore ACL side files when iterating
                 continue
             return Object.from_file(obj_name, path)
@@ -493,10 +493,10 @@ try:
         print "SOURCE: " + src_name
     src = Store.make_store(src_name, False,
             getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
-except NonexistentStore as e:
+except NonexistentStore, e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
     sys.exit(1)
-except Exception as e:
+except Exception, e:
     print >>stderr, "error creating source: " + str(e)
     traceback.print_exc(100000, stderr)
     sys.exit(1)
@@ -505,11 +505,11 @@ try:
         print "DESTINATION: " + dst_name
     dst = Store.make_store(dst_name, opts.create,
             getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
-except NonexistentStore as e:
+except NonexistentStore, e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
         "not exist. Run with -c or --create-dest to create it automatically."
     sys.exit(1)
-except Exception as e:
+except Exception, e:
     print >>stderr, "error creating destination: " + str(e)
     traceback.print_exc(100000, stderr)
     sys.exit(1)
