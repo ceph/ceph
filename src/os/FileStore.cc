@@ -265,6 +265,8 @@ int lfn_get(const char *pathname, char *short_fn, int len, const char **long_fn,
     default:
       break;
     }
+    if (r < 0)
+      break;
     i++;
   }
 
