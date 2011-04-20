@@ -59,7 +59,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
   m.created = g_clock.now();
   m.data_pg_pools.push_back(data_pool);
   m.metadata_pg_pool = metadata_pool;
-  m.cas_pg_pool = CEPH_CASDATA_RULE;
+  m.cas_pg_pool = -1;
   m.compat = mdsmap_compat;
   print_map(m);
 }

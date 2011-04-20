@@ -108,7 +108,6 @@ typedef uint16_t ps_t;
 enum {
   CEPH_DATA_RULE,
   CEPH_METADATA_RULE,
-  CEPH_CASDATA_RULE,
   CEPH_RBD_RULE,
 };
 
