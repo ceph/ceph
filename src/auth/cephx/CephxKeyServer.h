@@ -51,7 +51,7 @@ struct KeyServerData {
     ::decode(rotating_secrets, bl);
   }
 
-  void encode_rotating(bufferlist& bl) {
+  void encode_rotating(bufferlist& bl) const {
      __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(rotating_ver, bl);
@@ -65,7 +65,7 @@ struct KeyServerData {
     ::decode(rotating_secrets, iter);
   }
 
-  bool contains(EntityName& name) {
+  bool contains(const EntityName& name) const {
     return (secrets.find(name) != secrets.end());
   }
 
@@ -80,16 +80,28 @@ struct KeyServerData {
     secrets.erase(iter);
   }
 
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id);
-  bool get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id);
-  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
-  bool get_auth(EntityName& name, EntityAuth& auth);
-  bool get_secret(EntityName& name, CryptoKey& secret);
-  bool get_caps(EntityName& name, string& type, AuthCapsInfo& caps);
+  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret,
+			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, CryptoKey& secret,
+			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id,
+			  CryptoKey& secret) const;
+  bool get_auth(const EntityName& name, EntityAuth& auth) const;
+  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
 
-  map<EntityName, EntityAuth>::iterator secrets_begin() { return secrets.begin(); }
-  map<EntityName, EntityAuth>::iterator secrets_end() { return secrets.end(); }
-  map<EntityName, EntityAuth>::iterator find_name(EntityName& name) { return secrets.find(name); }
+  map<EntityName, EntityAuth>::iterator secrets_begin()
+  { return secrets.begin(); }
+  map<EntityName, EntityAuth>::const_iterator secrets_begin() const 
+  { return secrets.begin(); }
+  map<EntityName, EntityAuth>::iterator secrets_end()
+  { return secrets.end(); }
+  map<EntityName, EntityAuth>::const_iterator secrets_end() const
+  { return secrets.end(); }
+  map<EntityName, EntityAuth>::iterator find_name(const EntityName& name)
+  { return secrets.find(name); }
+  map<EntityName, EntityAuth>::const_iterator find_name(const EntityName& name) const
+  { return secrets.find(name); }
 
 
   // -- incremental updates --
@@ -166,22 +178,24 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental);
 class KeyServer : public KeyStore {
   KeyServerData data;
 
-  Mutex lock;
+  mutable Mutex lock;
 
   int _rotate_secret(uint32_t service_id);
   bool _check_rotating_secrets();
   void _dump_rotating_secrets();
-  int _build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
-  bool _get_service_caps(EntityName& name, uint32_t service_id, AuthCapsInfo& caps);
+  int _build_session_auth_info(uint32_t service_id, 
+	CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
+  bool _get_service_caps(const EntityName& name, uint32_t service_id,
+	AuthCapsInfo& caps) const;
 public:
   KeyServer();
 
   bool generate_secret(CryptoKey& secret);
 
-  bool get_secret(EntityName& name, CryptoKey& secret);
-  bool get_auth(EntityName& name, EntityAuth& auth);
-  bool get_caps(EntityName& name, string& type, AuthCapsInfo& caps);
-  bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
+  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_auth(const EntityName& name, EntityAuth& auth) const;
+  bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
+  bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
   int start_server();
   void rotate_timeout(double timeout);
 
@@ -190,9 +204,12 @@ public:
                                         CryptoKey& service_secret, uint64_t secret_id);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key, uint64_t& secret_id);
-  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, uint64_t& secret_id);
-  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
+  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key,
+			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
+			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id,
+			  CryptoKey& secret) const;
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
@@ -203,9 +220,9 @@ public:
     Mutex::Locker l(lock);
     ::decode(data, bl);
   }
-  bool contains(EntityName& name);
-  void list_secrets(stringstream& ss);
-  version_t get_ver() {
+  bool contains(const EntityName& name) const;
+  void list_secrets(stringstream& ss) const;
+  version_t get_ver() const {
     Mutex::Locker l(lock);
     return data.version;    
   }
@@ -233,7 +250,7 @@ public:
     data.add_rotating_secret(service_id, key);
   }
   */
-  void clone_to(KeyServerData& dst) {
+  void clone_to(KeyServerData& dst) const {
     Mutex::Locker l(lock);
     dst = data;
   }
@@ -247,10 +264,11 @@ public:
 
   bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);
 
-  bool get_rotating_encrypted(EntityName& name, bufferlist& enc_bl);
+  bool get_rotating_encrypted(const EntityName& name, bufferlist& enc_bl) const;
 
-  Mutex& get_lock() { return lock; }
-  bool get_service_caps(EntityName& name, uint32_t service_id, AuthCapsInfo& caps);
+  Mutex& get_lock() const { return lock; }
+  bool get_service_caps(const EntityName& name, uint32_t service_id,
+			AuthCapsInfo& caps) const;
 };
 WRITE_CLASS_ENCODER(KeyServer);
 

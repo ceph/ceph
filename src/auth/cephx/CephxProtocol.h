@@ -428,7 +428,7 @@ int decode_decrypt_enc_bl(T& t, CryptoKey key, bufferlist& bl_enc) {
 }
 
 template <typename T>
-int encode_encrypt_enc_bl(const T& t, CryptoKey& key, bufferlist& out) {
+int encode_encrypt_enc_bl(const T& t, const CryptoKey& key, bufferlist& out) {
   bufferlist bl;
   __u8 struct_v = 1;
   ::encode(struct_v, bl);
@@ -443,14 +443,14 @@ int encode_encrypt_enc_bl(const T& t, CryptoKey& key, bufferlist& out) {
 }
 
 template <typename T>
-int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
+int decode_decrypt(T& t, const CryptoKey key, bufferlist::iterator& iter) {
   bufferlist bl_enc;
   ::decode(bl_enc, iter);
   return decode_decrypt_enc_bl(t, key, bl_enc);
 }
 
 template <typename T>
-int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
+int encode_encrypt(const T& t, const CryptoKey& key, bufferlist& out) {
   bufferlist bl_enc;
   int ret = encode_encrypt_enc_bl(t, key, bl_enc);
   if (ret < 0)
