@@ -111,4 +111,6 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 
 #define derr dout(-1)
 
+#define generic_derr generic_dout(-1)
+
 #endif
