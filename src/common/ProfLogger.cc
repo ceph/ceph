@@ -68,7 +68,7 @@ const char **ProfLoggerConfObs::get_tracked_conf_keys() const
 {
   static const char *KEYS[] = {
     "profiling_logger", "profiling_logger_interval", "profiling_logger_calc_variance",
-    "profiling_logger_subdir", "profiling_logger_dir"
+    "profiling_logger_subdir", "profiling_logger_dir", NULL
   };
   return KEYS;
 }
