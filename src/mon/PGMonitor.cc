@@ -47,6 +47,36 @@ static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
 		<< ".pg v" << pg_map.version << " ";
 }
 
+class RatioMonitor : public md_config_obs_t {
+  PGMonitor *mon;
+public:
+  RatioMonitor(PGMonitor *pgmon) : mon(pgmon) {}
+  virtual ~RatioMonitor() {}
+  virtual const char **get_tracked_conf_keys() const {
+    static const char *KEYS[] = { "mon_osd_full_ratio",
+				  "mon_osd_nearfull_ratio", NULL };
+    return KEYS;
+  }
+  virtual void handle_conf_change(const md_config_t *conf,
+				  const std::set<std::string>& changed) {
+    mon->update_full_ratios(((float)conf->mon_osd_full_ratio) / 100,
+			    ((float)conf->mon_osd_nearfull_ratio) / 100);
+  }
+};
+
+PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
+  : PaxosService(mn, p)
+{
+  ratio_monitor = new RatioMonitor(this);
+  g_conf.add_observer(ratio_monitor);
+}
+
+PGMonitor::~PGMonitor()
+{
+  g_conf.remove_observer(ratio_monitor);
+  delete ratio_monitor;
+}
+
 /*
  Tick function to update the map based on performance every N seconds
 */

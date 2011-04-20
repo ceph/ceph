@@ -37,6 +37,8 @@ class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
 
+class RatioMonitor;
+
 class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
@@ -94,35 +96,9 @@ private:
   bool register_new_pgs();
   void send_pg_creates();
 
- public:
-  class RatioMonitor : public md_config_obs_t {
-    PGMonitor *mon;
-  public:
-    RatioMonitor(PGMonitor *pgmon) : mon(pgmon) {}
-    virtual ~RatioMonitor() {}
-    virtual const char **get_tracked_conf_keys() const {
-      static const char *KEYS[] = { "mon_osd_full_ratio",
-                                    "mon_osd_nearfull_ratio", NULL };
-      return KEYS;
-    }
-    virtual void handle_conf_change(const md_config_t *conf,
-                                    const std::set<std::string>& changed) {
-      mon->update_full_ratios(((float)conf->mon_osd_full_ratio) / 100,
-                              ((float)conf->mon_osd_nearfull_ratio) / 100);
-    }
-  };
-
-  RatioMonitor *ratio_monitor;
-  friend class RatioMonitor;
-
-  PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) {
-    ratio_monitor = new RatioMonitor(this);
-    g_conf.add_observer(ratio_monitor);
-  }
-
-  ~PGMonitor() {
-    delete ratio_monitor;
-  }
+public:
+  PGMonitor(Monitor *mn, Paxos *p);
+  virtual ~PGMonitor();
 
   virtual void on_election_start();
 
@@ -132,6 +108,13 @@ private:
 
   enum health_status_t get_health(std::ostream &ss) const;
 
+private:
+  // no copying allowed
+  PGMonitor(const PGMonitor &rhs);
+  PGMonitor &operator=(const PGMonitor &rhs);
+
+  RatioMonitor *ratio_monitor;
+  friend class RatioMonitor;
 };
 
 #endif
