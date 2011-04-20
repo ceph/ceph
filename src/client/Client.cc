@@ -4479,7 +4479,6 @@ int Client::getdir(const char *relpath, list<string>& contents)
 
 
 /****** file i/o **********/
-
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
   dout(3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;

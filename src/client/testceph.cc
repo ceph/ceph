@@ -15,24 +15,43 @@
 #include "libceph.h"
 #include <iostream>
 
-using namespace std;
+using std::cout;
+using std::cerr;
 
 int main(int argc, const char **argv)
 {
-  if (ceph_initialize(argc, argv) < 0) {
-    cerr << "error initializing\n" << std::endl;
-    return(1);
+  ceph_cluster_t *cluster;
+  int ret = ceph_create(&cluster, NULL);
+  if (ret) {
+    cerr << "ceph_create failed with error: " << ret << std::endl;
+    return 1;
   }
-  cout << "Successfully initialized Ceph!" << std::endl;
 
-  if(ceph_mount() < 0) {
-    cerr << "error mounting\n" << std::endl;
-    return(1);
+  ceph_conf_parse_argv(cluster, argc, argv);
+
+  char buf[128];
+  ret = ceph_conf_get(cluster, "log file", buf, sizeof(buf));
+  if (ret) {
+    cerr << "ceph_conf_get(\"log file\") failed with error " << ret << std::endl;
+  }
+  else {
+    cout << "log_file = \"" << buf << "\"" << std::endl;
+  }
+
+  ret = ceph_connect(cluster);
+  if (ret) {
+    cerr << "ceph_connect failed with error: " << ret << std::endl;
+    return 1;
+  }
+
+  ret = ceph_mount(cluster, NULL);
+  if (ret) {
+    cerr << "ceph_mount error: " << ret << std::endl;
+    return 1;
   }
   cout << "Successfully mounted Ceph!" << std::endl;
 
-  ceph_deinitialize();
-  cout << "Successfully deinitialized Ceph!" << std::endl;
+  ceph_shutdown(cluster);
 
   return 0;
 }

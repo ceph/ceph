@@ -67,8 +67,6 @@ void rados_shutdown(rados_t cluster);
 /* Config
  *
  * Functions for manipulating the Ceph configuration at runtime.
- * After changing the Ceph configuration, you should call rados_conf_apply to
- * ensure that the changes have been applied.
  */
 int rados_conf_read_file(rados_t cluster, const char *path);
 
