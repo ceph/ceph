@@ -272,6 +272,8 @@ public:
 	 p != osd_stat.end();
 	 ++p)
       stat_osd_add(p->second);
+
+    redo_full_sets();
   }
 
   void dump(ostream& ss) const
