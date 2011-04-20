@@ -188,7 +188,7 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
   ssize_t written;
   written = rbd_write(image, off, len, test_data);
   printf("wrote: %d\n", (int) written);
-  assert(written == len);
+  assert(written == (ssize_t)len);
 }
 
 void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len)
@@ -204,7 +204,7 @@ void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, s
   rbd_aio_wait_for_complete(comp);
   int r = rbd_aio_get_return_value(comp);
   printf("return value is: %d\n", r);
-  assert(r == len);
+  assert(r == (ssize_t)len);
   rbd_aio_release(comp);
   printf("read: %s\nexpected: %s\n", result, expected);
   assert(memcmp(result, expected, len) == 0);
@@ -219,7 +219,7 @@ void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_
 
   read = rbd_read(image, off, len, result);
   printf("read: %d\n", (int) read);
-  assert(read == len);
+  assert(read == (ssize_t)len);
   result[len] = '\0';
   printf("read: %s\nexpected: %s\n", result, expected);
   assert(memcmp(result, expected, len) == 0);
