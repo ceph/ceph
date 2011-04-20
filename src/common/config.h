@@ -66,6 +66,13 @@ public:
   // The caller is responsible for allocating observers.
   void add_observer(md_config_obs_t* observer_);
 
+  // Remove an observer from this configuration.
+  // This doesn't delete the observer! If you allocated it with new(),
+  // you need to delete it yourself.
+  // This function will assert if you try to delete an observer that isn't
+  // there.
+  void remove_observer(md_config_obs_t* observer_);
+
   // Parse a config file
   int parse_config_files(const std::list<std::string> &conf_files,
 			 std::deque<std::string> *parse_errors);

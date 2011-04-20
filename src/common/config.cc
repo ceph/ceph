@@ -464,6 +464,9 @@ md_config_t()
 md_config_t::
 ~md_config_t()
 {
+  remove_observer(_prof_logger_conf_obs);
+  remove_observer(_doss);
+
   free(_doss);
   _doss = NULL;
   free(_prof_logger_conf_obs);
@@ -478,6 +481,22 @@ add_observer(md_config_obs_t* observer_)
     obs_map_t::value_type val(*k, observer_);
     observers.insert(val);
   }
+}
+
+void md_config_t::
+remove_observer(md_config_obs_t* observer_)
+{
+  bool found_obs = false;
+  for (obs_map_t::iterator o = observers.begin(); o != observers.end(); ) {
+    if (o->second == observer_) {
+      observers.erase(o++);
+      found_obs = true;
+    }
+    else {
+      ++o;
+    }
+  }
+  assert(found_obs);
 }
 
 int md_config_t::
