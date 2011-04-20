@@ -928,8 +928,8 @@ int SyntheticClient::run()
   }
   dout(1) << "syn done, unmounting " << dendl;
 
-  if (client->unmount() == 0)
-    client->shutdown();
+  client->unmount();
+  client->shutdown();
   return 0;
 }
 

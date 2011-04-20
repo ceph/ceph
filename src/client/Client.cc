@@ -3021,7 +3021,7 @@ int Client::mount(const std::string &mount_root)
 
 // UNMOUNT
 
-int Client::unmount()
+void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
 
@@ -3142,8 +3142,6 @@ int Client::unmount()
   dout(2) << "unmounted." << dendl;
 
   objecter->shutdown();
-
-  return 0;
 }
 
 

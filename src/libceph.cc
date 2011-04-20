@@ -161,15 +161,12 @@ public:
     return 0;
   }
 
-  int umount()
+  void umount()
   {
     if (!mounted)
-      return -EINVAL;
-    int ret = client->unmount();
-    if (ret)
-      return ret;
+      return;
+    client->unmount();
     mounted = false;
-    return 0;
   }
 
   Client *get_client()
@@ -288,9 +285,9 @@ extern "C" int ceph_mount(ceph_cluster_t *cluster, const char *root)
   return cluster->mount(mount_root);
 }
 
-extern "C" int ceph_umount(ceph_cluster_t *cluster)
+extern "C" void ceph_umount(ceph_cluster_t *cluster)
 {
-  return cluster->umount();
+  cluster->umount();
 }
 
 extern "C" int ceph_statfs(ceph_cluster_t *cluster, const char *path,

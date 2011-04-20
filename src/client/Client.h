@@ -1223,7 +1223,7 @@ private:
 
 public:
   int mount(const std::string &mount_root);
-  int unmount();
+  void unmount();
 
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf);

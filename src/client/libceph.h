@@ -78,7 +78,7 @@ int ceph_conf_set(ceph_cluster_t *cluster, const char *option, const char *value
 int ceph_conf_get(ceph_cluster_t *cluster, const char *option, char *buf, size_t len);
 
 int ceph_mount(ceph_cluster_t *cluster, const char *root);
-int ceph_umount(ceph_cluster_t *cluster);
+void ceph_umount(ceph_cluster_t *cluster);
 
 int ceph_statfs(ceph_cluster_t *cluster, const char *path, struct statvfs *stbuf);
 int ceph_get_local_osd(ceph_cluster_t *cluster);
