@@ -26,11 +26,16 @@ import org.apache.commons.logging.Log;
 
 
 class CephTalker extends CephFS {
+  // JNI doesn't give us any way to store pointers, so use a long.
+  // Here we're assuming pointers aren't longer than 8 bytes.
+  long cluster;
+
   // we write a constructor so we can load the libraries
   public CephTalker(Configuration conf, Log log) {
     super(conf, log);
     System.load(conf.get("fs.ceph.libDir") + "/libhadoopcephfs.so");
     System.load(conf.get("fs.ceph.libDir") + "/libceph.so");
+    cluster = 0;
   }
 
   protected native boolean ceph_initializeClient(String arguments, int block_size);
