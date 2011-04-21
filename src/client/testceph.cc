@@ -27,6 +27,7 @@ int main(int argc, const char **argv)
     return 1;
   }
 
+  ceph_conf_read_file(cmount, NULL);
   ceph_conf_parse_argv(cmount, argc, argv);
 
   char buf[128];

@@ -79,7 +79,9 @@ public:
 
     //network connection
     messenger = new SimpleMessenger();
-    if (messenger->register_entity(entity_name_t::CLIENT())) {
+    if (!messenger->register_entity(entity_name_t::CLIENT())) {
+      messenger->destroy();
+      messenger = NULL;
       shutdown();
       return -1001;
     }
@@ -115,6 +117,7 @@ public:
       mounted = false;
     }
     if (client) {
+      client->shutdown();
       delete client;
       client = NULL;
     }
@@ -230,6 +233,8 @@ extern "C" int ceph_create(ceph_mount_t **cmount, const char * const id)
     conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     conf->parse_env(); // environment variables override
     conf->apply_changes();
+
+    keyring_init(conf);
   }
   ret = ceph_create_with_config_impl(cmount, conf);
   libceph_init_mutex.Unlock();
@@ -276,7 +281,7 @@ extern "C" int ceph_conf_get(ceph_mount_t *cmount, const char *option,
 extern "C" int ceph_mount(ceph_mount_t *cmount, const char *root)
 {
   std::string mount_root;
-  if (!root)
+  if (root)
     mount_root = root;
   return cmount->mount(mount_root);
 }
