@@ -1222,7 +1222,19 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
 {
   dout(10) << "recover_master_log" << dendl;
 
-  // -- query info from everyone in prior_set.
+  if (is_down())
+    return false;
+
+  if (peer_info_requested.empty()) {
+    stringstream out;
+    prior_set->gen_query_map(*osd->osdmap, info, query_map);
+    dout(10) << out << dendl;
+    for (map< int, map<pg_t, Query> >::const_iterator i = query_map.begin();
+	 i != query_map.end(); ++i) {
+      peer_info_requested.insert(i->first);
+    }
+  }
+
   bool lack_info = false;
   for (set<int>::const_iterator it = prior_set->cur.begin();
        it != prior_set->cur.end();
@@ -1239,19 +1251,10 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
       dout(10) << " waiting for osd" << *it << dendl;
       continue;
     }
-    
-    if (osd->osdmap->is_up(*it)) {
-      dout(10) << " querying info from osd" << *it << dendl;
-      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
-      peer_info_requested.insert(*it);
-    } else {
-      dout(10) << " not querying info from down osd" << *it << dendl;
-    }
   }
   if (lack_info)
     return false;
 
-  
   // -- ok, we have all (prior_set) info.  (and maybe others.)
   dout(10) << " have prior_set info.  min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
 
@@ -1344,11 +1347,6 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
   }
 
   dout(10) << " oldest_update " << oldest_update << " (osd" << oldest_who << ")" << dendl;
-
-  if (is_down()) {
-    dout(10) << " down.  we wait." << dendl;    
-    return false;
-  }
 
   have_master_log = true;
 
@@ -3905,4 +3903,21 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     }
   }
 
+}
+
+void PG::PgPriorSet::gen_query_map(const OSDMap &osdmap,
+				   const PG::Info &info,
+				   map< int, map<pg_t,Query> >& query_map)
+{
+  for (set<int>::const_iterator it = cur.begin();
+       it != cur.end();
+       ++it) {
+    // -- query info from everyone in prior_set.
+    if (osdmap.is_up(*it)) {
+      dout(10) << " querying info from osd" << *it << dendl;
+      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
+    } else {
+      dout(10) << " not querying info from down osd" << *it << dendl;
+    }
+  }
 }

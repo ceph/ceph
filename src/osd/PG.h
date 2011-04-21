@@ -243,9 +243,9 @@ public:
     Info::History history;
 
     Query() : type(-1) {}
-    Query(int t, Info::History& h) : 
+    Query(int t, const Info::History& h) :
       type(t), history(h) { assert(t != LOG); }
-    Query(int t, eversion_t s, Info::History& h) : 
+    Query(int t, eversion_t s, const Info::History& h) :
       type(t), since(s), history(h) { assert(t == LOG); }
 
     void encode(bufferlist &bl) const {
@@ -757,6 +757,10 @@ public:
 	       const vector<int> &acting,
 	       const Info &info,
 	       const PG *pg);
+
+    void gen_query_map(const OSDMap &osdmap,
+		       const Info &info,
+		       map< int, map<pg_t,Query> >& query_map);
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
