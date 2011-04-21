@@ -23,7 +23,8 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-while getopts  "36d:hPv" flag
+HADOOP_FLAGS=
+while getopts  "d:hHPv" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -32,6 +33,8 @@ do
 
     h) usage
         exit 0;;
+
+    H) HADOOP_FLAGS="--with-hadoop";;
 
     v) verbose=1;;
 
@@ -96,4 +99,5 @@ export CXXFLAGS
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
 --with-gtk2=yes --with-debug $with_profiler --with-cryptopp --with-radosgw \
+$HADOOP_FLAGS \
 || die "configure failed"
