@@ -20,17 +20,17 @@ using std::cerr;
 
 int main(int argc, const char **argv)
 {
-  ceph_cluster_t *cluster;
-  int ret = ceph_create(&cluster, NULL);
+  ceph_mount_t *cmount;
+  int ret = ceph_create(&cmount, NULL);
   if (ret) {
     cerr << "ceph_create failed with error: " << ret << std::endl;
     return 1;
   }
 
-  ceph_conf_parse_argv(cluster, argc, argv);
+  ceph_conf_parse_argv(cmount, argc, argv);
 
   char buf[128];
-  ret = ceph_conf_get(cluster, "log file", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "log file", buf, sizeof(buf));
   if (ret) {
     cerr << "ceph_conf_get(\"log file\") failed with error " << ret << std::endl;
   }
@@ -38,20 +38,14 @@ int main(int argc, const char **argv)
     cout << "log_file = \"" << buf << "\"" << std::endl;
   }
 
-  ret = ceph_connect(cluster);
-  if (ret) {
-    cerr << "ceph_connect failed with error: " << ret << std::endl;
-    return 1;
-  }
-
-  ret = ceph_mount(cluster, NULL);
+  ret = ceph_mount(cmount, NULL);
   if (ret) {
     cerr << "ceph_mount error: " << ret << std::endl;
     return 1;
   }
   cout << "Successfully mounted Ceph!" << std::endl;
 
-  ceph_shutdown(cluster);
+  ceph_shutdown(cmount);
 
   return 0;
 }

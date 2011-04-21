@@ -376,7 +376,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 {
   (void) fi;
 
-  DIR *dirp = (DIR*)fi->fh;
+  ceph_dir_result_t *dirp = (ceph_dir_result_t*)fi->fh;
   client->seekdir(dirp, off);
 
   struct readdir_context rc;
@@ -398,7 +398,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 			       struct fuse_file_info *fi)
 {
-  DIR *dirp = (DIR*)fi->fh;
+  ceph_dir_result_t *dirp = (ceph_dir_result_t*)fi->fh;
   client->ll_releasedir(dirp);
   fuse_reply_err(req, 0);
 }

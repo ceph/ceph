@@ -32,10 +32,10 @@ static Mutex libceph_init_mutex("libceph_init_mutex");
 static bool libceph_initialized = false; // FIXME! remove this
 static int nonce_seed = 0;
 
-class ceph_cluster_t
+class ceph_mount_t
 {
 public:
-  ceph_cluster_t(uint64_t msgr_nonce_, md_config_t *conf)
+  ceph_mount_t(uint64_t msgr_nonce_, md_config_t *conf)
     : msgr_nonce(msgr_nonce_),
       mounted(false),
       client(NULL),
@@ -45,14 +45,19 @@ public:
   {
   }
 
-  ~ceph_cluster_t()
+  ~ceph_mount_t()
   {
     try {
-      disconnect();
+      shutdown();
+    // uncomment once conf is de-globalized
+//    if (conf) {
+//      free(conf);
+//      conf = NULL;
+//    }
     }
     catch (const std::exception& e) {
       // we shouldn't get here, but if we do, we want to know about it.
-      derr << "ceph_cluster_t::~ceph_cluster_t: caught exception: "
+      derr << "ceph_mount_t::~ceph_mount_t: caught exception: "
 	   << e.what() << dendl;
     }
     catch (...) {
@@ -60,30 +65,50 @@ public:
     }
   }
 
-  int connect()
+  int mount(const std::string &mount_root)
   {
+    if (mounted)
+      return -EDOM;
+
     //monmap
     monclient = new MonClient();
     if (monclient->build_initial_monmap() < 0) {
-      delete monclient;
-      monclient = NULL;
+      shutdown();
       return -1000;
     }
 
     //network connection
     messenger = new SimpleMessenger();
-    messenger->register_entity(entity_name_t::CLIENT());
+    if (messenger->register_entity(entity_name_t::CLIENT())) {
+      shutdown();
+      return -1001;
+    }
 
     //at last the client
     client = new Client(messenger, monclient);
+    if (!client) {
+      shutdown();
+      return -1002;
+    }
 
-    messenger->start(false, msgr_nonce); // do not daemonize
+    if (messenger->start(false, msgr_nonce) != 0) {
+      shutdown();
+      return -1003;
+    }
 
     client->init();
+
+    int ret = client->mount(mount_root);
+    if (ret) {
+      shutdown();
+      return ret;
+    }
+
+    mounted = true;
     return 0;
   }
 
-  void disconnect()
+  void shutdown()
   {
     if (mounted) {
       client->unmount();
@@ -102,11 +127,6 @@ public:
       delete monclient;
       monclient = NULL;
     }
-    // uncomment once conf is de-globalized
-//    if (conf) {
-//      free(conf);
-//      conf = NULL;
-//    }
   }
 
   int conf_read_file(const char *path)
@@ -150,25 +170,6 @@ public:
     return conf->get_val(option, &tmp, len);
   }
 
-  int mount(const std::string &mount_root)
-  {
-    if (mounted)
-      return -EINVAL;
-     int ret = client->mount(mount_root);
-     if (ret)
-       return ret;
-    mounted = true;
-    return 0;
-  }
-
-  void umount()
-  {
-    if (!mounted)
-      return;
-    client->unmount();
-    mounted = false;
-  }
-
   Client *get_client()
   {
     return client;
@@ -205,16 +206,16 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
   return VERSION;
 }
 
-static int ceph_create_with_config_impl(ceph_cluster_t **cluster, md_config_t *conf)
+static int ceph_create_with_config_impl(ceph_mount_t **cmount, md_config_t *conf)
 {
   // should hold libceph_init_mutex here
   libceph_initialized = true;
   uint64_t nonce = (uint64_t)++nonce_seed * 1000000ull + (uint64_t)getpid();
-  *cluster = new ceph_cluster_t(nonce, conf);
+  *cmount = new ceph_mount_t(nonce, conf);
   return 0;
 }
 
-extern "C" int ceph_create(ceph_cluster_t **cluster, const char * const id)
+extern "C" int ceph_create(ceph_mount_t **cmount, const char * const id)
 {
   int ret;
   libceph_init_mutex.Lock();
@@ -230,345 +231,335 @@ extern "C" int ceph_create(ceph_cluster_t **cluster, const char * const id)
     conf->parse_env(); // environment variables override
     conf->apply_changes();
   }
-  ret = ceph_create_with_config_impl(cluster, conf);
+  ret = ceph_create_with_config_impl(cmount, conf);
   libceph_init_mutex.Unlock();
   return ret;
 }
 
-extern "C" int ceph_create_with_config(ceph_cluster_t **cluster, md_config_t *conf)
+extern "C" int ceph_create_with_config(ceph_mount_t **cmount, md_config_t *conf)
 {
   int ret;
   libceph_init_mutex.Lock();
-  ret = ceph_create_with_config_impl(cluster, conf);
+  ret = ceph_create_with_config_impl(cmount, conf);
   libceph_init_mutex.Unlock();
   return ret;
 }
 
-extern "C" int ceph_connect(ceph_cluster_t *cluster)
+extern "C" void ceph_shutdown(ceph_mount_t *cmount)
 {
-  return cluster->connect();
+  cmount->shutdown();
 }
 
-extern "C" void ceph_shutdown(ceph_cluster_t *cluster)
+extern "C" int ceph_conf_read_file(ceph_mount_t *cmount, const char *path)
 {
-  cluster->disconnect();
+  return cmount->conf_read_file(path);
 }
 
-extern "C" int ceph_conf_read_file(ceph_cluster_t *cluster, const char *path)
-{
-  return cluster->conf_read_file(path);
-}
-
-extern "C" void ceph_conf_parse_argv(ceph_cluster_t *cluster, int argc,
+extern "C" void ceph_conf_parse_argv(ceph_mount_t *cmount, int argc,
 				     const char **argv)
 {
-  cluster->conf_parse_argv(argc, argv);
+  cmount->conf_parse_argv(argc, argv);
 }
 
-extern "C" int ceph_conf_set(ceph_cluster_t *cluster, const char *option,
+extern "C" int ceph_conf_set(ceph_mount_t *cmount, const char *option,
 			     const char *value)
 {
-  return cluster->conf_set(option, value);
+  return cmount->conf_set(option, value);
 }
 
-extern "C" int ceph_conf_get(ceph_cluster_t *cluster, const char *option,
+extern "C" int ceph_conf_get(ceph_mount_t *cmount, const char *option,
 			     char *buf, size_t len)
 {
-  return cluster->conf_get(option, buf, len);
+  return cmount->conf_get(option, buf, len);
 }
 
-extern "C" int ceph_mount(ceph_cluster_t *cluster, const char *root)
+extern "C" int ceph_mount(ceph_mount_t *cmount, const char *root)
 {
   std::string mount_root;
   if (!root)
     mount_root = root;
-  return cluster->mount(mount_root);
+  return cmount->mount(mount_root);
 }
 
-extern "C" void ceph_umount(ceph_cluster_t *cluster)
-{
-  cluster->umount();
-}
-
-extern "C" int ceph_statfs(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_statfs(ceph_mount_t *cmount, const char *path,
 			   struct statvfs *stbuf)
 {
-  return cluster->get_client()->statfs(path, stbuf);
+  return cmount->get_client()->statfs(path, stbuf);
 }
 
-extern "C" int ceph_get_local_osd(ceph_cluster_t *cluster)
+extern "C" int ceph_get_local_osd(ceph_mount_t *cmount)
 {
-  return cluster->get_client()->get_local_osd();
+  return cmount->get_client()->get_local_osd();
 }
 
-extern "C" const char* ceph_getcwd(ceph_cluster_t *cluster)
+extern "C" const char* ceph_getcwd(ceph_mount_t *cmount)
 {
-  return cluster->get_cwd();
+  return cmount->get_cwd();
 }
 
-extern "C" int ceph_chdir (ceph_cluster_t *cluster, const char *s)
+extern "C" int ceph_chdir (ceph_mount_t *cmount, const char *s)
 {
-  return cluster->get_client()->chdir(s);
+  return cmount->get_client()->chdir(s);
 }
 
-extern "C" int ceph_opendir(ceph_cluster_t *cluster,
-			    const char *name, DIR **dirpp)
+extern "C" int ceph_opendir(ceph_mount_t *cmount,
+			    const char *name, ceph_dir_result_t **dirpp)
 {
-  return cluster->get_client()->opendir(name, dirpp);
+  return cmount->get_client()->opendir(name, dirpp);
 }
 
-extern "C" int ceph_closedir(ceph_cluster_t *cluster, DIR *dirp)
+extern "C" int ceph_closedir(ceph_mount_t *cmount, ceph_dir_result_t *dirp)
 {
-  return cluster->get_client()->closedir(dirp);
+  return cmount->get_client()->closedir(dirp);
 }
 
-extern "C" int ceph_readdir_r(ceph_cluster_t *cluster, DIR *dirp, struct dirent *de)
+extern "C" int ceph_readdir_r(ceph_mount_t *cmount, ceph_dir_result_t *dirp, struct dirent *de)
 {
-  return cluster->get_client()->readdir_r(dirp, de);
+  return cmount->get_client()->readdir_r(dirp, de);
 }
 
-extern "C" int ceph_readdirplus_r(ceph_cluster_t *cluster, DIR *dirp,
+extern "C" int ceph_readdirplus_r(ceph_mount_t *cmount, ceph_dir_result_t *dirp,
 				  struct dirent *de, struct stat *st, int *stmask)
 {
-  return cluster->get_client()->readdirplus_r(dirp, de, st, stmask);
+  return cmount->get_client()->readdirplus_r(dirp, de, st, stmask);
 }
 
-extern "C" int ceph_getdents(ceph_cluster_t *cluster, DIR *dirp,
+extern "C" int ceph_getdents(ceph_mount_t *cmount, ceph_dir_result_t *dirp,
 			     char *buf, int buflen)
 {
-  return cluster->get_client()->getdents(dirp, buf, buflen);
+  return cmount->get_client()->getdents(dirp, buf, buflen);
 }
 
-extern "C" int ceph_getdnames(ceph_cluster_t *cluster, DIR *dirp,
+extern "C" int ceph_getdnames(ceph_mount_t *cmount, ceph_dir_result_t *dirp,
 			      char *buf, int buflen)
 {
-  return cluster->get_client()->getdnames(dirp, buf, buflen);
+  return cmount->get_client()->getdnames(dirp, buf, buflen);
 }
 
-extern "C" void ceph_rewinddir(ceph_cluster_t *cluster, DIR *dirp)
+extern "C" void ceph_rewinddir(ceph_mount_t *cmount, ceph_dir_result_t *dirp)
 {
-  cluster->get_client()->rewinddir(dirp);
+  cmount->get_client()->rewinddir(dirp);
 }
 
-extern "C" loff_t ceph_telldir(ceph_cluster_t *cluster, DIR *dirp)
+extern "C" loff_t ceph_telldir(ceph_mount_t *cmount, ceph_dir_result_t *dirp)
 {
-  return cluster->get_client()->telldir(dirp);
+  return cmount->get_client()->telldir(dirp);
 }
 
-extern "C" void ceph_seekdir(ceph_cluster_t *cluster, DIR *dirp, loff_t offset)
+extern "C" void ceph_seekdir(ceph_mount_t *cmount, ceph_dir_result_t *dirp, loff_t offset)
 {
-  cluster->get_client()->seekdir(dirp, offset);
+  cmount->get_client()->seekdir(dirp, offset);
 }
 
-extern "C" int ceph_link (ceph_cluster_t *cluster, const char *existing,
+extern "C" int ceph_link (ceph_mount_t *cmount, const char *existing,
 			  const char *newname)
 {
-  return cluster->get_client()->link(existing, newname);
+  return cmount->get_client()->link(existing, newname);
 }
 
-extern "C" int ceph_unlink(ceph_cluster_t *cluster, const char *path)
+extern "C" int ceph_unlink(ceph_mount_t *cmount, const char *path)
 {
-  return cluster->get_client()->unlink(path);
+  return cmount->get_client()->unlink(path);
 }
 
-extern "C" int ceph_rename(ceph_cluster_t *cluster, const char *from,
+extern "C" int ceph_rename(ceph_mount_t *cmount, const char *from,
 			   const char *to)
 {
-  return cluster->get_client()->rename(from, to);
+  return cmount->get_client()->rename(from, to);
 }
 
 // dirs
-extern "C" int ceph_mkdir(ceph_cluster_t *cluster, const char *path, mode_t mode)
+extern "C" int ceph_mkdir(ceph_mount_t *cmount, const char *path, mode_t mode)
 {
-  return cluster->get_client()->mkdir(path, mode);
+  return cmount->get_client()->mkdir(path, mode);
 }
 
-extern "C" int ceph_mkdirs(ceph_cluster_t *cluster, const char *path, mode_t mode)
+extern "C" int ceph_mkdirs(ceph_mount_t *cmount, const char *path, mode_t mode)
 {
-  return cluster->get_client()->mkdirs(path, mode);
+  return cmount->get_client()->mkdirs(path, mode);
 }
 
-extern "C" int ceph_rmdir(ceph_cluster_t *cluster, const char *path)
+extern "C" int ceph_rmdir(ceph_mount_t *cmount, const char *path)
 {
-  return cluster->get_client()->rmdir(path);
+  return cmount->get_client()->rmdir(path);
 }
 
 // symlinks
-extern "C" int ceph_readlink(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_readlink(ceph_mount_t *cmount, const char *path,
 			     char *buf, loff_t size)
 {
-  return cluster->get_client()->readlink(path, buf, size);
+  return cmount->get_client()->readlink(path, buf, size);
 }
 
-extern "C" int ceph_symlink(ceph_cluster_t *cluster, const char *existing,
+extern "C" int ceph_symlink(ceph_mount_t *cmount, const char *existing,
 			    const char *newname)
 {
-  return cluster->get_client()->symlink(existing, newname);
+  return cmount->get_client()->symlink(existing, newname);
 }
 
 // inode stuff
-extern "C" int ceph_lstat(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_lstat(ceph_mount_t *cmount, const char *path,
 			  struct stat *stbuf)
 {
-  return cluster->get_client()->lstat(path, stbuf);
+  return cmount->get_client()->lstat(path, stbuf);
 }
 
-extern "C" int ceph_lstat_precise(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_lstat_precise(ceph_mount_t *cmount, const char *path,
 				  stat_precise *stbuf)
 {
-  return cluster->get_client()->lstat_precise(path, (Client::stat_precise*)stbuf);
+  return cmount->get_client()->lstat_precise(path, (Client::stat_precise*)stbuf);
 }
 
-extern "C" int ceph_setattr(ceph_cluster_t *cluster, const char *relpath,
+extern "C" int ceph_setattr(ceph_mount_t *cmount, const char *relpath,
 			    struct stat *attr, int mask)
 {
   Client::stat_precise p_attr = Client::stat_precise(*attr);
-  return cluster->get_client()->setattr(relpath, &p_attr, mask);
+  return cmount->get_client()->setattr(relpath, &p_attr, mask);
 }
 
-extern "C" int ceph_setattr_precise(ceph_cluster_t *cluster, const char *relpath,
+extern "C" int ceph_setattr_precise(ceph_mount_t *cmount, const char *relpath,
 				    struct stat_precise *attr, int mask)
 {
-  return cluster->get_client()->setattr(relpath, (Client::stat_precise*)attr, mask);
+  return cmount->get_client()->setattr(relpath, (Client::stat_precise*)attr, mask);
 }
 
-extern "C" int ceph_chmod(ceph_cluster_t *cluster, const char *path, mode_t mode)
+extern "C" int ceph_chmod(ceph_mount_t *cmount, const char *path, mode_t mode)
 {
-  return cluster->get_client()->chmod(path, mode);
+  return cmount->get_client()->chmod(path, mode);
 }
-extern "C" int ceph_chown(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_chown(ceph_mount_t *cmount, const char *path,
 			  uid_t uid, gid_t gid)
 {
-  return cluster->get_client()->chown(path, uid, gid);
+  return cmount->get_client()->chown(path, uid, gid);
 }
 
-extern "C" int ceph_utime(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_utime(ceph_mount_t *cmount, const char *path,
 			  struct utimbuf *buf)
 {
-  return cluster->get_client()->utime(path, buf);
+  return cmount->get_client()->utime(path, buf);
 }
 
-extern "C" int ceph_truncate(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_truncate(ceph_mount_t *cmount, const char *path,
 			     loff_t size)
 {
-  return cluster->get_client()->truncate(path, size);
+  return cmount->get_client()->truncate(path, size);
 }
 
 // file ops
-extern "C" int ceph_mknod(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_mknod(ceph_mount_t *cmount, const char *path,
 			  mode_t mode, dev_t rdev)
 {
-  return cluster->get_client()->mknod(path, mode, rdev);
+  return cmount->get_client()->mknod(path, mode, rdev);
 }
 
-extern "C" int ceph_open(ceph_cluster_t *cluster, const char *path,
+extern "C" int ceph_open(ceph_mount_t *cmount, const char *path,
 			 int flags, mode_t mode)
 {
-  return cluster->get_client()->open(path, flags, mode);
+  return cmount->get_client()->open(path, flags, mode);
 }
 
-extern "C" int ceph_close(ceph_cluster_t *cluster, int fd)
+extern "C" int ceph_close(ceph_mount_t *cmount, int fd)
 {
-  return cluster->get_client()->close(fd);
+  return cmount->get_client()->close(fd);
 }
 
-extern "C" loff_t ceph_lseek(ceph_cluster_t *cluster, int fd,
+extern "C" loff_t ceph_lseek(ceph_mount_t *cmount, int fd,
 			     loff_t offset, int whence)
 {
-  return cluster->get_client()->lseek(fd, offset, whence);
+  return cmount->get_client()->lseek(fd, offset, whence);
 }
 
-extern "C" int ceph_read(ceph_cluster_t *cluster, int fd, char *buf,
+extern "C" int ceph_read(ceph_mount_t *cmount, int fd, char *buf,
 			 loff_t size, loff_t offset)
 {
-  return cluster->get_client()->read(fd, buf, size, offset);
+  return cmount->get_client()->read(fd, buf, size, offset);
 }
 
-extern "C" int ceph_write(ceph_cluster_t *cluster, int fd, const char *buf,
+extern "C" int ceph_write(ceph_mount_t *cmount, int fd, const char *buf,
 			  loff_t size, loff_t offset)
 {
-  return cluster->get_client()->write(fd, buf, size, offset);
+  return cmount->get_client()->write(fd, buf, size, offset);
 }
 
-extern "C" int ceph_ftruncate(ceph_cluster_t *cluster, int fd, loff_t size)
+extern "C" int ceph_ftruncate(ceph_mount_t *cmount, int fd, loff_t size)
 {
-  return cluster->get_client()->ftruncate(fd, size);
+  return cmount->get_client()->ftruncate(fd, size);
 }
 
-extern "C" int ceph_fsync(ceph_cluster_t *cluster, int fd, int syncdataonly)
+extern "C" int ceph_fsync(ceph_mount_t *cmount, int fd, int syncdataonly)
 {
-  return cluster->get_client()->fsync(fd, syncdataonly);
+  return cmount->get_client()->fsync(fd, syncdataonly);
 }
 
-extern "C" int ceph_fstat(ceph_cluster_t *cluster, int fd, struct stat *stbuf)
+extern "C" int ceph_fstat(ceph_mount_t *cmount, int fd, struct stat *stbuf)
 {
-  return cluster->get_client()->fstat(fd, stbuf);
+  return cmount->get_client()->fstat(fd, stbuf);
 }
 
-extern "C" int ceph_sync_fs(ceph_cluster_t *cluster)
+extern "C" int ceph_sync_fs(ceph_mount_t *cmount)
 {
-  return cluster->get_client()->sync_fs();
+  return cmount->get_client()->sync_fs();
 }
 
-extern "C" int ceph_get_file_stripe_unit(ceph_cluster_t *cluster, int fh)
+extern "C" int ceph_get_file_stripe_unit(ceph_mount_t *cmount, int fh)
 {
-  return cluster->get_client()->get_file_stripe_unit(fh);
+  return cmount->get_client()->get_file_stripe_unit(fh);
 }
 
-extern "C" int ceph_get_file_replication(ceph_cluster_t *cluster,
+extern "C" int ceph_get_file_replication(ceph_mount_t *cmount,
 					 const char *path)
 {
-  int fd = cluster->get_client()->open(path, O_RDONLY);
+  int fd = cmount->get_client()->open(path, O_RDONLY);
   if (fd < 0)
     return fd;
-  int rep = cluster->get_client()->get_file_replication(fd);
-  cluster->get_client()->close(fd);
+  int rep = cmount->get_client()->get_file_replication(fd);
+  cmount->get_client()->close(fd);
   return rep;
 }
 
-extern "C" int ceph_get_default_preferred_pg(ceph_cluster_t *cluster, int fd)
+extern "C" int ceph_get_default_preferred_pg(ceph_mount_t *cmount, int fd)
 {
-  return cluster->get_client()->get_default_preferred_pg(fd);
+  return cmount->get_client()->get_default_preferred_pg(fd);
 }
 
-extern "C" int ceph_set_default_file_stripe_unit(ceph_cluster_t *cluster,
+extern "C" int ceph_set_default_file_stripe_unit(ceph_mount_t *cmount,
 						 int stripe)
 {
-  cluster->get_client()->set_default_file_stripe_unit(stripe);
+  cmount->get_client()->set_default_file_stripe_unit(stripe);
   return 0;
 }
 
-extern "C" int ceph_set_default_file_stripe_count(ceph_cluster_t *cluster,
+extern "C" int ceph_set_default_file_stripe_count(ceph_mount_t *cmount,
 						  int count)
 {
-  cluster->get_client()->set_default_file_stripe_unit(count);
+  cmount->get_client()->set_default_file_stripe_unit(count);
   return 0;
 }
 
-extern "C" int ceph_set_default_object_size(ceph_cluster_t *cluster, int size)
+extern "C" int ceph_set_default_object_size(ceph_mount_t *cmount, int size)
 {
-  cluster->get_client()->set_default_object_size(size);
+  cmount->get_client()->set_default_object_size(size);
   return 0;
 }
 
-extern "C" int ceph_set_default_file_replication(ceph_cluster_t *cluster,
+extern "C" int ceph_set_default_file_replication(ceph_mount_t *cmount,
 						 int replication)
 {
-  cluster->get_client()->set_default_file_replication(replication);
+  cmount->get_client()->set_default_file_replication(replication);
   return 0;
 }
 
-extern "C" int ceph_set_default_preferred_pg(ceph_cluster_t *cluster, int pg)
+extern "C" int ceph_set_default_preferred_pg(ceph_mount_t *cmount, int pg)
 {
-  cluster->get_client()->set_default_preferred_pg(pg);
+  cmount->get_client()->set_default_preferred_pg(pg);
   return 0;
 }
 
-extern "C" int ceph_get_file_stripe_address(ceph_cluster_t *cluster, int fh,
+extern "C" int ceph_get_file_stripe_address(ceph_mount_t *cmount, int fh,
 					    loff_t offset, char *buf, int buflen)
 {
   string address;
-  int r = cluster->get_client()->get_file_stripe_address(fh, offset, address);
+  int r = cmount->get_client()->get_file_stripe_address(fh, offset, address);
   if (r != 0) return r; //at time of writing, method ONLY returns
   // 0 or -EINVAL if there are no known osds
   int len = address.size()+1;
@@ -581,11 +572,11 @@ extern "C" int ceph_get_file_stripe_address(ceph_cluster_t *cluster, int fh,
   return 0;
 }
 
-extern "C" int ceph_localize_reads(ceph_cluster_t *cluster, int val)
+extern "C" int ceph_localize_reads(ceph_mount_t *cmount, int val)
 {
   if (!val)
-    cluster->get_client()->clear_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
+    cmount->get_client()->clear_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
   else
-    cluster->get_client()->set_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
+    cmount->get_client()->set_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
   return 0;
 }

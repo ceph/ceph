@@ -784,7 +784,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       
       Inode *in = add_update_inode(&ist, from, mds);
       Dentry *dn = insert_dentry_inode(dir, dname, &dlease, in, from, mds, false);
-      dn->offset = DirResult::make_fpos(request->readdir_frag, i + request->readdir_offset);
+      dn->offset = ceph_dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
       // remove any extra names
       while (pd != dir->dentry_map.end() && pd->first <= dname) {
@@ -3912,7 +3912,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 }
 
 
-int Client::opendir(const char *relpath, DIR **dirpp) 
+int Client::opendir(const char *relpath, ceph_dir_result_t **dirpp) 
 {
   Mutex::Locker lock(client_lock);
   tout << "opendir" << std::endl;
@@ -3922,14 +3922,14 @@ int Client::opendir(const char *relpath, DIR **dirpp)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  r = _opendir(in, (DirResult**)dirpp);
+  r = _opendir(in, dirpp);
   tout << (unsigned long)*dirpp << std::endl;
   return r;
 }
 
-int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid) 
+int Client::_opendir(Inode *in, ceph_dir_result_t **dirpp, int uid, int gid) 
 {
-  *dirpp = new DirResult(in);
+  *dirpp = new ceph_dir_result_t(in);
   if (!in->is_dir())
     return -ENOTDIR;
   (*dirpp)->set_frag(in->dirfragtree[0]);
@@ -3941,18 +3941,18 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
 }
 
 
-int Client::closedir(DIR *dir) 
+int Client::closedir(ceph_dir_result_t *dir) 
 {
   Mutex::Locker lock(client_lock);
   tout << "closedir" << std::endl;
   tout << (unsigned long)dir << std::endl;
 
   dout(3) << "closedir(" << dir << ") = 0" << dendl;
-  _closedir((DirResult*)dir);
+  _closedir(dir);
   return 0;
 }
 
-void Client::_closedir(DirResult *dirp)
+void Client::_closedir(ceph_dir_result_t *dirp)
 {
   dout(10) << "_closedir(" << dirp << ")" << dendl;
   if (dirp->inode) {
@@ -3964,28 +3964,28 @@ void Client::_closedir(DirResult *dirp)
   delete dirp;
 }
 
-void Client::rewinddir(DIR *dirp)
+void Client::rewinddir(ceph_dir_result_t *dirp)
 {
   dout(3) << "rewinddir(" << dirp << ")" << dendl;
-  DirResult *d = (DirResult*)dirp;
+  ceph_dir_result_t *d = (ceph_dir_result_t*)dirp;
   d->reset();
 }
  
-loff_t Client::telldir(DIR *dirp)
+loff_t Client::telldir(ceph_dir_result_t *dirp)
 {
-  DirResult *d = (DirResult*)dirp;
+  ceph_dir_result_t *d = (ceph_dir_result_t*)dirp;
   dout(3) << "telldir(" << dirp << ") = " << d->offset << dendl;
   return d->offset;
 }
 
-void Client::seekdir(DIR *dirp, loff_t offset)
+void Client::seekdir(ceph_dir_result_t *dirp, loff_t offset)
 {
   dout(3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
-  DirResult *d = (DirResult*)dirp;
+  ceph_dir_result_t *d = (ceph_dir_result_t*)dirp;
 
   if (offset == 0 ||
-      DirResult::fpos_frag(offset) != d->frag() ||
-      DirResult::fpos_off(offset) < d->fragpos()) {
+      ceph_dir_result_t::fpos_frag(offset) != d->frag() ||
+      ceph_dir_result_t::fpos_off(offset) < d->fragpos()) {
     d->reset();
   }
 
@@ -4023,7 +4023,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
 #endif
 }
 
-void Client::_readdir_next_frag(DirResult *dirp)
+void Client::_readdir_next_frag(ceph_dir_result_t *dirp)
 {
   frag_t fg = dirp->frag();
 
@@ -4037,7 +4037,7 @@ void Client::_readdir_next_frag(DirResult *dirp)
   }
 }
 
-void Client::_readdir_rechoose_frag(DirResult *dirp)
+void Client::_readdir_rechoose_frag(ceph_dir_result_t *dirp)
 {
   assert(dirp->inode);
   frag_t cur = dirp->frag();
@@ -4048,7 +4048,7 @@ void Client::_readdir_rechoose_frag(DirResult *dirp)
   }
 }
 
-void Client::_readdir_drop_dirp_buffer(DirResult *dirp)
+void Client::_readdir_drop_dirp_buffer(ceph_dir_result_t *dirp)
 {
   dout(10) << "_readdir_drop_dirp_buffer " << dirp << dendl;
   if (dirp->buffer) {
@@ -4059,7 +4059,7 @@ void Client::_readdir_drop_dirp_buffer(DirResult *dirp)
   }
 }
 
-int Client::_readdir_get_frag(DirResult *dirp)
+int Client::_readdir_get_frag(ceph_dir_result_t *dirp)
 {
   // get the current frag.
   frag_t fg = dirp->frag();
@@ -4098,7 +4098,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   }
 
   if (res == 0) {
-    // stuff dir contents to cache, DirResult
+    // stuff dir contents to cache, ceph_dir_result_t
     assert(diri);
 
     _readdir_drop_dirp_buffer(dirp);
@@ -4130,7 +4130,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   return res;
 }
 
-int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
+int Client::_readdir_cache_cb(ceph_dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 {
   dout(10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
 	   << " at_cache_name " << dirp->at_cache_name << " offset " << hex << dirp->offset << dec
@@ -4170,7 +4170,7 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
     uint64_t next_off = dn->offset + 1;
     pd++;
     if (pd == dir->dentry_map.end())
-      next_off = DirResult::END;
+      next_off = ceph_dir_result_t::END;
 
     int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
     dout(15) << " de " << de.d_name << " off " << hex << dn->offset << dec
@@ -4191,9 +4191,9 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
   return 1;
 }
 
-int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
+int Client::readdir_r_cb(ceph_dir_result_t *d, add_dirent_cb_t cb, void *p)
 {
-  DirResult *dirp = (DirResult*)d;
+  ceph_dir_result_t *dirp = (ceph_dir_result_t*)d;
 
   dout(10) << "readdir_r_cb " << *dirp->inode << " offset " << hex << dirp->offset << dec
 	   << " frag " << dirp->frag() << " fragpos " << hex << dirp->fragpos() << dec
@@ -4279,7 +4279,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 	     << " frag " << fg << dendl;
     while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
-      uint64_t pos = DirResult::make_fpos(fg, off);
+      uint64_t pos = ceph_dir_result_t::make_fpos(fg, off);
       pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
 
       int stmask = fill_stat(ent.second, &st);  
@@ -4328,7 +4328,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
 
 
-int Client::readdir_r(DIR *d, struct dirent *de)
+int Client::readdir_r(ceph_dir_result_t *d, struct dirent *de)
 {  
   return readdirplus_r(d, de, 0, 0);
 }
@@ -4363,7 +4363,7 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
   return 0;  
 }
 
-int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
+int Client::readdirplus_r(ceph_dir_result_t *d, struct dirent *de, struct stat *st, int *stmask)
 {  
   single_readdir sr;
   sr.de = de;
@@ -4410,7 +4410,7 @@ static int _readdir_getdent_cb(void *p, struct dirent *de, struct stat *st, int 
   return 0;
 }
 
-int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
+int Client::_getdents(ceph_dir_result_t *dir, char *buf, int buflen, bool fullent)
 {
   getdents_result gr;
   gr.buf = buf;
@@ -4453,7 +4453,7 @@ int Client::getdir(const char *relpath, list<string>& contents)
     tout << relpath << std::endl;
   }
 
-  DIR *d;
+  ceph_dir_result_t *d;
   int r = opendir(relpath, &d);
   if (r < 0)
     return r;
@@ -6253,9 +6253,9 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
 
   int r = 0;
   if (vino.snapid == CEPH_SNAPDIR) {
-    *dirpp = new DirResult(diri);
+    *dirpp = new ceph_dir_result_t(diri);
   } else {
-    r = _opendir(diri, (DirResult**)dirpp);
+    r = _opendir(diri, (ceph_dir_result_t**)dirpp);
   }
 
   tout << (unsigned long)*dirpp << std::endl;
@@ -6270,7 +6270,7 @@ void Client::ll_releasedir(void *dirp)
   dout(3) << "ll_releasedir " << dirp << dendl;
   tout << "ll_releasedir" << std::endl;
   tout << (unsigned long)dirp << std::endl;
-  _closedir((DirResult*)dirp);
+  _closedir((ceph_dir_result_t*)dirp);
 }
 
 int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
