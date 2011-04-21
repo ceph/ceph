@@ -16,6 +16,7 @@
 #define CEPH_LIB_H
 
 #include <utime.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 struct stat_precise {
