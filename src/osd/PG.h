@@ -874,11 +874,16 @@ public:
 
   bool choose_acting(int newest_update_osd);
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map,
-			    eversion_t &oldest_update);
+			  eversion_t &oldest_update);
   eversion_t calc_oldest_known_update() const;
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
-	      map< int, map<pg_t,Query> >& query_map,
-	      map<int, MOSDPGInfo*> *activator_map=0);
+	       map< int, map<pg_t,Query> >& query_map,
+	       map<int, MOSDPGInfo*> *activator_map=0);
+  void choose_log_location(bool &need_backlog,
+			   bool &wait_on_backlog,
+			   int &pull_from,
+			   eversion_t &newest_update,
+			   eversion_t &oldest_update) const;
   void build_might_have_unfound();
   void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,

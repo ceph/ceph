@@ -1258,64 +1258,48 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
   // -- ok, we have all (prior_set) info.  (and maybe others.)
   dout(10) << " have prior_set info.  min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
 
-  // who (of all priors and active) has the latest PG version?
-  eversion_t newest_update = info.last_update;
-  int newest_update_osd = osd->whoami;
+  bool need_backlog, wait_for_backlog;
+  int pull_from;
+  eversion_t newest_update;
+  stringstream out;
+  choose_log_location(need_backlog, 
+		      wait_for_backlog, pull_from, newest_update, 
+		      oldest_update);
+  dout(10) << out << dendl;
 
-  oldest_update = info.last_update;  // only of acting (current) osd set.
-  int oldest_who = osd->whoami;
-  min_last_complete_ondisk = info.last_complete;
-  
-  for (map<int,Info>::iterator it = peer_info.begin();
-       it != peer_info.end();
-       it++) {
-    if (osd->osdmap->is_down(it->first))
-      continue;
-    dout(10) << " have info from osd" << it->first << ": " << it->second << dendl;
-    if (it->second.last_update > newest_update ||
-	(it->second.last_update == newest_update &&    // prefer osds in the prior set
-	 prior_set->cur.count(newest_update_osd) == 0)) {
-      newest_update = it->second.last_update;
-      newest_update_osd = it->first;
-    }
-    if (is_acting(it->first)) {
-      if (it->second.last_update < oldest_update) {
-        oldest_update = it->second.last_update;
-	oldest_who = it->first;
-      }
-    }
-    if (is_up(it->first)) {
-      if (it->second.last_complete < min_last_complete_ondisk)
-        min_last_complete_ondisk = it->second.last_complete;
-    }
+  if (pull_from == -1) {
+    pull_from = osd->whoami;
   }
-  if (newest_update == info.last_update)   // or just me, if nobody better.
-    newest_update_osd = osd->whoami;
-  
+
+  // -- do i need to generate backlog?
+  if (need_backlog && !info.log_backlog) {
+    osd->queue_generate_backlog(this);
+  }
+
   // -- decide what acting set i want, based on state of up set
-  if (!choose_acting(newest_update_osd))
+  if (!choose_acting(pull_from))
     return false;
 
   // gather log(+missing) from that person!
-  if (newest_update_osd != osd->whoami) {
-    Info& pi = peer_info[newest_update_osd];
+  if (pull_from != osd->whoami) {
+    const Info& pi = peer_info[pull_from];
     if (pi.log_tail <= log.head) {
-      if (peer_log_requested.count(newest_update_osd)) {
-	dout(10) << " newest update on osd" << newest_update_osd
-		 << " v " << newest_update 
-		 << ", already queried log" 
+      if (peer_log_requested.count(pull_from)) {
+	dout(10) << " newest update on osd" << pull_from
+		 << " v " << newest_update
+		 << ", already queried log"
 		 << dendl;
       } else {
 	// we'd _like_ it back to oldest_update, but take what we can get.
-	dout(10) << " newest update on osd" << newest_update_osd
-		 << " v " << newest_update 
+	dout(10) << " newest update on osd" << pull_from
+		 << " v " << newest_update
 		 << ", querying since oldest_update " << oldest_update
 		 << dendl;
-	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update, info.history);
-	peer_log_requested.insert(newest_update_osd);
+	query_map[pull_from][info.pgid] = Query(Query::LOG, oldest_update, info.history);
+	peer_log_requested.insert(pull_from);
       }
     } else {
-      dout(10) << " newest update on osd" << newest_update_osd
+      dout(10) << " newest update on osd" << pull_from
 	       << ", whose log.tail " << pi.log_tail
 	       << " > my log.head " << log.head
 	       << ", i will need backlog for me+them." << dendl;
@@ -1327,18 +1311,18 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
 	return false;
       }
       
-      if (peer_backlog_requested.count(newest_update_osd)) {
-	dout(10) << " newest update on osd" << newest_update_osd
-		 << " v " << newest_update 
-		 << ", already queried summary/backlog" 
+      if (peer_backlog_requested.count(pull_from)) {
+	dout(10) << " newest update on osd" << pull_from
+		 << " v " << newest_update
+		 << ", already queried summary/backlog"
 		 << dendl;
       } else {
-	dout(10) << " newest update on osd" << newest_update_osd
+	dout(10) << " newest update on osd" << pull_from
 		 << " v " << newest_update 
 		 << ", querying entire summary/backlog"
 		 << dendl;
-	query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
-	peer_backlog_requested.insert(newest_update_osd);
+	query_map[pull_from][info.pgid] = Query(Query::BACKLOG, info.history);
+	peer_backlog_requested.insert(pull_from);
       }
     }
     return false;
@@ -1346,28 +1330,90 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
     dout(10) << " newest_update " << info.last_update << " (me)" << dendl;
   }
 
-  dout(10) << " oldest_update " << oldest_update << " (osd" << oldest_who << ")" << dendl;
+  dout(10) << " oldest_update " << oldest_update << dendl;
 
   have_master_log = true;
 
   return true;
 }
 
-eversion_t PG::calc_oldest_known_update() const
+void PG::choose_log_location(bool &need_backlog,
+			     bool &wait_on_backlog,
+			     int &pull_from,
+			     eversion_t &newest_update,
+			     eversion_t &oldest_update) const
 {
-  eversion_t oldest_update(info.last_update);
-  for (map<int,Info>::const_iterator it = peer_info.begin();
+  // Find the osd with the most recent update
+  pull_from = -1;
+  need_backlog = false;
+  wait_on_backlog = false;
+  const Info *best_info = &info;
+  for (map<int, Info>::const_iterator it = peer_info.begin();
        it != peer_info.end();
        ++it) {
-    if (osd->osdmap->is_down(it->first))
-      continue;
-    if (!is_acting(it->first))
-      continue;
-    if (it->second.last_update < oldest_update) {
-      oldest_update = it->second.last_update;
+    if (best_info->last_update < it->second.last_update) {
+      best_info = &(it->second);
+      pull_from = it->first;
     }
   }
-  return oldest_update;
+  newest_update = best_info->last_update;
+
+  for (vector<int>::const_iterator it = ++acting.begin();
+       it != acting.end();
+       ++it) {
+    const Info &pi = peer_info.find(*it)->second;
+    if (best_info->log_tail > pi.last_update) {
+      wait_on_backlog = true;
+      need_backlog = true;
+    }
+  }
+
+  oldest_update = info.last_update;
+  for (vector<int>::const_iterator it = ++up.begin();
+       it != up.end();
+       ++it) {
+    const Info &pi = peer_info.find(*it)->second;
+    if (oldest_update > pi.last_update) {
+      oldest_update = pi.last_update;
+    }
+
+    vector<int>::const_iterator acting_it = find(acting.begin(), acting.end(), *it);
+    if (acting_it != acting.end())
+      continue;
+
+    if (pi.last_update < best_info->log_tail) {
+      dout(10) << "must generate backlog for up but !acting peer osd" << *it
+	       << " whose last_update " << pi.last_update
+	       << " < best_info->tail " << best_info->log_tail << dendl;
+      need_backlog = true;
+    }
+  }
+  // check our own info -- we aren't in peer_info
+  if (best_info->log_tail > info.last_update) {
+    wait_on_backlog = true;
+    need_backlog = true;
+  }
+
+  // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
+  if (info.last_complete < info.log_tail && !info.log_backlog) {
+    dout(10) << "must generate backlog because my last_complete " << info.last_complete
+	     << " < log.tail " << info.log_tail << " and no backlog" << dendl;
+    need_backlog = true;
+  }
+  for (vector<int>::const_iterator it = ++acting.begin();
+       it != acting.end();
+       ++it) {
+    const Info& pi = peer_info.find(*it)->second;
+    if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
+	pi.last_complete < info.log_tail) {
+      dout(10) << "must generate backlog for replica peer osd" << *it
+	       << " who has a last_complete " << pi.last_complete
+	       << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
+      need_backlog = true;
+      wait_on_backlog = true;
+      return;
+    }
+  }
 }
 
 void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
@@ -1397,57 +1443,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (!choose_acting(osd->whoami))
 	return;
     }
-    oldest_update = calc_oldest_known_update();
   }
-
-  // -- do i need to generate backlog?
-  if (!log.backlog) {
-    if (oldest_update < log.tail) {
-      dout(10) << "must generate backlog for some peers, my tail " 
-	       << log.tail << " > oldest_update " << oldest_update
-	       << dendl;
-      osd->queue_generate_backlog(this);
-      return;
-    }
-
-    // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
-    if (info.last_complete < log.tail) {
-      dout(10) << "must generate backlog because my last_complete " << info.last_complete
-	       << " < log.tail " << log.tail << " and no backlog" << dendl;
-      osd->queue_generate_backlog(this);
-      return;
-    }
-    for (unsigned i=1; i<acting.size(); i++) {
-      int o = acting[i];
-      Info& pi = peer_info[o];
-      if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
-	  pi.last_complete < log.tail) {
-	dout(10) << "must generate backlog for replica peer osd" << o
-		 << " who has a last_complete " << pi.last_complete
-		 << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
-	osd->queue_generate_backlog(this);
-	return;
-      }
-    }
-
-    // do i need a backlog for an up peer excluded from acting?
-    bool need_backlog = false;
-    for (unsigned i=0; i<up.size(); i++) {
-      int o = up[i];
-      if (o == osd->whoami || is_acting(o))
-	continue;
-      Info& pi = peer_info[o];
-      if (pi.last_update < log.tail) {
-	dout(10) << "must generate backlog for up but !acting peer osd" << o
-		 << " whose last_update " << pi.last_update
-		 << " < my log.tail " << log.tail << dendl;
-	need_backlog = true;
-      }
-    }
-    if (need_backlog)
-      osd->queue_generate_backlog(this);
-  }
-
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
   /*
