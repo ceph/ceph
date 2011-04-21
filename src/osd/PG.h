@@ -745,6 +745,18 @@ public:
     set<int>    down;  // down osds normally exluded from cur
     set<int>    lost;  // osds in the prior set which are lost
     map<int,epoch_t> up_thru;  // osds whose up_thru we care about
+    vector<Interval> inter_up_thru;  // intervals whose up_thru we care about
+    bool crashed;
+    bool pg_down;
+    bool some_down;
+    const PG *pg;
+    PgPriorSet(int whoami,
+	       const OSDMap &osdmap,
+	       const map<epoch_t, Interval> &past_intervals,
+	       const vector<int> &up,
+	       const vector<int> &acting,
+	       const Info &info,
+	       const PG *pg);
   };
 
   friend std::ostream& operator<<(std::ostream& oss,

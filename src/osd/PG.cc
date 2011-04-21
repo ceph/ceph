@@ -1089,219 +1089,51 @@ void PG::build_prior()
     // sanity check
     for (map<int,Info>::iterator it = peer_info.begin();
 	 it != peer_info.end();
-	 it++)
+	 it++) {
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
+    }
   }
+  generate_past_intervals();
 
-  /*
-   * We have to be careful to gracefully deal with situations like
-   * so. Say we have a power outage or something that takes out both
-   * OSDs, but the monitor doesn't mark them down in the same epoch.
-   * The history may look like
-   *
-   *  1: A B
-   *  2:   B
-   *  3:       let's say B dies for good, too (say, from the power spike) 
-   *  4: A
-   *
-   * which makes it look like B may have applied updates to the PG
-   * that we need in order to proceed.  This sucks...
-   *
-   * To minimize the risk of this happening, we CANNOT go active if
-   * _any_ OSDs in the prior set are down until we send an MOSDAlive
-   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
-   * Then, we have something like
-   *
-   *  1: A B
-   *  2:   B   alive_thru[B]=0
-   *  3:
-   *  4: A
-   *
-   * -> we can ignore B, bc it couldn't have gone active (alive_thru
-   *    still 0).
-   *
-   * or,
-   *
-   *  1: A B
-   *  2:   B   alive_thru[B]=0
-   *  3:   B   alive_thru[B]=2
-   *  4:
-   *  5: A    
-   *
-   * -> we must wait for B, bc it was alive through 2, and could have
-        written to the pg.
-   *
-   * If B is really dead, then an administrator will need to manually
-   * intervene by marking the OSD as "lost."
-   */
-
-  prior_set.reset(new PgPriorSet());
-  PgPriorSet& prior(*prior_set.get());
-
-  // current up and/or acting nodes, of course.
-  for (unsigned i=0; i<up.size(); i++)
-    if (up[i] != osd->whoami)
-      prior.cur.insert(up[i]);
-  for (unsigned i=0; i<acting.size(); i++)
-    if (acting[i] != osd->whoami)
-      prior.cur.insert(acting[i]);
-
-  // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
   state_clear(PG_STATE_DOWN);
-  bool some_down = false;
 
-  // generate past intervals, if we don't have them.
-  generate_past_intervals();
-  
-  // see if i have ever started since joining the pg.  this is important only
-  // if we want to exclude lost osds.
-  set<int> started_since_joining;
-  for (vector<int>::iterator q = acting.begin(); q != acting.end(); q++) {
-    int o = *q;
-    
-    for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
-	 p != past_intervals.rend();
-	 p++) {
-      Interval &interval = p->second;
-      if (interval.last < info.history.last_epoch_started)
-	break;  // we don't care
-      if (!interval.maybe_went_rw)
-	continue;
-      if (std::find(interval.acting.begin(), interval.acting.end(), o)
-	  != interval.acting.end())
-	started_since_joining.insert(o);
-      break;
-    }
-  }
+  stringstream out;
+  prior_set.reset(new PgPriorSet(osd->whoami,
+				 *osd->osdmap,
+				 past_intervals,
+				 up,
+				 acting,
+				 info,
+				 this));
+  dout(10) << out << dendl;
+  PgPriorSet &prior(*prior_set.get());
+				 
 
-  dout(10) << "build_prior " << started_since_joining << " have started since joining this pg" << dendl;
-
-  for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
-       p != past_intervals.rend();
-       p++) {
-    Interval &interval = p->second;
-    dout(10) << "build_prior " << interval << dendl;
-
-    if (interval.last < info.history.last_epoch_started)
-      break;  // we don't care
-
-    if (interval.acting.empty())
-      continue;
-
-    int crashed = 0;
-    int need_down = 0;
-    bool any_survived = false;
-
-    // consider UP osds
-    for (unsigned i=0; i<interval.up.size(); i++) {
-      int o = interval.up[i];
-
-      if (osd->osdmap->is_up(o)) {  // is up now
-	if (o != osd->whoami)       // and is not me
-	  prior.cur.insert(o);
-      }
-    }
-
-    // consider ACTING osds
-    for (unsigned i=0; i<interval.acting.size(); i++) {
-      int o = interval.acting[i];
-
-      const osd_info_t *pinfo = 0;
-      if (osd->osdmap->exists(o))
-	pinfo = &osd->osdmap->get_info(o);
-
-      // if the osd restarted after this interval but is not known to have
-      // cleanly survived through this interval, we mark the pg crashed.
-      if (pinfo && (pinfo->up_from > interval.last &&
-		    !(pinfo->last_clean_first <= interval.first &&
-		      pinfo->last_clean_last >= interval.last))) {
-	dout(10) << "build_prior  prior osd" << o
-		 << " up_from " << pinfo->up_from
-		 << " and last clean interval " << pinfo->last_clean_first << "-" << pinfo->last_clean_last
-		 << " does not include us" << dendl;
-	crashed++;
-      }
-
-      if (osd->osdmap->is_up(o)) {  // is up now
-	// did any osds survive _this_ interval?
-	any_survived = true;
-      } else if (!pinfo || pinfo->lost_at > interval.first) {
-	prior.down.insert(0);
-	if (started_since_joining.size()) {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd" << o
-		     << " is down, but marked lost at " << pinfo->lost_at
-		     << ", and " << started_since_joining << " have started since joining pg"
-		     << dendl;
-	  else
-	    dout(10) << "build_prior  prior osd" << o
-		     << " no longer exists, and " << started_since_joining << " have started since joining pg"
-		     << dendl;
-
-	} else {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd" << o
-		     << " is down, but marked lost at " << pinfo->lost_at
-		     << ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		     << dendl;
-	  else
-	    dout(10) << "build_prior  prior osd" << o
-		     << " no longer exists, and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		     << dendl;
-	  need_down++;
-	}
-      } else {
-	dout(10) << "build_prior  prior osd" << o
-		 << " is down" << dendl;
-	need_down++;
-	prior.down.insert(o);
-      }
-    }
-
-    // if nobody survived this interval, and we may have gone rw,
-    // then we need to wait for one of those osds to recover to
-    // ensure that we haven't lost any information.
-    if (!any_survived && need_down && interval.maybe_went_rw) {
-      // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  " << need_down
-	       << " osds possibly went active+rw, no survivors, including" << dendl;
-      for (unsigned i=0; i<interval.acting.size(); i++)
-	if (osd->osdmap->is_down(interval.acting[i])) {
-	  prior.cur.insert(interval.acting[i]);
-	  state_set(PG_STATE_DOWN);
-	}
-      some_down = true;
-      
-      // take note that we care about the primary's up_thru.  if it
-      // changes later, it will affect our prior_set, and we'll want
-      // to rebuild it!
-      OSDMap *lastmap = osd->get_map(interval.last);
-      prior.up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
-    }
-
-    if (crashed) {
-      dout(10) << "build_prior  one of " << interval.acting 
-	       << " possibly crashed, marking pg crashed" << dendl;
-      state_set(PG_STATE_CRASHED);
-    }
-  }
-
-  // Build prior_set.lost
-  for (set<int>::const_iterator i = prior.cur.begin();
-       i != prior.cur.end(); ++i) {
-    int o = *i;
-    const osd_info_t& pinfo(osd->osdmap->get_info(o));
-    if (pinfo.lost_at > pinfo.up_from) {
-      prior.lost.insert(o);
-    }
-  }
-
-  dout(10) << "build_prior: " << prior << " "
-	   << (is_crashed() ? " crashed":"")
-	   << (is_down() ? " down":"")
-	   << (some_down ? " some_down":"")
+  dout(10) << "build_prior: " << *this << " "
+	   << (prior.crashed ? " crashed":"")
+	   << (prior.pg_down ? " down":"")
+	   << (prior.some_down ? " some_down":"")
 	   << dendl;
+  // take note that we care about the primary's up_thru.  if it
+  // changes later, it will affect our prior_set, and we'll want
+  // to rebuild it!
+  if (prior.crashed) {
+    state_set(PG_STATE_CRASHED);
+  }
+  if (prior.pg_down) {
+    state_set(PG_STATE_DOWN);
+  }
+
+  if (prior.some_down) {
+    need_up_thru = true;
+    for (vector<Interval>::iterator i = prior.inter_up_thru.begin();
+	 i != prior.inter_up_thru.end();
+	 ++i) {
+      OSDMap *lastmap = osd->get_map(i->last);
+      prior.up_thru[i->acting[0]] = lastmap->get_up_thru(i->acting[0]);
+    }
+  }
 }
 
 void PG::clear_primary_state()
@@ -3875,4 +3707,202 @@ std::ostream& operator<<(std::ostream& oss,
       << "down=" << prior.down << ", "
       << "lost=" << prior.lost << " ]]";
   return oss;
+}
+#undef dout_prefix
+#define dout_prefix (*_dout << pg->gen_prefix() << "PgPriorSet: ")
+
+PG::PgPriorSet::PgPriorSet(int whoami,
+			   const OSDMap &osdmap,
+			   const map<epoch_t, Interval> &past_intervals,
+			   const vector<int> &up,
+			   const vector<int> &acting,
+			   const PG::Info &info,
+			   const PG* pg)
+  : crashed(false), pg_down(false), some_down(false), pg(pg)
+{
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike) 
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * _any_ OSDs in the prior set are down until we send an MOSDAlive
+   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (alive_thru
+   *    still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:   B   alive_thru[B]=2
+   *  4:
+   *  5: A    
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+        written to the pg.
+   *
+   * If B is really dead, then an administrator will need to manually
+   * intervene by marking the OSD as "lost."
+   */
+  // current up and/or acting nodes, of course.
+  for (unsigned i=0; i<up.size(); i++)
+    if (up[i] != whoami)
+      cur.insert(up[i]);
+  for (unsigned i=0; i<acting.size(); i++)
+    if (acting[i] != whoami)
+      cur.insert(acting[i]);
+
+  // see if i have ever started since joining the pg.  this is important only
+  // if we want to exclude lost osds.
+  set<int> started_since_joining;
+  for (vector<int>::const_iterator q = acting.begin(); q != acting.end(); q++) {
+    int o = *q;
+    
+    for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+	 p != past_intervals.rend();
+	 p++) {
+      const Interval &interval = p->second;
+      if (interval.last < info.history.last_epoch_started)
+	break;  // we don't care
+      if (!interval.maybe_went_rw)
+	continue;
+      if (std::find(interval.acting.begin(), interval.acting.end(), o)
+	  != interval.acting.end())
+	started_since_joining.insert(o);
+      break;
+    }
+  }
+
+  dout(10) << "build_prior " << started_since_joining << " have started since joining this pg" << dendl;
+
+  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+       p != past_intervals.rend();
+       p++) {
+    const Interval &interval = p->second;
+    dout(10) << "build_prior " << interval << dendl;
+
+    if (interval.last < info.history.last_epoch_started)
+      break;  // we don't care
+
+    if (interval.acting.empty())
+      continue;
+
+    int need_down = 0;
+    bool any_survived = false;
+
+    // consider UP osds
+    for (unsigned i=0; i<interval.up.size(); i++) {
+      int o = interval.up[i];
+
+      if (osdmap.is_up(o)) {  // is up now
+	if (o != whoami)       // and is not me
+	  cur.insert(o);
+      }
+    }
+
+    // consider ACTING osds
+    for (unsigned i=0; i<interval.acting.size(); i++) {
+      int o = interval.acting[i];
+
+      const osd_info_t *pinfo = 0;
+      if (osdmap.exists(o))
+	pinfo = &osdmap.get_info(o);
+
+      // if the osd restarted after this interval but is not known to have
+      // cleanly survived through this interval, we mark the pg crashed.
+      if (pinfo && (pinfo->up_from > interval.last &&
+		    !(pinfo->last_clean_first <= interval.first &&
+		      pinfo->last_clean_last >= interval.last))) {
+	dout(10) << "build_prior  prior osd" << o
+	    << " up_from " << pinfo->up_from
+	    << " and last clean interval " << pinfo->last_clean_first << "-" << pinfo->last_clean_last
+	    << " does not include us" << dendl;
+	crashed = true;
+      }
+
+      if (osdmap.is_up(o)) {  // is up now
+	// did any osds survive _this_ interval?
+	any_survived = true;
+      } else if (!pinfo || pinfo->lost_at > interval.first) {
+	down.insert(0);
+	if (started_since_joining.size()) {
+	  if (pinfo)
+	    dout(10) << "build_prior  prior osd" << o
+		<< " is down, but marked lost at " << pinfo->lost_at
+		<< ", and " << started_since_joining << " have started since joining pg"
+		<< dendl;
+	  else
+	    dout(10) << "build_prior  prior osd" << o
+		<< " no longer exists, and " << started_since_joining << " have started since joining pg"
+		<< dendl;
+
+	} else {
+	  if (pinfo)
+	    dout(10) << "build_prior  prior osd" << o
+		<< " is down, but marked lost at " << pinfo->lost_at
+		<< ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
+		<< dendl;
+	  else
+	    dout(10) << "build_prior  prior osd" << o
+		     << " no longer exists, and NO acting osds have started since joining pg, so i may not have any pg state :/"
+		     << dendl;
+	  need_down++;
+	}
+      } else {
+	dout(10) << "build_prior  prior osd" << o
+	    << " is down" << dendl;
+	need_down++;
+	down.insert(o);
+      }
+    }
+
+    // if nobody survived this interval, and we may have gone rw,
+    // then we need to wait for one of those osds to recover to
+    // ensure that we haven't lost any information.
+    if (!any_survived && need_down && interval.maybe_went_rw) {
+      // fixme: how do we identify a "clean" shutdown anyway?
+      dout(10) << "build_prior  " << need_down
+	  << " osds possibly went active+rw, no survivors, including" << dendl;
+      for (unsigned i=0; i<interval.acting.size(); i++)
+	if (osdmap.is_down(interval.acting[i])) {
+	  cur.insert(interval.acting[i]);
+	  pg_down = true;
+	}
+      some_down = true;
+      inter_up_thru.push_back(interval);
+    }
+
+    if (crashed) {
+      dout(10) << "build_prior  one of " << interval.acting
+	  << " possibly crashed, marking pg crashed" << dendl;
+    }
+  }
+
+  // Build prior_set.lost
+  for (set<int>::const_iterator i = cur.begin();
+       i != cur.end(); ++i) {
+    int o = *i;
+    const osd_info_t& pinfo(osdmap.get_info(o));
+    if (pinfo.lost_at > pinfo.up_from) {
+      lost.insert(o);
+    }
+  }
+
 }
