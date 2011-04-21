@@ -22,8 +22,6 @@ die() {
 
 debug_level=0
 verbose=0
-CFLAGS=""
-CXXFLAGS=""
 profile=0
 while getopts  "36d:hPv" flag
 do
