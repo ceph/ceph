@@ -93,11 +93,14 @@
  */
 #define FILENAME_MAX_LEN 4096 // the long file name size
 
-#define FILENAME_SHORT_LEN 16 // the short file name size
+#define FILENAME_SHORT_LEN 32 // the short file name size
 #define FILENAME_COOKIE "cLFN"  // ceph long file name
 #define FILENAME_HASH_LEN 3
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 1 - (sizeof(FILENAME_COOKIE) - 1) - 1)
+
+static int __do_getxattr(const char *fn, const char *name, void *val, size_t size, int use_lfn);
+static int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
 
 #ifdef DARWIN
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
@@ -193,7 +196,7 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   char buf[PATH_MAX];
 
   snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = sys_getxattr(buf, "user.ceph._lfn", new_name, sizeof(buf) - 1);
+  int r = __do_getxattr(buf, "user.ceph._lfn", new_name, sizeof(buf) - 1, 0);
   if (r < 0)
     strncpy(new_name, name, len);
   else
@@ -247,7 +250,7 @@ int lfn_get(const char *pathname, char *short_fn, int len, const char **long_fn,
     int r;
 
     build_filename(&short_fn[path_len], len - path_len, filename, i);
-    r = getxattr(short_fn, "user.ceph._lfn", buf, sizeof(buf));
+    r = __do_getxattr(short_fn, "user.ceph._lfn", buf, sizeof(buf), 0);
     if (r < 0)
       r = -errno;
     if (r > 0) {
@@ -335,7 +338,7 @@ int lfn_listxattr(const char *fn, char *names, size_t len)
 
 static int lfn_truncate(const char *fn, off_t length)
 {
- char new_fn[PATH_MAX];
+  char new_fn[PATH_MAX];
   int r;
 
   r = lfn_find(fn, new_fn, sizeof(new_fn));
@@ -369,7 +372,7 @@ static int lfn_open(const char *pathname, int flags, mode_t mode)
   if (r < 0)
     return r;
   if (!is_lfn)
-    return open(pathname, flags);
+    return open(pathname, flags, mode);
 
   r = ::open(short_fn, flags, mode);
 
@@ -379,7 +382,7 @@ static int lfn_open(const char *pathname, int flags, mode_t mode)
   fd = r;
 
   if (flags & O_CREAT) {
-    r = fsetxattr(fd, "user.ceph._lfn", long_fn, strlen(long_fn), 0);
+    r = do_fsetxattr(fd, "user.ceph._lfn", long_fn, strlen(long_fn));
     if (r < 0) {
       close(fd);
       return r;
@@ -563,7 +566,7 @@ int do_getxattr_len(const char *fn, const char *name)
   return total;
 }
 
-int do_getxattr(const char *fn, const char *name, void *val, size_t size)
+static int __do_getxattr(const char *fn, const char *name, void *val, size_t size, int use_lfn)
 {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
@@ -579,7 +582,10 @@ int do_getxattr(const char *fn, const char *name, void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    r = lfn_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (use_lfn)
+      r = lfn_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    else
+      r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -597,7 +603,10 @@ int do_getxattr(const char *fn, const char *name, void *val, size_t size)
        exactly one block */
     if (chunk_size == ATTR_MAX_BLOCK_LEN) {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = lfn_getxattr(fn, raw_name, 0, 0);
+      if (use_lfn)
+        r = lfn_getxattr(fn, raw_name, 0, 0);
+      else
+        r = sys_getxattr(fn, raw_name, 0, 0);
       if (r > 0) { // there's another chunk.. the original buffer was too small
         ret = -ERANGE;
       }
@@ -606,7 +615,12 @@ int do_getxattr(const char *fn, const char *name, void *val, size_t size)
   return ret;
 }
 
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
+static int do_getxattr(const char *fn, const char *name, void *val, size_t size)
+{
+  return __do_getxattr(fn, name, val, size, 1);
+}
+
+static int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
@@ -632,6 +646,38 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size) 
   if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     lfn_removexattr(fn, raw_name);
+  }
+  
+  return ret;
+}
+
+static int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
+{
+  int i = 0, pos = 0;
+  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t chunk_size;
+
+  do {
+    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = ::fsetxattr(fd, raw_name, (char *)val + pos, chunk_size, 0);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+  } while (size);
+
+  /* if we're exactly at a chunk size, remove the next one (if wasn't removed
+     before) */
+  if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    ::fremovexattr(fd, raw_name);
   }
   
   return ret;

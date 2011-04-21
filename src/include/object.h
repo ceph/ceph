@@ -35,7 +35,7 @@ using namespace __gnu_cxx;
  * nasty warning message in the (unlikely) event that you are not using one of
  * those filesystems, and your filesystem can't handle the full 255 characters.
  */
-#define MAX_CEPH_OBJECT_NAME_LEN 255
+#define MAX_CEPH_OBJECT_NAME_LEN 2048
 
 struct object_t {
   string name;
