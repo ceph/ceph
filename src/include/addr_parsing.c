@@ -42,7 +42,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 char *resolve_addrs(const char *orig_str)
 {
   char *new_str;
-  char *tok, *p, *port_str;
+  char *tok, *p, *port_str, *saveptr;
   int len, pos;
   char buf[strlen(orig_str) + 1];
   strcpy(buf, orig_str);
@@ -53,7 +53,7 @@ char *resolve_addrs(const char *orig_str)
   p = new_str;
   pos = 0;
 
-  tok = strtok(buf, ",");
+  tok = strtok_r(buf, ",", &saveptr);
 
   while (tok) {
     struct addrinfo hint;
@@ -129,7 +129,7 @@ char *resolve_addrs(const char *orig_str)
     }
     freeaddrinfo(ores);
 
-    tok = strtok(NULL, ",");
+    tok = strtok_r(NULL, ",", &saveptr);
     if (tok)
       pos = safe_cat(&new_str, &len, pos, ",");
 
