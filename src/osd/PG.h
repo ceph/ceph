@@ -1054,7 +1054,13 @@ public:
   void share_pg_info();
   void share_pg_log(const eversion_t &oldver);
 
+  void warm_restart();
+		    
+  bool acting_up_affected(OSDMap &osdmap,
+	       const OSDMap &lastmap);
   // abstract bits
+  virtual bool handle_advance_map(OSDMap &osdmap,
+				  const OSDMap &lastmap);
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;

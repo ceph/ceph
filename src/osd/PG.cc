@@ -3503,6 +3503,190 @@ void PG::share_pg_log(const eversion_t &oldver)
   }
 }
 
+bool PG::handle_advance_map(OSDMap &osdmap,
+			    const OSDMap &lastmap)
+{
+  if (acting_up_affected(osdmap, lastmap)) {
+    return true;
+  } else {
+    warm_restart();
+    return false;
+  }
+}
+
+bool PG::acting_up_affected(OSDMap &osdmap,
+		 const OSDMap &lastmap)
+{
+  // get new acting set
+  vector<int> tup, tacting;
+  osdmap.pg_to_up_acting_osds(info.pgid, tup, tacting);
+
+  if (acting != tacting || up != tup) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+/* Called before initializing peering during advance_map */
+void PG::warm_restart()
+{
+  OSDMap &lastmap = *osd->get_map(osd->osdmap->get_epoch() - 1);
+  OSDMap &osdmap = *osd->osdmap;
+  // -- there was a change! --
+  kick();
+
+  int oldrole = get_role();
+  int oldprimary = get_primary();
+
+  vector<int> oldacting, oldup; //About to get swapped with current (old)
+  osdmap.pg_to_up_acting_osds(info.pgid, oldup, oldacting);
+
+  // update PG
+  acting.swap(oldacting);
+  up.swap(oldup);
+
+  int role = osdmap.calc_pg_role(osd->whoami, acting, acting.size());
+  set_role(role);
+
+  // did acting, up, primary|acker change?
+  if (acting != oldacting || up != oldup) {
+    // remember past interval
+    PG::Interval& i = past_intervals[info.history.same_acting_since];
+    i.first = info.history.same_acting_since;
+    i.last = osdmap.get_epoch() - 1;
+    i.acting = oldacting;
+    i.up = oldup;
+
+    if (oldacting != acting) {
+      info.history.same_acting_since = osdmap.get_epoch();
+    }
+    if (oldup != up) {
+      info.history.same_up_since = osdmap.get_epoch();
+    }
+
+    if (i.acting.size()) {
+      i.maybe_went_rw = 
+	(lastmap.get_up_thru(i.acting[0]) >= i.first &&
+	 lastmap.get_up_from(i.acting[0]) <= i.first) ||
+	i.first == info.history.epoch_created;
+    } else {
+      i.maybe_went_rw = 0;
+    }
+
+    if (oldprimary != get_primary()) {
+      info.history.same_primary_since = osdmap.get_epoch();
+    }
+
+    dout(10) << *this << " noting past " << i << dendl;
+    dirty_info = true;
+  }
+
+  dout(10) << " up " << oldup << " -> " << up 
+	   << ", acting " << oldacting << " -> " << acting 
+	   << ", role " << oldrole << " -> " << role << dendl; 
+
+  // deactivate.
+  state_clear(PG_STATE_ACTIVE);
+  state_clear(PG_STATE_DOWN);
+  state_clear(PG_STATE_PEERING);  // we'll need to restart peering
+  state_clear(PG_STATE_DEGRADED);
+  state_clear(PG_STATE_REPLAY);
+  state_clear(PG_STATE_CRASHED);
+
+  osd->cancel_generate_backlog(this);
+
+  peer_missing.clear();
+
+  if (is_primary()) {
+    if (osdmap.get_pg_size(info.pgid) != acting.size())
+      state_set(PG_STATE_DEGRADED);
+  }
+
+  // reset primary state?
+  if (oldrole == 0 || get_role() == 0)
+    clear_primary_state();
+
+    
+  // pg->on_*
+  /* TODO on_osd_failure does NOTHING! */
+#if 0
+  for (unsigned i=0; i<oldacting.size(); i++)
+    if (osdmap.is_down(oldacting[i]))
+      ->on_osd_failure(oldacting[i]);
+#endif
+
+  on_change();
+
+  if (deleting) {
+    dout(10) << *this << " canceling deletion!" << dendl;
+    deleting = false;
+    osd->remove_wq.dequeue(this);
+  }
+    
+  if (role != oldrole) {
+    // old primary?
+    if (oldrole == 0) {
+      state_clear(PG_STATE_CLEAN);
+      clear_stats();
+	
+      // take replay queue waiters
+      list<Message*> ls;
+      for (map<eversion_t,MOSDOp*>::iterator it = replay_queue.begin();
+	   it != replay_queue.end();
+	   it++)
+	ls.push_back(it->second);
+      replay_queue.clear();
+      osd->take_waiters(ls);
+    }
+
+    on_role_change();
+
+    // take active waiters
+    osd->take_waiters(waiting_for_active);
+
+    // new primary?
+    if (role == 0) {
+      // i am new primary
+      state_clear(PG_STATE_STRAY);
+    } else {
+      // i am now replica|stray.  we need to send a notify.
+      state_set(PG_STATE_STRAY);
+      have_master_log = false;
+    }
+      
+  } else {
+    // no role change.
+    // did primary change?
+    if (get_primary() != oldprimary) {    
+      // we need to announce
+      state_set(PG_STATE_STRAY);
+        
+      dout(10) << *this << " " << oldacting << " -> " << acting 
+	       << ", acting primary " 
+	       << oldprimary << " -> " << get_primary() 
+	       << dendl;
+    } else {
+      // primary is the same.
+      if (role == 0) {
+	// i am (still) primary. but my replica set changed.
+	state_clear(PG_STATE_CLEAN);
+	  
+	dout(10) << oldacting << " -> " << acting
+		 << ", replicas changed" << dendl;
+      }
+    }
+  }
+  // make sure we clear out any pg_temp change requests
+  osd->pg_temp_wanted.erase(info.pgid);
+  cancel_recovery();
+
+  if (acting.empty() && up.size() && up[0] == osd->whoami) {
+    dout(10) << " acting empty, but i am up[0], clearing pg_temp" << dendl;
+    osd->queue_want_pg_temp(info.pgid, acting);
+  }
+}
+
 unsigned int PG::Missing::num_missing() const
 {
   return missing.size();

@@ -3202,167 +3202,19 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg_t pgid = it->first;
     PG *pg = it->second;
 
-    // get new acting set
-    vector<int> tup, tacting;
-    osdmap->pg_to_up_acting_osds(pgid, tup, tacting);
-    int role = osdmap->calc_pg_role(whoami, tacting, tacting.size());
-
     pg->lock();
-
-    // adjust removed_snaps?
-    if (pg->is_active() &&
-	!pg->pool->newly_removed_snaps.empty()) {
-      pg->snap_trimq.union_of(pg->pool->newly_removed_snaps);
-      dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
-      pg->dirty_info = true;
+    if (pg->handle_advance_map(*osdmap, *lastmap)) {
+      pg->unlock();
+      continue;
     }
-    
-    // no change?
-    if (tacting == pg->acting && tup == pg->up) {
-      if ((pg->prior_set.get() == NULL) || (!pg->prior_set_affected(osdmap))) {
-	dout(15) << *pg << " unaffected with "
-	  << tup << "/" << tacting << " up/acting" << dendl;
-	pg->unlock();
-	continue;
-      }
-    }
-
-    // -- there was a change! --
-    int oldrole = pg->get_role();
-    int oldprimary = pg->get_primary();
-    vector<int> oldacting = pg->acting;
-    vector<int> oldup = pg->up;
-    
+	
     // make sure we clear out any pg_temp change requests
     pg_temp_wanted.erase(pgid);
-    
-    pg->kick();
     pg->prior_set.reset(NULL);
 
-    // update PG
-    pg->acting.swap(tacting);
-    pg->up.swap(tup);
-    pg->set_role(role);
     
-    // did acting, up, primary|acker change?
-    if (tacting != pg->acting || tup != pg->up) {
-      // remember past interval
-      PG::Interval& i = pg->past_intervals[pg->info.history.same_acting_since];
-      i.first = pg->info.history.same_acting_since;
-      i.last = osdmap->get_epoch() - 1;
-
-      i.acting = oldacting;
-      i.up = oldup;
-      if (tacting != pg->acting)
-	pg->info.history.same_acting_since = osdmap->get_epoch();
-      if (tup != pg->up)
-	pg->info.history.same_up_since = osdmap->get_epoch();
-
-      if (i.acting.size())
-	i.maybe_went_rw = 
-	  (lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	   lastmap->get_up_from(i.acting[0]) <= i.first) ||
-	  i.first == pg->info.history.epoch_created;
-      else
-	i.maybe_went_rw = 0;
-
-      if (oldprimary != pg->get_primary())
-	pg->info.history.same_primary_since = osdmap->get_epoch();
-
-      dout(10) << *pg << " noting past " << i << dendl;
-      pg->dirty_info = true;
-    }
     pg->cancel_recovery();
 
-    // deactivate.
-    pg->state_clear(PG_STATE_ACTIVE);
-    pg->state_clear(PG_STATE_DOWN);
-    pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
-    pg->state_clear(PG_STATE_DEGRADED);
-    pg->state_clear(PG_STATE_REPLAY);
-
-    if (pg->is_primary()) {
-      if (osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
-	pg->state_set(PG_STATE_DEGRADED);
-    }
-
-    // reset primary state?
-    if (oldrole == 0 || pg->get_role() == 0)
-      pg->clear_primary_state();
-
-    dout(10) << *pg
-	     << " up " << oldup << " -> " << pg->up 
-	     << ", acting " << oldacting << " -> " << pg->acting 
-	     << ", role " << oldrole << " -> " << role << dendl; 
-    
-    // pg->on_*
-    for (unsigned i=0; i<oldacting.size(); i++)
-      if (osdmap->is_down(oldacting[i]))
-	pg->on_osd_failure(oldacting[i]);
-    pg->on_change();
-
-    if (pg->deleting) {
-      dout(10) << *pg << " canceling deletion!" << dendl;
-      pg->deleting = false;
-      remove_wq.dequeue(pg);
-    }
-    
-    if (role != oldrole) {
-      // old primary?
-      if (oldrole == 0) {
-	pg->state_clear(PG_STATE_CLEAN);
-	pg->clear_stats();
-	
-	// take replay queue waiters
-	list<Message*> ls;
-	for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
-	     it != pg->replay_queue.end();
-	     it++)
-	  ls.push_back(it->second);
-	pg->replay_queue.clear();
-	take_waiters(ls);
-      }
-
-      pg->on_role_change();
-
-      // interrupt backlog generation
-      cancel_generate_backlog(pg);
-
-      // take active waiters
-      take_waiters(pg->waiting_for_active);
-
-      // new primary?
-      if (role == 0) {
-	// i am new primary
-	pg->state_clear(PG_STATE_STRAY);
-      } else {
-	// i am now replica|stray.  we need to send a notify.
-	pg->state_set(PG_STATE_STRAY);
-	pg->have_master_log = false;
-      }
-      
-    } else {
-      // no role change.
-      // did primary change?
-      if (pg->get_primary() != oldprimary) {    
-	// we need to announce
-	pg->state_set(PG_STATE_STRAY);
-        
-	dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
-		 << ", acting primary " 
-		 << oldprimary << " -> " << pg->get_primary() 
-		 << dendl;
-      } else {
-	// primary is the same.
-	if (role == 0) {
-	  // i am (still) primary. but my replica set changed.
-	  pg->state_clear(PG_STATE_CLEAN);
-	  
-	  dout(10) << *pg << " " << oldacting << " -> " << pg->acting
-		   << ", replicas changed" << dendl;
-	}
-      }
-    }
 
     // sanity check pg_temp
     if (pg->acting.empty() && pg->up.size() && pg->up[0] == whoami) {
