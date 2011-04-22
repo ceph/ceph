@@ -409,23 +409,10 @@ extern "C" int ceph_lstat(ceph_mount_t *cmount, const char *path,
   return cmount->get_client()->lstat(path, stbuf);
 }
 
-extern "C" int ceph_lstat_precise(ceph_mount_t *cmount, const char *path,
-				  stat_precise *stbuf)
-{
-  return cmount->get_client()->lstat_precise(path, (Client::stat_precise*)stbuf);
-}
-
 extern "C" int ceph_setattr(ceph_mount_t *cmount, const char *relpath,
 			    struct stat *attr, int mask)
 {
-  Client::stat_precise p_attr = Client::stat_precise(*attr);
-  return cmount->get_client()->setattr(relpath, &p_attr, mask);
-}
-
-extern "C" int ceph_setattr_precise(ceph_mount_t *cmount, const char *relpath,
-				    struct stat_precise *attr, int mask)
-{
-  return cmount->get_client()->setattr(relpath, (Client::stat_precise*)attr, mask);
+  return cmount->get_client()->setattr(relpath, attr, mask);
 }
 
 extern "C" int ceph_chmod(ceph_mount_t *cmount, const char *path, mode_t mode)

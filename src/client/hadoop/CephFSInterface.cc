@@ -627,7 +627,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1stat
 (JNIEnv *env, jobject obj, jstring j_path, jobject j_stat)
 {
   //setup variables
-  struct stat_precise st;
+  struct stat st;
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
 
@@ -647,19 +647,26 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1stat
   if (c_mode_id == NULL) return false;
   //do actual lstat
   ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
-  int r = ceph_lstat_precise(cmount, c_path, &st);
+  int r = ceph_lstat(cmount, c_path, &st);
   env->ReleaseStringUTFChars(j_path, c_path);
 
   if (r < 0) return false; //fail out; file DNE or Ceph broke
 
   //put variables from struct stat into Java
-  env->SetLongField(j_stat, c_size_id, (long)st.st_size);
+  env->SetLongField(j_stat, c_size_id, st.st_size);
   env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
-  env->SetLongField(j_stat, c_block_id, (long)st.st_blksize);
-  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime_sec*1000
-		    +st.st_mtime_micro/1000);
-  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime_sec*1000
-		    +st.st_atime_micro/1000);
+  env->SetLongField(j_stat, c_block_id, st.st_blksize);
+
+  long long java_mtime(st.st_mtime);
+  java_mtime *= 1000;
+  java_mtime += st.st_mtim.tv_nsec;
+  env->SetLongField(j_stat, c_mod_id, java_mtime);
+
+  long long java_atime(st.st_atime);
+  java_atime *= 1000;
+  java_atime += st.st_atim.tv_nsec;
+  env->SetLongField(j_stat, c_access_id, java_atime);
+
   env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
 
   //return happy
@@ -788,13 +795,13 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setTimes
   if (atime!=-1) mask |= CEPH_SETATTR_ATIME;
   //build a struct stat and fill it in!
   //remember to convert from millis to seconds and microseconds
-  stat_precise attr;
-  attr.st_mtime_sec = mtime / 1000;
-  attr.st_mtime_micro = (mtime % 1000) * 1000;
-  attr.st_atime_sec = atime / 1000;
-  attr.st_atime_micro = (atime % 1000) * 1000;
+  struct stat attr;
+  attr.st_mtim.tv_sec = mtime / 1000;
+  attr.st_mtim.tv_nsec = (mtime % 1000) * 1000000;
+  attr.st_atim.tv_sec = atime / 1000;
+  attr.st_atim.tv_nsec = (atime % 1000) * 1000000;
   ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
-  return ceph_setattr_precise(cmount, c_path, &attr, mask);
+  return ceph_setattr(cmount, c_path, &attr, mask);
 }
 
 /*

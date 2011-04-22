@@ -19,25 +19,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-struct stat_precise {
-  ino_t st_ino;
-  dev_t st_dev;
-  mode_t st_mode;
-  nlink_t st_nlink;
-  uid_t st_uid;
-  gid_t st_gid;
-  dev_t st_rdev;
-  off_t st_size;
-  blksize_t st_blksize;
-  blkcnt_t st_blocks;
-  time_t st_atime_sec;
-  time_t st_atime_micro;
-  time_t st_mtime_sec;
-  time_t st_mtime_micro;
-  time_t st_ctime_sec;
-  time_t st_ctime_micro;
-};
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -115,11 +96,8 @@ int ceph_symlink(ceph_mount_t *cmount, const char *existing, const char *newname
 
 /* inode stuff */
 int ceph_lstat(ceph_mount_t *cmount, const char *path, struct stat *stbuf);
-int ceph_lstat_precise(ceph_mount_t *cmount, const char *path, struct stat_precise *stbuf);
 
 int ceph_setattr(ceph_mount_t *cmount, const char *relpath, struct stat *attr, int mask);
-int ceph_setattr_precise (ceph_mount_t *cmount, const char *relpath,
-			  struct stat_precise *stbuf, int mask);
 int ceph_chmod(ceph_mount_t *cmount, const char *path, mode_t mode);
 int ceph_chown(ceph_mount_t *cmount, const char *path, uid_t uid, gid_t gid);
 int ceph_utime(ceph_mount_t *cmount, const char *path, struct utimbuf *buf);
