@@ -1302,13 +1302,11 @@ public:
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
-  int get_file_stripe_unit(int fd);
-  int get_file_stripe_width(int fd);
-  int get_file_stripe_period(int fd);
-  int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+
+  // expose osdmap 
   int get_local_osd();
-  int get_default_preferred_pg(int fd);
+  int get_pool_replication(int pool);
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);

@@ -6387,6 +6387,9 @@ int Client::ll_release(Fh *fh)
 
 // =========================================
 // layout
+
+// default layout
+
 void Client::set_default_file_stripe_unit(int stripe_unit)
 {
   if (stripe_unit > 0)
@@ -6419,6 +6422,9 @@ void Client::set_default_preferred_pg(int pg)
     dout(5) << "Attempt to set preferred_pg " << pg << " < -1!" << dendl;
 }
 
+
+// expose file layouts
+
 int Client::describe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
@@ -6433,45 +6439,15 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
   return 0;
 }
 
-int Client::get_file_stripe_unit(int fd)
-{
-  ceph_file_layout layout;
-  describe_layout(fd, &layout);
-  return layout.fl_stripe_unit;
-}
 
-int Client::get_file_stripe_width(int fd)
-{
-  ceph_file_layout layout;
-  describe_layout(fd, &layout);
-  return layout.fl_stripe_unit * layout.fl_stripe_count;
-}
+// expose osdmap
 
-int Client::get_file_stripe_period(int fd)
+int Client::get_pool_replication(int pool)
 {
-  ceph_file_layout layout;
-  describe_layout(fd, &layout);
-  return layout.fl_object_size * layout.fl_stripe_count;
-}
-
-int Client::get_file_replication(int fd)
-{
-  int pool;
   Mutex::Locker lock(client_lock);
-
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
-  Inode *in = f->inode;
-
-  pool = in->layout.fl_pg_pool;
+  if (!osdmap->have_pg_pool(pool))
+    return -ENOENT;
   return osdmap->get_pg_pool(pool)->get_size();
-}
-
-int Client::get_default_preferred_pg(int fd)
-{
-  ceph_file_layout layout;
-  describe_layout(fd, &layout);
-  return layout.fl_pg_preferred;
 }
 
 int Client::get_file_stripe_address(int fd, loff_t offset, string& address)

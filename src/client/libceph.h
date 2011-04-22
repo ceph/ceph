@@ -79,7 +79,6 @@ int ceph_conf_set(ceph_mount_t *cmount, const char *option, const char *value);
 int ceph_conf_get(ceph_mount_t *cmount, const char *option, char *buf, size_t len);
 
 int ceph_statfs(ceph_mount_t *cmount, const char *path, struct statvfs *stbuf);
-int ceph_get_local_osd(ceph_mount_t *cmount);
 
 /* Get the current working directory.
  *
@@ -105,16 +104,16 @@ int ceph_link(ceph_mount_t *cmount, const char *existing, const char *newname);
 int ceph_unlink(ceph_mount_t *cmount, const char *path);
 int ceph_rename(ceph_mount_t *cmount, const char *from, const char *to);
 
-// dirs
+/* dirs */
 int ceph_mkdir(ceph_mount_t *cmount, const char *path, mode_t mode);
 int ceph_mkdirs(ceph_mount_t *cmount, const char *path, mode_t mode);
 int ceph_rmdir(ceph_mount_t *cmount, const char *path);
 
-// symlinks
+/* symlinks */
 int ceph_readlink(ceph_mount_t *cmount, const char *path, char *buf, loff_t size);
 int ceph_symlink(ceph_mount_t *cmount, const char *existing, const char *newname);
 
-// inode stuff
+/* inode stuff */
 int ceph_lstat(ceph_mount_t *cmount, const char *path, struct stat *stbuf);
 int ceph_lstat_precise(ceph_mount_t *cmount, const char *path, struct stat_precise *stbuf);
 
@@ -126,7 +125,7 @@ int ceph_chown(ceph_mount_t *cmount, const char *path, uid_t uid, gid_t gid);
 int ceph_utime(ceph_mount_t *cmount, const char *path, struct utimbuf *buf);
 int ceph_truncate(ceph_mount_t *cmount, const char *path, loff_t size);
 
-// file ops
+/* file ops */
 int ceph_mknod(ceph_mount_t *cmount, const char *path, mode_t mode, dev_t rdev);
 int ceph_open(ceph_mount_t *cmount, const char *path, int flags, mode_t mode);
 int ceph_close(ceph_mount_t *cmount, int fd);
@@ -139,17 +138,26 @@ int ceph_fsync(ceph_mount_t *cmount, int fd, int syncdataonly);
 int ceph_fstat(ceph_mount_t *cmount, int fd, struct stat *stbuf);
 
 int ceph_sync_fs(ceph_mount_t *cmount);
+
+
+/* expose file layout */
 int ceph_get_file_stripe_unit(ceph_mount_t *cmount, int fh);
-int ceph_get_file_replication(ceph_mount_t *cmount, const char *path);
-int ceph_get_default_preferred_pg(ceph_mount_t *cmount, int fd);
+int ceph_get_file_pool(ceph_mount_t *cmount, int fh);
+int ceph_get_file_replication(ceph_mount_t *cmount, int fh);
 int ceph_get_file_stripe_address(ceph_mount_t *cmount, int fd,
 				 loff_t offset, char *buf, int buflen);
+
+/* set default layout for new files */
 int ceph_set_default_file_stripe_unit(ceph_mount_t *cmount, int stripe);
 int ceph_set_default_file_stripe_count(ceph_mount_t *cmount, int count);
 int ceph_set_default_object_size(ceph_mount_t *cmount, int size);
 int ceph_set_default_file_replication(ceph_mount_t *cmount, int replication);
-int ceph_set_default_preferred_pg(ceph_mount_t *cmount, int pg);
+
+/* read from local replicas when possible */
 int ceph_localize_reads(ceph_mount_t *cmount, int val);
+
+/* return osd on local node, if any */
+int ceph_get_local_osd(ceph_mount_t *cmount);
 
 #ifdef __cplusplus
 }

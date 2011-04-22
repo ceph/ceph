@@ -506,25 +506,33 @@ extern "C" int ceph_sync_fs(ceph_mount_t *cmount)
   return cmount->get_client()->sync_fs();
 }
 
+
 extern "C" int ceph_get_file_stripe_unit(ceph_mount_t *cmount, int fh)
 {
-  return cmount->get_client()->get_file_stripe_unit(fh);
+  struct ceph_file_layout l;
+  int r = cmount->get_client()->describe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_unit;
 }
 
-extern "C" int ceph_get_file_replication(ceph_mount_t *cmount,
-					 const char *path)
+extern "C" int ceph_get_file_pool(ceph_mount_t *cmount, int fh)
 {
-  int fd = cmount->get_client()->open(path, O_RDONLY);
-  if (fd < 0)
-    return fd;
-  int rep = cmount->get_client()->get_file_replication(fd);
-  cmount->get_client()->close(fd);
+  struct ceph_file_layout l;
+  int r = cmount->get_client()->describe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_pg_pool;
+}
+
+extern "C" int ceph_get_file_replication(ceph_mount_t *cmount, int fh)
+{
+  struct ceph_file_layout l;
+  int r = cmount->get_client()->describe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  int rep = cmount->get_client()->get_pool_replication(l.fl_pg_pool);
   return rep;
-}
-
-extern "C" int ceph_get_default_preferred_pg(ceph_mount_t *cmount, int fd)
-{
-  return cmount->get_client()->get_default_preferred_pg(fd);
 }
 
 extern "C" int ceph_set_default_file_stripe_unit(ceph_mount_t *cmount,
@@ -565,12 +573,13 @@ extern "C" int ceph_get_file_stripe_address(ceph_mount_t *cmount, int fh,
 {
   string address;
   int r = cmount->get_client()->get_file_stripe_address(fh, offset, address);
-  if (r != 0) return r; //at time of writing, method ONLY returns
-  // 0 or -EINVAL if there are no known osds
+  if (r < 0)
+    return r; 
   int len = address.size()+1;
   if (len > buflen) {
-    if (buflen == 0) return len;
-    else return -ERANGE;
+    if (buflen == 0)
+      return len;
+    return -ERANGE;
   }
   len = address.copy(buf, len, 0);
   buf[len] = '\0'; // write a null char to terminate c-style string
