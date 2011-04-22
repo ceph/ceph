@@ -478,15 +478,16 @@ CLEANFILES += \
 
 ##
 
+AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
+-Wtype-limits -Wignored-qualifiers
 
-AM_CXXFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic -Wnon-virtual-dtor
+AM_CFLAGS = $(AM_COMMON_FLAGS)
+AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof
+AM_LDFLAGS = -Wl,--as-needed
+
 if USE_BOOST_SPIRIT_OLD_HDR
 AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
 endif
-
-AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
-AM_CXXFLAGS += -Wno-invalid-offsetof
-AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops

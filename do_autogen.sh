@@ -8,7 +8,6 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -d <level>                       debug build
                                  level 0: no debug
                                  level 1: -g
-                                 level 2: -Wall
                                  level 3: -Wextra
                                  level 4: even more...
 -P                               profiling build
@@ -57,9 +56,6 @@ fi
 
 if [ "${debug_level}" -ge 1 ]; then
     CFLAGS="${CFLAGS} -g"
-fi
-if [ "${debug_level}" -ge 2 ]; then
-    CFLAGS="${CFLAGS} -Wall -Wvolatile-register-var"
 fi
 if [ "${debug_level}" -ge 3 ]; then
     CFLAGS="${CFLAGS} -Wextra \
