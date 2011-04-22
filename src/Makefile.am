@@ -97,7 +97,7 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 sbin_PROGRAMS += mount.ceph
 
@@ -275,9 +275,9 @@ radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += testrados testradospp radosacl
 endif
 
-rbd_SOURCES = rbd.cc common/fiemap.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
 if WITH_DEBUG
@@ -623,7 +623,8 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	common/pidfile.cc
+	common/pidfile.cc \
+	include/addr_parsing.c
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
@@ -784,6 +785,7 @@ noinst_HEADERS = \
         common/config.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
+	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
         crush/CrushWrapper.h\
