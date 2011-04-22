@@ -549,9 +549,9 @@ extern "C" int ceph_set_default_file_replication(ceph_mount_t *cmount,
   return 0;
 }
 
-extern "C" int ceph_set_default_preferred_pg(ceph_mount_t *cmount, int pg)
+extern "C" int ceph_set_default_preferred_pg(ceph_mount_t *cmount, int osd)
 {
-  cmount->get_client()->set_default_preferred_pg(pg);
+  cmount->get_client()->set_default_preferred_pg(osd);
   return 0;
 }
 

@@ -129,6 +129,7 @@ int ceph_get_file_stripe_address(ceph_mount_t *cmount, int fd,
 int ceph_set_default_file_stripe_unit(ceph_mount_t *cmount, int stripe);
 int ceph_set_default_file_stripe_count(ceph_mount_t *cmount, int count);
 int ceph_set_default_object_size(ceph_mount_t *cmount, int size);
+int ceph_set_default_preferred_pg(ceph_mount_t *cmount, int osd);
 int ceph_set_default_file_replication(ceph_mount_t *cmount, int replication);
 
 /* read from local replicas when possible */

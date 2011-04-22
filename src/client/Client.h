@@ -1277,7 +1277,7 @@ public:
   void set_default_file_stripe_count(int count);
   void set_default_object_size(int size);
   void set_default_file_replication(int replication);
-  void set_default_preferred_pg(int pg);
+  void set_default_preferred_pg(int osd);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
