@@ -445,11 +445,6 @@ static int lfn_unlink(const char *pathname)
     return -1;
   }
 
-  err = unlink(short_fn);
-  if (err < 0)
-    return err;
-
-
   path_len = filename - pathname;
   memcpy(short_fn2, pathname, path_len);
 
@@ -460,9 +455,12 @@ static int lfn_unlink(const char *pathname)
     build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, filename, i);
     ret = stat(short_fn2, &buf);
     if (ret < 0) {
-      if (i == r + 1)
+      if (i == r + 1) {
+        err = unlink(short_fn);
+        if (err < 0)
+          return err;
         return 0;
-
+      }
       break;
     }
   }
