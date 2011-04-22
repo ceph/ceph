@@ -170,10 +170,10 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1statfs
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_replication
- * Signature: (Ljava/lang/String;)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replication
-  (JNIEnv *, jobject, jstring);
+  (JNIEnv *, jobject, jint);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephTalker

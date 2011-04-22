@@ -78,7 +78,7 @@ class CephTalker extends CephFS {
 
   protected native int ceph_statfs(String Path, CephFileSystem.CephStat fill);
 
-  protected native int ceph_replication(String path);
+  protected native int ceph_replication(int fh);
 
   protected native String ceph_hosts(int fh, long offset);
 
