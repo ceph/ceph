@@ -153,7 +153,7 @@ int main(int argc, const char **argv)
     messenger->set_policy(entity_name_t::TYPE_CLIENT,
                           SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    messenger->start(g_conf.daemonize);
+    messenger->start((shadow == MDSMap::STATE_ONESHOT_REPLAY ? false : g_conf.daemonize));
 
     // start mds
     MDS *mds = new MDS(g_conf.name.get_id().c_str(), messenger, &mc);
