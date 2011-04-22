@@ -4538,7 +4538,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
   int result = 0;
 
   if (in->snapid != CEPH_NOSNAP &&
-      (mode & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
+      (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
     return -EROFS;
   }
 
