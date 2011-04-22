@@ -186,13 +186,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
-  bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
-  bool kick_paused =
-    (was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
-    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL));
-
+  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+  
   set<LingerOp*> need_resend_linger;
   set<Op*> need_resend;
 
@@ -282,21 +277,26 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
   }
 
-  // was paused, or was/is full?
-  if (was_pauserd || was_pausewr || was_full ||
-      (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL))
+  bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+
+  // was/is paused?
+  if (was_pauserd || was_pausewr || pauserd || pausewr)
     maybe_request_map();
   
-  // unpause paused ops?
-  if (kick_paused)
+  // unpause requests?
+  if ((was_pauserd && !pauserd) ||
+      (was_pausewr && !pausewr))
     for (hash_map<tid_t,Op*>::iterator p = ops.begin();
 	 p != ops.end();
 	 p++) {
       Op *op = p->second;
-      if (op->paused)
+      if (op->paused &&
+	  !((op->flags & CEPH_OSD_FLAG_READ) && pauserd) &&   // not still paused as a read
+	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr))    // not still paused as a write
 	need_resend.insert(op);
     }
-  
+
   // resend requests
   for (set<Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
     Op *op = *p;

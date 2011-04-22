@@ -411,7 +411,9 @@ struct MDSlaveUpdate {
     list.push_back(&item);
   }
   ~MDSlaveUpdate() {
-    if (waiter) waiter->finish(0);
+    item.remove_myself();
+    if (waiter)
+      waiter->finish(0);
     delete waiter;
   }
 };
