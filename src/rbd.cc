@@ -73,9 +73,10 @@ void usage()
        << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
        << "  snap rm <--snap=name> [image-name]        deletes a snapshot\n"
        << "  watch [image-name]                        watch events on image\n"
-       << "  kernel add [image-name]                   add a block device for the image\n"
+       << "  map [image-name]                          map the image to a block device\n"
        << "                                            using the kernel\n"
-       << "  kernel rm [image-name]                    unmap the image from a block device in the kernel\n"
+       << "  unmap [device]                            unmap a rbd device that was\n"
+       << "                                            mapped by the kernel\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
@@ -85,7 +86,9 @@ void usage()
        << "  --dest-pool <name>           destination pool name\n"
        << "  --path <path-name>           path name for import/export (if not specified)\n"
        << "  --size <size in MB>          size parameter for create and resize commands\n"
-       << "  --user <username>            ceph user to authenticate with (for kernel add)\n"
+       << "\n"
+       << "For the map command:\n"
+       << "  --user <username>            rados user to authenticate as\n"
        << "  --secret <path>              file containing secret key for use with authx\n";
 }
 
@@ -577,7 +580,7 @@ static int read_file(const char *filename, char *buf, size_t bufsize)
     return r;
 }
 
-static int get_rbd_dev_ids(const char *poolname, const char *imgname, std::vector<string> &dev_ids)
+static int get_rbd_seq(int major_num, string &seq)
 {
   int r;
   const char *devices_path = "/sys/bus/rbd/devices";
@@ -596,45 +599,45 @@ static int get_rbd_dev_ids(const char *poolname, const char *imgname, std::vecto
     return r;
   }
 
-  char device_pool[MAX_POOL_NAME_SIZE];
-  char device_name[RBD_MAX_IMAGE_NAME_SIZE];
+  char major[32];
   do {
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
       continue;
 
-    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//pool") + 1];
+    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//major") + 1];
 
-    snprintf(fn, sizeof(fn), "%s/%s/name", devices_path, dent->d_name);
-    r = read_file(fn, device_name, sizeof(device_name));
+    snprintf(fn, sizeof(fn), "%s/%s/major", devices_path, dent->d_name);
+    r = read_file(fn, major, sizeof(major));
     if (r < 0) {
-      cerr << "could not read image name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "could not read major number from " << fn << ": " << cpp_strerror(-r) << std::endl;
       continue;
     }
 
-    snprintf(fn, sizeof(fn), "%s/%s/pool", devices_path, dent->d_name);
-    r = read_file(fn, device_pool, sizeof(device_pool));
-    if (r < 0) {
-      cerr << "could not read pool name from " << fn << ": " << cpp_strerror(-r) << std::endl;
-      continue;
+    int cur_major = atoi(major);
+    if (cur_major == major_num) {
+      seq = string(dent->d_name);
+      return 0;
     }
-
-    if (strcmp(device_pool, poolname) == 0 &&
-	strcmp(device_name, imgname) == 0)
-      dev_ids.push_back(dent->d_name);
 
   } while ((dent = readdir(device_dir)));
 
-  if (dev_ids.empty())
-    return -ENOENT;
-  return 0;
+  return -ENOENT;
 }
 
-static int do_kernel_rm(const char *poolname, const char *imgname)
+static int do_kernel_rm(const char *dev)
 {
-  std::vector<string> dev_ids;
-  int r = get_rbd_dev_ids(poolname, imgname, dev_ids);
+  struct stat dev_stat;
+  int r = stat(dev, &dev_stat);
+  if (!S_ISBLK(dev_stat.st_mode)) {
+    cerr << dev << " is not a block device" << std::endl;
+    return -EINVAL;
+  }
+
+  int major = major(dev_stat.st_rdev);
+  string seq_num;
+  r = get_rbd_seq(major, seq_num);
   if (r == -ENOENT) {
-    cerr << "No image '" << imgname << "' found in pool '" << poolname << "'" << std::endl;
+    cerr << dev << " is not an rbd device" << std::endl;
     return -EINVAL;
   }
   if (r < 0)
@@ -645,14 +648,11 @@ static int do_kernel_rm(const char *poolname, const char *imgname)
     return -errno;
   }
 
-  for (std::vector<string>::iterator it = dev_ids.begin();
-       it != dev_ids.end();
-       ++it) {
-    r = safe_write(fd, it->c_str(), it->size());
-    if (r < 0) {
-      cerr << "Warning: failed to remove rbd device with id " << *it
-	   << ": " << cpp_strerror(-r) << std::endl;
-    }
+  r = safe_write(fd, seq_num.c_str(), seq_num.size());
+  if (r < 0) {
+    cerr << "Failed to remove rbd device" << ": " << cpp_strerror(-r) << std::endl;
+    close(fd);
+    return r;
   }
 
   r = close(fd);
@@ -677,25 +677,20 @@ enum {
   OPT_SNAP_REMOVE,
   OPT_SNAP_LIST,
   OPT_WATCH,
-  OPT_KERNEL_ADD,
-  OPT_KERNEL_RM,
+  OPT_MAP,
+  OPT_UNMAP,
 };
 
-static int get_cmd(const char *cmd, bool *snapcmd, bool *kernelcmd)
+static int get_cmd(const char *cmd, bool *snapcmd)
 {
   if (strcmp(cmd, "snap") == 0) {
     if (*snapcmd)
       return -EINVAL;
     *snapcmd = true;
     return 0;
-  } else if (strcmp(cmd, "kernel") == 0) {
-    if (*kernelcmd)
-      return -EINVAL;
-    *kernelcmd = true;
-    return 0;
   }
 
-  if (!*snapcmd && !*kernelcmd) {
+  if (!*snapcmd) {
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LIST;
@@ -719,7 +714,11 @@ static int get_cmd(const char *cmd, bool *snapcmd, bool *kernelcmd)
       return OPT_RENAME;
     if (strcmp(cmd, "watch") == 0)
       return OPT_WATCH;
-  } else if (*snapcmd) {
+    if (strcmp(cmd, "map") == 0)
+      return OPT_MAP;
+    if (strcmp(cmd, "unmap") == 0)
+      return OPT_UNMAP;
+  } else {
     if (strcmp(cmd, "create") == 0||
         strcmp(cmd, "add") == 0)
       return OPT_SNAP_CREATE;
@@ -732,12 +731,6 @@ static int get_cmd(const char *cmd, bool *snapcmd, bool *kernelcmd)
     if (strcmp(cmd, "ls") == 0||
         strcmp(cmd, "list") == 0)
       return OPT_SNAP_LIST;
-  } else {
-    if (strcmp(cmd, "add") == 0)
-      return OPT_KERNEL_ADD;
-    if (strcmp(cmd, "remove") == 0 ||
-        strcmp(cmd, "rm") == 0)
-      return OPT_KERNEL_RM;
   }
 
   return -EINVAL;
@@ -773,8 +766,8 @@ int main(int argc, const char **argv)
   const char *poolname = NULL;
   uint64_t size = 0;
   int order = 0;
-  const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL;
-  bool is_snap_cmd = false, is_kernel_cmd = false;
+  const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
+  bool is_snap_cmd = false;
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("pool", 'p')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&poolname, OPT_STR);
@@ -799,7 +792,7 @@ int main(int argc, const char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&user, OPT_STR);
     } else {
       if (!opt_cmd) {
-        opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, &is_snap_cmd, &is_kernel_cmd);
+        opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, &is_snap_cmd);
         if (opt_cmd < 0) {
           cerr << "invalid command: " << CEPH_ARGPARSE_VAL << std::endl;
           usage_exit();
@@ -818,9 +811,11 @@ int main(int argc, const char **argv)
           case OPT_SNAP_REMOVE:
           case OPT_SNAP_LIST:
           case OPT_WATCH:
-          case OPT_KERNEL_ADD:
-          case OPT_KERNEL_RM:
+          case OPT_MAP:
             set_conf_param(CEPH_ARGPARSE_VAL, &imgname, NULL);
+            break;
+          case OPT_UNMAP:
+            set_conf_param(CEPH_ARGPARSE_VAL, &devpath, NULL);
             break;
           case OPT_EXPORT:
             set_conf_param(CEPH_ARGPARSE_VAL, &imgname, &path);
@@ -856,7 +851,7 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_IMPORT && !destname)
     destname = imgname_from_path(path);
 
-  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && !imgname) {
+  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && !imgname) {
     cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
@@ -881,20 +876,24 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (rados.init_with_config(&g_conf) < 0) {
+  bool talk_to_cluster = (opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP);
+  if (talk_to_cluster && rados.init_with_config(&g_conf) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }
 
-  if (rados.connect() < 0) {
+  if (talk_to_cluster && rados.connect() < 0) {
     cerr << "error: couldn't connect to the cluster!" << std::endl;
     exit(1);
   }
 
-  int r = rados.ioctx_create(poolname, io_ctx);
-  if (r < 0) {
+  int r;
+  if (talk_to_cluster) {
+    r = rados.ioctx_create(poolname, io_ctx);
+    if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       exit(1);
+    }
   }
 
   if (imgname &&
@@ -1077,7 +1076,7 @@ int main(int argc, const char **argv)
     }
     break;
 
-  case OPT_KERNEL_ADD:
+  case OPT_MAP:
     r = do_kernel_add(poolname, imgname, secretfile, user);
     if (r < 0) {
       cerr << "add failed: " << strerror(-r) << std::endl;
@@ -1085,8 +1084,8 @@ int main(int argc, const char **argv)
     }
     break;
 
-  case OPT_KERNEL_RM:
-    r = do_kernel_rm(poolname, imgname);
+  case OPT_UNMAP:
+    r = do_kernel_rm(devpath);
     if (r < 0) {
       cerr << "remove failed: " << strerror(-r) << std::endl;
       exit(1);
