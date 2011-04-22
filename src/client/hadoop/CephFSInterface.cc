@@ -102,7 +102,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   if (ret)
     return false;
   if (set_local_writes) {
-    // ???
+    ceph_set_default_preferred_pg(cmount, ceph_get_local_osd(cmount));
   }
 
   set_ceph_mount_t(env, obj, cmount);
