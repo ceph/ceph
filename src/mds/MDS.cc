@@ -482,7 +482,7 @@ int MDS::init(int wanted_state)
       dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
       suicide();
     }
-    want_state = MDSMap::STATE_STANDBY;
+    want_state = MDSMap::STATE_BOOT;
     standby_type = wanted_state;
   }
 
@@ -875,6 +875,13 @@ void MDS::handle_mds_map(MMDSMap *m)
       request_state(standby_type);
 
     goto out;
+  } else if (state == MDSMap::STATE_STANDBY_REPLAY) {
+    if (standby_type && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
+      want_state = standby_type;
+      beacon_send();
+      state = oldstate;
+      goto out;
+    }
   }
 
   if (whoami < 0) {

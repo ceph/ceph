@@ -97,7 +97,7 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 sbin_PROGRAMS += mount.ceph
 
@@ -275,9 +275,9 @@ radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += testrados testradospp radosacl
 endif
 
-rbd_SOURCES = rbd.cc common/fiemap.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
 if WITH_DEBUG
@@ -478,15 +478,18 @@ CLEANFILES += \
 
 ##
 
+AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
+-Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith \
+-fno-strict-aliasing
 
-AM_CXXFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic -Wnon-virtual-dtor
+AM_CFLAGS = $(AM_COMMON_FLAGS)
+AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof \
+-Wstrict-null-sentinel
+AM_LDFLAGS = -Wl,--as-needed
+
 if USE_BOOST_SPIRIT_OLD_HDR
 AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
 endif
-
-AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
-AM_CXXFLAGS += -Wno-invalid-offsetof
-AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops
@@ -623,7 +626,8 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	common/pidfile.cc
+	common/pidfile.cc \
+	include/addr_parsing.c
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
@@ -784,6 +788,7 @@ noinst_HEADERS = \
         common/config.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
+	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
         crush/CrushWrapper.h\

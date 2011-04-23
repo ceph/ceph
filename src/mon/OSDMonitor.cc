@@ -156,7 +156,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
 {
   if (oload <= 100) {
     ostringstream oss;
-    oss << "You must give a percentageh higher than 100. "
+    oss << "You must give a percentage higher than 100. "
       "The reweighting threshold will be calculated as <average-utilization> "
       "times <input-percentage>. For example, an argument of 200 would "
       "reweight OSDs which are twice as utilized as the average OSD.\n";
@@ -1708,7 +1708,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if ((m->cmd.size() > 1) &&
 	     (m->cmd[1] == "reweight-by-utilization")) {
-      int oload = 70;
+      int oload = 120;
       if (m->cmd.size() > 2) {
 	oload = atoi(m->cmd[2].c_str());
       }

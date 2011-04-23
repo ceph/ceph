@@ -1,20 +1,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <netdb.h>
 #include <errno.h>
 #include <sys/mount.h>
-#include <keyutils.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "common/armor.h"
+#include "common/secret.h"
+#include "include/addr_parsing.h"
 
 #ifndef MS_RELATIME
 # define MS_RELATIME (1<<21)
 #endif
 
-#define BUF_SIZE 128
+#define MAX_SECRET_LEN 1000
+#define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
 
 int verboseflag = 0;
 static const char * const EMPTY_STRING = "";
@@ -34,35 +34,13 @@ static void block_signals (int how)
      sigprocmask (how, &sigs, (sigset_t *) 0);
 }
 
-
-static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
-{
-	int len2 = strlen(str2);
-
-	while (*plen < pos + len2 + 1) {
-		*plen += BUF_SIZE;
-		*pstr = realloc(*pstr, (size_t)*plen);
-
-		if (!*pstr) {
-			printf("Out of memory\n");
-			exit(1);
-		}
-	}
-
-	strcpy((*pstr)+pos, str2);
-
-	return pos + len2;
-}
-
 static char *mount_resolve_src(const char *orig_str)
 {
-	char *new_str;
-	char *mount_path;
-	char *tok, *p, *port_str;
 	int len, pos;
+	char *mount_path;
+	char *src;
 	char buf[strlen(orig_str) + 1];
 	strcpy(buf, orig_str);
-
 	mount_path = strrchr(buf, ':');
 	if (!mount_path) {
 		printf("source mount path was not specified\n");
@@ -81,99 +59,15 @@ static char *mount_resolve_src(const char *orig_str)
 		return NULL;
 	}
 
-	len = BUF_SIZE;
-	new_str = (char *)malloc(len);
+	src = resolve_addrs(buf);
+	if (!src)
+		return NULL;
 
-	p = new_str;
-	pos = 0;
+	len = strlen(src);
+	pos = safe_cat(&src, &len, len, ":");
+	safe_cat(&src, &len, pos, mount_path);
 
-	tok = strtok(buf, ",");
-
-	while (tok) {
-		struct addrinfo hint;
-		struct addrinfo *res, *ores;
-		char *firstcolon, *lastcolon, *bracecolon;
-		int r;
-		int brackets = 0;
-
-		firstcolon = strchr(tok, ':');
-		lastcolon = strrchr(tok, ':');
-		bracecolon = strstr(tok, "]:");
-
-		port_str = 0;
-		if (firstcolon && firstcolon == lastcolon) {
-			/* host:port or a.b.c.d:port */
-			*firstcolon = 0;
-			port_str = firstcolon + 1;
-		} else if (bracecolon) {
-			/* {ipv6addr}:port */
-			port_str = bracecolon + 1;
-			*port_str = 0;
-			port_str++;
-		}
-		if (port_str && !*port_str)
-			port_str = NULL;
-
-		if (*tok == '[' &&
-		    tok[strlen(tok)-1] == ']') {
-			tok[strlen(tok)-1] = 0;
-			tok++;
-			brackets = 1;
-		}			
-
-		/*printf("name '%s' port '%s'\n", tok, port_str);*/
-
-		memset(&hint, 0, sizeof(hint));
-		hint.ai_socktype = SOCK_STREAM;
-		hint.ai_protocol = IPPROTO_TCP;
-
-		r = getaddrinfo(tok, port_str, &hint, &res);
-		if (r < 0) {
-			printf("server name not found: %s (%s)\n", tok, strerror(errno));
-			free(new_str);
-			return 0;
-		}
-
-		/* build resolved addr list */
-		ores = res;
-		while (res) {
-			char host[40], port[40];
-			getnameinfo(res->ai_addr, res->ai_addrlen,
-				    host, sizeof(host),
-				    port, sizeof(port),
-				    NI_NUMERICSERV | NI_NUMERICHOST);
-			/*printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
-			       host, port,
-			       res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
-			       res->ai_canonname);*/
-			if (res->ai_family == AF_INET6)
-				brackets = 1;  /* always surround ipv6 addrs with brackets */
-			if (brackets)
-				pos = safe_cat(&new_str, &len, pos, "[");
-			pos = safe_cat(&new_str, &len, pos, host);
-			if (brackets)
-				pos = safe_cat(&new_str, &len, pos, "]");
-			if (port_str) {
-				pos = safe_cat(&new_str, &len, pos, ":");
-				pos = safe_cat(&new_str, &len, pos, port);
-			}
-			res = res->ai_next;
-			if (res)
-				pos = safe_cat(&new_str, &len, pos, ",");
-		}
-		freeaddrinfo(ores);
-
-		tok = strtok(NULL, ",");
-		if (tok)
-			pos = safe_cat(&new_str, &len, pos, ",");
-
-	}
-
-	pos = safe_cat(&new_str, &len, pos, ":");
-	pos = safe_cat(&new_str, &len, pos, mount_path);
-
-	/*printf("new_str is '%s'\n", new_str);*/
-	return new_str;
+	return src;
 }
 
 /*
@@ -189,7 +83,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 	int skip;
 	int pos = 0;
 	char *newdata = 0;
-	char secret[1000];
+	char secret[MAX_SECRET_LEN];
 	char *saw_name = NULL;
 	char *saw_secret = NULL;
 
@@ -253,36 +147,15 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = 1;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
-			char *fn = value;
-			char *end = fn;
-			int fd;
-			int len;
-
-			if (!fn || !*fn) {
+			if (!value || !*value) {
 				printf("keyword secretfile found, but no secret file specified\n");
 				return NULL;
 			}
 
-			while (*end)
-				end++;
-			fd = open(fn, O_RDONLY);
-			if (fd < 0) {
-				perror("unable to read secretfile");
+			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
+				printf("error reading secret file\n");
 				return NULL;
 			}
-			len = read(fd, secret, 1000);
-			if (len <= 0) {
-				perror("unable to read secret from secretfile");
-				return NULL;
-			}
-			end = secret;
-			while (end < secret + len && *end && *end != '\n' && *end != '\r')
-				end++;
-			*end = '\0';
-			close(fd);
-
-			if (verboseflag)
-				printf("read secret of len %d from %s\n", len, fn);
 
 			/* see comment for "secret" */
 			saw_secret = secret;
@@ -345,46 +218,24 @@ static char *parse_options(const char *data, int *filesys_flags)
 	} while (data);
 
 	if (saw_secret) {
-		/* try to submit key to kernel via the keys api */
-		key_serial_t serial;
 		int ret;
-		int secret_len = strlen(saw_secret);
-		char payload[((secret_len * 3) / 4) + 4];
+		char secret_option[MAX_SECRET_OPTION_LEN];
 		char *name = NULL;
 		int name_len = 0;
 		int name_pos = 0;
-
-		ret = ceph_unarmor(payload, payload+sizeof(payload), saw_secret, saw_secret+secret_len);
-		if (ret < 0) {
-			printf("secret is not valid base64: %s.\n", strerror(-ret));
-			return NULL;
-		}
-
 		name_pos = safe_cat(&name, &name_len, name_pos, "client.");
 		if (!saw_name) {
 			name_pos = safe_cat(&name, &name_len, name_pos, CEPH_AUTH_NAME_DEFAULT);
 		} else {
 			name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
 		}
-		serial = add_key("ceph", name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
-		if (serial < 0) {
-			if (errno == ENODEV || errno == ENOSYS) {
-				/* running against older kernel; fall back to secret= in options */
-				if (pos)
-					pos = safe_cat(&out, &out_len, pos, ",");
-				pos = safe_cat(&out, &out_len, pos, "secret=");
-				pos = safe_cat(&out, &out_len, pos, saw_secret);
-			} else {
-				perror("adding ceph secret key to kernel failed");
-			}
+		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
+		if (ret < 0) {
+			return NULL;
 		} else {
-			if (verboseflag)
-				printf("added key %s with serial %d\n", name, serial);
-			/* add key= option to identify key to use */
 			if (pos)
 				pos = safe_cat(&out, &out_len, pos, ",");
-			pos = safe_cat(&out, &out_len, pos, "key=");
-			pos = safe_cat(&out, &out_len, pos, name);
+			pos = safe_cat(&out, &out_len, pos, secret_option);
 		}
 	}
 

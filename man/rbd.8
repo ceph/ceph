@@ -1,4 +1,4 @@
-.TH RBDTOOL 8
+.TH RBD 8
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .SH SYNOPSIS
@@ -37,6 +37,12 @@ Specifies the object size expressed as a number of bits, such that the object si
 .TP
 \fB\-\-snap \fIsnap\fP
 Specifies the snapshot name for the specific operation.
+.TP
+\fB\-\-user \fIusername\fP
+Specifies the username to use with the map command.
+.TP
+\fB\-\-secret \fIfilename\fP
+Specifies a file containing the secret to use with the map command.
 .SH COMMANDS
 .TP
 \fBls \fR[ \fIpool-name\fP ]
@@ -80,6 +86,12 @@ Rollback image content to snapshot. This will iterate through the entire blocks 
 .TP
 \fBsnap rm \fR[ \fIimage-name\fP ]
 Removes the specified snapshot.
+.TP
+\fBmap \fR[ \fIimage-name\fP ]
+Maps the specified image to a block device via the rbd kernel module.
+.TP
+\fBunmap \fR[ \fIdevice-path\fP ]
+Unmaps the block device that was mapped via the rbd kernel module.
 .SH IMAGE NAME
 In addition to using the \fB\-\-pool\fR and the \fB\-\-snap\fR options, the image name can include both the pool name and the snapshot name. The image name format is as follows:
 .IP
@@ -103,11 +115,17 @@ To delete an rbd image (be careful!):
 .IP
 rbd rm mypool/myimage
 .PP
-.IP
 To create a new snapshot:
-.PP
 .IP
 rbd create mypool/myimage@mysnap
+.PP
+To map an image via the kernel with cephx enabled:
+.IP
+rbd map myimage --user admin --secret secretfile
+.PP
+To unmap an image:
+.IP
+rbd unmap /dev/rbd0
 .PP
 .SH AVAILABILITY
 .B rbd

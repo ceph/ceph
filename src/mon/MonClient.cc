@@ -50,10 +50,8 @@ MonClient::~MonClient()
  * build an initial monmap with any known monitor
  * addresses.
  */
-int MonClient::build_initial_monmap()
+int MonClient::build_initial_monmap(MonMap &monmap)
 {
-  dout(10) << "build_initial_monmap" << dendl;
-
   // file?
   if (!g_conf.monmap.empty()) {
     int r;
@@ -86,8 +84,7 @@ int MonClient::build_initial_monmap()
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
       char *old_addrs = new char[g_conf.mon_host.size() + 1];
-      strcpy(old_addrs, g_conf.mon_host.c_str());
-      hosts = mount_resolve_dest(old_addrs);
+      hosts = resolve_addrs(old_addrs);
       delete [] old_addrs;
       if (!hosts)
         return -EINVAL;
@@ -159,6 +156,11 @@ int MonClient::build_initial_monmap()
   return 0;
 }
 
+int MonClient::build_initial_monmap()
+{
+  dout(10) << "build_initial_monmap" << dendl;
+  return build_initial_monmap(monmap);
+}
 
 int MonClient::get_monmap()
 {
