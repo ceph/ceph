@@ -479,10 +479,11 @@ CLEANFILES += \
 ##
 
 AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
--Wtype-limits -Wignored-qualifiers
+-Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
-AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof
+AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof \
+-Wstrict-null-sentinel
 AM_LDFLAGS = -Wl,--as-needed
 
 if USE_BOOST_SPIRIT_OLD_HDR
