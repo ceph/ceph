@@ -346,8 +346,7 @@ public:
 	 << std::endl;
   }
 
-  void print_summary(ostream& out) const {
-    std::stringstream ss;
+  void state_summary(ostream& ss) const {
     for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();
 	 p != num_pg_by_state.end();
 	 ++p) {
@@ -355,6 +354,11 @@ public:
 	ss << ", ";
       ss << p->second << " " << pg_state_string(p->first);
     }
+  }
+
+  void print_summary(ostream& out) const {
+    std::stringstream ss;
+    state_summary(ss);
     string states = ss.str();
     out << "v" << version << ": "
 	<< pg_stat.size() << " pgs: "

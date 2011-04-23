@@ -875,52 +875,31 @@ bool PGMonitor::prepare_command(MMonCommand *m)
 enum health_status_t PGMonitor::get_health(std::ostream &ss) const
 {
   enum health_status_t ret(HEALTH_OK);
+  map<string,int> note;
 
-  const hash_map<pg_t,pg_stat_t> &pg_stat = pg_map.pg_stat;
-
-  hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin();
-  hash_map<pg_t,pg_stat_t>::const_iterator p_end = pg_stat.end();
-  int seen = 0;
+  hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
+  hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
   for (; p != p_end; ++p) {
-    seen |= p->second.state;
+    if (p->first & PG_STATE_DOWN)
+      note["down"] += p->second;
+    if (p->first & PG_STATE_DEGRADED)
+      note["degraded"] += p->second;
+    if (p->first & PG_STATE_INCONSISTENT)
+      note["inconsistent"] += p->second;
+    if (p->first & PG_STATE_PEERING)
+      note["peering"] += p->second;
+    if (p->first & PG_STATE_REPAIR)
+      note["repair"] += p->second;
+    if (p->first & PG_STATE_SPLITTING)
+      note["splitting"] += p->second;
   }
-
-  string prequel(" Some PGs are: ");
-  if (seen & PG_STATE_CRASHED) {
-    ss << prequel << "crashed";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_DOWN) {
-    ss << prequel << "down";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_REPLAY) {
-    ss << prequel << "replaying";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_SPLITTING) {
-    ss << prequel << "splitting";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_DEGRADED) {
-    ss << prequel << "degraded";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_INCONSISTENT) {
-    ss << prequel << "inconsistent";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_PEERING) {
-    ss << prequel << "peering";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_REPAIR) {
-    ss << prequel << "repairing";
-    prequel = ",";
-  }
-  if (prequel == ",") {
-    if (ret > HEALTH_WARN)
-      ret = HEALTH_WARN;
+  if (!note.empty()) {
+    ret = HEALTH_WARN;
+    for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
+      if (p != note.begin())
+	ss << ", ";
+      ss << p->second << " pgs " << p->first;
+    }
   }
   return ret;
 }
