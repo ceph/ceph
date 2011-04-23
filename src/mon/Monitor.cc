@@ -361,7 +361,9 @@ void Monitor::handle_command(MMonCommand *m)
       }
       
       stringstream ss;
-      ss << overall << " " << combined;
+      ss << overall;
+      if (combined.length())
+	ss << " " << combined;
       rs = ss.str();
       r = 0;
     }
