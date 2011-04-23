@@ -342,8 +342,28 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "health") {
-      monmon()->dispatch(m);
-      return;
+      health_status_t overall = HEALTH_OK;
+      string combined;
+      for (vector<PaxosService*>::iterator p = paxos_service.begin();
+	   p != paxos_service.end();
+	   p++) {
+	PaxosService *s = *p;
+	ostringstream oss;
+	health_status_t ret = s->get_health(oss);
+	if (ret < overall)
+	  overall = ret;
+	string cur = oss.str();
+	if (cur.length()) {
+	  if (combined.length())
+	    combined += "; ";
+	  combined += cur;
+	}
+      }
+      
+      stringstream ss;
+      ss << overall << " " << combined;
+      rs = ss.str();
+      r = 0;
     }
   } else 
     rs = "no command";
