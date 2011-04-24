@@ -901,5 +901,15 @@ enum health_status_t PGMonitor::get_health(std::ostream &ss) const
       ss << p->second << " pgs " << p->first;
     }
   }
+
+  stringstream rss;
+  pg_map.recovery_summary(rss);
+  if (!rss.str().empty()) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ret = HEALTH_WARN;
+    ss << rss.str();
+  }
+
   return ret;
 }
