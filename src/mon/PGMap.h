@@ -356,6 +356,28 @@ public:
     }
   }
 
+  void recovery_summary(ostream& out) const {
+    bool first = true;
+    if (pg_sum.num_objects_degraded) {
+      double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", pc);
+      out << pg_sum.num_objects_degraded 
+	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";
+      first = false;
+    }
+    if (pg_sum.num_objects_unfound) {
+      double pc = (double)pg_sum.num_objects_unfound / (double)pg_sum.num_objects * (double)100.0;
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", pc);
+      if (!first)
+	out << "; ";
+      out << pg_sum.num_objects_unfound
+	  << "/" << pg_sum.num_objects << " unfound (" << b << "%)";
+      first = false;
+    }
+  }
+
   void print_summary(ostream& out) const {
     std::stringstream ss;
     state_summary(ss);
@@ -367,15 +389,10 @@ public:
 	<< kb_t(osd_sum.kb_used) << " used, "
 	<< kb_t(osd_sum.kb_avail) << " / "
 	<< kb_t(osd_sum.kb) << " avail";
-    
-    if (pg_sum.num_objects_degraded) {
-      double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
-      char b[20];
-      snprintf(b, sizeof(b), "%.3lf", pc);
-      out << "; " //<< pg_sum.num_objects_missing_on_primary << "/"
-	  << pg_sum.num_objects_degraded 
-	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";
-    }
+    ss.clear();
+    recovery_summary(ss);
+    if (ss.str().length())
+      out << "; " << ss.str();
   }
 
 };
