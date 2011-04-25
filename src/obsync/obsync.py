@@ -465,8 +465,7 @@ parser.add_option("-v", "--verbose", action="store_true", \
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
 (opts, args) = parser.parse_args()
-if (not opts.no_preserve_acls):
-    opts.preserve_acls = True
+opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
     raise Exception("You can't run with both --create-dest and --dry-run! \
 By definition, a dry run never changes anything.")
