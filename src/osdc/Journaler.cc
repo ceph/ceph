@@ -22,9 +22,20 @@
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix
-#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler" << (readonly ? "(ro) ":"(rw) ")
 
 
+void Journaler::set_readonly()
+{
+  dout(1) << "set_readonly" << dendl;
+  readonly = true;
+}
+
+void Journaler::set_writeable()
+{
+  dout(1) << "set_writeable" << dendl;
+  readonly = false;
+}
 
 void Journaler::create(ceph_file_layout *l)
 {
@@ -41,7 +52,6 @@ void Journaler::create(ceph_file_layout *l)
 
 void Journaler::set_layout(ceph_file_layout *l)
 {
-  assert(!readonly);
   layout = *l;
 
   assert(layout.fl_pg_pool == pg_pool);
@@ -115,6 +125,7 @@ void Journaler::recover(Context *onread)
 {
   dout(1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
+  assert(readonly);
 
   if (onread)
     waitfor_recover.push_back(onread);
@@ -773,7 +784,7 @@ bool Journaler::_is_readable()
  */
 bool Journaler::is_readable() 
 {
-  bool r =_is_readable();
+  bool r = _is_readable();
   _prefetch();
   return r;
 }

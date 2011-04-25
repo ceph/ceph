@@ -1206,8 +1206,6 @@ void MDS::boot_start(int step, int r)
   case 3:
     if (is_any_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-      if(is_oneshot_replay() || is_standby_replay())
-        mdlog->get_journaler()->set_readonly();
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
     } else {
@@ -1336,6 +1334,7 @@ void MDS::replay_done()
     return;
   }
 
+  dout(1) << "making mds journal writeable" << dendl;
   mdlog->get_journaler()->set_writeable();
 
   if (g_conf.mds_wipe_sessions) {

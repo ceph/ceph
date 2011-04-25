@@ -92,6 +92,7 @@ void MDLog::init_journaler()
   journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 
 			    logger, l_mdl_jlat,
 			    &mds->timer);
+  assert(journaler->is_readonly());
 }
 
 void MDLog::write_head(Context *c) 
@@ -120,6 +121,7 @@ void MDLog::create(Context *c)
 {
   dout(5) << "create empty log" << dendl;
   init_journaler();
+  journaler->set_writeable();
   journaler->create(&mds->mdcache->default_log_layout);
   write_head(c);
 
@@ -415,6 +417,7 @@ void MDLog::_expired(LogSegment *ls)
 void MDLog::replay(Context *c)
 {
   assert(journaler->is_active());
+  assert(journaler->is_readonly());
 
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
