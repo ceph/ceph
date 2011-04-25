@@ -312,14 +312,12 @@ public:
   void set_write_pos(int64_t p) { 
     write_pos = flush_pos = safe_pos = p;
   }
-  void set_expire_trimmed_pos(int64_t p) { 
-    expire_pos = trimming_pos = trimmed_pos = p;
-  }
 
   bool truncate_tail_junk(Context *fin);
 
   // trim
   void set_expire_pos(int64_t ep) { expire_pos = ep; }
+  void set_trimmed_pos(int64_t p) { trimming_pos = trimmed_pos = p; }
   void trim();
   //bool is_trimmable() { return trimming_pos < expire_pos; }
   //void trim(int64_t trim_to=0, Context *c=0);
