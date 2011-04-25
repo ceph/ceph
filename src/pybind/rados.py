@@ -323,7 +323,7 @@ class Ioctx(object):
         self.require_ioctx_open()
         length = len(data)
         ret = self.librados.rados_write(self.io, c_char_p(key),
-                 c_char_p(data), c_size_t(length), c_size_t(offset))
+                 c_char_p(data), c_size_t(length), c_uint64(offset))
         if ret == length:
             return ret
         elif ret < 0:
@@ -341,7 +341,7 @@ written." % (self.name, ret, length))
         self.require_ioctx_open()
         length = len(data)
         ret = self.librados.rados_write_full(self.io, c_char_p(key),
-                 c_char_p(data), c_size_t(length), c_size_t(offset))
+                 c_char_p(data), c_size_t(length), c_uint64(offset))
         if ret == 0:
             return ret
         else:
@@ -352,7 +352,7 @@ written." % (self.name, ret, length))
         self.require_ioctx_open()
         ret_buf = create_string_buffer(length)
         ret = self.librados.rados_read(self.io, c_char_p(key), ret_buf,
-                c_size_t(length), c_size_t(offset))
+                c_size_t(length), c_uint64(offset))
         if ret < 0:
             raise make_ex("Ioctx.read(%s): failed to read %s" % (self.name, key))
         return ret_buf.value
