@@ -379,7 +379,7 @@ if [ $allhosts -eq 1 ]; then
     if [ -z "$dir" ]; then
 	dir=`mktemp -d -t mkcephfs.XXXXXXXXXX` || exit 1
 	echo "temp dir is $dir"
-	trap "rm $dir/* ; exit" INT TERM EXIT
+	trap "rm -rf $dir ; exit" INT TERM EXIT
     fi
 
     # temp dir on remote nodes
