@@ -530,14 +530,15 @@ void Journaler::wait_for_flush(Context *onsafe)
 void Journaler::flush(Context *onsafe)
 {
   assert(!readonly);
-  wait_for_flush(onsafe);
-  if (write_pos == safe_pos)
-    return;
 
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at "
 	     << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+    if (onsafe) {
+      onsafe->finish(0);
+      delete onsafe;
+    }
   } else {
     if (1) {
       // maybe buffer
@@ -556,6 +557,7 @@ void Journaler::flush(Context *onsafe)
       // always flush
       _do_flush();
     }
+    wait_for_flush(onsafe);
   }
 
   // write head?
