@@ -261,18 +261,18 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             k.get_contents_to_filename(temp_file.name)
             if (opts.preserve_acls):
                 temp_acl_file = tempfile.NamedTemporaryFile(mode='w+b',
-                                                            delete=False)
+                                                            delete=False).name
                 acl_xml = self.bucket.get_xml_acl(k)
-                temp_acl_file_f = open(temp_acl_file.name, 'w')
+                temp_acl_file_f = open(temp_acl_file, 'w')
                 temp_acl_file_f.write(acl_xml)
                 temp_acl_file_f.close()
         except:
             if (temp_file):
                 os.unlink(temp_file.name)
             if (temp_acl_file):
-                os.unlink(temp_acl_file.name)
+                os.unlink(temp_acl_file)
             raise
-        return S3StoreLocalCopy(temp_file.name, temp_acl_file.name)
+        return S3StoreLocalCopy(temp_file.name, temp_acl_file)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs.__iter__())
