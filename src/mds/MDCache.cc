@@ -1264,7 +1264,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
 
       // did auth change?
       if (oldparent->authority() != newparent->authority()) 
-	adjust_subtree_auth(dir, oldparent->authority());  // caller is responsible for *diri.
+	adjust_subtree_auth(dir, oldparent->authority(), !imported);  // caller is responsible for *diri.
     }
   }
 
