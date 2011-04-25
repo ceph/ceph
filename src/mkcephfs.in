@@ -182,6 +182,10 @@ if [ $preparemonmap -eq 1 ]; then
     for name in $mons; do
 	id=`echo $name | cut -c 4- | sed 's/^\\.//'`
 	get_conf addr "" "mon addr"
+	if [ -z "$addr" ]; then
+	    echo "$0: monitor $name has no address defined." 1>&2
+	    exit 1
+	fi
 	args=$args" --add $id $addr"
     done
 
