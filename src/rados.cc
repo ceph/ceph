@@ -512,6 +512,8 @@ int main(int argc, const char **argv)
       cerr << "error setting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
+    else
+      ret = 0;
   }
   else if (strcmp(nargs[0], "getxattr") == 0) {
     if (!pool_name || nargs.size() < 3)
@@ -526,6 +528,8 @@ int main(int argc, const char **argv)
       cerr << "error getting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
+    else
+      ret = 0;
     string s(bl.c_str(), bl.length());
     cout << s << std::endl;
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
