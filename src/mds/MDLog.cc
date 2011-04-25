@@ -394,7 +394,9 @@ void MDLog::_expired(LogSegment *ls)
       expired_segments.erase(ls);
       num_events -= ls->num_events;
       
-      journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
+      // this was the oldest segment, adjust expire pos
+      if (journaler->get_expire_pos() < ls->offset)
+	journaler->set_expire_pos(ls->offset);
       
       logger->set(l_mdl_expos, ls->offset);
       logger->inc(l_mdl_segtrm);
