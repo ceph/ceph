@@ -149,9 +149,7 @@ class MDS : public Dispatcher {
   int standby_for_rank;
   int standby_type;
   string standby_for_name;
-  bool continue_replay; /* set to true by replay_start if we're a hot standby,
-                           remains true until leader MDS fails and we need to
-                           take over*/
+  bool standby_replaying;  // true if current replay pass is in standby-replay mode
 
   Messenger    *messenger;
   MonClient    *monc;
@@ -362,7 +360,6 @@ class MDS : public Dispatcher {
   void starting_done();
   void replay_done();
   void standby_replay_restart();
-  void standby_trim_segments();
   class C_MDS_StandbyReplayRestart;
   class C_MDS_StandbyReplayRestartFinish;
 

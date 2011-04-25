@@ -22,9 +22,20 @@
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix
-#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler" << (readonly ? "(ro) ":"(rw) ")
 
 
+void Journaler::set_readonly()
+{
+  dout(1) << "set_readonly" << dendl;
+  readonly = true;
+}
+
+void Journaler::set_writeable()
+{
+  dout(1) << "set_writeable" << dendl;
+  readonly = false;
+}
 
 void Journaler::create(ceph_file_layout *l)
 {
@@ -41,7 +52,6 @@ void Journaler::create(ceph_file_layout *l)
 
 void Journaler::set_layout(ceph_file_layout *l)
 {
-  assert(!readonly);
   layout = *l;
 
   assert(layout.fl_pg_pool == pg_pool);
@@ -115,6 +125,7 @@ void Journaler::recover(Context *onread)
 {
   dout(1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
+  assert(readonly);
 
   if (onread)
     waitfor_recover.push_back(onread);
@@ -160,7 +171,7 @@ void Journaler::reread_head(Context *onfinish)
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   //read on-disk header into
-  assert (bl.length());
+  assert(bl.length());
 
   // unpack header
   Header h;
@@ -315,7 +326,7 @@ public:
 
 void Journaler::write_head(Context *oncommit)
 {
-  assert (!readonly);
+  assert(!readonly);
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
   last_written.expire_pos = expire_pos;
@@ -544,14 +555,15 @@ void Journaler::wait_for_flush(Context *onsafe)
 void Journaler::flush(Context *onsafe)
 {
   assert(!readonly);
-  wait_for_flush(onsafe);
-  if (write_pos == safe_pos)
-    return;
 
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, (prezeroing/prezero)/write/flush/safe pointers at "
 	     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
+    if (onsafe) {
+      onsafe->finish(0);
+      delete onsafe;
+    }
   } else {
     if (1) {
       // maybe buffer
@@ -570,6 +582,7 @@ void Journaler::flush(Context *onsafe)
       // always flush
       _do_flush();
     }
+    wait_for_flush(onsafe);
   }
 
   // write head?
@@ -874,7 +887,7 @@ bool Journaler::_is_readable()
  */
 bool Journaler::is_readable() 
 {
-  bool r =_is_readable();
+  bool r = _is_readable();
   _prefetch();
   return r;
 }
@@ -946,7 +959,6 @@ void Journaler::trim()
 {
   assert(!readonly);
   uint64_t period = get_layout_period();
-
   uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed

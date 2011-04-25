@@ -90,7 +90,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(0),
-  continue_replay(false),
+  standby_replaying(false),
   messenger(m),
   monc(mc),
   clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
@@ -1210,8 +1210,6 @@ void MDS::boot_start(int step, int r)
   case 3:
     if (is_any_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-      if(is_oneshot_replay() || is_standby_replay())
-        mdlog->get_journaler()->set_readonly();
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
     } else {
@@ -1260,8 +1258,9 @@ void MDS::calc_recovery_set()
 void MDS::replay_start()
 {
   dout(1) << "replay_start" << dendl;
+
   if (is_standby_replay())
-    continue_replay = true;
+    standby_replaying = true;
   
   standby_type = 0;
 
@@ -1275,6 +1274,8 @@ void MDS::replay_start()
   if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
     boot_start();
   } else {
+    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+	    << " (which blacklists prior instance)" << dendl;
     objecter->wait_for_new_map(new C_MDS_BootStart(this, 0),
 			       mdsmap->get_last_failure_osd_epoch());
   }
@@ -1293,6 +1294,7 @@ public:
       mds->respawn(); /* we're too far back, and this is easier than
                          trying to reset everything in the cache, etc */
     } else {
+      mds->mdlog->standby_trim_segments();
       mds->boot_start(3, r);
     }
   }
@@ -1300,8 +1302,17 @@ public:
 
 inline void MDS::standby_replay_restart()
 {
-  mdlog->get_journaler()->reread_head_and_probe(
+  dout(1) << "standby_replay_restart" << (standby_replaying ? " (as standby)":" (final takeover pass)") << dendl;
+
+  if (!standby_replaying && osdmap->get_epoch() < mdsmap->get_last_failure_osd_epoch()) {
+    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+	    << " (which blacklists prior instance)" << dendl;
+    objecter->wait_for_new_map(new C_MDS_BootStart(this, 3),
+			       mdsmap->get_last_failure_osd_epoch());
+  } else {
+    mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
+  }
 }
 
 class MDS::C_MDS_StandbyReplayRestart : public Context {
@@ -1316,9 +1327,7 @@ public:
 
 void MDS::replay_done()
 {
-  dout(1) << "replay_done in=" << mdsmap->get_num_mds()
-	  << " failed=" << mdsmap->get_num_failed()
-	  << dendl;
+  dout(1) << "replay_done" << (standby_replaying ? " (as standby)" : "") << dendl;
 
   if (is_oneshot_replay()) {
     dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
@@ -1327,19 +1336,20 @@ void MDS::replay_done()
   }
 
   if (is_standby_replay()) {
-    standby_trim_segments();
     dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf.mds_replay_interval,
                           new C_MDS_StandbyReplayRestart(this));
     return;
   }
 
-  if (continue_replay) {
-    continue_replay = false;
+  if (standby_replaying) {
+    dout(10) << " last replay pass was as a standby; making final pass" << dendl;
+    standby_replaying = false;
     standby_replay_restart();
     return;
   }
 
+  dout(1) << "making mds journal writeable" << dendl;
   mdlog->get_journaler()->set_writeable();
   mdlog->get_journaler()->trim_tail();
 
@@ -1368,35 +1378,6 @@ void MDS::replay_done()
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
   }
-}
-
-void MDS::standby_trim_segments()
-{
-  dout(10) << "standby_trim_segments" << dendl;
-  LogSegment *seg = NULL;
-  uint64_t expire_pos = mdlog->get_journaler()->get_expire_pos();
-  dout(10) << "expire_pos=" << expire_pos << dendl;
-  bool removed_segment = false;
-  while ((seg=mdlog->get_oldest_segment())->end <= expire_pos) {
-    dout(0) << "removing segment" << dendl;
-    seg->dirty_dirfrags.clear_list();
-    seg->new_dirfrags.clear_list();
-    seg->dirty_inodes.clear_list();
-    seg->dirty_dentries.clear_list();
-    seg->open_files.clear_list();
-    seg->renamed_files.clear_list();
-    seg->dirty_dirfrag_dir.clear_list();
-    seg->dirty_dirfrag_nest.clear_list();
-    seg->dirty_dirfrag_dirfragtree.clear_list();
-    mdlog->remove_oldest_segment();
-    removed_segment = true;
-  }
-
-  if (removed_segment) {
-    dout(20) << "calling mdcache->trim!" << dendl;
-    mdcache->trim(-1);
-  } else dout(20) << "removed no segments!" << dendl;
-  return;
 }
 
 void MDS::reopen_log()
