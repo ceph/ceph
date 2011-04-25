@@ -381,7 +381,6 @@ public:
     ObjectContext *obc;
 
     tid_t rep_tid;
-    bool noop;
 
     bool applying, applied, aborted;
 
@@ -398,13 +397,12 @@ public:
 
     list<ObjectStore::Transaction*> tls;
     
-    RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
+    RepGather(OpContext *c, ObjectContext *pi, tid_t rt, 
 	      eversion_t lc) :
       queue_item(this),
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      noop(noop_),
       applying(false), applied(false), aborted(false),
       sent_ack(false),
       //sent_nvram(false),
@@ -444,7 +442,7 @@ protected:
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, utime_t now,
 		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
-  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
+  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
