@@ -1290,6 +1290,7 @@ public:
       mds->respawn(); /* we're too far back, and this is easier than
                          trying to reset everything in the cache, etc */
     } else {
+      mds->mdlog->standby_trim_segments();
       mds->boot_start(3, r);
     }
   }
@@ -1331,7 +1332,6 @@ void MDS::replay_done()
   }
 
   if (is_standby_replay()) {
-    standby_trim_segments();
     dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf.mds_replay_interval,
                           new C_MDS_StandbyReplayRestart(this));
@@ -1373,35 +1373,6 @@ void MDS::replay_done()
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
   }
-}
-
-void MDS::standby_trim_segments()
-{
-  dout(10) << "standby_trim_segments" << dendl;
-  LogSegment *seg = NULL;
-  uint64_t expire_pos = mdlog->get_journaler()->get_expire_pos();
-  dout(10) << "expire_pos=" << expire_pos << dendl;
-  bool removed_segment = false;
-  while ((seg=mdlog->get_oldest_segment())->end <= expire_pos) {
-    dout(0) << "removing segment" << dendl;
-    seg->dirty_dirfrags.clear_list();
-    seg->new_dirfrags.clear_list();
-    seg->dirty_inodes.clear_list();
-    seg->dirty_dentries.clear_list();
-    seg->open_files.clear_list();
-    seg->renamed_files.clear_list();
-    seg->dirty_dirfrag_dir.clear_list();
-    seg->dirty_dirfrag_nest.clear_list();
-    seg->dirty_dirfrag_dirfragtree.clear_list();
-    mdlog->remove_oldest_segment();
-    removed_segment = true;
-  }
-
-  if (removed_segment) {
-    dout(20) << "calling mdcache->trim!" << dendl;
-    mdcache->trim(-1);
-  } else dout(20) << "removed no segments!" << dendl;
-  return;
 }
 
 void MDS::reopen_log()

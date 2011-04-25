@@ -241,6 +241,8 @@ public:
   void open(Context *onopen);      // append() or replay() to follow!
   void append();
   void replay(Context *onfinish);
+
+  void standby_trim_segments();
 };
 
 #endif

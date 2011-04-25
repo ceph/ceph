@@ -502,6 +502,7 @@ void MDLog::_replay_thread()
           while (!done)
             cond.Wait(mylock);
           mds->mds_lock.Lock();
+	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {
             dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
             r = -EAGAIN;
@@ -600,4 +601,33 @@ void MDLog::_replay_truncated()
   finish_contexts(waitfor_replay, 0);  
 }
 
+
+void MDLog::standby_trim_segments()
+{
+  dout(10) << "standby_trim_segments" << dendl;
+  uint64_t expire_pos = journaler->get_expire_pos();
+  dout(10) << " expire_pos=" << expire_pos << dendl;
+  LogSegment *seg = NULL;
+  bool removed_segment = false;
+  while ((seg = get_oldest_segment())->end <= expire_pos) {
+    dout(10) << " removing segment " << seg->offset << dendl;
+    seg->dirty_dirfrags.clear_list();
+    seg->new_dirfrags.clear_list();
+    seg->dirty_inodes.clear_list();
+    seg->dirty_dentries.clear_list();
+    seg->open_files.clear_list();
+    seg->renamed_files.clear_list();
+    seg->dirty_dirfrag_dir.clear_list();
+    seg->dirty_dirfrag_nest.clear_list();
+    seg->dirty_dirfrag_dirfragtree.clear_list();
+    remove_oldest_segment();
+    removed_segment = true;
+  }
+
+  if (removed_segment) {
+    dout(20) << " calling mdcache->trim!" << dendl;
+    mds->mdcache->trim(-1);
+  } else
+    dout(20) << " removed no segments!" << dendl;
+}
 
