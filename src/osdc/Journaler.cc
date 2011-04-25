@@ -171,7 +171,7 @@ void Journaler::reread_head(Context *onfinish)
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   //read on-disk header into
-  assert (bl.length());
+  assert(bl.length());
 
   // unpack header
   Header h;
@@ -326,7 +326,7 @@ public:
 
 void Journaler::write_head(Context *oncommit)
 {
-  assert (!readonly);
+  assert(!readonly);
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
   last_written.expire_pos = expire_pos;
@@ -874,7 +874,6 @@ void Journaler::trim()
 {
   assert(!readonly);
   uint64_t period = get_layout_period();
-
   uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed

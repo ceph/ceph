@@ -319,8 +319,6 @@ public:
   void set_expire_pos(int64_t ep) { expire_pos = ep; }
   void set_trimmed_pos(int64_t p) { trimming_pos = trimmed_pos = p; }
   void trim();
-  //bool is_trimmable() { return trimming_pos < expire_pos; }
-  //void trim(int64_t trim_to=0, Context *c=0);
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 

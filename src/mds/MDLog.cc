@@ -123,7 +123,7 @@ void MDLog::create(Context *c)
   init_journaler();
   journaler->set_writeable();
   journaler->create(&mds->mdcache->default_log_layout);
-  write_head(c);
+  journaler->write_head(c);
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
