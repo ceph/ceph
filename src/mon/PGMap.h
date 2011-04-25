@@ -389,10 +389,10 @@ public:
 	<< kb_t(osd_sum.kb_used) << " used, "
 	<< kb_t(osd_sum.kb_avail) << " / "
 	<< kb_t(osd_sum.kb) << " avail";
-    ss.clear();
-    recovery_summary(ss);
-    if (ss.str().length())
-      out << "; " << ss.str();
+    std::stringstream ssr;
+    recovery_summary(ssr);
+    if (ssr.str().length())
+      out << "; " << ssr.str();
   }
 
 };
