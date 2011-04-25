@@ -189,6 +189,11 @@ if [ $preparemonmap -eq 1 ]; then
 	args=$args" --add $id $addr"
     done
 
+    if [ -z "$args" ]; then
+	echo "$0: no monitors found in config, aborting." 1>&2
+	exit 1
+    fi
+
     # build monmap
     monmap="$dir/monmap"
     echo $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
