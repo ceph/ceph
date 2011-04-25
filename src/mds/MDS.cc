@@ -90,7 +90,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(0),
-  continue_replay(false),
+  standby_replaying(false),
   messenger(m),
   monc(mc),
   clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
@@ -1254,8 +1254,9 @@ void MDS::calc_recovery_set()
 void MDS::replay_start()
 {
   dout(1) << "replay_start" << dendl;
+
   if (is_standby_replay())
-    continue_replay = true;
+    standby_replaying = true;
   
   standby_type = 0;
 
@@ -1269,6 +1270,8 @@ void MDS::replay_start()
   if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
     boot_start();
   } else {
+    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+	    << " (which blacklists prior instance)" << dendl;
     objecter->wait_for_new_map(new C_MDS_BootStart(this, 0),
 			       mdsmap->get_last_failure_osd_epoch());
   }
@@ -1294,8 +1297,17 @@ public:
 
 inline void MDS::standby_replay_restart()
 {
-  mdlog->get_journaler()->reread_head_and_probe(
+  dout(1) << "standby_replay_restart" << (standby_replaying ? " (as standby)":" (final takeover pass)") << dendl;
+
+  if (!standby_replaying && osdmap->get_epoch() < mdsmap->get_last_failure_osd_epoch()) {
+    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+	    << " (which blacklists prior instance)" << dendl;
+    objecter->wait_for_new_map(new C_MDS_BootStart(this, 3),
+			       mdsmap->get_last_failure_osd_epoch());
+  } else {
+    mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
+  }
 }
 
 class MDS::C_MDS_StandbyReplayRestart : public Context {
@@ -1310,9 +1322,7 @@ public:
 
 void MDS::replay_done()
 {
-  dout(1) << "replay_done in=" << mdsmap->get_num_mds()
-	  << " failed=" << mdsmap->get_num_failed()
-	  << dendl;
+  dout(1) << "replay_done" << (standby_replaying ? " (as standby)" : "") << dendl;
 
   if (is_oneshot_replay()) {
     dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
@@ -1328,8 +1338,9 @@ void MDS::replay_done()
     return;
   }
 
-  if (continue_replay) {
-    continue_replay = false;
+  if (standby_replaying) {
+    dout(10) << " last replay pass was as a standby; making final pass" << dendl;
+    standby_replaying = false;
     standby_replay_restart();
     return;
   }
