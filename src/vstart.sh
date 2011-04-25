@@ -426,7 +426,7 @@ EOF
 		    if [ "$set_standby" -eq 1 ]; then
 			cat <<EOF >> $conf
         mds standby replay = true
-        mds standby for name = $last_mds_nama
+        mds standby for name = $last_mds_name
 EOF
 			set_standby=0
 		    else
@@ -452,6 +452,9 @@ EOF
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_ADM mds set_max_mds 2
     done
+    if [ "$standby" -eq 1 ]; then
+	CEPH_NUM_MDS=$(($CEPH_NUM_MDS / 2))
+    fi
     cmd="$CEPH_ADM mds set_max_mds $CEPH_NUM_MDS"
     echo $cmd
     $cmd
