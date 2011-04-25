@@ -47,6 +47,10 @@ abc_str = foo3_ioctx.read("abc")
 if (abc_str != "abc"):
     raise RuntimeError("error reading object abc: expected value abc, \
 got %s" % abc_str)
+b_str = foo3_ioctx.read("abc", 1, 1)
+if (b_str != "b"):
+    raise RuntimeError("error reading object abc: expected value b, \
+got %s" % b_str)
 # write_full replaces the whole 'def' object
 foo3_ioctx.write_full("def", "d")
 def_str = foo3_ioctx.read("def")

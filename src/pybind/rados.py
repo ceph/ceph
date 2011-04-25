@@ -348,7 +348,7 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Ioctx.write(%s): failed to write_full %s" % \
                 (self.name, key))
 
-    def read(self, key, offset = 0, length = 8192):
+    def read(self, key, length = 8192, offset = 0):
         self.require_ioctx_open()
         ret_buf = create_string_buffer(length)
         ret = self.librados.rados_read(self.io, c_char_p(key), ret_buf,
