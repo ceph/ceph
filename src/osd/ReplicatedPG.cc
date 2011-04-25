@@ -435,9 +435,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
       ctx->snapc.snaps = op->get_snaps();
     }
     if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
-	ctx->snapc.seq < obc->obs.ssc->snapset.seq) {
+	ctx->snapc.seq < obc->ssc->snapset.seq) {
       dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
-	       << " < snapset seq " << obc->obs.ssc->snapset.seq
+	       << " < snapset seq " << obc->ssc->snapset.seq
 	       << " on " << soid << dendl;
       delete ctx;
       put_object_context(obc);
@@ -473,7 +473,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     dout(10) << "do_op " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
-	     << " snapset " << obc->obs.ssc->snapset
+	     << " snapset " << obc->ssc->snapset
 	     << dendl;  
   } else {
     dout(10) << "do_op " << soid << " " << ctx->ops
@@ -703,9 +703,9 @@ bool ReplicatedPG::snap_trimmer()
       vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
-      if (!obc->obs.ssc)
-	obc->obs.ssc = get_snapset_context(coid.oid, false);
-      SnapSetContext *ssc = obc->obs.ssc;
+      if (!obc->ssc)
+	obc->ssc = get_snapset_context(coid.oid, false);
+      SnapSetContext *ssc = obc->ssc;
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
 
@@ -999,7 +999,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 			     bufferlist& odata)
 {
   int result = 0;
-  SnapSetContext *ssc = ctx->obs->ssc;
+  SnapSetContext *ssc = ctx->obc->ssc;
   object_info_t& oi = ctx->obs->oi;
 
   const sobject_t& soid = oi.soid;
@@ -2012,7 +2012,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 inline void ReplicatedPG::_delete_head(OpContext *ctx)
 {
-  SnapSetContext *ssc = ctx->obs->ssc;
+  SnapSetContext *ssc = ctx->obc->ssc;
   object_info_t& oi = ctx->obs->oi;
   const sobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
@@ -2041,7 +2041,7 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
 
 void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 {
-  SnapSetContext *ssc = ctx->obs->ssc;
+  SnapSetContext *ssc = ctx->obc->ssc;
   object_info_t& oi = ctx->obs->oi;
   const sobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
@@ -2129,7 +2129,7 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 
 void ReplicatedPG::make_writeable(OpContext *ctx)
 {
-  SnapSetContext *ssc = ctx->obs->ssc;
+  SnapSetContext *ssc = ctx->obc->ssc;
   object_info_t& oi = ctx->obs->oi;
   const sobject_t& soid = oi.soid;
   SnapContext& snapc = ctx->snapc;
@@ -2248,8 +2248,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   poi->version = ctx->at_version;
   
   bufferlist bss;
-  ::encode(ctx->obs->ssc->snapset, bss);
-  assert(ctx->obs->exists == ctx->obs->ssc->snapset.head_exists);
+  ::encode(ctx->obc->ssc->snapset, bss);
+  assert(ctx->obs->exists == ctx->obc->ssc->snapset.head_exists);
 
   // append to log
   int logopcode = Log::Entry::MODIFY;
@@ -2273,7 +2273,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ::encode(*poi, bv);
     ctx->op_t.setattr(coll, soid, OI_ATTR, bv);
 
-    dout(10) << " final snapset " << ctx->obs->ssc->snapset
+    dout(10) << " final snapset " << ctx->obc->ssc->snapset
 	     << " in " << soid << dendl;
     ctx->op_t.setattr(coll, soid, SS_ATTR, bss);   
     if (!head_existed) {
@@ -2293,10 +2293,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	assert(ctx->snapset_obc->registered);
       }
     }
-  } else if (ctx->obs->ssc->snapset.clones.size()) {
+  } else if (ctx->obc->ssc->snapset.clones.size()) {
     // save snapset on _snap
     sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
-    dout(10) << " final snapset " << ctx->obs->ssc->snapset
+    dout(10) << " final snapset " << ctx->obc->ssc->snapset
 	     << " in " << snapoid << dendl;
     ctx->at_version.version++;
     ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
@@ -2595,7 +2595,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
       wr->old_exists = old_exists;
       wr->old_size = old_size;
       wr->old_version = old_version;
-      wr->snapset = repop->obc->obs.ssc->snapset;
+      wr->snapset = repop->obc->ssc->snapset;
       wr->snapc = repop->ctx->snapc;
       wr->set_data(repop->ctx->op->get_data());   // _copy_ bufferlist
     } else {
@@ -2739,8 +2739,8 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     }
     register_object_context(obc);
 
-    if (can_create && !obc->obs.ssc)
-      obc->obs.ssc = get_snapset_context(soid.oid, true);
+    if (can_create && !obc->ssc)
+      obc->ssc = get_snapset_context(soid.oid, true);
 
     if (r >= 0) {
       obc->obs.oi.decode(bv);
@@ -2783,8 +2783,8 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
     dout(10) << "find_object_context " << oid << " @" << snapid << dendl;
     *pobc = obc;
 
-    if (can_create && !obc->obs.ssc)
-      obc->obs.ssc = get_snapset_context(oid, true);
+    if (can_create && !obc->ssc)
+      obc->ssc = get_snapset_context(oid, true);
 
     return 0;
   }
@@ -2805,10 +2805,10 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
 	       << " want " << snapid << " > snapset seq " << ssc->snapset.seq
 	       << " -- HIT " << obc->obs
 	       << dendl;
-      if (!obc->obs.ssc)
-	obc->obs.ssc = ssc;
+      if (!obc->ssc)
+	obc->ssc = ssc;
       else {
-	assert(ssc == obc->obs.ssc);
+	assert(ssc == obc->ssc);
 	put_snapset_context(ssc);
       }
       *pobc = obc;
@@ -2877,8 +2877,8 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
   --obc->ref;
   if (obc->ref == 0) {
-    if (obc->obs.ssc)
-      put_snapset_context(obc->obs.ssc);
+    if (obc->ssc)
+      put_snapset_context(obc->ssc);
 
     if (obc->registered)
       object_contexts.erase(obc->obs.oi.soid);
@@ -3005,7 +3005,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       oi.lost = false; // I guess?
       oi.version = op->old_version;
       oi.size = op->old_size;
-      ObjectState obs(oi, op->old_exists, NULL);
+      ObjectState obs(oi, op->old_exists);
       
       rm->ctx = new OpContext(op, op->reqid, op->ops, &obs, this);
       
@@ -3015,7 +3015,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
       SnapSetContext ssc(op->poid.oid);
       ssc.snapset = op->snapset;
-      rm->ctx->obs->ssc = &ssc;
+      rm->ctx->obc->ssc = &ssc;
       
       prepare_transaction(rm->ctx);
       log_op(rm->ctx->log, op->pg_trim_to, rm->ctx->local_t);
@@ -3953,7 +3953,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       obc->obs.oi.decode(oibl);
       
       // suck in snapset context?
-      SnapSetContext *ssc = obc->obs.ssc;
+      SnapSetContext *ssc = obc->ssc;
       if (ssbl.length()) {
 	bufferlist::iterator sp = ssbl.begin();
 	ssc->snapset.decode(sp);

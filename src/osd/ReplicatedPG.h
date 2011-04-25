@@ -106,10 +106,9 @@ public:
   struct ObjectState {
     object_info_t oi;
     bool exists;
-    SnapSetContext *ssc;  // may be null
 
-    ObjectState(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-      : oi(oi_), exists(exists_), ssc(ssc_) {}
+    ObjectState(const object_info_t &oi_, bool exists_)
+      : oi(oi_), exists(exists_) {}
   };
 
 
@@ -265,6 +264,8 @@ public:
     bool registered; 
     ObjectState obs;
 
+    SnapSetContext *ssc;  // may be null
+
     Mutex lock;
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
@@ -279,7 +280,7 @@ public:
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}*/
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-      : ref(0), registered(false), obs(oi_, exists_, ssc_),
+      : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
@@ -471,8 +472,8 @@ protected:
       obc->registered = true;
       object_contexts[obc->obs.oi.soid] = obc;
     }
-    if (obc->obs.ssc)
-      register_snapset_context(obc->obs.ssc);
+    if (obc->ssc)
+      register_snapset_context(obc->ssc);
   }
   void put_object_context(ObjectContext *obc);
   int find_object_context(const object_t& oid, const object_locator_t& oloc,
