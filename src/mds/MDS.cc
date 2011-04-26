@@ -329,6 +329,12 @@ void MDS::send_message(Message *m, Connection *c)
 
 void MDS::send_message_mds(Message *m, int mds)
 {
+  if (!mdsmap->is_up(mds)) {
+    dout(10) << "send_message_mds mds" << mds << " not up, dropping " << *m << dendl;
+    m->put();
+    return;
+  }
+
   // send mdsmap first?
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), 
