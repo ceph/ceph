@@ -177,11 +177,6 @@ else
         mds log max segments = 2'
 fi
 
-if [ "$standby" -eq 1 ]; then
-    echo "standby got set"
-    CEPH_NUM_MDS=$(($CEPH_NUM_MDS * 2))
-fi
-
 if [ -n "$MON_ADDR" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
@@ -396,10 +391,16 @@ EOF
 fi
 
 # mds
+if [ "$smallmds" -eq 1 ]; then
+    cat <<EOF >> $conf
+[mds]
+	mds log max segments = 2
+	mds cache size = 10000
+EOF
+fi
+
 if [ "$start_mds" -eq 1 ]; then
     mds=0
-    last_mds_name=a
-    set_standby=0
     for name in a b c d e f g h i j k l m n o p
     do
 	if [ "$new" -eq 1 ]; then
@@ -408,28 +409,20 @@ if [ "$start_mds" -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
 EOF
-		if [ "$smallmds" -eq 1 ]; then
-		    cat <<EOF >> $conf
-	mds log max segments = 2
-	mds cache size = 10000
-EOF
-		fi
 		if [ "$cephx" -eq 1 ]; then
 	    	    cat <<EOF >> $conf
         keyring = $key_fn
 EOF
 		fi
 		if [ "$standby" -eq 1 ]; then
-		    echo "noticing standby set"
-		    if [ "$set_standby" -eq 1 ]; then
-			cat <<EOF >> $conf
-        mds standby replay = true
-        mds standby for name = $last_mds_name
+		    cat <<EOF >> $conf
+;        mds standby replay = true
+       mds standby for rank = $mds
+[mds.${name}s]
+        keyring = dev/mds.${name}s.keyring
+;        mds standby replay = true
+        mds standby for rank = $mds
 EOF
-			set_standby=0
-		    else
-			set_standby=1
-		    fi
 		fi
 	    fi
 	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name \
@@ -438,21 +431,28 @@ EOF
 		--cap mds 'allow' \
 		$key_fn
 	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
+	    if [ "$standby" -eq 1 ]; then
+		    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.${name}s \
+			--cap mon 'allow *' \
+			--cap osd 'allow *' \
+			--cap mds 'allow' \
+			dev/mds.${name}s.keyring
+                    $SUDO $CEPH_ADM -i dev/mds.${name}s.keyring auth add mds.${name}s
+	    fi
 	fi
 	
 	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
+	if [ "$standby" -eq 1 ]; then
+	    run 'mds' $CEPH_BIN/cmds -i ${name}s $ARGS $CMDS_ARGS
+	fi
 	
 	mds=$(($mds + 1))
-	last_mds_name=$name
 	[ $mds -eq $CEPH_NUM_MDS ] && break
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_ADM mds set_max_mds 2
     done
-    if [ "$standby" -eq 1 ]; then
-	CEPH_NUM_MDS=$(($CEPH_NUM_MDS / 2))
-    fi
     cmd="$CEPH_ADM mds set_max_mds $CEPH_NUM_MDS"
     echo $cmd
     $cmd
