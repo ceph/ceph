@@ -484,9 +484,7 @@ public:
     const std::list<ptr>& buffers() const { return _buffers; }
     
     void swap(list& other) {
-      unsigned t = _len;
-      _len = other._len;
-      other._len = t;
+      std::swap(_len, other._len);
       _buffers.swap(other._buffers);
       append_buffer.swap(other.append_buffer);
       //last_p.swap(other.last_p);
