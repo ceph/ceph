@@ -209,7 +209,8 @@ bool CDir::check_rstats()
     dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
     return true;
   }
-  // first, check basic counts
+
+  // fragstat
   if(!(get_num_head_items()==
       (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs))) {
     dout(1) << "mismatch between head items and fnode.fragstat! printing dentries" << dendl;
@@ -229,9 +230,11 @@ bool CDir::check_rstats()
              << " fnode.fragstat.nsubdirs=" << fnode.fragstat.nsubdirs << dendl;
   }
 
+  // rstat
   nest_info_t sub_info;
   for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
-    if (i->second->get_linkage()->is_primary()) {
+    if (i->second->get_linkage()->is_primary() &&
+	i->second->last == CEPH_NOSNAP) {
       sub_info.add(i->second->get_linkage()->inode->inode.accounted_rstat);
     }
   }
