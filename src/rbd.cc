@@ -580,6 +580,67 @@ static int read_file(const char *filename, char *buf, size_t bufsize)
     return r;
 }
 
+static int do_kernel_showmapped()
+{
+  int r;
+  const char *devices_path = "/sys/bus/rbd/devices";
+  DIR *device_dir = opendir(devices_path);
+  if (!device_dir) {
+    r = -errno;
+    cerr << "Could not open " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  struct dirent *dent;
+  dent = readdir(device_dir);
+  if (!dent) {
+    r = -errno;
+    cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  cout << "device\t\tpool\timage\tsnap" << std::endl;
+
+  do {
+    if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
+      continue;
+
+    char fn[PATH_MAX];
+
+    char dev[PATH_MAX];
+    snprintf(dev, sizeof(dev), "/dev/rbd%s", dent->d_name);
+
+    char name[RBD_MAX_IMAGE_NAME_SIZE];
+    snprintf(fn, sizeof(fn), "%s/%s/name", devices_path, dent->d_name);
+    r = read_file(fn, name, sizeof(name));
+    if (r < 0) {
+      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      continue;
+    }
+
+    char pool[4096];
+    snprintf(fn, sizeof(fn), "%s/%s/pool", devices_path, dent->d_name);
+    r = read_file(fn, pool, sizeof(pool));
+    if (r < 0) {
+      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      continue;
+    }
+
+    char snap[4096];
+    snprintf(fn, sizeof(fn), "%s/%s/current_snap", devices_path, dent->d_name);
+    r = read_file(fn, snap, sizeof(snap));
+    if (r < 0) {
+      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      continue;
+    }
+
+    cout << dev << "\t" << pool << "\t" << name << "\t" << snap << std::endl;
+
+  } while ((dent = readdir(device_dir)));
+
+  return 0;
+}
+
 static int get_rbd_seq(int major_num, string &seq)
 {
   int r;
@@ -679,6 +740,7 @@ enum {
   OPT_WATCH,
   OPT_MAP,
   OPT_UNMAP,
+  OPT_SHOWMAPPED,
 };
 
 static int get_cmd(const char *cmd, bool *snapcmd)
@@ -716,6 +778,8 @@ static int get_cmd(const char *cmd, bool *snapcmd)
       return OPT_WATCH;
     if (strcmp(cmd, "map") == 0)
       return OPT_MAP;
+    if (strcmp(cmd, "showmapped") == 0)
+      return OPT_SHOWMAPPED;
     if (strcmp(cmd, "unmap") == 0)
       return OPT_UNMAP;
   } else {
@@ -851,7 +915,8 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_IMPORT && !destname)
     destname = imgname_from_path(path);
 
-  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && !imgname) {
+  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
+      !imgname) {
     cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
@@ -1088,6 +1153,14 @@ int main(int argc, const char **argv)
     r = do_kernel_rm(devpath);
     if (r < 0) {
       cerr << "remove failed: " << strerror(-r) << std::endl;
+      exit(1);
+    }
+    break;
+
+  case OPT_SHOWMAPPED:
+    r = do_kernel_showmapped();
+    if (r < 0) {
+      cerr << "showmapped failed: " << strerror(-r) << std::endl;
       exit(1);
     }
     break;
