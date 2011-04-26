@@ -101,7 +101,7 @@ decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, bufferptr& secret, const bufferlist& in, bufferlist& out) {
+static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret, const bufferlist& in, bufferlist& out) {
   const CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
 
   // sample source said this has to be at least size of input + 8,
