@@ -179,15 +179,16 @@ static void build_filename(char *filename, int len, const char *old_filename, in
     return;
 
   hash_filename(old_filename, hash, sizeof(hash));
-  sprintf(filename + FILENAME_PREFIX_LEN, "_" FILENAME_COOKIE "_%s_%d", hash, i);
+  sprintf(filename + FILENAME_PREFIX_LEN, "_%s_%d_" FILENAME_COOKIE, hash, i);
 }
 
 /* is this a candidate? */
 static int lfn_is_hashed_filename(const char *filename)
 {
-  if (strlen(filename) < FILENAME_SHORT_LEN)
+  int len = strlen(filename);
+  if (len < FILENAME_SHORT_LEN)
     return 0;
-  return (strncmp(filename + FILENAME_PREFIX_LEN, "_" FILENAME_COOKIE "_", sizeof(FILENAME_COOKIE) -1 + 2) == 0);
+  return (strcmp(filename + len - (sizeof(FILENAME_COOKIE) - 1), FILENAME_COOKIE) == 0);
 }
 
 static void lfn_translate(const char *path, const char *name, char *new_name, int len)
