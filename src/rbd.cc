@@ -599,7 +599,7 @@ static int do_kernel_showmapped()
     return r;
   }
 
-  cout << "device\t\tpool\timage\tsnap" << std::endl;
+  cout << "id\tpool\timage\tsnap\tdevice" << std::endl;
 
   do {
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
@@ -634,7 +634,7 @@ static int do_kernel_showmapped()
       continue;
     }
 
-    cout << dev << "\t" << pool << "\t" << name << "\t" << snap << std::endl;
+    cout << dent->d_name << "\t" << pool << "\t" << name << "\t" << snap << "\t" << dev << std::endl;
 
   } while ((dent = readdir(device_dir)));
 
