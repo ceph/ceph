@@ -106,10 +106,9 @@ public:
   struct ObjectState {
     object_info_t oi;
     bool exists;
-    SnapSetContext *ssc;  // may be null
 
-    ObjectState(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-      : oi(oi_), exists(exists_), ssc(ssc_) {}
+    ObjectState(const object_info_t &oi_, bool exists_)
+      : oi(oi_), exists(exists_) {}
   };
 
 
@@ -265,6 +264,8 @@ public:
     bool registered; 
     ObjectState obs;
 
+    SnapSetContext *ssc;  // may be null
+
     Mutex lock;
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
@@ -279,7 +280,7 @@ public:
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}*/
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-      : ref(0), registered(false), obs(oi_, exists_, ssc_),
+      : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
@@ -333,7 +334,16 @@ public:
     bufferlist outdata;
 
     ObjectState *obs;
+    ObjectState new_obs;  // resulting ObjectState
+    bool modify;          // (force) modification (even if op_t is empty)
+    bool user_modify;     // user-visible modification
 
+    // side effects
+    bool watch_connect, watch_disconnect;
+    watch_info_t watch_info;
+    list<notify_info_t> notifies;
+    list<uint64_t> notify_acks;
+    
     uint64_t bytes_written;
 
     utime_t mtime;
@@ -356,9 +366,11 @@ public:
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),
+      modify(false), user_modify(false),
+      watch_connect(false), watch_disconnect(false),
       bytes_written(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { }
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
@@ -380,7 +392,6 @@ public:
     ObjectContext *obc;
 
     tid_t rep_tid;
-    bool noop;
 
     bool applying, applied, aborted;
 
@@ -397,13 +408,12 @@ public:
 
     list<ObjectStore::Transaction*> tls;
     
-    RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
+    RepGather(OpContext *c, ObjectContext *pi, tid_t rt, 
 	      eversion_t lc) :
       queue_item(this),
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      noop(noop_),
       applying(false), applied(false), aborted(false),
       sent_ack(false),
       //sent_nvram(false),
@@ -443,7 +453,7 @@ protected:
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, utime_t now,
 		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
-  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
+  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
@@ -471,8 +481,8 @@ protected:
       obc->registered = true;
       object_contexts[obc->obs.oi.soid] = obc;
     }
-    if (obc->obs.ssc)
-      register_snapset_context(obc->obs.ssc);
+    if (obc->ssc)
+      register_snapset_context(obc->ssc);
   }
   void put_object_context(ObjectContext *obc);
   int find_object_context(const object_t& oid, const object_locator_t& oloc,
@@ -643,11 +653,6 @@ protected:
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
-  int prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
-		   string& cname, string& mname,
-		   bufferlist::iterator& bp,
-		   ClassHandler::ClassMethod **pmethod);
-
   bool pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
@@ -664,6 +669,7 @@ public:
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
+  void do_osd_op_effects(OpContext *ctx);
 private:
   void _delete_head(OpContext *ctx);
   void _rollback_to(OpContext *ctx, ceph_osd_op& op);
