@@ -314,9 +314,7 @@ class Ioctx(object):
 
     def close(self):
         self.require_ioctx_open()
-        ret = self.librados.rados_ioctx_destroy(self.io)
-        if ret < 0:
-            raise make_ex(ret, "error destroying ioctx '%s'" % self.name)
+        self.librados.rados_ioctx_destroy(self.io)
         self.state = "closed"
 
     def write(self, key, data, offset = 0):
