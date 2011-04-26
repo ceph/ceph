@@ -288,11 +288,6 @@ $COSDDEBUG
 $DAEMONOPTS
 $CMONDEBUG
 
-[group everyone]
-	addr = 0.0.0.0/0
-
-[mount /]
-	allow = %everyone
 EOF
 		fi
 
