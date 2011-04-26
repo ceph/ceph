@@ -108,7 +108,7 @@ void Filer::_probe(Probe *probe)
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
     probe->ops[p->oid] = objecter->stat(p->oid, p->oloc, probe->snapid, &c->size, &c->mtime, 
-					probe->flags | CEPH_OSD_FLAG_WRITE, c);
+					probe->flags | CEPH_OSD_FLAG_RWORDERED, c);
   }
 }
 

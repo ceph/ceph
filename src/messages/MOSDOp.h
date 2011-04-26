@@ -349,6 +349,16 @@ struct ceph_osd_request_head {
     if (is_retry_attempt()) out << " RETRY";
     if (get_snap_seq())
       out << " snapc " << get_snap_seq() << "=" << snaps;
+    if (get_flags() & CEPH_OSD_FLAG_ORDERSNAP)
+      out << " ordersnap";
+    if (get_flags() & CEPH_OSD_FLAG_BALANCE_READS)
+      out << " balance_reads";
+    if (get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)
+      out << " parallelexec";
+    if (get_flags() & CEPH_OSD_FLAG_LOCALIZE_READS)
+      out << " localize_reads";
+    if (get_flags() & CEPH_OSD_FLAG_RWORDERED)
+      out << " rwordered";
     out << ")";
   }
 };
