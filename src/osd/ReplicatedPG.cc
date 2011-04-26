@@ -2212,8 +2212,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // there was a modification.
 
   // valid snap context?
-  if (!ctx->snapc.is_valid())
+  if (!ctx->snapc.is_valid()) {
+    dout(10) << " invalid snapc " << ctx->snapc << dendl;
     return -EINVAL;
+  }
 
   make_writeable(ctx);
 
