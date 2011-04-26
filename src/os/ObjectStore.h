@@ -158,6 +158,19 @@ public:
     bufferlist::iterator p;
 
   public:
+
+    void append(Transaction& other) {
+      ops += other.ops;
+      assert(pad_unused_bytes == 0);
+      assert(other.pad_unused_bytes == 0);
+      if (other.largest_data_len > largest_data_len) {
+	largest_data_len = other.largest_data_len;
+	largest_data_off = other.largest_data_off;
+	largest_data_off_in_tbl = tbl.length() + other.largest_data_off_in_tbl;
+      }
+      tbl.append(other.tbl);
+    }
+
     uint64_t get_encoded_bytes() {
       return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
     }
