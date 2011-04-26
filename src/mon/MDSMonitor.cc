@@ -1067,11 +1067,12 @@ void MDSMonitor::tick()
 	   i != pending_mdsmap.mds_info.end();
 	   ++i) {
 	if (i->second.rank >= 0 && pending_mdsmap.is_followable(i->second.rank)) {
-	  if (info.standby_for_name.length() &&
-	      info.standby_for_name != i->second.name)
+	  if ((info.standby_for_name.length() && info.standby_for_name != i->second.name) ||
+	      info.standby_for_rank >= 0)
 	    continue;   // we're supposed to follow someone else
 
-	  if (try_standby_replay(info, i->second)) {
+	  if (info.standby_for_rank == MDSMap::MDS_STANDBY_ANY &&
+	      try_standby_replay(info, i->second)) {
 	    do_propose = true;
 	    break;
 	  }
