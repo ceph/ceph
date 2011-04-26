@@ -83,9 +83,9 @@ void MDBalancer::tick()
   }
 
   // balance?
-  if (last_heartbeat == utime_t()) last_heartbeat = now;
-  if (true &&
-      mds->get_nodeid() == 0 &&
+  if (last_heartbeat == utime_t())
+    last_heartbeat = now;
+  if (mds->get_nodeid() == 0 &&
       g_conf.mds_bal_interval > 0 &&
       (num_bal_times ||
        (g_conf.mds_bal_max_until >= 0 &&
@@ -172,6 +172,12 @@ mds_load_t MDBalancer::get_load(utime_t now)
 void MDBalancer::send_heartbeat()
 {
   utime_t now = g_clock.now();
+  
+  if (mds->mdsmap->is_degraded()) {
+    dout(10) << "send_heartbeat degraded" << dendl;
+    return;
+  }
+
   if (!mds->mdcache->is_open()) {
     dout(5) << "not open" << dendl;
     mds->mdcache->wait_for_open(new C_Bal_SendHeartbeat(mds));
@@ -213,7 +219,8 @@ void MDBalancer::send_heartbeat()
   set<int> up;
   mds->get_mds_map()->get_mds_set(up);
   for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
-    if (*p == mds->get_nodeid()) continue;
+    if (*p == mds->get_nodeid())
+      continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->messenger->send_message(hb,
@@ -224,12 +231,11 @@ void MDBalancer::send_heartbeat()
 /* This function DOES put the passed message before returning */
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
+  int who = m->get_source().num();
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
-  if (!mds->is_active()) {
-    m->put();
-    return;
-  }
+  if (!mds->is_active())
+    goto out;
 
   if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
@@ -237,7 +243,10 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     return;
   }
 
-  int who = m->get_source().num();
+  if (mds->mdsmap->is_degraded()) {
+    dout(10) << " degraded, ignoring" << dendl;
+    goto out;
+  }
 
   if (who == 0) {
     dout(20) << " from mds0, new epoch" << dendl;
@@ -252,14 +261,17 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
 
-  unsigned cluster_size = mds->get_mds_map()->get_num_mds();
-  if (mds_load.size() == cluster_size) {
-    // let's go!
-    //export_empties();  // no!
-    prep_rebalance(m->get_beat());
+  {
+    unsigned cluster_size = mds->get_mds_map()->get_num_mds();
+    if (mds_load.size() == cluster_size) {
+      // let's go!
+      //export_empties();  // no!
+      prep_rebalance(m->get_beat());
+    }
   }
 
   // done
+ out:
   m->put();
 }
 

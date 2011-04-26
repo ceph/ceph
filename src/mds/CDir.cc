@@ -710,6 +710,9 @@ void CDir::steal_dentry(CDentry *dn)
     }
   }
 
+  dn->dir->nested_auth_pins -= dn->auth_pins + dn->nested_auth_pins;
+  dn->dir->dir_auth_pins -= dn->auth_pins;
+
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
   dir_auth_pins += dn->auth_pins;
   nested_anchors += dn->nested_anchors;
@@ -729,6 +732,10 @@ void CDir::purge_stolen(list<Context*>& waiters, bool replay)
       unfreeze_dir();
     }
   }
+
+  assert(nested_auth_pins == 0);
+  assert(dir_auth_pins == 0);
+  assert(auth_pins == 0);
 
   num_head_items = num_head_null = 0;
   num_snap_items = num_snap_null = 0;
