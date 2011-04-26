@@ -26,6 +26,7 @@ import errno
 import hashlib
 import mimetypes
 import os
+import rados
 import re
 import shutil
 import string
@@ -35,10 +36,17 @@ import traceback
 
 global opts
 
+###### Constants classes #######
+RGW_META_BUCKET_NAME = ".rgw"
+
+###### Exception classes #######
 class LocalFileIsAcl(Exception):
     pass
 
 class InvalidLocalName(Exception):
+    pass
+
+class NonexistentStore(Exception):
     pass
 
 ###### Helper functions #######
@@ -82,7 +90,7 @@ def etag_to_md5(etag):
 def getenv(a, b):
     if os.environ.has_key(a):
         return os.environ[a]
-    elif os.environ.has_key(b):
+    elif b and os.environ.has_key(b):
         return os.environ[b]
     else:
         return None
@@ -136,10 +144,6 @@ def get_local_acl_file_name(local_name):
     return os.path.dirname(local_name) + "/." + \
         os.path.basename(local_name) + "$acl"
 
-###### NonexistentStore #######
-class NonexistentStore(Exception):
-    pass
-
 ###### Object #######
 class Object(object):
     def __init__(self, name, md5, size):
@@ -174,6 +178,9 @@ class Store(object):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
             return S3Store(s3_url, create, akey, skey)
+        rados_url = strip_prefix("rados:", url)
+        if (rados_url):
+            return RadosStore(rados_url, create, akey, skey)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -404,6 +411,167 @@ class FileStore(Store):
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
 
+###### Rados store #######
+class RadosStoreLocalCopy(object):
+    def __init__(self, path, acl_path):
+        self.path = path
+        self.acl_path = acl_path
+    def __del__(self):
+        self.remove()
+    def remove(self):
+        if (self.path):
+            os.unlink(self.path)
+            self.path = None
+        if (self.acl_path):
+            os.unlink(self.acl_path)
+            self.acl_path = None
+
+class RadosStoreIterator(object):
+    """RadosStore iterator"""
+    def __init__(self, it, rados_store):
+        self.it = it # has type rados.ObjectIterator
+        self.rados_store = rados_store
+        self.prefix = self.rados_store.prefix
+        self.prefix_len = len(self.rados_store.prefix)
+    def __iter__(self):
+        return self
+    def next(self):
+        rados_obj = None
+        while True:
+            # This will raise StopIteration when there are no more objects to
+            # iterate on
+            rados_obj = self.it.next()
+            # do the prefixes match?
+            if rados_obj.key[:self.prefix_len] == self.prefix:
+                break
+        ret = self.rados_store.obsync_obj_from_rgw(rados_obj.key)
+        if (ret == None):
+            raise Exception("internal iterator error")
+        return ret
+
+class RadosStore(Store):
+    def __init__(self, url, create, akey, skey):
+        # Parse the rados url
+        conf_end = string.find(url, ":")
+        if (conf_end == -1):
+            raise Exception("RadosStore URLs are of the form \
+rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
+        self.conf_file_path = url[0:conf_end]
+        bucket_end = url.find(":", conf_end+1)
+        if (bucket_end == -1):
+            self.rgw_bucket_name = url[conf_end+1:]
+            self.key_prefix = ""
+        else:
+            self.rgw_bucket_name = url[conf_end+1:bucket_end]
+            self.key_prefix = url[bucket_end+1:]
+        if (self.rgw_bucket_name == ""):
+            raise Exception("RadosStore URLs are of the form \
+rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
+        if (opts.more_verbose):
+            print "self.conf_file_path = '" + self.conf_file_path + "', ",
+            print "self.rgw_bucket_name = '" + self.rgw_bucket_name + "' ",
+            print "self.key_prefix = '" + self.key_prefix + "'"
+        acl_hack = getenv("ACL_HACK", None)
+        if (acl_hack == None):
+            raise Exception("RadosStore error: You must specify an environment " +
+                "variable called ACL_HACK containing the name of a file. This " +
+                "file contains a serialized RGW ACL that you want " +
+                "to insert into the user.rgw.acl extended attribute of all " +
+                "the objects you create. This is a hack and yes, it will go " +
+                "away soon.")
+        acl_hack_f = open(acl_hack, "r")
+        try:
+            self.acl_hack = acl_hack_f.read()
+        finally:
+            acl_hack_f.close()
+        self.rados = rados.Rados()
+        self.rados.conf_read_file(self.conf_file_path)
+        self.rados.connect()
+        if (not self.rados.pool_exists(self.rgw_bucket_name)):
+            if (create):
+                self.create_rgw_bucket(self.rgw_bucket_name)
+            else:
+                raise NonexistentStore()
+        self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
+        Store.__init__(self, "rados:" + url)
+    def create_rgw_bucket(self, rgw_bucket_name):
+        """ Create an rgw bucket named 'rgw_bucket_name' """
+        self.rados.create_pool(self.rgw_bucket_name)
+        meta_ctx = None
+        try:
+            meta_ctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
+            meta_ctx.write(rgw_bucket_name, "", 0)
+            print "meta_ctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
+                    "user.rgw.acl, self.acl_hack=" + self.acl_hack + ")"
+            meta_ctx.set_xattr(rgw_bucket_name, "user.rgw.acl", self.acl_hack)
+        finally:
+            if (meta_ctx):
+               meta_ctx.close()
+    def obsync_obj_from_rgw(self, key):
+        """Create an obsync object from a Rados object"""
+        try:
+            size, tm = self.ioctx.stat(key)
+        except rados.ObjectNotFound:
+            return None
+        md5 = self.ioctx.get_xattr(key, "user.rgw.etag")
+        return Object(key, md5, size)
+    def __str__(self):
+        return "rados:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
+    def make_local_copy(self, obj):
+        temp_file = None
+        temp_file_f = None
+        try:
+            # read the object from rados in chunks
+            temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
+            temp_file_f = open(temp_file.name, 'w')
+            while True:
+                buf = self.ioctx.read(obj.name, off, 8192)
+                if (len(buf) == 0):
+                    break
+                temp_file_f.write(buf)
+                if (len(buf) < 8192):
+                    break
+                off += 8192
+            temp_file_f.close()
+            # TODO: implement ACLs
+        except:
+            if (temp_file_f):
+                temp_file_f.close()
+            if (temp_file):
+                os.unlink(temp_file.name)
+            raise
+        return RadosStoreLocalCopy(temp_file.name, None)
+    def all_objects(self):
+        it = self.bucket.list_objects()
+        return RadosStoreIterator(it, self.key_prefix)
+    def locate_object(self, obj):
+        return self.obsync_obj_from_rgw(obj.name)
+    def upload(self, local_copy, obj):
+        if (opts.more_verbose):
+            print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+                "obj='" + obj.name + "'"
+        if (opts.dry_run):
+            return
+        local_copy_f = open(local_copy.path, 'r')
+        off = 0
+        while True:
+            buf = local_copy_f.read(8192)
+            if ((len(buf) == 0) and (off != 0)):
+                break
+            self.ioctx.write(obj.name, buf, off)
+            if (len(buf) < 8192):
+                break
+            off += 8192
+        self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
+        self.ioctx.set_xattr(obj.name, "user.rgw.acl", self.acl_hack)
+        self.ioctx.set_xattr(obj.name, "user.rgw.content_type",
+                            "application/octet-stream")
+    def remove(self, obj):
+        if (opts.dry_run):
+            return
+        self.ioctx.remove_object(obj.name)
+        if (opts.more_verbose):
+            print "RadosStore: removed %s" % obj.name
 ###### Functions #######
 def delete_unreferenced(src, dst):
     """ delete everything from dst that is not referenced in src """
@@ -415,8 +583,8 @@ def delete_unreferenced(src, dst):
             dst.remove(dobj)
 
 USAGE = """
-obsync synchronizes objects. The source and destination can both be local or
-both remote.
+obsync synchronizes S3, Rados, and local objects. The source and destination
+can both be local or both remote.
 
 Examples:
 # copy contents of mybucket to disk
