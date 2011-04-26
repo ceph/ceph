@@ -2561,6 +2561,12 @@ void MDCache::handle_resolve(MMDSResolve *m)
   dout(7) << "handle_resolve from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
+  if (mds->get_state() < MDSMap::STATE_RESOLVE) {
+    // wait until we reach the resolve stage!
+    m->put();
+    return;
+  }
+
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
     MMDSResolveAck *ack = new MMDSResolveAck;
