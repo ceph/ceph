@@ -1295,88 +1295,34 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  timeout = 0;
 	}
 	if (!timeout || timeout > (uint32_t)g_conf.osd_max_notify_timeout)
-		timeout = g_conf.osd_max_notify_timeout;
-	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
-        ObjectContext *obc = ctx->obc;
-	dout(0) << "ctx->obc=" << (void *)obc << dendl;
+	  timeout = g_conf.osd_max_notify_timeout;
 
-	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
-	// give the session reference to notif.
-	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, op.watch.cookie);
-	notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-
-	osd->watch_lock.Lock();
-	osd->watch->add_notification(notif);
-
-	// connected
-	for (map<entity_name_t, OSD::Session*>::iterator p = obc->watchers.begin();
-	     p != obc->watchers.end();
-	     p++) {
-	  entity_name_t name = p->first;
-	  OSD::Session *s = p->second;
-	  watch_info_t& w = obc->obs.oi.watchers[p->first];
-
-	  notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
-	  s->add_notif(notif, name);
-
-	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
-	  osd->client_messenger->send_message(notify_msg, s->con);
-	}
-
-	// unconnected
-	utime_t now = g_clock.now();
-	for (map<entity_name_t, utime_t>::iterator p = obc->unconnected_watchers.begin();
-	     p != obc->unconnected_watchers.end();
-	     p++) {
-	  entity_name_t name = p->first;
-          utime_t expire = p->second;
-          if (now < expire)
-	    notif->add_watcher(name, Watch::WATCHER_PENDING); /* FIXME: should we remove expired unconnected? probably yes */
-	}
-
-	notif->reply = new MWatchNotify(op.watch.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE);
-	if (notif->watchers.empty()) {
-          do_complete_notify(notif, obc);
-	} else {
-	  obc->notifs[notif] = true;
-          obc->ref++;
-          notif->obc = obc;
-	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
-	  osd->watch_timer.add_event_after(timeout, notif->timeout);
-	}
-	osd->watch_lock.Unlock();
+	notify_info_t n;
+	n.timeout = timeout;
+	n.cookie = op.watch.cookie;
+	ctx->notifies.push_back(n);
       }
       break;
 
     case CEPH_OSD_OP_NOTIFY_ACK:
       {
-        ObjectContext *obc = ctx->obc;
-	entity_name_t source = ctx->op->get_source();
-	dout(0) << "CEPH_OSD_OP_NOTIFY_ACK" << dendl;
-	dout(0) << "ctx->obc=" << (void *)obc << dendl;
-
 	osd->watch_lock.Lock();
-        map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(source);
-	if (oi_iter == oi.watchers.end()) {
-	  dout(0) << "couldn't find watcher" << dendl;
-	  break;
-	}
-
+	entity_name_t source = ctx->op->get_source();
+	map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(source);
 	Watch::Notification *notif = osd->watch->get_notif(op.watch.cookie);
-	if (!notif) {
-          osd->watch_lock.Unlock();
+	if (oi_iter != oi.watchers.end() && notif) {
+	  ctx->notify_acks.push_back(op.watch.cookie);
+	} else {
+	  if (!notif)
+	    dout(10) << " no pending notify for cookie " << op.watch.cookie << dendl;
+	  else
+	    dout(10) << " not registered as a watcher" << dendl;
 	  result = -EINVAL;
-	  break;
 	}
-
-	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
-        session->del_notif(notif);
-	session->put();
-
-        osd->ack_notification(source, notif, obc);
 	osd->watch_lock.Unlock();
       }
       break;
+
 
       // --- WRITES ---
 
@@ -1557,55 +1503,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	dout(0) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
 		<< " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(0) << "watch: oi.user_version=" << oi.user_version.version << dendl;
-	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
 
-	osd->watch_lock.Lock();
-	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
 	watch_info_t w = {cookie, 30};  // FIXME: where does the timeout come from?
 	if (do_watch) {
 	  if (oi.watchers.count(entity) && oi.watchers[entity] == w) {
-	    dout(10) << " found existing watch " << w << " by " << entity << " session " << session << dendl;
+	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  } else {
-	    dout(10) << " registered new watch " << w << " by " << entity << " session " << session << dendl;
+	    dout(10) << " registered new watch " << w << " by " << entity << dendl;
 	    oi.watchers[entity] = w;
 	    t.nop();  // make sure update the object_info on disk!
 	  }
-
-	  if (iter == obc->watchers.end()) {
-	    dout(10) << " connected to watch " << w << " by " << entity << " session " << session << dendl;
-	    obc->watchers[entity] = session;
-	    session->get();
-	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-	    obc->ref++;
-	  } else if (iter->second == session) {
-	    // already there
-	    dout(10) << " already connected to watch " << w << " by " << entity
-		     << " session " << session << dendl;
-	  } else {
-	    // weird: same entity, different session.
-	    dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
-		     << " session " << session << " (was " << iter->second << ")" << dendl;
-	    iter->second->watches.erase(obc);
-	    iter->second->put();
-	    iter->second = session;
-	    session->get();
-	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-	  }
-          map<entity_name_t, utime_t>::iterator un_iter = obc->unconnected_watchers.find(entity);
-          if (un_iter != obc->unconnected_watchers.end())
-            obc->unconnected_watchers.erase(un_iter);
-
-	  map<Watch::Notification *, bool>::iterator niter;
-          for (niter = obc->notifs.begin(); niter != obc->notifs.end(); ++niter) {
-            Watch::Notification *notif = niter->first;
-            map<entity_name_t, Watch::WatcherState>::iterator iter = notif->watchers.find(entity);
-            if (iter != notif->watchers.end()) {
-            /* there is a pending notification for this watcher, we should resend it anyway
-               even if we already sent it as it might not have received it */
-              MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
-              osd->client_messenger->send_message(notify_msg, session->con);
-            }
-          }
+	  ctx->watch_connect = true;
+	  ctx->watch_info = w;
 	  assert(obc->registered);
         } else {
 	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
@@ -1614,28 +1523,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
             oi.watchers.erase(entity);
 	    t.nop();  // update oi on disk
 
-	    if (iter != obc->watchers.end()) {
-	      dout(10) << " disconnected session " << iter->second << dendl;
-	      obc->watchers.erase(iter);
-	      session->watches.erase(obc);
-	      put_object_context(obc);
-	      iter->second->put();
-	    } else {
-	      assert(obc->unconnected_watchers.count(entity));
-	      obc->unconnected_watchers.erase(entity);
-	    }
+	    ctx->watch_disconnect = true;
 
 	    // FIXME: trigger notifies?
 
 	  } else {
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
-	    assert(iter == obc->watchers.end());
 	  }
         }
 	dump_watchers(obc);
-	osd->watch_lock.Unlock();
-
-	session->put();
       }
       break;
 
@@ -2190,6 +2086,143 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& stat
   }
 }
 
+void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
+{
+  if (ctx->watch_connect || ctx->watch_disconnect ||
+      !ctx->notifies.empty() || !ctx->notify_acks.empty()) {
+    OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+    ObjectContext *obc = ctx->obc;
+    object_info_t& oi = obc->obs.oi;
+    sobject_t& soid = oi.soid;
+    entity_name_t entity = ctx->reqid.name;
+
+    dout(10) << "do_osd_op_effects applying watch/notify effects on session " << session << dendl;
+
+    osd->watch_lock.Lock();
+    
+    map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
+    if (ctx->watch_connect) {
+      watch_info_t w = ctx->watch_info;
+
+      if (iter == obc->watchers.end()) {
+	dout(10) << " connected to " << w << " by " << entity << " session " << session << dendl;
+	obc->watchers[entity] = session;
+	session->get();
+	session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+	obc->ref++;
+      } else if (iter->second == session) {
+	// already there
+	dout(10) << " already connected to " << w << " by " << entity
+		 << " session " << session << dendl;
+      } else {
+	// weird: same entity, different session.
+	dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
+		 << " session " << session << " (was " << iter->second << ")" << dendl;
+	iter->second->watches.erase(obc);
+	iter->second->put();
+	iter->second = session;
+	session->get();
+	session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+      }
+      map<entity_name_t, utime_t>::iterator un_iter = obc->unconnected_watchers.find(entity);
+      if (un_iter != obc->unconnected_watchers.end())
+	obc->unconnected_watchers.erase(un_iter);
+      
+      map<Watch::Notification *, bool>::iterator niter;
+      for (niter = obc->notifs.begin(); niter != obc->notifs.end(); ++niter) {
+	Watch::Notification *notif = niter->first;
+	map<entity_name_t, Watch::WatcherState>::iterator iter = notif->watchers.find(entity);
+	if (iter != notif->watchers.end()) {
+	  /* there is a pending notification for this watcher, we should resend it anyway
+	     even if we already sent it as it might not have received it */
+	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+	  osd->client_messenger->send_message(notify_msg, session->con);
+	}
+      }
+    }
+    
+    if (ctx->watch_disconnect) {
+      if (iter != obc->watchers.end()) {
+	dout(10) << " disconnected session " << iter->second << dendl;
+	obc->watchers.erase(iter);
+	session->watches.erase(obc);
+	put_object_context(obc);
+	iter->second->put();
+      } else {
+	assert(obc->unconnected_watchers.count(entity));
+	obc->unconnected_watchers.erase(entity);
+      }
+    }
+
+    for (list<notify_info_t>::iterator p = ctx->notifies.begin();
+	 p != ctx->notifies.end();
+	 ++p) {
+
+      dout(10) << " " << *p << dendl;
+
+      Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, p->cookie);
+      session->get();  // notif got a reference
+      notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+
+      osd->watch->add_notification(notif);
+
+      // connected
+      for (map<entity_name_t, OSD::Session*>::iterator q = obc->watchers.begin();
+	   q != obc->watchers.end();
+	   q++) {
+	entity_name_t name = q->first;
+	OSD::Session *s = q->second;
+	watch_info_t& w = obc->obs.oi.watchers[q->first];
+
+	notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
+	s->add_notif(notif, name);
+
+	MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+	osd->client_messenger->send_message(notify_msg, s->con);
+      }
+
+      // unconnected
+      utime_t now = g_clock.now();
+      for (map<entity_name_t, utime_t>::iterator q = obc->unconnected_watchers.begin();
+	   q != obc->unconnected_watchers.end();
+	   q++) {
+	entity_name_t name = q->first;
+	utime_t expire = q->second;
+	if (now < expire)
+	  notif->add_watcher(name, Watch::WATCHER_PENDING); /* FIXME: should we remove expired unconnected? probably yes */
+      }
+
+      notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE);
+      if (notif->watchers.empty()) {
+	do_complete_notify(notif, obc);
+      } else {
+	obc->notifs[notif] = true;
+	obc->ref++;
+	notif->obc = obc;
+	notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
+	osd->watch_timer.add_event_after(p->timeout, notif->timeout);
+      }
+    }
+
+    for (list<uint64_t>::iterator p = ctx->notify_acks.begin(); p != ctx->notify_acks.end(); ++p) {
+      uint64_t cookie = *p;
+      
+      dout(10) << " notify_ack " << cookie << dendl;
+      map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
+      assert(oi_iter != oi.watchers.end());
+
+      Watch::Notification *notif = osd->watch->get_notif(cookie);
+      assert(notif);
+
+      session->del_notif(notif);
+      osd->ack_notification(entity, notif, obc);
+    }
+
+    osd->watch_lock.Unlock();
+    session->put();
+  }
+}
+
 
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
@@ -2205,11 +2238,19 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
-  if (result < 0 ||
-      (ctx->op_t.empty() && !ctx->modify))
-    return result;  // error, or read op.
+  if (result < 0)
+    return result;
 
-  // there was a modification.
+  // finish side-effects
+  if (result == 0)
+    do_osd_op_effects(ctx);
+
+  // read-op?  done?
+  if (ctx->op_t.empty() && !ctx->modify)
+    return result;
+
+
+  // there was a modification!
 
   // valid snap context?
   if (!ctx->snapc.is_valid()) {

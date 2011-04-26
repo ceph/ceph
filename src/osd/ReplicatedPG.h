@@ -338,6 +338,12 @@ public:
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
 
+    // side effects
+    bool watch_connect, watch_disconnect;
+    watch_info_t watch_info;
+    list<notify_info_t> notifies;
+    list<uint64_t> notify_acks;
+    
     uint64_t bytes_written;
 
     utime_t mtime;
@@ -362,6 +368,7 @@ public:
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
+      watch_connect(false), watch_disconnect(false),
       bytes_written(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { }
     ~OpContext() {
@@ -662,6 +669,7 @@ public:
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
+  void do_osd_op_effects(OpContext *ctx);
 private:
   void _delete_head(OpContext *ctx);
   void _rollback_to(OpContext *ctx, ceph_osd_op& op);

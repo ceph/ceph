@@ -1312,6 +1312,17 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
   return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s)";
 }
 
+struct notify_info_t {
+  uint64_t cookie;
+  uint32_t timeout;
+};
+
+static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
+  return out << "notify(cookie " << n.cookie << " " << n.timeout << "s)";
+}
+
+
+
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;
