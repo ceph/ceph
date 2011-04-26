@@ -143,3 +143,87 @@ void Dumper::dump(const char *dump_file)
 
   shutdown();
 }
+
+void Dumper::undump(const char *dump_file)
+{
+  cout << "undump " << dump_file << std::endl;
+  
+  int fd = ::open(dump_file, O_RDONLY);
+  if (fd < 0) {
+    derr << "couldn't open " << dump_file << ": " << cpp_strerror(errno) << dendl;
+    return;
+  }
+
+  // Ceph mds0 journal dump
+  //  start offset 232401996 (0xdda2c4c)
+  //        length 1097504 (0x10bf20)
+
+  char buf[200];
+  int r = safe_read(fd, buf, sizeof(buf));
+  if (r < 0)
+    return;
+
+  long long unsigned start, len;
+  sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
+  sscanf(strstr(buf, "length"), "length %llu", &len);
+
+  cout << "start " << start << " len " << len << std::endl;
+  
+  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
+  unsigned pg_pool = CEPH_METADATA_RULE;
+
+  Journaler::Header h;
+  h.trimmed_pos = start;
+  h.expire_pos = start;
+  h.write_pos = start+len;
+  h.magic = CEPH_FS_ONDISK_MAGIC;
+
+  h.layout = g_default_file_layout;
+  h.layout.fl_pg_preferred = -1;
+  h.layout.fl_pg_pool = pg_pool;
+  
+  bufferlist hbl;
+  ::encode(h, hbl);
+
+  object_t oid = file_object_t(ino, 0);
+  object_locator_t oloc(pg_pool);
+  SnapContext snapc;
+
+  bool done = false;
+  Cond cond;
+  
+  cout << "writing header " << oid << std::endl;
+  objecter->write_full(oid, oloc, snapc, hbl, g_clock.now(), 0, 
+		       NULL, 
+		       new C_SafeCond(&lock, &cond, &done));
+
+  lock.Lock();
+  while (!done)
+    cond.Wait(lock);
+  lock.Unlock();
+  
+  // read
+  Filer filer(objecter);
+  uint64_t pos = start;
+  uint64_t left = len;
+  while (left > 0) {
+    bufferlist j;
+    lseek64(fd, pos, SEEK_SET);
+    uint64_t l = MIN(left, 1024*1024);
+    j.read_fd(fd, l);
+    cout << " writing " << pos << "~" << l << std::endl;
+    filer.write(ino, &h.layout, snapc, pos, l, j, g_clock.now(), 0, NULL, new C_SafeCond(&lock, &cond, &done));
+
+    lock.Lock();
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+    
+    pos += l;
+    left -= l;
+  }
+
+  cout << "done." << std::endl;
+}
+
+

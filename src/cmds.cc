@@ -71,13 +71,18 @@ int main(int argc, const char **argv)
   // mds specific args
   int shadow = 0;
   int dump_journal = -1;
+  int undump_journal = -1;
   const char *dump_file = NULL;
   int reset_journal = -1;
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("dump-journal", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&dump_journal, OPT_INT);
       CEPH_ARGPARSE_SET_ARG_VAL(&dump_file, OPT_STR);
-      dout(0) << "dumping journal for mds" << dump_journal << " to " << dump_file << dendl;
+      cout << "dumping journal for mds" << dump_journal << " to " << dump_file << std::endl;
+    } else if (CEPH_ARGPARSE_EQ("undump-journal", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&undump_journal, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&dump_file, OPT_STR);
+      cout << "undumping journal for mds" << dump_journal << " to " << dump_file << std::endl;
     } else if (CEPH_ARGPARSE_EQ("reset-journal", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&reset_journal, OPT_INT);
     } else if (CEPH_ARGPARSE_EQ("journal-check", '\0')) {
@@ -124,6 +129,11 @@ int main(int argc, const char **argv)
     Dumper *journal_dumper = new Dumper(messenger, &mc);
     journal_dumper->init(dump_journal);
     journal_dumper->dump(dump_file);
+    mc.shutdown();
+  } else if (undump_journal >= 0) {
+    Dumper *journal_dumper = new Dumper(messenger, &mc);
+    journal_dumper->init(undump_journal);
+    journal_dumper->undump(dump_file);
     mc.shutdown();
   } else if (reset_journal >= 0) {
     Resetter *jr = new Resetter(messenger, &mc);
