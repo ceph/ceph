@@ -225,6 +225,10 @@ if os.path.exists("/%s/dir1c/a" % tdir):
     raise RuntimeError("error: running with --delete-after \
 failed to delete files from the destination!")
 
+# test with --no-preserve-acls
+obsync_check("file://%s/dir1" % tdir, "file://%s/dir1b2" % tdir,
+            ["--no-preserve-acls", "-c"])
+
 if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
     os.mkdir("%s/empty1" % tdir)
@@ -279,6 +283,12 @@ if (len(opts.buckets) >= 1):
     obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
     obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
     compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
+
+    # some more tests with --no-preserve-acls
+    obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
+                ["--no-preserve-acls"])
+    obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
+                ["--no-preserve-acls", "-c"])
 
 if (len(opts.buckets) >= 2):
     if (opts.verbose):
