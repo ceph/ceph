@@ -100,6 +100,8 @@ class MDSMonitor : public PaxosService {
   };
   map<uint64_t, beacon_info_t> last_beacon;
 
+  bool try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo);
+
 public:
   MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
 
