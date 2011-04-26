@@ -325,18 +325,14 @@ public:
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
-      if (((p->second.rank == -1 &&
-           (p->second.standby_for_rank == mds ||
-            p->second.standby_for_name == name)) ||
-	  (p->second.standby_for_rank == MDS_STANDBY_ANY)) &&
-	  (p->second.state == MDSMap::STATE_STANDBY ||
-	      p->second.state == MDSMap::STATE_STANDBY_REPLAY) &&
-	   !p->second.laggy()) {
-	if (p->second.standby_for_rank == MDS_STANDBY_ANY)
-	  generic_standby = p;
-	else
-	  return p->first;
-      }
+      if ((p->second.state != MDSMap::STATE_STANDBY && p->second.state != MDSMap::STATE_STANDBY_REPLAY) ||
+	  p->second.laggy() ||
+	  p->second.rank >= 0)
+	continue;
+      if (p->second.standby_for_rank == mds || (name.length() && p->second.standby_for_name == name))
+	return p->first;
+      if (p->second.standby_for_rank < 0 && p->second.standby_for_name.length() == 0)
+	generic_standby = p;
     }
     if (generic_standby != mds_info.end())
       return generic_standby->first;
@@ -346,12 +342,13 @@ public:
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
-      if (p->second.rank == -1 &&
-	  (p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
+      if (p->second.state != MDSMap::STATE_STANDBY ||
+	  p->second.laggy() ||
+	  p->second.rank >= 0)
+	continue;
+      if ((p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
 	   p->second.standby_for_rank == MDS_MATCHED_ACTIVE ||
-	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf.mon_force_standby_active)) &&
-	  p->second.state == MDSMap::STATE_STANDBY &&
-	  !p->second.laggy()) {
+	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf.mon_force_standby_active))) {
 	return p->first;
       }
     }

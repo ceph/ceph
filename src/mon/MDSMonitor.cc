@@ -349,7 +349,6 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.standby_for_rank = m->get_standby_for_rank();
     info.standby_for_name = m->get_standby_for_name();
 
-
     if (!info.standby_for_name.empty()) {
       if (mdsmap.find_by_name(info.standby_for_name))
         info.standby_for_rank =
@@ -872,7 +871,7 @@ void MDSMonitor::tick()
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    uint64_t newgid = pending_mdsmap.find_unused_for(mds, name);
+    uint64_t newgid = pending_mdsmap.find_replacement_for(mds, name);
     if (!newgid)
       break;
 
