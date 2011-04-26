@@ -479,7 +479,7 @@ CLEANFILES += \
 ##
 
 AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
--Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith \
+${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
 -fno-strict-aliasing
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
