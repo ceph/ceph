@@ -420,30 +420,37 @@ int buffer::list::read_file(const char *fn, bool silent)
   memset(&st, 0, sizeof(st));
   ::fstat(fd, &st);
 
-  int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
-  bufferptr bp = buffer::create_page_aligned(s);
-
-  ssize_t ret = safe_read(fd, (void*)bp.c_str(), st.st_size);
+  ssize_t ret = read_fd(fd, st.st_size);
   if (ret < 0) {
-      if (!silent) {
-	derr << "bufferlist::read_file(" << fn << "): read error:"
-	     << cpp_strerror(ret) << dendl;
-      }
-      TEMP_FAILURE_RETRY(::close(fd));
-      return ret;
+    if (!silent) {
+      derr << "bufferlist::read_file(" << fn << "): read error:"
+	   << cpp_strerror(ret) << dendl;
+    }
+    TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
   }
   else if (ret != st.st_size) {
-      // Premature EOF.
-      // Perhaps the file changed between stat() and read()?
-      if (!silent) {
-	derr << "bufferlist::read_file(" << fn << "): warning: got premature "
-	     << "EOF:" << dendl;
-      }
+    // Premature EOF.
+    // Perhaps the file changed between stat() and read()?
+    if (!silent) {
+      derr << "bufferlist::read_file(" << fn << "): warning: got premature "
+	   << "EOF:" << dendl;
+    }
   }
   TEMP_FAILURE_RETRY(::close(fd));
-  bp.set_length(ret);
-  append(bp);
   return 0;
+}
+
+ssize_t buffer::list::read_fd(int fd, size_t len) 
+{
+  int s = ROUND_UP_TO(len, PAGE_SIZE);
+  bufferptr bp = buffer::create_page_aligned(s);
+  ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
+  if (ret >= 0) {
+    bp.set_length(ret);
+    append(bp);
+  }
+  return ret;
 }
 
 int buffer::list::write_file(const char *fn, int mode)
