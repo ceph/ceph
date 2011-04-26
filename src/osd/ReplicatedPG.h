@@ -334,6 +334,9 @@ public:
     bufferlist outdata;
 
     ObjectState *obs;
+    ObjectState new_obs;  // resulting ObjectState
+    bool modify;          // (force) modification (even if op_t is empty)
+    bool user_modify;     // user-visible modification
 
     uint64_t bytes_written;
 
@@ -357,9 +360,10 @@ public:
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),
+      modify(false), user_modify(false),
       bytes_written(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { }
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
@@ -641,11 +645,6 @@ protected:
   void calc_trim_to();
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
-
-  int prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
-		   string& cname, string& mname,
-		   bufferlist::iterator& bp,
-		   ClassHandler::ClassMethod **pmethod);
 
   bool pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);

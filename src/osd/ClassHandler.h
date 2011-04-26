@@ -24,6 +24,11 @@ public:
     int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
     void unregister();
 
+    int get_flags() {
+      Mutex::Locker l(cls->handler->mutex);
+      return flags;
+    }
+
     ClassMethod() : cls(0), func(0), cxx_func(0) {}
   };
 
