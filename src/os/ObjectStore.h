@@ -159,6 +159,14 @@ public:
 
   public:
 
+    void swap(Transaction& other) {
+      std::swap(ops, other.ops);
+      std::swap(largest_data_len, other.largest_data_len);
+      std::swap(largest_data_off, other.largest_data_off);
+      std::swap(largest_data_off_in_tbl, other.largest_data_off_in_tbl);
+      tbl.swap(other.tbl);
+    }
+
     void append(Transaction& other) {
       ops += other.ops;
       assert(pad_unused_bytes == 0);
