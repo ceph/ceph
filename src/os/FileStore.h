@@ -68,7 +68,7 @@ class FileStore : public JournalingObjectStore {
   // helper fns
   void append_oname(const sobject_t &oid, char *s, int len);
   //void get_oname(sobject_t oid, char *s);
-  void get_cdir(coll_t cid, char *s, int len);
+  int get_cdir(coll_t cid, char *s, int len);
   void get_coname(coll_t cid, const sobject_t& oid, char *s, int len);
   bool parse_object(char *s, sobject_t& o);
   
@@ -238,6 +238,19 @@ public:
   void start_logger(int whoami, utime_t tare);
   void stop_logger();
 
+  int lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn);
+  int lfn_find(coll_t cid, const sobject_t& oid, char *pathname, int len);
+  int lfn_getxattr(coll_t cid, const sobject_t& oid, const char *name, void *val, size_t size);
+  int lfn_setxattr(coll_t cid, const sobject_t& oid, const char *name, const void *val, size_t size);
+  int lfn_removexattr(coll_t cid, const sobject_t& oid, const char *name);
+  int lfn_listxattr(coll_t cid, const sobject_t& oid, char *names, size_t len);
+  int lfn_truncate(coll_t cid, const sobject_t& oid, off_t length);
+  int lfn_stat(coll_t cid, const sobject_t& oid, struct stat *buf);
+  int lfn_open(coll_t cid, const sobject_t& oid, int flags, mode_t mode);
+  int lfn_open(coll_t cid, const sobject_t& oid, int flags);
+  int lfn_link(coll_t c, coll_t cid, const sobject_t& o) ;
+  int lfn_unlink(coll_t cid, const sobject_t& o);
+
  public:
   FileStore(const std::string &base, const std::string &jdev);
 
@@ -300,6 +313,8 @@ public:
   int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
+  int _getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& bp);
+  int _getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) ;
   int _getattr(const char *fn, const char *name, bufferptr& bp);
   int _getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only = false);
 

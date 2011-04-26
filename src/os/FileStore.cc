@@ -99,8 +99,12 @@
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 1 - (sizeof(FILENAME_COOKIE) - 1) - 1)
 
-static int __do_getxattr(const char *fn, const char *name, void *val, size_t size, int use_lfn);
+static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
+static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 static int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
+static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
+static int do_listxattr(const char *fn, char *names, size_t len);
+static int do_removexattr(const char *fn, const char *name);
 
 #ifdef DARWIN
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
@@ -196,7 +200,7 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   char buf[PATH_MAX];
 
   snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = __do_getxattr(buf, "user.ceph._lfn", new_name, sizeof(buf) - 1, 0);
+  int r = do_getxattr(buf, "user.ceph._lfn", new_name, sizeof(buf) - 1);
   if (r < 0)
     strncpy(new_name, name, len);
   else
@@ -204,58 +208,131 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   return;
 }
 
-static int prepare_short_path(const char *pathname, char *short_path, const char **pfilename, int *is_lfn)
+/* 
+ * sorry, these are sentitive to the sobject_t and coll_t typing.
+ */ 
+
+  //           11111111112222222222333333333344444444445555555555
+  // 012345678901234567890123456789012345678901234567890123456789
+  // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
+
+void FileStore::append_oname(const sobject_t &oid, char *s, int len)
 {
-  const char *filename = strrchr(pathname, '/');
-  int path_len;
-  int len;
+  //assert(sizeof(oid) == 28);
+  char *end = s + len;
+  char *t = s + strlen(s);
 
-  if (!filename)
-    filename = pathname;
+  const char *i = oid.oid.name.c_str();
+  while (*i && t < end) {
+    if (*i == '\\') {
+      *t++ = '\\';
+      *t++ = '\\';      
+    } else if (*i == '.' && i == oid.oid.name.c_str()) {  // only escape leading .
+      *t++ = '\\';
+      *t++ = '.';
+    } else if (*i == '/') {
+      *t++ = '\\';
+      *t++ = 's';
+    } else
+      *t++ = *i;
+    i++;
+  }
+
+  if (oid.snap == CEPH_NOSNAP)
+    snprintf(t, end - t, "_head");
+  else if (oid.snap == CEPH_SNAPDIR)
+    snprintf(t, end - t, "_snapdir");
   else
-    filename++;
-
-  *pfilename = filename;
-
-  len = strlen(filename);
-  *is_lfn = (len >= (int)FILENAME_PREFIX_LEN);
-  if (!*is_lfn)
-    return 0;
-
-  path_len = filename - pathname;
-  if (short_path)
-    memcpy(short_path, pathname, path_len);
-
-  return path_len;
+    snprintf(t, end - t, "_%llx", (long long unsigned)oid.snap);
+  //parse_object(t+1);
 }
 
-int lfn_get(const char *pathname, char *short_fn, int len, const char **long_fn, int *exist, int *is_lfn)
+bool FileStore::parse_object(char *s, sobject_t& o)
+{
+  char *bar = s + strlen(s) - 1;
+  while (*bar != '_' &&
+	 bar > s)
+    bar--;
+  if (*bar == '_') {
+    char buf[bar-s + 1];
+    char *t = buf;
+    char *i = s;
+    while (i < bar) {
+      if (*i == '\\') {
+	i++;
+	switch (*i) {
+	case '\\': *t++ = '\\'; break;
+	case '.': *t++ = '.'; break;
+	case 's': *t++ = '/'; break;
+	default: assert(0);
+	}
+      } else {
+	*t++ = *i;
+      }
+      i++;
+    }
+    *t = 0;
+    o.oid.name = string(buf, t-buf);
+    if (strcmp(bar+1, "head") == 0)
+      o.snap = CEPH_NOSNAP;
+    else if (strcmp(bar+1, "snapdir") == 0)
+      o.snap = CEPH_SNAPDIR;
+    else
+      o.snap = strtoull(bar+1, &s, 16);
+    return true;
+  }
+  return false;
+}
+
+  //           11111111112222222222333
+  // 012345678901234567890123456789012
+  // pppppppppppppppp.ssssssssssssssss
+
+int FileStore::get_cdir(coll_t cid, char *s, int len) 
+{
+  const string &cid_str(cid.to_str());
+  return snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
+}
+
+void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s, int len) 
+{
+  get_cdir(cid, s, len);
+  append_oname(oid, s, len);
+}
+
+int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn)
 {
   int i = 0;
-  const char *filename;
-  int path_len;
+  char *filename;
+  int path_len = get_cdir(cid, pathname, len);
+  pathname[path_len] = '/';
+  path_len++;
+  pathname[path_len] = '\0';
+  filename = pathname + strlen(pathname) + path_len;
 
-  path_len = prepare_short_path(pathname, short_fn, &filename, is_lfn);
-  if (!*is_lfn)
+  append_oname(oid, lfn, lfn_len);
+
+  if (oid.oid.name.size() < FILENAME_PREFIX_LEN) {
+    /* not a long file name, just build it as it is */
+    strncpy(filename, lfn, len - path_len);
+    *is_lfn = 0;
     return 0;
+  }
 
-  *long_fn = filename;
-
+  *is_lfn = 1;
   *exist = 0;
-
-  path_len = filename - pathname;
 
   while (1) {
     char buf[PATH_MAX];
     int r;
 
-    build_filename(&short_fn[path_len], len - path_len, filename, i);
-    r = __do_getxattr(short_fn, "user.ceph._lfn", buf, sizeof(buf), 0);
+    build_filename(filename, len - path_len, lfn, i);
+    r = do_getxattr(pathname, "user.ceph._lfn", buf, sizeof(buf));
     if (r < 0)
       r = -errno;
     if (r > 0) {
       buf[MAX((int)sizeof(buf)-1, r)] = '\0';
-      if (strcmp(buf, filename) == 0) { // a match?
+      if (strcmp(buf, lfn) == 0) { // a match?
         *exist = 1;
         return i;
       }
@@ -276,103 +353,103 @@ int lfn_get(const char *pathname, char *short_fn, int len, const char **long_fn,
   return 0; // unreachable anyway
 }
 
-static int lfn_find(const char *pathname, char *new_pathname, int len)
+int FileStore::lfn_find(coll_t cid, const sobject_t& oid, char *pathname, int len)
 {
-  const char *long_fn;
+  char long_fn[PATH_MAX];
   int r, exist;
   int is_lfn;
 
-  r = lfn_get(pathname, new_pathname, len, &long_fn, &exist, &is_lfn);
+  r = lfn_get(cid, oid, pathname, len, long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
-  if (!is_lfn)
-    strncpy(new_pathname, pathname, len);
-  else if (!exist)
+  if (!exist)
     return -ENOENT;
   return 0;
 }
-
-static int lfn_getxattr(const char *fn, const char *name, void *val, size_t size)
+int FileStore::lfn_getxattr(coll_t cid, const sobject_t& oid, const char *name, void *val, size_t size)
 {
   char new_fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
   if (r < 0)
     return r;
-  return sys_getxattr(new_fn, name, val, size);
+  return do_getxattr(new_fn, name, val, size);
 }
 
-static int lfn_setxattr(const char *fn, const char *name, const void *val, size_t size)
+int FileStore::lfn_setxattr(coll_t cid, const sobject_t& oid, const char *name, const void *val, size_t size)
 {
   char new_fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
   if (r < 0)
     return r;
-  return sys_setxattr(new_fn, name, val, size);
+  return do_setxattr(new_fn, name, val, size);
 }
 
-static int lfn_removexattr(const char *fn, const char *name)
+int FileStore::lfn_removexattr(coll_t cid, const sobject_t& oid, const char *name)
 {
   char new_fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
   if (r < 0)
     return r;
-  return sys_removexattr(new_fn, name);
+  return do_removexattr(new_fn, name);
 }
 
-int lfn_listxattr(const char *fn, char *names, size_t len)
+int FileStore::lfn_listxattr(coll_t cid, const sobject_t& oid, char *names, size_t len)
 {
   char new_fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
   if (r < 0)
     return r;
-  return sys_listxattr(new_fn, names, len);
+  return do_listxattr(new_fn, names, len);
 }
 
-static int lfn_truncate(const char *fn, off_t length)
+int FileStore::lfn_truncate(coll_t cid, const sobject_t& oid, off_t length)
 {
   char new_fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
   if (r < 0)
     return r;
-  r = ::truncate(fn, length);
+  r = ::truncate(new_fn, length);
   if (r < 0)
     return -errno;
   return r;
 }
 
-static int lfn_stat(const char *fn, struct stat *buf)
+int FileStore::lfn_stat(coll_t cid, const sobject_t& oid, struct stat *buf)
 {
-  char new_fn[PATH_MAX];
+  char fn[PATH_MAX];
   int r;
 
-  r = lfn_find(fn, new_fn, sizeof(new_fn));
+  r = lfn_find(cid, oid, fn, sizeof(fn));
   if (r < 0)
     return r;
-  return ::stat(new_fn, buf);
+  r = ::stat(fn, buf);
+  if (r < 0)
+    return -errno;
+  return 0;
 }
 
-static int lfn_open(const char *pathname, int flags, mode_t mode)
+int FileStore::lfn_open(coll_t cid, const sobject_t& oid, int flags, mode_t mode)
 {
-  const char *long_fn;
+  char long_fn[PATH_MAX];
   char short_fn[PATH_MAX];
   int r, fd, exist;
   int is_lfn;
 
-  r = lfn_get(pathname, short_fn, sizeof(short_fn), &long_fn, &exist, &is_lfn);
+  r = lfn_get(cid, oid, short_fn, sizeof(short_fn), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
   if (!is_lfn)
-    return open(pathname, flags, mode);
+    return open(short_fn, flags, mode);
 
   r = ::open(short_fn, flags, mode);
 
@@ -391,69 +468,67 @@ static int lfn_open(const char *pathname, int flags, mode_t mode)
   return fd;
 }
 
-static int lfn_open(const char *pathname, int flags)
+int FileStore::lfn_open(coll_t cid, const sobject_t& oid, int flags)
 {
-  return lfn_open(pathname, flags, 0);
+  return lfn_open(cid, oid, flags, 0);
 }
 
-static int lfn_link(const char *oldpath, const char *newpath)
+int FileStore::lfn_link(coll_t c, coll_t cid, const sobject_t& o) 
 {
+  char long_fn[PATH_MAX];
   char short_fn_old[PATH_MAX];
   char short_fn_new[PATH_MAX];
   int exist, is_lfn;
-  const char *filename;
   int r;
 
-  r = lfn_get(oldpath, short_fn_old, sizeof(short_fn_old), &filename, &exist, &is_lfn);
+  r = lfn_get(cid, o, short_fn_old, sizeof(short_fn_old), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
   if (!exist)
     return -ENOENT;
-  if (!is_lfn)
-    strncpy(short_fn_old, oldpath, sizeof(short_fn_old));
 
-  r = lfn_get(newpath, short_fn_new, sizeof(short_fn_new), &filename, &exist, &is_lfn);
+  r = lfn_get(c, o, short_fn_new, sizeof(short_fn_new), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
   if (exist)
     return -EEXIST;
-  if (!is_lfn)
-    strncpy(short_fn_new, newpath, sizeof(short_fn_new));
 
   r = link(short_fn_old, short_fn_new);
   if (r < 0)
     return -errno;
+
   return 0;
 }
 
-static int lfn_unlink(const char *pathname)
+int FileStore::lfn_unlink(coll_t cid, const sobject_t& o)
 {
-  const char *filename;
+  char long_fn[PATH_MAX];
   char short_fn[PATH_MAX];
   char short_fn2[PATH_MAX];
   int r, i, exist, err;
   int path_len;
   int is_lfn;
 
-  r = lfn_get(pathname, short_fn, sizeof(short_fn), &filename, &exist, &is_lfn);
+  r = lfn_get(cid, o, short_fn, sizeof(short_fn), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
   if (!is_lfn)
-    return unlink(pathname);
+    return unlink(short_fn);
   if (!exist) {
-    errno = ENOENT;
-    return -1;
+    return -ENOENT;
   }
 
-  path_len = filename - pathname;
-  memcpy(short_fn2, pathname, path_len);
+  path_len = get_cdir(cid, short_fn2, sizeof(short_fn2));
+  short_fn2[path_len] = '/';
+  path_len++;
+  short_fn2[path_len] = '\0';
 
   for (i = r + 1; ; i++) {
     struct stat buf;
     int ret;
 
-    build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, filename, i);
-    ret = stat(short_fn2, &buf);
+    build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, long_fn, i);
+    ret = ::stat(short_fn2, &buf);
     if (ret < 0) {
       if (i == r + 1) {
         err = unlink(short_fn);
@@ -465,7 +540,7 @@ static int lfn_unlink(const char *pathname)
     }
   }
 
-  build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, filename, i - 1);
+  build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, long_fn, i - 1);
   generic_dout(0) << "renaming " << short_fn2 << " -> " << short_fn << dendl;
 
   if (rename(short_fn2, short_fn) < 0) {
@@ -551,7 +626,7 @@ int do_getxattr_len(const char *fn, const char *name)
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = lfn_getxattr(fn, raw_name, 0, 0);
+    r = do_getxattr(fn, raw_name, 0, 0);
     if (!i && r < 0) {
       return r;
     }
@@ -564,7 +639,7 @@ int do_getxattr_len(const char *fn, const char *name)
   return total;
 }
 
-static int __do_getxattr(const char *fn, const char *name, void *val, size_t size, int use_lfn)
+static int do_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
@@ -580,10 +655,7 @@ static int __do_getxattr(const char *fn, const char *name, void *val, size_t siz
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    if (use_lfn)
-      r = lfn_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
-    else
-      r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -601,21 +673,13 @@ static int __do_getxattr(const char *fn, const char *name, void *val, size_t siz
        exactly one block */
     if (chunk_size == ATTR_MAX_BLOCK_LEN) {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      if (use_lfn)
-        r = lfn_getxattr(fn, raw_name, 0, 0);
-      else
-        r = sys_getxattr(fn, raw_name, 0, 0);
+      r = sys_getxattr(fn, raw_name, 0, 0);
       if (r > 0) { // there's another chunk.. the original buffer was too small
         ret = -ERANGE;
       }
     }
   }
   return ret;
-}
-
-static int do_getxattr(const char *fn, const char *name, void *val, size_t size)
-{
-  return __do_getxattr(fn, name, val, size, 1);
 }
 
 static int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
@@ -629,7 +693,7 @@ static int do_setxattr(const char *fn, const char *name, const void *val, size_t
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    int r = lfn_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -643,7 +707,7 @@ static int do_setxattr(const char *fn, const char *name, const void *val, size_t
      before) */
   if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    lfn_removexattr(fn, raw_name);
+    do_removexattr(fn, raw_name);
   }
   
   return ret;
@@ -681,14 +745,14 @@ static int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
   return ret;
 }
 
-int do_removexattr(const char *fn, const char *name) {
+static int do_removexattr(const char *fn, const char *name) {
   int i = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int r;
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = lfn_removexattr(fn, raw_name);
+    r = sys_removexattr(fn, raw_name);
     if (!i && r < 0) {
       return r;
     }
@@ -697,13 +761,13 @@ int do_removexattr(const char *fn, const char *name) {
   return 0;
 }
 
-int do_listxattr(const char *fn, char *names, size_t len) {
+static int do_listxattr(const char *fn, char *names, size_t len) {
   int r;
 
   if (!len)
-   return lfn_listxattr(fn, names, len);
+   return sys_listxattr(fn, names, len);
 
-  r = lfn_listxattr(fn, 0, 0);
+  r = sys_listxattr(fn, 0, 0);
   if (r < 0)
     return r;
 
@@ -712,7 +776,7 @@ int do_listxattr(const char *fn, char *names, size_t len) {
   if (!full_buf)
     return -ENOMEM;
 
-  r = lfn_listxattr(fn, full_buf, total_len);
+  r = sys_listxattr(fn, full_buf, total_len);
   if (r < 0)
     return r;
 
@@ -844,98 +908,6 @@ int FileStore::statfs(struct statfs *buf)
   return 0;
 }
 
-
-/* 
- * sorry, these are sentitive to the sobject_t and coll_t typing.
- */ 
-
-  //           11111111112222222222333333333344444444445555555555
-  // 012345678901234567890123456789012345678901234567890123456789
-  // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
-
-void FileStore::append_oname(const sobject_t &oid, char *s, int len)
-{
-  //assert(sizeof(oid) == 28);
-  char *t = s + strlen(s);
-
-  *t++ = '/';
-  const char *i = oid.oid.name.c_str();
-  while (*i) {
-    if (*i == '\\') {
-      *t++ = '\\';
-      *t++ = '\\';      
-    } else if (*i == '.' && i == oid.oid.name.c_str()) {  // only escape leading .
-      *t++ = '\\';
-      *t++ = '.';
-    } else if (*i == '/') {
-      *t++ = '\\';
-      *t++ = 's';
-    } else
-      *t++ = *i;
-    i++;
-  }
-
-  if (oid.snap == CEPH_NOSNAP)
-    snprintf(t, len, "_head");
-  else if (oid.snap == CEPH_SNAPDIR)
-    snprintf(t, len, "_snapdir");
-  else
-    snprintf(t, len, "_%llx", (long long unsigned)oid.snap);
-  //parse_object(t+1);
-}
-
-bool FileStore::parse_object(char *s, sobject_t& o)
-{
-  char *bar = s + strlen(s) - 1;
-  while (*bar != '_' &&
-	 bar > s)
-    bar--;
-  if (*bar == '_') {
-    char buf[bar-s + 1];
-    char *t = buf;
-    char *i = s;
-    while (i < bar) {
-      if (*i == '\\') {
-	i++;
-	switch (*i) {
-	case '\\': *t++ = '\\'; break;
-	case '.': *t++ = '.'; break;
-	case 's': *t++ = '/'; break;
-	default: assert(0);
-	}
-      } else {
-	*t++ = *i;
-      }
-      i++;
-    }
-    *t = 0;
-    o.oid.name = string(buf, t-buf);
-    if (strcmp(bar+1, "head") == 0)
-      o.snap = CEPH_NOSNAP;
-    else if (strcmp(bar+1, "snapdir") == 0)
-      o.snap = CEPH_SNAPDIR;
-    else
-      o.snap = strtoull(bar+1, &s, 16);
-    return true;
-  }
-  return false;
-}
-
-  //           11111111112222222222333
-  // 012345678901234567890123456789012
-  // pppppppppppppppp.ssssssssssssssss
-
-void FileStore::get_cdir(coll_t cid, char *s, int len) 
-{
-  const string &cid_str(cid.to_str());
-  snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
-}
-
-void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s, int len) 
-{
-  get_cdir(cid, s, len);
-  append_oname(oid, s, len);
-}
 
 int FileStore::open_journal()
 {
@@ -1466,7 +1438,7 @@ int FileStore::_sanity_check_fs()
 
 int FileStore::read_op_seq(const char *fn, uint64_t *seq)
 {
-  int op_fd = lfn_open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
+  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
     return -errno;
   char s[40];
@@ -1640,7 +1612,7 @@ int FileStore::mount()
       // roll back
       char s[PATH_MAX];
       snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
-      vol_args.fd = lfn_open(s, O_RDONLY);
+      vol_args.fd = ::open(s, O_RDONLY);
       if (vol_args.fd < 0) {
 	ret = -errno;
 	derr << "FileStore::mount: error opening '" << s << "': "
@@ -1670,7 +1642,7 @@ int FileStore::mount()
   }
   initial_op_seq = 0;
 
-  current_fd = lfn_open(current_fn.c_str(), O_RDONLY);
+  current_fd = ::open(current_fn.c_str(), O_RDONLY);
   if (current_fd < 0) {
     derr << "FileStore::mount: error opening: " << current_fn << ": "
 	 << cpp_strerror(ret) << dendl;
@@ -2521,12 +2493,8 @@ bool FileStore::exists(coll_t cid, const sobject_t& oid)
   
 int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
 {
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  int r = lfn_stat(fn, st);
-  if (r < 0)
-    r = -errno;
-  dout(10) << "stat " << fn << " = " << r << " (size " << st->st_size << ")" << dendl;
+  int r = lfn_stat(cid, oid, st);
+  dout(10) << "stat " << cid << "/" << oid << " = " << r << " (size " << st->st_size << ")" << dendl;
   return r;
 }
 
@@ -2534,15 +2502,13 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
                     uint64_t offset, size_t len, bufferlist& bl)
 {
   int got;
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
 
-  dout(15) << "read " << fn << " " << offset << "~" << len << dendl;
+  dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
-  int fd = lfn_open(fn, O_RDONLY);
+  int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
     int err = errno;
-    dout(10) << "FileStore::read(" << fn << "): open error "
+    dout(10) << "FileStore::read(" << cid << "/" << oid << "): open error "
 	     << cpp_strerror(err) << dendl;
     return -err;
   }
@@ -2557,7 +2523,7 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(fd, bptr.c_str(), len, offset);
   if (got < 0) {
-    dout(10) << "FileStore::read(" << fn << "): pread error "
+    dout(10) << "FileStore::read(" << cid << "/" << oid << "): pread error "
 	     << cpp_strerror(got) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
     return got;
@@ -2566,7 +2532,7 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   bl.push_back(bptr);   // put it in the target bufferlist
   TEMP_FAILURE_RETRY(::close(fd));
 
-  dout(10) << "FileStore::read " << fn << " " << offset << "~"
+  dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
   return got;
 }
@@ -2584,19 +2550,16 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
   }
 
 
-  char fn[PATH_MAX];
   struct fiemap *fiemap = NULL;
   map<off_t, size_t> extmap;
 
-  get_coname(cid, oid, fn, sizeof(fn));
-
-  dout(15) << "fiemap " << fn << " " << offset << "~" << len << dendl;
+  dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
   int r;
-  int fd = lfn_open(fn, O_RDONLY);
+  int fd = lfn_open(cid, oid, O_RDONLY);
   if (fd < 0) {
     char buf[80];
-    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(10) << "read couldn't open " << cid << "/" << oid << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
   } else {
     uint64_t i;
@@ -2645,7 +2608,7 @@ done:
   if (r >= 0)
     ::encode(extmap, bl);
 
-  dout(10) << "fiemap " << fn << " " << offset << "~" << len << " = " << r << " num extents=" << extmap.size() << dendl;
+  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num extents=" << extmap.size() << dendl;
   free(fiemap);
   return r;
 }
@@ -2653,42 +2616,34 @@ done:
 
 int FileStore::_remove(coll_t cid, const sobject_t& oid) 
 {
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "remove " << fn << dendl;
-  int r = ::lfn_unlink(fn);
-  if (r < 0) r = -errno;
-  dout(10) << "remove " << fn << " = " << r << dendl;
+  dout(15) << "remove " << cid << "/" << oid << dendl;
+  int r = lfn_unlink(cid, oid);
+  dout(10) << "remove " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
 int FileStore::_truncate(coll_t cid, const sobject_t& oid, uint64_t size)
 {
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "truncate " << fn << " size " << size << dendl;
-  int r = lfn_truncate(fn, size);
-  dout(10) << "truncate " << fn << " size " << size << " = " << r << dendl;
+  dout(15) << "truncate " << cid << "/" << oid << " size " << size << dendl;
+  int r = lfn_truncate(cid, oid, size);
+  dout(10) << "truncate " << cid << "/" << oid << " size " << size << " = " << r << dendl;
   return r;
 }
 
 
 int FileStore::_touch(coll_t cid, const sobject_t& oid)
 {
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-
-  dout(15) << "touch " << fn << dendl;
+  dout(15) << "touch " << cid << "/" << oid << dendl;
 
   int flags = O_WRONLY|O_CREAT;
-  int fd = lfn_open(fn, flags, 0644);
+  int fd = lfn_open(cid, oid, flags, 0644);
   int r;
   if (fd >= 0) {
     ::close(fd);
     r = 0;
   } else
     r = -errno;
-  dout(10) << "touch " << fn << " = " << r << dendl;
+  dout(10) << "touch " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -2696,19 +2651,16 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
                      uint64_t offset, size_t len,
                      const bufferlist& bl)
 {
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-
-  dout(15) << "write " << fn << " " << offset << "~" << len << dendl;
+  dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
 
   int64_t actual;
 
   char buf[80];
   int flags = O_WRONLY|O_CREAT;
-  int fd = lfn_open(fn, flags, 0644);
+  int fd = lfn_open(cid, oid, flags, 0644);
   if (fd < 0) {
-    dout(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "write couldn't open " << cid << "/" << oid << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
     goto out;
   }
@@ -2744,7 +2696,7 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
 #endif
 
  out:
-  dout(10) << "write " << fn << " " << offset << "~" << len << " = " << r << dendl;
+  dout(10) << "write " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
   return r;
 }
 
@@ -2759,19 +2711,15 @@ int FileStore::_zero(coll_t cid, const sobject_t& oid, uint64_t offset, size_t l
 
 int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid)
 {
-  char ofn[PATH_MAX], nfn[PATH_MAX];
-  get_coname(cid, oldoid, ofn, sizeof(ofn));
-  get_coname(cid, newoid, nfn, sizeof(nfn));
-
-  dout(15) << "clone " << ofn << " -> " << nfn << dendl;
+  dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
 
   int o, n, r;
-  o = lfn_open(ofn, O_RDONLY);
+  o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
     r = -errno;
     goto out2;
   }
-  n = lfn_open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  n = lfn_open(cid, newoid, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (n < 0) {
     r = -errno;
     goto out;
@@ -2785,7 +2733,7 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
   else {
     struct stat st;
     ::fstat(o, &st);
-    dout(10) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
+    dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " READ+WRITE" << dendl;
     r = _do_clone_range(o, n, 0, st.st_size);
   }
   if (r < 0)
@@ -2795,7 +2743,7 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
  out:
   ::close(o);
  out2:
-  dout(10) << "clone " << ofn << " -> " << nfn << " = " << r << dendl;
+  dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   return 0;
 }
 
@@ -2859,20 +2807,16 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
 
 int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t off, uint64_t len)
 {
-  char ofn[PATH_MAX], nfn[PATH_MAX];
-  get_coname(cid, oldoid, ofn, sizeof(ofn));
-  get_coname(cid, newoid, nfn, sizeof(ofn));
-
-  dout(15) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
+  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << off << "~" << len << dendl;
 
   int r;
   int o, n;
-  o = lfn_open(ofn, O_RDONLY);
+  o = lfn_open(cid, oldoid, O_RDONLY);
   if (o < 0) {
     r = -errno;
     goto out2;
   }
-  n = lfn_open(nfn, O_CREAT|O_WRONLY, 0644);
+  n = lfn_open(cid, newoid, O_CREAT|O_WRONLY, 0644);
   if (n < 0) {
     r = -errno;
     goto out;
@@ -2882,7 +2826,7 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
  out:
   ::close(o);
  out2:
-  dout(10) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << " = " << r << dendl;
+  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << off << "~" << len << " = " << r << dendl;
   return r;
 }
 
@@ -3237,6 +3181,23 @@ void FileStore::sync_and_flush()
 // attributes
 
 // low-level attr helpers
+int FileStore::_getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& bp)
+{
+  char val[100];
+  int l = lfn_getxattr(cid, oid, name, val, sizeof(val));
+  if (l >= 0) {
+    bp = buffer::create(l);
+    memcpy(bp.c_str(), val, l);
+  } else if (l == -ERANGE) {
+    l = lfn_getxattr(cid, oid, name, 0, 0);
+    if (l) {
+      bp = buffer::create(l);
+      l = lfn_getxattr(cid, oid, name, bp.c_str(), l);
+    }
+  }
+  return l;
+}
+
 int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
 {
   char val[100];
@@ -3254,6 +3215,60 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
   return l;
 }
 
+// note that this is a clone of the method below.. any change here should be reflected there 
+int FileStore::_getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
+{
+  // get attr list
+  char names1[100];
+  int len = lfn_listxattr(cid, oid, names1, sizeof(names1)-1);
+  char *names2 = 0;
+  char *name = 0;
+  if (len == -ERANGE) {
+    len = lfn_listxattr(cid, oid, 0, 0);
+    if (len < 0)
+      return len;
+    dout(10) << " -ERANGE, len is " << len << dendl;
+    names2 = new char[len+1];
+    len = lfn_listxattr(cid, oid, names2, len);
+    dout(10) << " -ERANGE, got " << len << dendl;
+    if (len < 0)
+      return len;
+    name = names2;
+  } else if (len < 0)
+    return len;
+  else
+    name = names1;
+  name[len] = 0;
+
+  char *end = name + len;
+  while (name < end) {
+    char *attrname = name;
+    if (parse_attrname(&name)) {
+      char *set_name = name;
+      bool can_get = true;
+      if (user_only) {
+          if (*set_name =='_')
+            set_name++;
+          else
+            can_get = false;
+      }
+      if (*set_name && can_get) {
+        dout(20) << "getattrs " << cid << "/" << oid << " getting '" << name << "'" << dendl;
+      
+        int r = _getattr(cid, oid, attrname, aset[set_name]);
+        if (r < 0) return r;
+      }
+    }
+    name += strlen(name) + 1;
+  }
+
+  delete[] names2;
+  return 0;
+}
+
+
+// note that this is a clone of the method above.. any change here should be reflected
+// there
 int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only) 
 {
   // get attr list
@@ -3312,13 +3327,11 @@ int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name,
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, value, size);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "getattr " << fn << " '" << name << "' len " << size << dendl;
+  dout(15) << "getattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = do_getxattr(fn, n, value, size);
-  dout(10) << "getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  int r = lfn_getxattr(cid, oid, n, value, size);
+  dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
 }
 
@@ -3326,13 +3339,11 @@ int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name, buffe
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, bp);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "getattr " << fn << " '" << name << "'" << dendl;
+  dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = _getattr(fn, n, bp);
-  dout(10) << "getattr " << fn << " '" << name << "' = " << r << dendl;
+  int r = _getattr(cid, oid, n, bp);
+  dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
 
@@ -3340,30 +3351,22 @@ int FileStore::getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>&
 {
   if (fake_attrs) return attrs.getattrs(cid, oid, aset);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "getattrs " << fn << dendl;
-  int r = _getattrs(fn, aset, user_only);
-  dout(10) << "getattrs " << fn << " = " << r << dendl;
+  dout(15) << "getattrs " << cid << "/" << oid << dendl;
+  int r = _getattrs(cid, oid, aset, user_only);
+  dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
-
-
-
-
 
 int FileStore::_setattr(coll_t cid, const sobject_t& oid, const char *name,
 			const void *value, size_t size) 
 {
   if (fake_attrs) return attrs.setattr(cid, oid, name, value, size);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "setattr " << fn << " '" << name << "' len " << size << dendl;
+  dout(15) << "setattr " << cid << "/" << oid << " '" << name << "' len " << size << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = do_setxattr(fn, n, value, size);
-  dout(10) << "setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  int r = lfn_setxattr(cid, oid, n, value, size);
+  dout(10) << "setattr " << cid << "/" << oid << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
 }
 
@@ -3371,9 +3374,7 @@ int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>
 {
   if (fake_attrs) return attrs.setattrs(cid, oid, aset);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "setattrs " << fn << dendl;
+  dout(15) << "setattrs " << cid << "/" << oid << dendl;
   int r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -3386,13 +3387,13 @@ int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>
     else
       val = "";
     // ??? Why do we skip setting all the other attrs if one fails?
-    r = do_setxattr(fn, n, val, p->second.length());
+    r = lfn_setxattr(cid, oid, n, val, p->second.length());
     if (r < 0) {
       derr << "FileStore::_setattrs: do_setxattr returned " << r << dendl;
       break;
     }
   }
-  dout(10) << "setattrs " << fn << " = " << r << dendl;
+  dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -3401,13 +3402,11 @@ int FileStore::_rmattr(coll_t cid, const sobject_t& oid, const char *name)
 {
   if (fake_attrs) return attrs.rmattr(cid, oid, name);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-  dout(15) << "rmattr " << fn << " '" << name << "'" << dendl;
+  dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   char n[ATTR_MAX_NAME_LEN];
   get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = do_removexattr(fn, n);
-  dout(10) << "rmattr " << fn << " '" << name << "' = " << r << dendl;
+  int r = lfn_removexattr(cid, oid, n);
+  dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
 
@@ -3415,23 +3414,20 @@ int FileStore::_rmattrs(coll_t cid, const sobject_t& oid)
 {
   //if (fake_attrs) return attrs.rmattrs(cid, oid);
 
-  char fn[PATH_MAX];
-  get_coname(cid, oid, fn, sizeof(fn));
-
-  dout(15) << "rmattrs " << fn << dendl;
+  dout(15) << "rmattrs " << cid << "/" << oid << dendl;
 
   map<string,bufferptr> aset;
-  int r = _getattrs(fn, aset);
+  int r = _getattrs(cid, oid, aset);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
       char n[ATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
-      r = do_removexattr(fn, n);
+      r = lfn_removexattr(cid, oid, n);
       if (r < 0)
 	break;
     }
   }
-  dout(10) << "rmattrs " << fn << " = " << r << dendl;
+  dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
 
@@ -3588,7 +3584,7 @@ int FileStore::collection_stat(coll_t c, struct stat *st)
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_stat " << fn << dendl;
-  int r = lfn_stat(fn, st);
+  int r = ::stat(fn, st);
   if (r < 0) r = -errno;
   dout(10) << "collection_stat " << fn << " = " << r << dendl;
   return r;
@@ -3781,14 +3777,9 @@ int FileStore::_collection_add(coll_t c, coll_t cid, const sobject_t& o)
 {
   if (fake_collections) return collections.collection_add(c, o);
 
-  char cof[PATH_MAX];
-  get_coname(c, o, cof, sizeof(cof));
-  char of[PATH_MAX];
-  get_coname(cid, o, of, sizeof(of));
-  dout(15) << "collection_add " << cof << " " << of << dendl;
-  int r = lfn_link(of, cof);
-  if (r < 0) r = -errno;
-  dout(10) << "collection_add " << cof << " " << of << " = " << r << dendl;
+  dout(15) << "collection_add " << c << "/" << o << " " << cid << "/" << o << dendl;
+  int r = lfn_link(cid, c, o);
+  dout(10) << "collection_add " << c << "/" << o << " " << cid << "/" << o << " = " << r << dendl;
   return r;
 }
 
@@ -3796,12 +3787,9 @@ int FileStore::_collection_remove(coll_t c, const sobject_t& o)
 {
   if (fake_collections) return collections.collection_remove(c, o);
 
-  char cof[PATH_MAX];
-  get_coname(c, o, cof, sizeof(cof));
-  dout(15) << "collection_remove " << cof << dendl;
-  int r = lfn_unlink(cof);
-  if (r < 0) r = -errno;
-  dout(10) << "collection_remove " << cof << " = " << r << dendl;
+  dout(15) << "collection_remove " << c << "/" << o << dendl;
+  int r = lfn_unlink(c, o);
+  dout(10) << "collection_remove " << c << "/" << o << " = " << r << dendl;
   return r;
 }
 
