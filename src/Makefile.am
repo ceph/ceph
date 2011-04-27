@@ -524,7 +524,7 @@ shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
 
 libceph_includedir = $(includedir)/ceph
-libceph_include_DATA = $(srcdir)/client/libceph.h
+libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
@@ -744,7 +744,6 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse_ll.h\
 	client/ioctl.h\
-	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\
@@ -813,6 +812,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
+	include/ceph/libceph.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\

@@ -13,7 +13,7 @@
  */
 
 #include "client/Client.h"
-#include "client/libceph.h"
+#include "include/ceph/libceph.h"
 #include "common/Mutex.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
