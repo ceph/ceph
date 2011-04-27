@@ -94,7 +94,7 @@
 #define FILENAME_MAX_LEN 4096 // the long file name size
 
 #define FILENAME_SHORT_LEN 32 // the short file name size
-#define FILENAME_COOKIE "cLFN"  // ceph long file name
+#define FILENAME_COOKIE "long"  // ceph long file name
 #define FILENAME_HASH_LEN 3
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 1 - (sizeof(FILENAME_COOKIE) - 1) - 1)
@@ -309,14 +309,16 @@ int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len
   pathname[path_len] = '/';
   path_len++;
   pathname[path_len] = '\0';
-  filename = pathname + strlen(pathname) + path_len;
+  filename = pathname + path_len;
 
+  *lfn = '\0';
   append_oname(oid, lfn, lfn_len);
 
   if (oid.oid.name.size() < FILENAME_PREFIX_LEN) {
     /* not a long file name, just build it as it is */
     strncpy(filename, lfn, len - path_len);
     *is_lfn = 0;
+    dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " pathname=" << pathname << " lfn=" << lfn << " is_lfn=" << *is_lfn << dendl;
     return 0;
   }
 
@@ -351,6 +353,7 @@ int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len
     i++;
   }
 
+  dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " pathname=" << pathname << " lfn=" << lfn << " is_lfn=" << *is_lfn << dendl;
   return 0; // unreachable anyway
 }
 
