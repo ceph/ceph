@@ -833,9 +833,17 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   }
 
   // fix up new frag fragstats
+  bool stale_fragstat = fnode.fragstat.version != fnode.accounted_fragstat.version;
+  bool stale_rstat = fnode.rstat.version != fnode.accounted_rstat.version;
   for (int i=0; i<n; i++) {
     subfrags[i]->fnode.fragstat.version = fnode.fragstat.version;
     subfrags[i]->fnode.accounted_fragstat = subfrags[i]->fnode.fragstat;
+    if (i == 0) {
+      if (stale_fragstat)
+	subfrags[0]->fnode.accounted_fragstat.version--;
+      if (stale_rstat)
+	subfrags[0]->fnode.accounted_rstat.version--;
+    }
     dout(10) << "      fragstat " << subfrags[i]->fnode.fragstat << " on " << *subfrags[i] << dendl;
   }
 
