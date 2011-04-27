@@ -9492,8 +9492,10 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
       for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
-	p->second->get(CDentry::PIN_FRAGMENTING);
-	p->second->state_set(CDentry::STATE_FRAGMENTING);
+	CDentry *dn = p->second;
+	dn->get(CDentry::PIN_FRAGMENTING);
+	assert(!dn->state_test(CDentry::STATE_FRAGMENTING));
+	dn->state_set(CDentry::STATE_FRAGMENTING);
       }
       dir->state_set(CDir::STATE_DNPINNEDFRAG);
       dir->auth_unpin(dir);
@@ -9523,8 +9525,10 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
-      p->second->state_clear(CDentry::STATE_FRAGMENTING);
-      p->second->put(CDentry::PIN_FRAGMENTING);
+      CDentry *dn = p->second;
+      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+      dn->state_clear(CDentry::STATE_FRAGMENTING);
+      dn->put(CDentry::PIN_FRAGMENTING);
     }
 
     dir->unfreeze_dir();
@@ -9675,8 +9679,9 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 	 p != dir->items.end();
 	 ++p) { 
       CDentry *dn = p->second;
-      if (dn->state_test(CDentry::STATE_FRAGMENTING)) 
-	dn->put(CDentry::PIN_FRAGMENTING);
+      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+      dn->state_clear(CDentry::STATE_FRAGMENTING);
+      dn->put(CDentry::PIN_FRAGMENTING);
     }
 
     dir->unfreeze_dir();

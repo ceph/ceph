@@ -313,6 +313,11 @@ CDentry* CDir::add_null_dentry(const string& dname,
   else
     num_snap_null++;
 
+  if (state_test(CDir::STATE_DNPINNEDFRAG)) {
+    dn->get(CDentry::PIN_FRAGMENTING);
+    dn->state_set(CDentry::STATE_FRAGMENTING);
+  }    
+
   dout(12) << "add_null_dentry " << *dn << dendl;
 
   // pin?
@@ -355,6 +360,11 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
   else
     num_snap_items++;
   
+  if (state_test(CDir::STATE_DNPINNEDFRAG)) {
+    dn->get(CDentry::PIN_FRAGMENTING);
+    dn->state_set(CDentry::STATE_FRAGMENTING);
+  }    
+
   dout(12) << "add_primary_dentry " << *dn << dendl;
 
   // pin?
@@ -389,6 +399,11 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
   else
     num_snap_items++;
 
+  if (state_test(CDir::STATE_DNPINNEDFRAG)) {
+    dn->get(CDentry::PIN_FRAGMENTING);
+    dn->state_set(CDentry::STATE_FRAGMENTING);
+  }    
+
   dout(12) << "add_remote_dentry " << *dn << dendl;
 
   // pin?
@@ -407,6 +422,11 @@ void CDir::remove_dentry(CDentry *dn)
 
   // there should be no client leases at this point!
   assert(dn->client_lease_map.empty());
+
+  if (state_test(CDir::STATE_DNPINNEDFRAG)) {
+    dn->put(CDentry::PIN_FRAGMENTING);
+    dn->state_clear(CDentry::STATE_FRAGMENTING);
+  }    
 
   if (dn->get_linkage()->is_null()) {
     if (dn->last == CEPH_NOSNAP)
