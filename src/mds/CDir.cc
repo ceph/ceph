@@ -730,16 +730,25 @@ void CDir::steal_dentry(CDentry *dn)
     }
   }
 
-  dn->dir->nested_auth_pins -= dn->auth_pins + dn->nested_auth_pins;
-  dn->dir->dir_auth_pins -= dn->auth_pins;
+  if (dn->auth_pins || dn->nested_auth_pins) {
+    // use the helpers here to maintain the auth_pin invariants on the dir inode
+    adjust_nested_auth_pins(dn->nested_auth_pins, dn->auth_pins);
+    dn->dir->adjust_nested_auth_pins(-dn->nested_auth_pins, -dn->auth_pins);
+  }
 
-  nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
-  dir_auth_pins += dn->auth_pins;
   nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
 
   dn->dir = this;
+}
+
+void CDir::prepare_old_fragment(bool replay)
+{
+  // auth_pin old fragment for duration so that any auth_pinning
+  // during the dentry migration doesn't trigger side effects
+  if (!replay && is_auth())
+    auth_pin(this);
 }
 
 void CDir::prepare_new_fragment(bool replay)
@@ -754,6 +763,7 @@ void CDir::finish_old_fragment(list<Context*>& waiters, bool replay)
   if (!replay) {
     take_waiting(WAIT_ANY_MASK, waiters);
     if (is_auth()) {
+      auth_unpin(this);  // pinned in prepare_old_fragment
       assert(is_frozen_dir());
       unfreeze_dir();
     }
@@ -818,6 +828,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
   olddiff.add_delta(fnode.rstat, fnode.accounted_rstat);
   dout(10) << "         olddiff " << olddiff << dendl;
+
+  prepare_old_fragment(replay);
 
   // create subfrag dirs
   int n = 0;
@@ -900,6 +912,8 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
     
+    dir->prepare_old_fragment(replay);
+
     // steal dentries
     while (!dir->items.empty()) 
       steal_dentry(dir->items.begin()->second);
