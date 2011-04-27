@@ -940,12 +940,22 @@ void EUpdate::update_segment()
 void EUpdate::replay(MDS *mds)
 {
   metablob.replay(mds, _segment);
-
+  
   if (had_slaves) {
     dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
     _segment->uncommitted_masters.insert(reqid);
     set<int> slaves;
     mds->mdcache->add_uncommitted_master(reqid, _segment, slaves);
+  }
+  
+  // open client sessions?
+  map<client_t,entity_inst_t> cm;
+  map<client_t, uint64_t> seqm;
+  if (client_map.length()) {
+    bufferlist::iterator blp = client_map.begin();
+    ::decode(cm, blp);
+    mds->server->prepare_force_open_sessions(cm, seqm);
+    mds->server->finish_force_open_sessions(cm, seqm);
   }
 }
 
