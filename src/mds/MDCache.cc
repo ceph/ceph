@@ -8464,6 +8464,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "handle_discover not adding unwanted base dir " << *curdir << dendl;
+      // make sure the base frag is correct, though, in there was a refragment since the
+      // original request was sent.
+      reply->set_base_dir_frag(curdir->get_frag());
     } else {
       assert(!curdir->is_ambiguous_auth()); // would be frozen.
       if (!reply->trace.length())
