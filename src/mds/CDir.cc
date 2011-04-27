@@ -853,6 +853,10 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
 
+  // see if _any_ of the source frags have stale fragstat or rstat
+  int stale_rstat = 0;
+  int stale_fragstat = 0;
+
   for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); p++) {
     CDir *dir = *p;
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
@@ -875,10 +879,20 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     if (dir->get_version() > get_version())
       set_version(dir->get_version());
 
-    if (fnode.fragstat.version == 0)
+    // *stat versions
+    if (fnode.fragstat.version < dir->fnode.fragstat.version)
       fnode.fragstat.version = dir->fnode.fragstat.version;
-    if (fnode.rstat.version == 0)
+    if (fnode.rstat.version < dir->fnode.rstat.version)
       fnode.rstat.version = dir->fnode.rstat.version;
+
+    if (dir->fnode.accounted_fragstat.version != dir->fnode.fragstat.version)
+      stale_fragstat = 1;
+    if (dir->fnode.accounted_rstat.version != dir->fnode.rstat.version)
+      stale_rstat = 1;
+
+    // sum accounted_*
+    fnode.accounted_fragstat.add(dir->fnode.accounted_fragstat);
+    fnode.accounted_rstat.add(dir->fnode.accounted_rstat, 1);
 
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
@@ -887,6 +901,10 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     dir->purge_stolen(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
   }
+
+  // offset accounted_* version by -1 if any source frag was stale
+  fnode.accounted_fragstat.version = fnode.fragstat.version - stale_fragstat;
+  fnode.accounted_rstat.version = fnode.rstat.version - stale_rstat;
 
   init_fragment_pins();
 }
