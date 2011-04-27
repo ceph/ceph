@@ -687,6 +687,8 @@ libos_a_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
 	os/JournalingObjectStore.cc
+libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+
 
 libosd_a_SOURCES = \
 	osd/PG.cc \

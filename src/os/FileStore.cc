@@ -82,6 +82,11 @@
 
 #include <map>
 
+#include "common/ceph_crypto.h"
+
+using ceph::crypto::MD5;
+// using ceph::crypto::SHA1;
+
 /*
  * long file names will have the following format:
  *
@@ -157,11 +162,29 @@ int sys_listxattr(const char *fn, char *names, size_t len)
 }
 #endif
 
+static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  int i;
+  str[0] = '\0';
+  for (i = 0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
+
 static int hash_filename(const char *filename, char *hash, int buf_len)
 {
   if (buf_len < FILENAME_HASH_LEN + 1)
     return -EINVAL;
-  sprintf(hash, "zzz");
+
+  char buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char hex[CEPH_CRYPTO_MD5_DIGESTSIZE * 2];
+  MD5 h;
+  h.Update((const byte *)filename, strlen(filename));
+  h.Final((byte *)buf);
+
+  buf_to_hex((byte *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
+  strncpy(hash, hex, FILENAME_HASH_LEN);
+  hash[FILENAME_HASH_LEN] = '\0';
   return 0;
 }
 
@@ -217,7 +240,7 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   // 012345678901234567890123456789012345678901234567890123456789
   // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
 
-void FileStore::append_oname(const sobject_t &oid, char *s, int len)
+int FileStore::append_oname(const sobject_t &oid, char *s, int len)
 {
   //assert(sizeof(oid) == 28);
   char *end = s + len;
@@ -239,13 +262,16 @@ void FileStore::append_oname(const sobject_t &oid, char *s, int len)
     i++;
   }
 
+  int size = t - s;
+
   if (oid.snap == CEPH_NOSNAP)
-    snprintf(t, end - t, "_head");
+    size += snprintf(t, end - t, "_head");
   else if (oid.snap == CEPH_SNAPDIR)
-    snprintf(t, end - t, "_snapdir");
+    size += snprintf(t, end - t, "_snapdir");
   else
-    snprintf(t, end - t, "_%llx", (long long unsigned)oid.snap);
-  //parse_object(t+1);
+    size += snprintf(t, end - t, "_%llx", (long long unsigned)oid.snap);
+
+  return size;
 }
 
 bool FileStore::parse_object(char *s, sobject_t& o)
@@ -306,9 +332,9 @@ int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len
   filename = pathname + path_len;
 
   *lfn = '\0';
-  append_oname(oid, lfn, lfn_len);
+  int actual_len = append_oname(oid, lfn, lfn_len);
 
-  if (oid.oid.name.size() < FILENAME_PREFIX_LEN) {
+  if (actual_len < (int)FILENAME_PREFIX_LEN) {
     /* not a long file name, just build it as it is */
     strncpy(filename, lfn, len - path_len);
     *is_lfn = 0;

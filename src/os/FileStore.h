@@ -66,10 +66,8 @@ class FileStore : public JournalingObjectStore {
   Finisher ondisk_finisher;
 
   // helper fns
-  void append_oname(const sobject_t &oid, char *s, int len);
-  //void get_oname(sobject_t oid, char *s);
+  int append_oname(const sobject_t &oid, char *s, int len);
   int get_cdir(coll_t cid, char *s, int len);
-  void get_coname(coll_t cid, const sobject_t& oid, char *s, int len);
   bool parse_object(char *s, sobject_t& o);
   
   int lock_fsid();

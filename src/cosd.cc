@@ -56,7 +56,7 @@ int main(int argc, const char **argv)
   vector<const char *>::iterator args_iter;
 
   common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
-  
+
   ceph_heap_profiler_init();
 
   // osd specific args
