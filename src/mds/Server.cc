@@ -4958,13 +4958,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
 
-
-  if (!srcdn->is_auth() && srcdnl->is_primary()) {
-    // importing inode; also journal imported client map
-    
-    // ** DER FIXME **
-  }
-
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
 
