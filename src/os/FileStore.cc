@@ -201,11 +201,11 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   char buf[PATH_MAX];
 
   snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = do_getxattr(buf, "user.ceph._lfn", new_name, sizeof(buf) - 1);
+  int r = do_getxattr(buf, "user.ceph._lfn", new_name, len - 1);
   if (r < 0)
     strncpy(new_name, name, len);
   else
-    buf[r] = '\0';
+    new_name[r] = '\0';
   return;
 }
 
@@ -295,12 +295,6 @@ int FileStore::get_cdir(coll_t cid, char *s, int len)
   return snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
-void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s, int len) 
-{
-  get_cdir(cid, s, len);
-  append_oname(oid, s, len);
-}
-
 int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn)
 {
   int i = 0;
@@ -334,7 +328,8 @@ int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len
     if (r < 0)
       r = -errno;
     if (r > 0) {
-      buf[MAX((int)sizeof(buf)-1, r)] = '\0';
+      buf[MIN((int)sizeof(buf)-1, r)] = '\0';
+      dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " lfn=" << lfn << " buf=" << buf << dendl;
       if (strcmp(buf, lfn) == 0) { // a match?
         *exist = 1;
         return i;
@@ -518,9 +513,8 @@ int FileStore::lfn_unlink(coll_t cid, const sobject_t& o)
     return r;
   if (!is_lfn)
     return unlink(short_fn);
-  if (!exist) {
+  if (!exist)
     return -ENOENT;
-  }
 
   path_len = get_cdir(cid, short_fn2, sizeof(short_fn2));
   short_fn2[path_len] = '/';
@@ -630,7 +624,7 @@ int do_getxattr_len(const char *fn, const char *name)
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = do_getxattr(fn, raw_name, 0, 0);
+    r = sys_getxattr(fn, raw_name, 0, 0);
     if (!i && r < 0) {
       return r;
     }
