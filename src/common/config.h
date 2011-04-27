@@ -370,6 +370,7 @@ public:
   bool mds_verify_scatter;
   bool mds_debug_scatterstat;
   bool mds_debug_frag;
+  bool mds_debug_auth_pins;
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;

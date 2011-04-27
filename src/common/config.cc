@@ -309,6 +309,7 @@ struct config_option config_optionsp[] = {
   OPTION(mds_verify_scatter, OPT_BOOL, false),
   OPTION(mds_debug_scatterstat, OPT_BOOL, false),
   OPTION(mds_debug_frag, OPT_BOOL, false),
+  OPTION(mds_debug_auth_pins, OPT_BOOL, false),
   OPTION(mds_kill_mdstable_at, OPT_INT, 0),
   OPTION(mds_kill_export_at, OPT_INT, 0),
   OPTION(mds_kill_import_at, OPT_INT, 0),

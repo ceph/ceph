@@ -2023,6 +2023,19 @@ void CInode::adjust_nested_auth_pins(int a)
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
+  if (g_conf.mds_debug_auth_pins) {
+    // audit
+    int s = 0;
+    for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	 p != dirfrags.end();
+	 ++p) {
+      CDir *dir = p->second;
+      if (dir->get_cum_auth_pins())
+	s++;
+    } 
+    assert(s == nested_auth_pins);
+  } 
+
   if (parent)
     parent->adjust_nested_auth_pins(a, 0);
 }
