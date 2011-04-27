@@ -370,8 +370,9 @@ public:
   }
 
 private:
+  void prepare_new_fragment(bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void purge_stolen(list<Context*>& waiters, bool replay);
+  void finish_old_fragment(list<Context*>& waiters, bool replay);
   void init_fragment_pins();
 
 

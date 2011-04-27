@@ -659,7 +659,7 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
 /**
  * steal_dentry -- semi-violently move a dentry from one CDir to another
  * (*) violently, in that nitems, most pins, etc. are not correctly maintained 
- * on the old CDir corpse; must call purge_stolen() when finished.
+ * on the old CDir corpse; must call finish_old_fragment() when finished.
  */
 void CDir::steal_dentry(CDentry *dn)
 {
@@ -722,7 +722,13 @@ void CDir::steal_dentry(CDentry *dn)
   dn->dir = this;
 }
 
-void CDir::purge_stolen(list<Context*>& waiters, bool replay)
+void CDir::prepare_new_fragment(bool replay)
+{
+  if (!replay && is_auth())
+    _freeze_dir();
+}
+
+void CDir::finish_old_fragment(list<Context*>& waiters, bool replay)
 {
   // take waiters _before_ unfreeze...
   if (!replay) {
@@ -818,6 +824,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     subfrags[n++] = f;
     subs.push_back(f);
     inode->add_dirfrag(f);
+
+    f->prepare_new_fragment(replay);
   }
   
   // repartition dentries
@@ -854,12 +862,14 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   subfrags[0]->fnode.accounted_rstat.add_delta(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
-  purge_stolen(waiters, replay);
+  finish_old_fragment(waiters, replay);
 }
 
 void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
+
+  prepare_new_fragment(replay);
 
   // see if _any_ of the source frags have stale fragstat or rstat
   int stale_rstat = 0;
@@ -906,7 +916,7 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
     dir_auth = dir->dir_auth;
 
-    dir->purge_stolen(waiters, replay);
+    dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
   }
 

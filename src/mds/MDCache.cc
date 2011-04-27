@@ -4607,7 +4607,7 @@ void MDCache::open_snap_parents()
 	   q++)
 	for (set<inodeno_t>::iterator r = q->second.begin();
 	     r != q->second.end();
-	     r++)
+	     r++) 
 	  prepare_realm_split(in->snaprealm, q->first, *r, splits);
 
       missing_snap_parents.erase(p++);
@@ -9617,7 +9617,6 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
     // freeze and store them too
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->commit(0, gather->new_sub(), true);  // ignore authpinnability
-    dir->_freeze_dir();
   }
 
   mds->mdlog->submit_entry(le, gather->new_sub());
