@@ -706,7 +706,7 @@ public:
     assert(my_ambiguous_imports.count(base));
     bounds = my_ambiguous_imports[base];
   }
-  void cancel_ambiguous_import(dirfrag_t dirino);
+  void cancel_ambiguous_import(CDir *);
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
   void send_resolves();

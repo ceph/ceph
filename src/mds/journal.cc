@@ -1215,8 +1215,7 @@ void EImportFinish::replay(MDS *mds)
       vector<dirfrag_t> bounds;
       mds->mdcache->get_ambiguous_import_bounds(base, bounds);
       mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
-      mds->mdcache->cancel_ambiguous_import(base);
-      mds->mdcache->try_trim_non_auth_subtree(dir);
+      mds->mdcache->cancel_ambiguous_import(dir);
     }
   } else {
     dout(10) << "EImportFinish.replay " << base << " success=" << success

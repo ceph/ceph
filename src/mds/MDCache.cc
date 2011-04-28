@@ -2820,7 +2820,7 @@ void MDCache::disambiguate_imports()
     
     if (dir->authority() != me_ambig) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
-      cancel_ambiguous_import(q->first);
+      cancel_ambiguous_import(dir);
       mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
@@ -2872,13 +2872,17 @@ void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
   add_ambiguous_import(base->dirfrag(), binos);
 }
 
-void MDCache::cancel_ambiguous_import(dirfrag_t df)
+void MDCache::cancel_ambiguous_import(CDir *dir)
 {
+  dirfrag_t df = dir->dirfrag();
   assert(my_ambiguous_imports.count(df));
   dout(10) << "cancel_ambiguous_import " << df
 	   << " bounds " << my_ambiguous_imports[df]
+	   << " " << *dir
 	   << dendl;
   my_ambiguous_imports.erase(df);
+
+  try_trim_non_auth_subtree(dir);
 }
 
 void MDCache::finish_ambiguous_import(dirfrag_t df)
