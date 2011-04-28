@@ -84,7 +84,7 @@
 
 #include "common/ceph_crypto.h"
 
-using ceph::crypto::MD5;
+using ceph::crypto::SHA256;
 // using ceph::crypto::SHA1;
 
 /*
@@ -98,11 +98,12 @@ using ceph::crypto::MD5;
  */
 #define FILENAME_MAX_LEN 4096 // the long file name size
 
-#define FILENAME_SHORT_LEN 32 // the short file name size
+#define FILENAME_SHORT_LEN 20 // the short file name size
 #define FILENAME_COOKIE "long"  // ceph long file name
 #define FILENAME_HASH_LEN 3
+#define FILENAME_EXTRA 4 // underscores and digit
 
-#define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 1 - (sizeof(FILENAME_COOKIE) - 1) - 1)
+#define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 
 static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
 static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
@@ -175,15 +176,18 @@ static int hash_filename(const char *filename, char *hash, int buf_len)
 {
   if (buf_len < FILENAME_HASH_LEN + 1)
     return -EINVAL;
-
-  char buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char hex[CEPH_CRYPTO_MD5_DIGESTSIZE * 2];
-  MD5 h;
+#if 0
+  char buf[CEPH_CRYPTO_SHA256_DIGESTSIZE];
+  char hex[CEPH_CRYPTO_SHA256_DIGESTSIZE * 2];
+  SHA256 h;
   h.Update((const byte *)filename, strlen(filename));
   h.Final((byte *)buf);
 
   buf_to_hex((byte *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
   strncpy(hash, hex, FILENAME_HASH_LEN);
+  hash[FILENAME_HASH_LEN] = '\0';
+#endif
+  memset(hash, 'z', FILENAME_HASH_LEN);
   hash[FILENAME_HASH_LEN] = '\0';
   return 0;
 }
@@ -202,7 +206,14 @@ static void build_filename(char *filename, int len, const char *old_filename, in
     return;
 
   hash_filename(old_filename, hash, sizeof(hash));
-  sprintf(filename + FILENAME_PREFIX_LEN, "_%s_%d_" FILENAME_COOKIE, hash, i);
+  int ofs = FILENAME_PREFIX_LEN;
+  int suffix_len;
+  while (1) {
+    suffix_len = sprintf(filename + ofs, "_%s_%d_" FILENAME_COOKIE, hash, i);
+    if (ofs + suffix_len <= FILENAME_SHORT_LEN || !ofs)
+      break;
+    ofs--;
+  }
 }
 
 /* is this a candidate? */
