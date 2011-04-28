@@ -1728,7 +1728,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       dout(10) << " trace from " << df << " start " << start << " len " << p->length() << dendl;
 
       CInode *in;
-      CDir *cur;
+      CDir *cur = 0;
       if (start == 'd') {
 	cur = cache->get_dirfrag(df);
 	assert(cur);
