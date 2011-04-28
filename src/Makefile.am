@@ -30,6 +30,7 @@ endif
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cmon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cmon
 
 # osd
@@ -137,6 +138,9 @@ cosd_SOURCES += perfglue/heap_profiler.cc
 cmds_LDADD += -ltcmalloc
 cmds_CXXFLAGS += ${tcmalloc_safety_flags}
 cmds_SOURCES += perfglue/heap_profiler.cc
+cmon_LDADD += -ltcmalloc
+cmon_CXXFLAGS += ${tcmalloc_safety_flags}
+cmon_SOURCES += perfglue/heap_profiler.cc
 if WITH_FUSE
 cfuse_LDADD += -ltcmalloc
 cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
@@ -144,6 +148,7 @@ endif #WITH_FUSE
 else
 cosd_SOURCES += perfglue/disabled_heap_profiler.cc
 cmds_SOURCES += perfglue/disabled_heap_profiler.cc
+cmon_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets
