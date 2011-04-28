@@ -7,6 +7,8 @@ SUBDIRS =
 DIST_SUBDIRS = gtest
 CLEANFILES =
 bin_PROGRAMS =
+# like bin_PROGRAMS, but these targets are only built for debug builds
+bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
 bin_SCRIPTS = crun $(srcdir)/cclsinfo cdebugpack crbdnamer
@@ -144,23 +146,21 @@ cosd_SOURCES += perfglue/disabled_heap_profiler.cc
 cmds_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
-# debug targets?
-if WITH_DEBUG
-
+# debug targets
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += psim
+bin_DEBUGPROGRAMS += psim
 
 test_mutate_SOURCES = test/test_mutate.cc msg/SimpleMessenger.cc
 test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += test_mutate
+bin_DEBUGPROGRAMS += test_mutate
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testmsgr
+bin_DEBUGPROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
-bin_PROGRAMS += test_ioctls
+bin_DEBUGPROGRAMS += test_ioctls
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -168,18 +168,15 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += dumpjournal dupstore streamtest
+bin_DEBUGPROGRAMS += dumpjournal dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += test_trans
+bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
 testsnaps_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testsnaps
-
-endif
-
+bin_DEBUGPROGRAMS += testsnaps
 
 ##########
 BUILT_SOURCES =
@@ -210,24 +207,21 @@ libceph_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
-if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testceph
+bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testtimers
+bin_DEBUGPROGRAMS += testtimers
 
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
 testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
-bin_PROGRAMS += testdout_streambuf
+bin_DEBUGPROGRAMS += testdout_streambuf
 
 testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
 testsignal_handlers_LDADD = libceph.la -lpthread
-bin_PROGRAMS += testsignal_handlers
-
-endif
+bin_DEBUGPROGRAMS += testsignal_handlers
 
 # librados
 librados_SOURCES = \
@@ -265,30 +259,26 @@ rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
-if WITH_DEBUG
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testrados testradospp radosacl
-endif
+bin_DEBUGPROGRAMS += testrados testradospp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
-if WITH_DEBUG
 testlibrbd_SOURCES = testlibrbd.c
 testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		   $(CRYPTO_LIBS) $(EXTRALIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
 testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		     $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testlibrbd testlibrbdpp
-endif
+bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -323,17 +313,15 @@ radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthrea
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
-if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += testcrypto
+bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
 testkeys_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += testkeys
-endif
+bin_DEBUGPROGRAMS += testkeys
 
 
 ## rados object classes
@@ -479,7 +467,7 @@ CLEANFILES += \
 ##
 
 AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
--Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith \
+${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
 -fno-strict-aliasing
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
@@ -524,7 +512,7 @@ shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
 
 libceph_includedir = $(includedir)/ceph
-libceph_include_DATA = $(srcdir)/client/libceph.h
+libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
@@ -744,7 +732,6 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse_ll.h\
 	client/ioctl.h\
-	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\
@@ -813,6 +800,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
+	include/ceph/libceph.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
@@ -1093,3 +1081,8 @@ uninstall-local:
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
+# if we are doing a debug build, tell make to actually build the debug
+# targets
+if WITH_DEBUG
+bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
+endif

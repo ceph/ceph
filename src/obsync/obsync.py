@@ -20,12 +20,14 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from optparse import OptionParser
 from sys import stderr
-import boto
+from lxml import etree
 import base64
+import boto
 import errno
 import hashlib
 import mimetypes
 import os
+from StringIO import StringIO
 import rados
 import re
 import shutil
@@ -143,6 +145,147 @@ def get_local_acl_file_name(local_name):
         raise LocalFileIsAcl()
     return os.path.dirname(local_name) + "/." + \
         os.path.basename(local_name) + "$acl"
+
+###### ACLs #######
+
+# for buckets: allow list
+# for object: allow grantee to read object data and metadata
+READ = 1
+
+# for buckets: allow create, overwrite, or deletion of any object in the bucket
+WRITE = 2
+
+# for buckets: allow grantee to read the bucket ACL
+# for objects: allow grantee to read the object ACL
+READ_ACP = 4
+
+# for buckets: allow grantee to write the bucket ACL
+# for objects: allow grantee to write the object ACL
+WRITE_ACP = 8
+
+# all of the above
+FULL_CONTROL = READ | WRITE | READ_ACP | WRITE_ACP
+
+ACL_TYPE_CANON_USER = "canon:"
+ACL_TYPE_EMAIL_USER = "email:"
+ACL_TYPE_GROUP = "group:"
+
+S3_GROUP_AUTH_USERS = ACL_TYPE_GROUP +  "AuthenticatedUsers"
+S3_GROUP_ALL_USERS = ACL_TYPE_GROUP +  "AllUsers"
+S3_GROUP_LOG_DELIVERY = ACL_TYPE_GROUP +  "LogDelivery"
+
+NS = "http://s3.amazonaws.com/doc/2006-03-01/"
+NS2 = "http://www.w3.org/2001/XMLSchema-instance"
+
+class AclGrant(object):
+    def __init__(self, user_id, display_name, permission):
+        self.user_id = user_id
+        self.display_name = display_name
+        self.permission = permission
+
+def get_user_type(utype):
+    for ut in [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]:
+        if utype[:len(ut)] == ut:
+            return ut
+    raise Exception("unknown user type for user %s" % utype)
+
+def strip_user_type(utype):
+    for ut in [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]:
+        if utype[:len(ut)] == ut:
+            return utype[len(ut):]
+    raise Exception("unknown user type for user %s" % utype)
+
+def grantee_attribute_to_user_type(utype):
+    if (utype == "Canonical User"):
+        return ACL_TYPE_CANON_USER
+    elif (utype == "CanonicalUser"):
+        return ACL_TYPE_CANON_USER
+    elif (utype == "Group"):
+        return ACL_TYPE_GROUP
+    elif (utype == "Email User"):
+        return ACL_TYPE_EMAIL_USER
+    elif (utype == "EmailUser"):
+        return ACL_TYPE_EMAIL_USER
+    else:
+        raise Exception("unknown user type for user %s" % utype)
+
+def user_type_to_attr(t):
+    if (t == ACL_TYPE_CANON_USER):
+        return "CanonicalUser"
+    elif (t == ACL_TYPE_GROUP):
+        return "Group"
+    elif (t ==  ACL_TYPE_EMAIL_USER):
+        return "EmailUser"
+    else:
+        raise Exception("unknown user type %s" % t)
+
+class AclPolicy(object):
+    def __init__(self, owner_id, owner_display_name, grants):
+        self.owner_id = owner_id
+        self.owner_display_name = owner_display_name
+        self.grants = grants  # list of ACLGrant
+    @staticmethod
+    def from_xml(s):
+        root = etree.parse(StringIO(s))
+        owner_id = root.find("{%s}Owner/{%s}ID" % (NS,NS)).text
+        owner_display_name = root.find("{%s}Owner/{%s}DisplayName" \
+            % (NS,NS)).text
+        grantlist = root.findall("{%s}AccessControlList/{%s}Grant" \
+            % (NS,NS))
+        grants = [ ]
+        for g in grantlist:
+            grantee = g.find("{%s}Grantee" % NS)
+            user_id = grantee.find("{%s}ID" % NS).text
+            user_type = grantee.attrib["{%s}type" % NS2]
+            display_name = grantee.find("{%s}DisplayName" % NS).text
+            permission = g.find("{%s}Permission" % NS).text
+            g_user_id = grantee_attribute_to_user_type(user_type) + user_id
+            grants.append(AclGrant(g_user_id, display_name, permission))
+        return AclPolicy(owner_id, owner_display_name, grants)
+    def to_xml(self):
+        root = etree.Element("AccessControlPolicy", nsmap={None: NS})
+        owner = etree.SubElement(root, "Owner")
+        id_elem = etree.SubElement(owner, "ID")
+        id_elem.text = self.owner_id
+        display_name_elem = etree.SubElement(owner, "DisplayName")
+        display_name_elem.text = self.owner_display_name
+        access_control_list = etree.SubElement(root, "AccessControlList")
+        for g in self.grants:
+            grant_elem = etree.SubElement(access_control_list, "Grant")
+            grantee_elem = etree.SubElement(grant_elem, "{%s}Grantee" % NS,
+                nsmap={None: NS, "xsi" : NS2})
+            grantee_elem.set("type", user_type_to_attr(get_user_type(g.user_id)))
+            user_id_elem = etree.SubElement(grantee_elem, "{%s}ID" % NS)
+            user_id_elem.text = strip_user_type(g.user_id)
+            display_name_elem = etree.SubElement(grantee_elem, "{%s}DisplayName" % NS)
+            display_name_elem.text = g.display_name
+            permission_elem = etree.SubElement(grant_elem, "{%s}Permission" % NS)
+            permission_elem.text = g.permission
+        return etree.tostring(root, encoding="UTF-8")
+
+def compare_xml(xml1, xml2):
+    tree1 = etree.parse(StringIO(xml1))
+    out1 = etree.tostring(tree1, encoding="UTF-8")
+    tree2 = etree.parse(StringIO(xml2))
+    out2 = etree.tostring(tree2, encoding="UTF-8")
+    out1 = out1.replace("xsi:type", "type")
+    out2 = out2.replace("xsi:type", "type")
+    if out1 != out2:
+        print "out1 = %s" % out1
+        print "out2 = %s" % out2
+        raise Exception("compare xml failed")
+
+#<?xml version="1.0" encoding="UTF-8"?>
+def test_acl_policy():
+    test1_xml = \
+"<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" + \
+"<Owner><ID>foo</ID><DisplayName>MrFoo</DisplayName></Owner><AccessControlList>" + \
+"<Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" " + \
+"xsi:type=\"CanonicalUser\"><ID>*** Owner-Canonical-User-ID ***</ID>" + \
+"<DisplayName>display-name</DisplayName></Grantee>" + \
+"<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
+    test1 = AclPolicy.from_xml(test1_xml)
+    compare_xml(test1_xml, test1.to_xml())
 
 ###### Object #######
 class Object(object):
@@ -632,7 +775,12 @@ parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
+parser.add_option("--unit", action="store_true", \
+    dest="run_unit_tests", help="run unit tests and quit")
 (opts, args) = parser.parse_args()
+if (opts.run_unit_tests):
+    test_acl_policy()
+    sys.exit(0)
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
     raise Exception("You can't run with both --create-dest and --dry-run! \

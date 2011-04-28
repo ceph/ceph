@@ -1,6 +1,6 @@
 // -*- mode:c++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "CephFSInterface.h"
-#include "client/libceph.h"
+#include "include/ceph/libceph.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "msg/SimpleMessenger.h"
