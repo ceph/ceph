@@ -128,7 +128,7 @@ void MDSMap::print_summary(ostream& out)
       s += "(laggy or crashed)";
 
     if (p->second.rank >= 0)
-      by_rank[p->second.rank] = s;
+      by_rank[p->second.rank] = p->second.name + "=" + s;
     else
       by_state[s]++;
   }
