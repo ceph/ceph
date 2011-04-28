@@ -19,10 +19,9 @@
 #define PAXOS_MDSMAP     1
 #define PAXOS_OSDMAP     2
 #define PAXOS_LOG        3
-#define PAXOS_CLASS      4
-#define PAXOS_MONMAP     5
-#define PAXOS_AUTH       6
-#define PAXOS_NUM        7
+#define PAXOS_MONMAP     4
+#define PAXOS_AUTH       5
+#define PAXOS_NUM        6
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
@@ -31,7 +30,6 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_OSDMAP: return "osdmap";
   case PAXOS_PGMAP: return "pgmap";
   case PAXOS_LOG: return "logm";
-  case PAXOS_CLASS: return "class";
   case PAXOS_AUTH: return "auth";
   default: assert(0); return 0;
   }

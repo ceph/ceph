@@ -110,6 +110,8 @@ class MDiscoverReply : public Message {
   bool is_unsolicited() { return unsolicited; }
   void mark_unsolicited() { unsolicited = true; }
 
+  void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
+
   // cons
   MDiscoverReply() {}
   MDiscoverReply(MDiscover *dis) :

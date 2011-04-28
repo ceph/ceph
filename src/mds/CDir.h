@@ -370,8 +370,10 @@ public:
   }
 
 private:
+  void prepare_new_fragment(bool replay);
+  void prepare_old_fragment(bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void purge_stolen(list<Context*>& waiters, bool replay);
+  void finish_old_fragment(list<Context*>& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -569,26 +571,7 @@ public:
   void _freeze_dir();
   void unfreeze_dir();
 
-  void maybe_finish_freeze() {
-    if (auth_pins != 1 ||
-	dir_auth_pins != 0)
-      return;
-    // we can freeze the _dir_ even with nested pins...
-    if (state_test(STATE_FREEZINGDIR)) {
-      _freeze_dir();
-      auth_unpin(this);
-      finish_waiting(WAIT_FROZEN);
-    }
-    if (nested_auth_pins != 0) 
-      return;
-    if (!is_subtree_root() && inode->is_frozen())
-      return;
-    if (state_test(STATE_FREEZINGTREE)) {
-      _freeze_tree();
-      auth_unpin(this);
-      finish_waiting(WAIT_FROZEN);
-    }
-  }
+  void maybe_finish_freeze();
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree();

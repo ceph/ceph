@@ -66,8 +66,6 @@
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
 
-#include "messages/MClass.h"
-
 #include "messages/MWatchNotify.h"
 
 #include "common/ProfLogger.h"
@@ -79,7 +77,7 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
-#include "common/ClassHandler.h"
+#include "osd/ClassHandler.h"
 
 #include "auth/AuthAuthorizeHandler.h"
 
@@ -454,7 +452,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"), map_cache_keep_from(0),
-  class_lock("OSD::class_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -514,7 +511,7 @@ void handle_signal(int signal)
   }
 }
 
-void cls_initialize(OSD *_osd);
+void cls_initialize(ClassHandler *ch);
 
 
 int OSD::pre_init()
@@ -568,10 +565,10 @@ int OSD::init()
     return -1;
   }
 
-  class_handler = new ClassHandler(this);
+  class_handler = new ClassHandler();
   if (!class_handler)
     return -ENOMEM;
-  cls_initialize(this);
+  cls_initialize(class_handler);
 
   // load up "current" osdmap
   assert_warn(!osdmap);
@@ -1833,7 +1830,6 @@ void OSD::ms_handle_connect(Connection *con)
     send_pg_temp();
     send_failures();
     send_pg_stats(g_clock.now());
-    class_handler->resend_class_requests();
   }
 }
 
@@ -2169,7 +2165,7 @@ void OSD::handle_command(MMonCommand *m)
 
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
-    parse_config_option_string(m->cmd[1]);
+    g_conf.injectargs(m->cmd[1]);
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
     shutdown();
@@ -2552,10 +2548,6 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_REP_SCRUB:
     handle_rep_scrub((MOSDRepScrub*)m);
     break;    
-
-  case MSG_CLASS:
-    handle_class((MClass*)m);
-    break;
 
     // -- need OSDMap --
 
@@ -4493,35 +4485,11 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
         continue;
       }
 
-      if (role < 0) {
-        dout(10) << " pg " << pgid << " dne, and i am not an active replica" << dendl;
-        PG::Info empty(pgid);
-        notify_list[from].push_back(empty);
-        continue;
-      }
-      assert(role > 0);
-
-      if (!history.epoch_created) {
-	dout(10) << " pg " << pgid << " not created, replying with empty info" << dendl;
-        PG::Info empty(pgid);
-        notify_list[from].push_back(empty);
-	continue;
-      }
-
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg = _create_lock_pg(pgid, *t);
-      pg->acting.swap( acting );
-      pg->up.swap( up );
-      pg->set_role(role);
-      pg->info.history = history;
-      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-      pg->write_info(*t);
-      pg->write_log(*t);
-      int tr = store->queue_transaction(&pg->osr, t);
-      assert(tr == 0);
-      created++;
-
-      dout(10) << *pg << " dne (before), but i am role " << role << dendl;
+      assert(role != 0);
+      dout(10) << " pg " << pgid << " dne" << dendl;
+      PG::Info empty(pgid);
+      notify_list[from].push_back(empty);
+      continue;
     } else {
       pg = _lookup_lock_pg(pgid);
       if (m->get_epoch() < pg->info.history.same_acting_since) {
@@ -4541,7 +4509,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
        * get an old query from an old primary.. which we can safely
        * ignore.
        */
-      dout(10) << *pg << " query on deleting pg; ignoring" << dendl;
+      dout(0) << *pg << " query on deleting pg" << dendl;
+      assert(0 == "this should not happen");
       pg->unlock();
       continue;
     }
@@ -4902,19 +4871,20 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
-  dout(10) << "activate_pg" << dendl;
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
+    dout(10) << "activate_pg " << *pg << dendl;
     if (pg->is_active() &&
 	pg->is_replay() &&
 	pg->get_role() == 0 &&
 	pg->replay_until == activate_at) {
-
       pg->replay_queued_ops();
     }
     pg->unlock();
+  } else {
+    dout(10) << "activate_pg pgid " << pgid << " (not found)" << dendl;
   }
-
+  
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();
 }
@@ -5133,7 +5103,11 @@ void OSD::handle_op(MOSDOp *op)
 
   utime_t now = g_clock.now();
 
-  init_op_flags(op);
+  int r = init_op_flags(op);
+  if (r) {
+    reply_op_error(op, r);
+    return;
+  }
 
   // calc actual pgid
   pg_t pgid = op->get_pg();
@@ -5494,78 +5468,7 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m,
-		   ClassHandler::ClassData **pcls)
-{
-  Mutex::Locker l(class_lock);
-  dout(10) << "get_class '" << cname << "' by " << m << dendl;
-
-  ClassHandler::ClassData *cls = class_handler->get_class(cname, version);
-  if (cls) {
-    switch (cls->status) {
-    case ClassHandler::ClassData::CLASS_LOADED:
-      *pcls = cls;
-      return 0;
-    case ClassHandler::ClassData::CLASS_INVALID:
-      dout(1) << "class " << cname << " not supported" << dendl;
-      return -EOPNOTSUPP;
-    case ClassHandler::ClassData::CLASS_ERROR:
-      dout(0) << "error loading class!" << dendl;
-      return -EIO;
-    default:
-      assert(0);
-    }
-  }
-
-  dout(10) << "get_class '" << cname << "' by " << m << " waiting for missing class" << dendl;
-  waiting_for_missing_class[cname].push_back(m);
-  return -EAGAIN;
-}
-
-void OSD::got_class(const string& cname)
-{
-  // no lock.. this is an upcall from handle_class
-  dout(10) << "got_class '" << cname << "'" << dendl;
-
-  if (waiting_for_missing_class.count(cname)) {
-    take_waiters(waiting_for_missing_class[cname]);
-    waiting_for_missing_class.erase(cname);
-  }
-}
-
-void OSD::handle_class(MClass *m)
-{
-  if (!require_mon_peer(m))
-    return;
-
-  Mutex::Locker l(class_lock);
-  dout(10) << "handle_class action=" << m->action << dendl;
-
-  switch (m->action) {
-  case CLASS_RESPONSE:
-    class_handler->handle_class(m);
-    break;
-
-  default:
-    assert(0);
-  }
-  m->put();
-}
-
-void OSD::send_class_request(const char *cname, ClassVersion& version)
-{
-  dout(10) << "send_class_request class=" << cname << " version=" << version << dendl;
-  MClass *m = new MClass(monc->get_fsid(), 0);
-  ClassInfo info;
-  info.name = cname;
-  info.version = version;
-  m->info.push_back(info);
-  m->action = CLASS_GET;
-  monc->send_mon_message(m);
-}
-
-
-void OSD::init_op_flags(MOSDOp *op)
+int OSD::init_op_flags(MOSDOp *op)
 {
   vector<OSDOp>::iterator iter;
 
@@ -5591,7 +5494,12 @@ void OSD::init_op_flags(MOSDOp *op)
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
 	bp.copy(iter->op.cls.method_len, mname);
-        int flags =  class_handler->get_method_flags(cname, mname);
+
+	ClassHandler::ClassData *cls;
+	int r = class_handler->open_class(cname, &cls);
+	if (r)
+	  return r;
+	int flags = cls->get_method_flags(mname.c_str());
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
         is_public = flags & CLS_METHOD_PUBLIC;
@@ -5613,4 +5521,6 @@ void OSD::init_op_flags(MOSDOp *op)
       break;
     }
   }
+
+  return 0;
 }

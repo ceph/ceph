@@ -246,7 +246,6 @@ int main(int argc, const char **argv)
   rbd = new librbd::RBD();
   assert(rados.init(NULL) == 0);
   assert(rados.conf_read_file(NULL) == 0);
-  rados.reopen_log();
   assert(rados.connect() == 0);
   if (rados.pool_lookup(TEST_POOL) != -ENOENT) {
     int r = rados.pool_delete(TEST_POOL);

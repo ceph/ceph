@@ -20,16 +20,20 @@
 #ifndef CEPH_DOUT_STREAMBUF_H
 #define CEPH_DOUT_STREAMBUF_H
 
+#include "common/config.h"
+
 #include <iosfwd>
 #include <string>
 
+class md_config_t;
+
 template <typename charT, typename traits = std::char_traits<charT> >
-class DoutStreambuf : public std::basic_streambuf<charT, traits>
+class DoutStreambuf : public std::basic_streambuf<charT, traits>,
+		      public md_config_obs_t
 {
 public:
   enum dout_streambuf_flags_t {
     DOUTSB_FLAG_SYSLOG =          0x01,
-    DOUTSB_FLAG_STDOUT =          0x02,
     DOUTSB_FLAG_STDERR_SOME =     0x04,
     DOUTSB_FLAG_STDERR_ALL =      0x08,
     DOUTSB_FLAG_STDERR =          0x0c,
@@ -52,8 +56,10 @@ public:
   // for the error to happen.
   void handle_stderr_closed();
 
-  // Set the flags based on the global configuration
-  void read_global_config();
+  virtual const char** get_tracked_conf_keys() const;
+
+  virtual void handle_conf_change(const md_config_t *conf,
+			     const std::set <std::string> &changed);
 
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
@@ -61,10 +67,7 @@ public:
   // Call after calling daemon()
   // A change in the process ID sometimes requires us to change our output
   // path name.
-  int handle_pid_change();
-
-  // Create a rank symlink to the log file
-  int create_rank_symlink(int n);
+  int handle_pid_change(const md_config_t *conf);
 
   std::string config_to_str() const;
 
@@ -87,10 +90,12 @@ private:
   friend void dout_emergency(const std::string &str);
 
   void _clear_output_buffer();
-  std::string _calculate_opath() const;
-  std::string _get_symlink_dir() const;
-  int _read_ofile_config();
-  int _rotate_files(const std::string &base);
+  std::string _calculate_opath(const md_config_t *conf) const;
+  std::string _get_symlink_dir(const md_config_t *conf) const;
+  int _read_ofile_config(const md_config_t *conf);
+  int _rotate_files(const md_config_t *conf, const std::string &base);
+
+  std::string type_name;
 
   // Output buffer
   charT obuf[OBUF_SZ];
@@ -101,10 +106,8 @@ private:
   // ofile stuff
   int ofd;
   std::string opath;
-
-  // symlinks
+  std::string symlink_dir;
   std::string isym_path;
-  std::string rsym_path;
 };
 
 // Secret evil interfaces for writing logs without taking the lock.

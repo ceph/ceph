@@ -47,6 +47,36 @@ static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
 		<< ".pg v" << pg_map.version << " ";
 }
 
+class RatioMonitor : public md_config_obs_t {
+  PGMonitor *mon;
+public:
+  RatioMonitor(PGMonitor *pgmon) : mon(pgmon) {}
+  virtual ~RatioMonitor() {}
+  virtual const char **get_tracked_conf_keys() const {
+    static const char *KEYS[] = { "mon_osd_full_ratio",
+				  "mon_osd_nearfull_ratio", NULL };
+    return KEYS;
+  }
+  virtual void handle_conf_change(const md_config_t *conf,
+				  const std::set<std::string>& changed) {
+    mon->update_full_ratios(((float)conf->mon_osd_full_ratio) / 100,
+			    ((float)conf->mon_osd_nearfull_ratio) / 100);
+  }
+};
+
+PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
+  : PaxosService(mn, p)
+{
+  ratio_monitor = new RatioMonitor(this);
+  g_conf.add_observer(ratio_monitor);
+}
+
+PGMonitor::~PGMonitor()
+{
+  g_conf.remove_observer(ratio_monitor);
+  delete ratio_monitor;
+}
+
 /*
  Tick function to update the map based on performance every N seconds
 */
@@ -845,52 +875,41 @@ bool PGMonitor::prepare_command(MMonCommand *m)
 enum health_status_t PGMonitor::get_health(std::ostream &ss) const
 {
   enum health_status_t ret(HEALTH_OK);
+  map<string,int> note;
 
-  const hash_map<pg_t,pg_stat_t> &pg_stat = pg_map.pg_stat;
-
-  hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin();
-  hash_map<pg_t,pg_stat_t>::const_iterator p_end = pg_stat.end();
-  int seen = 0;
+  hash_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
+  hash_map<int,int>::const_iterator p_end = pg_map.num_pg_by_state.end();
   for (; p != p_end; ++p) {
-    seen |= p->second.state;
+    if (p->first & PG_STATE_DOWN)
+      note["down"] += p->second;
+    if (p->first & PG_STATE_DEGRADED)
+      note["degraded"] += p->second;
+    if (p->first & PG_STATE_INCONSISTENT)
+      note["inconsistent"] += p->second;
+    if (p->first & PG_STATE_PEERING)
+      note["peering"] += p->second;
+    if (p->first & PG_STATE_REPAIR)
+      note["repair"] += p->second;
+    if (p->first & PG_STATE_SPLITTING)
+      note["splitting"] += p->second;
+  }
+  if (!note.empty()) {
+    ret = HEALTH_WARN;
+    for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
+      if (p != note.begin())
+	ss << ", ";
+      ss << p->second << " pgs " << p->first;
+    }
   }
 
-  string prequel(" Some PGs are: ");
-  if (seen & PG_STATE_CRASHED) {
-    ss << prequel << "crashed";
-    prequel = ",";
+  stringstream rss;
+  pg_map.recovery_summary(rss);
+  if (!rss.str().empty()) {
+    if (ret != HEALTH_OK)
+      ss << ", ";
+    ret = HEALTH_WARN;
+    ss << rss.str();
   }
-  if (seen & PG_STATE_DOWN) {
-    ss << prequel << "down";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_REPLAY) {
-    ss << prequel << "replaying";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_SPLITTING) {
-    ss << prequel << "splitting";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_DEGRADED) {
-    ss << prequel << "degraded";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_INCONSISTENT) {
-    ss << prequel << "inconsistent";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_PEERING) {
-    ss << prequel << "peering";
-    prequel = ",";
-  }
-  if (seen & PG_STATE_REPAIR) {
-    ss << prequel << "repairing";
-    prequel = ",";
-  }
-  if (prequel == ",") {
-    if (ret > HEALTH_WARN)
-      ret = HEALTH_WARN;
-  }
+
   return ret;
 }

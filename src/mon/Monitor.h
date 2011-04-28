@@ -48,7 +48,6 @@ class PaxosService;
 class MMonGetMap;
 class MMonObserve;
 class MMonSubscribe;
-class MClass;
 class MAuthRotating;
 class MRoute;
 class MForward;
@@ -125,7 +124,6 @@ public:
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
   class MonmapMonitor *monmon() { return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP]; }
   class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
-  class ClassMonitor *classmon() { return (class ClassMonitor *)paxos_service[PAXOS_CLASS]; }
   class AuthMonitor *authmon() { return (class AuthMonitor *)paxos_service[PAXOS_AUTH]; }
 
   friend class Paxos;
@@ -150,7 +148,6 @@ public:
   void handle_mon_get_map(MMonGetMap *m);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
-  void handle_class(MClass *m);
   void handle_route(MRoute *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);

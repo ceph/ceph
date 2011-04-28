@@ -156,7 +156,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
 {
   if (oload <= 100) {
     ostringstream oss;
-    oss << "You must give a percentageh higher than 100. "
+    oss << "You must give a percentage higher than 100. "
       "The reweighting threshold will be calculated as <average-utilization> "
       "times <input-percentage>. For example, an argument of 200 would "
       "reweight OSDs which are twice as utilized as the average OSD.\n";
@@ -1025,8 +1025,8 @@ void OSDMonitor::tick()
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
-    } else {
-      dout(10) << "No full osds, removing full flag (if it's set)" << dendl;
+    } else if (osdmap.test_flag(CEPH_OSDMAP_FULL)){
+      dout(10) << "No full osds, removing full flag" << dendl;
       remove_flag(CEPH_OSDMAP_FULL);
     }
     if (pending_inc.new_flags != -1 &&
@@ -1129,13 +1129,19 @@ enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
   int num_in_osds = osdmap.get_num_in_osds();
 
   if (num_osds == 0) {
-    ss << " no osds";
+    ss << "no osds";
     ret = HEALTH_ERR;
-  }
-  else if ((num_up_osds != num_osds) ||
-	   (num_in_osds != num_osds)) {
-    ss << " " << num_up_osds << "/" << num_in_osds << "/" << num_osds << " osds up/in";
-    ret = HEALTH_WARN;
+  } else {
+    if (num_up_osds < num_osds) {
+      ss << (num_osds - num_up_osds) << "/" << num_osds << " osds down";
+      ret = HEALTH_WARN;
+    }
+    if (num_in_osds < num_osds) {
+      if (ret != HEALTH_OK)
+	ss << ", ";
+      ss << (num_osds - num_in_osds) << "/" << num_osds << " osds out";
+      ret = HEALTH_WARN;
+    }
   }
   return ret;
 }
@@ -1708,7 +1714,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if ((m->cmd.size() > 1) &&
 	     (m->cmd[1] == "reweight-by-utilization")) {
-      int oload = 70;
+      int oload = 120;
       if (m->cmd.size() > 2) {
 	oload = atoi(m->cmd[2].c_str());
       }

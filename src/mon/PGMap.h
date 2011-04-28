@@ -45,9 +45,11 @@ public:
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
     set<pg_t> pg_remove;
+    float full_ratio;
+    float nearfull_ratio;
 
     void encode(bufferlist &bl) const {
-      __u8 v = 1;
+      __u8 v = 2;
       ::encode(v, bl);
       ::encode(version, bl);
       ::encode(pg_stat_updates, bl);
@@ -55,6 +57,8 @@ public:
       ::encode(osd_stat_rm, bl);
       ::encode(osdmap_epoch, bl);
       ::encode(pg_scan, bl);
+      ::encode(full_ratio, bl);
+      ::encode(nearfull_ratio, bl);
       ::encode(pg_remove, bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -66,16 +70,31 @@ public:
       ::decode(osd_stat_rm, bl);
       ::decode(osdmap_epoch, bl);
       ::decode(pg_scan, bl);
-      if (!bl.end())
-	::decode(pg_remove, bl);
+      if (v >= 2) {
+        ::decode(full_ratio, bl);
+        ::decode(nearfull_ratio, bl);
+      }
+      ::decode(pg_remove, bl);
     }
 
-    Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
+    Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
+        full_ratio(0), nearfull_ratio(0) {}
   };
 
   void apply_incremental(const Incremental& inc) {
     assert(inc.version == version+1);
     version++;
+    bool ratios_changed = false;
+    if (inc.full_ratio != 0) {
+      full_ratio = inc.full_ratio;
+      ratios_changed = true;
+    }
+    if (inc.nearfull_ratio != 0) {
+      nearfull_ratio = inc.nearfull_ratio;
+      ratios_changed = true;
+    }
+    if (ratios_changed)
+      redo_full_sets();
     for (map<pg_t,pg_stat_t>::const_iterator p = inc.pg_stat_updates.begin();
 	 p != inc.pg_stat_updates.end();
 	 ++p) {
@@ -165,6 +184,20 @@ public:
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   
+  void redo_full_sets() {
+    full_osds.clear();
+    nearfull_osds.clear();
+    for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
+        i != osd_stat.end();
+        ++i) {
+      float ratio = ((float)i->second.kb_used) / ((float)i->second.kb);
+      if ( ratio > full_ratio )
+        full_osds.insert(i->first);
+      else if ( ratio > nearfull_ratio )
+        nearfull_osds.insert(i->first);
+    }
+  }
+
   void stat_zero() {
     num_pg = 0;
     num_pg_by_state.clear();
@@ -207,13 +240,15 @@ public:
 	    nearfull_ratio(((float)g_conf.mon_osd_nearfull_ratio)/100) {}
 
   void encode(bufferlist &bl) {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
     ::encode(version, bl);
     ::encode(pg_stat, bl);
     ::encode(osd_stat, bl);
     ::encode(last_osdmap_epoch, bl);
     ::encode(last_pg_scan, bl);
+    ::encode(full_ratio, bl);
+    ::encode(nearfull_ratio, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 v;
@@ -223,6 +258,10 @@ public:
     ::decode(osd_stat, bl);
     ::decode(last_osdmap_epoch, bl);
     ::decode(last_pg_scan, bl);
+    if (v >= 2) {
+      ::decode(full_ratio, bl);
+      ::decode(nearfull_ratio, bl);
+    }
     stat_zero();
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();
@@ -233,6 +272,8 @@ public:
 	 p != osd_stat.end();
 	 ++p)
       stat_osd_add(p->second);
+
+    redo_full_sets();
   }
 
   void dump(ostream& ss) const
@@ -305,8 +346,7 @@ public:
 	 << std::endl;
   }
 
-  void print_summary(ostream& out) const {
-    std::stringstream ss;
+  void state_summary(ostream& ss) const {
     for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();
 	 p != num_pg_by_state.end();
 	 ++p) {
@@ -314,6 +354,33 @@ public:
 	ss << ", ";
       ss << p->second << " " << pg_state_string(p->first);
     }
+  }
+
+  void recovery_summary(ostream& out) const {
+    bool first = true;
+    if (pg_sum.num_objects_degraded) {
+      double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", pc);
+      out << pg_sum.num_objects_degraded 
+	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";
+      first = false;
+    }
+    if (pg_sum.num_objects_unfound) {
+      double pc = (double)pg_sum.num_objects_unfound / (double)pg_sum.num_objects * (double)100.0;
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", pc);
+      if (!first)
+	out << "; ";
+      out << pg_sum.num_objects_unfound
+	  << "/" << pg_sum.num_objects << " unfound (" << b << "%)";
+      first = false;
+    }
+  }
+
+  void print_summary(ostream& out) const {
+    std::stringstream ss;
+    state_summary(ss);
     string states = ss.str();
     out << "v" << version << ": "
 	<< pg_stat.size() << " pgs: "
@@ -322,15 +389,10 @@ public:
 	<< kb_t(osd_sum.kb_used) << " used, "
 	<< kb_t(osd_sum.kb_avail) << " / "
 	<< kb_t(osd_sum.kb) << " avail";
-    
-    if (pg_sum.num_objects_degraded) {
-      double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
-      char b[20];
-      snprintf(b, sizeof(b), "%.3lf", pc);
-      out << "; " //<< pg_sum.num_objects_missing_on_primary << "/"
-	  << pg_sum.num_objects_degraded 
-	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";
-    }
+    std::stringstream ssr;
+    recovery_summary(ssr);
+    if (ssr.str().length())
+      out << "; " << ssr.str();
   }
 
 };

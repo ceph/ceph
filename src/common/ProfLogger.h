@@ -16,6 +16,7 @@
 #ifndef CEPH_LOGGER_H
 #define CEPH_LOGGER_H
 
+#include "common/config.h"
 #include "common/Clock.h"
 #include "common/ProfLogType.h"
 #include "include/types.h"
@@ -30,6 +31,14 @@ extern void logger_add(class ProfLogger *l);
 extern void logger_remove(class ProfLogger *l);
 extern void logger_tare(utime_t when);
 extern void logger_start();
+
+class ProfLoggerConfObs : public md_config_obs_t {
+public:
+  ~ProfLoggerConfObs();
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed);
+};
 
 class ProfLogger {
  protected:

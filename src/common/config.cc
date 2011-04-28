@@ -16,6 +16,7 @@
 #include "common/BackTrace.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
+#include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -48,6 +49,12 @@
 #undef derr
 #undef generic_dout
 #undef dendl
+
+using std::map;
+using std::multimap;
+using std::pair;
+using std::set;
+using std::string;
 
 const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf";
 
@@ -128,9 +135,6 @@ struct config_option config_optionsp[] = {
   OPTION(monmap, OPT_STR, 0),
   OPTION(mon_host, OPT_STR, 0),
   OPTION(daemonize, OPT_BOOL, false),
-  OPTION(tcmalloc_profiler_run, OPT_BOOL, false),
-  OPTION(profiler_allocation_interval, OPT_INT, 1073741824),
-  OPTION(profiler_highwater_interval, OPT_INT, 104857600),
   OPTION(profiling_logger, OPT_BOOL, false),
   OPTION(profiling_logger_interval, OPT_INT, 1),
   OPTION(profiling_logger_calc_variance, OPT_BOOL, false),
@@ -179,7 +183,6 @@ struct config_option config_optionsp[] = {
   OPTION(key, OPT_STR, 0),
   OPTION(keyfile, OPT_STR, 0),
   OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
-  OPTION(buffer_track_alloc, OPT_BOOL, false),
   OPTION(ms_tcp_nodelay, OPT_BOOL, true),
   OPTION(ms_initial_backoff, OPT_DOUBLE, .2),
   OPTION(ms_max_backoff, OPT_DOUBLE, 15.0),
@@ -241,7 +244,8 @@ struct config_option config_optionsp[] = {
   OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100), //max in-flight data (both directions)
   OPTION(journaler_allow_split_entries, OPT_BOOL, true),
   OPTION(journaler_write_head_interval, OPT_INT, 15),
-  OPTION(journaler_prefetch_periods, OPT_INT, 10),   // * journal object size (1~MB? see above)
+  OPTION(journaler_prefetch_periods, OPT_INT, 10),   // * journal object size
+  OPTION(journaler_prezero_periods, OPT_INT, 5),     // * journal object size
   OPTION(journaler_batch_interval, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
   OPTION(journaler_batch_max, OPT_U64, 0),  // max bytes we'll delay flushing; disable, for now....
   OPTION(mds_max_file_size, OPT_U64, 1ULL << 40),
@@ -305,6 +309,7 @@ struct config_option config_optionsp[] = {
   OPTION(mds_verify_scatter, OPT_BOOL, false),
   OPTION(mds_debug_scatterstat, OPT_BOOL, false),
   OPTION(mds_debug_frag, OPT_BOOL, false),
+  OPTION(mds_debug_auth_pins, OPT_BOOL, false),
   OPTION(mds_kill_mdstable_at, OPT_INT, 0),
   OPTION(mds_kill_export_at, OPT_INT, 0),
   OPTION(mds_kill_import_at, OPT_INT, 0),
@@ -367,7 +372,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_auto_weight, OPT_BOOL, false),
   OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0),  // seconds
   OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0), // seconds
-  OPTION(osd_class_tmp, OPT_STR, "/var/lib/ceph/tmp"),
+  OPTION(osd_class_dir, OPT_STR, "/usr/lib/rados-classes"),
   OPTION(osd_check_for_log_corruption, OPT_BOOL, false),
   OPTION(osd_use_stale_snap, OPT_BOOL, false),
   OPTION(osd_max_notify_timeout, OPT_U32, 30), // max notify timeout in seconds
@@ -436,6 +441,9 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 md_config_t::
 md_config_t()
+  : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
+    _dout(_doss),
+    _prof_logger_conf_obs(new ProfLoggerConfObs())
 {
   //
   // Note: because our md_config_t structure is a global, the memory used to
@@ -449,11 +457,47 @@ md_config_t()
     config_option *opt = config_optionsp + i;
     set_val_from_default(opt);
   }
+
+  add_observer(_doss);
+  add_observer(_prof_logger_conf_obs);
 }
 
 md_config_t::
 ~md_config_t()
 {
+  remove_observer(_prof_logger_conf_obs);
+  remove_observer(_doss);
+
+  free(_doss);
+  _doss = NULL;
+  free(_prof_logger_conf_obs);
+  _prof_logger_conf_obs = NULL;
+}
+
+void md_config_t::
+add_observer(md_config_obs_t* observer_)
+{
+  const char **keys = observer_->get_tracked_conf_keys();
+  for (const char ** k = keys; *k; ++k) {
+    obs_map_t::value_type val(*k, observer_);
+    observers.insert(val);
+  }
+}
+
+void md_config_t::
+remove_observer(md_config_obs_t* observer_)
+{
+  bool found_obs = false;
+  for (obs_map_t::iterator o = observers.begin(); o != observers.end(); ) {
+    if (o->second == observer_) {
+      observers.erase(o++);
+      found_obs = true;
+    }
+    else {
+      ++o;
+    }
+  }
+  assert(found_obs);
 }
 
 int md_config_t::
@@ -483,12 +527,6 @@ parse_config_files(const std::list<std::string> &conf_files,
       set_val_impl(val.c_str(), opt);
     }
   }
-
-  // FIXME: This bit of global fiddling needs to go somewhere else eventually.
-  std::string val;
-  g_lockdep =
-    ((get_val_from_conf_file(my_sections, "lockdep", val, true) == 0) &&
-      ((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0)));
 
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
@@ -525,6 +563,9 @@ parse_env()
 void md_config_t::
 parse_argv(std::vector<const char*>& args)
 {
+  // In this function, don't change any parts of g_conf directly.
+  // Instead, use set_val to set them. This will allow us to send the proper
+  // observer notifications later.
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
@@ -532,44 +573,39 @@ parse_argv(std::vector<const char*>& args)
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
-      daemonize = false;
-      pid_file = "";
+      set_val_or_die("daemonize", "false");
+      set_val_or_die("pid_file", "");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
-      daemonize = false;
-      log_dir = "";
-      pid_file = "";
-      log_sym_dir = "";
-      log_sym_history = 0;
-      log_to_stderr = LOG_TO_STDERR_ALL;
-      log_to_syslog = false;
-      log_per_instance = false;
+      set_val_or_die("daemonize", "false");
+      set_val_or_die("log_dir", "");
+      set_val_or_die("pid_file", "");
+      set_val_or_die("log_sym_dir", "");
+      set_val_or_die("log_sym_history", "0");
+      set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_ALL));
+      set_val_or_die("log_to_syslog", "false");
+      set_val_or_die("log_per_instance", "false");
     }
     // Some stuff that we wanted to give universal single-character options for
     // Careful: you can burn through the alphabet pretty quickly by adding
     // to this list.
     else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", (char*)NULL)) {
-      monmap = val;
+      set_val("monmap", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", (char*)NULL)) {
-      mon_host = val;
+      set_val("mon_host", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
-      public_addr.parse(val.c_str());
+      set_val("public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
-      keyfile = val;
+      set_val("keyfile", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
-      keyring = val;
+      set_val("keyring", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
-      client_mountpoint = val;
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--lockdep", (char*)NULL)) {
-      // FIXME: This bit of global fiddling needs to go somewhere else eventually.
-      g_lockdep =
-	((strcasecmp(val.c_str(), "true") == 0) || (atoi(val.c_str()) != 0));
+      set_val("client_mountpoint", val.c_str());
     }
     else {
       int o;
@@ -594,6 +630,75 @@ parse_argv(std::vector<const char*>& args)
       }
     }
   }
+
+}
+
+void md_config_t::
+apply_changes()
+{
+  /* Maps observers to the configuration options that they care about which
+   * have changed. */
+  typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
+
+  // Expand all metavariables
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = config_optionsp + i;
+    if (opt->type == OPT_STR) {
+      std::string *str = (std::string *)opt->conf_ptr(this);
+      expand_meta(*str);
+    }
+  }
+
+  // create the reverse observer mapping, mapping observers to the set of
+  // changed keys that they'll get.
+  rev_obs_map_t robs;
+  std::set <std::string> empty_set;
+  for (changed_set_t::const_iterator c = changed.begin();
+       c != changed.end(); ++c) {
+    const std::string &key(*c);
+    pair < obs_map_t::iterator, obs_map_t::iterator >
+      range(observers.equal_range(key));
+    for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
+      rev_obs_map_t::value_type robs_val(r->second, empty_set);
+      pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
+      std::set <std::string> &keys(robs_ret.first->second);
+      keys.insert(key);
+    }
+  }
+
+  // Make any pending observer callbacks
+  for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
+    md_config_obs_t *obs = r->first;
+    obs->handle_conf_change(this, r->second);
+  }
+
+  changed.clear();
+}
+
+void md_config_t::
+injectargs(const std::string& s)
+{
+  char b[s.length()+1];
+  strcpy(b, s.c_str());
+  std::vector<const char*> nargs;
+  char *p = b;
+  while (*p) {
+    nargs.push_back(p);
+    while (*p && *p != ' ') p++;
+    if (!*p)
+      break;
+    *p++ = 0;
+    while (*p && *p == ' ') p++;
+  }
+  parse_argv(nargs);
+  apply_changes();
+}
+
+void md_config_t::
+set_val_or_die(const char *key, const char *val)
+{
+  int ret = set_val(key, val);
+  assert(ret == 0);
 }
 
 int md_config_t::
@@ -618,6 +723,7 @@ set_val(const char *key, const char *val)
   // couldn't find a configuration option with key 'key'
   return -ENOENT;
 }
+
 
 int md_config_t::
 get_val(const char *key, char **buf, int len) const
@@ -727,6 +833,11 @@ get_val_from_conf_file(const std::vector <std::string> &sections,
 void md_config_t::
 set_val_from_default(const config_option *opt)
 {
+  // set_val_from_default can't fail! Unless the programmer screwed up, and
+  // in that case we'll abort.
+  // Anyway, we know that this function changed something.
+  changed.insert(opt->name);
+
   switch (opt->type) {
     case OPT_INT:
       *(int*)opt->conf_ptr(this) = opt->def_longlong;
@@ -791,6 +902,16 @@ set_val_from_default(const config_option *opt)
 
 int md_config_t::
 set_val_impl(const char *val, const config_option *opt)
+{
+  int ret = set_val_raw(val, opt);
+  if (ret)
+    return ret;
+  changed.insert(opt->name);
+  return 0;
+}
+
+int md_config_t::
+set_val_raw(const char *val, const config_option *opt)
 {
   switch (opt->type) {
     case OPT_INT: {
@@ -858,18 +979,6 @@ set_val_impl(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
-void md_config_t::
-expand_all_meta()
-{
-  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-    config_option *opt = config_optionsp + i;
-    if (opt->type == OPT_STR) {
-      std::string *str = (std::string *)opt->conf_ptr(this);
-      expand_meta(*str);
-    }
-  }
-}
-
 static const char *CONF_METAVARIABLES[] =
       { "type", "name", "host", "num", "id" };
 static const int NUM_CONF_METAVARIABLES =
@@ -917,4 +1026,9 @@ expand_meta(std::string &val) const
   }
   val = out;
   return found_meta;
+}
+
+md_config_obs_t::
+~md_config_obs_t()
+{
 }

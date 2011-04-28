@@ -171,6 +171,8 @@ public:
 
   virtual void init() {}
 
+  virtual enum health_status_t get_health(std::ostream& os) const { return HEALTH_OK; }
+
 };
 
 #endif

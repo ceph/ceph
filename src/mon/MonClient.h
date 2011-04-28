@@ -178,6 +178,8 @@ public:
   void init();
   void shutdown();
 
+  static int build_initial_monmap(MonMap &);
+
   int build_initial_monmap();
   int get_monmap();
   int get_monmap_privately();

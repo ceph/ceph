@@ -24,6 +24,7 @@
 #include "common/config.h"
 
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <syslog.h>
@@ -41,8 +42,12 @@ int main(int argc, const char **argv)
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 
   {
+    std::set <std::string> changed;
+    for (const char** t = dos->get_tracked_conf_keys(); *t; ++t) {
+      changed.insert(*t);
+    }
     DoutLocker _dout_locker;
-    dos->read_global_config();
+    dos->handle_conf_change(&g_conf, changed);
   }
   derr << "using configuration: " << dos->config_to_str() << dendl;
 

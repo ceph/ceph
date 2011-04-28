@@ -390,7 +390,15 @@ done_err:
  */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  int r = rados->pool_delete(bucket.c_str());
+  librados::IoCtx list_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), list_ctx);
+  if (r < 0)
+    return r;
+
+  if (list_ctx.objects_begin() != list_ctx.objects_end())
+    return -ENOTEMPTY;
+
+  r = rados->pool_delete(bucket.c_str());
   if (r < 0)
     return r;
 

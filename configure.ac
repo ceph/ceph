@@ -7,7 +7,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.26], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.27], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 
@@ -32,6 +32,27 @@ AC_PROG_CXX
 #AC_PROG_RANLIB
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
+
+# Checks for compiler warning types
+
+# AC_CHECK_CC_FLAG(FLAG_TO_TEST, VARIABLE_TO_SET_IF_SUPPORTED)
+# ---------
+AC_DEFUN([AC_CHECK_CC_FLAG],
+[{
+	AC_LANG_PUSH([C])
+	my_cflags_save="$CFLAGS"
+	CFLAGS="$my_cflags_save $1"
+	AC_MSG_CHECKING([whether $CC accepts $1])
+	AC_COMPILE_IFELSE(AC_LANG_PROGRAM(),
+			  [AC_MSG_RESULT([yes]); AC_SUBST([$2], ["$1"])],
+			  [AC_MSG_RESULT([no])]
+			 )
+	CFLAGS="$my_cflags_save"
+	AC_LANG_POP([C])
+}])
+
+AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
+AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
@@ -163,9 +184,9 @@ AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
-	    [AS_HELP_STRING([--with--tcmalloc], [use tcmalloc instead of ptmallc])],
+	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
 	    [],
-	    [with_tcmalloc=check])
+	    [with_tcmalloc=yes])
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_CHECK_LIB([tcmalloc], [malloc],
@@ -174,11 +195,8 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	       		 [Define if you have tcmalloc])
 	       HAVE_LIBTCMALLOC=1
 	     ],
-	    [if test "x$with_tcmalloc" != xcheck; then
-	        AC_MSG_FAILURE(
-		  [--with-tcmalloc was given but test failed])
-	      fi
-	    ])])
+	    [AC_MSG_FAILURE(
+		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
 # jni?

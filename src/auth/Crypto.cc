@@ -61,27 +61,31 @@ public:
   ~CryptoNone() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
-  int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
-  int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
+  int encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const;
+  int decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const;
 };
 
-int CryptoNone::create(bufferptr& secret)
+int CryptoNone::
+create(bufferptr& secret)
 {
   return 0;
 }
 
-int CryptoNone::validate_secret(bufferptr& secret)
+int CryptoNone::
+validate_secret(bufferptr& secret)
 {
   return 0;
 }
 
-int CryptoNone::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+int CryptoNone::
+encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 {
   out = in;
   return 0;
 }
 
-int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+int CryptoNone::
+decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 {
   out = in;
   return 0;
@@ -97,7 +101,7 @@ int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, bufferptr& secret, const bufferlist& in, bufferlist& out) {
+static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret, const bufferlist& in, bufferlist& out) {
   const CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
 
   // sample source said this has to be at least size of input + 8,
@@ -210,8 +214,8 @@ public:
   ~CryptoAES() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
-  int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
-  int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
+  int encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const;
+  int decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const;
 };
 
 int CryptoAES::create(bufferptr& secret)
@@ -234,7 +238,8 @@ int CryptoAES::validate_secret(bufferptr& secret)
   return 0;
 }
 
-int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+int CryptoAES::
+encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 {
   if (secret.length() < AES_KEY_LEN) {
     dout(0) << "key is too short" << dendl;
@@ -276,7 +281,8 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   return true;
 }
 
-int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+int CryptoAES::
+decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 {
 #ifdef USE_CRYPTOPP
   const unsigned char *key = (const unsigned char *)secret.c_str();
@@ -364,7 +370,7 @@ int CryptoKey::create(int t)
   return h->create(secret);
 }
 
-int CryptoKey::encrypt(const bufferlist& in, bufferlist& out)
+int CryptoKey::encrypt(const bufferlist& in, bufferlist& out) const
 {
   CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
   if (!h)
@@ -372,7 +378,7 @@ int CryptoKey::encrypt(const bufferlist& in, bufferlist& out)
   return h->encrypt(this->secret, in, out);
 }
 
-int CryptoKey::decrypt(const bufferlist& in, bufferlist& out)
+int CryptoKey::decrypt(const bufferlist& in, bufferlist& out) const
 {
   CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
   if (!h)
@@ -380,14 +386,14 @@ int CryptoKey::decrypt(const bufferlist& in, bufferlist& out)
   return h->decrypt(this->secret, in, out);
 }
 
-void CryptoKey::print(ostream &out) const
+void CryptoKey::print(std::ostream &out) const
 {
   string a;
   encode_base64(a);
   out << a;
 }
 
-void CryptoKey::to_str(string& s)
+void CryptoKey::to_str(std::string& s) const
 {
   int len = secret.length() * 4;
   char buf[len];

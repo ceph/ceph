@@ -16,6 +16,7 @@
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
+#include "common/DoutStreambuf.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
@@ -28,6 +29,9 @@
 #include <errno.h>
 #include <deque>
 #include <syslog.h>
+
+#define _STR(x) #x
+#define STRINGIFY(x) _STR(x)
 
 int keyring_init(md_config_t *conf)
 {
@@ -89,6 +93,7 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
   // Create a configuration object
   // TODO: de-globalize
   md_config_t *conf = &g_conf; //new md_config_t();
+  // add config observers here
 
   // Set up our entity name.
   conf->name = iparams.name;
@@ -98,13 +103,13 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
     case CODE_ENVIRONMENT_DAEMON:
       conf->daemonize = true;
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
-	conf->log_dir = "/var/log/ceph";
-	conf->pid_file = "/var/run/ceph/$type.$id.pid";
+	conf->set_val_or_die("log_dir", "/var/log/ceph");
+	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
       }
-      conf->log_to_stderr = LOG_TO_STDERR_SOME;
+      conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
       break;
     default:
-      conf->daemonize = false;
+      conf->set_val_or_die("daemonize", "false");
       break;
   }
 
@@ -141,17 +146,17 @@ void common_init(std::vector < const char* >& args,
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
   if (ret == -EDOM) {
-    derr << "common_init: error parsing config file." << dendl;
+    dout_emergency("common_init: error parsing config file.\n");
     _exit(1);
   }
   else if (ret == -EINVAL) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-      derr << "common_init: unable to open config file." << dendl;
+      dout_emergency("common_init: unable to open config file.\n");
       _exit(1);
     }
   }
   else if (ret) {
-    derr << "common_init: error reading config file." << dendl;
+    dout_emergency("common_init: error reading config file.\n");
     _exit(1);
   }
 
@@ -164,18 +169,8 @@ void common_init(std::vector < const char* >& args,
     conf->log_per_instance = false;
   }
 
-  conf->expand_all_meta();
-
-  if (conf->log_to_syslog || conf->clog_to_syslog) {
-    closelog();
-    openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
-  }
-
-  {
-    // Force a reopen of dout() with the configuration we have just read.
-    DoutLocker _dout_locker;
-    _dout_open_log();
-  }
+  // Expand metavariables. Invoke configuration observers.
+  conf->apply_changes();
 
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(&parse_errors);
@@ -190,10 +185,8 @@ void common_init(std::vector < const char* >& args,
 	 << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
 	 << "with important data.       **" << TEXT_NORMAL << std::endl;
+    output_ceph_version();
   }
-
-  // this probably belongs somewhere else...
-  buffer_track_alloc = g_conf.buffer_track_alloc;
 
   ceph::crypto::init();
 }

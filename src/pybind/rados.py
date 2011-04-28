@@ -143,10 +143,6 @@ Rados object in state %s." % (self.state))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
 
-    def reopen_log(self):
-        self.require_state("configuring", "connected")
-        self.librados.rados_reopen_log(self.cluster);
-
     def connect(self):
         self.require_state("configuring")
         ret = self.librados.rados_connect(self.cluster)
@@ -318,16 +314,14 @@ class Ioctx(object):
 
     def close(self):
         self.require_ioctx_open()
-        ret = self.librados.rados_ioctx_destroy(self.io)
-        if ret < 0:
-            raise make_ex(ret, "error destroying ioctx '%s'" % self.name)
+        self.librados.rados_ioctx_destroy(self.io)
         self.state = "closed"
 
     def write(self, key, data, offset = 0):
         self.require_ioctx_open()
         length = len(data)
         ret = self.librados.rados_write(self.io, c_char_p(key),
-                 c_char_p(data), c_size_t(length), c_size_t(offset))
+                 c_char_p(data), c_size_t(length), c_uint64(offset))
         if ret == length:
             return ret
         elif ret < 0:
@@ -345,18 +339,18 @@ written." % (self.name, ret, length))
         self.require_ioctx_open()
         length = len(data)
         ret = self.librados.rados_write_full(self.io, c_char_p(key),
-                 c_char_p(data), c_size_t(length), c_size_t(offset))
+                 c_char_p(data), c_size_t(length), c_uint64(offset))
         if ret == 0:
             return ret
         else:
             raise make_ex(ret, "Ioctx.write(%s): failed to write_full %s" % \
                 (self.name, key))
 
-    def read(self, key, offset = 0, length = 8192):
+    def read(self, key, length = 8192, offset = 0):
         self.require_ioctx_open()
         ret_buf = create_string_buffer(length)
         ret = self.librados.rados_read(self.io, c_char_p(key), ret_buf,
-                c_size_t(length), c_size_t(offset))
+                c_size_t(length), c_uint64(offset))
         if ret < 0:
             raise make_ex("Ioctx.read(%s): failed to read %s" % (self.name, key))
         return ret_buf.value

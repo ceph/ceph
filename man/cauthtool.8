@@ -5,7 +5,7 @@ cauthtool \- ceph keyring manipulation tool
 .B cauthtool
 \fIkeyringfile\fP
 [ \fB\-l\fR | \fB\-\-list\fR ]
-[ \fB\-c\fR | \fB\-\-create-keyring\fR ]
+[ \fB\-C\fR | \fB\-\-create-keyring\fR ]
 [ \fB\-p\fR | \fB\-\-print\fR ]
 [ \fB\-n\fR | \fB\-\-name\fR \fIentityname\fP ]
 [ \fB\-\-gen-key\fR ]
@@ -26,7 +26,7 @@ will list all keys and capabilities present in the keyring
 \fB\-p\fP, \fB\-\-print\fP
 will print an encoded key for the specified \fIentityname\fP.  This is suitable for the mount -o secret= argument
 .TP
-\fB\-c\fP, \fB\-\-create-keyring\fP
+\fB\-C\fP, \fB\-\-create-keyring\fP
 will create a new keyring, overwriting any existing \fIkeyringfile\fP
 .TP
 \fB\-\-gen\-key\fP

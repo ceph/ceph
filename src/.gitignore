@@ -54,7 +54,6 @@ CrushWrapper.pm
 crush/CrushWrapper_wrap.cxx
 
 /.git_version
-/cclass
 /cconf
 /cdebugpack
 /cephfs

@@ -76,6 +76,7 @@ public:
   void init(int rank);
   void shutdown();
   void dump(const char *dumpfile);
+  void undump(const char *dumpfile);
 };
 
 #endif /* JOURNAL_DUMPER_H_ */

@@ -222,8 +222,12 @@ class Filer {
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, offset, len, extents);
     if (extents.size() == 1) {
-      objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length, 
-		     snapc, mtime, flags, onack, oncommit);
+      if (extents[0].offset == 0 && extents[0].length == layout->fl_object_size)
+	objecter->remove(extents[0].oid, extents[0].oloc, 
+			 snapc, mtime, flags, onack, oncommit);
+      else
+	objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length, 
+		       snapc, mtime, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -231,10 +235,16 @@ class Filer {
       if (oncommit)
 	gcom = new C_Gather(oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
-	objecter->zero(p->oid, p->oloc, p->offset, p->length, 
-		       snapc, mtime, flags,
-		       gack ? gack->new_sub():0,
-		       gcom ? gcom->new_sub():0);
+	if (p->offset == 0 && p->length == layout->fl_object_size)
+	  objecter->remove(p->oid, p->oloc,
+			   snapc, mtime, flags,
+			   gack ? gack->new_sub():0,
+			   gcom ? gcom->new_sub():0);
+	else
+	  objecter->zero(p->oid, p->oloc, p->offset, p->length, 
+			 snapc, mtime, flags,
+			 gack ? gack->new_sub():0,
+			 gcom ? gcom->new_sub():0);
       }
     }
     return 0;

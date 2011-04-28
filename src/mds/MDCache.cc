@@ -1264,7 +1264,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
 
       // did auth change?
       if (oldparent->authority() != newparent->authority()) 
-	adjust_subtree_auth(dir, oldparent->authority());  // caller is responsible for *diri.
+	adjust_subtree_auth(dir, oldparent->authority(), !imported);  // caller is responsible for *diri.
     }
   }
 
@@ -2560,6 +2560,12 @@ void MDCache::handle_resolve(MMDSResolve *m)
 {
   dout(7) << "handle_resolve from " << m->get_source() << dendl;
   int from = m->get_source().num();
+
+  if (mds->get_state() < MDSMap::STATE_RESOLVE) {
+    // wait until we reach the resolve stage!
+    m->put();
+    return;
+  }
 
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
@@ -4601,7 +4607,7 @@ void MDCache::open_snap_parents()
 	   q++)
 	for (set<inodeno_t>::iterator r = q->second.begin();
 	     r != q->second.end();
-	     r++)
+	     r++) 
 	  prepare_realm_split(in->snaprealm, q->first, *r, splits);
 
       missing_snap_parents.erase(p++);
@@ -8458,6 +8464,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "handle_discover not adding unwanted base dir " << *curdir << dendl;
+      // make sure the base frag is correct, though, in there was a refragment since the
+      // original request was sent.
+      reply->set_base_dir_frag(curdir->get_frag());
     } else {
       assert(!curdir->is_ambiguous_auth()); // would be frozen.
       if (!reply->trace.length())
@@ -9483,8 +9492,10 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
       for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
 	   ++p) {
-	p->second->get(CDentry::PIN_FRAGMENTING);
-	p->second->state_set(CDentry::STATE_FRAGMENTING);
+	CDentry *dn = p->second;
+	dn->get(CDentry::PIN_FRAGMENTING);
+	assert(!dn->state_test(CDentry::STATE_FRAGMENTING));
+	dn->state_set(CDentry::STATE_FRAGMENTING);
       }
       dir->state_set(CDir::STATE_DNPINNEDFRAG);
       dir->auth_unpin(dir);
@@ -9514,8 +9525,10 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
-      p->second->state_clear(CDentry::STATE_FRAGMENTING);
-      p->second->put(CDentry::PIN_FRAGMENTING);
+      CDentry *dn = p->second;
+      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+      dn->state_clear(CDentry::STATE_FRAGMENTING);
+      dn->put(CDentry::PIN_FRAGMENTING);
     }
 
     dir->unfreeze_dir();
@@ -9608,7 +9621,6 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
     // freeze and store them too
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->commit(0, gather->new_sub(), true);  // ignore authpinnability
-    dir->_freeze_dir();
   }
 
   mds->mdlog->submit_entry(le, gather->new_sub());
@@ -9667,8 +9679,9 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 	 p != dir->items.end();
 	 ++p) { 
       CDentry *dn = p->second;
-      if (dn->state_test(CDentry::STATE_FRAGMENTING)) 
-	dn->put(CDentry::PIN_FRAGMENTING);
+      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+      dn->state_clear(CDentry::STATE_FRAGMENTING);
+      dn->put(CDentry::PIN_FRAGMENTING);
     }
 
     dir->unfreeze_dir();

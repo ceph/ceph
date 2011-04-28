@@ -47,10 +47,11 @@ public:
 
   int get_type() const { return type; }
   utime_t get_created() const { return created; }
-  void print(ostream& out) const;
+  void print(std::ostream& out) const;
 
   int set_secret(int type, bufferptr& s);
   bufferptr& get_secret() { return secret; }
+  const bufferptr& get_secret() const { return secret; }
 
   void encode_base64(string& s) const {
     bufferlist bl;
@@ -71,10 +72,10 @@ public:
 
   // --
   int create(int type);
-  int encrypt(const bufferlist& in, bufferlist& out);
-  int decrypt(const bufferlist& in, bufferlist& out);
+  int encrypt(const bufferlist& in, bufferlist& out) const;
+  int decrypt(const bufferlist& in, bufferlist& out) const;
 
-  void to_str(string& s);
+  void to_str(std::string& s) const;
 };
 WRITE_CLASS_ENCODER(CryptoKey);
 
@@ -96,8 +97,10 @@ public:
   virtual ~CryptoHandler() {}
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(bufferptr& secret) = 0;
-  virtual int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out) = 0;
-  virtual int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out) = 0;
+  virtual int encrypt(const bufferptr& secret, const bufferlist& in,
+		      bufferlist& out) const = 0;
+  virtual int decrypt(const bufferptr& secret, const bufferlist& in,
+		      bufferlist& out) const = 0;
 };
 
 

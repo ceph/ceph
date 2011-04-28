@@ -59,7 +59,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
   m.created = g_clock.now();
   m.data_pg_pools.push_back(data_pool);
   m.metadata_pg_pool = metadata_pool;
-  m.cas_pg_pool = CEPH_CASDATA_RULE;
+  m.cas_pg_pool = -1;
   m.compat = mdsmap_compat;
   print_map(m);
 }
@@ -348,7 +348,6 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.state_seq = seq;
     info.standby_for_rank = m->get_standby_for_rank();
     info.standby_for_name = m->get_standby_for_name();
-
 
     if (!info.standby_for_name.empty()) {
       if (mdsmap.find_by_name(info.standby_for_name))
@@ -872,7 +871,7 @@ void MDSMonitor::tick()
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    uint64_t newgid = pending_mdsmap.find_unused_for(mds, name);
+    uint64_t newgid = pending_mdsmap.find_replacement_for(mds, name);
     if (!newgid)
       break;
 
@@ -1046,8 +1045,7 @@ void MDSMonitor::tick()
 	 ++j) {
       MDSMap::mds_info_t& info = j->second;
       
-      if (info.state != MDSMap::STATE_STANDBY ||
-	  info.standby_for_rank != MDSMap::MDS_STANDBY_ANY)
+      if (info.state != MDSMap::STATE_STANDBY)
 	continue;
 
       /*
@@ -1056,28 +1054,29 @@ void MDSMonitor::tick()
        */
       dout(20) << "gid " << j->first << " is standby and following nobody" << dendl;
       
-      uint64_t lgid = 0;
+      // standby for someone specific?
+      if (info.standby_for_rank >= 0) {
+	if (pending_mdsmap.is_followable(info.standby_for_rank) &&
+	    try_standby_replay(info, pending_mdsmap.mds_info[pending_mdsmap.up[info.standby_for_rank]]))
+	  do_propose = true;
+	continue;
+      }
+
+      // check everyone
       for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
 	   i != pending_mdsmap.mds_info.end();
 	   ++i) {
 	if (i->second.rank >= 0 && pending_mdsmap.is_followable(i->second.rank)) {
-	  if ((lgid = pending_mdsmap.find_standby_for(i->second.rank, i->second.name))) {
-	    MDSMap::mds_info_t& sinfo = i->second;
-	    dout(20) << " mds" << i->second.rank
-		     << " standby gid " << lgid << " has state "
-		     << ceph_mds_state_name(sinfo.state)
-		     << dendl;
-	    if (sinfo.state == MDSMap::STATE_STANDBY_REPLAY) {
-	      dout(20) << "  skipping this MDS since it has a follower!" << dendl;
-	      continue; // this MDS already has a standby
-	    }
+	  if ((info.standby_for_name.length() && info.standby_for_name != i->second.name) ||
+	      info.standby_for_rank >= 0)
+	    continue;   // we're supposed to follow someone else
+
+	  if (info.standby_for_rank == MDSMap::MDS_STANDBY_ANY &&
+	      try_standby_replay(info, i->second)) {
+	    do_propose = true;
+	    break;
 	  }
-	  // hey, we found an MDS without a standby. Pair them!
-	  info.standby_for_rank = i->second.rank;
-	  dout(10) << "  setting to shadow mds rank " << info.standby_for_rank << dendl;
-	  info.state = MDSMap::STATE_STANDBY_REPLAY;
-	  do_propose = true;
-	  break;
+	  continue;
 	}
       }
     }
@@ -1085,6 +1084,29 @@ void MDSMonitor::tick()
 
   if (do_propose)
     propose_pending();
+}
+
+bool MDSMonitor::try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo)
+{
+  // someone else already following?
+  uint64_t lgid = pending_mdsmap.find_standby_for(ainfo.rank, ainfo.name);
+  if (lgid) {
+    MDSMap::mds_info_t& sinfo = pending_mdsmap.mds_info[lgid];
+    dout(20) << " mds" << ainfo.rank
+	     << " standby gid " << lgid << " with state "
+	     << ceph_mds_state_name(sinfo.state)
+	     << dendl;
+    if (sinfo.state == MDSMap::STATE_STANDBY_REPLAY) {
+      dout(20) << "  skipping this MDS since it has a follower!" << dendl;
+      return false; // this MDS already has a standby
+    }
+  }
+
+  // hey, we found an MDS without a standby. Pair them!
+  finfo.standby_for_rank = ainfo.rank;
+  dout(10) << "  setting to shadow mds rank " << finfo.standby_for_rank << dendl;
+  finfo.state = MDSMap::STATE_STANDBY_REPLAY;
+  return true;
 }
 
 

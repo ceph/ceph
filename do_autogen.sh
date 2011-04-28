@@ -8,7 +8,6 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -d <level>                       debug build
                                  level 0: no debug
                                  level 1: -g
-                                 level 2: -Wall
                                  level 3: -Wextra
                                  level 4: even more...
 -P                               profiling build
@@ -23,10 +22,9 @@ die() {
 
 debug_level=0
 verbose=0
-CFLAGS=""
-CXXFLAGS=""
 profile=0
-while getopts  "36d:hPv" flag
+HADOOP_FLAGS=
+while getopts  "d:hHPv" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -35,6 +33,8 @@ do
 
     h) usage
         exit 0;;
+
+    H) HADOOP_FLAGS="--with-hadoop";;
 
     v) verbose=1;;
 
@@ -57,9 +57,6 @@ fi
 
 if [ "${debug_level}" -ge 1 ]; then
     CFLAGS="${CFLAGS} -g"
-fi
-if [ "${debug_level}" -ge 2 ]; then
-    CFLAGS="${CFLAGS} -Wall -Wvolatile-register-var"
 fi
 if [ "${debug_level}" -ge 3 ]; then
     CFLAGS="${CFLAGS} -Wextra \
@@ -102,4 +99,5 @@ export CXXFLAGS
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
 --with-gtk2=yes --with-debug $with_profiler --with-cryptopp --with-radosgw \
+$HADOOP_FLAGS \
 || die "configure failed"

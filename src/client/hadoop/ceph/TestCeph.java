@@ -1,4 +1,5 @@
 // -*- mode:Java; tab-width:2; c-basic-offset:2; indent-tabs-mode:t -*- 
+
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -21,6 +22,7 @@
 
 package org.apache.hadoop.fs.ceph;
 
+
 import java.io.IOException;
 import java.net.URI;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
@@ -28,15 +30,17 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
+
 public class TestCeph extends FileSystemContractBaseTest {
 
-	@Override
-    protected void setUp() throws IOException {
+  @Override
+  protected void setUp() throws IOException {
     Configuration conf = new Configuration();
     CephFaker cephfaker = new CephFaker(conf, FileSystem.LOG);
     CephFileSystem cephfs = new CephFileSystem(cephfaker, "ceph://null");
+
     cephfs.initialize(URI.create("ceph://null"), conf);
-		fs = cephfs;
-		cephfs.setWorkingDirectory(new Path(getDefaultWorkingDirectory()));
-	}
+    fs = cephfs;
+    cephfs.setWorkingDirectory(new Path(getDefaultWorkingDirectory()));
+  }
 }

@@ -163,9 +163,17 @@ inline bool operator>(const utime_t& a, const utime_t& b)
 {
   return (a.sec() > b.sec()) || (a.sec() == b.sec() && a.nsec() > b.nsec());
 }
+inline bool operator<=(const utime_t& a, const utime_t& b)
+{
+  return !(operator>(a, b));
+}
 inline bool operator<(const utime_t& a, const utime_t& b)
 {
   return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.nsec() < b.nsec());
+}
+inline bool operator>=(const utime_t& a, const utime_t& b)
+{
+  return !(operator<(a, b));
 }
 
 inline bool operator==(const utime_t& a, const utime_t& b)

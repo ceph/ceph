@@ -12,27 +12,98 @@
  * 
  */
 
-#include "libceph.h"
+#include "common/errno.h"
+#include "include/ceph/libceph.h"
+
+#include <errno.h>
 #include <iostream>
 
-using namespace std;
+using std::cout;
+using std::cerr;
 
 int main(int argc, const char **argv)
 {
-  if (ceph_initialize(argc, argv) < 0) {
-    cerr << "error initializing\n" << std::endl;
-    return(1);
+  struct ceph_mount_t *cmount;
+  int ret = ceph_create(&cmount, NULL);
+  if (ret) {
+    cerr << "ceph_create failed with error: " << ret << std::endl;
+    return 1;
   }
-  cout << "Successfully initialized Ceph!" << std::endl;
 
-  if(ceph_mount() < 0) {
-    cerr << "error mounting\n" << std::endl;
-    return(1);
+  ceph_conf_read_file(cmount, NULL);
+  ceph_conf_parse_argv(cmount, argc, argv);
+
+  char buf[128];
+  ret = ceph_conf_get(cmount, "log file", buf, sizeof(buf));
+  if (ret) {
+    cerr << "ceph_conf_get(\"log file\") failed with error " << ret << std::endl;
+  }
+  else {
+    cout << "log_file = \"" << buf << "\"" << std::endl;
+  }
+
+  ret = ceph_mount(cmount, NULL);
+  if (ret) {
+    cerr << "ceph_mount error: " << ret << std::endl;
+    return 1;
   }
   cout << "Successfully mounted Ceph!" << std::endl;
 
-  ceph_deinitialize();
-  cout << "Successfully deinitialized Ceph!" << std::endl;
+  struct ceph_dir_result_t *foo_dir;
+  ret = ceph_opendir(cmount, "foo", &foo_dir);
+  if (ret != -ENOENT) {
+    cerr << "ceph_opendir error: unexpected result from trying to open foo: "
+	 << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  ret = ceph_mkdir(cmount, "foo",  0777);
+  if (ret) {
+    cerr << "ceph_mkdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  struct stat stbuf;
+  ret = ceph_lstat(cmount, "foo", &stbuf);
+  if (ret) {
+    cerr << "ceph_lstat error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  if (!S_ISDIR(stbuf.st_mode)) {
+    cerr << "ceph_lstat(foo): foo is not a directory? st_mode = "
+	 << stbuf.st_mode << std::endl;
+    return 1;
+  }
+
+  ret = ceph_rmdir(cmount, "foo");
+  if (ret) {
+    cerr << "ceph_rmdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  ret = ceph_mkdirs(cmount, "foo/bar/baz",  0777);
+  if (ret) {
+    cerr << "ceph_mkdirs error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+  ret = ceph_rmdir(cmount, "foo/bar/baz");
+  if (ret) {
+    cerr << "ceph_rmdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+  ret = ceph_rmdir(cmount, "foo/bar");
+  if (ret) {
+    cerr << "ceph_rmdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+  ret = ceph_rmdir(cmount, "foo");
+  if (ret) {
+    cerr << "ceph_rmdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  ceph_shutdown(cmount);
 
   return 0;
 }

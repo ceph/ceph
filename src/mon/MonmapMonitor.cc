@@ -152,28 +152,6 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd[1] == "remove")
       return false;
   }
-  else if (m->cmd[0] == "health") {
-    ostringstream oss;
-    health_status_t overall = HEALTH_OK;
-    try {
-      health_status_t ret;
-      ret = mon->mdsmon()->get_health(oss);
-      if (ret < overall)
-	overall = ret;
-      ret = mon->osdmon()->get_health(oss);
-      if (ret < overall)
-	overall = ret;
-      ret = mon->pgmon()->get_health(oss);
-      if (ret < overall)
-	overall = ret;
-    }
-    catch (const std::exception &e) {
-      oss << " monmapmonitor: caught exception while "
-	  << "checking health: '" << e.what() << "'";
-    }
-    ss << overall << oss.str();
-    r = 0;
-  }
 
   if (r != -1) {
     string rs;

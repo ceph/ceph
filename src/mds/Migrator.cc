@@ -906,9 +906,15 @@ void Migrator::export_go(CDir *dir)
 
 void Migrator::export_go_synced(CDir *dir)
 {  
+  if (export_state.count(dir) == 0 ||
+      export_state[dir] != EXPORT_WARNING) {
+    // export must have aborted.  
+    dout(7) << "export must have aborted on " << dir << dendl;
+    return;
+  }
+
   assert(export_peer.count(dir));
   int dest = export_peer[dir];
-  utime_t now = g_clock.now();
   dout(7) << "export_go_synced " << *dir << " to " << dest << dendl;
 
   cache->show_subtrees();
@@ -923,6 +929,7 @@ void Migrator::export_go_synced(CDir *dir)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), dest);
 
   // take away the popularity we're sending.
+  utime_t now = g_clock.now();
   mds->balancer->subtract_export(dir, now);
   
   // fill export message with cache data

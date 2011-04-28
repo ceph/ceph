@@ -138,7 +138,7 @@ private:
 
   // header
   utime_t last_wrote_head;
-  void _finish_write_head(Header &wrote, Context *oncommit);
+  void _finish_write_head(int r, Header &wrote, Context *oncommit);
   class C_WriteHead;
   friend class C_WriteHead;
 
@@ -164,11 +164,15 @@ private:
 
 
   // writer
+  uint64_t prezeroing_pos;
+  uint64_t prezero_pos;     // we zero journal space ahead of write_pos to avoid problems with tail probing
   uint64_t write_pos;       // logical write position, where next entry will go
   uint64_t flush_pos;       // where we will flush. if write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos;        // what has been committed safely to disk.
   bufferlist write_buf;  // write buffer.  flush_pos + write_buf.length() == write_pos.
 
+  bool waiting_for_zero;
+  interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
   std::set<uint64_t> pending_safe;
   std::map<uint64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
 
@@ -188,8 +192,6 @@ private:
   uint64_t fetch_len;     // how much to read at a time
   uint64_t temp_fetch_len;
   uint64_t prefetch_from; // how far from end do we read next chunk
-
-  int64_t junk_tail_pos; // for truncate
 
   // for wait_for_readable()
   Context    *on_readable;
@@ -213,6 +215,10 @@ private:
   class C_Trim;
   friend class C_Trim;
 
+  void _issue_prezero();
+  void _prezeroed(int r, uint64_t from, uint64_t len);
+  friend class C_Journaler_Prezero;
+
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
     assert(readonly ||
@@ -224,14 +230,14 @@ private:
 public:
   Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, ProfLogger *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag),
-    ino(ino_), pg_pool(pool), readonly(false), magic(mag),
+    ino(ino_), pg_pool(pool), readonly(true), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
-    write_pos(0), flush_pos(0), safe_pos(0),
+    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
+    waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0), prefetch_from(0),
-    junk_tail_pos(0),
     on_readable(0),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
@@ -239,10 +245,12 @@ public:
 
   void reset() {
     assert(state == STATE_ACTIVE);
-    readonly = false;
+    readonly = true;
     delay_flush_event = 0;
     state = STATE_UNDEF;
     error = 0;
+    prezeroing_pos = 0;
+    prezero_pos = 0;
     write_pos = 0;
     flush_pos = 0;
     safe_pos = 0;
@@ -251,11 +259,11 @@ public:
     received_pos = 0;
     fetch_len = 0;
     prefetch_from = 0;
-    junk_tail_pos = 0;
     assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
+    waiting_for_zero = false;
   }
 
   // me
@@ -276,8 +284,8 @@ public:
 
   void set_layout(ceph_file_layout *l);
 
-  void set_readonly() { readonly = true; }
-  void set_writeable() { readonly = false; }
+  void set_readonly();
+  void set_writeable();
   bool is_readonly() { return readonly; }
 
   bool is_active() { return state == STATE_ACTIVE; }
@@ -310,19 +318,18 @@ public:
   void wait_for_readable(Context *onfinish);
   
   void set_write_pos(int64_t p) { 
-    write_pos = flush_pos = safe_pos = p;
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
   }
-  void set_expire_trimmed_pos(int64_t p) { 
-    expire_pos = trimming_pos = trimmed_pos = p;
-  }
-
-  bool truncate_tail_junk(Context *fin);
 
   // trim
   void set_expire_pos(int64_t ep) { expire_pos = ep; }
+  void set_trimmed_pos(int64_t p) { trimming_pos = trimmed_pos = p; }
+
   void trim();
-  //bool is_trimmable() { return trimming_pos < expire_pos; }
-  //void trim(int64_t trim_to=0, Context *c=0);
+  void trim_tail() {
+    assert(!readonly);
+    _issue_prezero();
+  }
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 

@@ -79,8 +79,6 @@ extern Spinlock buffer_lock;
 #endif
 
 
-extern bool buffer_track_alloc;
-
 class buffer {
   /*
    * exceptions
@@ -486,9 +484,7 @@ public:
     const std::list<ptr>& buffers() const { return _buffers; }
     
     void swap(list& other) {
-      unsigned t = _len;
-      _len = other._len;
-      other._len = t;
+      std::swap(_len, other._len);
       _buffers.swap(other._buffers);
       append_buffer.swap(other.append_buffer);
       //last_p.swap(other.last_p);
@@ -908,6 +904,7 @@ public:
 
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, bool silent=false);
+    ssize_t read_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     __u32 crc32c(__u32 crc) {

@@ -19,6 +19,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include <vector>
 #include <map>
+#include <set>
 
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
@@ -31,20 +32,46 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_CHAIN   2
 
 class config_option;
+class md_config_obs_t;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
-enum log_to_stderr_t {
-  LOG_TO_STDERR_NONE = 0,
-  LOG_TO_STDERR_SOME = 1,
-  LOG_TO_STDERR_ALL = 2,
-};
+#define LOG_TO_STDERR_NONE 0
+#define LOG_TO_STDERR_SOME 1
+#define LOG_TO_STDERR_ALL 2
 
-struct md_config_t
-{
+template <typename T, typename U>
+class DoutStreambuf;
+
+struct md_config_t {
 public:
+  /* Maps configuration options to the observer listening for them. */
+  typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
+
+  /* Set of configuration options that have changed since the last
+   * apply_changes */
+  typedef std::set < std::string > changed_set_t;
+
+  // Create a new md_config_t structure.
   md_config_t();
   ~md_config_t();
+
+  // Adds a new observer to this configuration. You can do this at any time,
+  // but it will only receive notifications for the changes that happen after
+  // you attach it, obviously.
+  //
+  // Most developers will probably attach their observers after common_init,
+  // but before anyone can call injectargs.
+  //
+  // The caller is responsible for allocating observers.
+  void add_observer(md_config_obs_t* observer_);
+
+  // Remove an observer from this configuration.
+  // This doesn't delete the observer! If you allocated it with new(),
+  // you need to delete it yourself.
+  // This function will assert if you try to delete an observer that isn't
+  // there.
+  void remove_observer(md_config_obs_t* observer_);
 
   // Parse a config file
   int parse_config_files(const std::list<std::string> &conf_files,
@@ -54,8 +81,17 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  void parse_argv_part2(std::vector<const char*>& args);
   void parse_argv(std::vector<const char*>& args);
+
+  // Expand all metavariables. Make any pending observer callbacks.
+  void apply_changes();
+
+  // Called by the Ceph daemons to make configuration changes at runtime
+  void injectargs(const std::string &s);
+
+  // Set a configuration value, or crash
+  // Metavariables will be expanded.
+  void set_val_or_die(const char *key, const char *val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
@@ -76,9 +112,6 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 		   const char *key, std::string &out, bool emeta) const;
 
-  // Perform metavariable expansion on all the data members of md_config_t.
-  void expand_all_meta();
-
   // Expand metavariables in the provided string.
   // Returns true if any metavariables were found and expanded.
   bool expand_meta(std::string &val) const;
@@ -88,25 +121,22 @@ private:
   void set_val_from_default(const config_option *opt);
 
   int set_val_impl(const char *val, const config_option *opt);
+  int set_val_raw(const char *val, const config_option *opt);
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+
+  obs_map_t observers;
+  changed_set_t changed;
 
 public:
   std::string host;
 
   int num_client;
 
-  //bool mkfs;
-
   std::string monmap;
   std::string mon_host;
   bool daemonize;
-
-  //profiling
-  bool tcmalloc_profiler_run;
-  int profiler_allocation_interval;
-  int profiler_highwater_interval;
 
   // profiling logger
   bool profiling_logger;
@@ -167,9 +197,6 @@ public:
   std::string key;
   std::string keyfile;
   std::string keyring;
-
-  // buffer
-  bool buffer_track_alloc;
 
   // messenger
 
@@ -262,6 +289,7 @@ public:
   bool  journaler_allow_split_entries;
   int   journaler_write_head_interval;
   int   journaler_prefetch_periods;
+  int   journaler_prezero_periods;
   double journaler_batch_interval;
   uint64_t journaler_batch_max;
 
@@ -342,6 +370,7 @@ public:
   bool mds_verify_scatter;
   bool mds_debug_scatterstat;
   bool mds_debug_frag;
+  bool mds_debug_auth_pins;
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;
@@ -415,7 +444,7 @@ public:
 
   double osd_class_error_timeout;
   double osd_class_timeout;
-  std::string osd_class_tmp;
+  std::string osd_class_dir;
 
   int osd_max_scrubs;
   float osd_scrub_load_threshold;
@@ -473,6 +502,9 @@ public:
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
 
+  DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
+  std::ostream _dout;
+  md_config_obs_t *_prof_logger_conf_obs;
 };
 
 extern md_config_t g_conf;
@@ -499,6 +531,15 @@ struct config_option {
   void *conf_ptr(md_config_t *conf) const;
 
   const void *conf_ptr(const md_config_t *conf) const;
+};
+
+class md_config_obs_t {
+public:
+  virtual ~md_config_obs_t(); // we won't actually use this, but it's safest
+  // when you have virtual functions
+  virtual const char** get_tracked_conf_keys() const = 0;
+  virtual void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed) = 0;
 };
 
 #include "common/debug.h"

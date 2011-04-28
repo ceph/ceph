@@ -2643,12 +2643,6 @@ conf_set(const char *option, const char *value)
   return rados_conf_set((rados_t)client, option, value);
 }
 
-void librados::Rados::
-reopen_log()
-{
-  rados_reopen_log((rados_t)client);
-}
-
 int librados::Rados::
 conf_get(const char *option, std::string &val)
 {
@@ -2793,7 +2787,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     // configuration
     md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     conf->parse_env(); // environment variables override
-    conf->expand_all_meta(); // future proofing
+    conf->apply_changes();
 
     ++rados_initialized;
   }
@@ -2863,21 +2857,19 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   if (ret)
     return ret;
   g_conf.parse_env(); // environment variables override
-  g_conf.expand_all_meta(); // handle metavariables in the config
 
+  g_conf.apply_changes();
   complain_about_parse_errors(&parse_errors);
-
   return 0;
 }
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
 {
-  return g_conf.set_val(option, value);
-}
-
-extern "C" void rados_reopen_log(rados_t cluster)
-{
-  sighup_handler(SIGHUP);
+  int ret = g_conf.set_val(option, value);
+  if (ret)
+    return ret;
+  g_conf.apply_changes();
+  return 0;
 }
 
 /* cluster info */

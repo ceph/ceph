@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/code_environment.h"
 #include "common/config.h"
 #include "common/DoutStreambuf.h"
 #include "common/entity_name.h"
@@ -194,16 +195,12 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
     syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s",
 	   obuf + TIME_FMT_SZ + 1);
   }
-  if (flags & DOUTSB_FLAG_STDOUT) {
-    // Just write directly out to the stdout fileno. There's no point in
-    // using something like fputs to write to a temporary buffer,
-    // because we would just have to flush that temporary buffer
-    // immediately.
-    if (safe_write(STDOUT_FILENO, obuf, len))
-      flags &= ~DOUTSB_FLAG_STDOUT;
-  }
   if (flags & DOUTSB_FLAG_STDERR) {
     if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
+      // Just write directly out to the stderr fileno. There's no point in
+      // using something like fputs to write to a temporary buffer,
+      // because we would just have to flush that temporary buffer
+      // immediately.
       if (safe_write(STDERR_FILENO, obuf, len))
 	flags &= ~DOUTSB_FLAG_STDERR;
     }
@@ -229,9 +226,23 @@ void DoutStreambuf<charT, traits>::handle_stderr_closed()
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::read_global_config()
+const char** DoutStreambuf<charT, traits>::
+get_tracked_conf_keys() const
 {
-  // should hold the dout_lock here
+  static const char *KEYS[] =
+	{ "log_file", "log_dir", "log_sym_dir",
+	 "log_sym_history", "log_to_stderr",
+	 "log_to_syslog", "log_per_instance", NULL };
+  return KEYS;
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+handle_conf_change(const md_config_t *conf, const std::set <std::string> &changed)
+{
+  DoutLocker _dout_locker;
+  type_name = conf->name.get_type_name();
+
   flags = 0;
 
   if (ofd != -1) {
@@ -239,13 +250,18 @@ void DoutStreambuf<charT, traits>::read_global_config()
     ofd = -1;
   }
 
-  if (g_conf.log_to_syslog) {
+  if (conf->log_to_syslog) {
+    if ((changed.count("log_to_syslog") || changed.count("name")) &&
+        (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
+      closelog();
+      openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
+    }
     flags |= DOUTSB_FLAG_SYSLOG;
   }
 
-  if ((g_conf.log_to_stderr != LOG_TO_STDERR_NONE) &&
+  if ((conf->log_to_stderr != LOG_TO_STDERR_NONE) &&
        fd_is_open(STDERR_FILENO)) {
-    switch (g_conf.log_to_stderr) {
+    switch (conf->log_to_stderr) {
       case LOG_TO_STDERR_SOME:
 	flags |= DOUTSB_FLAG_STDERR_SOME;
 	break;
@@ -254,15 +270,15 @@ void DoutStreambuf<charT, traits>::read_global_config()
 	break;
       default:
 	ostringstream oss;
-	oss << "DoutStreambuf::read_global_config: can't understand "
-	    << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
+	oss << "DoutStreambuf::handle_conf_change: can't understand "
+	    << "conf->log_to_stderr = " << conf->log_to_stderr << "\n";
 	dout_emergency(oss.str());
 	break;
     }
   }
 
-  if ((!g_conf.log_file.empty()) || (!g_conf.log_dir.empty())) {
-    if (_read_ofile_config() == 0) {
+  if ((!conf->log_file.empty()) || (!conf->log_dir.empty())) {
+    if (_read_ofile_config(conf) == 0) {
       flags |= DOUTSB_FLAG_OFILE;
     }
   }
@@ -280,13 +296,14 @@ set_prio(int prio)
 }
 
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::handle_pid_change()
+int DoutStreambuf<charT, traits>::
+handle_pid_change(const md_config_t *conf)
 {
   // should hold the dout_lock here
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
-  string new_opath(_calculate_opath());
+  string new_opath(_calculate_opath(conf));
   if (opath == new_opath)
     return 0;
 
@@ -296,17 +313,6 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to (re)create instance symlink\n";
-      dout_emergency(oss.str());
-      return ret;
-    }
-  }
-
-  if (!rsym_path.empty()) {
-    // Re-create the rank symlink
-    int ret = create_symlink(new_opath, rsym_path);
-    if (ret) {
-      ostringstream oss;
-      oss << __func__ << ": failed to (re)create rank symlink\n";
       dout_emergency(oss.str());
       return ret;
     }
@@ -328,48 +334,14 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
 }
 
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
-{
-  // should hold the dout_lock here
-
-  if (!(flags & DOUTSB_FLAG_OFILE))
-    return 0;
-
-  ostringstream rss;
-  std::string symlink_dir(_get_symlink_dir());
-  rss << symlink_dir << "/" << g_conf.name.get_type_name() << "." << n;
-
-  string rsym_path_(rss.str());
-  int ret = create_symlink(opath, rsym_path_);
-  if (ret) {
-    ostringstream oss;
-    oss << __func__ << ": failed to create rank symlink with n = "
-	<< n << "\n";
-    dout_emergency(oss.str());
-    return ret;
-  }
-
-  rsym_path = rsym_path_;
-  return 0;
-}
-
-template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::config_to_str() const
 {
   // should hold the dout_lock here
   ostringstream oss;
-  oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
-  oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
-  oss << "g_conf.log_file = '" << g_conf.log_file << "'\n";
-  oss << "g_conf.log_dir = '" << g_conf.log_dir << "'\n";
-  oss << "g_conf.g_conf.log_per_instance = '"
-      << g_conf.log_per_instance << "'\n";
   oss << "flags = 0x" << std::hex << flags << std::dec << "\n";
   oss << "ofd = " << ofd << "\n";
   oss << "opath = '" << opath << "'\n";
   oss << "isym_path = '" << isym_path << "'\n";
-  oss << "rsym_path = '" << rsym_path << "'\n";
-  oss << "log_sym_history = " << g_conf.log_sym_history  << "\n";
   return oss.str();
 }
 
@@ -420,14 +392,15 @@ void DoutStreambuf<charT, traits>::_clear_output_buffer()
 }
 
 template <typename charT, typename traits>
-std::string DoutStreambuf<charT, traits>::_calculate_opath() const
+std::string DoutStreambuf<charT, traits>::
+_calculate_opath(const md_config_t *conf) const
 {
   // should hold the dout_lock here
 
-  // If g_conf.log_file was specified, that takes the highest priority
-  if (!g_conf.log_file.empty()) {
-    string log_file(normalize_relative(g_conf.log_file.c_str()));
-    if (g_conf.log_per_instance) {
+  // If conf->log_file was specified, that takes the highest priority
+  if (!conf->log_file.empty()) {
+    string log_file(normalize_relative(conf->log_file.c_str()));
+    if (conf->log_per_instance) {
       ostringstream oss;
       oss << log_file << "." << getpid();
       return oss.str();
@@ -437,12 +410,12 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
   }
 
   string log_dir;
-  if (g_conf.log_dir.empty())
+  if (conf->log_dir.empty())
     log_dir = normalize_relative(".");
   else
-    log_dir = normalize_relative(g_conf.log_dir.c_str());
+    log_dir = normalize_relative(conf->log_dir.c_str());
 
-  if (g_conf.log_per_instance) {
+  if (conf->log_per_instance) {
     char hostname[255];
     memset(hostname, 0, sizeof(hostname));
     int ret = gethostname(hostname, sizeof(hostname));
@@ -459,28 +432,32 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
   }
   else {
     ostringstream oss;
-    oss << log_dir << "/" << g_conf.name.to_str() << ".log";
+    oss << log_dir << "/" << conf->name.to_str() << ".log";
     return oss.str();
   }
 }
 
 template <typename charT, typename traits>
-std::string DoutStreambuf<charT, traits>::_get_symlink_dir() const
+std::string DoutStreambuf<charT, traits>::
+_get_symlink_dir(const md_config_t *conf) const
 {
-  if (!g_conf.log_sym_dir.empty())
-    return normalize_relative(g_conf.log_sym_dir.c_str());
+  if (!conf->log_sym_dir.empty())
+    return normalize_relative(conf->log_sym_dir.c_str());
   else
     return get_dirname(opath);
 }
 
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::_read_ofile_config()
+int DoutStreambuf<charT, traits>::
+_read_ofile_config(const md_config_t *conf)
 {
   int ret;
 
-  isym_path = "";
-  rsym_path = "";
-  opath = _calculate_opath();
+  opath.clear();
+  symlink_dir.clear();
+  isym_path.clear();
+
+  opath = _calculate_opath(conf);
   if (opath.empty()) {
     ostringstream oss;
     oss << __func__ << ": _calculate_opath failed.\n";
@@ -488,15 +465,16 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     return 1;
   }
 
-  if (g_conf.log_per_instance) {
+  symlink_dir = _get_symlink_dir(conf);
+
+  if (conf->log_per_instance) {
     // Calculate instance symlink path (isym_path)
     ostringstream iss;
-    std::string symlink_dir(_get_symlink_dir());
-    iss << symlink_dir << "/" << g_conf.name.to_str();
+    iss << symlink_dir << "/" << conf->name.to_str();
     isym_path = iss.str();
 
     // Rotate isym_path
-    ret = _rotate_files(isym_path);
+    ret = _rotate_files(conf, isym_path);
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to rotate instance symlinks\n";
@@ -530,7 +508,8 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
 }
 
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
+int DoutStreambuf<charT, traits>::
+_rotate_files(const md_config_t *conf, const std::string &base)
 {
   // Given a file name base, and a directory like this:
   // base
@@ -571,7 +550,7 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
     string path(oss.str());
 
     signed int k = j + 1;
-    if (k >= g_conf.log_sym_history) {
+    if (k >= conf->log_sym_history) {
       if (::unlink(path.c_str())) {
 	int err = errno;
 	ostringstream ess;
@@ -611,9 +590,6 @@ void dout_emergency(const char * const str)
   if (safe_write(STDERR_FILENO, str, len)) {
     // ignore errors
     ;
-  }
-  if (safe_write(STDOUT_FILENO, str, len)) {
-    ; // ignore error code
   }
   /* Normally we would take the lock before even checking _doss, but since
    * this is an emergency, we can't do that. */

@@ -140,6 +140,13 @@ struct frag_info_t : public scatter_info_t {
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
   }
 
+  void add(const frag_info_t& other) {
+    if (other.mtime > mtime)
+      mtime = other.mtime;
+    nfiles += other.nfiles;
+    nsubdirs += other.nsubdirs;
+  }
+
   void encode(bufferlist &bl) const {
     __u8 v = 1;
     ::encode(v, bl);

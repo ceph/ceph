@@ -157,35 +157,33 @@ public:
     bufferlist tbl;
     bufferlist::iterator p;
 
-    // -- old format --
-    bool old;
-    vector<int8_t> opvec;
-    vector<bufferlist> bls;
-    vector<sobject_t> oids;
-    vector<coll_t> cids;
-    vector<int64_t> lengths;
-
-    // for these guys, just use a pointer.
-    // but, decode to a full value, and create pointers to that.
-    //vector<const char*> attrnames;
-    vector<string> attrnames;
-    deque<map<std::string,bufferptr> > attrsets;
-
-    unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
-
   public:
+
+    void swap(Transaction& other) {
+      std::swap(ops, other.ops);
+      std::swap(largest_data_len, other.largest_data_len);
+      std::swap(largest_data_off, other.largest_data_off);
+      std::swap(largest_data_off_in_tbl, other.largest_data_off_in_tbl);
+      tbl.swap(other.tbl);
+    }
+
+    void append(Transaction& other) {
+      ops += other.ops;
+      assert(pad_unused_bytes == 0);
+      assert(other.pad_unused_bytes == 0);
+      if (other.largest_data_len > largest_data_len) {
+	largest_data_len = other.largest_data_len;
+	largest_data_off = other.largest_data_off;
+	largest_data_off_in_tbl = tbl.length() + other.largest_data_off_in_tbl;
+      }
+      tbl.append(other.tbl);
+    }
+
     uint64_t get_encoded_bytes() {
       return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
     }
 
     uint64_t get_num_bytes() {
-      if (old) {
-	uint64_t s = 16384 +
-	  (opvec.size() + oids.size() + cids.size() + lengths.size()) * 4096;
-	for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
-	  s += bls.size() + 4096;
-	return s;
-      }
       return get_encoded_bytes();
     }
 
@@ -212,26 +210,18 @@ public:
     }
 
     bool empty() {
-      if (old)
-	return opvec.empty();
       return !ops;
     }
 
     bool have_op() {
-      if (old)
-	return opp < opvec.size();
       if (p.get_off() == 0)
 	p = tbl.begin();
       return !p.end();
     }
     int get_num_ops() {
-      if (old)
-	return opvec.size();
       return ops;
     }
     int get_op() {
-      if (old)
-	return opvec[opp++];
       if (p.get_off() == 0)
 	p = tbl.begin();
       __u32 op;
@@ -239,17 +229,11 @@ public:
       return op;
     }
     void get_bl(bufferlist& bl) {
-      if (old) {
-	bl = bls[blp++];
-	return;
-      }
       if (p.get_off() == 0)
 	p = tbl.begin();
       ::decode(bl, p);
     }
     sobject_t get_oid() {
-      if (old)
-	return oids[oidp++];
       if (p.get_off() == 0)
 	p = tbl.begin();
       sobject_t soid;
@@ -257,8 +241,6 @@ public:
       return soid;
     }
     coll_t get_cid() {
-      if (old)
-	return cids[cidp++];
       if (p.get_off() == 0)
 	p = tbl.begin();
       coll_t c;
@@ -266,8 +248,6 @@ public:
       return c;
     }
     uint64_t get_length() {
-      if (old)
-	return lengths[lengthp++];
       if (p.get_off() == 0)
 	p = tbl.begin();
       uint64_t len;
@@ -275,8 +255,6 @@ public:
       return len;
     }
     string get_attrname() {
-      if (old)
-	return string(attrnames[attrnamep++].c_str());
       if (p.get_off() == 0)
 	p = tbl.begin();
       string s;
@@ -284,10 +262,6 @@ public:
       return s;
     }
     void get_attrset(map<string,bufferptr>& aset) {
-      if (old) {
-	aset = attrsets[attrsetp++];
-	return;
-      }
       if (p.get_off() == 0)
 	p = tbl.begin();
       ::decode(aset, p);
@@ -499,16 +473,13 @@ public:
 
     // etc.
     Transaction() :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { }
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {}
     Transaction(bufferlist::iterator &dp) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
@@ -527,19 +498,7 @@ public:
       __u8 struct_v;
       ::decode(struct_v, bl);
       if (struct_v == 1) {
-	// old <= v0.19 format
-	old = true;
-	::decode(opvec, bl);
-	::decode(bls, bl);
-	::decode(oids, bl);
-	::decode(cids, bl);
-	::decode(lengths, bl);
-	::decode(attrnames, bl);
-	/*for (vector<string>::iterator p = attrnames2.begin();
-          p != attrnames2.end();
-          ++p)
-          attrnames.push_back((*p).c_str());*/
-	::decode(attrsets, bl);
+	assert(0 == "dropped support for <= v0.19 transaction format");
       } else {
 	assert(struct_v <= 3);
 	::decode(ops, bl);

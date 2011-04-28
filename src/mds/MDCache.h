@@ -411,7 +411,9 @@ struct MDSlaveUpdate {
     list.push_back(&item);
   }
   ~MDSlaveUpdate() {
-    if (waiter) waiter->finish(0);
+    item.remove_myself();
+    if (waiter)
+      waiter->finish(0);
     delete waiter;
   }
 };
@@ -497,7 +499,9 @@ public:
 
   void _send_discover(discover_info_t& dis);
   discover_info_t& _create_discover(int mds) {
-    discover_info_t& d = discovers[++discover_last_tid];
+    tid_t t = ++discover_last_tid;
+    discover_info_t& d = discovers[t];
+    d.tid = t;
     d.mds = mds;
     return d;
   }

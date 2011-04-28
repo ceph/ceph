@@ -255,7 +255,6 @@ namespace librados
     void shutdown();
     int conf_read_file(const char * const path) const;
     int conf_set(const char *option, const char *value);
-    void reopen_log();
     int conf_get(const char *option, std::string &val);
 
     int pool_create(const char *name);

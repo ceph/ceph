@@ -692,106 +692,73 @@ struct Fh {
 // ========================================================
 // client interface
 
+struct ceph_dir_result_t {
+  static const int SHIFT = 28;
+  static const int64_t MASK = (1 << SHIFT) - 1;
+  static const loff_t END = 1ULL << (SHIFT + 32);
+
+  static uint64_t make_fpos(unsigned frag, unsigned off) {
+    return ((uint64_t)frag << SHIFT) | (uint64_t)off;
+  }
+  static unsigned fpos_frag(uint64_t p) {
+    return p >> SHIFT;
+  }
+  static unsigned fpos_off(uint64_t p) {
+    return p & MASK;
+  }
+
+
+  Inode *inode;
+
+  int64_t offset;        // high bits: frag_t, low bits: an offset
+
+  uint64_t this_offset;  // offset of last chunk, adjusted for . and ..
+  uint64_t next_offset;  // offset of next chunk (last_name's + 1)
+  string last_name;      // last entry in previous chunk
+
+  uint64_t release_count;
+
+  frag_t buffer_frag;
+  vector<pair<string,Inode*> > *buffer;
+
+  string at_cache_name;  // last entry we successfully returned
+
+  ceph_dir_result_t(Inode *in) : inode(in), offset(0), next_offset(2),
+			 release_count(0),
+			 buffer(0) { 
+    inode->get();
+  }
+
+  frag_t frag() { return frag_t(offset >> SHIFT); }
+  unsigned fragpos() { return offset & MASK; }
+
+  void next_frag() {
+    frag_t fg = offset >> SHIFT;
+    if (fg.is_rightmost())
+      set_end();
+    else 
+      set_frag(fg.next());
+  }
+  void set_frag(frag_t f) {
+    offset = (uint64_t)f << SHIFT;
+    assert(sizeof(offset) == 8);
+  }
+  void set_end() { offset = END; }
+  bool at_end() { return (offset == END); }
+
+  void reset() {
+    last_name.clear();
+    next_offset = 2;
+    this_offset = 0;
+    offset = 0;
+    delete buffer;
+    buffer = 0;
+  }
+};
+
 class Client : public Dispatcher {
  public:
   
-  struct DirResult {
-    static const int SHIFT = 28;
-    static const int64_t MASK = (1 << SHIFT) - 1;
-    static const loff_t END = 1ULL << (SHIFT + 32);
-
-    static uint64_t make_fpos(unsigned frag, unsigned off) {
-      return ((uint64_t)frag << SHIFT) | (uint64_t)off;
-    }
-    static unsigned fpos_frag(uint64_t p) {
-      return p >> SHIFT;
-    }
-    static unsigned fpos_off(uint64_t p) {
-      return p & MASK;
-    }
-
-
-    Inode *inode;
-
-    int64_t offset;        // high bits: frag_t, low bits: an offset
-
-    uint64_t this_offset;  // offset of last chunk, adjusted for . and ..
-    uint64_t next_offset;  // offset of next chunk (last_name's + 1)
-    string last_name;      // last entry in previous chunk
-
-    uint64_t release_count;
-
-    frag_t buffer_frag;
-    vector<pair<string,Inode*> > *buffer;
-
-    string at_cache_name;  // last entry we successfully returned
-
-    DirResult(Inode *in) : inode(in), offset(0), next_offset(2),
-			   release_count(0),
-			   buffer(0) { 
-      inode->get();
-    }
-
-    frag_t frag() { return frag_t(offset >> SHIFT); }
-    unsigned fragpos() { return offset & MASK; }
-
-    void next_frag() {
-      frag_t fg = offset >> SHIFT;
-      if (fg.is_rightmost())
-	set_end();
-      else 
-	set_frag(fg.next());
-    }
-    void set_frag(frag_t f) {
-      offset = (uint64_t)f << SHIFT;
-      assert(sizeof(offset) == 8);
-    }
-    void set_end() { offset = END; }
-    bool at_end() { return (offset == END); }
-
-    void reset() {
-      last_name.clear();
-      next_offset = 2;
-      this_offset = 0;
-      offset = 0;
-      delete buffer;
-      buffer = 0;
-    }
-  };
-
-  // **** WARNING: be sure to update the struct in libceph.h too! ****
-  struct stat_precise {
-    ino_t st_ino;
-    dev_t st_dev;
-    mode_t st_mode;
-    nlink_t st_nlink;
-    uid_t st_uid;
-    gid_t st_gid;
-    dev_t st_rdev;
-    off_t st_size;
-    blksize_t st_blksize;
-    blkcnt_t st_blocks;
-    time_t st_atime_sec;
-    time_t st_atime_micro;
-    time_t st_mtime_sec;
-    time_t st_mtime_micro;
-    time_t st_ctime_sec;
-    time_t st_ctime_micro;
-    stat_precise() {}
-    stat_precise(struct stat attr): st_ino(attr.st_ino), st_dev(attr.st_dev),
-			       st_mode(attr.st_mode), st_nlink(attr.st_nlink),
-			       st_uid(attr.st_uid), st_gid(attr.st_gid),
-			       st_size(attr.st_size),
-			       st_blksize(attr.st_blksize),
-			       st_blocks(attr.st_blocks),
-			       st_atime_sec(attr.st_atime),
-			       st_atime_micro(0),
-			       st_mtime_sec(attr.st_mtime),
-			       st_mtime_micro(0),
-			       st_ctime_sec(attr.st_ctime),
-			       st_ctime_micro(0) {}
-  };
-
   // cluster descriptors
   MDSMap *mdsmap; 
   OSDMap *osdmap;
@@ -1054,7 +1021,6 @@ protected:
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-  int fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
   // trim cache.
@@ -1171,14 +1137,14 @@ private:
   // some readdir helpers
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
 
-  int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
-  void _readdir_drop_dirp_buffer(DirResult *dirp);
-  bool _readdir_have_frag(DirResult *dirp);
-  void _readdir_next_frag(DirResult *dirp);
-  void _readdir_rechoose_frag(DirResult *dirp);
-  int _readdir_get_frag(DirResult *dirp);
-  int _readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p);
-  void _closedir(DirResult *dirp);
+  int _opendir(Inode *in, ceph_dir_result_t **dirpp, int uid=-1, int gid=-1);
+  void _readdir_drop_dirp_buffer(ceph_dir_result_t *dirp);
+  bool _readdir_have_frag(ceph_dir_result_t *dirp);
+  void _readdir_next_frag(ceph_dir_result_t *dirp);
+  void _readdir_rechoose_frag(ceph_dir_result_t *dirp);
+  int _readdir_get_frag(ceph_dir_result_t *dirp);
+  int _readdir_cache_cb(ceph_dir_result_t *dirp, add_dirent_cb_t cb, void *p);
+  void _closedir(ceph_dir_result_t *dirp);
 
   // other helpers
   void _ll_get(Inode *in);
@@ -1202,7 +1168,7 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
-  int _setattr(Inode *in, stat_precise *attr, int mask, int uid=-1, int gid=-1);
+  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
@@ -1223,7 +1189,7 @@ private:
 
 public:
   int mount(const std::string &mount_root);
-  int unmount();
+  void unmount();
 
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf);
@@ -1233,27 +1199,27 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int opendir(const char *name, DIR **dirpp);
-  int closedir(DIR *dirp);
+  int opendir(const char *name, ceph_dir_result_t **dirpp);
+  int closedir(ceph_dir_result_t *dirp);
 
-  int readdir_r_cb(DIR *dirp, add_dirent_cb_t cb, void *p);
+  int readdir_r_cb(ceph_dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
-  int readdir_r(DIR *dirp, struct dirent *de);
-  int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+  int readdir_r(ceph_dir_result_t *dirp, struct dirent *de);
+  int readdirplus_r(ceph_dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
 
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  int _getdents(DIR *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
-  int getdents(DIR *dirp, char *buf, int buflen) {
+  int _getdents(ceph_dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
+  int getdents(ceph_dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, true);
   }
-  int getdnames(DIR *dirp, char *buf, int buflen) {
+  int getdnames(ceph_dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, false);
   }
 
-  void rewinddir(DIR *dirp); 
-  loff_t telldir(DIR *dirp);
-  void seekdir(DIR *dirp, loff_t offset);
+  void rewinddir(ceph_dir_result_t *dirp);
+  loff_t telldir(ceph_dir_result_t *dirp);
+  void seekdir(ceph_dir_result_t *dirp, loff_t offset);
 
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
@@ -1270,10 +1236,9 @@ public:
 
   // inode stuff
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
-  int lstat_precise(const char *relpath, struct stat_precise *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
-  int setattr(const char *relpath, stat_precise *attr, int mask);
+  int setattr(const char *relpath, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
@@ -1302,19 +1267,17 @@ public:
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
-  int get_file_stripe_unit(int fd);
-  int get_file_stripe_width(int fd);
-  int get_file_stripe_period(int fd);
-  int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+
+  // expose osdmap 
   int get_local_osd();
-  int get_default_preferred_pg(int fd);
+  int get_pool_replication(int pool);
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);
   void set_default_object_size(int size);
   void set_default_file_replication(int replication);
-  void set_default_preferred_pg(int pg);
+  void set_default_preferred_pg(int osd);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

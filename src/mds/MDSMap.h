@@ -169,7 +169,7 @@ protected:
   uint64_t max_file_size;
 
   vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
-  __u32 cas_pg_pool;            // where CAS objects go
+  __s32 cas_pg_pool;            // where CAS objects go
   __u32 metadata_pg_pool;       // where fs metadata objects go
   
   /*
@@ -197,7 +197,7 @@ public:
 
 public:
   MDSMap() : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
-	     cas_pg_pool(0), metadata_pg_pool(0) {
+	     cas_pg_pool(-1), metadata_pg_pool(0) {
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
@@ -233,7 +233,7 @@ public:
 
   const vector<__u32> &get_data_pg_pools() const { return data_pg_pools; }
   __u32 get_data_pg_pool() const { return data_pg_pools[0]; }
-  __u32 get_cas_pg_pool() const { return cas_pg_pool; }
+  __s32 get_cas_pg_pool() const { return cas_pg_pool; }
   __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
 
   const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
@@ -325,18 +325,14 @@ public:
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
-      if (((p->second.rank == -1 &&
-           (p->second.standby_for_rank == mds ||
-            p->second.standby_for_name == name)) ||
-	  (p->second.standby_for_rank == MDS_STANDBY_ANY)) &&
-	  (p->second.state == MDSMap::STATE_STANDBY ||
-	      p->second.state == MDSMap::STATE_STANDBY_REPLAY) &&
-	   !p->second.laggy()) {
-	if (p->second.standby_for_rank == MDS_STANDBY_ANY)
-	  generic_standby = p;
-	else
-	  return p->first;
-      }
+      if ((p->second.state != MDSMap::STATE_STANDBY && p->second.state != MDSMap::STATE_STANDBY_REPLAY) ||
+	  p->second.laggy() ||
+	  p->second.rank >= 0)
+	continue;
+      if (p->second.standby_for_rank == mds || (name.length() && p->second.standby_for_name == name))
+	return p->first;
+      if (p->second.standby_for_rank < 0 && p->second.standby_for_name.length() == 0)
+	generic_standby = p;
     }
     if (generic_standby != mds_info.end())
       return generic_standby->first;
@@ -346,12 +342,13 @@ public:
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
-      if (p->second.rank == -1 &&
-	  (p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
+      if (p->second.state != MDSMap::STATE_STANDBY ||
+	  p->second.laggy() ||
+	  p->second.rank >= 0)
+	continue;
+      if ((p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
 	   p->second.standby_for_rank == MDS_MATCHED_ACTIVE ||
-	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf.mon_force_standby_active)) &&
-	  p->second.state == MDSMap::STATE_STANDBY &&
-	  !p->second.laggy()) {
+	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf.mon_force_standby_active))) {
 	return p->first;
       }
     }

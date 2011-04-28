@@ -32,21 +32,21 @@ public:
   void print(ostream& out);
 
   // accessors
-  bool get_auth(EntityName& name, EntityAuth &a) {
-    if (keys.count(name)) {
-      a = keys[name];
-      return true;
-    }
-    return false;
+  bool get_auth(const EntityName& name, EntityAuth &a) const {
+    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+    if (k == keys.end())
+      return false;
+    a = k->second;
+    return true;
   }
-  bool get_secret(EntityName& name, CryptoKey& secret) {
-    if (keys.count(name)) {
-      secret = keys[name].key;
-      return true;
-    }
-    return false;
+  bool get_secret(const EntityName& name, CryptoKey& secret) const {
+    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+    if (k == keys.end())
+      return false;
+    secret = k->second.key;
+    return true;
   }
-  void get_master(CryptoKey& dest) {
+  void get_master(CryptoKey& dest) const {
     get_secret(g_conf.name, dest);
   }
 

@@ -96,8 +96,6 @@ protected:
 
   void _replay();         // old way
   void _replay_thread();  // new way
-  void _replay_truncated();
-  friend class C_MDL_ReplayTruncated;
 
 
   // -- segments --
@@ -241,6 +239,8 @@ public:
   void open(Context *onopen);      // append() or replay() to follow!
   void append();
   void replay(Context *onfinish);
+
+  void standby_trim_segments();
 };
 
 #endif

@@ -1,30 +1,40 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
-/*
- * Ceph - scalable distributed file system
+/** -*- C++ -*-
+ * Copyright (C) 2009-2011 New Dream Network
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * This file is part of Hypertable.
  *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
- * Foundation.  See file COPYING.
- * 
+ * Hypertable is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or any later version.
+ *
+ * Hypertable is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Hypertable. If not, see <http://www.gnu.org/licenses/>
+ *
+ * Authors:
+ * Gregory Farnum <gfarnum@gmail.com>
+ * Colin McCabe <cmccabe@alumni.cmu.edu>
  */
 
-#ifndef CEPH_HYPERTABLE_BROKER_H
-#define CEPH_HYPERTABLE_BROKER_H
+#ifndef HYPERTABLE_CEPHBROKER_H
+#define HYPERTABLE_CEPHBROKER_H
 
 extern "C" {
 #include <unistd.h>
 }
 
-#include "libceph.h"
 #include "Common/String.h"
 #include "Common/atomic.h"
 #include "Common/Properties.h"
 
 #include "DfsBroker/Lib/Broker.h"
+
+class ceph_mount_t;
 
 namespace Hypertable {
   using namespace DfsBroker;
@@ -33,9 +43,10 @@ namespace Hypertable {
    */
   class OpenFileDataCeph : public OpenFileData {
   public:
-    OpenFileDataCeph(const String& fname, int _fd, int _flags) :
-      fd(_fd), flags(_flags), filename(fname) {}
-    virtual ~OpenFileDataCeph() { ceph_close(fd); }
+    OpenFileDataCeph(ceph_mount_t *cmount_, const String& fname,
+		     int _fd, int _flags);
+    virtual ~OpenFileDataCeph();
+    ceph_mount_t *cmount;
     int fd;
     int flags;
     String filename;
@@ -60,9 +71,9 @@ namespace Hypertable {
     virtual ~CephBroker();
 
     virtual void open(ResponseCallbackOpen *cb, const char *fname,
-                      uint32_t bufsz);
+                      uint32_t flags, uint32_t bufsz);
     virtual void
-    create(ResponseCallbackOpen *cb, const char *fname, bool overwrite,
+    create(ResponseCallbackOpen *cb, const char *fname, uint32_t flags,
            int32_t bufsz, int16_t replication, int64_t blksz);
     virtual void close(ResponseCallback *cb, uint32_t fd);
     virtual void read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount);
@@ -85,6 +96,7 @@ namespace Hypertable {
                        StaticBuffer &serialized_parameters);
 
   private:
+    ceph_mount_t *cmount;
     static atomic_t ms_next_fd;
 
     virtual void report_error(ResponseCallback *cb, int error);

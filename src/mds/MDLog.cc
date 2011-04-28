@@ -92,6 +92,7 @@ void MDLog::init_journaler()
   journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 
 			    logger, l_mdl_jlat,
 			    &mds->timer);
+  assert(journaler->is_readonly());
 }
 
 void MDLog::write_head(Context *c) 
@@ -120,8 +121,9 @@ void MDLog::create(Context *c)
 {
   dout(5) << "create empty log" << dendl;
   init_journaler();
+  journaler->set_writeable();
   journaler->create(&mds->mdcache->default_log_layout);
-  write_head(c);
+  journaler->write_head(c);
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
@@ -392,8 +394,9 @@ void MDLog::_expired(LogSegment *ls)
       expired_segments.erase(ls);
       num_events -= ls->num_events;
       
-      journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
-      journaler->write_head(0);
+      // this was the oldest segment, adjust expire pos
+      if (journaler->get_expire_pos() < ls->offset)
+	journaler->set_expire_pos(ls->offset);
       
       logger->set(l_mdl_expos, ls->offset);
       logger->inc(l_mdl_segtrm);
@@ -402,6 +405,8 @@ void MDLog::_expired(LogSegment *ls)
       segments.erase(ls->offset);
       delete ls;
     }
+
+    journaler->write_head(0);
   }
 
   logger->set(l_mdl_ev, num_events);
@@ -415,6 +420,7 @@ void MDLog::_expired(LogSegment *ls)
 void MDLog::replay(Context *c)
 {
   assert(journaler->is_active());
+  assert(journaler->is_readonly());
 
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
@@ -446,14 +452,6 @@ public:
   C_MDL_Replay(MDLog *l) : mdlog(l) {}
   void finish(int r) { 
     mdlog->replay_cond.Signal();
-  }
-};
-
-struct C_MDL_ReplayTruncated : public Context {
-  MDLog *mdl;
-  C_MDL_ReplayTruncated(MDLog *l) : mdl(l) {}
-  void finish(int r) {
-    mdl->_replay_truncated();
   }
 };
 
@@ -498,6 +496,7 @@ void MDLog::_replay_thread()
           while (!done)
             cond.Wait(mylock);
           mds->mds_lock.Lock();
+	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {
             dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
             r = -EAGAIN;
@@ -571,29 +570,40 @@ void MDLog::_replay_thread()
 	     << " events" << dendl;
 
     logger->set(l_mdl_expos, journaler->get_expire_pos());
-
-    dout(10) << "_replay - truncating at " << journaler->get_write_pos() << dendl;
-    Context *c = new C_MDL_ReplayTruncated(this);
-    if (journaler->truncate_tail_junk(c)) {
-      delete c;
-      
-      dout(10) << "_replay_thread nothing to truncate, kicking waiters" << dendl;
-      finish_contexts(waitfor_replay, 0);  
-    }
-  } else {
-    dout(10) << "_replay_thread kicking waiters" << dendl;
-    finish_contexts(waitfor_replay, r);  
   }
+
+  dout(10) << "_replay_thread kicking waiters" << dendl;
+  finish_contexts(waitfor_replay, 0);  
 
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();
 }
 
-
-void MDLog::_replay_truncated()
+void MDLog::standby_trim_segments()
 {
-  dout(10) << "_replay_truncated" << dendl;
-  finish_contexts(waitfor_replay, 0);  
+  dout(10) << "standby_trim_segments" << dendl;
+  uint64_t expire_pos = journaler->get_expire_pos();
+  dout(10) << " expire_pos=" << expire_pos << dendl;
+  LogSegment *seg = NULL;
+  bool removed_segment = false;
+  while ((seg = get_oldest_segment())->end <= expire_pos) {
+    dout(10) << " removing segment " << seg->offset << dendl;
+    seg->dirty_dirfrags.clear_list();
+    seg->new_dirfrags.clear_list();
+    seg->dirty_inodes.clear_list();
+    seg->dirty_dentries.clear_list();
+    seg->open_files.clear_list();
+    seg->renamed_files.clear_list();
+    seg->dirty_dirfrag_dir.clear_list();
+    seg->dirty_dirfrag_nest.clear_list();
+    seg->dirty_dirfrag_dirfragtree.clear_list();
+    remove_oldest_segment();
+    removed_segment = true;
+  }
+
+  if (removed_segment) {
+    dout(20) << " calling mdcache->trim!" << dendl;
+    mds->mdcache->trim(-1);
+  } else
+    dout(20) << " removed no segments!" << dendl;
 }
-
-

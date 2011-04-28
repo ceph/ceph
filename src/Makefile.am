@@ -7,9 +7,11 @@ SUBDIRS =
 DIST_SUBDIRS = gtest
 CLEANFILES =
 bin_PROGRAMS =
+# like bin_PROGRAMS, but these targets are only built for debug builds
+bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
-bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack crbdnamer
+bin_SCRIPTS = crun $(srcdir)/cclsinfo cdebugpack crbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -97,7 +99,7 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 sbin_PROGRAMS += mount.ceph
 
@@ -144,23 +146,21 @@ cosd_SOURCES += perfglue/disabled_heap_profiler.cc
 cmds_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
-# debug targets?
-if WITH_DEBUG
-
+# debug targets
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += psim
+bin_DEBUGPROGRAMS += psim
 
 test_mutate_SOURCES = test/test_mutate.cc msg/SimpleMessenger.cc
 test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += test_mutate
+bin_DEBUGPROGRAMS += test_mutate
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testmsgr
+bin_DEBUGPROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
-bin_PROGRAMS += test_ioctls
+bin_DEBUGPROGRAMS += test_ioctls
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -168,18 +168,15 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += dumpjournal dupstore streamtest
+bin_DEBUGPROGRAMS += dumpjournal dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += test_trans
+bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
 testsnaps_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testsnaps
-
-endif
-
+bin_DEBUGPROGRAMS += testsnaps
 
 ##########
 BUILT_SOURCES =
@@ -210,24 +207,21 @@ libceph_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
-if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testceph
+bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testtimers
+bin_DEBUGPROGRAMS += testtimers
 
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
 testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
-bin_PROGRAMS += testdout_streambuf
+bin_DEBUGPROGRAMS += testdout_streambuf
 
 testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
 testsignal_handlers_LDADD = libceph.la -lpthread
-bin_PROGRAMS += testsignal_handlers
-
-endif
+bin_DEBUGPROGRAMS += testsignal_handlers
 
 # librados
 librados_SOURCES = \
@@ -265,30 +259,26 @@ rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
-if WITH_DEBUG
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testrados testradospp radosacl
-endif
+bin_DEBUGPROGRAMS += testrados testradospp radosacl
 
-rbd_SOURCES = rbd.cc common/fiemap.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
-if WITH_DEBUG
 testlibrbd_SOURCES = testlibrbd.c
 testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		   $(CRYPTO_LIBS) $(EXTRALIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
 testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		     $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_PROGRAMS += testlibrbd testlibrbdpp
-endif
+bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -323,17 +313,15 @@ radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthrea
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
-if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += testcrypto
+bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
 testkeys_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += testkeys
-endif
+bin_DEBUGPROGRAMS += testkeys
 
 
 ## rados object classes
@@ -459,7 +447,7 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs cclass cdebugpack: init-ceph.in mkcephfs.in cclass.in Makefile cdebugpack.in
+init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -470,7 +458,6 @@ BUILT_SOURCES += init-ceph
 sbin_SCRIPTS += mkcephfs
 
 CLEANFILES += \
-	cclass \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
@@ -479,15 +466,18 @@ CLEANFILES += \
 
 ##
 
+AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic \
+${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
+-fno-strict-aliasing
 
-AM_CXXFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic -Wnon-virtual-dtor
+AM_CFLAGS = $(AM_COMMON_FLAGS)
+AM_CXXFLAGS = $(AM_COMMON_FLAGS) -Wnon-virtual-dtor -Wno-invalid-offsetof \
+-Wstrict-null-sentinel
+AM_LDFLAGS = -Wl,--as-needed
+
 if USE_BOOST_SPIRIT_OLD_HDR
 AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
 endif
-
-AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
-AM_CXXFLAGS += -Wno-invalid-offsetof
-AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops
@@ -504,7 +494,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
-	$(srcdir)/cclass.in $(srcdir)/cdebugpack.in \
+	$(srcdir)/cdebugpack.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/crbdnamer \
@@ -522,7 +512,7 @@ shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
 
 libceph_includedir = $(includedir)/ceph
-libceph_include_DATA = $(srcdir)/client/libceph.h
+libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
@@ -584,10 +574,10 @@ libcommon_files = \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
 	common/ProfLogger.cc \
-	common/ClassLibrary.cc \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
+	common/environment.cc\
 	common/sctp_crc32.c\
 	common/assert.cc \
 	common/dyn_snprintf.c \
@@ -624,7 +614,8 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	common/pidfile.cc
+	common/pidfile.cc \
+	include/addr_parsing.c
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
@@ -651,7 +642,6 @@ libmon_a_SOURCES = \
 	mon/MonmapMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
-	mon/ClassMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
@@ -697,7 +687,7 @@ libosd_a_SOURCES = \
 	osd/OSD.cc \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
-        common/ClassHandler.cc
+        osd/ClassHandler.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \
@@ -744,7 +734,6 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse_ll.h\
 	client/ioctl.h\
-	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\
@@ -760,10 +749,9 @@ noinst_HEADERS = \
 	common/hex.h\
 	common/entity_name.h\
 	common/errno.h\
+	common/environment.h\
 	common/likely.h\
 	common/lockdep.h\
-        common/ClassHandler.h\
-        common/ClassVersion.h\
         common/Clock.h\
         common/Cond.h\
         common/ConfUtils.h\
@@ -789,6 +777,7 @@ noinst_HEADERS = \
         common/config.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
+	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
         crush/CrushWrapper.h\
@@ -802,7 +791,6 @@ noinst_HEADERS = \
         crush/types.h\
 	fetch_config\
 	include/bloom_filter.hpp\
-	include/ClassLibrary.h\
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
@@ -814,6 +802,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
+	include/ceph/libceph.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
@@ -911,8 +900,6 @@ noinst_HEADERS = \
         messages/MAuth.h\
         messages/MAuthReply.h\
 	messages/MCacheExpire.h\
-	messages/MClass.h\
-	messages/MClassAck.h\
         messages/MClientCaps.h\
         messages/MClientCapRelease.h\
         messages/MClientLease.h\
@@ -1002,7 +989,6 @@ noinst_HEADERS = \
         messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
-        mon/ClassMonitor.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\
@@ -1037,6 +1023,7 @@ noinst_HEADERS = \
         os/JournalingObjectStore.h\
         os/ObjectStore.h\
         osd/Ager.h\
+	osd/ClassHandler.h\
         osd/OSD.h\
         osd/OSDCaps.h\
         osd/OSDMap.h\
@@ -1096,3 +1083,8 @@ uninstall-local:
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
+# if we are doing a debug build, tell make to actually build the debug
+# targets
+if WITH_DEBUG
+bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
+endif

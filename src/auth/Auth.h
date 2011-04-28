@@ -196,10 +196,10 @@ struct RotatingSecrets {
     return max_ver;
   }
   
-  bool need_new_secrets() {
+  bool need_new_secrets() const {
     return secrets.size() < KEY_ROTATE_NUM;
   }
-  bool need_new_secrets(utime_t now) {
+  bool need_new_secrets(utime_t now) const {
     return secrets.size() < KEY_ROTATE_NUM || current().expiration <= now;
   }
 
@@ -208,6 +208,11 @@ struct RotatingSecrets {
   }
   ExpiringCryptoKey& current() {
     map<uint64_t, ExpiringCryptoKey>::iterator p = secrets.begin();
+    p++;
+    return p->second;
+  }
+  const ExpiringCryptoKey& current() const {
+    map<uint64_t, ExpiringCryptoKey>::const_iterator p = secrets.begin();
     p++;
     return p->second;
   }
@@ -227,8 +232,9 @@ WRITE_CLASS_ENCODER(RotatingSecrets);
 class KeyStore {
 public:
   virtual ~KeyStore() {}
-  virtual bool get_secret(EntityName& name, CryptoKey& secret) = 0;
-  virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
+  virtual bool get_secret(const EntityName& name, CryptoKey& secret) const = 0;
+  virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id,
+				  CryptoKey& secret) const = 0;
 };
 
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)

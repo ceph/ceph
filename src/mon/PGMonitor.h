@@ -29,12 +29,15 @@ using namespace std;
 #include "include/types.h"
 #include "include/utime.h"
 #include "msg/Messenger.h"
+#include "common/config.h"
 
 class MPGStats;
 class MPGStatsAck;
 class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
+
+class RatioMonitor;
 
 class PGMonitor : public PaxosService {
 public:
@@ -58,6 +61,14 @@ private:
   bool pg_stats_have_changed(int from, const MPGStats *stats) const;
   bool prepare_pg_stats(MPGStats *stats);
   void _updated_stats(MPGStats *req, MPGStatsAck *ack);
+
+  void update_full_ratios(float full_ratio, int nearfull_ratio) {
+    if (full_ratio != 0)
+      pending_inc.full_ratio = full_ratio;
+    if (nearfull_ratio != 0)
+      pending_inc.nearfull_ratio = nearfull_ratio;
+    propose_pending();
+  }
 
   struct C_Stats : public Context {
     PGMonitor *pgmon;
@@ -85,9 +96,10 @@ private:
   bool register_new_pgs();
   void send_pg_creates();
 
- public:
-  PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
-  
+public:
+  PGMonitor(Monitor *mn, Paxos *p);
+  virtual ~PGMonitor();
+
   virtual void on_election_start();
 
   void tick();  // check state, take actions
@@ -95,6 +107,14 @@ private:
   void check_osd_map(epoch_t epoch);
 
   enum health_status_t get_health(std::ostream &ss) const;
+
+private:
+  // no copying allowed
+  PGMonitor(const PGMonitor &rhs);
+  PGMonitor &operator=(const PGMonitor &rhs);
+
+  RatioMonitor *ratio_monitor;
+  friend class RatioMonitor;
 };
 
 #endif

@@ -24,19 +24,13 @@
 #include <pthread.h>
 #include <streambuf>
 
-template <typename T, typename U>
-class DoutStreambuf;
 
 extern std::ostream *_dout;
 extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
-extern bool _dout_need_open;
+class md_config_t;
 extern pthread_mutex_t _dout_lock;
 
-extern void _dout_open_log();
-
-extern int dout_handle_daemonize();
-
-extern int dout_create_rank_symlink(int n);
+extern int dout_handle_daemonize(md_config_t *conf);
 
 extern void dout_emergency(const char * const str);
 
@@ -54,9 +48,6 @@ public:
 };
 
 static inline void _dout_begin_line(signed int prio) {
-  if (unlikely(_dout_need_open))
-    _dout_open_log();
-
   // Put priority information into dout
   std::streambuf *doss = (std::streambuf*)_doss;
   doss->sputc(prio + 12);

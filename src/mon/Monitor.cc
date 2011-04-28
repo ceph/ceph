@@ -30,7 +30,6 @@
 #include "messages/MMonObserveNotify.h"
 
 #include "messages/MMonPaxos.h"
-#include "messages/MClass.h"
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
 
@@ -50,7 +49,6 @@
 #include "MonmapMonitor.h"
 #include "PGMonitor.h"
 #include "LogMonitor.h"
-#include "ClassMonitor.h"
 #include "AuthMonitor.h"
 
 #include "osd/OSDMap.h"
@@ -109,7 +107,6 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
-  paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
 
   mon_caps = new MonCaps();
@@ -333,11 +330,11 @@ void Monitor::handle_command(MMonCommand *m)
 
     if (m->cmd[0] == "_injectargs") {
       dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-      parse_config_option_string(m->cmd[1]);
+      g_conf.injectargs(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "class") {
-      classmon()->dispatch(m);
+      reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
       return;
     }
     if (m->cmd[0] == "auth") {
@@ -345,8 +342,30 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "health") {
-      monmon()->dispatch(m);
-      return;
+      health_status_t overall = HEALTH_OK;
+      string combined;
+      for (vector<PaxosService*>::iterator p = paxos_service.begin();
+	   p != paxos_service.end();
+	   p++) {
+	PaxosService *s = *p;
+	ostringstream oss;
+	health_status_t ret = s->get_health(oss);
+	if (ret < overall)
+	  overall = ret;
+	string cur = oss.str();
+	if (cur.length()) {
+	  if (combined.length())
+	    combined += "; ";
+	  combined += cur;
+	}
+      }
+      
+      stringstream ss;
+      ss << overall;
+      if (combined.length())
+	ss << " " << combined;
+      rs = ss.str();
+      r = 0;
     }
   } else 
     rs = "no command";
@@ -765,10 +784,6 @@ bool Monitor::_ms_dispatch(Message *m)
       elector.dispatch(m);
       break;
 
-    case MSG_CLASS:
-      handle_class((MClass *)m);
-      break;
-
     case MSG_FORWARD:
       handle_forward((MForward *)m);
       break;
@@ -991,6 +1006,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
+    if (!svc)
+      continue;
     bufferlist bl;
     dout(10) << "initializing " << svc->get_machine_name() << dendl;
     svc->paxos->init();
@@ -1015,36 +1032,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   store->put_bl_ss(latest, "monmap", "latest");
 
   return 0;
-}
-
-void Monitor::handle_class(MClass *m)
-{
-  MonSession *session = m->get_session();
-  if (!session)
-    goto done;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
-    dout(1) << "MClass received from entity without sufficient privileges "
-	    << session->caps << dendl;
-    goto done;
-  }
-
-  switch (m->action) {
-    case CLASS_SET:
-    case CLASS_GET:
-      classmon()->handle_request(m);
-      return;
-
-    case CLASS_RESPONSE:
-      dout(10) << "got a class response (" << *m << ") ???" << dendl;
-      break;
-
-    default:
-      dout(10) << "got an unknown class message (" << *m << ") ???" << dendl;
-      break;
-  }
-
- done:
-  m->put();
 }
 
 bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)

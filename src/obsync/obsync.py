@@ -20,12 +20,15 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from optparse import OptionParser
 from sys import stderr
-import boto
+from lxml import etree
 import base64
+import boto
 import errno
 import hashlib
 import mimetypes
 import os
+from StringIO import StringIO
+import rados
 import re
 import shutil
 import string
@@ -35,17 +38,24 @@ import traceback
 
 global opts
 
+###### Constants classes #######
+RGW_META_BUCKET_NAME = ".rgw"
+
+###### Exception classes #######
 class LocalFileIsAcl(Exception):
     pass
 
 class InvalidLocalName(Exception):
     pass
 
+class NonexistentStore(Exception):
+    pass
+
 ###### Helper functions #######
 def mkdir_p(path):
     try:
         os.makedirs(path)
-    except OSError as exc:
+    except OSError, exc:
         if exc.errno != errno.EEXIST:
             raise
         if (not os.path.isdir(path)):
@@ -82,7 +92,7 @@ def etag_to_md5(etag):
 def getenv(a, b):
     if os.environ.has_key(a):
         return os.environ[a]
-    elif os.environ.has_key(b):
+    elif b and os.environ.has_key(b):
         return os.environ[b]
     else:
         return None
@@ -136,9 +146,146 @@ def get_local_acl_file_name(local_name):
     return os.path.dirname(local_name) + "/." + \
         os.path.basename(local_name) + "$acl"
 
-###### NonexistentStore #######
-class NonexistentStore(Exception):
-    pass
+###### ACLs #######
+
+# for buckets: allow list
+# for object: allow grantee to read object data and metadata
+READ = 1
+
+# for buckets: allow create, overwrite, or deletion of any object in the bucket
+WRITE = 2
+
+# for buckets: allow grantee to read the bucket ACL
+# for objects: allow grantee to read the object ACL
+READ_ACP = 4
+
+# for buckets: allow grantee to write the bucket ACL
+# for objects: allow grantee to write the object ACL
+WRITE_ACP = 8
+
+# all of the above
+FULL_CONTROL = READ | WRITE | READ_ACP | WRITE_ACP
+
+ACL_TYPE_CANON_USER = "canon:"
+ACL_TYPE_EMAIL_USER = "email:"
+ACL_TYPE_GROUP = "group:"
+
+S3_GROUP_AUTH_USERS = ACL_TYPE_GROUP +  "AuthenticatedUsers"
+S3_GROUP_ALL_USERS = ACL_TYPE_GROUP +  "AllUsers"
+S3_GROUP_LOG_DELIVERY = ACL_TYPE_GROUP +  "LogDelivery"
+
+NS = "http://s3.amazonaws.com/doc/2006-03-01/"
+NS2 = "http://www.w3.org/2001/XMLSchema-instance"
+
+class AclGrant(object):
+    def __init__(self, user_id, display_name, permission):
+        self.user_id = user_id
+        self.display_name = display_name
+        self.permission = permission
+
+def get_user_type(utype):
+    for ut in [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]:
+        if utype[:len(ut)] == ut:
+            return ut
+    raise Exception("unknown user type for user %s" % utype)
+
+def strip_user_type(utype):
+    for ut in [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]:
+        if utype[:len(ut)] == ut:
+            return utype[len(ut):]
+    raise Exception("unknown user type for user %s" % utype)
+
+def grantee_attribute_to_user_type(utype):
+    if (utype == "Canonical User"):
+        return ACL_TYPE_CANON_USER
+    elif (utype == "CanonicalUser"):
+        return ACL_TYPE_CANON_USER
+    elif (utype == "Group"):
+        return ACL_TYPE_GROUP
+    elif (utype == "Email User"):
+        return ACL_TYPE_EMAIL_USER
+    elif (utype == "EmailUser"):
+        return ACL_TYPE_EMAIL_USER
+    else:
+        raise Exception("unknown user type for user %s" % utype)
+
+def user_type_to_attr(t):
+    if (t == ACL_TYPE_CANON_USER):
+        return "CanonicalUser"
+    elif (t == ACL_TYPE_GROUP):
+        return "Group"
+    elif (t ==  ACL_TYPE_EMAIL_USER):
+        return "EmailUser"
+    else:
+        raise Exception("unknown user type %s" % t)
+
+class AclPolicy(object):
+    def __init__(self, owner_id, owner_display_name, grants):
+        self.owner_id = owner_id
+        self.owner_display_name = owner_display_name
+        self.grants = grants  # list of ACLGrant
+    @staticmethod
+    def from_xml(s):
+        root = etree.parse(StringIO(s))
+        owner_id = root.find("{%s}Owner/{%s}ID" % (NS,NS)).text
+        owner_display_name = root.find("{%s}Owner/{%s}DisplayName" \
+            % (NS,NS)).text
+        grantlist = root.findall("{%s}AccessControlList/{%s}Grant" \
+            % (NS,NS))
+        grants = [ ]
+        for g in grantlist:
+            grantee = g.find("{%s}Grantee" % NS)
+            user_id = grantee.find("{%s}ID" % NS).text
+            user_type = grantee.attrib["{%s}type" % NS2]
+            display_name = grantee.find("{%s}DisplayName" % NS).text
+            permission = g.find("{%s}Permission" % NS).text
+            g_user_id = grantee_attribute_to_user_type(user_type) + user_id
+            grants.append(AclGrant(g_user_id, display_name, permission))
+        return AclPolicy(owner_id, owner_display_name, grants)
+    def to_xml(self):
+        root = etree.Element("AccessControlPolicy", nsmap={None: NS})
+        owner = etree.SubElement(root, "Owner")
+        id_elem = etree.SubElement(owner, "ID")
+        id_elem.text = self.owner_id
+        display_name_elem = etree.SubElement(owner, "DisplayName")
+        display_name_elem.text = self.owner_display_name
+        access_control_list = etree.SubElement(root, "AccessControlList")
+        for g in self.grants:
+            grant_elem = etree.SubElement(access_control_list, "Grant")
+            grantee_elem = etree.SubElement(grant_elem, "{%s}Grantee" % NS,
+                nsmap={None: NS, "xsi" : NS2})
+            grantee_elem.set("type", user_type_to_attr(get_user_type(g.user_id)))
+            user_id_elem = etree.SubElement(grantee_elem, "{%s}ID" % NS)
+            user_id_elem.text = strip_user_type(g.user_id)
+            display_name_elem = etree.SubElement(grantee_elem, "{%s}DisplayName" % NS)
+            display_name_elem.text = g.display_name
+            permission_elem = etree.SubElement(grant_elem, "{%s}Permission" % NS)
+            permission_elem.text = g.permission
+        return etree.tostring(root, encoding="UTF-8")
+
+def compare_xml(xml1, xml2):
+    tree1 = etree.parse(StringIO(xml1))
+    out1 = etree.tostring(tree1, encoding="UTF-8")
+    tree2 = etree.parse(StringIO(xml2))
+    out2 = etree.tostring(tree2, encoding="UTF-8")
+    out1 = out1.replace("xsi:type", "type")
+    out2 = out2.replace("xsi:type", "type")
+    if out1 != out2:
+        print "out1 = %s" % out1
+        print "out2 = %s" % out2
+        raise Exception("compare xml failed")
+
+#<?xml version="1.0" encoding="UTF-8"?>
+def test_acl_policy():
+    test1_xml = \
+"<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" + \
+"<Owner><ID>foo</ID><DisplayName>MrFoo</DisplayName></Owner><AccessControlList>" + \
+"<Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" " + \
+"xsi:type=\"CanonicalUser\"><ID>*** Owner-Canonical-User-ID ***</ID>" + \
+"<DisplayName>display-name</DisplayName></Grantee>" + \
+"<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
+    test1 = AclPolicy.from_xml(test1_xml)
+    compare_xml(test1_xml, test1.to_xml())
 
 ###### Object #######
 class Object(object):
@@ -174,6 +321,9 @@ class Store(object):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
             return S3Store(s3_url, create, akey, skey)
+        rados_url = strip_prefix("rados:", url)
+        if (rados_url):
+            return RadosStore(rados_url, create, akey, skey)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -261,18 +411,18 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             k.get_contents_to_filename(temp_file.name)
             if (opts.preserve_acls):
                 temp_acl_file = tempfile.NamedTemporaryFile(mode='w+b',
-                                                            delete=False)
+                                                            delete=False).name
                 acl_xml = self.bucket.get_xml_acl(k)
-                temp_acl_file_f = open(temp_acl_file.name, 'w')
+                temp_acl_file_f = open(temp_acl_file, 'w')
                 temp_acl_file_f.write(acl_xml)
                 temp_acl_file_f.close()
         except:
             if (temp_file):
                 os.unlink(temp_file.name)
             if (temp_acl_file):
-                os.unlink(temp_acl_file.name)
+                os.unlink(temp_acl_file)
             raise
-        return S3StoreLocalCopy(temp_file.name, temp_acl_file.name)
+        return S3StoreLocalCopy(temp_file.name, temp_acl_file)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs.__iter__())
@@ -335,7 +485,7 @@ class FileStoreIterator(object):
                 continue
             try:
                 obj_name = local_name_to_s3_name(path[len(self.base)+1:])
-            except LocalFileIsAcl as e:
+            except LocalFileIsAcl, e:
                 # ignore ACL side files when iterating
                 continue
             return Object.from_file(obj_name, path)
@@ -404,6 +554,167 @@ class FileStore(Store):
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
 
+###### Rados store #######
+class RadosStoreLocalCopy(object):
+    def __init__(self, path, acl_path):
+        self.path = path
+        self.acl_path = acl_path
+    def __del__(self):
+        self.remove()
+    def remove(self):
+        if (self.path):
+            os.unlink(self.path)
+            self.path = None
+        if (self.acl_path):
+            os.unlink(self.acl_path)
+            self.acl_path = None
+
+class RadosStoreIterator(object):
+    """RadosStore iterator"""
+    def __init__(self, it, rados_store):
+        self.it = it # has type rados.ObjectIterator
+        self.rados_store = rados_store
+        self.prefix = self.rados_store.prefix
+        self.prefix_len = len(self.rados_store.prefix)
+    def __iter__(self):
+        return self
+    def next(self):
+        rados_obj = None
+        while True:
+            # This will raise StopIteration when there are no more objects to
+            # iterate on
+            rados_obj = self.it.next()
+            # do the prefixes match?
+            if rados_obj.key[:self.prefix_len] == self.prefix:
+                break
+        ret = self.rados_store.obsync_obj_from_rgw(rados_obj.key)
+        if (ret == None):
+            raise Exception("internal iterator error")
+        return ret
+
+class RadosStore(Store):
+    def __init__(self, url, create, akey, skey):
+        # Parse the rados url
+        conf_end = string.find(url, ":")
+        if (conf_end == -1):
+            raise Exception("RadosStore URLs are of the form \
+rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
+        self.conf_file_path = url[0:conf_end]
+        bucket_end = url.find(":", conf_end+1)
+        if (bucket_end == -1):
+            self.rgw_bucket_name = url[conf_end+1:]
+            self.key_prefix = ""
+        else:
+            self.rgw_bucket_name = url[conf_end+1:bucket_end]
+            self.key_prefix = url[bucket_end+1:]
+        if (self.rgw_bucket_name == ""):
+            raise Exception("RadosStore URLs are of the form \
+rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
+        if (opts.more_verbose):
+            print "self.conf_file_path = '" + self.conf_file_path + "', ",
+            print "self.rgw_bucket_name = '" + self.rgw_bucket_name + "' ",
+            print "self.key_prefix = '" + self.key_prefix + "'"
+        acl_hack = getenv("ACL_HACK", None)
+        if (acl_hack == None):
+            raise Exception("RadosStore error: You must specify an environment " +
+                "variable called ACL_HACK containing the name of a file. This " +
+                "file contains a serialized RGW ACL that you want " +
+                "to insert into the user.rgw.acl extended attribute of all " +
+                "the objects you create. This is a hack and yes, it will go " +
+                "away soon.")
+        acl_hack_f = open(acl_hack, "r")
+        try:
+            self.acl_hack = acl_hack_f.read()
+        finally:
+            acl_hack_f.close()
+        self.rados = rados.Rados()
+        self.rados.conf_read_file(self.conf_file_path)
+        self.rados.connect()
+        if (not self.rados.pool_exists(self.rgw_bucket_name)):
+            if (create):
+                self.create_rgw_bucket(self.rgw_bucket_name)
+            else:
+                raise NonexistentStore()
+        self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
+        Store.__init__(self, "rados:" + url)
+    def create_rgw_bucket(self, rgw_bucket_name):
+        """ Create an rgw bucket named 'rgw_bucket_name' """
+        self.rados.create_pool(self.rgw_bucket_name)
+        meta_ctx = None
+        try:
+            meta_ctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
+            meta_ctx.write(rgw_bucket_name, "", 0)
+            print "meta_ctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
+                    "user.rgw.acl, self.acl_hack=" + self.acl_hack + ")"
+            meta_ctx.set_xattr(rgw_bucket_name, "user.rgw.acl", self.acl_hack)
+        finally:
+            if (meta_ctx):
+               meta_ctx.close()
+    def obsync_obj_from_rgw(self, key):
+        """Create an obsync object from a Rados object"""
+        try:
+            size, tm = self.ioctx.stat(key)
+        except rados.ObjectNotFound:
+            return None
+        md5 = self.ioctx.get_xattr(key, "user.rgw.etag")
+        return Object(key, md5, size)
+    def __str__(self):
+        return "rados:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
+    def make_local_copy(self, obj):
+        temp_file = None
+        temp_file_f = None
+        try:
+            # read the object from rados in chunks
+            temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
+            temp_file_f = open(temp_file.name, 'w')
+            while True:
+                buf = self.ioctx.read(obj.name, off, 8192)
+                if (len(buf) == 0):
+                    break
+                temp_file_f.write(buf)
+                if (len(buf) < 8192):
+                    break
+                off += 8192
+            temp_file_f.close()
+            # TODO: implement ACLs
+        except:
+            if (temp_file_f):
+                temp_file_f.close()
+            if (temp_file):
+                os.unlink(temp_file.name)
+            raise
+        return RadosStoreLocalCopy(temp_file.name, None)
+    def all_objects(self):
+        it = self.bucket.list_objects()
+        return RadosStoreIterator(it, self.key_prefix)
+    def locate_object(self, obj):
+        return self.obsync_obj_from_rgw(obj.name)
+    def upload(self, local_copy, obj):
+        if (opts.more_verbose):
+            print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+                "obj='" + obj.name + "'"
+        if (opts.dry_run):
+            return
+        local_copy_f = open(local_copy.path, 'r')
+        off = 0
+        while True:
+            buf = local_copy_f.read(8192)
+            if ((len(buf) == 0) and (off != 0)):
+                break
+            self.ioctx.write(obj.name, buf, off)
+            if (len(buf) < 8192):
+                break
+            off += 8192
+        self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
+        self.ioctx.set_xattr(obj.name, "user.rgw.acl", self.acl_hack)
+        self.ioctx.set_xattr(obj.name, "user.rgw.content_type",
+                            "application/octet-stream")
+    def remove(self, obj):
+        if (opts.dry_run):
+            return
+        self.ioctx.remove_object(obj.name)
+        if (opts.more_verbose):
+            print "RadosStore: removed %s" % obj.name
 ###### Functions #######
 def delete_unreferenced(src, dst):
     """ delete everything from dst that is not referenced in src """
@@ -415,8 +726,8 @@ def delete_unreferenced(src, dst):
             dst.remove(dobj)
 
 USAGE = """
-obsync synchronizes objects. The source and destination can both be local or
-both remote.
+obsync synchronizes S3, Rados, and local objects. The source and destination
+can both be local or both remote.
 
 Examples:
 # copy contents of mybucket to disk
@@ -464,9 +775,13 @@ parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
+parser.add_option("--unit", action="store_true", \
+    dest="run_unit_tests", help="run unit tests and quit")
 (opts, args) = parser.parse_args()
-if (not opts.no_preserve_acls):
-    opts.preserve_acls = True
+if (opts.run_unit_tests):
+    test_acl_policy()
+    sys.exit(0)
+opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
     raise Exception("You can't run with both --create-dest and --dry-run! \
 By definition, a dry run never changes anything.")
@@ -493,10 +808,10 @@ try:
         print "SOURCE: " + src_name
     src = Store.make_store(src_name, False,
             getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
-except NonexistentStore as e:
+except NonexistentStore, e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
     sys.exit(1)
-except Exception as e:
+except Exception, e:
     print >>stderr, "error creating source: " + str(e)
     traceback.print_exc(100000, stderr)
     sys.exit(1)
@@ -505,11 +820,11 @@ try:
         print "DESTINATION: " + dst_name
     dst = Store.make_store(dst_name, opts.create,
             getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
-except NonexistentStore as e:
+except NonexistentStore, e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
         "not exist. Run with -c or --create-dest to create it automatically."
     sys.exit(1)
-except Exception as e:
+except Exception, e:
     print >>stderr, "error creating destination: " + str(e)
     traceback.print_exc(100000, stderr)
     sys.exit(1)

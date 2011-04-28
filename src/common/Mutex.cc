@@ -1,7 +1,8 @@
 
+#include "common/environment.h"
 #include "Mutex.h"
 
-int g_lockdep = 0;
+int g_lockdep = get_env_int("CEPH_LOCKDEP");
 
 #ifdef LOCKDEP
 
