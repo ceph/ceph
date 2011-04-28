@@ -142,23 +142,6 @@ create_object_store(const std::string &dev, const std::string &jdev)
 #undef dout_prefix
 #define dout_prefix *_dout
 
-/* Complain about flaky object stores.
- */
-void OSD::validate_max_object_name_length(ObjectStore *store)
-{
-  int len = store->get_max_object_name_length();
-  if (len <= 0) {
-    derr << "store->get_max_object_name_length failed with error " << len << dendl;
-    return;
-  }
-  else if (len < MAX_CEPH_OBJECT_NAME_LEN) {
-    derr << TEXT_RED << " ** ERROR: error: object store can only handle objects "
-         << "whose names are no more than " << len << " bytes.\n"
-	 << "** Please use an object store that can handle object names of at least "
-	 << MAX_CEPH_OBJECT_NAME_LEN << " bytes for safety." << TEXT_NORMAL << dendl;
-  }
-}
-
 int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
 {
   int ret;
@@ -183,8 +166,6 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
     }
-    validate_max_object_name_length(store);
-
     ret = write_meta(dev, fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
@@ -551,8 +532,6 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
-
-  validate_max_object_name_length(store);
 
   dout(2) << "boot" << dendl;
 
