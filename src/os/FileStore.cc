@@ -104,6 +104,8 @@ using ceph::crypto::SHA1;
 #define FILENAME_HASH_LEN       FILENAME_LFN_DIGEST_SIZE
 #define FILENAME_EXTRA	        4       // underscores and digit
 
+#define LFN_ATTR "user.cephos.lfn"
+
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 
 static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
@@ -234,7 +236,7 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   char buf[PATH_MAX];
 
   snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = do_getxattr(buf, "user.ceph._lfn", new_name, len - 1);
+  int r = do_getxattr(buf, LFN_ATTR, new_name, len - 1);
   if (r < 0)
     strncpy(new_name, name, len);
   else
@@ -360,7 +362,7 @@ int FileStore::lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len
     int r;
 
     build_filename(filename, len - path_len, lfn, i);
-    r = do_getxattr(pathname, "user.ceph._lfn", buf, sizeof(buf));
+    r = do_getxattr(pathname, LFN_ATTR, buf, sizeof(buf));
     if (r < 0)
       r = -errno;
     if (r > 0) {
@@ -494,7 +496,7 @@ int FileStore::lfn_open(coll_t cid, const sobject_t& oid, int flags, mode_t mode
   fd = r;
 
   if (flags & O_CREAT) {
-    r = do_fsetxattr(fd, "user.ceph._lfn", long_fn, strlen(long_fn));
+    r = do_fsetxattr(fd, LFN_ATTR, long_fn, strlen(long_fn));
     if (r < 0) {
       close(fd);
       return r;
