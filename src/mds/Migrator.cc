@@ -770,9 +770,10 @@ void Migrator::export_frozen(CDir *dir)
    * this includes inodes and dirfrags included in the subtree, but
    * only the inodes at the bounds.
    *
-   * each trace is: df dentry inode (dir dentry inode)*
+   * each trace is: df ('-' | ('f' dir | 'd') dentry inode (dir dentry inode)*)
    */
   set<inodeno_t> inodes_added;
+  set<dirfrag_t> dirfrags_added;
 
   // check bounds
   for (set<CDir*>::iterator it = bounds.begin();
@@ -791,7 +792,13 @@ void Migrator::export_frozen(CDir *dir)
     bufferlist tracebl;
     CDir *cur = bound;
     
+    char start = '-';
     while (1) {
+      // don't repeat inodes
+      if (inodes_added.count(cur->inode->ino()))
+	break;
+      inodes_added.insert(cur->inode->ino());
+
       // prepend dentry + inode
       assert(cur->inode->is_auth());
       bufferlist bl;
@@ -804,20 +811,26 @@ void Migrator::export_frozen(CDir *dir)
 
       cur = cur->get_parent_dir();
 
-      // don't repeat ourselves
-      if (inodes_added.count(cur->ino()) ||
-	  cur == dir) break;   // did already!
-      inodes_added.insert(cur->ino());
+      // don't repeat dirfrags
+      if (dirfrags_added.count(cur->dirfrag()) ||
+	  cur == dir) {
+	start = 'd';  // start with dentry
+	break;
+      }
+      dirfrags_added.insert(cur->dirfrag());
 
       // prepend dir
       cache->replicate_dir(cur, dest, bl);
       dout(7) << "  added " << *cur << dendl;
       bl.claim_append(tracebl);
       tracebl.claim(bl);
+
+      start = 'f';  // start with dirfrag
     }
     bufferlist final;
     dirfrag_t df = cur->dirfrag();
     ::encode(df, final);
+    ::encode(start, final);
     final.claim_append(tracebl);
     prep->add_trace(final);
   }
@@ -1703,23 +1716,39 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     dout(7) << "bystanders are " << import_bystanders[dir] << dendl;
 
     // assimilate traces to exports
-    // each trace is: df dentry inode (dir dentry inode)*
+    // each trace is: df ('-' | ('f' dir | 'd') dentry inode (dir dentry inode)*)
     for (list<bufferlist>::iterator p = m->traces.begin();
 	 p != m->traces.end();
 	 p++) {
       bufferlist::iterator q = p->begin();
       dirfrag_t df;
       ::decode(df, q);
-      dout(10) << " trace from " << df << dendl;
-      CDir *cur = cache->get_dirfrag(df);
-      assert(cur);
-      dout(10) << "  had " << *cur << dendl;
-      while (1) {
+      char start;
+      ::decode(start, q);
+      dout(10) << " trace from " << df << " start " << start << " len " << p->length() << dendl;
+
+      CInode *in;
+      CDir *cur = 0;
+      if (start == 'd') {
+	cur = cache->get_dirfrag(df);
+	assert(cur);
+	dout(10) << "  had " << *cur << dendl;
+      } else if (start == 'f') {
+	in = cache->get_inode(df.ino);
+	dout(10) << "  had " << *in << dendl;
+	cur = cache->add_replica_dir(q, in, oldauth, finished);
+ 	dout(10) << "  added " << *cur << dendl;
+      } else if (start == '-') {
+	// nothing
+      } else
+	assert(0 == "unrecognized start char");
+      while (start != '-') {
 	CDentry *dn = cache->add_replica_dentry(q, cur, finished);
 	dout(10) << "  added " << *dn << dendl;
 	CInode *in = cache->add_replica_inode(q, dn, finished);
 	dout(10) << "  added " << *in << dendl;
-	if (q.end()) break;
+	if (q.end())
+	  break;
 	cur = cache->add_replica_dir(q, in, oldauth, finished);
 	dout(10) << "  added " << *cur << dendl;
       }
@@ -1807,6 +1836,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
 class C_MDS_ImportDirLoggedStart : public Context {
   Migrator *migrator;
+  dirfrag_t df;
   CDir *dir;
   int from;
 public:
@@ -1814,10 +1844,10 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
-    migrator(m), dir(d), from(f) {
+    migrator(m), df(d->dirfrag()), dir(d), from(f) {
   }
   void finish(int r) {
-    migrator->import_logged_start(dir, from, imported_client_map, sseqmap);
+    migrator->import_logged_start(df, dir, from, imported_client_map, sseqmap);
   }
 };
 
@@ -2088,10 +2118,16 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 
-void Migrator::import_logged_start(CDir *dir, int from,
+void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
 				   map<client_t,entity_inst_t>& imported_client_map,
 				   map<client_t,uint64_t>& sseqmap)
 {
+  if (import_state.count(df) == 0 ||
+      import_state[df] != IMPORT_LOGGINGSTART) {
+    dout(7) << "import " << df << " must have aborted" << dendl;
+    return;
+  }
+
   dout(7) << "import_logged " << *dir << dendl;
 
   // note state

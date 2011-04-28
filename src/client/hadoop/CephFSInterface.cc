@@ -9,11 +9,11 @@
 #include <sys/statvfs.h>
 
 union ceph_mount_union_t {
-  ceph_mount_t *cmount;
+  struct ceph_mount_info *cmount;
   jlong cjlong;
 };
 
-static void set_ceph_mount_t(JNIEnv *env, jobject obj, ceph_mount_t *cmount)
+static void set_struct ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info *cmount)
 {
   jclass cls = env->GetObjectClass(obj);
   jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
@@ -25,7 +25,7 @@ static void set_ceph_mount_t(JNIEnv *env, jobject obj, ceph_mount_t *cmount)
   env->SetLongField(obj, fid, ceph_mount_union.cjlong);
 }
 
-static ceph_mount_t *get_ceph_mount_t(JNIEnv *env, jobject obj)
+static struct ceph_mount_info *get_ceph_mount_t(JNIEnv *env, jobject obj)
 {
   jclass cls = env->GetObjectClass(obj);
   jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
@@ -87,7 +87,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   }
 
   // connect to the cmount
-  ceph_mount_t *cmount;
+  struct ceph_mount_info *cmount;
   int ret = ceph_create(&cmount, NULL);
   if (ret)
     return false;
@@ -120,7 +120,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getcwd
   (JNIEnv *env, jobject obj)
 {
   dout(10) << "CephFSInterface: In getcwd" << dendl;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   jstring j_path = env->NewStringUTF(ceph_getcwd(cmount));
   return j_path;
 }
@@ -143,7 +143,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setcw
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int ret = ceph_chdir(cmount, c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
   return ret ? JNI_FALSE : JNI_TRUE;
@@ -167,7 +167,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1rmdir
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if(c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int ret = ceph_rmdir(cmount, c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
   return ret ? JNI_FALSE : JNI_TRUE;
@@ -188,7 +188,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1unlin
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   dout(10) << "CephFSInterface: In unlink for path " << c_path <<  ":" << dendl;
   int ret = ceph_unlink(cmount, c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -218,7 +218,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1renam
     return false;
   }
   struct stat stbuf;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int ret = ceph_lstat(cmount, c_to, &stbuf);
   if (ret != -ENOENT) {
     // Hadoop doesn't want to overwrite files in a rename.
@@ -251,7 +251,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1exist
     return false;
   dout(10) << "Attempting lstat with file " << c_path << ":" << dendl;
 
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int ret = ceph_lstat(cmount, c_path, &stbuf);
   dout(10) << "result is " << ret << dendl;
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -290,7 +290,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getblock
     return -ENOMEM;
   // we need to open the file to retrieve the stripe size
   dout(10) << "CephFSInterface: getblocksize: opening file" << dendl;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int fh = ceph_open(cmount, c_path, O_RDONLY, 0);
   env->ReleaseStringUTFChars(j_path, c_path);
   if (fh < 0)
@@ -321,7 +321,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1isfil
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int ret = ceph_lstat(cmount, c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -350,7 +350,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1isdir
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int result = ceph_lstat(cmount, c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -382,9 +382,9 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1g
   list<string> contents;
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return NULL;
-  ceph_dir_result_t *dirp;
+  struct ceph_dir_result *dirp;
   int r;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   r = ceph_opendir(cmount, c_path, &dirp);
   if (r<0) {
     env->ReleaseStringUTFChars(j_path, c_path);
@@ -460,7 +460,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1mkdirs
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return -ENOMEM;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_mkdirs(cmount, c_path, mode);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -488,7 +488,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return -ENOMEM;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_open(cmount, c_path, O_WRONLY|O_CREAT|O_APPEND, 0);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -517,7 +517,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return -ENOMEM;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_open(cmount, c_path, O_RDONLY, 0);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -547,7 +547,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return -ENOMEM;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_open(cmount, c_path, O_WRONLY|O_CREAT|O_TRUNC, mode);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -566,7 +566,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1close
 {
   dout(10) << "In CephTalker::ceph_close" << dendl;
 
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   return ceph_close(cmount, fh);
 }
 
@@ -587,7 +587,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setPe
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL)
     return false;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int result = ceph_chmod(cmount, c_path, j_new_mode);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -605,7 +605,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setPe
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1kill_1client
   (JNIEnv *env, jobject obj)
 {
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   if (!cmount)
     return true;
   ceph_shutdown(cmount);
@@ -647,7 +647,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1stat
   jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
   if (c_mode_id == NULL) return false;
   //do actual lstat
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int r = ceph_lstat(cmount, c_path, &st);
   env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -700,7 +700,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1statfs
   jfieldID c_remaining_id = env->GetFieldID(cls, "remaining", "J");
 
   //do the statfs
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int r = ceph_statfs(cmount, c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
   if (r != 0)
@@ -729,7 +729,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1statfs
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replication
 (JNIEnv *env, jobject obj, jint fh)
 {
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int replication = ceph_get_file_replication(cmount, (int)fh);
   return replication;
 }
@@ -750,7 +750,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
   //get the address
   const static int IP_ADDR_LENGTH = 24;//a buffer size; may want to up for IPv6.
   char *address = new char[IP_ADDR_LENGTH];
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   int r = ceph_get_file_stripe_address(cmount, j_fh, j_offset,
 				       address, IP_ADDR_LENGTH);
   if (r == -ERANGE) {//buffer's too small
@@ -796,7 +796,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setTimes
   attr.st_mtim.tv_nsec = (mtime % 1000) * 1000000;
   attr.st_atim.tv_sec = atime / 1000;
   attr.st_atim.tv_nsec = (atime % 1000) * 1000000;
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   return ceph_setattr(cmount, c_path, &attr, mask);
 }
 
@@ -834,7 +834,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1read
   c_buffer += (int)buffer_offset;
 
   // Step 3: do the read
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_read(cmount, (int)fh, c_buffer, length, -1);
 
   // Step 4: release the pointer to the buffer
@@ -859,7 +859,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1seek_1fr
 {
   dout(10) << "In CephTalker::seek_from_start" << dendl;
 
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   return ceph_lseek(cmount, fh, pos, SEEK_SET);
 }
 
@@ -878,7 +878,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getpos
   dout(10) << "In CephTalker::ceph_getpos" << dendl;
 
   // seek a distance of 0 to get current offset
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   return ceph_lseek(cmount, fh, 0, SEEK_CUR);
 }
 
@@ -915,7 +915,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1write
   c_buffer += (int)buffer_offset;
 
   // Step 3: do the write
-  ceph_mount_t *cmount = get_ceph_mount_t(env, obj);
+  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
   result = ceph_write(cmount, (int)fh, c_buffer, length, -1);
 
   // Step 4: release the pointer to the buffer

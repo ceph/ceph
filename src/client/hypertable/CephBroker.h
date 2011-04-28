@@ -34,7 +34,6 @@ extern "C" {
 
 #include "DfsBroker/Lib/Broker.h"
 
-class ceph_mount_t;
 
 namespace Hypertable {
   using namespace DfsBroker;
@@ -43,10 +42,10 @@ namespace Hypertable {
    */
   class OpenFileDataCeph : public OpenFileData {
   public:
-    OpenFileDataCeph(ceph_mount_t *cmount_, const String& fname,
+    OpenFileDataCeph(struct ceph_mount_info *cmount_, const String& fname,
 		     int _fd, int _flags);
     virtual ~OpenFileDataCeph();
-    ceph_mount_t *cmount;
+    struct ceph_mount_info *cmount;
     int fd;
     int flags;
     String filename;
@@ -96,7 +95,7 @@ namespace Hypertable {
                        StaticBuffer &serialized_parameters);
 
   private:
-    ceph_mount_t *cmount;
+    struct ceph_mount_info *cmount;
     static atomic_t ms_next_fd;
 
     virtual void report_error(ResponseCallback *cb, int error);

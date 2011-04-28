@@ -732,8 +732,11 @@ void CDir::steal_dentry(CDentry *dn)
 
   if (dn->auth_pins || dn->nested_auth_pins) {
     // use the helpers here to maintain the auth_pin invariants on the dir inode
-    adjust_nested_auth_pins(dn->nested_auth_pins, dn->auth_pins);
-    dn->dir->adjust_nested_auth_pins(-dn->nested_auth_pins, -dn->auth_pins);
+    int ap = dn->get_num_auth_pins() + dn->get_num_nested_auth_pins();
+    int dap = dn->get_num_dir_auth_pins();
+    assert(dap <= ap);
+    adjust_nested_auth_pins(ap, dap);
+    dn->dir->adjust_nested_auth_pins(-ap, -dap);
   }
 
   nested_anchors += dn->nested_anchors;

@@ -2820,7 +2820,7 @@ void MDCache::disambiguate_imports()
     
     if (dir->authority() != me_ambig) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
-      cancel_ambiguous_import(q->first);
+      cancel_ambiguous_import(dir);
       mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
@@ -2872,13 +2872,17 @@ void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
   add_ambiguous_import(base->dirfrag(), binos);
 }
 
-void MDCache::cancel_ambiguous_import(dirfrag_t df)
+void MDCache::cancel_ambiguous_import(CDir *dir)
 {
+  dirfrag_t df = dir->dirfrag();
   assert(my_ambiguous_imports.count(df));
   dout(10) << "cancel_ambiguous_import " << df
 	   << " bounds " << my_ambiguous_imports[df]
+	   << " " << *dir
 	   << dendl;
   my_ambiguous_imports.erase(df);
+
+  try_trim_non_auth_subtree(dir);
 }
 
 void MDCache::finish_ambiguous_import(dirfrag_t df)
@@ -5486,7 +5490,9 @@ void MDCache::trim_non_auth()
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
-	  warn_str_dirs << subdir->get_inode()->get_parent_dn()->get_name() << "\n";
+	  filepath fp;
+	  subdir->get_inode()->make_path(fp);
+	  warn_str_dirs << fp << "\n";
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
@@ -5529,8 +5535,9 @@ void MDCache::trim_non_auth()
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
 	  CInode *diri = (*p)->get_inode();
-	  if (!diri->is_base())
-	    warn_str_dirs << diri->get_parent_dn()->get_name() << "\n";
+	  filepath fp;
+	  diri->make_path(fp);
+	  warn_str_dirs << fp << "\n";
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
@@ -9644,6 +9651,8 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
   for (map<int,int>::iterator p = first->replica_map.begin();
        p != first->replica_map.end();
        p++) {
+    if (mds->mdsmap->get_state(p->first) <= MDSMap::STATE_REJOIN)
+      continue;
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
 
     /*
@@ -9694,13 +9703,28 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
 
+  if (mds->get_state() < MDSMap::STATE_REJOIN) {
+    notify->put();
+    return;
+  }
+
   CInode *diri = get_inode(notify->get_ino());
   if (diri) {
-    list<Context*> waiters;
+    frag_t base = notify->get_basefrag();
+    int bits = notify->get_bits();
+
+    if ((bits < 0 && diri->dirfragtree.is_leaf(base)) ||
+	(bits > 0 && !diri->dirfragtree.is_leaf(base))) {
+      dout(10) << " dft " << diri->dirfragtree << " state doesn't match " << base << " by " << bits
+	       << ", must have found out during resolve/rejoin?  ignoring. " << *diri << dendl;
+      notify->put();
+      return;
+    }
 
     // refragment
+    list<Context*> waiters;
     list<CDir*> resultfrags;
-    adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
+    adjust_dir_fragments(diri, base, bits, 
 			 resultfrags, waiters, false);
     if (g_conf.mds_debug_frag)
       diri->verify_dirfrags();

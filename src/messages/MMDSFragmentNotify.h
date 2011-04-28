@@ -41,7 +41,7 @@ private:
 public:  
   const char *get_type_name() { return "fragment_notify"; }
   void print(ostream& o) {
-    o << "fragment_notify(" << ino << "#" << basefrag
+    o << "fragment_notify(" << ino << "." << basefrag
       << " " << (int)bits << ")";
   }
 
