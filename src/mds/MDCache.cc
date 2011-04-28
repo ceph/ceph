@@ -5486,7 +5486,9 @@ void MDCache::trim_non_auth()
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
-	  warn_str_dirs << subdir->get_inode()->get_parent_dn()->get_name() << "\n";
+	  filepath fp;
+	  subdir->get_inode()->make_path(fp);
+	  warn_str_dirs << fp << "\n";
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
@@ -5529,8 +5531,9 @@ void MDCache::trim_non_auth()
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
 	  CInode *diri = (*p)->get_inode();
-	  if (!diri->is_base())
-	    warn_str_dirs << diri->get_parent_dn()->get_name() << "\n";
+	  filepath fp;
+	  diri->make_path(fp);
+	  warn_str_dirs << fp << "\n";
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
