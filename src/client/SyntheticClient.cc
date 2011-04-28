@@ -1009,7 +1009,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   utime_t start = g_clock.now();
 
   hash_map<int64_t, int64_t> open_files;
-  hash_map<int64_t, ceph_dir_result_t*>    open_dirs;
+  hash_map<int64_t, dir_result_t*>    open_dirs;
 
   hash_map<int64_t, Fh*> ll_files;
   hash_map<int64_t, void*> ll_dirs;
@@ -1139,7 +1139,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "opendir") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
-      ceph_dir_result_t *dirp;
+      dir_result_t *dirp;
       client->opendir(a, &dirp);
       if (dirp) open_dirs[b] = dirp;
     } else if (strcmp(op, "closedir") == 0) {
@@ -1478,7 +1478,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     dout(1) << "leftover close " << fi->second << dendl;
     if (fi->second > 0) client->close(fi->second);
   }
-  for (hash_map<int64_t, ceph_dir_result_t*>::iterator fi = open_dirs.begin();
+  for (hash_map<int64_t, dir_result_t*>::iterator fi = open_dirs.begin();
        fi != open_dirs.end();
        fi++) {
     dout(1) << "leftover closedir " << fi->second << dendl;

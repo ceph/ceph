@@ -692,7 +692,7 @@ struct Fh {
 // ========================================================
 // client interface
 
-struct ceph_dir_result_t {
+struct dir_result_t {
   static const int SHIFT = 28;
   static const int64_t MASK = (1 << SHIFT) - 1;
   static const loff_t END = 1ULL << (SHIFT + 32);
@@ -723,7 +723,7 @@ struct ceph_dir_result_t {
 
   string at_cache_name;  // last entry we successfully returned
 
-  ceph_dir_result_t(Inode *in) : inode(in), offset(0), next_offset(2),
+  dir_result_t(Inode *in) : inode(in), offset(0), next_offset(2),
 			 release_count(0),
 			 buffer(0) { 
     inode->get();
@@ -1137,14 +1137,14 @@ private:
   // some readdir helpers
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
 
-  int _opendir(Inode *in, ceph_dir_result_t **dirpp, int uid=-1, int gid=-1);
-  void _readdir_drop_dirp_buffer(ceph_dir_result_t *dirp);
-  bool _readdir_have_frag(ceph_dir_result_t *dirp);
-  void _readdir_next_frag(ceph_dir_result_t *dirp);
-  void _readdir_rechoose_frag(ceph_dir_result_t *dirp);
-  int _readdir_get_frag(ceph_dir_result_t *dirp);
-  int _readdir_cache_cb(ceph_dir_result_t *dirp, add_dirent_cb_t cb, void *p);
-  void _closedir(ceph_dir_result_t *dirp);
+  int _opendir(Inode *in, dir_result_t **dirpp, int uid=-1, int gid=-1);
+  void _readdir_drop_dirp_buffer(dir_result_t *dirp);
+  bool _readdir_have_frag(dir_result_t *dirp);
+  void _readdir_next_frag(dir_result_t *dirp);
+  void _readdir_rechoose_frag(dir_result_t *dirp);
+  int _readdir_get_frag(dir_result_t *dirp);
+  int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
+  void _closedir(dir_result_t *dirp);
 
   // other helpers
   void _ll_get(Inode *in);
@@ -1199,27 +1199,27 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int opendir(const char *name, ceph_dir_result_t **dirpp);
-  int closedir(ceph_dir_result_t *dirp);
+  int opendir(const char *name, dir_result_t **dirpp);
+  int closedir(dir_result_t *dirp);
 
-  int readdir_r_cb(ceph_dir_result_t *dirp, add_dirent_cb_t cb, void *p);
+  int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
-  int readdir_r(ceph_dir_result_t *dirp, struct dirent *de);
-  int readdirplus_r(ceph_dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
+  int readdir_r(dir_result_t *dirp, struct dirent *de);
+  int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
 
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
-  int _getdents(ceph_dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
-  int getdents(ceph_dir_result_t *dirp, char *buf, int buflen) {
+  int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
+  int getdents(dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, true);
   }
-  int getdnames(ceph_dir_result_t *dirp, char *buf, int buflen) {
+  int getdnames(dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, false);
   }
 
-  void rewinddir(ceph_dir_result_t *dirp);
-  loff_t telldir(ceph_dir_result_t *dirp);
-  void seekdir(ceph_dir_result_t *dirp, loff_t offset);
+  void rewinddir(dir_result_t *dirp);
+  loff_t telldir(dir_result_t *dirp);
+  void seekdir(dir_result_t *dirp, loff_t offset);
 
   int link(const char *existing, const char *newname);
   int unlink(const char *path);

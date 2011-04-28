@@ -23,7 +23,7 @@ using std::cerr;
 
 int main(int argc, const char **argv)
 {
-  struct ceph_mount_t *cmount;
+  ceph_mount_info_t cmount;
   int ret = ceph_create(&cmount, NULL);
   if (ret) {
     cerr << "ceph_create failed with error: " << ret << std::endl;
@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   }
   cout << "Successfully mounted Ceph!" << std::endl;
 
-  struct ceph_dir_result_t *foo_dir;
+  ceph_dir_result_t foo_dir;
   ret = ceph_opendir(cmount, "foo", &foo_dir);
   if (ret != -ENOENT) {
     cerr << "ceph_opendir error: unexpected result from trying to open foo: "
