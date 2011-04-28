@@ -1836,6 +1836,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
 class C_MDS_ImportDirLoggedStart : public Context {
   Migrator *migrator;
+  dirfrag_t df;
   CDir *dir;
   int from;
 public:
@@ -1843,10 +1844,10 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
-    migrator(m), dir(d), from(f) {
+    migrator(m), df(d->dirfrag()), dir(d), from(f) {
   }
   void finish(int r) {
-    migrator->import_logged_start(dir, from, imported_client_map, sseqmap);
+    migrator->import_logged_start(df, dir, from, imported_client_map, sseqmap);
   }
 };
 
@@ -2117,10 +2118,16 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 
-void Migrator::import_logged_start(CDir *dir, int from,
+void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
 				   map<client_t,entity_inst_t>& imported_client_map,
 				   map<client_t,uint64_t>& sseqmap)
 {
+  if (import_state.count(df) == 0 ||
+      import_state[df] != IMPORT_LOGGINGSTART) {
+    dout(7) << "import " << df << " must have aborted" << dendl;
+    return;
+  }
+
   dout(7) << "import_logged " << *dir << dendl;
 
   // note state
