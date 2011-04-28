@@ -23,6 +23,10 @@
 extern "C" {
 #endif
 
+#ifndef __USE_FILE_OFFSET64
+# error libceph: must define __USE_FILE_OFFSET64 or readdir results will be corrupted
+#endif
+
 struct ceph_mount_info;
 struct ceph_dir_result;
 
