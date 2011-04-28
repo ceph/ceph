@@ -397,7 +397,7 @@ int FileStore::lfn_find(coll_t cid, const sobject_t& oid, char *pathname, int le
   r = lfn_get(cid, oid, pathname, len, long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
-  if (!exist)
+  if (is_lfn && !exist)
     return -ENOENT;
   return 0;
 }
@@ -519,13 +519,13 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const sobject_t& o)
   r = lfn_get(cid, o, short_fn_old, sizeof(short_fn_old), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
-  if (!exist)
+  if (is_lfn && !exist)
     return -ENOENT;
 
   r = lfn_get(c, o, short_fn_new, sizeof(short_fn_new), long_fn, sizeof(long_fn), &exist, &is_lfn);
   if (r < 0)
     return r;
-  if (exist)
+  if (is_lfn && exist)
     return -EEXIST;
 
   r = link(short_fn_old, short_fn_new);
