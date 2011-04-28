@@ -2498,6 +2498,45 @@ CDir *CDir::get_frozen_tree_root()
   }
 }
 
+struct C_Dir_AuthUnpin : public Context {
+  CDir *dir;
+  C_Dir_AuthUnpin(CDir *d) : dir(d) {}
+  void finish(int r) {
+    dir->auth_unpin(dir->get_inode());
+  }
+};
+
+void CDir::maybe_finish_freeze()
+{
+  if (auth_pins != 1 || dir_auth_pins != 0)
+    return;
+
+  // we can freeze the _dir_ even with nested pins...
+  if (state_test(STATE_FREEZINGDIR)) {
+    _freeze_dir();
+    auth_unpin(this);
+    finish_waiting(WAIT_FROZEN);
+  }
+
+  if (nested_auth_pins != 0)
+    return;
+
+  if (state_test(STATE_FREEZINGTREE)) {
+    if (!is_subtree_root() && inode->is_frozen()) {
+      dout(10) << "maybe_finish_freeze !subtree root and frozen inode, waiting for unfreeze on " << inode << dendl;
+      // retake an auth_pin...
+      auth_pin(inode);
+      // and release it when the parent inode unfreezes
+      inode->add_waiter(WAIT_UNFREEZE, new C_Dir_AuthUnpin(this));
+      return;
+    }
+
+    _freeze_tree();
+    auth_unpin(this);
+    finish_waiting(WAIT_FROZEN);
+  }
+}
+
 
 
 // FREEZE DIR
