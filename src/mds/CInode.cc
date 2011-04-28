@@ -2030,7 +2030,7 @@ void CInode::adjust_nested_auth_pins(int a)
 	 p != dirfrags.end();
 	 ++p) {
       CDir *dir = p->second;
-      if (dir->get_cum_auth_pins())
+      if (!dir->is_subtree_root() && dir->get_cum_auth_pins())
 	s++;
     } 
     assert(s == nested_auth_pins);
