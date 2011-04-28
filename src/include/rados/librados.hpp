@@ -214,6 +214,8 @@ namespace librados
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
+    
+    int aio_flush();
 
     // compound object operations
     int operate(const std::string& oid, ObjectOperation *op, bufferlist *pbl);
