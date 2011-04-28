@@ -346,6 +346,14 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
 // ----------------------------
 // auth pins
 
+int CDentry::get_num_dir_auth_pins()
+{
+  assert(!is_projected());
+  if (get_linkage()->is_primary())
+    return auth_pins + get_linkage()->get_inode()->get_num_auth_pins();
+  return auth_pins;
+}
+
 bool CDentry::can_auth_pin()
 {
   assert(dir);

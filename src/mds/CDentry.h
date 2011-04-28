@@ -263,6 +263,7 @@ public:
   bool is_frozen();
   bool is_auth_pinned() { return auth_pins || nested_auth_pins; }
   int get_num_auth_pins() { return auth_pins; }
+  int get_num_dir_auth_pins();
   int get_num_nested_auth_pins() { return nested_auth_pins; }
   
   void adjust_nested_anchors(int by);
