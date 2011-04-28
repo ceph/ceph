@@ -9710,11 +9710,21 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 
   CInode *diri = get_inode(notify->get_ino());
   if (diri) {
-    list<Context*> waiters;
+    frag_t base = notify->get_basefrag();
+    int bits = notify->get_bits();
+
+    if ((bits < 0 && diri->dirfragtree.is_leaf(base)) ||
+	(bits > 0 && !diri->dirfragtree.is_leaf(base))) {
+      dout(10) << " dft " << diri->dirfragtree << " state doesn't match " << base << " by " << bits
+	       << ", must have found out during resolve/rejoin?  ignoring. " << *diri << dendl;
+      notify->put();
+      return;
+    }
 
     // refragment
+    list<Context*> waiters;
     list<CDir*> resultfrags;
-    adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
+    adjust_dir_fragments(diri, base, bits, 
 			 resultfrags, waiters, false);
     if (g_conf.mds_debug_frag)
       diri->verify_dirfrags();
