@@ -6,6 +6,7 @@
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
+#define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 
 #ifdef USE_CRYPTOPP
 # define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
@@ -20,6 +21,7 @@ namespace ceph {
     }
     using CryptoPP::Weak::MD5;
     using CryptoPP::SHA1;
+    using CryptoPP::SHA256;
 
     class HMACSHA1: public CryptoPP::HMAC<CryptoPP::SHA1> {
     public:
@@ -49,38 +51,6 @@ typedef unsigned char byte;
 namespace ceph {
   namespace crypto {
     void init();
-    class MD5 {
-    private:
-      PK11Context *ctx;
-    public:
-      MD5 () {
-	ctx = PK11_CreateDigestContext(SEC_OID_MD5);
-	assert(ctx);
-	Restart();
-      }
-      ~MD5 () {
-	PK11_DestroyContext(ctx, PR_TRUE);
-      }
-      void Restart() {
-	SECStatus s;
-	s = PK11_DigestBegin(ctx);
-	assert(s == SECSuccess);
-      }
-      void Update (const byte *input, size_t length) {
-	SECStatus s;
-	s = PK11_DigestOp(ctx, input, length);
-	assert(s == SECSuccess);
-      }
-      void Final (byte *digest) {
-	SECStatus s;
-	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_MD5_DIGESTSIZE);
-	assert(s == SECSuccess);
-	assert(dummy == CEPH_CRYPTO_MD5_DIGESTSIZE);
-	Restart();
-      }
-    };
-#if 0
     class Digest {
     private:
       PK11Context *ctx;
@@ -119,12 +89,16 @@ namespace ceph {
       MD5 () : Digest(SEC_OID_MD5, CEPH_CRYPTO_MD5_DIGESTSIZE) { }
     };
 
-   class SHA1 : public Digest {
+    class SHA1 : public Digest {
     public:
       SHA1 () : Digest(SEC_OID_SHA1, CEPH_CRYPTO_SHA1_DIGESTSIZE) { }
     };
 
-#endif
+    class SHA256 : public Digest {
+    public:
+      SHA256 () : Digest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
+    };
+
     class HMACSHA1 {
     private:
       PK11SlotInfo *slot;
