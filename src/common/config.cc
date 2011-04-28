@@ -628,7 +628,6 @@ get_val(const char *key, char **buf, int len) const
   // In key names, leading and trailing whitespace are not significant.
   string k(ConfFile::normalize_key_name(key));
 
-  cout << "get_val(key='" << key << "'): k = '" << k << "'" << std::endl;
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     const config_option *opt = &config_optionsp[i];
     if (strcmp(opt->name, k.c_str()))
