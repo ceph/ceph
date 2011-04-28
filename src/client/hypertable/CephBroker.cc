@@ -54,7 +54,7 @@ static std::string cpp_strerror(int err)
   return oss.str();
 }
 
-OpenFileDataCeph::OpenFileDataCeph(ceph_mount_t *cmount_, const String& fname,
+OpenFileDataCeph::OpenFileDataCeph(struct ceph_mount_info *cmount_, const String& fname,
 				   int _fd, int _flags) 
   : cmount(cmount_), fd(_fd), flags(_flags), filename(fname)
 {
@@ -382,7 +382,7 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname) {
 }
 
 int CephBroker::rmdir_recursive(const char *directory) {
-  ceph_dir_result_t *dirp;
+  struct ceph_dir_result *dirp;
   struct dirent de;
   struct stat st;
   int r;
@@ -450,7 +450,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
   //get from ceph in a buffer
   make_abs_path(dname, absdir);
 
-  ceph_dir_result_t *dirp;
+  struct ceph_dir_result *dirp;
   ceph_opendir(cmount, absdir.c_str(), &dirp);
   int r;
   int buflen = 100; //good default?
