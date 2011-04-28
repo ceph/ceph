@@ -9651,6 +9651,8 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
   for (map<int,int>::iterator p = first->replica_map.begin();
        p != first->replica_map.end();
        p++) {
+    if (mds->mdsmap->get_state(p->first) <= MDSMap::STATE_REJOIN)
+      continue;
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
 
     /*
@@ -9700,6 +9702,11 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_REJOIN) {
+    notify->put();
+    return;
+  }
 
   CInode *diri = get_inode(notify->get_ino());
   if (diri) {
