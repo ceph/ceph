@@ -847,7 +847,8 @@ int Client::choose_target_mds(MetaRequest *req)
     goto out;
   }
 
-  if (g_conf.client_use_random_mds) goto random_mds;
+  if (g_conf.client_use_random_mds)
+    goto random_mds;
 
   if (req->inode) {
     in = req->inode;
@@ -919,7 +920,6 @@ int Client::choose_target_mds(MetaRequest *req)
 random_mds:
   if (mds < 0) {
     mds = mdsmap->get_random_up_mds();
-    if (mds < 0) mds = 0; //why is this necessary?
     dout(10) << "did not get mds through better means, so chose random mds " << mds << dendl;
   }
 
@@ -991,10 +991,15 @@ int Client::make_request(MetaRequest *request,
   
   while (1) {
     // choose mds
-    int mds;
-    // force use of a particular mds?
-    mds = choose_target_mds(request);
-    
+    int mds = choose_target_mds(request);
+    if (mds < 0 || !mdsmap->is_active(mds)) {
+      Cond cond;
+      dout(10) << " target mds" << mds << " not active, waiting for new mdsmap" << dendl;
+      waiting_for_mdsmap.push_back(&cond);
+      cond.Wait(client_lock);
+      continue;
+    }
+
     // open a session?
     if (mds_sessions.count(mds) == 0) {
       Cond cond;
@@ -1346,7 +1351,8 @@ void Client::handle_client_reply(MClientReply *reply)
     dout(20) << "got ESTALE on req" << request->tid
 	     << "from mds" << request->mds << dendl;
     request->resend_mds = choose_target_mds(request);
-    if (request->resend_mds != request->mds) { //wasn't sent to auth, resend
+    if (request->resend_mds >= 0 &&
+	request->resend_mds != request->mds) { //wasn't sent to auth, resend
       dout(20) << "but it wasn't sent to auth, resending" << dendl;
       send_request(request, request->resend_mds);
       return;
