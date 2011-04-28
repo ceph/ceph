@@ -84,24 +84,25 @@
 
 #include "common/ceph_crypto.h"
 
-using ceph::crypto::SHA256;
-// using ceph::crypto::SHA1;
+using ceph::crypto::SHA1;
 
 /*
  * long file names will have the following format:
  *
- * prefix_cookie_hash_index
+ * prefix_hash_index_cookie
  *
  * The prefix will just be the first X bytes of the original file name.
- * The cookie is a constant string that hints whether this file name
+ * The cookie is a constant string that shows whether this file name
  * is hashed
  */
-#define FILENAME_MAX_LEN 4096 // the long file name size
 
-#define FILENAME_SHORT_LEN 20 // the short file name size
-#define FILENAME_COOKIE "long"  // ceph long file name
-#define FILENAME_HASH_LEN 3
-#define FILENAME_EXTRA 4 // underscores and digit
+#define FILENAME_LFN_DIGEST_SIZE CEPH_CRYPTO_SHA1_DIGESTSIZE
+
+#define FILENAME_MAX_LEN        4096    // the long file name size
+#define FILENAME_SHORT_LEN      255     // the short file name size
+#define FILENAME_COOKIE         "long"  // ceph long file name
+#define FILENAME_HASH_LEN       FILENAME_LFN_DIGEST_SIZE
+#define FILENAME_EXTRA	        4       // underscores and digit
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 
@@ -176,18 +177,16 @@ static int hash_filename(const char *filename, char *hash, int buf_len)
 {
   if (buf_len < FILENAME_HASH_LEN + 1)
     return -EINVAL;
-#if 0
-  char buf[CEPH_CRYPTO_SHA256_DIGESTSIZE];
-  char hex[CEPH_CRYPTO_SHA256_DIGESTSIZE * 2];
-  SHA256 h;
+
+  char buf[FILENAME_LFN_DIGEST_SIZE];
+  char hex[FILENAME_LFN_DIGEST_SIZE * 2];
+
+  SHA1 h;
   h.Update((const byte *)filename, strlen(filename));
   h.Final((byte *)buf);
 
   buf_to_hex((byte *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
   strncpy(hash, hex, FILENAME_HASH_LEN);
-  hash[FILENAME_HASH_LEN] = '\0';
-#endif
-  memset(hash, 'z', FILENAME_HASH_LEN);
   hash[FILENAME_HASH_LEN] = '\0';
   return 0;
 }
