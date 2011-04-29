@@ -106,3 +106,35 @@ TEST(HMACSHA1, Restart) {
   err = memcmp(digest, want_digest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   ASSERT_EQ(0, err);
 }
+
+class ForkDeathTest : public ::testing::Test {
+ protected:
+  virtual void SetUp() {
+    // shutdown NSS so it can be reinitialized after the fork
+    ceph::crypto::shutdown();
+  }
+
+  virtual void TearDown() {
+    // undo the NSS shutdown we did in the parent process, after the
+    // test is done
+    ceph::crypto::init();
+  }
+};
+
+void do_simple_crypto() {
+  // ensure that the shutdown/fork/init sequence results in a working
+  // NSS crypto library; this function is run in the child, after the
+  // fork, and if you comment out the ceph::crypto::init, or if the
+  // trick were to fail, you would see this ending in an assert and
+  // not exit status 0
+  ceph::crypto::init();
+  ceph::crypto::MD5 h;
+  h.Update((const byte*)"foo", 3);
+  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  h.Final(digest);
+  exit(0);
+}
+
+TEST_F(ForkDeathTest, MD5) {
+  ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), "^$");
+}
