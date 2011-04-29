@@ -2319,21 +2319,18 @@ int SimpleMessenger::rebind(int avoid_port)
 
 int SimpleMessenger::start(bool daemonize, uint64_t nonce)
 {
+  lock.Lock();
+  dout(1) << "messenger.start" << dendl;
+
   // register at least one entity, first!
   assert(my_type >= 0); 
 
-  lock.Lock();
-  if (started) {
-    dout(10) << "rank.start already started" << dendl;
-    lock.Unlock();
-    return 0;
-  }
-  if (!did_bind) {
-    ms_addr.nonce = nonce;
-  }
-
-  dout(1) << "messenger.start" << dendl;
+  assert(!started);
   started = true;
+
+  if (!did_bind)
+    ms_addr.nonce = nonce;
+
   lock.Unlock();
 
   // daemonize?
