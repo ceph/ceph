@@ -9,7 +9,9 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 #elif USE_NSS
 
 void ceph::crypto::init() {
-  NSS_NoDB_Init(NULL);
+  SECStatus s;
+  s = NSS_NoDB_Init(NULL);
+  assert(s == SECSuccess);
 }
 
 ceph::crypto::HMACSHA1::~HMACSHA1()
