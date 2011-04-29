@@ -176,6 +176,8 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
+  s->obj_size = total_len;
+
   if (!get_data || ofs > end)
     goto done;
 
@@ -423,6 +425,8 @@ void RGWPutObj::execute()
         ofs += len;
       }
     } while ( len > 0);
+
+    s->obj_size = ofs;
 
     hash.Final(m);
 

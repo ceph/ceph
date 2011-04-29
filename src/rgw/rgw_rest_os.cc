@@ -224,7 +224,7 @@ int RGWGetObj_REST_OS::send_response(void *handle)
 
 send_data:
   if (get_data && !orig_ret) {
-    FCGX_PutStr(data, len, s->fcgx->out); 
+    CGI_PutStr(s, data, len);
   }
   s->formatter->flush();
 

@@ -24,7 +24,6 @@ static RGWFormatter_JSON formatter_json;
 
 static void dump_status(struct req_state *s, const char *status)
 {
-  s->status = status;
   CGI_PRINTF(s,"Status: %s\n", status);
 }
 
@@ -307,9 +306,9 @@ void init_entities_from_header(struct req_state *s)
   s->object = NULL;
   s->object_str = "";
 
-  s->status = NULL;
   s->header_ended = false;
   s->bytes_sent = 0;
+  s->obj_size = 0;
 
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;

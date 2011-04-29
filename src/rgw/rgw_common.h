@@ -58,10 +58,15 @@ extern string rgw_root_bucket;
 #define CGI_PRINTF(state, format, ...) do { \
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
    if (state->header_ended) \
-     state->bytes_sent = __ret; \
+     state->bytes_sent += __ret; \
    printf(">" format, __VA_ARGS__); \
 } while (0)
 
+#define CGI_PutStr(state, buf, len) do { \
+  FCGX_PutStr(buf, len, state->fcgx->out); \
+  if (state->header_ended) \
+    state->bytes_sent += len; \
+} while (0)
 
 #define ERR_INVALID_BUCKET_NAME 2000
 #define ERR_INVALID_OBJECT_NAME 2001
@@ -244,10 +249,10 @@ struct req_state {
    const char *length;
    const char *content_type;
    struct rgw_err err;
-   const char *status;
    bool expect_cont;
    bool header_ended;
    uint64_t bytes_sent; // bytes sent as a response, excluding header
+   uint64_t obj_size;
    bool should_log;
 
    XMLArgs args;

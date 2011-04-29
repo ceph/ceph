@@ -472,7 +472,7 @@ int main(int argc, char **argv)
            << entry.op << delim
            << "\"" << escape_str(entry.uri, '"') << "\"" << delim
            << entry.http_status << delim
-           << entry.error_code << delim
+           << "\"" << entry.error_code << "\"" << delim
            << entry.bytes_sent << delim
            << entry.obj_size << delim
            << entry.total_time.usec() << delim

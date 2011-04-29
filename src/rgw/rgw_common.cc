@@ -277,7 +277,7 @@ void RGWFormatter::flush()
     return;
 
   RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << std::endl;
-  FCGX_PutStr(buf, len - 1, s->fcgx->out);
+  CGI_PutStr(s, buf, len - 1);
   free(buf);
   buf = NULL;
   len = 0;

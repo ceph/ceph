@@ -81,7 +81,7 @@ done:
 
 send_data:
   if (get_data && !orig_ret) {
-    FCGX_PutStr(data, len, s->fcgx->out); 
+    CGI_PutStr(s, data, len);
   }
 
   return 0;
@@ -231,7 +231,7 @@ void RGWGetACLs_REST_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
-  FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
+  CGI_PutStr(s, acls.c_str(), acls.size());
 }
 
 void RGWPutACLs_REST_S3::send_response()

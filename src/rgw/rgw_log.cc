@@ -29,6 +29,8 @@ int rgw_log_op(struct req_state *s)
   else
     entry.obj = "-";
 
+  entry.obj_size = s->obj_size;
+
   set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
@@ -42,9 +44,11 @@ int rgw_log_op(struct req_state *s)
   entry.time = s->time;
   entry.total_time = g_clock.now() - s->time;
   entry.bytes_sent = s->bytes_sent;
-  if (s->status)
-    entry.http_status = s->status;
-  else
+  if (s->err.http_ret) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
+    entry.http_status = buf;
+  } else
     entry.http_status = "200"; // default
 
   entry.error_code = s->err.s3_code;
