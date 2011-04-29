@@ -400,7 +400,7 @@ _calculate_opath(const md_config_t *conf) const
   // If conf->log_file was specified, that takes the highest priority
   if (!conf->log_file.empty()) {
     string log_file(normalize_relative(conf->log_file.c_str()));
-    if (conf->log_per_instance) {
+    if ((conf->log_per_instance) && (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
       ostringstream oss;
       oss << log_file << "." << getpid();
       return oss.str();
@@ -415,7 +415,7 @@ _calculate_opath(const md_config_t *conf) const
   else
     log_dir = normalize_relative(conf->log_dir.c_str());
 
-  if (conf->log_per_instance) {
+  if ((conf->log_per_instance) && (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
     char hostname[255];
     memset(hostname, 0, sizeof(hostname));
     int ret = gethostname(hostname, sizeof(hostname));
@@ -467,7 +467,7 @@ _read_ofile_config(const md_config_t *conf)
 
   symlink_dir = _get_symlink_dir(conf);
 
-  if (conf->log_per_instance) {
+  if ((conf->log_per_instance) && (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
     // Calculate instance symlink path (isym_path)
     ostringstream iss;
     iss << symlink_dir << "/" << conf->name.to_str();
