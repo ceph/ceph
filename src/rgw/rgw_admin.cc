@@ -360,6 +360,7 @@ int main(int argc, char **argv)
     cout << "Access Key: " << info.access_key << std::endl;
     cout << "Secret Key: " << info.secret_key << std::endl;
     cout << "Display Name: " << info.display_name << std::endl;
+    cout << "Email: " << info.user_email << std::endl;
     cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
     cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
     break;
