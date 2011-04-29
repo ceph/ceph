@@ -26,6 +26,8 @@ void complain_about_parse_errors(std::deque<std::string> *parse_errors);
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 void output_ceph_version();
+void common_prefork();
+void common_postfork();
 void common_init_daemonize(const md_config_t *conf);
 
 #endif

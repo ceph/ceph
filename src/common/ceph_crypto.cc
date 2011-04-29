@@ -14,6 +14,12 @@ void ceph::crypto::init() {
   assert(s == SECSuccess);
 }
 
+void ceph::crypto::shutdown() {
+  SECStatus s;
+  s = NSS_Shutdown();
+  assert(s == SECSuccess);
+}
+
 ceph::crypto::HMACSHA1::~HMACSHA1()
 {
   PK11_DestroyContext(ctx, PR_TRUE);

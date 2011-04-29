@@ -116,6 +116,11 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
       break;
   }
 
+  // TODO this is not idempotent! we are relying on
+  // libceph_initialized/rados_initialized to guard us from being
+  // called more than once in 3rd party apps, and on coding
+  // conventions in Ceph daemons/tools
+  ceph::crypto::init();
   return conf;
 }
 
@@ -191,7 +196,17 @@ void common_init(std::vector < const char* >& args,
 	 << "with important data.       **" << TEXT_NORMAL << std::endl;
     output_ceph_version();
   }
+}
 
+// TODO: until this is exposed to libceph/librados somehow, the
+// library users cannot fork and expect to keep using the library
+void common_prefork() {
+  // NSS is evil and breaks in forked children; shut it down properly
+  // and re-init in both parent and child, after the fork
+  ceph::crypto::shutdown();
+}
+
+void common_postfork() {
   ceph::crypto::init();
 }
 
@@ -200,8 +215,12 @@ static void pidfile_remove_void(void)
   pidfile_remove();
 }
 
+// callers that fork must either use common_init_daemonize for that, or
+// call common_prefork/common_postfork around the bit where they fork
 void common_init_daemonize(const md_config_t *conf)
 {
+  common_prefork();
+
   int num_threads = Thread::get_num_threads();
   if (num_threads > 1) {
     derr << "common_init_daemonize: BUG: there are " << num_threads - 1
@@ -235,4 +254,6 @@ void common_init_daemonize(const md_config_t *conf)
   dout_handle_daemonize(&g_conf);
 
   dout(1) << "finished common_init_daemonize" << dendl;
+
+  common_postfork();
 }

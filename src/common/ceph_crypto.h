@@ -19,6 +19,9 @@ namespace ceph {
     static inline void init() {
       // nothing
     }
+    static inline void shutdown() {
+      // nothing
+    }
     using CryptoPP::Weak::MD5;
     using CryptoPP::SHA1;
     using CryptoPP::SHA256;
@@ -51,6 +54,7 @@ typedef unsigned char byte;
 namespace ceph {
   namespace crypto {
     void init();
+    void shutdown();
     class Digest {
     private:
       PK11Context *ctx;

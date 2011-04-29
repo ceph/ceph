@@ -109,6 +109,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       exit(1);
     }
 
+    common_prefork();
     childpid = fork();
   }
 
@@ -118,6 +119,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cout << "cfuse[" << getpid() << "]: starting ceph client" << std::endl;
 
+    // if we forked, re-init things
+    if (g_conf.daemonize)
+      common_postfork();
     messenger->start_with_nonce(getpid());
 
     // start client
