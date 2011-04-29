@@ -2263,6 +2263,8 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
   }
 
 done:
+  if (fd >= 0)
+    TEMP_FAILURE_RETRY(::close(fd));
   if (r >= 0)
     ::encode(extmap, bl);
 
