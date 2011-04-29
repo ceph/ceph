@@ -93,7 +93,7 @@ public:
       return -1002;
     }
 
-    if (messenger->start(false, msgr_nonce) != 0) {
+    if (messenger->start_with_nonce(false, msgr_nonce) != 0) {
       shutdown();
       return -1003;
     }

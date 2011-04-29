@@ -2317,7 +2317,7 @@ int SimpleMessenger::rebind(int avoid_port)
   return accepter.rebind(avoid_port);
 }
 
-int SimpleMessenger::start(bool daemonize, uint64_t nonce)
+int SimpleMessenger::start_with_nonce(bool daemonize, uint64_t nonce)
 {
   lock.Lock();
   dout(1) << "messenger.start" << dendl;
