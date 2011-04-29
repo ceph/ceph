@@ -564,10 +564,10 @@ public:
   int bind(uint64_t nonce) {
     return bind(g_conf.public_addr, nonce);
   }
-  int start_with_nonce(bool daemonize, uint64_t nonce);  // if we didn't bind
-  int start(bool daemonize) {                 // if we did
+  int start_with_nonce(uint64_t nonce);  // if we didn't bind
+  int start() {                 // if we did
     assert(did_bind);
-    return start_with_nonce(daemonize, 0);
+    return start_with_nonce(0);
   }
   void wait();
 

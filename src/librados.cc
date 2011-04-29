@@ -649,7 +649,7 @@ connect()
   rados_instance.inc();
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.read());
 
-  messenger->start_with_nonce(false, nonce); // do not daemonize
+  messenger->start_with_nonce(nonce);
   messenger->add_dispatcher_head(this);
 
   dout(1) << "setting wanted keys" << dendl;

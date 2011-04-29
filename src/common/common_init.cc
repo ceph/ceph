@@ -27,6 +27,8 @@
 #include "common/signal.h"
 #include "common/version.h"
 #include "include/color.h"
+#include "common/Thread.h"
+#include "common/pidfile.h"
 
 #include <errno.h>
 #include <deque>

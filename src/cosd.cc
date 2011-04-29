@@ -263,9 +263,11 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  client_messenger->start(g_conf.daemonize);
-  messenger_hb->start(false);  // do not daemonize (only need to daemonize once)
-  cluster_messenger->start(false); // do not daemonize (only need to daemonize once)
+  if (g_conf.daemonize)
+    common_init_daemonize(&g_conf);
+  client_messenger->start();
+  messenger_hb->start();
+  cluster_messenger->start();
 
   // start osd
   err = osd->init();

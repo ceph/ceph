@@ -56,7 +56,7 @@ void Dumper::init(int rank)
 
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(this);
-  messenger->start_with_nonce(false, getpid()); // do not daemonize
+  messenger->start_with_nonce(getpid());
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
   monc->set_messenger(messenger);

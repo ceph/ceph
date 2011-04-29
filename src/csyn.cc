@@ -75,7 +75,7 @@ int main(int argc, const char **argv, char *envp[])
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
     synclients.push_back(syn);
-    messengers[i]->start(false); // do not daemonize
+    messengers[i]->start();
   }
 
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 

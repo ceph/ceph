@@ -96,7 +96,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   messenger->add_dispatcher_head(&dispatcher);
 
-  rank->start(false); // do not daemonize
+  rank->start();
   
   int isend = 0;
   if (whoami == 0)

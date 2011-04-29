@@ -260,7 +260,9 @@ int main(int argc, const char **argv)
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(g_conf.name.get_id(), &store, messenger, &monmap);
 
-  messenger->start(g_conf.daemonize);
+  if (g_conf.daemonize)
+    common_init_daemonize(&g_conf);
+  messenger->start();
 
   uint64_t supported =
     CEPH_FEATURE_UID |
