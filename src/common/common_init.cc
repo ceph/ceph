@@ -103,7 +103,6 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
     case CODE_ENVIRONMENT_DAEMON:
       conf->daemonize = true;
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
-	conf->set_val_or_die("log_dir", "/var/log/ceph");
 	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
       }
       conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
@@ -163,6 +162,12 @@ void common_init(std::vector < const char* >& args,
   conf->parse_env(); // environment variables override
 
   conf->parse_argv(args); // argv override
+
+  if (code_env == CODE_ENVIRONMENT_DAEMON) {
+    if (conf->log_dir.empty() && conf->log_file.empty()) {
+	conf->set_val_or_die("log_file", "/var/log/ceph/$name.log");
+    }
+  }
 
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes();
