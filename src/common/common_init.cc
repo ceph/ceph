@@ -14,16 +14,18 @@
 
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
-#include "common/ceph_argparse.h"
-#include "common/code_environment.h"
 #include "common/DoutStreambuf.h"
+#include "common/Thread.h"
+#include "common/ceph_argparse.h"
+#include "common/ceph_crypto.h"
+#include "common/code_environment.h"
+#include "common/common_init.h"
+#include "common/config.h"
+#include "common/errno.h"
+#include "common/pidfile.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
-#include "common/config.h"
-#include "common/common_init.h"
-#include "common/errno.h"
-#include "common/ceph_crypto.h"
 #include "include/color.h"
 
 #include <errno.h>
@@ -189,4 +191,46 @@ void common_init(std::vector < const char* >& args,
   }
 
   ceph::crypto::init();
+}
+
+static void pidfile_remove_void(void)
+{
+  pidfile_remove();
+}
+
+void common_init_daemonize(const md_config_t *conf)
+{
+  int num_threads = Thread::get_num_threads();
+  if (num_threads > 1) {
+    derr << "common_init_daemonize: BUG: there are " << num_threads - 1
+	 << " child threads already started that will now die!" << dendl;
+    exit(1);
+  }
+
+  int ret = daemon(1, 0);
+  if (ret) {
+    ret = errno;
+    derr << "common_init_daemonize: BUG: daemon error: "
+	 << cpp_strerror(ret) << dendl;
+    exit(1);
+  }
+
+  if (!conf->chdir.empty()) {
+    if (::chdir(conf->chdir.c_str())) {
+      int err = errno;
+      derr << "common_init_daemonize: failed to chdir to directory: '"
+	   << conf->chdir << "': " << cpp_strerror(err) << dendl;
+    }
+  }
+
+  if (atexit(pidfile_remove_void)) {
+    derr << "common_init_daemonize: failed to set pidfile_remove function "
+	 << "to run at exit." << dendl;
+  }
+
+  // move these things into observers.
+  pidfile_write(&g_conf);
+  dout_handle_daemonize(&g_conf);
+
+  dout(1) << "finished common_init_daemonize" << dendl;
 }

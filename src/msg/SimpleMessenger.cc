@@ -25,6 +25,7 @@
 #include <sys/user.h>
 
 #include "common/config.h"
+#include "common/common_init.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -35,7 +36,6 @@
 
 #include "common/Timer.h"
 #include "common/errno.h"
-#include "common/pidfile.h"
 #include "common/safe_io.h"
 
 #define DOUT_SUBSYS ms
@@ -2333,29 +2333,8 @@ int SimpleMessenger::start(bool daemonize, uint64_t nonce)
 
   lock.Unlock();
 
-  // daemonize?
   if (daemonize) {
-    int num_threads = Thread::get_num_threads();
-    if (num_threads > 1) {
-      derr << "messenger.start BUG: there are " << num_threads - 1
-           << " child threads already started that will now die!  call messenger.start() sooner."
-	   << dendl;
-    }
-
-    int r = daemon(1, 0);
-    assert(r >= 0);
-    install_standard_sighandlers();
-    pidfile_write(&g_conf);
- 
-    if (!g_conf.chdir.empty()) {
-      if (::chdir(g_conf.chdir.c_str())) {
-	int err = errno;
-	derr << "messenger.start: failed to chdir to directory: '"
-	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;
-      }
-    }
-    dout_handle_daemonize(&g_conf);
-    dout(1) << "messenger.start daemonized" << dendl;
+    common_init_daemonize(&g_conf);
   }
 
   // go!
@@ -2652,7 +2631,6 @@ void SimpleMessenger::wait()
 
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
-  pidfile_remove();
   started = false;
   did_bind = false;
   my_type = -1;
