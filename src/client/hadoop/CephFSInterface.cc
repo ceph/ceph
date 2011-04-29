@@ -13,7 +13,7 @@ union ceph_mount_union_t {
   jlong cjlong;
 };
 
-static void set_struct ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info *cmount)
+static void set_ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info *cmount)
 {
   jclass cls = env->GetObjectClass(obj);
   jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
@@ -105,7 +105,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
     ceph_set_default_preferred_pg(cmount, ceph_get_local_osd(cmount));
   }
 
-  set_ceph_mount_t(env, obj, cmount);
+  set_ceph_mount_info(env, obj, cmount);
   return true;
 }
 
@@ -609,7 +609,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1kill_
   if (!cmount)
     return true;
   ceph_shutdown(cmount);
-  set_ceph_mount_t(env, obj, NULL);
+  set_ceph_mount_info(env, obj, NULL);
   return true;
 }
 
