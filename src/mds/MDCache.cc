@@ -9758,7 +9758,7 @@ void MDCache::rollback_uncommitted_fragments()
     if (g_conf.mds_debug_frag)
       diri->verify_dirfrags();
 
-    EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, -p->second);
+    EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, p->second);
     mds->mdlog->start_submit_entry(le);
   }
   uncommitted_fragments.clear();
