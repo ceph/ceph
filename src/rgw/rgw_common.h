@@ -68,6 +68,11 @@ extern string rgw_root_bucket;
     state->bytes_sent += len; \
 } while (0)
 
+#define CGI_GetStr(state, buf, buf_len, olen) do { \
+  olen = FCGX_GetStr(buf, buf_len, state->fcgx->in); \
+  state->bytes_received += olen; \
+} while (0)
+
 #define ERR_INVALID_BUCKET_NAME 2000
 #define ERR_INVALID_OBJECT_NAME 2001
 #define ERR_NO_SUCH_BUCKET      2002
@@ -252,6 +257,7 @@ struct req_state {
    bool expect_cont;
    bool header_ended;
    uint64_t bytes_sent; // bytes sent as a response, excluding header
+   uint64_t bytes_received; // data received
    uint64_t obj_size;
    bool should_log;
 

@@ -4,7 +4,7 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
-#define LOG_ENTRY_VER 1
+#define LOG_ENTRY_VER 2
 
 #define RGW_SHOULD_LOG_DEFAULT 1
 
@@ -22,6 +22,7 @@ struct rgw_log_entry {
   string http_status;
   string error_code;
   uint64_t bytes_sent;
+  uint64_t bytes_received;
   uint64_t obj_size;
   utime_t total_time;
   string user_agent;
@@ -46,6 +47,7 @@ struct rgw_log_entry {
     ::encode(total_time, bl);
     ::encode(user_agent, bl);
     ::encode(referrer, bl);
+    ::encode(bytes_received, bl);
   }
   void decode(bufferlist::iterator &p) {
     uint8_t ver;
@@ -65,6 +67,10 @@ struct rgw_log_entry {
     ::decode(total_time, p);
     ::decode(user_agent, p);
     ::decode(referrer, p);
+    if (ver >= 2)
+      ::decode(bytes_received, p);
+    else
+      bytes_received = 0;
   }
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)

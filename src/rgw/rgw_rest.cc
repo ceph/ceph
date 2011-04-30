@@ -236,7 +236,7 @@ int RGWPutObj_REST::get_data()
     if (!data)
        return -ENOMEM;
 
-    len = FCGX_GetStr(data, cl, s->fcgx->in);
+    CGI_GetStr(s, data, cl, len);
   }
 
   if (!ofs)
@@ -264,7 +264,7 @@ int RGWPutACLs_REST::get_params()
        ret = -ENOMEM;
        return ret;
     }
-    len = FCGX_GetStr(data, cl, s->fcgx->in);
+    CGI_GetStr(s, data, cl, len);
     data[len] = '\0';
   } else {
     len = 0;
@@ -308,6 +308,7 @@ void init_entities_from_header(struct req_state *s)
 
   s->header_ended = false;
   s->bytes_sent = 0;
+  s->bytes_received = 0;
   s->obj_size = 0;
 
   /* this is the default, might change in a few lines */

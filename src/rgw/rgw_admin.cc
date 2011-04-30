@@ -474,6 +474,7 @@ int main(int argc, char **argv)
            << entry.http_status << delim
            << "\"" << entry.error_code << "\"" << delim
            << entry.bytes_sent << delim
+           << entry.bytes_received << delim
            << entry.obj_size << delim
            << entry.total_time.usec() << delim
            << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim

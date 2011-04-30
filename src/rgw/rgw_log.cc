@@ -44,6 +44,7 @@ int rgw_log_op(struct req_state *s)
   entry.time = s->time;
   entry.total_time = g_clock.now() - s->time;
   entry.bytes_sent = s->bytes_sent;
+  entry.bytes_received = s->bytes_received;
   if (s->err.http_ret) {
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
