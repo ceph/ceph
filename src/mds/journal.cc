@@ -1225,7 +1225,8 @@ void EImportFinish::replay(MDS *mds)
       mds->mdcache->get_ambiguous_import_bounds(base, bounds);
       mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
       mds->mdcache->cancel_ambiguous_import(dir);
-    }
+      mds->mdcache->try_trim_non_auth_subtree(dir);
+   }
   } else {
     dout(10) << "EImportFinish.replay " << base << " success=" << success
 	     << " on subtree not marked as ambiguous" 
