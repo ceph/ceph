@@ -3752,7 +3752,7 @@ PG::RecoveryState::Reset::react(const AdvMap& advmap) {
 }
 
 boost::statechart::result 
-PG::RecoveryState::Reset::react(const ActMap& actmap) {
+PG::RecoveryState::Reset::react(const ActMap&) {
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -3963,6 +3963,16 @@ PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
+boost::statechart::result
+PG::RecoveryState::ReplicaActive::react(const ActMap&) {
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->is_stray() && pg->get_primary() >= 0) {
+    context< RecoveryMachine >().send_notify(pg->get_primary(),
+					     pg->info);
+  }
+  return forward_event();
+}
+
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
   : my_base(ctx), backlog_requested(false) {
@@ -3988,7 +3998,7 @@ PG::RecoveryState::Stray::react(const MLogRec& logevt) {
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
-};
+}
 
 boost::statechart::result 
 PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
@@ -4006,7 +4016,7 @@ PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
-};
+}
 
 boost::statechart::result 
 PG::RecoveryState::Stray::react(const BacklogComplete&) {
@@ -4049,6 +4059,16 @@ PG::RecoveryState::Stray::react(const MQuery& query) {
     pg->fulfill_log(query.from, query.query);
   }
   return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::Stray::react(const ActMap&) {
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->is_stray() && pg->get_primary() >= 0) {
+    context< RecoveryMachine >().send_notify(pg->get_primary(),
+					     pg->info);
+  }
+  return forward_event();
 }
 
 /*--------GetInfo---------*/

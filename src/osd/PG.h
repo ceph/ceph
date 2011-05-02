@@ -996,11 +996,13 @@ public:
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started > {
       typedef boost::mpl::list <
 	boost::statechart::transition< MQuery, Crashed >,
+	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MInfoRec >
 	> reactions;
 
       ReplicaActive(my_context ctx);
       boost::statechart::result react(const MInfoRec& infoevt);
+      boost::statechart::result react(const ActMap&);
     };
 
     struct Stray : boost::statechart::state< Stray, Started > {
@@ -1011,6 +1013,7 @@ public:
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< BacklogComplete >,
+	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< Activate, ReplicaActive >
 	> reactions;
 
@@ -1020,6 +1023,7 @@ public:
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const MInfoRec& infoevt);
+      boost::statechart::result react(const ActMap&);
     };
 
     struct GetLog;
