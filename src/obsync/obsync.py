@@ -37,6 +37,7 @@ import tempfile
 import traceback
 
 global opts
+global xuser
 
 ###### Constants classes #######
 RGW_META_BUCKET_NAME = ".rgw"
@@ -169,6 +170,7 @@ FULL_CONTROL = READ | WRITE | READ_ACP | WRITE_ACP
 ACL_TYPE_CANON_USER = "canon:"
 ACL_TYPE_EMAIL_USER = "email:"
 ACL_TYPE_GROUP = "group:"
+ALL_ACL_TYPES = [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]
 
 S3_GROUP_AUTH_USERS = ACL_TYPE_GROUP +  "AuthenticatedUsers"
 S3_GROUP_ALL_USERS = ACL_TYPE_GROUP +  "AllUsers"
@@ -176,12 +178,6 @@ S3_GROUP_LOG_DELIVERY = ACL_TYPE_GROUP +  "LogDelivery"
 
 NS = "http://s3.amazonaws.com/doc/2006-03-01/"
 NS2 = "http://www.w3.org/2001/XMLSchema-instance"
-
-class AclGrant(object):
-    def __init__(self, user_id, display_name, permission):
-        self.user_id = user_id
-        self.display_name = display_name
-        self.permission = permission
 
 def get_user_type(utype):
     for ut in [ ACL_TYPE_CANON_USER, ACL_TYPE_EMAIL_USER, ACL_TYPE_GROUP ]:
@@ -218,6 +214,27 @@ def user_type_to_attr(t):
         return "EmailUser"
     else:
         raise Exception("unknown user type %s" % t)
+
+def add_user_type(user):
+    """ All users that are not specifically marked as something else 
+are treated as canonical users"""
+    for atype in ALL_ACL_TYPES:
+        if (user[:len(atype)] == atype):
+            return user
+    return ACL_TYPE_CANON_USER + user
+
+class AclGrant(object):
+    def __init__(self, user_id, display_name, permission):
+        self.user_id = user_id
+        self.display_name = display_name
+        self.permission = permission
+    def translate_users(self, xusers):
+        # Keep in mind that xusers contains user_ids of the form "type:value"
+        # So typical contents might be like { canon:XYZ => canon.123 }
+        if (xusers.has_key(self.user_id)):
+            self.user_id = xusers[self.user_id]
+            # It's not clear what the new pretty-name should be, so just leave it blank.
+            self.display_name = ""
 
 class AclPolicy(object):
     def __init__(self, owner_id, owner_display_name, grants):
@@ -262,6 +279,17 @@ class AclPolicy(object):
             permission_elem = etree.SubElement(grant_elem, "{%s}Permission" % NS)
             permission_elem.text = g.permission
         return etree.tostring(root, encoding="UTF-8")
+    def translate_users(self, xusers):
+        # owner ids are always expressed in terms of canonical user id
+        if (xusers.has_key(ACL_TYPE_CANON_USER + self.owner_id)):
+            self.owner_id = \
+                strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
+            # It's not clear what the new pretty-name should be, so just leave it blank.
+            # It's not necessary when doing PUT/POST anyway.
+            self.owner_display_name = ""
+        for g in self.grants:
+            g.translate_users(xusers)
+
 
 def compare_xml(xml1, xml2):
     tree1 = etree.parse(StringIO(xml1))
@@ -338,7 +366,8 @@ Cannot handle this URL.")
 
 ###### LocalCopy ######
 class LocalCopy(object):
-    def __init__(self, path, path_is_temp, acl_path, acl_is_temp):
+    def __init__(self, obj_name, path, path_is_temp, acl_path, acl_is_temp):
+        self.obj_name = obj_name
         self.path = path
         self.path_is_temp = path_is_temp
         self.acl_path = acl_path
@@ -352,6 +381,34 @@ class LocalCopy(object):
         if (self.acl_is_temp and self.acl_path):
             os.unlink(self.acl_path)
         self.acl_path = None
+    def translate_users(self, xusers):
+        # Do we even have an ACL?
+        if (self.acl_path == None):
+            return
+        # Read the XML and parse it.
+        f = open(self.acl_path, 'r')
+        try:
+            acl_xml = f.read()
+        finally:
+            f.close()
+        try:
+            policy = AclPolicy.from_xml(acl_xml)
+        except Exception, e:
+            print >>stderr, "Error parsing ACL from object \"%s\"" % \
+                self.obj_name
+            raise
+        policy.translate_users(xusers)
+        acl_xml2 = policy.to_xml()
+        new_acl_temp = tempfile.NamedTemporaryFile(mode='w+b', delete=False).name
+        f = open(new_acl_temp, 'w')
+        try:
+            f.write(acl_xml2)
+        finally:
+            f.close()
+        if (self.acl_is_temp):
+            os.unlink(self.acl_path)
+        self.acl_path = new_acl_temp
+        self.acl_is_temp = True
 
 ###### S3 store #######
 class S3StoreIterator(object):
@@ -425,7 +482,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             if (temp_acl_file):
                 os.unlink(temp_acl_file)
             raise
-        return LocalCopy(temp_file.name, True, temp_acl_file, True)
+        return LocalCopy(obj.name, temp_file.name, True, temp_acl_file, True)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs.__iter__())
@@ -515,7 +572,7 @@ class FileStore(Store):
             full_acl_name = self.base + "/" + acl_name
         else:
             full_acl_name = None
-        return LocalCopy(self.base + "/" + local_name, False,
+        return LocalCopy(obj.name, self.base + "/" + local_name, False,
                          full_acl_name, False)
     def all_objects(self):
         return FileStoreIterator(self.base)
@@ -666,7 +723,7 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             if (temp_file):
                 os.unlink(temp_file.name)
             raise
-        return LocalCopy(temp_file.name, True, None, True)
+        return LocalCopy(obj.name, temp_file.name, True, None, True)
     def all_objects(self):
         it = self.bucket.list_objects()
         return RadosStoreIterator(it, self.key_prefix)
@@ -708,6 +765,32 @@ def delete_unreferenced(src, dst):
         if (sobj == None):
             dst.remove(dobj)
 
+def xuser_cb(opt, opt_str, value, parser):
+    """ handle an --xuser argument """
+    equals = value.find(r'=')
+    if equals == -1:
+        print >>stderr, "Error parsing --xuser: You must give both a source \
+and destination user name, like so:\n\
+--xuser SOURCE_USER=DEST_USER\n\
+\n\
+This will translate the user SOURCE_USER in the source to the user DEST_USER \n\
+in the destination."
+        sys.exit(1)
+    src_user = value[:equals]
+    dst_user = value[equals+1:]
+    if ((len(src_user) == 0) or (len(dst_user) == 0)):
+        print >>stderr, "Error parsing --xuser: can't have a zero-length \
+user name."
+        sys.exit(1)
+    src_user = add_user_type(src_user)
+    dst_user = add_user_type(dst_user)
+    if (xuser.has_key(src_user)):
+        print >>stderr, "Error parsing --xuser: we are already translating \
+\"%s\" to \"%s\"; we cannot translate it to \"%s\"" % \
+(src_user, xuser[src_user], dst_user)
+        sys.exit(1)
+    xuser[src_user] = dst_user
+
 USAGE = """
 obsync synchronizes S3, Rados, and local objects. The source and destination
 can both be local or both remote.
@@ -720,9 +803,10 @@ obsync -v s3://myhost/mybucket file://mydir
 obsync -v file://mydir s3://myhost/mybucket
 
 # synchronize two S3 buckets
-SRC_AKEY=foo SRC_SKEY=foo \
-DST_AKEY=foo DST_SKEY=foo \
-obsync -v s3://myhost/mybucket1 s3://myhost/mybucket2
+SRC_AKEY=... SRC_SKEY=... \
+DST_AKEY=... DST_SKEY=... \
+obsync -v s3://myhost/mybucket1 s3://myhost2/mybucket2
+   --xuser bob=robert --xuser joe=joseph
 
 Note: You must specify an AWS access key and secret access key when accessing
 S3. obsync honors these environment variables:
@@ -758,8 +842,12 @@ parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
+parser.add_option("-x", "--xuser", type="string", nargs=1, action="callback", \
+    dest="SRC=DST", callback=xuser_cb, help="set up a user tranlation. You \
+can specify multiple user translations with multiple --xuser arguments.")
 parser.add_option("--unit", action="store_true", \
     dest="run_unit_tests", help="run unit tests and quit")
+xuser = {}
 (opts, args) = parser.parse_args()
 if (opts.run_unit_tests):
     test_acl_policy()
@@ -776,6 +864,11 @@ elif (len(args) > 2):
     print >>stderr, "Too many positional arguments."
     print >>stderr, USAGE
     sys.exit(1)
+if (opts.more_verbose):
+    print >>stderr, "User translations:"
+    for k,v in xuser.items():
+        print >>stderr, "\"%s\" ==> \"%s\"" % (k, v)
+    print >>stderr, ""
 if (opts.more_verbose):
     opts.verbose = True
     boto.set_stream_logger("stdout")
@@ -834,6 +927,8 @@ for sobj in src.all_objects():
     if (upload):
         local_copy = src.make_local_copy(sobj)
         try:
+            if (opts.preserve_acls):
+                local_copy.translate_users(xuser)
             dst.upload(local_copy, sobj)
         finally:
             local_copy.remove()
