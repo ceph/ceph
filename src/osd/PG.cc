@@ -179,7 +179,7 @@ void PG::trim_write_ahead()
 
 void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
 {
-  dout(10) << "proc_replica_log for osd" << from << ": " << olog << " " << omissing << dendl;
+  dout(10) << "proc_master_log for osd" << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active() && is_primary());
 
   // merge log into our own log to build master log.  no need to
