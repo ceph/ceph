@@ -34,11 +34,19 @@
 
 #define DOUT_SUBSYS osd
 #undef dout_prefix
-#define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
-static ostream& _prefix(const PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+#define dout_prefix _prefix(this)
+static ostream& _prefix(const PG *pg) {
+  return *_dout << pg->gen_prefix();
 }
 
+std::string PG::gen_prefix() const {
+  stringstream out;
+  out << "osd" << osd->whoami 
+      << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) 
+      << " " << *this << " ";
+  return out.str();
+}
+  
 /******* PGLog ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 

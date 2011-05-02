@@ -95,6 +95,8 @@ public:
     char buf[512];
   };
 
+  std::string gen_prefix() const;
+
   /*
    * PG::Info - summary of PG statistics.
    *
