@@ -336,21 +336,24 @@ Cannot handle this URL.")
     def __init__(self, url):
         self.url = url
 
-###### S3 store #######
-class S3StoreLocalCopy(object):
-    def __init__(self, path, acl_path):
+###### LocalCopy ######
+class LocalCopy(object):
+    def __init__(self, path, path_is_temp, acl_path, acl_is_temp):
         self.path = path
+        self.path_is_temp = path_is_temp
         self.acl_path = acl_path
+        self.acl_is_temp = acl_is_temp
     def __del__(self):
         self.remove()
     def remove(self):
-        if (self.path):
+        if (self.path_is_temp and self.path):
             os.unlink(self.path)
-            self.path = None
-        if (self.acl_path):
+        self.path = None
+        if (self.acl_is_temp and self.acl_path):
             os.unlink(self.acl_path)
-            self.acl_path = None
+        self.acl_path = None
 
+###### S3 store #######
 class S3StoreIterator(object):
     """S3Store iterator"""
     def __init__(self, blrs):
@@ -422,7 +425,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             if (temp_acl_file):
                 os.unlink(temp_acl_file)
             raise
-        return S3StoreLocalCopy(temp_file.name, temp_acl_file)
+        return LocalCopy(temp_file.name, True, temp_acl_file, True)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs.__iter__())
@@ -490,13 +493,6 @@ class FileStoreIterator(object):
                 continue
             return Object.from_file(obj_name, path)
 
-class FileStoreLocalCopy(object):
-    def __init__(self, path, acl_path):
-        self.path = path
-        self.acl_path = acl_path
-    def remove(self):
-        self.path = None
-
 class FileStore(Store):
     def __init__(self, url, create):
         # Parse the file url
@@ -519,7 +515,8 @@ class FileStore(Store):
             full_acl_name = self.base + "/" + acl_name
         else:
             full_acl_name = None
-        return FileStoreLocalCopy(self.base + "/" + local_name, full_acl_name)
+        return LocalCopy(self.base + "/" + local_name, False,
+                         full_acl_name, False)
     def all_objects(self):
         return FileStoreIterator(self.base)
     def locate_object(self, obj):
@@ -555,20 +552,6 @@ class FileStore(Store):
             print "FileStore: removed %s" % obj.name
 
 ###### Rados store #######
-class RadosStoreLocalCopy(object):
-    def __init__(self, path, acl_path):
-        self.path = path
-        self.acl_path = acl_path
-    def __del__(self):
-        self.remove()
-    def remove(self):
-        if (self.path):
-            os.unlink(self.path)
-            self.path = None
-        if (self.acl_path):
-            os.unlink(self.acl_path)
-            self.acl_path = None
-
 class RadosStoreIterator(object):
     """RadosStore iterator"""
     def __init__(self, it, rados_store):
@@ -683,7 +666,7 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             if (temp_file):
                 os.unlink(temp_file.name)
             raise
-        return RadosStoreLocalCopy(temp_file.name, None)
+        return LocalCopy(temp_file.name, True, None, True)
     def all_objects(self):
         it = self.bucket.list_objects()
         return RadosStoreIterator(it, self.key_prefix)
