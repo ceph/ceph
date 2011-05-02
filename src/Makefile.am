@@ -245,6 +245,25 @@ librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 
+# librgw
+if WITH_RADOSGW
+librgw_SOURCES = \
+	$(my_radosgw_src) \
+	rgw/librgw.cc
+	${libcommon_a_SOURCES}
+librgw_la_SOURCES = ${librgw_SOURCES}
+librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+librgw_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^librgw_.*' \
+	 -lexpat -lpthread -lm -lcurl
+lib_LTLIBRARIES += librgw.la
+
+librgw_a_SOURCES = ${librgw_SOURCES}
+librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+endif
+
 # librbd
 librbd_SOURCES = \
 	librbd.cc
@@ -286,7 +305,7 @@ testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 
 if WITH_RADOSGW
-libradosgw_a_SOURCES = \
+my_radosgw_src = \
 	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
 	rgw/rgw_acl.cc \
@@ -304,17 +323,16 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_log.cc \
 	rgw/rgw_escape.c
 
-libradosgw_a_CFLAGS = ${AM_CFLAGS}
-libradosgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-#libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-# lib_LTLIBRARIES += libradosgw.a
+my_radosgw_ldadd = \
+	librgw.a librados.a libcrush.a -lfcgi -lcurl -lexpat \
+	-lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
-radosgw_SOURCES = rgw/rgw_main.cc
-radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm -lcurl $(CRYPTO_LIBS) $(EXTRALIBS)
+radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
+radosgw_LDADD = $(my_radosgw_ldadd)
 radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+radosgw_admin_LDADD = $(my_radosgw_ldadd)
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
@@ -444,6 +462,14 @@ unittest_confutils_LDADD = libcommon.a ${UNITTEST_LDADD}
 unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_confutils
 
+if WITH_RADOSGW
+unittest_librgw_SOURCES = test/librgw.cc
+unittest_librgw_LDFLAGS = -pthread -lcurl ${AM_LDFLAGS}
+unittest_librgw_LDADD =  librgw.a ${CRYPTO_LIBS} libcommon.a ${UNITTEST_LDADD} -lexpat -lfcgi
+unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_librgw
+endif
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -492,7 +518,11 @@ endif
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a librados.a librbd.a libradosgw.a
+	libos.a librados.a librbd.a
+
+if WITH_RADOSGW
+noinst_LIBRARIES += librgw.a
+endif
 
 noinst_LIBRARIES +=  #libcephclient_so.a
 
@@ -531,6 +561,12 @@ rados_include_DATA = \
 	$(srcdir)/include/buffer.h \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h
+
+if WITH_RADOSGW
+rgw_includedir = $(includedir)/rados
+rgw_include_DATA = \
+	$(srcdir)/include/rados/librgw.h
+endif
 
 crush_includedir = $(includedir)/crush
 crush_include_DATA = \
@@ -844,6 +880,7 @@ noinst_HEADERS = \
         include/xlist.h\
 	include/rados/librados.h\
 	include/rados/librados.hpp\
+	include/rados/librgw.h\
 	include/rados/page.h\
 	include/rados/crc32c.h\
 	include/rados/buffer.h\

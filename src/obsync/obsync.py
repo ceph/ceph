@@ -343,7 +343,7 @@ def test_acl_policy():
 "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" + \
 "<Owner><ID>foo</ID><DisplayName>MrFoo</DisplayName></Owner><AccessControlList>" + \
 "<Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" " + \
-"xsi:type=\"CanonicalUser\"><ID>*** Owner-Canonical-User-ID ***</ID>" + \
+"xsi:type=\"CanonicalUser\"><ID>bar</ID>" + \
 "<DisplayName>display-name</DisplayName></Grantee>" + \
 "<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
     test1 = AclPolicy.from_xml(test1_xml)
