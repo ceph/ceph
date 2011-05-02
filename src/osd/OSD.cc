@@ -1002,10 +1002,11 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->acting.swap(acting);
   pg->up = pg->acting;
   pg->info.history.epoch_created = 
-    pg->info.history.last_epoch_started =
     pg->info.history.same_up_since =
     pg->info.history.same_acting_since =
     pg->info.history.same_primary_since = osdmap->get_epoch();
+
+  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1;
 
   pg->write_info(t);
   pg->write_log(t);
