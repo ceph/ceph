@@ -518,19 +518,25 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const sobject_t& o)
   int exist, is_lfn;
   int r;
 
-  r = lfn_get(cid, o, short_fn_old, sizeof(short_fn_old), long_fn, sizeof(long_fn), &exist, &is_lfn);
+  r = lfn_get(cid, o, short_fn_new, sizeof(short_fn_new), long_fn, sizeof(long_fn), &exist, &is_lfn);
+  dout(25) << "lfn_link called lfn_get = " << r << dendl;
   if (r < 0)
     return r;
   if (is_lfn && !exist)
     return -ENOENT;
 
-  r = lfn_get(c, o, short_fn_new, sizeof(short_fn_new), long_fn, sizeof(long_fn), &exist, &is_lfn);
+  r = lfn_get(c, o, short_fn_old, sizeof(short_fn_old), long_fn, sizeof(long_fn), &exist, &is_lfn);
+  dout(25) << "lfn_link again called lfn_get = " << r << dendl;
   if (r < 0)
     return r;
   if (is_lfn && exist)
     return -EEXIST;
 
+  dout(25) << "lfn_link short_fn_old: " << short_fn_old << dendl;
+  dout(25) << "lfn_link short_fn_new: " << short_fn_new << dendl;
+
   r = link(short_fn_old, short_fn_new);
+  dout(25) << "lfn_link called link =" << r << dendl;
   if (r < 0)
     return -errno;
 
