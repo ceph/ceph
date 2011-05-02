@@ -196,6 +196,13 @@ void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Mi
 }
     
 void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from) {
+  // This was a side effect in _process_pg_info. At this point I don't
+  // think it's necessary, since we're in the GetMissing state,
+  // but we'll keep it here for now
+  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  info.history.merge(oinfo.history);
+  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
   /*
     basically what we're doing here is rewinding the remote log,
     dropping divergent entries, until we find something that matches
