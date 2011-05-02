@@ -403,7 +403,7 @@ public:
     ::decode(acl, bl);
    }
   void to_xml(ostream& out) {
-    out << "<AccessControlPolicy>";
+    out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
     owner.to_xml(out);
     acl.to_xml(out);
     out << "</AccessControlPolicy>";
