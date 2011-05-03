@@ -155,7 +155,7 @@ public:
     set<int32_t> old_pools;
     map<int32_t,entity_addr_t> new_up_client;
     map<int32_t,entity_addr_t> new_up_internal;
-    map<int32_t,uint8_t> new_down;
+    map<int32_t,uint8_t> new_state;             // XORed onto previous state.
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
     map<int32_t,epoch_t> new_up_thru;
@@ -183,7 +183,7 @@ public:
       ::encode(new_pool_names, bl);
       ::encode(old_pools, bl);
       ::encode(new_up_client, bl);
-      ::encode(new_down, bl);
+      ::encode(new_state, bl);
       ::encode(new_weight, bl);
       ::encode(new_pg_temp, bl);
 
@@ -217,7 +217,7 @@ public:
 	::decode(new_pool_names, p);
       ::decode(old_pools, p);
       ::decode(new_up_client, p);
-      ::decode(new_down, p);
+      ::decode(new_state, p);
       ::decode(new_weight, p);
       ::decode(new_pg_temp, p);
 
@@ -570,13 +570,15 @@ private:
       set_weight(i->first, i->second);
 
     // up/down
-    for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
-         i != inc.new_down.end();
+    for (map<int32_t,uint8_t>::iterator i = inc.new_state.begin();
+         i != inc.new_state.end();
          i++) {
-      assert(osd_state[i->first] & CEPH_OSD_UP);
-      osd_state[i->first] &= ~CEPH_OSD_UP;
-      osd_info[i->first].down_at = epoch;
-      //cout << "epoch " << epoch << " down osd" << i->first << endl;
+      int s = i->second ? i->second : CEPH_OSD_UP;
+      if ((osd_state[i->first] & CEPH_OSD_UP) &&
+	  (s & CEPH_OSD_UP)) {
+	osd_info[i->first].down_at = epoch;
+      }
+      osd_state[i->first] ^= s;
     }
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
          i != inc.new_up_client.end();
