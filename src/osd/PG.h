@@ -902,7 +902,14 @@ public:
     struct Initial :
       boost::statechart::simple_state< Initial, RecoveryMachine > {
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Started >
+	boost::statechart::transition< Initialize, Started >,
+	boost::statechart::transition< MNotifyRec, Crashed >,
+	boost::statechart::transition< MInfoRec, Crashed >,
+	boost::statechart::transition< MLogRec, Crashed >,
+	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< Activate, Crashed >,
+	boost::statechart::transition< AdvMap, Crashed >,
+	boost::statechart::transition< ActMap, Crashed >
 	> reactions;
     };
 
@@ -910,7 +917,13 @@ public:
       boost::statechart::simple_state< Reset, RecoveryMachine > {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::custom_reaction< ActMap >
+	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::transition< MNotifyRec, Crashed >,
+	boost::statechart::transition< MInfoRec, Crashed >,
+	boost::statechart::transition< MLogRec, Crashed >,
+	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< Initialize, Crashed >,
+	boost::statechart::transition< Activate, Crashed >
 	> reactions;
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
@@ -920,7 +933,14 @@ public:
     struct Started :
       boost::statechart::simple_state< Started, RecoveryMachine, Start > {
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< AdvMap >
+	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::transition< ActMap, Crashed >,
+	boost::statechart::transition< MNotifyRec, Crashed >,
+	boost::statechart::transition< MInfoRec, Crashed >,
+	boost::statechart::transition< MLogRec, Crashed >,
+	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< Initialize, Crashed >,
+	boost::statechart::transition< Activate, Crashed >
 	> reactions;
 
       boost::statechart::result react(const AdvMap&);
