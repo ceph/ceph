@@ -1389,18 +1389,36 @@ public:
   bool acting_up_affected(OSDMap &osdmap,
 	       const OSDMap &lastmap);
     
+  // recovery bits
+  void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
+    recovery_state.handle_notify(from, i, rctx);
+  }
+  void handle_info(int from, PG::Info& i, RecoveryCtx *rctx) {
+    recovery_state.handle_info(from, i, rctx);
+  }
+  void handle_log(int from,
+		  MOSDPGLog *msg,
+		  RecoveryCtx *rctx) {
+    recovery_state.handle_log(from, msg, rctx);
+  }
+  void handle_query(int from, const PG::Query& q, RecoveryCtx *rctx) {
+    recovery_state.handle_query(from, q, rctx);
+  }
+  void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+			  RecoveryCtx *rctx) {
+    recovery_state.handle_advance_map(osdmap, lastmap, rctx);
+  }
+  void handle_activate_map(RecoveryCtx *rctx) {
+    recovery_state.handle_activate_map(rctx);
+  }
+  void handle_backlog_generated(RecoveryCtx *rctx) {
+    recovery_state.handle_backlog_generated(rctx);
+  }
+  void handle_create(RecoveryCtx *rctx) {
+    recovery_state.handle_create(rctx);
+  }
+
   // abstract bits
-  virtual void handle_notify(int from, PG::Info& i, RecoveryCtx *ctx) = 0;
-  virtual void handle_info(int from, PG::Info& i, RecoveryCtx *ctx) = 0;
-  virtual void handle_log(int from,
-			  MOSDPGLog *msg,
-			  RecoveryCtx *ctx) = 0;
-  virtual void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx) = 0;
-  virtual void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
-				  RecoveryCtx *ctx) = 0;
-  virtual void handle_activate_map(RecoveryCtx *ctx) = 0;
-  virtual void handle_backlog_generated(RecoveryCtx *ctx) = 0;
-  virtual void handle_create(RecoveryCtx *ctx) = 0;
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
