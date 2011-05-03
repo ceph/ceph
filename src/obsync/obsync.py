@@ -801,7 +801,7 @@ obsync -v file://mydir s3://myhost/mybucket
 SRC_AKEY=... SRC_SKEY=... \
 DST_AKEY=... DST_SKEY=... \
 obsync -v s3://myhost/mybucket1 s3://myhost2/mybucket2
-   --xuser bob=robert --xuser joe=joseph
+   --xuser bob=robert --xuser joe=joseph -O bob
 
 Note: You must specify an AWS access key and secret access key when accessing
 S3. obsync honors these environment variables:
