@@ -849,11 +849,12 @@ xuser = {}
 if (opts.run_unit_tests):
     test_acl_policy()
     sys.exit(0)
-if (not opts.owner):
-    raise Exception("You must specify who will own the objects you create. \
+if (xuser and not opts.owner):
+    raise Exception("If you specify user translations, you must specify \
+who will own the objects you create. \
 Please specify the owner as -O [OWNER].\n\
-It's not enough to have the access key, since a single account can have many \
-users.")
+(It's not enough to have the access key, since a single account can have many \
+users.)")
 
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
