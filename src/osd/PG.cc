@@ -1175,7 +1175,6 @@ void PG::clear_primary_state()
   // clear peering state
   have_master_log = false;
   stray_set.clear();
-  peer_info_requested.clear();
   peer_log_requested.clear();
   peer_backlog_requested.clear();
   peer_missing_requested.clear();
@@ -1825,7 +1824,6 @@ void PG::purge_strays()
 
   // clear _requested maps; we may have to peer() again if we discover
   // (more) stray content
-  peer_info_requested.clear();
   peer_log_requested.clear();
   peer_backlog_requested.clear();
   peer_missing_requested.clear();

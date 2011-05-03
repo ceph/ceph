@@ -1101,7 +1101,6 @@ protected:
   set<int>    stray_set;   // non-acting osds that have PG data.
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
-  set<int>             peer_info_requested;
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_backlog_requested;
