@@ -2279,7 +2279,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // append to log
   int logopcode = Log::Entry::MODIFY;
-  if (!ctx->obs->exists)
+  if (!obs.exists)
     logopcode = Log::Entry::DELETE;
   ctx->log.push_back(Log::Entry(logopcode, soid, ctx->at_version, old_version,
 				ctx->reqid, ctx->mtime));
@@ -4530,7 +4530,8 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
          p != log.log.rend();
          p++) {
-      if (did.count(p->soid)) continue;
+      if (did.count(p->soid))
+	continue;
       did.insert(p->soid);
 
       if (p->is_delete()) {
