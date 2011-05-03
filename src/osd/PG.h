@@ -906,7 +906,7 @@ public:
 	boost::statechart::transition< MNotifyRec, Crashed >,
 	boost::statechart::transition< MInfoRec, Crashed >,
 	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< MQuery, Crashed >,
 	boost::statechart::transition< Activate, Crashed >,
 	boost::statechart::transition< AdvMap, Crashed >,
 	boost::statechart::transition< ActMap, Crashed >
@@ -921,7 +921,7 @@ public:
 	boost::statechart::transition< MNotifyRec, Crashed >,
 	boost::statechart::transition< MInfoRec, Crashed >,
 	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< MQuery, Crashed >,
 	boost::statechart::transition< Initialize, Crashed >,
 	boost::statechart::transition< Activate, Crashed >
 	> reactions;
@@ -938,7 +938,7 @@ public:
 	boost::statechart::transition< MNotifyRec, Crashed >,
 	boost::statechart::transition< MInfoRec, Crashed >,
 	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQueryRec, Crashed >,
+	boost::statechart::transition< MQuery, Crashed >,
 	boost::statechart::transition< Initialize, Crashed >,
 	boost::statechart::transition< Activate, Crashed >
 	> reactions;
