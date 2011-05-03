@@ -3327,14 +3327,9 @@ void PG::fulfill_log(int from, const Query &query)
   }
 }
 
-bool PG::acting_up_affected(OSDMap &osdmap,
-		 const OSDMap &lastmap)
+bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
 {
-  // get new acting set
-  vector<int> tup, tacting;
-  osdmap.pg_to_up_acting_osds(info.pgid, tup, tacting);
-
-  if (acting != tacting || up != tup) {
+  if (acting != newacting || up != newup) {
     return true;
   } else {
     return false;
@@ -3342,22 +3337,21 @@ bool PG::acting_up_affected(OSDMap &osdmap,
 }
 
 /* Called before initializing peering during advance_map */
-void PG::warm_restart()
+void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting)
 {
-  OSDMap &lastmap = *osd->get_map(osd->osdmap->get_epoch() - 1);
-  OSDMap &osdmap = *osd->osdmap;
+  const OSDMap &osdmap = *osd->osdmap;
+
   // -- there was a change! --
   kick();
 
+  vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
-
-  vector<int> oldacting, oldup; //About to get swapped with current (old)
-  osdmap.pg_to_up_acting_osds(info.pgid, oldup, oldacting);
-
-  // update PG
   acting.swap(oldacting);
   up.swap(oldup);
+
+  up = newup;
+  acting = newacting;
 
   int role = osdmap.calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
@@ -3729,8 +3723,9 @@ boost::statechart::result
 PG::RecoveryState::Started::react(const AdvMap& advmap) {
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->acting_up_affected(advmap.osdmap, advmap.lastmap)) {
+  if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, transitioning to Reset" << dendl;
+    post_event(advmap);
     return transit< Reset >();
   }
   return discard_event();
@@ -3741,9 +3736,9 @@ boost::statechart::result
 PG::RecoveryState::Reset::react(const AdvMap& advmap) {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
-  if (pg->acting_up_affected(advmap.osdmap, advmap.lastmap)) {
+  if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
     dout(10) << "up or acting affected, calling warm_restart again" << dendl;
-    pg->warm_restart();
+    pg->warm_restart(advmap.lastmap, advmap.newup, advmap.newacting);
   }
   return discard_event();
 }
@@ -3756,13 +3751,6 @@ PG::RecoveryState::Reset::react(const ActMap&) {
 					     pg->info);
   }
   return transit< Started >();
-}
-
-PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
-  PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "Reseting" << dendl;
-  pg->warm_restart();
-  post_event(Initialize());
 }
 	
 /*-------Start---------*/
@@ -3823,6 +3811,7 @@ PG::RecoveryState::Peering::react(const AdvMap& advmap) {
   dout(10) << "Peering advmap" << dendl;
   if (pg->prior_set_affected(*prior_set.get(), &advmap.osdmap)) {
     dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
+    post_event(advmap);
     return transit< Reset >();
   }
   return forward_event();
@@ -4288,10 +4277,11 @@ void PG::RecoveryState::handle_query(int from, const PG::Query& q,
 }
 
 void PG::RecoveryState::handle_advance_map(OSDMap &osdmap, OSDMap &lastmap,
+					   vector<int>& newup, vector<int>& newacting,
 					   RecoveryCtx *rctx)
 {
   start_handle(rctx);
-  machine.process_event(AdvMap(osdmap, lastmap));
+  machine.process_event(AdvMap(osdmap, lastmap, newup, newacting));
   end_handle();
 }
 

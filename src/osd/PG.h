@@ -839,8 +839,9 @@ public:
     struct AdvMap : boost::statechart::event< AdvMap > {
       OSDMap &osdmap;
       OSDMap &lastmap;
-      AdvMap(OSDMap &osdmap, OSDMap &lastmap):
-	osdmap(osdmap), lastmap(lastmap) {}
+      vector<int> newup, newacting;
+      AdvMap(OSDMap &osdmap, OSDMap &lastmap, vector<int>& newup, vector<int>& newacting):
+	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
     struct BacklogComplete : boost::statechart::event< BacklogComplete > {};
@@ -906,15 +907,11 @@ public:
     };
 
     struct Reset :
-      boost::statechart::state< Reset, RecoveryMachine > {
+      boost::statechart::simple_state< Reset, RecoveryMachine > {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >
 	> reactions;
-
-      /* Entry function for RecoveryMachine.  Should initialize relevant peering
-       * state */
-      Reset(my_context ctx);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
     };
@@ -1089,7 +1086,9 @@ public:
 		    MOSDPGLog *msg,
 		    RecoveryCtx *ctx);
     void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx);
-    void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, RecoveryCtx *ctx);
+    void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+			    vector<int>& newup, vector<int>& newacting, 
+			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
     void handle_backlog_generated(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
@@ -1388,13 +1387,12 @@ public:
   void share_pg_info();
   void share_pg_log(const eversion_t &oldver);
 
-  void warm_restart();
+  void warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting);
 		    
   void fulfill_info(int from, const Query &query, 
 		    pair<int, Info> &notify_info);
   void fulfill_log(int from, const Query &query);
-  bool acting_up_affected(OSDMap &osdmap,
-	       const OSDMap &lastmap);
+  bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
     
   // recovery bits
   void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
@@ -1412,8 +1410,9 @@ public:
     recovery_state.handle_query(from, q, rctx);
   }
   void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx) {
-    recovery_state.handle_advance_map(osdmap, lastmap, rctx);
+    recovery_state.handle_advance_map(osdmap, lastmap, newup, newacting, rctx);
   }
   void handle_activate_map(RecoveryCtx *rctx) {
     recovery_state.handle_activate_map(rctx);

@@ -3207,9 +3207,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg_t pgid = it->first;
     PG *pg = it->second;
 
+    vector<int> newup, newacting;
+    osdmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
+
     pg->lock();
     dout(10) << "Scanning pg " << *pg << dendl;
-    pg->handle_advance_map(*osdmap, *lastmap, 0);
+    pg->handle_advance_map(*osdmap, *lastmap, newup, newacting, 0);
     pg->unlock();
   }
 }
