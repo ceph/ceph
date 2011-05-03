@@ -73,6 +73,28 @@ static uint64_t make_fake_ino(inodeno_t ino, snapid_t snapid)
   return fino;
 }
 
+#define MINORBITS	20
+#define MINORMASK	((1U << MINORBITS) - 1)
+
+#define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
+#define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
+#define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
+static uint32_t new_encode_dev(dev_t dev)
+{
+	unsigned major = MAJOR(dev);
+	unsigned minor = MINOR(dev);
+	return (minor & 0xff) | (major << 8) | ((minor & ~0xff) << 12);
+}
+
+static dev_t new_decode_dev(uint32_t dev)
+{
+	unsigned major = (dev & 0xfff00) >> 8;
+	unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
+	return MKDEV(major, minor);
+}
+
+
 static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -83,6 +105,7 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   r = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
   if (r >= 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -105,6 +128,7 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 
   if (client->ll_getattr(fino_vino(ino), &stbuf, ctx->uid, ctx->gid) == 0) {
     stbuf.st_ino = make_fake_ino(stbuf.st_ino, stbuf.st_dev);
+    stbuf.st_rdev = new_encode_dev(stbuf.st_rdev);
     fuse_reply_attr(req, &stbuf, 0);
   } else
     fuse_reply_err(req, ENOENT);
@@ -207,9 +231,10 @@ static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_mknod(fino_vino(parent), name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
+  int r = client->ll_mknod(fino_vino(parent), name, mode, new_decode_dev(rdev), &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -226,6 +251,7 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   int r = client->ll_mkdir(fino_vino(parent), name, mode, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -255,6 +281,7 @@ static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
   int r = client->ll_symlink(fino_vino(parent), name, existing, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -279,6 +306,7 @@ static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   int r = client->ll_link(fino_vino(ino), fino_vino(newparent), newname, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -359,6 +387,7 @@ static int ceph_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int s
 
   st->st_ino = make_fake_ino(de->d_ino, c->snap);
   st->st_mode = DT_TO_MODE(de->d_type);
+  st->st_rdev = new_encode_dev(st->st_rdev);
 
   size_t room = c->size - c->pos;
   size_t entrysize = fuse_add_direntry(c->req, c->buf + c->pos, room,
@@ -512,7 +541,7 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   newargv[newargc++] = "-o";
   newargv[newargc++] = "default_permissions";
 
-  //newargv[newargc++] = "-d";
+  newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 
