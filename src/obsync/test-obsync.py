@@ -25,7 +25,8 @@ import sys
 
 global opts
 global tdir
-global user
+global user1
+global user2
 
 ###### Helper functions #######
 def getenv(e):
@@ -33,8 +34,6 @@ def getenv(e):
         return os.environ[e]
     else:
         return None
-
-user = getenv("USER")
 
 def obsync(src, dst, misc):
     full = ["./obsync.py"]
@@ -51,13 +50,6 @@ def obsync(src, dst, misc):
         e["DST_SKEY"] = dst.skey
     else:
         full.append(dst)
-    has_owner = False
-    for m in misc:
-        if m == "-O" or m == "--owner":
-            has_owner = True
-    if (has_owner == False):
-        full.append("--owner")
-        full.append(user)
     full.extend(misc)
     if (opts.more_verbose):
         for f in full:
@@ -130,6 +122,9 @@ elif (not os.environ.has_key("URL2")):
                         getenv("SKEY1")))
     if (opts.verbose):
         print "have scratch1_url: will test bucket transfers"
+    user1 = getenv("USER1")
+    if (user1 == None):
+        raise Exception("You must specify a USER1 to use with URL1")
 else:
     opts.buckets.append(ObSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
                         getenv("SKEY1")))
@@ -142,6 +137,15 @@ bucket-to-bucket transfers."
 if (len(opts.buckets) == 0):
     print >>sys.stderr, "invalid usage. -h for help."
     sys.exit(1)
+
+user1 = getenv("USER1")
+user2 = getenv("USER2")
+if (user1 == None):
+    raise Exception("You must specify a USER1. If URL1 exists, we will use \
+USER1 with it.")
+if (user2 == None):
+    raise Exception("You must specify a USER2. If URL2 exists, we will use \
+USER2 with it.")
 
 # set up temporary directory
 tdir = tempfile.mkdtemp()
@@ -182,6 +186,9 @@ subprocess.check_call(["cp", "-r", "%s/dir1" % tdir, "%s/dir1a" % tdir])
 
 # make sure it's still the same
 compare_directories("%s/dir1" % tdir, "%s/dir1a" % tdir)
+
+# Run unit tests
+ret = obsync("", "", ["--unit"])
 
 # we should fail here, because we didn't supply -c
 ret = obsync("file://%s/dir1" % tdir, "file://%s/dir2" % tdir, [])
@@ -236,6 +243,35 @@ failed to delete files from the destination!")
 # test with --no-preserve-acls
 obsync_check("file://%s/dir1" % tdir, "file://%s/dir1b2" % tdir,
             ["--no-preserve-acls", "-c"])
+
+
+# Create synthetic ACL
+obsync_check("file://%s/dir1" % tdir, "file://%s/dira" % tdir, ["-c"])
+synthetic_xml = \
+"<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n\
+<Owner>\n\
+<ID>" + user1 + "</ID>\n\
+<DisplayName></DisplayName>\n\
+</Owner>\n\
+<AccessControlList>\n\
+<Grant>\n\
+  <Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
+xsi:type=\"CanonicalUser\">\n\
+    <ID>" + user1 + "</ID>\n\
+    <DisplayName></DisplayName>\n\
+  </Grantee>\n\
+  <Permission>FULL_CONTROL</Permission>\n\
+</Grant>\n\
+</AccessControlList>\n\
+</AccessControlPolicy>"
+f = open("%s/dira/.a$acl" % tdir, "w")
+try:
+    f.write(synthetic_xml)
+finally:
+    f.close()
+# test ACL transformations
+obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir,
+            ["-d", "-c", "--xuser", user1 + "=" + user2])
 
 if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
@@ -297,6 +333,9 @@ if (len(opts.buckets) >= 1):
                 ["--no-preserve-acls"])
     obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
                 ["--no-preserve-acls", "-c"])
+    # test ACL transformations, again
+    obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
+                ["-d", "-c", "--xuser", user2 + "=" + user1])
 
 if (len(opts.buckets) >= 2):
     if (opts.verbose):

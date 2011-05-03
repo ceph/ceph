@@ -259,13 +259,14 @@ class AclPolicy(object):
             g_user_id = grantee_attribute_to_user_type(user_type) + user_id
             grants.append(AclGrant(g_user_id, display_name, permission))
         return AclPolicy(owner_id, owner_display_name, grants)
-    def to_xml(self):
+    def to_xml(self, omit_owner):
         root = etree.Element("AccessControlPolicy", nsmap={None: NS})
-        owner = etree.SubElement(root, "Owner")
-        id_elem = etree.SubElement(owner, "ID")
-        id_elem.text = self.owner_id
-        display_name_elem = etree.SubElement(owner, "DisplayName")
-        display_name_elem.text = self.owner_display_name
+        if (not omit_owner):
+            owner = etree.SubElement(root, "Owner")
+            id_elem = etree.SubElement(owner, "ID")
+            id_elem.text = self.owner_id
+            display_name_elem = etree.SubElement(owner, "DisplayName")
+            display_name_elem.text = self.owner_display_name
         access_control_list = etree.SubElement(root, "AccessControlList")
         for g in self.grants:
             grant_elem = etree.SubElement(access_control_list, "Grant")
@@ -280,8 +281,13 @@ class AclPolicy(object):
             permission_elem.text = g.permission
         return etree.tostring(root, encoding="UTF-8")
     def translate_users(self, xusers):
-        self.owner_id = opts.owner
-        self.owner_display_name = ""
+        # Translate the owner for consistency, although most of the time we
+        # don't write out the owner to the ACL.
+        # Owner ids are always expressed in terms of canonical user id
+        if (xusers.has_key(ACL_TYPE_CANON_USER + self.owner_id)):
+            self.owner_id = \
+                strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
+            self.owner_display_name = ""
         for g in self.grants:
             g.translate_users(xusers)
 
@@ -308,7 +314,7 @@ def test_acl_policy():
 "<DisplayName>display-name</DisplayName></Grantee>" + \
 "<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
     test1 = AclPolicy.from_xml(test1_xml)
-    compare_xml(test1_xml, test1.to_xml())
+    compare_xml(test1_xml, test1.to_xml(False))
 
 ###### Object #######
 class Object(object):
@@ -393,7 +399,7 @@ class LocalCopy(object):
                 self.obj_name
             raise
         policy.translate_users(xusers)
-        acl_xml2 = policy.to_xml()
+        acl_xml2 = policy.to_xml(True)
         new_acl_temp = tempfile.NamedTemporaryFile(mode='w+b', delete=False).name
         f = open(new_acl_temp, 'w')
         try:
@@ -801,7 +807,7 @@ obsync -v file://mydir s3://myhost/mybucket
 SRC_AKEY=... SRC_SKEY=... \
 DST_AKEY=... DST_SKEY=... \
 obsync -v s3://myhost/mybucket1 s3://myhost2/mybucket2
-   --xuser bob=robert --xuser joe=joseph
+   --xuser bob=robert --xuser joe=joseph -O bob
 
 Note: You must specify an AWS access key and secret access key when accessing
 S3. obsync honors these environment variables:
@@ -840,8 +846,6 @@ parser.add_option("-V", "--more-verbose", action="store_true", \
 parser.add_option("-x", "--xuser", type="string", nargs=1, action="callback", \
     dest="SRC=DST", callback=xuser_cb, help="set up a user tranlation. You \
 can specify multiple user translations with multiple --xuser arguments.")
-parser.add_option("-O", "--owner", dest="owner", help="set who will \
-own the objects you create.")
 parser.add_option("--unit", action="store_true", \
     dest="run_unit_tests", help="run unit tests and quit")
 xuser = {}
@@ -849,12 +853,6 @@ xuser = {}
 if (opts.run_unit_tests):
     test_acl_policy()
     sys.exit(0)
-if (xuser and not opts.owner):
-    raise Exception("If you specify user translations, you must specify \
-who will own the objects you create. \
-Please specify the owner as -O [OWNER].\n\
-(It's not enough to have the access key, since a single account can have many \
-users.)")
 
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
