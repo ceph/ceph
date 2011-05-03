@@ -1428,43 +1428,70 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "down" && m->cmd.size() == 3) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (!osdmap.exists(osd)) {
-	ss << "osd" << osd << " does not exist";
-      } else if (osdmap.is_down(osd)) {
-	ss << "osd" << osd << " is already down";
-      } else {
-	pending_inc.new_state[osd] = CEPH_OSD_UP;
-	ss << "marked down osd" << osd;
+    else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
+      bool any = false;
+      for (unsigned j = 2; j < m->cmd.size(); j++) {
+	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!osdmap.exists(osd)) {
+	  ss << "osd" << osd << " does not exist";
+	} else if (osdmap.is_down(osd)) {
+	  ss << "osd" << osd << " is already down";
+	} else {
+	  pending_inc.new_state[osd] = CEPH_OSD_UP;
+	  if (any)
+	    ss << ", osd" << osd;
+	  else 
+	    ss << "marked down osd" << osd;
+	  any = true;
+	}
+      }
+      if (any) {
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       }
     }
     else if (m->cmd[1] == "out" && m->cmd.size() == 3) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (!osdmap.exists(osd)) {
-	ss << "osd" << osd << " does not exist";
-      } else if (osdmap.is_out(osd)) {
-	ss << "osd" << osd << " is already out";
-      } else {
-	pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-	ss << "marked out osd" << osd;
+      bool any = false;
+      for (unsigned j = 2; j < m->cmd.size(); j++) {
+	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!osdmap.exists(osd)) {
+	  ss << "osd" << osd << " does not exist";
+	} else if (osdmap.is_out(osd)) {
+	  ss << "osd" << osd << " is already out";
+	} else {
+	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+	  if (any)
+	    ss << ", osd" << osd;
+	  else
+	    ss << "marked out osd" << osd;
+	  any = true;
+	}
+      }
+      if (any) {
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       } 
     }
     else if (m->cmd[1] == "in" && m->cmd.size() == 3) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_in(osd)) {
-	ss << "osd" << osd << " is already in";
-      } else if (!osdmap.exists(osd)) {
-	ss << "osd" << osd << " does not exist";
-      } else {
-	pending_inc.new_weight[osd] = CEPH_OSD_IN;
-	ss << "marked in osd" << osd;
+      bool any = false;
+      for (unsigned j = 2; j < m->cmd.size(); j++) {
+	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	if (osdmap.is_in(osd)) {
+	  ss << "osd" << osd << " is already in";
+	} else if (!osdmap.exists(osd)) {
+	  ss << "osd" << osd << " does not exist";
+	} else {
+	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
+	  if (any)
+	    ss << ", osd" << osd;
+	  else
+	    ss << "marked in osd" << osd;
+	  any = true;
+	}
+      }
+      if (any) {
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
