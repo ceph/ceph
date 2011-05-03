@@ -54,7 +54,6 @@ def obsync(src, dst, misc):
     if (opts.more_verbose):
         for f in full:
             print f,
-            print " ",
         print
     return subprocess.call(full, stderr=opts.error_out, env=e)
 
@@ -67,10 +66,22 @@ def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
         shutil.rmtree(tdir)
 
-def compare_directories(dir_a, dir_b):
+def compare_directories(dir_a, dir_b, ignore_acl = True, expect_same = True):
     if (opts.verbose):
         print "comparing directories %s and %s" % (dir_a, dir_b)
-    subprocess.check_call(["diff", "-x", "*$acl", "-r", dir_a, dir_b])
+    full = ["diff", "-q"]
+    if (ignore_acl):
+        full.extend(["-x", "*$acl"])
+    full.extend(["-r", dir_a, dir_b])
+    ret = subprocess.call(full)
+    if ((ret == 0) and (not expect_same)):
+        print "expected the directories %s and %s to differ, but \
+they were the same!" % (dir_a, dir_b)
+        sys.exit(1)
+    if ((ret != 0) and expect_same):
+        print "expected the directories %s and %s to be the same, but \
+they were different!" % (dir_a, dir_b)
+        sys.exit(1)
 
 def count_obj_in_dir(d):
     """counts the number of objects in a directory (WITHOUT recursing)"""
@@ -272,6 +283,15 @@ finally:
 # test ACL transformations
 obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir,
             ["-d", "-c", "--xuser", user1 + "=" + user2])
+# The transformation should result in different directories
+compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
+    ignore_acl=False, expect_same=False)
+# Test ACL syncing. It should sync the ACLs even when the object data is
+# the same!
+obsync_check("file://%s/dirb" % tdir, "file://%s/dira" % tdir, ["-d"])
+obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir, ["-d"])
+compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
+    ignore_acl=False, expect_same=True)
 
 if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
