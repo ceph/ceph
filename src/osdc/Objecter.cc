@@ -212,13 +212,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
 	  osdmap->apply_incremental(inc);
-	  
-	  // notify messenger
-	  for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
-	       i != inc.new_down.end();
-	       i++) 
-	    messenger->mark_down(osdmap->get_addr(i->first));
-	  
 	}
 	else if (m->maps.count(e)) {
 	  dout(3) << "handle_osd_map decoding full epoch " << e << dendl;
