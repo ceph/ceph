@@ -1530,6 +1530,29 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "rm" && m->cmd.size() >= 3) {
+      bool any = false;
+      for (unsigned j = 2; j < m->cmd.size(); j++) {
+	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!osdmap.exists(osd)) {
+	  ss << "osd" << osd << " does not exist";
+	} else if (osdmap.is_up(osd)) {
+	  ss << "osd" << osd << " is still up";
+	} else {
+	  pending_inc.new_state[osd] = CEPH_OSD_EXISTS;
+	  if (any)
+	    ss << ", osd" << osd;
+	  else 
+	    ss << "marked dne osd" << osd;
+	  any = true;
+	}
+      }
+      if (any) {
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      }
+    }
     else if (m->cmd[1] == "blacklist" && m->cmd.size() >= 4) {
       entity_addr_t addr;
       if (!addr.parse(m->cmd[3].c_str(), 0))
