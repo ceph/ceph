@@ -1821,7 +1821,6 @@ void PG::purge_strays()
     peer_info.erase(*p);
   }
 
-  state_set(PG_STATE_CLEAN);
   stray_set.clear();
 
   // clear _requested maps; we may have to peer() again if we discover
