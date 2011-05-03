@@ -3716,7 +3716,8 @@ std::ostream& operator<<(std::ostream& oss,
 
 /*------------ Recovery State Machine----------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << context< RecoveryMachine >().pg->gen_prefix() << "StateMachine: ")
+#define dout_prefix (*_dout << context< RecoveryMachine >().pg->gen_prefix() \
+		     << "state<" << get_state_name() << ">: ")
 
 /*------Started-------*/
 boost::statechart::result 
