@@ -25,6 +25,7 @@ import sys
 
 global opts
 global tdir
+global user
 
 ###### Helper functions #######
 def getenv(e):
@@ -32,6 +33,8 @@ def getenv(e):
         return os.environ[e]
     else:
         return None
+
+user = getenv("USER")
 
 def obsync(src, dst, misc):
     full = ["./obsync.py"]
@@ -48,6 +51,13 @@ def obsync(src, dst, misc):
         e["DST_SKEY"] = dst.skey
     else:
         full.append(dst)
+    has_owner = False
+    for m in misc:
+        if m == "-O" or m == "--owner":
+            has_owner = True
+    if (has_owner == False):
+        full.append("--owner")
+        full.append(user)
     full.extend(misc)
     if (opts.more_verbose):
         for f in full:
@@ -174,8 +184,7 @@ subprocess.check_call(["cp", "-r", "%s/dir1" % tdir, "%s/dir1a" % tdir])
 compare_directories("%s/dir1" % tdir, "%s/dir1a" % tdir)
 
 # we should fail here, because we didn't supply -c
-ret = subprocess.call(["./obsync.py", "file://%s/dir1" % tdir,
-                "file://%s/dir2" % tdir], stderr=opts.error_out)
+ret = obsync("file://%s/dir1" % tdir, "file://%s/dir2" % tdir, [])
 if (ret == 0):
     raise RuntimeError("expected this call to obsync to fail, because \
 we didn't supply -c. But it succeeded.")
@@ -183,14 +192,13 @@ if (opts.verbose):
     print "first call failed as expected."
 
 # now supply -c and it should work
-ret = subprocess.check_call(["./obsync.py", "-c", "file://%s/dir1" % tdir,
-                "file://%s/dir2" % tdir], stderr=opts.error_out)
+obsync_check("file://%s/dir1" % tdir, "file://%s/dir2" % tdir, ["-c"])
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 
 # test the alternate syntax where we leave off the file://, and it is assumed
 # because the url begins with / or ./
-ret = subprocess.check_call(["./obsync.py", "-c", "file://%s/dir1" % tdir,
-                "/%s/dir2" % tdir], stderr=opts.error_out)
+obsync_check("file://%s/dir1" % tdir, "/%s/dir2" % tdir, ["-c"])
+
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 
 if (opts.verbose):

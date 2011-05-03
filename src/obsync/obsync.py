@@ -216,7 +216,7 @@ def user_type_to_attr(t):
         raise Exception("unknown user type %s" % t)
 
 def add_user_type(user):
-    """ All users that are not specifically marked as something else 
+    """ All users that are not specifically marked as something else
 are treated as canonical users"""
     for atype in ALL_ACL_TYPES:
         if (user[:len(atype)] == atype):
@@ -280,13 +280,8 @@ class AclPolicy(object):
             permission_elem.text = g.permission
         return etree.tostring(root, encoding="UTF-8")
     def translate_users(self, xusers):
-        # owner ids are always expressed in terms of canonical user id
-        if (xusers.has_key(ACL_TYPE_CANON_USER + self.owner_id)):
-            self.owner_id = \
-                strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
-            # It's not clear what the new pretty-name should be, so just leave it blank.
-            # It's not necessary when doing PUT/POST anyway.
-            self.owner_display_name = ""
+        self.owner_id = opts.owner
+        self.owner_display_name = ""
         for g in self.grants:
             g.translate_users(xusers)
 
@@ -845,6 +840,8 @@ parser.add_option("-V", "--more-verbose", action="store_true", \
 parser.add_option("-x", "--xuser", type="string", nargs=1, action="callback", \
     dest="SRC=DST", callback=xuser_cb, help="set up a user tranlation. You \
 can specify multiple user translations with multiple --xuser arguments.")
+parser.add_option("-O", "--owner", dest="owner", help="set who will \
+own the objects you create.")
 parser.add_option("--unit", action="store_true", \
     dest="run_unit_tests", help="run unit tests and quit")
 xuser = {}
@@ -852,6 +849,12 @@ xuser = {}
 if (opts.run_unit_tests):
     test_acl_policy()
     sys.exit(0)
+if (not opts.owner):
+    raise Exception("You must specify who will own the objects you create. \
+Please specify the owner as -O [OWNER].\n\
+It's not enough to have the access key, since a single account can have many \
+users.")
+
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
     raise Exception("You can't run with both --create-dest and --dry-run! \
