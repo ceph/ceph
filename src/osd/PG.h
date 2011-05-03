@@ -46,7 +46,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
+//#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 
 
 class OSD;
