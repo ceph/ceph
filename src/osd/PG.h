@@ -240,11 +240,13 @@ public:
    *   only if type=BACKLOG do we generate a backlog and provide that too.
    */
   struct Query {
-    const static int INFO = 0;
-    const static int LOG = 1;
-    const static int BACKLOG = 3;
-    const static int MISSING = 4;
-    const static int FULLLOG = 5;
+    enum {
+      INFO = 0,
+      LOG = 1,
+      BACKLOG = 3,
+      MISSING = 4,
+      FULLLOG = 5,
+    };
 
     __s32 type;
     eversion_t since;
@@ -283,12 +285,14 @@ public:
     /** Entry
      */
     struct Entry {
-      const static int LOST = 0;        // lost new version, now deleted
-      const static int MODIFY = 1;
-      const static int CLONE = 2;  
-      const static int DELETE = 3;
-      const static int BACKLOG = 4;  // event invented by generate_backlog
-      const static int LOST_REVERT = 5; // lost new version, reverted to old
+      enum {
+	LOST = 0,        // lost new version, now deleted
+	MODIFY = 1,
+	CLONE = 2,
+	DELETE = 3,
+	BACKLOG = 4,  // event invented by generate_backlog
+	LOST_REVERT = 5, // lost new version, reverted to old
+      };
 
       __s32      op;
       sobject_t  soid;
