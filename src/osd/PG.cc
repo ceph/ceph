@@ -4121,9 +4121,9 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
       dout(10) << "Sending request to osd" << newest_update_osd
 	       << "for the master log" << dendl;
       context<RecoveryMachine>().send_query(newest_update_osd,
-	Query(wait_on_backlog ? Query::BACKLOG : Query::LOG,
-	      oldest_update,
-	      pg->info.history));
+					    wait_on_backlog ? 
+					    Query(Query::BACKLOG, pg->info.history) :
+					    Query(Query::LOG, oldest_update, pg->info.history));
     }
 
     if (pg->log.backlog) {
