@@ -27,6 +27,13 @@
 #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
 
+#include <boost/statechart/custom_reaction.hpp>
+#include <boost/statechart/event.hpp>
+#include <boost/statechart/simple_state.hpp>
+#include <boost/statechart/state.hpp>
+#include <boost/statechart/state_machine.hpp>
+#include <boost/statechart/transition.hpp>
+
 #include "common/DecayCounter.h"
 
 #include <list>
@@ -47,6 +54,7 @@ class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
 class MOSDPGInfo;
+class MOSDPGLog;
 
 
 struct PGPool {
@@ -766,7 +774,320 @@ public:
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PgPriorSet &prior);
 
-  std::auto_ptr < PgPriorSet > prior_set;
+public:    
+  struct RecoveryCtx {
+    map< int, map<pg_t, Query> > *query_map;
+    map< int, MOSDPGInfo* > *info_map;
+    map< int, vector<Info> > *notify_list;
+    list< Context* > *context_list;
+    ObjectStore::Transaction *transaction;
+    RecoveryCtx() : query_map(0), info_map(0), notify_list(0),
+		    context_list(0), transaction(0) {}
+    RecoveryCtx(map< int, map<pg_t, Query> > *query_map,
+		map< int, MOSDPGInfo* > *info_map,
+		map< int, vector<Info> > *notify_list,
+		list< Context* > *context_list,
+		ObjectStore::Transaction *transaction)
+      : query_map(query_map), info_map(info_map), 
+	notify_list(notify_list),
+	context_list(context_list), transaction(transaction) {}
+  };
+
+  /* Encapsulates PG recovery process */
+  class RecoveryState {
+    void start_handle(RecoveryCtx *new_ctx) {
+      assert(!rctx);
+      rctx = new_ctx;
+    }
+
+    void end_handle() {
+      rctx = 0;
+    }
+
+    struct MInfoRec : boost::statechart::event< MInfoRec > {
+      int from;
+      Info &info;
+      MInfoRec(int from, Info &info) :
+	from(from), info(info) {}
+    };
+
+    struct MLogRec : boost::statechart::event< MLogRec > {
+      int from;
+      MOSDPGLog *msg;
+      MLogRec(int from, MOSDPGLog *msg) :
+	from(from), msg(msg) {}
+    };
+
+    struct MNotifyRec : boost::statechart::event< MNotifyRec > {
+      int from;
+      Info &info;
+      MNotifyRec(int from, Info &info) :
+	from(from), info(info) {}
+    };
+
+    struct MQuery : boost::statechart::event< MQuery > {
+      int from;
+      const Query &query;
+      MQuery(int from, const Query &query):
+	from(from), query(query) {}
+    };
+
+    struct AdvMap : boost::statechart::event< AdvMap > {
+      OSDMap &osdmap;
+      OSDMap &lastmap;
+      AdvMap(OSDMap &osdmap, OSDMap &lastmap):
+	osdmap(osdmap), lastmap(lastmap) {}
+    };
+
+    struct BacklogComplete : boost::statechart::event< BacklogComplete > {};
+    struct ActMap : boost::statechart::event< ActMap > {};
+    struct Activate : boost::statechart::event< Activate > {};
+    struct Initialize : boost::statechart::event< Initialize > {};
+
+
+    /* States */
+    struct Initial;
+    class RecoveryMachine : public boost::statechart::state_machine< RecoveryMachine, Initial > {
+      RecoveryState *state;
+    public:
+      PG *pg;
+
+      RecoveryMachine(RecoveryState *state, PG *pg) : state(state), pg(pg) {}
+
+      /* Accessor functions for state methods */
+      ObjectStore::Transaction* get_cur_transaction() {
+	assert(state->rctx->transaction);
+	return state->rctx->transaction;
+      }
+
+      void send_query(int to, const Query &query) {
+	assert(state->rctx->query_map);
+	(*state->rctx->query_map)[to][pg->info.pgid] = query;
+      }
+
+      map<int, map<pg_t, Query> > *get_query_map() {
+	assert(state->rctx->query_map);
+	return state->rctx->query_map;
+      }
+
+      map<int, MOSDPGInfo*> *get_info_map() {
+	assert(state->rctx->info_map);
+	return state->rctx->info_map;
+      }
+
+      list< Context* > *get_context_list() {
+	assert(state->rctx->context_list);
+	return state->rctx->context_list;
+      }
+
+      void send_notify(int to, const Info &info) {
+	assert(state->rctx->notify_list);
+	(*state->rctx->notify_list)[to].push_back(info);
+      }
+    };
+    friend class RecoveryMachine;
+
+    /* States */
+    struct Crashed :
+      boost::statechart::state< Crashed, RecoveryMachine > {
+      Crashed(my_context ctx) : my_base(ctx) { assert(0); }
+    };
+
+    struct Started;
+    struct Initial :
+      boost::statechart::simple_state< Initial, RecoveryMachine > {
+      typedef boost::mpl::list <
+	boost::statechart::transition< Initialize, Started >
+	> reactions;
+    };
+
+    struct Reset :
+      boost::statechart::state< Reset, RecoveryMachine > {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::custom_reaction< ActMap >
+	> reactions;
+
+      /* Entry function for RecoveryMachine.  Should initialize relevant peering
+       * state */
+      Reset(my_context ctx);
+      boost::statechart::result react(const AdvMap&);
+      boost::statechart::result react(const ActMap&);
+    };
+
+    struct Start;
+    struct Started :
+      boost::statechart::simple_state< Started, RecoveryMachine, Start > {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< AdvMap >
+	> reactions;
+
+      boost::statechart::result react(const AdvMap&);
+    };
+
+    struct MakePrimary : boost::statechart::event< MakePrimary > {};
+    struct MakeStray : boost::statechart::event< MakeStray > {};
+    struct Primary;
+    struct Stray;
+    struct Start :
+      boost::statechart::state< Start, Started > {
+      typedef boost::mpl::list <
+	boost::statechart::transition< MakePrimary, Primary >,
+	boost::statechart::transition< MakeStray, Stray >
+	> reactions;
+      Start(my_context ctx);
+    };
+
+    struct Peering;
+    struct Pending;
+    struct NeedNewMap : boost::statechart::event< NeedNewMap > {};
+    struct Primary :
+      boost::statechart::simple_state< Primary, Started, Peering > {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::custom_reaction< BacklogComplete >,
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::transition< NeedNewMap, Pending >
+	> reactions;
+	boost::statechart::result react(const BacklogComplete&);
+	boost::statechart::result react(const ActMap&);
+	boost::statechart::result react(const MNotifyRec&);
+    };
+
+    struct Pending :
+      boost::statechart::simple_state< Pending, Primary> {};
+    
+
+    struct GetInfo;
+    struct Active;
+    struct Peering : 
+      boost::statechart::state< Peering, Primary, GetInfo > {
+      typedef boost::mpl::list <
+	boost::statechart::transition< Activate, Active >,
+	boost::statechart::custom_reaction< AdvMap >
+	> reactions;
+      std::auto_ptr< PgPriorSet > prior_set;
+
+      Peering(my_context ctx);
+      boost::statechart::result react(const AdvMap &advmap);
+      void exit();
+    };
+
+    struct Active : 
+      boost::statechart::state< Active, Primary > {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::custom_reaction< MInfoRec >,
+	boost::statechart::custom_reaction< MNotifyRec >
+	> reactions;
+
+      Active(my_context ctx);
+      boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const AdvMap&);
+      boost::statechart::result react(const MInfoRec& infoevt);
+      boost::statechart::result react(const MNotifyRec& notevt);
+    };
+
+    struct ReplicaActive : boost::statechart::state< ReplicaActive, Started > {
+      typedef boost::mpl::list <
+	boost::statechart::transition< MQuery, Crashed >,
+	boost::statechart::custom_reaction< MInfoRec >
+	> reactions;
+
+      ReplicaActive(my_context ctx);
+      boost::statechart::result react(const MInfoRec& infoevt);
+    };
+
+    struct Stray : boost::statechart::state< Stray, Started > {
+      bool backlog_requested;
+      map<int, Query> pending_queries;
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MQuery >,
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< MInfoRec >,
+	boost::statechart::custom_reaction< BacklogComplete >,
+	boost::statechart::transition< Activate, ReplicaActive >
+	> reactions;
+
+      Stray(my_context ctx);
+
+      boost::statechart::result react(const MQuery& query);
+      boost::statechart::result react(const BacklogComplete&);
+      boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const MInfoRec& infoevt);
+    };
+
+    struct GetLog;
+    struct GotInfo : boost::statechart::event< GotInfo > {};
+    struct GetInfo :
+      boost::statechart::state< GetInfo, Peering > {
+      set<int> peer_info_requested;
+      typedef boost::mpl::list <
+	boost::statechart::transition< GotInfo, GetLog >,
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::transition< MLogRec, Crashed >,
+	boost::statechart::transition< BacklogComplete, Crashed >
+	> reactions;
+
+      GetInfo(my_context ctx);
+      boost::statechart::result react(const MNotifyRec& infoevt);
+    };
+
+    struct GetMissing;
+    struct GotLog : boost::statechart::event< GotLog > {};
+    struct GetLog :
+      boost::statechart::state< GetLog, Peering > {
+      int newest_update_osd;
+      bool need_backlog;
+      bool wait_on_backlog;
+      MOSDPGLog *msg;
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< BacklogComplete >,
+	boost::statechart::transition< GotLog, GetMissing >
+	> reactions;
+
+      GetLog(my_context ctx);
+      boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const BacklogComplete&);
+      void exit();
+      ~GetLog();
+    };
+
+    struct GetMissing :
+      boost::statechart::state< GetMissing, Peering > {
+      set<int> peer_missing_requested;
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MLogRec >
+	> reactions;
+
+      GetMissing(my_context ctx);
+      boost::statechart::result react(const MLogRec& logevt);
+    };
+
+    RecoveryMachine machine;
+    PG *pg;
+    RecoveryCtx *rctx;
+
+  public:
+    RecoveryState(PG *pg) : machine(this, pg), pg(pg), rctx(0) {
+      machine.initiate();
+    }
+
+    void handle_notify(int from, Info& i, RecoveryCtx *ctx);
+    void handle_info(int from, Info& i, RecoveryCtx *ctx);
+    void handle_log(int from,
+		    MOSDPGLog *msg,
+		    RecoveryCtx *ctx);
+    void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx);
+    void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, RecoveryCtx *ctx);
+    void handle_activate_map(RecoveryCtx *ctx);
+    void handle_backlog_generated(RecoveryCtx *ctx);
+    void handle_create(RecoveryCtx *ctx);
+  } recovery_state;
+
+protected:
 
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
@@ -828,9 +1149,9 @@ public:
 
   void generate_past_intervals();
   void trim_past_intervals();
-  void build_prior();
+  void build_prior(std::auto_ptr<PgPriorSet> &prior_set);
   void clear_prior();
-  bool prior_set_affected(const OSDMap *map) const;
+  bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,
@@ -856,6 +1177,9 @@ public:
 
   void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
 			Missing& omissing, int from);
+  void proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
+		       Missing& omissing, int from);
+  void proc_replica_info(int from, Info &info);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
   void search_for_missing(const Info &oinfo, const Missing *omissing,
@@ -891,6 +1215,8 @@ public:
 		map<int, MOSDPGInfo*> *activator_map=0);
   void _activate_committed(epoch_t e);
   void all_activated_and_committed();
+
+  void process_primary_info(ObjectStore::Transaction &t, const Info &info);
 
   bool have_unfound() const { 
     return missing.num_missing() > missing_loc.size();
@@ -977,6 +1303,7 @@ public:
     role(0),
     state(0),
     have_master_log(true),
+    recovery_state(this),
     need_up_thru(false),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
@@ -1056,11 +1383,24 @@ public:
 
   void warm_restart();
 		    
+  void fulfill_info(int from, const Query &query, 
+		    pair<int, Info> &notify_info);
+  void fulfill_log(int from, const Query &query);
   bool acting_up_affected(OSDMap &osdmap,
 	       const OSDMap &lastmap);
+    
   // abstract bits
-  virtual bool handle_advance_map(OSDMap &osdmap,
-				  const OSDMap &lastmap);
+  virtual void handle_notify(int from, PG::Info& i, RecoveryCtx *ctx) = 0;
+  virtual void handle_info(int from, PG::Info& i, RecoveryCtx *ctx) = 0;
+  virtual void handle_log(int from,
+			  MOSDPGLog *msg,
+			  RecoveryCtx *ctx) = 0;
+  virtual void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx) = 0;
+  virtual void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+				  RecoveryCtx *ctx) = 0;
+  virtual void handle_activate_map(RecoveryCtx *ctx) = 0;
+  virtual void handle_backlog_generated(RecoveryCtx *ctx) = 0;
+  virtual void handle_create(RecoveryCtx *ctx) = 0;
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;

@@ -661,15 +661,6 @@ protected:
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
 
-  // helper for handle_pg_log and handle_pg_info
-  void _process_pg_info(epoch_t epoch, int from,
-			PG::Info &info, 
-			PG::Log &log, 
-			PG::Missing *missing,
-			map< int, map<pg_t,PG::Query> >& query_map,
-			map<int, MOSDPGInfo*>* info_map,
-			int& created);
-
   // backlogs
   xlist<PG*> backlog_queue;
 

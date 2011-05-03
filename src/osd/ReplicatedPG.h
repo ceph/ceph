@@ -662,6 +662,35 @@ public:
   { }
   ~ReplicatedPG() {}
 
+
+  void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
+    recovery_state.handle_notify(from, i, rctx);
+  }
+  void handle_info(int from, PG::Info& i, RecoveryCtx *rctx) {
+    recovery_state.handle_info(from, i, rctx);
+  }
+  void handle_log(int from,
+		  MOSDPGLog *msg,
+		  RecoveryCtx *rctx) {
+    recovery_state.handle_log(from, msg, rctx);
+  }
+  void handle_query(int from, const PG::Query& q, RecoveryCtx *rctx) {
+    recovery_state.handle_query(from, q, rctx);
+  }
+  void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+			  RecoveryCtx *rctx) {
+    recovery_state.handle_advance_map(osdmap, lastmap, rctx);
+  }
+  void handle_activate_map(RecoveryCtx *rctx) {
+    recovery_state.handle_activate_map(rctx);
+  }
+  void handle_backlog_generated(RecoveryCtx *rctx) {
+    recovery_state.handle_backlog_generated(rctx);
+  }
+  void handle_create(RecoveryCtx *rctx) {
+    recovery_state.handle_create(rctx);
+  }
+
   void do_op(MOSDOp *op);
   void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
