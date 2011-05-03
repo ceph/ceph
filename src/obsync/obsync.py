@@ -235,12 +235,19 @@ class AclGrant(object):
             self.user_id = xusers[self.user_id]
             # It's not clear what the new pretty-name should be, so just leave it blank.
             self.display_name = ""
+    def equals(self, rhs):
+        if (self.user_id != rhs.user_id):
+            return False
+        if (self.permission != rhs.permission):
+            return False
+        # ignore display_name
+        return True
 
 class AclPolicy(object):
     def __init__(self, owner_id, owner_display_name, grants):
         self.owner_id = owner_id
         self.owner_display_name = owner_display_name
-        self.grants = grants  # list of ACLGrant
+        self.grants = grants  # dict of { string -> ACLGrant }
     @staticmethod
     def from_xml(s):
         root = etree.parse(StringIO(s))
@@ -257,15 +264,15 @@ class AclPolicy(object):
             owner_display_name = None
         grantlist = root.findall("{%s}AccessControlList/{%s}Grant" \
             % (NS,NS))
-        grants = [ ]
+        grants = { }
         for g in grantlist:
             grantee = g.find("{%s}Grantee" % NS)
             user_id = grantee.find("{%s}ID" % NS).text
             user_type = grantee.attrib["{%s}type" % NS2]
             display_name = grantee.find("{%s}DisplayName" % NS).text
             permission = g.find("{%s}Permission" % NS).text
-            g_user_id = grantee_attribute_to_user_type(user_type) + user_id
-            grants.append(AclGrant(g_user_id, display_name, permission))
+            grant_user_id = grantee_attribute_to_user_type(user_type) + user_id
+            grants[grant_user_id] = AclGrant(grant_user_id, display_name, permission)
         return AclPolicy(owner_id, owner_display_name, grants)
     def to_xml(self, omit_owner):
         root = etree.Element("AccessControlPolicy", nsmap={None: NS})
@@ -277,7 +284,7 @@ class AclPolicy(object):
                 display_name_elem = etree.SubElement(owner, "DisplayName")
                 display_name_elem.text = self.owner_display_name
         access_control_list = etree.SubElement(root, "AccessControlList")
-        for g in self.grants:
+        for k,g in self.grants.items():
             grant_elem = etree.SubElement(access_control_list, "Grant")
             grantee_elem = etree.SubElement(grant_elem, "{%s}Grantee" % NS,
                 nsmap={None: NS, "xsi" : NS2})
@@ -298,9 +305,23 @@ class AclPolicy(object):
                 self.owner_id = \
                     strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
                 self.owner_display_name = ""
-        for g in self.grants:
+        for k,g in self.grants.items():
             g.translate_users(xusers)
-
+    def equals(self, rhs):
+        if (self.owner_id != None) and (rhs.owner_id != None):
+            if (self.owner_id != rhs.owner_id):
+                return False
+        for k,g in self.grants.items():
+            if (not rhs.grants.has_key(k)):
+                return False
+            if (not g.equals(rhs.grants[k])):
+                return False
+        for l,r in rhs.grants.items():
+            if (not self.grants.has_key(l)):
+                return False
+            if (not r.equals(self.grants[l])):
+                return False
+        return True
 
 def compare_xml(xml1, xml2):
     tree1 = etree.parse(StringIO(xml1))
@@ -324,7 +345,7 @@ def test_acl_policy():
 "<DisplayName>display-name</DisplayName></Grantee>" + \
 "<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
     test1 = AclPolicy.from_xml(test1_xml)
-    compare_xml(test1_xml, test1.to_xml(False))
+    compare_xml(test1_xml, test1.to_xml(omit_owner = False))
 
 ###### Object #######
 class Object(object):
@@ -390,71 +411,51 @@ class LocalCopy(object):
         self.remove()
 
 class LocalAcl(object):
-    def __init__(self, obj_name):
+    @staticmethod
+    def from_file(obj_name, file_name):
+        f = open(file_name, "r")
+        try:
+            xml = f.read()
+        finally:
+            f.close()
+        return LocalAcl.from_xml(obj_name, xml)
+    @staticmethod
+    def from_xml(obj_name, xml):
+        acl_policy = AclPolicy.from_xml(xml)
+        return LocalAcl(obj_name, acl_policy)
+    @staticmethod
+    def get_empty(obj_name):
+        return LocalAcl(obj_name, None)
+    def __init__(self, obj_name, acl_policy):
         self.obj_name = obj_name
-        self.acl_path = None
-        self.acl_is_temp = False
-    def set_acl_xml(self, acl_xml):
-        self.remove()
-        self.acl_is_temp = True
-        self.acl_path = tempfile.NamedTemporaryFile(mode='w+b', delete=False).name
-        temp_acl_file_f = open(self.acl_path, 'w')
-        try:
-            temp_acl_file_f.write(acl_xml)
-        finally:
-            temp_acl_file_f.close()
-    def __del__(self):
-        self.remove()
-    def remove(self):
-        if ((self.acl_is_temp == True) and (self.acl_path != None)):
-            os.unlink(self.acl_path)
-        self.acl_path = None
-        self.acl_is_temp = False
+        self.acl_policy = acl_policy
     def equals(self, rhs):
-        """ Compare two cached ACL files """
-        if (self.acl_path == None):
-            return (rhs.acl_path == None)
-        if (rhs.acl_path == None):
-            return (self.acl_path == None)
-        f = open(self.acl_path, 'r')
-        try:
-            my_xml = f.read()
-        finally:
-            f.close()
-        f = open(rhs.acl_path, 'r')
-        try:
-            rhs_xml = f.read()
-        finally:
-            f.close()
-        return my_xml == rhs_xml
+        """ Compare two LocalAcls """
+        if (self.acl_policy == None):
+            return (rhs.acl_policy == None)
+        if (rhs.acl_policy == None):
+            return (self.acl_policy == None)
+        return self.acl_policy.equals(rhs.acl_policy)
     def translate_users(self, xusers):
-        # Do we even have an ACL?
-        if (self.acl_path == None):
+        """ Translate the users in this ACL """
+        if (self.acl_policy == None):
             return
-        # Read the XML and parse it.
-        f = open(self.acl_path, 'r')
+        self.acl_policy.translate_users(xusers)
+    def strip_owner(self):
+        if (self.acl_policy == None):
+            return
+        self.acl_policy.owner_id = None
+        self.acl_policy.owner_display_name = None
+    def write_to_file(self, file_name):
+        """ Write this ACL to a file """
+        if (self.acl_policy == None):
+            return
+        xml = self.acl_policy.to_xml(omit_owner = True)
+        f = open(file_name, 'w')
         try:
-            acl_xml = f.read()
+            f.write(xml)
         finally:
             f.close()
-        try:
-            policy = AclPolicy.from_xml(acl_xml)
-        except Exception, e:
-            print >>stderr, "Error parsing ACL from object \"%s\"" % \
-                self.obj_name
-            raise
-        policy.translate_users(xusers)
-        acl_xml2 = policy.to_xml(True)
-        new_acl_temp = tempfile.NamedTemporaryFile(mode='w+b', delete=False).name
-        f = open(new_acl_temp, 'w')
-        try:
-            f.write(acl_xml2)
-        finally:
-            f.close()
-        if (self.acl_is_temp):
-            os.unlink(self.acl_path)
-        self.acl_path = new_acl_temp
-        self.acl_is_temp = True
 
 ###### S3 store #######
 class S3StoreIterator(object):
@@ -508,10 +509,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
     def get_acl(self, obj):
-        acl = LocalAcl(obj.name)
         acl_xml = self.bucket.get_xml_acl(obj.name)
-        acl.set_acl_xml(acl_xml)
-        return acl
+        return LocalAcl.from_xml(obj.name, acl_xml)
     def make_local_copy(self, obj):
         k = Key(self.bucket)
         k.key = obj.name
@@ -543,13 +542,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         k.key = obj.name
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
-        if (src_acl.acl_path != None):
-            f = open(src_acl.acl_path, 'r')
-            try:
-                acl_xml = f.read()
-            finally:
-                f.close()
-            self.bucket.set_acl(acl_xml, k)
+        if (src_acl.acl_policy != None):
+            self.bucket.set_acl(src_acl.acl_policy.to_xml(omit_owner = False), k)
 
     def remove(self, obj):
         if (opts.dry_run):
@@ -604,14 +598,12 @@ class FileStore(Store):
     def __str__(self):
         return "file://" + self.base
     def get_acl(self, obj):
-        acl = LocalAcl(obj.name)
         acl_name = get_local_acl_file_name(obj.local_name())
         acl_path = self.base + "/" + acl_name
-#        print "get_acl(obj.name = " + obj.name + ", acl_name=" + acl_name + \
-#            ", acl_path = " +  acl_path + ")"
         if (os.path.exists(acl_path)):
-            acl.acl_path = acl_path
-        return acl
+            return LocalAcl.from_file(obj.name, acl_path)
+        else:
+            return LocalAcl.get_empty(obj.name)
     def make_local_copy(self, obj):
         local_name = obj.local_name()
         return LocalCopy(obj.name, self.base + "/" + local_name, False)
@@ -642,9 +634,8 @@ class FileStore(Store):
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
-        if (src_acl.acl_path != None):
-            shutil.copy(src_acl.acl_path,
-                self.base + "/" + get_local_acl_file_name(lname))
+        if (src_acl.acl_policy != None):
+            src_acl.write_to_file(self.base + "/" + get_local_acl_file_name(lname))
     def remove(self, obj):
         if (opts.dry_run):
             return
@@ -977,28 +968,28 @@ for sobj in src.all_objects():
         src_acl = src.get_acl(sobj)
         dst_acl = dst.get_acl(dobj)
         src_acl.translate_users(xuser)
+        src_acl.strip_owner()
         if (not src_acl.equals(dst_acl)):
             upload = True
             if (opts.verbose):
                 print "^ " + sobj.name
-        dst_acl.remove()
     else:
         if (opts.verbose):
             print ". " + sobj.name
     if (upload):
         if (not opts.preserve_acls):
             # Just default to an empty ACL
-            src_acl = LocalAcl(sobj.name)
+            src_acl = LocalAcl.get_empty(sobj.name)
         else:
             if (src_acl == None):
                 src_acl = src.get_acl(sobj)
                 src_acl.translate_users(xuser)
+                src_acl.strip_owner()
         local_copy = src.make_local_copy(sobj)
         try:
             dst.upload(local_copy, src_acl, sobj)
         finally:
             local_copy.remove()
-            src_acl.remove()
 
 if (opts.delete_after):
     delete_unreferenced(src, dst)

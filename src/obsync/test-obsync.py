@@ -77,11 +77,11 @@ def compare_directories(dir_a, dir_b, ignore_acl = True, expect_same = True):
     if ((ret == 0) and (not expect_same)):
         print "expected the directories %s and %s to differ, but \
 they were the same!" % (dir_a, dir_b)
-        sys.exit(1)
+        raise Exception("compare_directories failed!")
     if ((ret != 0) and expect_same):
         print "expected the directories %s and %s to be the same, but \
 they were different!" % (dir_a, dir_b)
-        sys.exit(1)
+        raise Exception("compare_directories failed!")
 
 def count_obj_in_dir(d):
     """counts the number of objects in a directory (WITHOUT recursing)"""
@@ -288,10 +288,17 @@ compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
     ignore_acl=False, expect_same=False)
 # Test ACL syncing. It should sync the ACLs even when the object data is
 # the same!
+old_acl = open("/%s/dira/.a$acl" % tdir)
+old_acl.read()
+old_acl.close()
 obsync_check("file://%s/dirb" % tdir, "file://%s/dira" % tdir, ["-d"])
-obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir, ["-d"])
-compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
-    ignore_acl=False, expect_same=True)
+new_acl = open("/%s/dira/.a$acl" % tdir)
+new_acl.read()
+new_acl.close()
+if (old_acl == new_acl):
+    raise Exception("expected obsync to synchronize ACLs, but it left a \
+destination ACL the same, despite the fact that it had different \
+users in it.")
 
 if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
