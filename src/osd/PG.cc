@@ -3793,7 +3793,7 @@ PG::RecoveryState::Primary::react(const ActMap&) {
   dout(7) << "handle ActMap primary" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   pg->update_stats();
-  return forward_event();
+  return discard_event();
 }
 
 /*---------Peering--------*/
