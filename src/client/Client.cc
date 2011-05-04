@@ -1904,6 +1904,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
     
   in->reported_size = in->size;
   m->set_snap_follows(in->snaprealm->get_snap_context().seq);
+  cap->wanted = want;
   if (cap == in->auth_cap) {
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
