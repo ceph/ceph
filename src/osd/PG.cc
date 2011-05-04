@@ -3722,7 +3722,6 @@ std::ostream& operator<<(std::ostream& oss,
 /*------Initial-------*/
 PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
   state_name = "Initial";
-  dout(10) << "entered state" << dendl;
   context< RecoveryMachine >().log_enter(state_name);
 }
 
@@ -3733,7 +3732,6 @@ void PG::RecoveryState::Initial::exit() {
 /*------Started-------*/
 PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
   state_name = "Started";
-  dout(10) << "entered state" << dendl;
   context< RecoveryMachine >().log_enter(state_name);
 }
 
@@ -3756,7 +3754,6 @@ void PG::RecoveryState::Started::exit() {
 /*--------Reset---------*/
 PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
   state_name = "Reset";
-  dout(10) << "entered state" << dendl;
   context< RecoveryMachine >().log_enter(state_name);
 }
 
@@ -3789,7 +3786,7 @@ void PG::RecoveryState::Reset::exit() {
 PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
   state_name = "Start";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_primary()) {
     dout(1) << "transitioning to Primary" << dendl;
@@ -3806,9 +3803,8 @@ void PG::RecoveryState::Start::exit() {
 
 /*---------Primary--------*/
 PG::RecoveryState::Primary::Primary(my_context ctx) : my_base(ctx) {
-  state_name = "Primary";
+  state_name = "Started/Primary";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
 }
 
 boost::statechart::result 
@@ -3847,9 +3843,9 @@ void PG::RecoveryState::Primary::exit() {
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
   : my_base(ctx) {
-  state_name = "Peering";
+  state_name = "Started/Primary/Peering";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_active());
   assert(!pg->is_peering());
@@ -3876,9 +3872,9 @@ void PG::RecoveryState::Peering::exit() {
 
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
-  state_name = "Active";
+  state_name = "Started/Primary/Active";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
@@ -3990,7 +3986,8 @@ void PG::RecoveryState::Active::exit() {
 /*------ReplicaActive-----*/
 PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
   : my_base(ctx) {
-  state_name = "ReplicaActive";
+  state_name = "Started/ReplicaActive";
+
   context< RecoveryMachine >().log_enter(state_name);
   dout(10) << "In ReplicaActive, about to call activate" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
@@ -4034,9 +4031,9 @@ void PG::RecoveryState::ReplicaActive::exit() {
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
   : my_base(ctx), backlog_requested(false) {
-  state_name = "Stray";
+  state_name = "Started/Stray";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_active());
   assert(!pg->is_peering());
@@ -4138,9 +4135,9 @@ void PG::RecoveryState::Stray::exit() {
 
 /*--------GetInfo---------*/
 PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
-  state_name = "GetInfo";
+  state_name = "Started/Primary/Peering/GetInfo";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   pg->generate_past_intervals();
   auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
@@ -4195,9 +4192,9 @@ void PG::RecoveryState::GetInfo::exit() {
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
   my_base(ctx), newest_update_osd(-1), need_backlog(false), msg(0) {
-  state_name = "GetLog";
+  state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "In GetLog, selecting log location" << dendl;
   eversion_t newest_update;
@@ -4290,9 +4287,9 @@ PG::RecoveryState::GetLog::~GetLog() {
 
 /*------GetMissing--------*/
 PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx) {
-  state_name = "GetMissing";
+  state_name = "Started/Primary/Peering/GetMissing";
   context< RecoveryMachine >().log_enter(state_name);
-  dout(10) << "entered state" << dendl;
+
   PG *pg = context< RecoveryMachine >().pg;
   map<int, Missing> &peer_missing = pg->peer_missing;
   for (vector<int>::iterator i = pg->acting.begin()++;
@@ -4341,14 +4338,21 @@ void PG::RecoveryState::GetMissing::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
-/*****/
+
+/*----RecoveryState::RecoveryMachine Methods-----*/
+#undef dout_prefix
+#define dout_prefix *_dout << pg->gen_prefix() 
+
 void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
 {
+  dout(20) << "enter " << state_name << dendl;
   pg->osd->pg_recovery_stats.log_enter(state_name);
 }
 
 void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_t enter_time)
 {
+  utime_t dur = g_clock.now() - enter_time;
+  dout(20) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
   pg->osd->pg_recovery_stats.log_exit(state_name, g_clock.now() - enter_time,
 				      event_count, event_time);
   event_count = 0;
@@ -4356,7 +4360,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 }
 
 
-/*----Public Methods-----*/
+/*----RecoverState Methods-----*/
 
 void PG::RecoveryState::handle_notify(int from, PG::Info& i,
 				      RecoveryCtx *rctx)
