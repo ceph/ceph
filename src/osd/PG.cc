@@ -4343,12 +4343,20 @@ void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
   end_handle();
 }
 
+void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
+{
+  start_handle(rctx);
+  machine.process_event(Load());
+  end_handle();
+}
+
 void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 {
   start_handle(rctx);
   machine.process_event(Initialize());
   end_handle();
 }
+
 /*---------------------------------------------------*/
 #undef dout_prefix
 #define dout_prefix (*_dout << pg->gen_prefix() << "PgPriorSet: ")

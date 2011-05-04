@@ -848,6 +848,7 @@ public:
     struct ActMap : boost::statechart::event< ActMap > {};
     struct Activate : boost::statechart::event< Activate > {};
     struct Initialize : boost::statechart::event< Initialize > {};
+    struct Load : boost::statechart::event< Load > {};
 
 
     /* States */
@@ -905,10 +906,12 @@ public:
     };
 
     struct Started;
+    struct Reset;
     struct Initial :
       boost::statechart::state< Initial, RecoveryMachine >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Started >,
+	boost::statechart::transition< Load, Reset >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       Initial(my_context ctx);
@@ -1103,6 +1106,7 @@ public:
     void handle_activate_map(RecoveryCtx *ctx);
     void handle_backlog_generated(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
+    void handle_loaded(RecoveryCtx *ctx);
   } recovery_state;
 
 protected:
@@ -1434,6 +1438,10 @@ public:
   void handle_create(RecoveryCtx *rctx) {
     recovery_state.handle_create(rctx);
   }
+  void handle_loaded(RecoveryCtx *rctx) {
+    recovery_state.handle_loaded(rctx);
+  }
+
 
   // abstract bits
   virtual void do_op(MOSDOp *op) = 0;
