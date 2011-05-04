@@ -19,19 +19,25 @@ ostream& operator<<(ostream& out, XMLObj& obj) {
 }
 
 
-void ACLPermission::xml_end(const char *el) {
+bool ACLPermission::xml_end(const char *el) {
   const char *s = data.c_str();
   if (strcasecmp(s, "READ") == 0) {
     flags |= RGW_PERM_READ;
+    return true;
   } else if (strcasecmp(s, "WRITE") == 0) {
     flags |= RGW_PERM_WRITE;
+    return true;
   } else if (strcasecmp(s, "READ_ACP") == 0) {
     flags |= RGW_PERM_READ_ACP;
+    return true;
   } else if (strcasecmp(s, "WRITE_ACP") == 0) {
     flags |= RGW_PERM_WRITE_ACP;
+    return true;
   } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
     flags |= RGW_PERM_FULL_CONTROL;
+    return true;
   }
+  return false;
 }
 
 class ACLID : public XMLObj
@@ -63,17 +69,23 @@ public:
  ~ACLDisplayName() {}
 };
 
-void ACLOwner::xml_end(const char *el) {
+bool ACLOwner::xml_end(const char *el) {
   ACLID *acl_id = (ACLID *)find_first("ID");  
   ACLID *acl_name = (ACLID *)find_first("DisplayName");
 
-  if (acl_id)
-    id = acl_id->get_data();
+  // ID is mandatory
+  if (!acl_id)
+    return false;
+  id = acl_id->get_data();
+
+  // DisplayName is optional
   if (acl_name)
     display_name = acl_name->get_data();
+
+  return true;
 }
 
-void ACLGrant::xml_end(const char *el) {
+bool ACLGrant::xml_end(const char *el) {
   ACLGrantee *acl_grantee;
   ACLID *acl_id;
   ACLURI *acl_uri;
@@ -83,44 +95,46 @@ void ACLGrant::xml_end(const char *el) {
 
   acl_grantee = (ACLGrantee *)find_first("Grantee");
   if (!acl_grantee)
-    return;
+    return false;
   string type_str;
-  acl_grantee->get_attr("xsi:type", type_str);
+  if (!acl_grantee->get_attr("xsi:type", type_str))
+    return false;
   type.set(type_str.c_str());
   acl_permission = (ACLPermission *)find_first("Permission");
   if (!acl_permission)
-    return;
+    return false;
   permission = *acl_permission;
-
-  acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
-  if (acl_name)
-    name = acl_name->get_data();
 
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
     acl_id = (ACLID *)acl_grantee->find_first("ID");
-    if (acl_id) {
-      id = acl_id->to_str();
-      RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << endl;
-    }
+    if (!acl_id)
+      return false;
+    id = acl_id->to_str();
+    acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
+    if (acl_name)
+      name = acl_name->get_data();
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << endl;
     break;
   case ACL_TYPE_GROUP:
     acl_uri = (ACLURI *)acl_grantee->find_first("URI");
-    if (acl_uri) {
-      uri = acl_uri->get_data();
-      RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << endl;
-    }
+    if (!acl_uri)
+      return false;
+    uri = acl_uri->get_data();
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << endl;
     break;
   case ACL_TYPE_EMAIL_USER:
     acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
-    if (acl_email) {
-      email = acl_email->get_data();
-      RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << endl;
-    }
+    if (!acl_email)
+      return false;
+    email = acl_email->get_data();
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << endl;
     break;
   default:
-    break;
+    // unknown user type
+    return false;
   };
+  return true;
 }
 
 void RGWAccessControlList::init_user_map()
@@ -143,7 +157,7 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   }
 }
 
-void RGWAccessControlList::xml_end(const char *el) {
+bool RGWAccessControlList::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
   while (grant) {
@@ -151,6 +165,7 @@ void RGWAccessControlList::xml_end(const char *el) {
     grant = (ACLGrant *)iter.get_next();
   }
   init_user_map();
+  return true;
 }
 
 int RGWAccessControlList::get_perm(string& id, int perm_mask) {
@@ -200,9 +215,18 @@ bool RGWAccessControlList::create_canned(string id, string name, string canned_a
 
 }
 
-void RGWAccessControlPolicy::xml_end(const char *el) {
-  acl = *(RGWAccessControlList *)find_first("AccessControlList");
-  owner = *(ACLOwner *)find_first("Owner");
+bool RGWAccessControlPolicy::xml_end(const char *el) {
+  RGWAccessControlList *acl_p =
+      (RGWAccessControlList *)find_first("AccessControlList");
+  if (!acl_p)
+    return false;
+  acl = *acl_p;
+
+  ACLOwner *owner_p = (ACLOwner*)find_first("Owner");
+  if (!owner_p)
+    return false;
+  owner = *owner_p;
+  return true;
 }
 
 int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
@@ -237,10 +261,11 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
 void xml_start(void *data, const char *el, const char **attr) {
   RGWXMLParser *handler = (RGWXMLParser *)data;
 
-  handler->xml_start(el, attr);
+  if (!handler->xml_start(el, attr))
+    handler->set_failure();
 }
 
-void RGWXMLParser::xml_start(const char *el, const char **attr) {
+bool RGWXMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
     obj = new RGWAccessControlPolicy();    
@@ -265,7 +290,8 @@ void RGWXMLParser::xml_start(const char *el, const char **attr) {
   } else {
     obj = new XMLObj(); 
   }
-  obj->xml_start(cur_obj, el, attr);
+  if (!obj->xml_start(cur_obj, el, attr))
+    return false;
   if (cur_obj) {
     cur_obj->add_child(el, obj);
   } else {
@@ -274,18 +300,22 @@ void RGWXMLParser::xml_start(const char *el, const char **attr) {
   cur_obj = obj;
 
   objs.push_back(obj);
+  return true;
 }
 
 void xml_end(void *data, const char *el) {
   RGWXMLParser *handler = (RGWXMLParser *)data;
 
-  handler->xml_end(el);
+  if (!handler->xml_end(el))
+    handler->set_failure();
 }
 
-void RGWXMLParser::xml_end(const char *el) {
+bool RGWXMLParser::xml_end(const char *el) {
   XMLObj *parent_obj = cur_obj->get_parent();
-  cur_obj->xml_end(el);
+  if (!cur_obj->xml_end(el))
+    return false;
   cur_obj = parent_obj;
+  return true;
 }
 
 void handle_data(void *data, const char *s, int len)
@@ -311,7 +341,6 @@ bool RGWXMLParser::init()
   XML_SetElementHandler(p, ::xml_start, ::xml_end);
   XML_SetCharacterDataHandler(p, ::handle_data);
   XML_SetUserData(p, (void *)this);
-
   return true;
 }
 
@@ -322,11 +351,12 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
   memcpy(&buf[buf_len], _buf, len);
   buf_len += len;
 
+  success = true;
   if (!XML_Parse(p, &buf[pos], len, done)) {
     fprintf(stderr, "Parse error at line %d:\n%s\n",
 	      (int)XML_GetCurrentLineNumber(p),
 	      XML_ErrorString(XML_GetErrorCode(p)));
     return false;
   }
-  return true; 
+  return success;
 }

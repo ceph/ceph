@@ -57,14 +57,15 @@ protected:
   map<string, string> attr_map;
 public:
   virtual ~XMLObj() { }
-  void xml_start(XMLObj *parent, const char *el, const char **attr) {
+  bool xml_start(XMLObj *parent, const char *el, const char **attr) {
     this->parent = parent;
     type = el;
     for (int i = 0; attr[i]; i += 2) {
       attr_map[attr[i]] = string(attr[i + 1]);
     }
+    return true;
   }
-  virtual void xml_end(const char *el) {}
+  virtual bool xml_end(const char *el) { return true; }
   virtual void xml_handle_data(const char *s, int len) { data = string(s, len); }
   string& get_data() { return data; }
   XMLObj *get_parent() { return parent; }
@@ -108,7 +109,7 @@ class ACLPermission : public XMLObj
 public:
   ACLPermission() : flags(0) {}
   ~ACLPermission() {}
-  void xml_end(const char *el);
+  bool xml_end(const char *el);
   int get_permissions() { return flags; }
   void set_permissions(int perm) { flags = perm; }
 
@@ -200,7 +201,7 @@ public:
   ACLGrantee() {} 
   ~ACLGrantee() {}
 
-  void xml_start(const char *el, const char **attr);
+  bool xml_start(const char *el, const char **attr);
 
   string& get_type() { return type; }
 };
@@ -219,7 +220,7 @@ public:
   ACLGrant() {}
   ~ACLGrant() {}
 
-  void xml_end(const char *el);
+  bool xml_end(const char *el);
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
@@ -288,7 +289,7 @@ public:
     uri = _uri;
     permission.set_permissions(perm);
   }
-  void xml_start(const char *el, const char **attr);
+  bool xml_start(const char *el, const char **attr);
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
@@ -303,7 +304,7 @@ public:
   RGWAccessControlList() : user_map_initialized(false) {}
   ~RGWAccessControlList() {}
 
-  void xml_end(const char *el);
+  bool xml_end(const char *el);
   int get_perm(string& id, int perm_mask);
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -350,7 +351,7 @@ public:
   ACLOwner() {}
   ~ACLOwner() {}
 
-  void xml_end(const char *el);
+  bool xml_end(const char *el);
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -364,6 +365,8 @@ public:
     ::decode(display_name, bl);
   }
   void to_xml(ostream& out) {
+    if (id.empty())
+      return;
     out << "<Owner>" <<
                    "<ID>" << id << "</ID>" <<
                    "<DisplayName>" << display_name << "</DisplayName>" <<
@@ -386,7 +389,7 @@ public:
   RGWAccessControlPolicy() {}
   ~RGWAccessControlPolicy() {}
 
-  void xml_end(const char *el);
+  bool xml_end(const char *el);
 
   int get_perm(string& id, int perm_mask);
 
@@ -444,7 +447,7 @@ class RGWXMLParser : public XMLObj
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
 public:
-  RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL) {}
+  RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true) {}
   ~RGWXMLParser() {
     free(buf);
     vector<XMLObj *>::iterator iter;
@@ -454,12 +457,16 @@ public:
     }
   }
   bool init();
-  void xml_start(const char *el, const char **attr);
-  void xml_end(const char *el);
+  bool xml_start(const char *el, const char **attr);
+  bool xml_end(const char *el);
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf, int len, int done);
   const char *get_xml() { return buf; }
+  void set_failure() { success = false; }
+
+private:
+  bool success;
 };
 
 #endif
