@@ -894,20 +894,19 @@ public:
 
     /* States */
     struct NamedState {
-      virtual const char *get_state_name() = 0;
+      string state_name;
+      virtual string &get_state_name() { return state_name; }
       virtual ~NamedState() {}
     };
 
     struct Crashed :
       boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
-      const char *get_state_name() { return "Crashed"; }
       Crashed(my_context ctx) : my_base(ctx) { assert(0); }
     };
 
     struct Started;
     struct Initial :
-      boost::statechart::simple_state< Initial, RecoveryMachine >, NamedState {
-      const char *get_state_name() { return "Initial"; }
+      boost::statechart::state< Initial, RecoveryMachine >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Started >,
 	boost::statechart::transition< MNotifyRec, Crashed >,
@@ -918,11 +917,11 @@ public:
 	boost::statechart::transition< AdvMap, Crashed >,
 	boost::statechart::transition< ActMap, Crashed >
 	> reactions;
+      Initial(my_context ctx);
     };
 
     struct Reset :
-      boost::statechart::simple_state< Reset, RecoveryMachine >, NamedState {
-      const char *get_state_name() { return "Reset"; }
+      boost::statechart::state< Reset, RecoveryMachine >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >,
@@ -935,12 +934,12 @@ public:
 	> reactions;
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
+      Reset(my_context ctx);
     };
 
     struct Start;
     struct Started :
-      boost::statechart::simple_state< Started, RecoveryMachine, Start >, NamedState {
-      const char *get_state_name() { return "Started"; }
+      boost::statechart::state< Started, RecoveryMachine, Start >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< ActMap, Crashed >,
@@ -952,6 +951,7 @@ public:
 	boost::statechart::transition< Activate, Crashed >
 	> reactions;
       boost::statechart::result react(const AdvMap&);
+      Started(my_context ctx);
     };
 
     struct MakePrimary : boost::statechart::event< MakePrimary > {};
@@ -960,7 +960,6 @@ public:
     struct Stray;
     struct Start :
       boost::statechart::state< Start, Started >, NamedState {
-      const char *get_state_name() { return "Start"; }
       typedef boost::mpl::list <
 	boost::statechart::transition< MakePrimary, Primary >,
 	boost::statechart::transition< MakeStray, Stray >
@@ -972,8 +971,7 @@ public:
     struct Pending;
     struct NeedNewMap : boost::statechart::event< NeedNewMap > {};
     struct Primary :
-      boost::statechart::simple_state< Primary, Started, Peering >, NamedState {
-      const char *get_state_name() { return "Primary"; }
+      boost::statechart::state< Primary, Started, Peering >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< BacklogComplete >,
@@ -983,6 +981,7 @@ public:
 	boost::statechart::result react(const BacklogComplete&);
 	boost::statechart::result react(const ActMap&);
 	boost::statechart::result react(const MNotifyRec&);
+      Primary(my_context ctx);
     };
 
     struct Pending :
@@ -993,7 +992,6 @@ public:
     struct Active;
     struct Peering : 
       boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      const char *get_state_name() { return "Peering"; }
       typedef boost::mpl::list <
 	boost::statechart::transition< Activate, Active >,
 	boost::statechart::custom_reaction< AdvMap >
@@ -1007,7 +1005,6 @@ public:
 
     struct Active : 
       boost::statechart::state< Active, Primary >, NamedState {
-      const char *get_state_name() { return "Active"; }
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< AdvMap >,
@@ -1023,7 +1020,6 @@ public:
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
-      const char *get_state_name() { return "ReplicaActive"; }
       typedef boost::mpl::list <
 	boost::statechart::transition< MQuery, Crashed >,
 	boost::statechart::custom_reaction< ActMap >,
@@ -1036,7 +1032,6 @@ public:
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
-      const char *get_state_name() { return "Stray"; }
       bool backlog_requested;
       map<int, Query> pending_queries;
       typedef boost::mpl::list <
@@ -1061,7 +1056,6 @@ public:
     struct GotInfo : boost::statechart::event< GotInfo > {};
     struct GetInfo :
       boost::statechart::state< GetInfo, Peering >, NamedState {
-      const char *get_state_name() { return "Peering::GetInfo"; }
       set<int> peer_info_requested;
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
@@ -1078,7 +1072,6 @@ public:
     struct GotLog : boost::statechart::event< GotLog > {};
     struct GetLog :
       boost::statechart::state< GetLog, Peering >, NamedState {
-      const char *get_state_name() { return "Peering::GetLog"; }
       int newest_update_osd;
       bool need_backlog;
       bool wait_on_backlog;
@@ -1098,7 +1091,6 @@ public:
 
     struct GetMissing :
       boost::statechart::state< GetMissing, Peering >, NamedState {
-      const char *get_state_name() { return "Peering::GetMissing"; }
       set<int> peer_missing_requested;
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >

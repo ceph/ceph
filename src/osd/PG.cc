@@ -3719,7 +3719,18 @@ std::ostream& operator<<(std::ostream& oss,
 #define dout_prefix (*_dout << context< RecoveryMachine >().pg->gen_prefix() \
 		     << "state<" << get_state_name() << ">: ")
 
+/*------Initial-------*/
+PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
+  state_name = "Initial";
+  dout(10) << "entered state" << dendl;
+}
+
 /*------Started-------*/
+PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
+  state_name = "Started";
+  dout(10) << "entered state" << dendl;
+}
+
 boost::statechart::result 
 PG::RecoveryState::Started::react(const AdvMap& advmap) {
   dout(10) << "Started advmap" << dendl;
@@ -3733,6 +3744,11 @@ PG::RecoveryState::Started::react(const AdvMap& advmap) {
 }
 
 /*--------Reset---------*/
+PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
+  state_name = "Reset";
+  dout(10) << "entered state" << dendl;
+}
+
 boost::statechart::result 
 PG::RecoveryState::Reset::react(const AdvMap& advmap) {
   PG *pg = context< RecoveryMachine >().pg;
@@ -3756,6 +3772,8 @@ PG::RecoveryState::Reset::react(const ActMap&) {
 	
 /*-------Start---------*/
 PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
+  state_name = "Start";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_primary()) {
     dout(1) << "transitioning to Primary" << dendl;
@@ -3767,6 +3785,11 @@ PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
 }
 
 /*---------Primary--------*/
+PG::RecoveryState::Primary::Primary(my_context ctx) : my_base(ctx) {
+  state_name = "Primary";
+  dout(10) << "entered state" << dendl;
+}
+
 boost::statechart::result 
 PG::RecoveryState::Primary::react(const BacklogComplete&) {
   PG *pg = context< RecoveryMachine >().pg;
@@ -3799,6 +3822,8 @@ PG::RecoveryState::Primary::react(const ActMap&) {
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
   : my_base(ctx) {
+  state_name = "Peering";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_active());
   assert(!pg->is_peering());
@@ -3824,6 +3849,8 @@ void PG::RecoveryState::Peering::exit() {
 
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
+  state_name = "Active";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
@@ -3933,6 +3960,7 @@ PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
 /*------ReplicaActive-----*/
 PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
   : my_base(ctx) {
+  state_name = "ReplicaActive";
   dout(10) << "In ReplicaActive, about to call activate" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   map< int, map< pg_t, Query> > query_map;
@@ -3963,6 +3991,8 @@ PG::RecoveryState::ReplicaActive::react(const ActMap&) {
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
   : my_base(ctx), backlog_requested(false) {
+  state_name = "Stray";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_active());
   assert(!pg->is_peering());
@@ -4060,6 +4090,8 @@ PG::RecoveryState::Stray::react(const ActMap&) {
 
 /*--------GetInfo---------*/
 PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
+  state_name = "GetInfo";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   pg->generate_past_intervals();
   auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
@@ -4110,6 +4142,8 @@ PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) {
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
   my_base(ctx), newest_update_osd(-1), need_backlog(false), msg(0) {
+  state_name = "GetLog";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "In GetLog, selecting log location" << dendl;
   eversion_t newest_update;
@@ -4199,6 +4233,8 @@ PG::RecoveryState::GetLog::~GetLog() {
 
 /*------GetMissing--------*/
 PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx) {
+  state_name = "GetMissing";
+  dout(10) << "entered state" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   map<int, Missing> &peer_missing = pg->peer_missing;
   for (vector<int>::iterator i = pg->acting.begin()++;
