@@ -1903,9 +1903,11 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   m->head.time_warp_seq = in->time_warp_seq;
     
   in->reported_size = in->size;
-  m->set_max_size(in->wanted_max_size);
-  in->requested_max_size = in->wanted_max_size;
   m->set_snap_follows(in->snaprealm->get_snap_context().seq);
+  if (cap == in->auth_cap) {
+    m->set_max_size(in->wanted_max_size);
+    in->requested_max_size = in->wanted_max_size;
+  }
   messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
@@ -1960,13 +1962,15 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	     << " revoking " << ccap_string(revoking) << dendl;
 
     if (in->wanted_max_size > in->max_size &&
-	in->wanted_max_size > in->requested_max_size)
+	in->wanted_max_size > in->requested_max_size &&
+	cap == in->auth_cap)
       goto ack;
 
     /* approaching file_max? */
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
 	(in->size << 1) >= in->max_size &&
-	(in->reported_size << 1) < in->max_size) {
+	(in->reported_size << 1) < in->max_size &&
+	cap == in->auth_cap) {
       dout(10) << "size " << in->size << " approaching max_size " << in->max_size
 	       << ", reported " << in->reported_size << dendl;
       goto ack;
