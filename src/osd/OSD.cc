@@ -2263,6 +2263,15 @@ void OSD::handle_command(MMonCommand *m)
   else if (m->cmd[0] == "cpu_profiler") {
     cpu_profiler_handle_command(m->cmd, clog);
   }
+  else if (m->cmd[0] == "dump_pg_recovery_stats") {
+    stringstream s;
+    pg_recovery_stats.dump(s);
+    dout(0) << "dump pg recovery stats\n" << s.str() << dendl;
+  }
+  else if (m->cmd[0] == "reset_pg_recovery_stats") {
+    dout(0) << "reset pg recovery stats" << dendl;
+    pg_recovery_stats.reset();
+  }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
 done:

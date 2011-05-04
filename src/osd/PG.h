@@ -57,6 +57,54 @@ class MOSDPGInfo;
 class MOSDPGLog;
 
 
+struct PGRecoveryStats {
+  struct per_state_info {
+    uint64_t enter, exit;     // enter/exit counts
+    uint64_t events;
+    utime_t event_time;       // time spent processing events
+    utime_t total_time;       // total time in state
+    utime_t min_time, max_time;
+  };
+  map<const char *,per_state_info> info;
+  Mutex lock;
+
+  PGRecoveryStats() : lock("PGRecoverStats::lock") {}
+
+  void reset() {
+    Mutex::Locker l(lock);
+    info.clear();
+  }
+  void dump(ostream& out) {
+    Mutex::Locker l(lock);
+    for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); p++) {
+      per_state_info& i = p->second;
+      out << i.enter << "\t" << i.exit << "\t"
+	  << i.events << "\t" << i.event_time << "\t"
+	  << i.total_time << "\t"
+	  << i.min_time << "\t" << i.max_time << "\t"
+	  << p->first << "\n";
+	       
+    }
+  }
+
+  void log_enter(const char *s) {
+    Mutex::Locker l(lock);
+    info[s].enter++;
+  }
+  void log_exit(const char *s, utime_t dur, uint64_t events, utime_t event_dur) {
+    Mutex::Locker l(lock);
+    per_state_info &i = info[s];
+    i.exit++;
+    i.total_time += dur;
+    if (dur > i.max_time)
+      i.max_time = dur;
+    if (i.min_time < dur || i.min_time == utime_t())
+      i.min_time = dur;
+    i.events += events;
+    i.event_time += event_dur;
+  }
+};
+
 struct PGPool {
   int id;
   atomic_t nref;
@@ -780,6 +828,7 @@ public:
 
 public:    
   struct RecoveryCtx {
+    utime_t start_time;
     map< int, map<pg_t, Query> > *query_map;
     map< int, MOSDPGInfo* > *info_map;
     map< int, vector<Info> > *notify_list;
@@ -802,9 +851,16 @@ public:
     void start_handle(RecoveryCtx *new_ctx) {
       assert(!rctx);
       rctx = new_ctx;
+      if (rctx)
+	rctx->start_time = g_clock.now();
     }
 
     void end_handle() {
+      if (rctx) {
+	utime_t dur = g_clock.now() - rctx->start_time;
+	machine.event_time += dur;
+      }
+      machine.event_count++;
       rctx = 0;
     }
 
@@ -858,6 +914,17 @@ public:
     public:
       PG *pg;
 
+      utime_t event_time;
+      uint64_t event_count;
+      
+      void clear_event_counters() {
+	event_time = utime_t();
+	event_count = 0;
+      }
+
+      void log_enter(const char *state_name);
+      void log_exit(const char *state_name, utime_t duration);
+
       RecoveryMachine(RecoveryState *state, PG *pg) : state(state), pg(pg) {}
 
       /* Accessor functions for state methods */
@@ -896,7 +963,9 @@ public:
     /* States */
     struct NamedState {
       const char *state_name;
+      utime_t enter_time;
       const char *get_state_name() { return state_name; }
+      NamedState() : enter_time(g_clock.now()) {}
       virtual ~NamedState() {}
     };
 
@@ -914,7 +983,9 @@ public:
 	boost::statechart::transition< Load, Reset >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
+
       Initial(my_context ctx);
+      void exit();
     };
 
     struct Reset :
@@ -924,9 +995,12 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
+
+      Reset(my_context ctx);
+      void exit();
+
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
-      Reset(my_context ctx);
     };
 
     struct Start;
@@ -936,8 +1010,11 @@ public:
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
-      boost::statechart::result react(const AdvMap&);
+
       Started(my_context ctx);
+      void exit();
+
+      boost::statechart::result react(const AdvMap&);
     };
 
     struct MakePrimary : boost::statechart::event< MakePrimary > {};
@@ -950,7 +1027,9 @@ public:
 	boost::statechart::transition< MakePrimary, Primary >,
 	boost::statechart::transition< MakeStray, Stray >
 	> reactions;
+
       Start(my_context ctx);
+      void exit();
     };
 
     struct Peering;
@@ -964,16 +1043,18 @@ public:
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::transition< NeedNewMap, Pending >
 	> reactions;
-	boost::statechart::result react(const BacklogComplete&);
-	boost::statechart::result react(const ActMap&);
-	boost::statechart::result react(const MNotifyRec&);
+
       Primary(my_context ctx);
+      void exit();
+
+      boost::statechart::result react(const BacklogComplete&);
+      boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const MNotifyRec&);
     };
 
     struct Pending :
       boost::statechart::simple_state< Pending, Primary> {};
     
-
     struct GetInfo;
     struct Active;
     struct Peering : 
@@ -985,8 +1066,9 @@ public:
       std::auto_ptr< PgPriorSet > prior_set;
 
       Peering(my_context ctx);
-      boost::statechart::result react(const AdvMap &advmap);
       void exit();
+
+      boost::statechart::result react(const AdvMap &advmap);
     };
 
     struct Active : 
@@ -999,6 +1081,8 @@ public:
 	> reactions;
 
       Active(my_context ctx);
+      void exit();
+
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -1013,6 +1097,8 @@ public:
 	> reactions;
 
       ReplicaActive(my_context ctx);
+      void exit();
+
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
@@ -1031,6 +1117,7 @@ public:
 	> reactions;
 
       Stray(my_context ctx);
+      void exit();
 
       boost::statechart::result react(const MQuery& query);
       boost::statechart::result react(const BacklogComplete&);
@@ -1050,6 +1137,8 @@ public:
 	> reactions;
 
       GetInfo(my_context ctx);
+      void exit();
+
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
@@ -1061,6 +1150,7 @@ public:
       bool need_backlog;
       bool wait_on_backlog;
       MOSDPGLog *msg;
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< BacklogComplete >,
@@ -1068,20 +1158,24 @@ public:
 	> reactions;
 
       GetLog(my_context ctx);
+      ~GetLog();
+      void exit();
+
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const BacklogComplete&);
-      void exit();
-      ~GetLog();
     };
 
     struct GetMissing :
       boost::statechart::state< GetMissing, Peering >, NamedState {
       set<int> peer_missing_requested;
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
 
       GetMissing(my_context ctx);
+      void exit();
+
       boost::statechart::result react(const MLogRec& logevt);
     };
 
