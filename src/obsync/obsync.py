@@ -268,7 +268,10 @@ class AclPolicy(object):
         for g in grantlist:
             grantee = g.find("{%s}Grantee" % NS)
             user_id = grantee.find("{%s}ID" % NS).text
-            user_type = grantee.attrib["{%s}type" % NS2]
+            if (grantee.attrib.has_key("type")):
+                user_type = grantee.attrib["type"]
+            else:
+                user_type = grantee.attrib["{%s}type" % NS2]
             display_name = grantee.find("{%s}DisplayName" % NS).text
             permission = g.find("{%s}Permission" % NS).text
             grant_user_id = grantee_attribute_to_user_type(user_type) + user_id
@@ -543,7 +546,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
-            self.bucket.set_acl(src_acl.acl_policy.to_xml(omit_owner = False), k)
+            self.bucket.set_xml_acl(src_acl.acl_policy.to_xml(omit_owner = False), k)
 
     def remove(self, obj):
         if (opts.dry_run):
