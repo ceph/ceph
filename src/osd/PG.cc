@@ -291,19 +291,19 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   peer_missing[from].swap(omissing);
 }
 
-void PG::proc_replica_info(int from, Info &info)
+void PG::proc_replica_info(int from, Info &oinfo)
 {
   assert(is_primary());
-  peer_info[from] = info;
+  peer_info[from] = oinfo;
   might_have_unfound.insert(from);
   
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
-  info.history.merge(info.history);
+  info.history.merge(oinfo.history);
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   
   // stray?
   if (!is_acting(from)) {
-    dout(10) << " osd" << from << " has stray content: " << info << dendl;
+    dout(10) << " osd" << from << " has stray content: " << oinfo << dendl;
     stray_set.insert(from);
     if (is_clean()) {
       purge_strays();
