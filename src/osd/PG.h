@@ -889,6 +889,10 @@ public:
 	assert(state->rctx->notify_list);
 	(*state->rctx->notify_list)[to].push_back(info);
       }
+
+      void unconsumed_event(const boost::statechart::event_base& e) {
+	assert(0 == "unconsumed state machine event");
+      }
     };
     friend class RecoveryMachine;
 
@@ -898,25 +902,12 @@ public:
       virtual ~NamedState() {}
     };
 
-    struct Crashed :
-      boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
-      const char *get_state_name() { return "Crashed"; }
-      Crashed(my_context ctx) : my_base(ctx) { assert(0); }
-    };
-
     struct Started;
     struct Initial :
       boost::statechart::simple_state< Initial, RecoveryMachine >, NamedState {
       const char *get_state_name() { return "Initial"; }
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Started >,
-	boost::statechart::transition< MNotifyRec, Crashed >,
-	boost::statechart::transition< MInfoRec, Crashed >,
-	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQuery, Crashed >,
-	boost::statechart::transition< Activate, Crashed >,
-	boost::statechart::transition< AdvMap, Crashed >,
-	boost::statechart::transition< ActMap, Crashed >
+	boost::statechart::transition< Initialize, Started >
 	> reactions;
     };
 
@@ -925,13 +916,7 @@ public:
       const char *get_state_name() { return "Reset"; }
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::custom_reaction< ActMap >,
-	boost::statechart::transition< MNotifyRec, Crashed >,
-	boost::statechart::transition< MInfoRec, Crashed >,
-	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQuery, Crashed >,
-	boost::statechart::transition< Initialize, Crashed >,
-	boost::statechart::transition< Activate, Crashed >
+	boost::statechart::custom_reaction< ActMap >
 	> reactions;
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
@@ -942,14 +927,7 @@ public:
       boost::statechart::simple_state< Started, RecoveryMachine, Start >, NamedState {
       const char *get_state_name() { return "Started"; }
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::transition< ActMap, Crashed >,
-	boost::statechart::transition< MNotifyRec, Crashed >,
-	boost::statechart::transition< MInfoRec, Crashed >,
-	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< MQuery, Crashed >,
-	boost::statechart::transition< Initialize, Crashed >,
-	boost::statechart::transition< Activate, Crashed >
+	boost::statechart::custom_reaction< AdvMap >
 	> reactions;
       boost::statechart::result react(const AdvMap&);
     };
@@ -1025,7 +1003,6 @@ public:
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
       const char *get_state_name() { return "ReplicaActive"; }
       typedef boost::mpl::list <
-	boost::statechart::transition< MQuery, Crashed >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MInfoRec >
 	> reactions;
@@ -1065,9 +1042,7 @@ public:
       set<int> peer_info_requested;
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
-	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::transition< MLogRec, Crashed >,
-	boost::statechart::transition< BacklogComplete, Crashed >
+	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
 
       GetInfo(my_context ctx);
