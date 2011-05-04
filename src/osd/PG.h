@@ -295,6 +295,16 @@ public:
       MISSING = 4,
       FULLLOG = 5,
     };
+    const char *get_type_name() const {
+      switch (type) {
+      case INFO: return "info";
+      case LOG: return "log";
+      case BACKLOG: return "backlog";
+      case MISSING: return "missing";
+      case FULLLOG: return "fulllog";
+      default: return "???";
+      }
+    }
 
     __s32 type;
     eversion_t since;
@@ -1595,6 +1605,15 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
   out << " n=" << pgi.stats.num_objects;
   out << " " << pgi.history
       << ")";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, const PG::Query& q) 
+{
+  out << "query(" << q.get_type_name() << " " << q.since;
+  if (q.type == PG::Query::LOG)
+    out << " " << q.history;
+  out << ")";
   return out;
 }
 

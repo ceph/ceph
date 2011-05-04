@@ -4361,10 +4361,13 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 
 
 /*----RecoverState Methods-----*/
+#undef dout_prefix
+#define dout_prefix *_dout << machine.pg->gen_prefix() 
 
 void PG::RecoveryState::handle_notify(int from, PG::Info& i,
 				      RecoveryCtx *rctx)
 {
+  dout(10) << "handle_notify " << i << " from osd" << from << dendl;
   start_handle(rctx);
   machine.process_event(MNotifyRec(from, i));
   end_handle();
@@ -4373,6 +4376,7 @@ void PG::RecoveryState::handle_notify(int from, PG::Info& i,
 void PG::RecoveryState::handle_info(int from, PG::Info& i,
 				    RecoveryCtx *rctx)
 {
+  dout(10) << "handle_info " << i << " from osd" << from << dendl;
   start_handle(rctx);
   machine.process_event(MInfoRec(from, i));
   end_handle();
@@ -4382,6 +4386,7 @@ void PG::RecoveryState::handle_log(int from,
 				   MOSDPGLog *msg,
 				   RecoveryCtx *rctx)
 {
+  dout(10) << "handle_log " << *msg << " from osd" << from << dendl;
   start_handle(rctx);
   machine.process_event(MLogRec(from, msg));
   end_handle();
@@ -4390,6 +4395,7 @@ void PG::RecoveryState::handle_log(int from,
 void PG::RecoveryState::handle_query(int from, const PG::Query& q,
 				     RecoveryCtx *rctx)
 {
+  dout(10) << "handle_query " << q << " from osd" << from << dendl;
   start_handle(rctx);
   machine.process_event(MQuery(from, q));
   end_handle();
@@ -4399,6 +4405,7 @@ void PG::RecoveryState::handle_advance_map(OSDMap &osdmap, OSDMap &lastmap,
 					   vector<int>& newup, vector<int>& newacting,
 					   RecoveryCtx *rctx)
 {
+  dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
   start_handle(rctx);
   machine.process_event(AdvMap(osdmap, lastmap, newup, newacting));
   end_handle();
@@ -4406,6 +4413,7 @@ void PG::RecoveryState::handle_advance_map(OSDMap &osdmap, OSDMap &lastmap,
 
 void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
 {
+  dout(10) << "handle_activate_map " << dendl;
   start_handle(rctx);
   machine.process_event(ActMap());
   end_handle();
@@ -4413,6 +4421,7 @@ void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
 
 void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
 {
+  dout(10) << "handle_backlog_generated" << dendl;
   start_handle(rctx);
   machine.process_event(BacklogComplete());
   end_handle();
@@ -4420,6 +4429,7 @@ void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
 
 void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
 {
+  dout(10) << "handle_backlog_loaded" << dendl;
   start_handle(rctx);
   machine.process_event(Load());
   end_handle();
@@ -4427,6 +4437,7 @@ void PG::RecoveryState::handle_loaded(RecoveryCtx *rctx)
 
 void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 {
+  dout(10) << "handle_create" << dendl;
   start_handle(rctx);
   machine.process_event(Initialize());
   end_handle();
