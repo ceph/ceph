@@ -836,6 +836,7 @@ protected:
   void unreg_last_pg_scrub(pg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     pair<utime_t,pg_t> p(t, pgid);
+    assert(last_scrub_pg.count(p));
     last_scrub_pg.erase(p);
   }
 

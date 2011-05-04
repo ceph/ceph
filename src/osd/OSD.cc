@@ -1011,6 +1011,8 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->write_info(t);
   pg->write_log(t);
   
+  reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+
   dout(7) << "_create_lock_new_pg " << *pg << dendl;
   return pg;
 }
