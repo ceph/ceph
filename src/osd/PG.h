@@ -895,8 +895,8 @@ public:
 
     /* States */
     struct NamedState {
-      string state_name;
-      virtual string &get_state_name() { return state_name; }
+      const char *state_name;
+      const char *get_state_name() { return state_name; }
       virtual ~NamedState() {}
     };
 
