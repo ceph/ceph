@@ -514,7 +514,7 @@ protected:
 		       ObjectStore::Transaction **pt,
 		       C_Contexts **pfin);
   
-  void load_pgs();
+  void load_pgs(map<int, map<pg_t, PG::Query> > &query_map);
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& lastup, vector<int>& lastacting);

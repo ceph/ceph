@@ -568,8 +568,10 @@ int OSD::init()
   }
 
   // load up pgs (as they previously existed)
-  load_pgs();
-  
+  // defer querying until after the messenger is initialized
+  map<int, map<pg_t, PG::Query> > query_map;
+  load_pgs(query_map);
+
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
@@ -619,6 +621,8 @@ int OSD::init()
   }
   dout(0) << "started rotating keys" << dendl;
 #endif
+
+  do_queries(query_map);
 
   return 0;
 }
@@ -1049,7 +1053,7 @@ PG *OSD::lookup_lock_raw_pg(pg_t pgid)
 }
 
 
-void OSD::load_pgs()
+void OSD::load_pgs(map<int, map<pg_t, PG::Query> > &query_map)
 {
   assert(osd_lock.is_locked());
   dout(10) << "load_pgs" << dendl;
@@ -1088,6 +1092,9 @@ void OSD::load_pgs()
     int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
     int role = osdmap->calc_pg_role(whoami, pg->acting, nrep);
     pg->set_role(role);
+
+    PG::RecoveryCtx rctx(&query_map, 0, 0, 0, 0);
+    pg->handle_create(&rctx);
 
     dout(10) << "load_pgs loaded " << *pg << " " << pg->log << dendl;
     pg->unlock();
