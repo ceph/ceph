@@ -3957,7 +3957,7 @@ PG::RecoveryState::ReplicaActive::react(const ActMap&) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg->info);
   }
-  return forward_event();
+  return discard_event();
 }
 
 /*-------Stray---*/
@@ -4055,7 +4055,7 @@ PG::RecoveryState::Stray::react(const ActMap&) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
 					     pg->info);
   }
-  return forward_event();
+  return discard_event();
 }
 
 /*--------GetInfo---------*/
