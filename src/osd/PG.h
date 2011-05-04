@@ -1005,12 +1005,14 @@ public:
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >
 	> reactions;
 
       ReplicaActive(my_context ctx);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const MQuery&);
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {

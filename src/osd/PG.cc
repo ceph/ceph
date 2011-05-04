@@ -3988,6 +3988,13 @@ PG::RecoveryState::ReplicaActive::react(const ActMap&) {
   return discard_event();
 }
 
+boost::statechart::result 
+PG::RecoveryState::ReplicaActive::react(const MQuery& query) {
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(query.query.type == Query::MISSING);
+  pg->fulfill_log(query.from, query.query);
+  return discard_event();
+}
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
   : my_base(ctx), backlog_requested(false) {
