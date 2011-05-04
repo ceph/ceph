@@ -137,10 +137,10 @@ class frag_t {
 
   // parse
   bool parse(const char *s) {
-    int value, bits;
-    int r = sscanf(s, "%x/%d", &value, &bits);
+    int pvalue, pbits;
+    int r = sscanf(s, "%x/%d", &pvalue, &pbits);
     if (r == 2) {
-      *this = frag_t(value, bits);
+      *this = frag_t(pvalue, pbits);
       return true;
     }
     return false;

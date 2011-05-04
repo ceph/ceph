@@ -99,7 +99,7 @@ void OSDMap::print_summary(ostream& out) const
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
-			  int num_osd, int num_dom, int pg_bits, int pgp_bits, int lpg_bits)
+			  int nosd, int ndom, int pg_bits, int pgp_bits, int lpg_bits)
 {
   dout(10) << "build_simple on " << num_osd
 	   << " osds with " << pg_bits << " pg bits per osd, "
@@ -108,7 +108,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   set_fsid(fsid);
   created = modified = g_clock.now();
 
-  set_max_osd(num_osd);
+  set_max_osd(nosd);
 
   // pgp_num <= pg_num
   if (pgp_bits > pg_bits)
@@ -126,24 +126,24 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
     pools[pool].v.size = 2;
     pools[pool].v.crush_ruleset = p->first;
     pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].v.pg_num = num_osd << pg_bits;
-    pools[pool].v.pgp_num = num_osd << pgp_bits;
+    pools[pool].v.pg_num = nosd << pg_bits;
+    pools[pool].v.pgp_num = nosd << pgp_bits;
     pools[pool].v.lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].v.lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].v.last_change = epoch;
     pool_name[pool] = p->second;
   }
 
-  build_simple_crush_map(crush, rulesets, num_osd, num_dom);
+  build_simple_crush_map(crush, rulesets, nosd, ndom);
 
-  for (int i=0; i<num_osd; i++) {
+  for (int i=0; i<nosd; i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
 }
 
-void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& rulesets, int num_osd,
-				    int num_dom)
+void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& rulesets, int nosd,
+				    int ndom)
 {
   // new
   crush.create();
@@ -154,16 +154,15 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   int minrep = g_conf.osd_min_rep;
   int maxrep = g_conf.osd_max_rep;
   assert(maxrep >= minrep);
-  int ndom = num_dom;
   if (!ndom)
     ndom = MAX(maxrep, g_conf.osd_max_raid_width);
   if (ndom > 1 &&
-      num_osd >= ndom*3 &&
-      num_osd > 8) {
+      nosd >= ndom*3 &&
+      nosd > 8) {
     int ritems[ndom];
     int rweights[ndom];
 
-    int nper = ((num_osd - 1) / ndom) + 1;
+    int nper = ((nosd - 1) / ndom) + 1;
     dout(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
     
     int o = 0;
@@ -172,7 +171,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
       int j;
       rweights[i] = 0;
       for (j=0; j<nper; j++, o++) {
-	if (o == num_osd) break;
+	if (o == nosd) break;
 	dout(20) << "added osd" << o << dendl;
 	items[j] = o;
 	weights[j] = 0x10000;
@@ -209,14 +208,14 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   } else {
     // one bucket
 
-    int items[num_osd];
-    int weights[num_osd];
-    for (int i=0; i<num_osd; i++) {
+    int items[nosd];
+    int weights[nosd];
+    for (int i=0; i<nosd; i++) {
       items[i] = i;
       weights[i] = 0x10000;
     }
 
-    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, num_osd, items, weights);
+    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, nosd, items, weights);
     int rootid = crush_add_bucket(crush.crush, 0, b);
     crush.set_item_name(rootid, "root");
 

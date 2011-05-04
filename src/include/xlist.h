@@ -75,49 +75,49 @@ public:
     while (_front) remove(_front);
   }
 
-  void push_front(item *item) {
-    if (item->_list) 
-      item->_list->remove(item);
+  void push_front(item *i) {
+    if (i->_list) 
+      i->_list->remove(i);
 
-    item->_list = this;
-    item->_next = _front;
-    item->_prev = 0;
+    i->_list = this;
+    i->_next = _front;
+    i->_prev = 0;
     if (_front) 
-      _front->_prev = item;
+      _front->_prev = i;
     else
-      _back = item;
-    _front = item;
+      _back = i;
+    _front = i;
     _size++;
   }
-  void push_back(item *item) {
-    if (item->_list) 
-      item->_list->remove(item);
+  void push_back(item *i) {
+    if (i->_list) 
+      i->_list->remove(i);
 
-    item->_list = this;
-    item->_next = 0;
-    item->_prev = _back;
+    i->_list = this;
+    i->_next = 0;
+    i->_prev = _back;
     if (_back) 
-      _back->_next = item;
+      _back->_next = i;
     else
-      _front = item;
-    _back = item;
+      _front = i;
+    _back = i;
     _size++;
   }
-  void remove(item *item) {
-    assert(item->_list == this);
+  void remove(item *i) {
+    assert(i->_list == this);
     
-    if (item->_prev)
-      item->_prev->_next = item->_next;
+    if (i->_prev)
+      i->_prev->_next = i->_next;
     else
-      _front = item->_next;
-    if (item->_next)
-      item->_next->_prev = item->_prev;
+      _front = i->_next;
+    if (i->_next)
+      i->_next->_prev = i->_prev;
     else
-      _back = item->_prev;
+      _back = i->_prev;
     _size--;
 
-    item->_list = 0;
-    item->_next = item->_prev = 0;
+    i->_list = 0;
+    i->_next = i->_prev = 0;
   }
 
   T front() { return (T)_front->_item; }

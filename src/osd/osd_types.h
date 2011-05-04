@@ -121,9 +121,9 @@ struct pg_t {
 
   pg_t() { memset(&v, 0, sizeof(v)); }
   pg_t(const pg_t& o) { v = o.v; }
-  pg_t(ps_t seed, int pool, int pref) {
+  pg_t(ps_t seed, int pool_, int pref) {
     v.ps = seed;
-    v.pool = pool;
+    v.pool = pool_;
     v.preferred = pref;   // hack: avoid negative.
   }
   pg_t(const ceph_pg& cpg) {
@@ -148,16 +148,16 @@ struct pg_t {
       return snprintf(o, maxlen, "%d.%x", pool(), ps());
   }
   bool parse(const char *s) {
-    int pool;
-    int ps;
-    int preferred;
-    int r = sscanf(s, "%d.%xp%d", &pool, &ps, &preferred);
+    int ppool;
+    int pseed;
+    int pref;
+    int r = sscanf(s, "%d.%xp%d", &ppool, &pseed, &pref);
     if (r < 2)
       return false;
-    v.pool = pool;
-    v.ps = ps;
+    v.pool = ppool;
+    v.ps = pseed;
     if (r == 3)
-      v.preferred = preferred;
+      v.preferred = pref;
     else
       v.preferred = -1;
     return true;
@@ -359,18 +359,18 @@ inline ostream& operator<<(ostream& out, const coll_t& c) {
 namespace __gnu_cxx {
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
-      size_t hash = 0;
+      size_t h = 0;
       string str(c.to_str());
       std::string::const_iterator end(str.end());
       for (std::string::const_iterator s = str.begin(); s != end; ++s) {
-	hash += *s;
-	hash += (hash << 10);
-	hash ^= (hash >> 6);
+	h += *s;
+	h += (h << 10);
+	h ^= (h >> 6);
       }
-      hash += (hash << 3);
-      hash ^= (hash >> 11);
-      hash += (hash << 15);
-      return hash;
+      h += (h << 3);
+      h ^= (h >> 11);
+      h += (h << 15);
+      return h;
     }
   };
 }

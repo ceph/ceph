@@ -342,12 +342,12 @@ struct SnapRealmInfo {
   SnapRealmInfo() {
     memset(&h, 0, sizeof(h));
   }
-  SnapRealmInfo(inodeno_t ino, snapid_t created, snapid_t seq, snapid_t current_parent_since) {
+  SnapRealmInfo(inodeno_t ino_, snapid_t created_, snapid_t seq_, snapid_t current_parent_since_) {
     memset(&h, 0, sizeof(h));
-    h.ino = ino;
-    h.created = created;
-    h.seq = seq;
-    h.parent_since = current_parent_since;
+    h.ino = ino_;
+    h.created = created_;
+    h.seq = seq_;
+    h.parent_since = current_parent_since_;
   }
   
   inodeno_t ino() { return inodeno_t(h.ino); }

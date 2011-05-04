@@ -427,9 +427,9 @@ class interval_set {
       if (pb->first + pb->second <= pa->first) 
         { pb++;  continue; }
       T start = MAX(pa->first, pb->first);
-      T end = MIN(pa->first+pa->second, pb->first+pb->second);
-      assert(end > start);
-      insert(start, end-start);
+      T en = MIN(pa->first+pa->second, pb->first+pb->second);
+      assert(en > start);
+      insert(start, en-start);
       if (pa->first+pa->second > pb->first+pb->second)
         pb++;
       else

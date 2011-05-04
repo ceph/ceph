@@ -47,13 +47,13 @@ bool RotatingKeyRing::get_secret(const EntityName& name, CryptoKey& secret) cons
   return keyring->get_secret(name, secret);
 }
 
-bool RotatingKeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id,
+bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_id,
 					 CryptoKey& secret) const
 {
   Mutex::Locker l(lock);
 
-  if (service_id != this->service_id) {
-    dout(0) << "do not have service " << ceph_entity_type_name(service_id)
+  if (service_id_ != this->service_id) {
+    dout(0) << "do not have service " << ceph_entity_type_name(service_id_)
 	    << ", i am " << ceph_entity_type_name(this->service_id) << dendl;
     return false;
   }

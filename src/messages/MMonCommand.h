@@ -26,8 +26,8 @@ class MMonCommand : public PaxosServiceMessage {
   vector<string> cmd;
 
   MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
-  MMonCommand(ceph_fsid_t &f, version_t version) : 
-    PaxosServiceMessage(MSG_MON_COMMAND, version),
+  MMonCommand(ceph_fsid_t &f, version_t v) : 
+    PaxosServiceMessage(MSG_MON_COMMAND, v),
     fsid(f) { }
 
 private:

@@ -101,8 +101,8 @@ public:
     }
   };
   struct malformed_input : public error {
-    explicit malformed_input(const char *what) {
-      snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", what);
+    explicit malformed_input(const char *w) {
+      snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w);
     }
     const char *what() const throw () {
       return buf;

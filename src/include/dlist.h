@@ -79,15 +79,15 @@ public:
       remove(front());
   }
 
-  void push_front(item *item) {
-    if (!item->empty()) 
-      item->remove_myself();
-    _head.insert_after(item);
+  void push_front(item *i) {
+    if (!i->empty()) 
+      i->remove_myself();
+    _head.insert_after(i);
   }
-  void push_back(item *item) {
-    if (!item->empty()) 
-      item->remove_myself();
-    _head.insert_before(item);
+  void push_back(item *i) {
+    if (!i->empty()) 
+      i->remove_myself();
+    _head.insert_before(i);
   }
 
   T front() { return (T)_head._next->_item; }

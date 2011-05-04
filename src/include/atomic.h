@@ -39,8 +39,8 @@ public:
     AO_fetch_and_add(&val, add_me);
   }
   void sub(int sub_me) {
-    int sub = 0 - sub_me;
-    AO_fetch_and_add_write(&val, (AO_t)sub);
+    int negsub = 0 - sub_me;
+    AO_fetch_and_add_write(&val, (AO_t)negsub);
   }
   AO_t read() const {
     // cast away const on the pointer.  this is only needed to build
