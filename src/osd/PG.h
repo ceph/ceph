@@ -98,7 +98,7 @@ struct PGRecoveryStats {
     i.total_time += dur;
     if (dur > i.max_time)
       i.max_time = dur;
-    if (i.min_time < dur || i.min_time == utime_t())
+    if (dur < i.min_time || i.min_time == utime_t())
       i.min_time = dur;
     i.events += events;
     i.event_time += event_dur;
