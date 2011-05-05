@@ -25,7 +25,7 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 #elif USE_NSS
 
 void ceph::crypto::init() {
-  static pthread_mutex_t lock;
+  static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
   static bool crypto_init = false;
   pthread_mutex_lock(&lock);
   if (crypto_init) {
