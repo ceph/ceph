@@ -104,6 +104,31 @@ def put_obj(bucket_name, args):
     else:
         k.set_contents_from_filename(opts.filename)
 
+def put_obj_acl(bucket_name, args):
+    parser = OptionParser()
+    parser.add_option("-f", "--filename", dest="filename",
+                        help="file name (default stdin)")
+    (opts, args) = parser.parse_args(args)
+    if (len(args) < 1):
+        print "put_acl requires an argument: the object name"
+        return 255
+    obj_name = args[0]
+    print "uploading object ACL to bucket: '%s', object name: '%s'" \
+        % (bucket_name, obj_name)
+    bucket = conn.get_bucket(bucket_name)
+    k = Key(bucket)
+    k.key = obj_name
+    if (opts.filename == None):
+        print "sorry, no support for put-from-stdin yet. use -f"
+        return 255
+    else:
+        f = open(opts.filename, "r")
+        try:
+            xml = f.read()
+        finally:
+            f.close()
+        k.set_xml_acl(xml)
+
 def get_obj(bucket_name, args):
     parser = OptionParser()
     parser.add_option("-f", "--filename", dest="filename",
@@ -121,6 +146,30 @@ def get_obj(bucket_name, args):
         k.get_contents_to_file(sys.stdout)
     else:
         k.get_contents_to_filename(opts.filename)
+
+def get_obj_acl(bucket_name, args):
+    parser = OptionParser()
+    parser.add_option("-f", "--filename", dest="filename",
+                        help="file name (default stdin)")
+    (opts, args) = parser.parse_args(args)
+    if (len(args) < 1):
+        print "get_acl requires an argument: the object name to get the acl for"
+        return 255
+    obj_name = args[0]
+    print "downloading object acl from bucket: '%s', object name: '%s'" % \
+        (bucket_name, obj_name)
+    bucket = conn.get_bucket(bucket_name)
+    k = Key(bucket)
+    k.key = obj_name
+    xml = k.get_xml_acl()
+    if (opts.filename == None):
+        print xml
+    else:
+        f = open(opts.filename, "w")
+        try:
+            f.write(xml)
+        finally:
+            f.close()
 
 def list_obj(bucket_name, args):
     if (len(args) < 1):
@@ -220,8 +269,12 @@ else:
         sys.exit(255)
     if (sys.argv[3] == "put"):
         sys.exit(put_obj(bucket_name, sys.argv[4:]))
+    if (sys.argv[3] == "putacl"):
+        sys.exit(put_obj_acl(bucket_name, sys.argv[4:]))
     elif (sys.argv[3] == "get"):
         sys.exit(get_obj(bucket_name, sys.argv[4:]))
+    elif (sys.argv[3] == "getacl"):
+        sys.exit(get_obj_acl(bucket_name, sys.argv[4:]))
     elif (sys.argv[3] == "ls"):
         sys.exit(list_obj(bucket_name, sys.argv[4:]))
     elif (sys.argv[3] == "rm"):
