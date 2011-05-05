@@ -64,6 +64,8 @@ struct PGRecoveryStats {
     utime_t event_time;       // time spent processing events
     utime_t total_time;       // total time in state
     utime_t min_time, max_time;
+
+    per_state_info() : enter(0), exit(0), events(0) {}
   };
   map<const char *,per_state_info> info;
   Mutex lock;
@@ -931,7 +933,7 @@ public:
       void log_enter(const char *state_name);
       void log_exit(const char *state_name, utime_t duration);
 
-      RecoveryMachine(RecoveryState *state, PG *pg) : state(state), pg(pg) {}
+      RecoveryMachine(RecoveryState *state, PG *pg) : state(state), pg(pg), event_count(0) {}
 
       /* Accessor functions for state methods */
       ObjectStore::Transaction* get_cur_transaction() {
