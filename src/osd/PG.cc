@@ -4176,23 +4176,26 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
       dout(10) << "transitioning to pending, need upthru" << dendl;
       post_event(NeedNewMap());
     } else {
-      stringstream out;
-      map< int, map< pg_t, Query > > query_map;
-      prior_set->gen_query_map(*pg->osd->osdmap,
-			       pg->info,
-			       query_map);
-      for (map< int, map< pg_t, Query> >::iterator i = query_map.begin();
-	   i != query_map.end();
-	   ++i) {
-	for (map< pg_t, Query >::iterator j = i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  context< RecoveryMachine >().send_query(i->first, j->second);
-	  peer_info_requested.insert(i->first);
+      for (set<int>::const_iterator it = prior_set->cur.begin();
+	   it != prior_set->cur.end();
+	   ++it) {
+	int peer = *it;
+	if (pg->peer_info.count(peer)) {
+	  dout(10) << " have osd" << peer << " info " << pg->peer_info[peer] << dendl;
+	} else if (peer_info_requested.count(peer)) {
+	  dout(10) << " already requested info from osd" << peer << dendl;
+	} else if (!pg->osd->osdmap->is_up(peer)) {
+	  dout(10) << " not querying info from down osd" << peer << dendl;
+	} else {
+	  dout(10) << " querying info from osd" << peer << dendl;
+	  context< RecoveryMachine >().send_query(peer, Query(Query::INFO, pg->info.history));
+	  peer_info_requested.insert(peer);
 	}
       }
     }
   }
+
+#warning is this right?
   if (peer_info_requested.empty()) {
     post_event(GotInfo());
   }
@@ -4667,19 +4670,3 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 
 }
 
-void PG::PgPriorSet::gen_query_map(const OSDMap &osdmap,
-				   const PG::Info &info,
-				   map< int, map<pg_t,Query> >& query_map)
-{
-  for (set<int>::const_iterator it = cur.begin();
-       it != cur.end();
-       ++it) {
-    // -- query info from everyone in prior_set.
-    if (osdmap.is_up(*it)) {
-      dout(10) << " querying info from osd" << *it << dendl;
-      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
-    } else {
-      dout(10) << " not querying info from down osd" << *it << dendl;
-    }
-  }
-}

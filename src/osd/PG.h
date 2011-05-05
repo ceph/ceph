@@ -827,10 +827,6 @@ public:
 	       const vector<int> &acting,
 	       const Info &info,
 	       const PG *pg);
-
-    void gen_query_map(const OSDMap &osdmap,
-		       const Info &info,
-		       map< int, map<pg_t,Query> >& query_map);
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
