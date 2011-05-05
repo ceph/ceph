@@ -546,7 +546,16 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
-            self.bucket.set_xml_acl(src_acl.acl_policy.to_xml(omit_owner = False), k)
+            try:
+                xml = src_acl.acl_policy.to_xml(omit_owner = False)
+                self.bucket.set_xml_acl(xml, k)
+            except Exception, e:
+                print >>stderr, "ERROR SETTING ACL on object '" + sobj.name
+                print >>stderr
+                print >>stderr, "************* ACL: *************"
+                print >>stderr, str(xml)
+                print >>stderr, "********************************"
+                raise
 
     def remove(self, obj):
         if (opts.dry_run):
