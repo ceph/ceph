@@ -475,8 +475,7 @@ private:
   entity_inst_t get_inst(int osd) {
     assert(exists(osd));
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd),
-			 osd_addr[osd]);
+    return entity_inst_t(entity_name_t::OSD(osd), osd_addr[osd]);
   }
   entity_inst_t get_cluster_inst(int osd) {
     assert(exists(osd));
@@ -487,9 +486,8 @@ private:
   }
   entity_inst_t get_hb_inst(int osd) {
     assert(exists(osd));
-    entity_inst_t i(entity_name_t::OSD(osd),
-		    osd_hb_addr[osd]);
-    return i;
+    assert(is_up(osd));
+    return entity_inst_t(entity_name_t::OSD(osd), osd_hb_addr[osd]);
   }
 
   const epoch_t& get_up_from(int osd) const {
