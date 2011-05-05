@@ -195,7 +195,10 @@ void PG::proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Mi
   peer_missing[from].swap(omissing);
 }
     
-void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from) {
+void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
+{
+  dout(10) << "proc_replica_log for osd" << from << ": " << oinfo << " " << olog << " " << omissing << dendl;
+
   // This was a side effect in _process_pg_info. At this point I don't
   // think it's necessary, since we're in the GetMissing state,
   // but we'll keep it here for now
@@ -1275,6 +1278,12 @@ void PG::choose_log_location(bool &need_backlog,
     }
   }
   newest_update = best_info->last_update;
+  if (pull_from >= 0)
+    dout(10) << "choose_log_location newest_update " << newest_update
+	     << " on osd" << pull_from << dendl;
+  else
+    dout(10) << "choose_log_location newest_update " << newest_update
+	     << " (local)" << dendl;
 
   for (vector<int>::const_iterator it = ++acting.begin();
        it != acting.end();
@@ -1329,9 +1338,14 @@ void PG::choose_log_location(bool &need_backlog,
 	       << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
       need_backlog = true;
       wait_on_backlog = true;
-      return;
+      break;
     }
   }
+
+  dout(10) << "choose_log_location"
+	   << (need_backlog ? " need_backlog" : "")
+	   << (wait_on_backlog ? " wait_on_backlog" : "")
+	   << dendl;
 }
 
 /* Build the might_have_unfound set.
@@ -4178,7 +4192,6 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
     pg->build_prior(prior_set);
 
   if (pg->need_up_thru) {
-    dout(10) << "transitioning to pending, need upthru" << dendl;
     post_event(NeedNewMap());
   } else {
     get_infos();
@@ -4250,15 +4263,15 @@ void PG::RecoveryState::GetInfo::exit() {
 
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
-  my_base(ctx), newest_update_osd(-1), need_backlog(false), msg(0) {
+  my_base(ctx), newest_update_osd(-1), need_backlog(false), msg(0)
+{
   state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "In GetLog, selecting log location" << dendl;
+
   eversion_t newest_update;
   eversion_t oldest_update;
-  stringstream out;
   pg->choose_log_location(need_backlog,
 			  wait_on_backlog,
 			  newest_update_osd,
@@ -4266,18 +4279,14 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 			  oldest_update);
 
   if (!pg->choose_acting(newest_update_osd == -1 ? 0 : newest_update_osd)) {
-    dout(10) << "transitioning to pending, need new acting" << dendl;
     post_event(NeedNewMap());
   } else {
-	
     if (need_backlog && !pg->log.backlog) {
-      dout(10) << "In GetLog, need backlog" << dendl;
       pg->osd->queue_generate_backlog(pg);
     }
     
     if (newest_update_osd != -1) {
-      dout(10) << "Sending request to osd" << newest_update_osd
-	       << "for the master log" << dendl;
+      dout(10) << " requesting master log from osd" << newest_update_osd << dendl;
       context<RecoveryMachine>().send_query(newest_update_osd,
 					    wait_on_backlog ? 
 					    Query(Query::BACKLOG, pg->info.history) :
@@ -4289,7 +4298,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
     }
 
     if (!wait_on_backlog && newest_update_osd == -1) {
-      dout(10) << "GetLog: neither backlog nor master log needed, "
+      dout(10) << " neither backlog nor master log needed, "
 	       << "moving to GetMissing" << dendl;
       post_event(GotLog());
     }
@@ -4345,26 +4354,35 @@ PG::RecoveryState::GetLog::~GetLog() {
 }
 
 /*------GetMissing--------*/
-PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
+{
   state_name = "Started/Primary/Peering/GetMissing";
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  map<int, Missing> &peer_missing = pg->peer_missing;
   for (vector<int>::iterator i = pg->acting.begin()++;
        i != pg->acting.end();
        ++i) {
     const Info& pi = pg->peer_info[*i];
-    if (pi.is_empty()) continue; // Does not have the PG yet
+
+    if (pi.is_empty())
+      continue;                                // Does not have the PG yet
+
     if (pi.last_update == pi.last_complete &&  // peer has no missing
 	pi.last_update == pg->info.last_update) {  // peer is up to date
       // replica has no missing and identical log as us.  no need to
       // pull anything.
-      dout(10) << "osd" << *i << " has no missing, identical log" << dendl;
-      peer_missing[*i];
-      pg->search_for_missing(pg->peer_info[*i], &peer_missing[*i], *i);
+      // FIXME: we can do better here.  if last_update==last_complete we
+      //        can infer the rest!
+      dout(10) << " osd" << *i << " has no missing, identical log" << dendl;
+      pg->peer_missing[*i];
+      pg->search_for_missing(pg->peer_info[*i], &pg->peer_missing[*i], *i);
+      continue;
     }
-    dout(10) << "Requesting missing from osd" << *i << dendl;
+
+    // FIXME: do we really need to request the whole log here?  can we
+    //        build peer_missing with less?
+    dout(10) << " requesting missing from osd" << *i << dendl;
     context< RecoveryMachine >().send_query(*i,
       Query(Query::LOG,
 	    eversion_t(pi.history.last_epoch_started, 0),
@@ -4377,12 +4395,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx) {
   }
 }
 
-boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& logevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "GetMissing: Got a missing from osd" << logevt.from 
-	   << "waiting on " << peer_missing_requested.size() - 1 
-	   << " more" << dendl;
   MOSDPGLog *msg = logevt.msg;
+
   peer_missing_requested.erase(logevt.from);
   pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
 		       msg->info, msg->log, msg->missing, logevt.from);
