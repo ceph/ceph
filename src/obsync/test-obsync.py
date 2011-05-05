@@ -32,8 +32,18 @@ import tempfile
 
 global opts
 global tdir
+global nonce
+nonce = 0
 
 ###### Helper functions #######
+def get_nonce():
+    global nonce
+    if (opts.deterministic_nonce):
+        nonce = nonce + 1
+        return nonce
+    else:
+        return random.randint(9999, 99999)
+
 def read_config():
     config = {}
     cfg = ConfigParser.RawConfigParser()
@@ -82,7 +92,7 @@ def read_config():
         random.seed()
         try:
             config[name]["bucket_name"] = \
-                template.format(random=str(random.randint(9999, 99999)))
+                template.format(random=get_nonce())
         except:
             print >>stderr, "error parsing bucket prefix template"
             raise
@@ -148,7 +158,8 @@ def count_obj_in_dir(d):
 
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
-    def __init__(self, url, akey, skey):
+    def __init__(self, name, url, akey, skey):
+        self.name = name
         self.url = url
         self.akey = akey
         self.skey = skey
@@ -172,6 +183,9 @@ parser.add_option("-v", "--verbose", action="store_true",
     help="run verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
+parser.add_option("-D", "--deterministic-nonce", action="store_true", \
+    dest="deterministic_nonce", help="use a deterministic bucket nonce\
+(good for predictability, bad for re-entrancy).")
 (opts, args) = parser.parse_args()
 if (opts.more_verbose):
     opts.verbose = True
@@ -179,10 +193,10 @@ if (opts.more_verbose):
 # parse configuration file
 config = read_config()
 opts.buckets = []
-opts.buckets.append(ObSyncTestBucket(\
+opts.buckets.append(ObSyncTestBucket(config["main"]["bucket_name"], \
     "s3://" + config["main"]["host"] + "/" + config["main"]["bucket_name"], \
     config["main"]["access_key"], config["main"]["secret_key"]))
-opts.buckets.append(ObSyncTestBucket(\
+opts.buckets.append(ObSyncTestBucket(config["alt"]["bucket_name"], \
     "s3://" + config["alt"]["host"] + "/" + config["alt"]["bucket_name"], \
     config["alt"]["access_key"], config["alt"]["secret_key"]))
 
@@ -337,7 +351,7 @@ users in it.")
 # first, let's empty out the S3 bucket
 os.mkdir("%s/empty1" % tdir)
 if (opts.verbose):
-    print "emptying out bucket1..."
+    print "emptying out " + opts.buckets[0].name
 obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
             ["-c", "--delete-after"])
 
@@ -345,10 +359,10 @@ obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
 obsync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
 compare_directories("%s/empty1" % tdir, "%s/empty2" % tdir)
 if (opts.verbose):
-    print "successfully emptied out the bucket."
+    print "successfully emptied out " + opts.buckets[0].name
 
 if (opts.verbose):
-    print "copying the sample directory to the test bucket..."
+    print "copying the sample directory to " + opts.buckets[0].name
 # now copy the sample files to the test bucket
 obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 
@@ -356,7 +370,7 @@ obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
 compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
 if (opts.verbose):
-    print "successfully copied the sample directory to the test bucket."
+    print "successfully copied the sample directory to " + opts.buckets[0].name
 
 # test --follow-symlinks
 os.mkdir("%s/sym_test_dir" % tdir)
@@ -399,19 +413,20 @@ obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
             config["alt"]["user_id"] + "=" + config["main"]["user_id"]])
 
 if (opts.verbose):
-    print "copying dir1 to bucket0..."
+    print "copying dir1 to " + opts.buckets[0].name
 obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
 if (opts.verbose):
-    print "copying bucket0 to bucket1..."
+    print "copying " + opts.buckets[0].name + " to " + opts.buckets[1].name
 obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
 if (opts.verbose):
     print "copying bucket1 to dir4..."
 obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
 compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
 if (opts.verbose):
-    print "successfully copied one bucket to another."
+    print "successfully copied " + opts.buckets[0].name + " to " + \
+        opts.buckets[1].name
 if (opts.verbose):
-    print "adding another object to bucket1..."
+    print "adding another object to " + opts.buckets[1]
 os.mkdir("%s/small" % tdir)
 f = open("%s/small/new_thing" % tdir, 'w')
 f.write("a new object!!!")

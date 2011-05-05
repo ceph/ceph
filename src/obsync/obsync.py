@@ -544,7 +544,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
                 xml = src_acl.acl_policy.to_xml()
                 self.bucket.set_xml_acl(xml, k)
             except Exception, e:
-                print >>stderr, "ERROR SETTING ACL on object '" + sobj.name
+                print >>stderr, "ERROR SETTING ACL on object '" + sobj.name + "'"
                 print >>stderr
                 print >>stderr, "************* ACL: *************"
                 print >>stderr, str(xml)
