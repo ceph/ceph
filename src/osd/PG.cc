@@ -4221,7 +4221,7 @@ void PG::RecoveryState::GetInfo::get_infos() {
     }
   }
   
-  if (peer_info_requested.empty() && prior_set->down.empty()) {
+  if (peer_info_requested.empty() && !prior_set->some_down) {
     post_event(GotInfo());
   }
 }
@@ -4243,7 +4243,7 @@ PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) {
       get_infos();
     } else {
       // are we done getting everything?
-      if (peer_info_requested.empty() && prior_set->down.empty())
+      if (peer_info_requested.empty() && !prior_set->some_down)
 	post_event(GotInfo());
     }
   }
