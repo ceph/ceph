@@ -81,6 +81,8 @@ bool ACLOwner::xml_end(const char *el) {
   // DisplayName is optional
   if (acl_name)
     display_name = acl_name->get_data();
+  else
+    display_name = "";
 
   return true;
 }
@@ -104,6 +106,11 @@ bool ACLGrant::xml_end(const char *el) {
   if (!acl_permission)
     return false;
   permission = *acl_permission;
+
+  id.clear();
+  name.clear();
+  uri.clear();
+  email.clear();
 
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:

@@ -367,10 +367,10 @@ public:
   void to_xml(ostream& out) {
     if (id.empty())
       return;
-    out << "<Owner>" <<
-                   "<ID>" << id << "</ID>" <<
-                   "<DisplayName>" << display_name << "</DisplayName>" <<
-                  "</Owner>";
+    out << "<Owner>" << "<ID>" << id << "</ID>";
+    if (!display_name.empty())
+      out << "<DisplayName>" << display_name << "</DisplayName>";
+    out << "</Owner>";
   }
   void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
