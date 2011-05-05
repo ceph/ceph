@@ -250,10 +250,14 @@ static void dashes_to_underscores(const char *input, char *output)
   if (*o++ == '\0')
     return;
   for (; ((c = *i)); ++i) {
-     if (c == '-')
-       *o++ = '_';
-     else
-       *o++ = c;
+    if (c == '=') {
+      strcpy(o, i);
+      return;
+    }
+    if (c == '-')
+      *o++ = '_';
+    else
+      *o++ = c;
   }
   *o++ = '\0';
 }
