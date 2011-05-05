@@ -277,9 +277,9 @@ class AclPolicy(object):
             grant_user_id = grantee_attribute_to_user_type(user_type) + user_id
             grants[grant_user_id] = AclGrant(grant_user_id, display_name, permission)
         return AclPolicy(owner_id, owner_display_name, grants)
-    def to_xml(self, omit_owner):
+    def to_xml(self):
         root = etree.Element("AccessControlPolicy", nsmap={None: NS})
-        if ((not omit_owner) and self.owner_id):
+        if (self.owner_id):
             owner = etree.SubElement(root, "Owner")
             id_elem = etree.SubElement(owner, "ID")
             id_elem.text = self.owner_id
@@ -348,7 +348,7 @@ def test_acl_policy():
 "<DisplayName>display-name</DisplayName></Grantee>" + \
 "<Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>"
     test1 = AclPolicy.from_xml(test1_xml)
-    compare_xml(test1_xml, test1.to_xml(omit_owner = False))
+    compare_xml(test1_xml, test1.to_xml())
 
 ###### Object #######
 class Object(object):
@@ -453,7 +453,7 @@ class LocalAcl(object):
         """ Write this ACL to a file """
         if (self.acl_policy == None):
             return
-        xml = self.acl_policy.to_xml(omit_owner = True)
+        xml = self.acl_policy.to_xml()
         f = open(file_name, 'w')
         try:
             f.write(xml)
@@ -547,7 +547,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
             try:
-                xml = src_acl.acl_policy.to_xml(omit_owner = False)
+                xml = src_acl.acl_policy.to_xml()
                 self.bucket.set_xml_acl(xml, k)
             except Exception, e:
                 print >>stderr, "ERROR SETTING ACL on object '" + sobj.name
