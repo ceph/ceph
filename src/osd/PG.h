@@ -1337,7 +1337,7 @@ public:
   void _activate_committed(epoch_t e);
   void all_activated_and_committed();
 
-  void process_primary_info(ObjectStore::Transaction &t, const Info &info);
+  void proc_primary_info(ObjectStore::Transaction &t, const Info &info);
 
   bool have_unfound() const { 
     return missing.num_missing() > missing_loc.size();

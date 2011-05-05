@@ -3503,7 +3503,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
   }
 }
 
-void PG::process_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
+void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
 {
   assert(is_replica());
   assert(is_active());
@@ -4033,8 +4033,8 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
 boost::statechart::result 
 PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->process_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
-			   infoevt.info);
+  pg->proc_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
+			infoevt.info);
   return discard_event();
 }
 
