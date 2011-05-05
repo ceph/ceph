@@ -252,10 +252,7 @@ class AclPolicy(object):
     def from_xml(s):
         root = etree.parse(StringIO(s))
         owner_id_node = root.find("{%s}Owner/{%s}ID" % (NS,NS))
-        if (owner_id_node != None):
-            owner_id = owner_id_node.text
-        else:
-            owner_id = None
+        owner_id = owner_id_node.text
         owner_display_name_node = root.find("{%s}Owner/{%s}DisplayName" \
                                         % (NS,NS))
         if (owner_display_name_node != None):
@@ -279,13 +276,12 @@ class AclPolicy(object):
         return AclPolicy(owner_id, owner_display_name, grants)
     def to_xml(self):
         root = etree.Element("AccessControlPolicy", nsmap={None: NS})
-        if (self.owner_id):
-            owner = etree.SubElement(root, "Owner")
-            id_elem = etree.SubElement(owner, "ID")
-            id_elem.text = self.owner_id
-            if (self.owner_display_name and self.owner_display_name != ""):
-                display_name_elem = etree.SubElement(owner, "DisplayName")
-                display_name_elem.text = self.owner_display_name
+        owner = etree.SubElement(root, "Owner")
+        id_elem = etree.SubElement(owner, "ID")
+        id_elem.text = self.owner_id
+        if (self.owner_display_name and self.owner_display_name != ""):
+            display_name_elem = etree.SubElement(owner, "DisplayName")
+            display_name_elem.text = self.owner_display_name
         access_control_list = etree.SubElement(root, "AccessControlList")
         for k,g in self.grants.items():
             grant_elem = etree.SubElement(access_control_list, "Grant")
@@ -300,20 +296,19 @@ class AclPolicy(object):
             permission_elem.text = g.permission
         return etree.tostring(root, encoding="UTF-8")
     def translate_users(self, xusers):
-        if (self.owner_id != None):
-            # Translate the owner for consistency, although most of the time we
-            # don't write out the owner to the ACL.
-            # Owner ids are always expressed in terms of canonical user id
-            if (xusers.has_key(ACL_TYPE_CANON_USER + self.owner_id)):
-                self.owner_id = \
-                    strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
-                self.owner_display_name = ""
+        # Owner ids are always expressed in terms of canonical user id
+        if (xusers.has_key(ACL_TYPE_CANON_USER + self.owner_id)):
+            self.owner_id = \
+                strip_user_type(xusers[ACL_TYPE_CANON_USER + self.owner_id])
+            self.owner_display_name = ""
         for k,g in self.grants.items():
             g.translate_users(xusers)
+    def set_owner(self, owner_id):
+        self.owner_id = owner_id
+        self.owner_display_name = ""
     def equals(self, rhs):
-        if (self.owner_id != None) and (rhs.owner_id != None):
-            if (self.owner_id != rhs.owner_id):
-                return False
+        if (self.owner_id != rhs.owner_id):
+            return False
         for k,g in self.grants.items():
             if (not rhs.grants.has_key(k)):
                 return False
@@ -444,11 +439,10 @@ class LocalAcl(object):
         if (self.acl_policy == None):
             return
         self.acl_policy.translate_users(xusers)
-    def strip_owner(self):
+    def set_owner(self, owner_id):
         if (self.acl_policy == None):
             return
-        self.acl_policy.owner_id = None
-        self.acl_policy.owner_display_name = None
+        self.acl_policy.set_owner(owner_id)
     def write_to_file(self, file_name):
         """ Write this ACL to a file """
         if (self.acl_policy == None):
@@ -987,7 +981,7 @@ for sobj in src.all_objects():
         src_acl = src.get_acl(sobj)
         dst_acl = dst.get_acl(dobj)
         src_acl.translate_users(xuser)
-        src_acl.strip_owner()
+        #src_acl.set_owner()
         if (not src_acl.equals(dst_acl)):
             upload = True
             if (opts.verbose):
@@ -1003,7 +997,7 @@ for sobj in src.all_objects():
             if (src_acl == None):
                 src_acl = src.get_acl(sobj)
                 src_acl.translate_users(xuser)
-                src_acl.strip_owner()
+                #src_acl.set_owner()
         local_copy = src.make_local_copy(sobj)
         try:
             dst.upload(local_copy, src_acl, sobj)
