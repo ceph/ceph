@@ -15,25 +15,78 @@
 obsync_test.py: a system test for obsync
 """
 
+from boto.s3.connection import OrdinaryCallingFormat
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 from optparse import OptionParser
+from sys import stderr
+import ConfigParser
 import atexit
+import boto
 import os
-import tempfile
 import shutil
 import subprocess
+import random
 import sys
+import tempfile
 
 global opts
 global tdir
-global user1
-global user2
 
 ###### Helper functions #######
-def getenv(e):
-    if os.environ.has_key(e):
-        return os.environ[e]
-    else:
-        return None
+def read_config():
+    config = {}
+    cfg = ConfigParser.RawConfigParser()
+    try:
+        path = os.environ['S3TEST_CONF']
+    except KeyError:
+        raise RuntimeError('To run tests, point environment ' + \
+            'variable S3TEST_CONF to a config file.')
+    with file(path) as f:
+        cfg.readfp(f)
+
+    for section in cfg.sections():
+        try:
+            (type_, name) = section.split(None, 1)
+        except ValueError:
+            continue
+        if type_ != 's3':
+            continue
+        # TODO: support 'port', 'is_secure'
+
+        config[name] = {}
+        for var in [ 'access_key', 'host', 'secret_key', 'user_id',
+                     'display_name', 'email', ]:
+            try:
+                config[name][var] = cfg.get(section, var)
+            except ConfigParser.NoOptionError:
+                pass
+        # Make sure connection works
+        try:
+            conn = boto.s3.connection.S3Connection(
+                aws_access_key_id = config[name]["access_key"],
+                aws_secret_access_key = config[name]["secret_key"],
+                host = config[name]["host"],
+                # TODO support & test all variations
+                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                )
+        except Exception, e:
+            print >>stderr, "error initializing connection!"
+            raise
+
+        # Create bucket name
+        try:
+            template = cfg.get('fixtures', 'bucket prefix')
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            template = 'test-{random}-'
+        random.seed()
+        try:
+            config[name]["bucket_name"] = \
+                template.format(random=str(random.randint(9999, 99999)))
+        except:
+            print >>stderr, "error parsing bucket prefix template"
+            raise
+    return config
 
 def obsync(src, dst, misc):
     full = ["./obsync.py"]
@@ -109,8 +162,8 @@ parser = OptionParser("""test-obsync.sh
 A system test for obsync.
 
 Important environment variables:
-URL1, SKEY1, AKEY1: to set up bucket1 (optional)
-URL2, SKEY2, AKEY2: to set up bucket2 (optional)""")
+S3TEST_CONF: path to the S3-tests configuration file
+""")
 parser.add_option("-k", "--keep-tempdir", action="store_true",
     dest="keep_tempdir", default=False,
     help="create the destination if it doesn't already exist")
@@ -123,40 +176,20 @@ parser.add_option("-V", "--more-verbose", action="store_true", \
 if (opts.more_verbose):
     opts.verbose = True
 
-# parse environment
+# parse configuration file
+config = read_config()
 opts.buckets = []
-if (not os.environ.has_key("URL1")):
-    if (opts.verbose):
-        print "no bucket urls were given. Running local tests only."
-elif (not os.environ.has_key("URL2")):
-    opts.buckets.append(ObSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
-                        getenv("SKEY1")))
-    if (opts.verbose):
-        print "have scratch1_url: will test bucket transfers"
-    user1 = getenv("USER1")
-    if (user1 == None):
-        raise Exception("You must specify a USER1 to use with URL1")
-else:
-    opts.buckets.append(ObSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
-                        getenv("SKEY1")))
-    opts.buckets.append(ObSyncTestBucket(getenv("URL2"), getenv("AKEY2"),
-                getenv("SKEY2")))
-    if (opts.verbose):
-        print "have both scratch1_url and scratch2_url: will test \
-bucket-to-bucket transfers."
+opts.buckets.append(ObSyncTestBucket(\
+    "s3://" + config["main"]["host"] + "/" + config["main"]["bucket_name"], \
+    config["main"]["access_key"], config["main"]["secret_key"]))
+opts.buckets.append(ObSyncTestBucket(\
+    "s3://" + config["alt"]["host"] + "/" + config["alt"]["bucket_name"], \
+    config["alt"]["access_key"], config["alt"]["secret_key"]))
 
-if (len(opts.buckets) == 0):
-    print >>sys.stderr, "invalid usage. -h for help."
-    sys.exit(1)
-
-user1 = getenv("USER1")
-user2 = getenv("USER2")
-if (user1 == None):
-    raise Exception("You must specify a USER1. If URL1 exists, we will use \
-USER1 with it.")
-if (user2 == None):
-    raise Exception("You must specify a USER2. If URL2 exists, we will use \
-USER2 with it.")
+if not config["main"]["user_id"]:
+    raise Exception("You must specify a user_id for the main section.")
+if not config["alt"]["user_id"]:
+    raise Exception("You must specify a user_id for the alt section.")
 
 # set up temporary directory
 tdir = tempfile.mkdtemp()
@@ -261,14 +294,14 @@ obsync_check("file://%s/dir1" % tdir, "file://%s/dira" % tdir, ["-c"])
 synthetic_xml = \
 "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n\
 <Owner>\n\
-<ID>" + user1 + "</ID>\n\
+<ID>" + config["main"]["user_id"] + "</ID>\n\
 <DisplayName></DisplayName>\n\
 </Owner>\n\
 <AccessControlList>\n\
 <Grant>\n\
   <Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
 xsi:type=\"CanonicalUser\">\n\
-    <ID>" + user1 + "</ID>\n\
+    <ID>" + config["main"]["user_id"] + "</ID>\n\
     <DisplayName></DisplayName>\n\
   </Grantee>\n\
   <Permission>FULL_CONTROL</Permission>\n\
@@ -282,7 +315,8 @@ finally:
     f.close()
 # test ACL transformations
 obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir,
-            ["-d", "-c", "--xuser", user1 + "=" + user2])
+            ["-d", "-c", "--xuser",
+            config["main"]["user_id"] + "=" + config["alt"]["user_id"]])
 # The transformation should result in different directories
 compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
     ignore_acl=False, expect_same=False)
@@ -300,106 +334,105 @@ if (old_acl == new_acl):
 destination ACL the same, despite the fact that it had different \
 users in it.")
 
-if (len(opts.buckets) >= 1):
-    # first, let's empty out the S3 bucket
-    os.mkdir("%s/empty1" % tdir)
-    if (opts.verbose):
-        print "emptying out bucket1..."
-    obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
-                ["-c", "--delete-after"])
+# first, let's empty out the S3 bucket
+os.mkdir("%s/empty1" % tdir)
+if (opts.verbose):
+    print "emptying out bucket1..."
+obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
+            ["-c", "--delete-after"])
 
-    # make sure that the empty worked
-    obsync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
-    compare_directories("%s/empty1" % tdir, "%s/empty2" % tdir)
-    if (opts.verbose):
-        print "successfully emptied out the bucket."
+# make sure that the empty worked
+obsync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
+compare_directories("%s/empty1" % tdir, "%s/empty2" % tdir)
+if (opts.verbose):
+    print "successfully emptied out the bucket."
 
-    if (opts.verbose):
-        print "copying the sample directory to the test bucket..."
-    # now copy the sample files to the test bucket
-    obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
+if (opts.verbose):
+    print "copying the sample directory to the test bucket..."
+# now copy the sample files to the test bucket
+obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 
-    # make sure that the copy worked
-    obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
-    compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
-    if (opts.verbose):
-        print "successfully copied the sample directory to the test bucket."
+# make sure that the copy worked
+obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
+compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
+if (opts.verbose):
+    print "successfully copied the sample directory to the test bucket."
 
-    # test --follow-symlinks
-    os.mkdir("%s/sym_test_dir" % tdir)
-    f = open("%s/sym_test_dir/a" % tdir, 'w')
-    f.write("a")
-    f.close()
-    os.symlink("./a", "%s/sym_test_dir/b" % tdir)
-    obsync_check("file://%s/sym_test_dir" % tdir,
-        "file://%s/sym_test_dir2" % tdir,
-        ["-c", "--follow-symlinks"])
-    os.unlink("%s/sym_test_dir2/a" % tdir)
-    f = open("%s/sym_test_dir2/b" % tdir, 'r')
-    whole_file = f.read()
-    f.close()
-    if (whole_file != "a"):
-        raise RuntimeError("error! unexpected value in %s/sym_test_dir2/b" % tdir)
-    if (opts.verbose):
-        print "successfully copied a directory with --follow-symlinks"
+# test --follow-symlinks
+os.mkdir("%s/sym_test_dir" % tdir)
+f = open("%s/sym_test_dir/a" % tdir, 'w')
+f.write("a")
+f.close()
+os.symlink("./a", "%s/sym_test_dir/b" % tdir)
+obsync_check("file://%s/sym_test_dir" % tdir,
+    "file://%s/sym_test_dir2" % tdir,
+    ["-c", "--follow-symlinks"])
+os.unlink("%s/sym_test_dir2/a" % tdir)
+f = open("%s/sym_test_dir2/b" % tdir, 'r')
+whole_file = f.read()
+f.close()
+if (whole_file != "a"):
+    raise RuntimeError("error! unexpected value in %s/sym_test_dir2/b" % tdir)
+if (opts.verbose):
+    print "successfully copied a directory with --follow-symlinks"
 
-    # test escaping
-    os.mkdir("%s/escape_dir1" % tdir)
-    f = open("%s/escape_dir1/$$foo" % tdir, 'w')
-    f.write("$foo")
-    f.close()
-    f = open("%s/escape_dir1/blarg$slash" % tdir, 'w')
-    f.write("blarg/")
-    f.close()
-    obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
-    obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
-    compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
+# test escaping
+os.mkdir("%s/escape_dir1" % tdir)
+f = open("%s/escape_dir1/$$foo" % tdir, 'w')
+f.write("$foo")
+f.close()
+f = open("%s/escape_dir1/blarg$slash" % tdir, 'w')
+f.write("blarg/")
+f.close()
+obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
+obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
+compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
 
-    # some more tests with --no-preserve-acls
-    obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
-                ["--no-preserve-acls"])
-    obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
-                ["--no-preserve-acls", "-c"])
-    # test ACL transformations, again
-    obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
-                ["-d", "-c", "--xuser", user2 + "=" + user1])
+# some more tests with --no-preserve-acls
+obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
+            ["--no-preserve-acls"])
+obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
+            ["--no-preserve-acls", "-c"])
+# test ACL transformations, again
+obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
+            ["-d", "-c", "--xuser",
+            config["alt"]["user_id"] + "=" + config["main"]["user_id"]])
 
-if (len(opts.buckets) >= 2):
-    if (opts.verbose):
-        print "copying dir1 to bucket0..."
-    obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
-    if (opts.verbose):
-        print "copying bucket0 to bucket1..."
-    obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
-    if (opts.verbose):
-        print "copying bucket1 to dir4..."
-    obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
-    compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
-    if (opts.verbose):
-        print "successfully copied one bucket to another."
-    if (opts.verbose):
-        print "adding another object to bucket1..."
-    os.mkdir("%s/small" % tdir)
-    f = open("%s/small/new_thing" % tdir, 'w')
-    f.write("a new object!!!")
-    f.close()
-    obsync_check("%s/small" % tdir, opts.buckets[1], [])
-    obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["-c"])
-    obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["-c"])
-    bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
-    bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
-    if (bucket1_count != bucket0_count + 1):
-        raise RuntimeError("error! expected one extra object in bucket1! \
+if (opts.verbose):
+    print "copying dir1 to bucket0..."
+obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
+if (opts.verbose):
+    print "copying bucket0 to bucket1..."
+obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
+if (opts.verbose):
+    print "copying bucket1 to dir4..."
+obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
+compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
+if (opts.verbose):
+    print "successfully copied one bucket to another."
+if (opts.verbose):
+    print "adding another object to bucket1..."
+os.mkdir("%s/small" % tdir)
+f = open("%s/small/new_thing" % tdir, 'w')
+f.write("a new object!!!")
+f.close()
+obsync_check("%s/small" % tdir, opts.buckets[1], [])
+obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["-c"])
+obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["-c"])
+bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
+bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
+if (bucket1_count != bucket0_count + 1):
+    raise RuntimeError("error! expected one extra object in bucket1! \
 bucket0_count=%d, bucket1_count=%d" % (bucket0_count, bucket1_count))
-    if (opts.verbose):
-        print "copying bucket0 to bucket1..."
-    obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
-    obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
-    obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
-    bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
-    bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
-    if (bucket0_count != bucket1_count):
-        raise RuntimeError("error! expected the same number of objects \
+if (opts.verbose):
+    print "copying bucket0 to bucket1..."
+obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
+obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
+obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
+bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
+bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
+if (bucket0_count != bucket1_count):
+    raise RuntimeError("error! expected the same number of objects \
 in bucket0 and bucket1. bucket0_count=%d, bucket1_count=%d" \
 % (bucket0_count, bucket1_count))
 
