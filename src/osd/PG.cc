@@ -4177,34 +4177,34 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  get_infos();
+  if (pg->need_up_thru) {
+    dout(10) << "transitioning to pending, need upthru" << dendl;
+    post_event(NeedNewMap());
+  } else {
+    get_infos();
+  }
 }
 
 void PG::RecoveryState::GetInfo::get_infos() {
   PG *pg = context< RecoveryMachine >().pg;
   auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
 
-  if (pg->need_up_thru) {
-    dout(10) << "transitioning to pending, need upthru" << dendl;
-    post_event(NeedNewMap());
-  } else {
-    for (set<int>::const_iterator it = prior_set->cur.begin();
-	 it != prior_set->cur.end();
-	 ++it) {
-      int peer = *it;
-      if (pg->peer_info.count(peer)) {
-	dout(10) << " have osd" << peer << " info " << pg->peer_info[peer] << dendl;
-	continue;
-      }
-      if (peer_info_requested.count(peer)) {
-	dout(10) << " already requested info from osd" << peer << dendl;
-      } else if (!pg->osd->osdmap->is_up(peer)) {
-	dout(10) << " not querying info from down osd" << peer << dendl;
-      } else {
-	dout(10) << " querying info from osd" << peer << dendl;
-	context< RecoveryMachine >().send_query(peer, Query(Query::INFO, pg->info.history));
-	peer_info_requested.insert(peer);
-      }
+  for (set<int>::const_iterator it = prior_set->cur.begin();
+       it != prior_set->cur.end();
+       ++it) {
+    int peer = *it;
+    if (pg->peer_info.count(peer)) {
+      dout(10) << " have osd" << peer << " info " << pg->peer_info[peer] << dendl;
+      continue;
+    }
+    if (peer_info_requested.count(peer)) {
+      dout(10) << " already requested info from osd" << peer << dendl;
+    } else if (!pg->osd->osdmap->is_up(peer)) {
+      dout(10) << " not querying info from down osd" << peer << dendl;
+    } else {
+      dout(10) << " querying info from osd" << peer << dendl;
+      context< RecoveryMachine >().send_query(peer, Query(Query::INFO, pg->info.history));
+      peer_info_requested.insert(peer);
     }
   }
   
