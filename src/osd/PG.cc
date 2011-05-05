@@ -3908,6 +3908,7 @@ PG::RecoveryState::Peering::react(const AdvMap& advmap) {
   dout(10) << "Peering advmap" << dendl;
   if (pg->prior_set_affected(*prior_set.get(), &advmap.osdmap)) {
     dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
+    pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
   }
