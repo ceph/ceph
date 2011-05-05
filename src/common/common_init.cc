@@ -116,10 +116,6 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
       break;
   }
 
-  // TODO this is not idempotent! we are relying on
-  // libceph_initialized/rados_initialized to guard us from being
-  // called more than once in 3rd party apps, and on coding
-  // conventions in Ceph daemons/tools
   ceph::crypto::init();
   return conf;
 }
