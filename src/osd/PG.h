@@ -1088,12 +1088,14 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< MNotifyRec >
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
+      boost::statechart::result react(const MLogRec& logevt);
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
@@ -1303,7 +1305,7 @@ public:
   bool proc_replica_info(int from, Info &info);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
-  void search_for_missing(const Info &oinfo, const Missing *omissing,
+  bool search_for_missing(const Info &oinfo, const Missing *omissing,
 			  int fromosd);
 
   void check_for_lost_objects();

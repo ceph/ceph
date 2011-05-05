@@ -569,10 +569,11 @@ void PG::merge_log(ObjectStore::Transaction& t,
  * TODO: if the missing set becomes very large, this could get expensive.
  * Instead, we probably want to just iterate over our unfound set.
  */
-void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
+bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 			    int fromosd)
 {
   bool stats_updated = false;
+  bool found_missing = false;
 
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
@@ -620,12 +621,14 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
     else {
       ml->second.insert(fromosd);
     }
+    found_missing = true;
   }
   if (stats_updated) {
     update_stats();
   }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
+  return found_missing;
 }
 
 void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
@@ -4022,6 +4025,18 @@ PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
   if (pg->peer_activated.size() == pg->acting.size()) {
     pg->all_activated_and_committed();
   }
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::Active::react(const MLogRec& logevt) {
+  dout(10) << "searching osd" << logevt.from
+           << " log for unfound items" << dendl;
+  PG *pg = context< RecoveryMachine >().pg;
+  bool got_missing = pg->search_for_missing(logevt.msg->info,
+                                            &pg->missing, logevt.from);
+  if (got_missing)
+    pg->osd->queue_for_recovery(pg);
   return discard_event();
 }
 
