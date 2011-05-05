@@ -991,11 +991,18 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Started >,
 	boost::statechart::transition< Load, Reset >,
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< MInfoRec >,
+	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       Initial(my_context ctx);
       void exit();
+
+      boost::statechart::result react(const MNotifyRec&);
+      boost::statechart::result react(const MInfoRec&);
+      boost::statechart::result react(const MLogRec&);
     };
 
     struct Reset :
@@ -1117,6 +1124,7 @@ public:
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
       bool backlog_requested;
       map<int, Query> pending_queries;
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MLogRec >,
@@ -1141,6 +1149,7 @@ public:
     struct GetInfo :
       boost::statechart::state< GetInfo, Peering >, NamedState {
       set<int> peer_info_requested;
+
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
 	boost::statechart::custom_reaction< MNotifyRec >

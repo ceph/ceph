@@ -293,6 +293,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
 
 void PG::proc_replica_info(int from, Info &oinfo)
 {
+  dout(10) << "proc_replica_info osd" << from << " " << oinfo << dendl;
   assert(is_primary());
   peer_info[from] = oinfo;
   might_have_unfound.insert(from);
@@ -3723,6 +3724,29 @@ std::ostream& operator<<(std::ostream& oss,
 PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
   state_name = "Initial";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result 
+PG::RecoveryState::Initial::react(const MNotifyRec& notify) {
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->proc_replica_info(notify.from, notify.info);
+  return transit< Primary >();
+}
+
+boost::statechart::result 
+PG::RecoveryState::Initial::react(const MInfoRec& i) {
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(!pg->is_primary());
+  post_event(i);
+  return transit< Stray >();
+}
+
+boost::statechart::result 
+PG::RecoveryState::Initial::react(const MLogRec& i) {
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(!pg->is_primary());
+  post_event(i);
+  return transit< Stray >();
 }
 
 void PG::RecoveryState::Initial::exit() {

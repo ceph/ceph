@@ -1174,15 +1174,6 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     // kick any waiters
     wake_pg_waiters(pg->info.pgid);
 
-    map<int, map<pg_t, PG::Query> > query_map;
-    map<int, MOSDPGInfo*> info_map;
-    map<int, vector<PG::Info> > notify_list;
-    PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list,
-                         &((*pfin)->contexts), *pt);
-    pg->handle_create(&rctx);
-    do_queries(query_map);
-    do_infos(info_map);
-    do_notifies(notify_list);
   } else {
     // already had it.  did the mapping change?
     pg = _lookup_lock_pg(info.pgid);
