@@ -843,6 +843,7 @@ private:
   }
   
   bool raw_to_temp_osds(pg_t pg, vector<int>& raw, vector<int>& temp) {
+    pg = raw_pg_to_pg(pg);
     map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
     if (p != pg_temp.end()) {
       temp.clear();
