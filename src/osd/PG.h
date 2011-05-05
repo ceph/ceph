@@ -1140,12 +1140,15 @@ public:
 
       GetInfo(my_context ctx);
       void exit();
+      void get_infos();
 
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
-	boost::statechart::custom_reaction< MNotifyRec >
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< MInfoRec >
 	> reactions;
       boost::statechart::result react(const MNotifyRec& infoevt);
+      boost::statechart::result react(const MInfoRec& infoevt);
     };
 
     struct GetMissing;
@@ -1297,7 +1300,7 @@ public:
 			Missing& omissing, int from);
   void proc_master_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
 		       Missing& omissing, int from);
-  void proc_replica_info(int from, Info &info);
+  bool proc_replica_info(int from, Info &info);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
   void search_for_missing(const Info &oinfo, const Missing *omissing,
