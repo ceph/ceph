@@ -233,8 +233,6 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
     conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     conf->parse_env(); // environment variables override
     conf->apply_changes();
-
-    keyring_init(conf);
   }
   ret = ceph_create_with_config_impl(cmount, conf);
   libceph_init_mutex.Unlock();
@@ -281,6 +279,9 @@ extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
   std::string mount_root;
+
+  keyring_init(&g_conf);
+
   if (root)
     mount_root = root;
   return cmount->mount(mount_root);
