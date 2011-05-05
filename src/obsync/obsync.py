@@ -896,6 +896,9 @@ parser.add_option("-V", "--more-verbose", action="store_true", \
 parser.add_option("-x", "--xuser", type="string", nargs=1, action="callback", \
     dest="SRC=DST", callback=xuser_cb, help="set up a user tranlation. You \
 can specify multiple user translations with multiple --xuser arguments.")
+parser.add_option("--force", action="store_true", \
+    dest="force", help="overwrite all destination objects, even if they \
+appear to be the same as the source objects.")
 parser.add_option("--unit", action="store_true", \
     dest="run_unit_tests", help="run unit tests and quit")
 xuser = {}
@@ -967,7 +970,11 @@ for sobj in src.all_objects():
     upload = False
     src_acl = None
     dst_acl = None
-    if (dobj == None):
+    if (opts.force):
+        if (opts.verbose):
+            print "F " + sobj.name
+        upload = True
+    elif (dobj == None):
         if (opts.verbose):
             print "+ " + sobj.name
         upload = True
