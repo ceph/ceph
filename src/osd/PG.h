@@ -977,15 +977,17 @@ public:
       virtual ~NamedState() {}
     };
 
-    struct Crashed :
-      boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
+    struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       Crashed(my_context ctx) : my_base(ctx) { assert(0); }
     };
 
     struct Started;
     struct Reset;
-    struct Initial :
-      boost::statechart::state< Initial, RecoveryMachine >, NamedState {
+
+    struct Initial : boost::statechart::state< Initial, RecoveryMachine >, NamedState {
+      Initial(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Started >,
 	boost::statechart::transition< Load, Reset >,
@@ -995,40 +997,34 @@ public:
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
-      Initial(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
     };
 
-    struct Reset :
-      boost::statechart::state< Reset, RecoveryMachine >, NamedState {
+    struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
+      Reset(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
-
-      Reset(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
     };
 
     struct Start;
-    struct Started :
-      boost::statechart::state< Started, RecoveryMachine, Start >, NamedState {
+
+    struct Started : boost::statechart::state< Started, RecoveryMachine, Start >, NamedState {
+      Started(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
-
-      Started(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const AdvMap&);
     };
 
@@ -1036,68 +1032,64 @@ public:
     struct MakeStray : boost::statechart::event< MakeStray > {};
     struct Primary;
     struct Stray;
-    struct Start :
-      boost::statechart::state< Start, Started >, NamedState {
+
+    struct Start : boost::statechart::state< Start, Started >, NamedState {
+      Start(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::transition< MakePrimary, Primary >,
 	boost::statechart::transition< MakeStray, Stray >
 	> reactions;
-
-      Start(my_context ctx);
-      void exit();
     };
 
     struct Peering;
     struct Pending;
     struct NeedNewMap : boost::statechart::event< NeedNewMap > {};
-    struct Primary :
-      boost::statechart::state< Primary, Started, Peering >, NamedState {
+
+    struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
+      Primary(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::transition< NeedNewMap, Pending >
 	> reactions;
-
-      Primary(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
     };
 
-    struct Pending :
-      boost::statechart::simple_state< Pending, Primary> {};
+    struct Pending : boost::statechart::simple_state< Pending, Primary> {};
     
     struct GetInfo;
     struct Active;
-    struct Peering : 
-      boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      typedef boost::mpl::list <
-	boost::statechart::transition< Activate, Active >,
-	boost::statechart::custom_reaction< AdvMap >
-	> reactions;
+
+    struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::auto_ptr< PgPriorSet > prior_set;
 
       Peering(my_context ctx);
       void exit();
 
+      typedef boost::mpl::list <
+	boost::statechart::transition< Activate, Active >,
+	boost::statechart::custom_reaction< AdvMap >
+	> reactions;
       boost::statechart::result react(const AdvMap &advmap);
     };
 
-    struct Active : 
-      boost::statechart::state< Active, Primary >, NamedState {
+    struct Active : boost::statechart::state< Active, Primary >, NamedState {
+      Active(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
-
-      Active(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -1105,15 +1097,14 @@ public:
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
+      ReplicaActive(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >
 	> reactions;
-
-      ReplicaActive(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
@@ -1123,6 +1114,9 @@ public:
       bool backlog_requested;
       map<int, Query> pending_queries;
 
+      Stray(my_context ctx);
+      void exit();
+
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MLogRec >,
@@ -1131,10 +1125,6 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< Activate, ReplicaActive >
 	> reactions;
-
-      Stray(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const MQuery& query);
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const MLogRec& logevt);
@@ -1144,55 +1134,51 @@ public:
 
     struct GetLog;
     struct GotInfo : boost::statechart::event< GotInfo > {};
-    struct GetInfo :
-      boost::statechart::state< GetInfo, Peering >, NamedState {
+
+    struct GetInfo : boost::statechart::state< GetInfo, Peering >, NamedState {
       set<int> peer_info_requested;
+
+      GetInfo(my_context ctx);
+      void exit();
 
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
-
-      GetInfo(my_context ctx);
-      void exit();
-
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
     struct GetMissing;
     struct GotLog : boost::statechart::event< GotLog > {};
-    struct GetLog :
-      boost::statechart::state< GetLog, Peering >, NamedState {
+
+    struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
       int newest_update_osd;
       bool need_backlog;
       bool wait_on_backlog;
       MOSDPGLog *msg;
+
+      GetLog(my_context ctx);
+      ~GetLog();
+      void exit();
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::transition< GotLog, GetMissing >
 	> reactions;
-
-      GetLog(my_context ctx);
-      ~GetLog();
-      void exit();
-
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const BacklogComplete&);
     };
 
-    struct GetMissing :
-      boost::statechart::state< GetMissing, Peering >, NamedState {
+    struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
       set<int> peer_missing_requested;
-
-      typedef boost::mpl::list <
-	boost::statechart::custom_reaction< MLogRec >
-	> reactions;
 
       GetMissing(my_context ctx);
       void exit();
 
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MLogRec >
+	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
     };
 
