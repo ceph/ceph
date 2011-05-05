@@ -1451,7 +1451,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
-    else if (m->cmd[1] == "out" && m->cmd.size() == 3) {
+    else if (m->cmd[1] == "out" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[2].c_str(), 0, 10);
@@ -1474,7 +1474,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       } 
     }
-    else if (m->cmd[1] == "in" && m->cmd.size() == 3) {
+    else if (m->cmd[1] == "in" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[2].c_str(), 0, 10);
