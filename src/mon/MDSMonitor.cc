@@ -684,15 +684,21 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
       int who = atoi(m->cmd[2].c_str());
-      if (mdsmap.is_active(who)) {
+      if (!mdsmap.is_active(who)) {
+	r = -EEXIST;
+	ss << "mds" << who << " not active (" 
+	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
+      } else if ((mdsmap.get_root() == who ||
+		  mdsmap.get_tableserver() == who) &&
+		 mdsmap.get_num_mds() > 1) {
+	r = -EBUSY;
+	ss << "can't tell the root (" << mdsmap.get_root() << ") or tableserver (" << mdsmap.get_tableserver()
+	   << " to stop unless it is the last mds in the cluster";
+      } else {
 	r = 0;
 	uint64_t gid = pending_mdsmap.up[who];
 	ss << "telling mds" << who << " " << pending_mdsmap.mds_info[gid].addr << " to stop";
 	pending_mdsmap.mds_info[gid].state = MDSMap::STATE_STOPPING;
-      } else {
-	r = -EEXIST;
-	ss << "mds" << who << " not active (" 
-	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
       }
     }
     else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {
