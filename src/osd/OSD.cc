@@ -569,7 +569,7 @@ int OSD::init()
 
   // load up pgs (as they previously existed)
   load_pgs();
-  
+
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
@@ -1002,14 +1002,17 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->acting.swap(acting);
   pg->up = pg->acting;
   pg->info.history.epoch_created = 
-    pg->info.history.last_epoch_started =
     pg->info.history.same_up_since =
     pg->info.history.same_acting_since =
     pg->info.history.same_primary_since = osdmap->get_epoch();
 
+  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1;
+
   pg->write_info(t);
   pg->write_log(t);
   
+  reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+
   dout(7) << "_create_lock_new_pg " << *pg << dendl;
   return pg;
 }
@@ -1083,10 +1086,15 @@ void OSD::load_pgs()
     // read pg state, log
     pg->read_state(store);
 
+    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+
     // generate state for current mapping
     int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
     int role = osdmap->calc_pg_role(whoami, pg->acting, nrep);
     pg->set_role(role);
+
+    PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
+    pg->handle_loaded(&rctx);
 
     dout(10) << "load_pgs loaded " << *pg << " " << pg->log << dendl;
     pg->unlock();
@@ -1167,6 +1175,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     
     // kick any waiters
     wake_pg_waiters(pg->info.pgid);
+
   } else {
     // already had it.  did the mapping change?
     pg = _lookup_lock_pg(info.pgid);
@@ -2252,6 +2261,15 @@ void OSD::handle_command(MMonCommand *m)
   else if (m->cmd[0] == "cpu_profiler") {
     cpu_profiler_handle_command(m->cmd, clog);
   }
+  else if (m->cmd[0] == "dump_pg_recovery_stats") {
+    stringstream s;
+    pg_recovery_stats.dump(s);
+    dout(0) << "dump pg recovery stats\n" << s.str() << dendl;
+  }
+  else if (m->cmd[0] == "reset_pg_recovery_stats") {
+    dout(0) << "reset pg recovery stats" << dendl;
+    pg_recovery_stats.reset();
+  }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
 done:
@@ -3201,174 +3219,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg_t pgid = it->first;
     PG *pg = it->second;
 
-    // get new acting set
-    vector<int> tup, tacting;
-    osdmap->pg_to_up_acting_osds(pgid, tup, tacting);
-    int role = osdmap->calc_pg_role(whoami, tacting, tacting.size());
+    vector<int> newup, newacting;
+    osdmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
 
     pg->lock();
-
-    // adjust removed_snaps?
-    if (pg->is_active() &&
-	!pg->pool->newly_removed_snaps.empty()) {
-      pg->snap_trimq.union_of(pg->pool->newly_removed_snaps);
-      dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
-      pg->dirty_info = true;
-    }
-    
-    // no change?
-    if (tacting == pg->acting && tup == pg->up) {
-      if ((pg->prior_set.get() == NULL) || (!pg->prior_set_affected(osdmap))) {
-	dout(15) << *pg << " unaffected with "
-	  << tup << "/" << tacting << " up/acting" << dendl;
-	pg->unlock();
-	continue;
-      }
-    }
-
-    // -- there was a change! --
-    int oldrole = pg->get_role();
-    int oldprimary = pg->get_primary();
-    vector<int> oldacting = pg->acting;
-    vector<int> oldup = pg->up;
-    
-    // make sure we clear out any pg_temp change requests
-    pg_temp_wanted.erase(pgid);
-    
-    pg->kick();
-    pg->prior_set.reset(NULL);
-
-    // update PG
-    pg->acting.swap(tacting);
-    pg->up.swap(tup);
-    pg->set_role(role);
-    
-    // did acting, up, primary|acker change?
-    if (tacting != pg->acting || tup != pg->up) {
-      // remember past interval
-      PG::Interval& i = pg->past_intervals[pg->info.history.same_acting_since];
-      i.first = pg->info.history.same_acting_since;
-      i.last = osdmap->get_epoch() - 1;
-
-      i.acting = oldacting;
-      i.up = oldup;
-      if (tacting != pg->acting)
-	pg->info.history.same_acting_since = osdmap->get_epoch();
-      if (tup != pg->up)
-	pg->info.history.same_up_since = osdmap->get_epoch();
-
-      if (i.acting.size())
-	i.maybe_went_rw = 
-	  (lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	   lastmap->get_up_from(i.acting[0]) <= i.first) ||
-	  i.first == pg->info.history.epoch_created;
-      else
-	i.maybe_went_rw = 0;
-
-      if (oldprimary != pg->get_primary())
-	pg->info.history.same_primary_since = osdmap->get_epoch();
-
-      dout(10) << *pg << " noting past " << i << dendl;
-      pg->dirty_info = true;
-    }
-    pg->cancel_recovery();
-
-    // deactivate.
-    pg->state_clear(PG_STATE_ACTIVE);
-    pg->state_clear(PG_STATE_DOWN);
-    pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
-    pg->state_clear(PG_STATE_DEGRADED);
-    pg->state_clear(PG_STATE_REPLAY);
-
-    if (pg->is_primary()) {
-      if (osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
-	pg->state_set(PG_STATE_DEGRADED);
-    }
-
-    // reset primary state?
-    if (oldrole == 0 || pg->get_role() == 0)
-      pg->clear_primary_state();
-
-    dout(10) << *pg
-	     << " up " << oldup << " -> " << pg->up 
-	     << ", acting " << oldacting << " -> " << pg->acting 
-	     << ", role " << oldrole << " -> " << role << dendl; 
-    
-    // pg->on_*
-    for (unsigned i=0; i<oldacting.size(); i++)
-      if (osdmap->is_down(oldacting[i]))
-	pg->on_osd_failure(oldacting[i]);
-    pg->on_change();
-
-    if (pg->deleting) {
-      dout(10) << *pg << " canceling deletion!" << dendl;
-      pg->deleting = false;
-      remove_wq.dequeue(pg);
-    }
-    
-    if (role != oldrole) {
-      // old primary?
-      if (oldrole == 0) {
-	pg->state_clear(PG_STATE_CLEAN);
-	pg->clear_stats();
-	
-	// take replay queue waiters
-	list<Message*> ls;
-	for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
-	     it != pg->replay_queue.end();
-	     it++)
-	  ls.push_back(it->second);
-	pg->replay_queue.clear();
-	take_waiters(ls);
-      }
-
-      pg->on_role_change();
-
-      // interrupt backlog generation
-      cancel_generate_backlog(pg);
-
-      // take active waiters
-      take_waiters(pg->waiting_for_active);
-
-      // new primary?
-      if (role == 0) {
-	// i am new primary
-	pg->state_clear(PG_STATE_STRAY);
-      } else {
-	// i am now replica|stray.  we need to send a notify.
-	pg->state_set(PG_STATE_STRAY);
-	pg->have_master_log = false;
-      }
-      
-    } else {
-      // no role change.
-      // did primary change?
-      if (pg->get_primary() != oldprimary) {    
-	// we need to announce
-	pg->state_set(PG_STATE_STRAY);
-        
-	dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
-		 << ", acting primary " 
-		 << oldprimary << " -> " << pg->get_primary() 
-		 << dendl;
-      } else {
-	// primary is the same.
-	if (role == 0) {
-	  // i am (still) primary. but my replica set changed.
-	  pg->state_clear(PG_STATE_CLEAN);
-	  
-	  dout(10) << *pg << " " << oldacting << " -> " << pg->acting
-		   << ", replicas changed" << dendl;
-	}
-      }
-    }
-
-    // sanity check pg_temp
-    if (pg->acting.empty() && pg->up.size() && pg->up[0] == whoami) {
-      dout(10) << *pg << " acting empty, but i am up[0], clearing pg_temp" << dendl;
-      queue_want_pg_temp(pg->info.pgid, pg->acting);
-    }
-
+    dout(10) << "Scanning pg " << *pg << dendl;
+    pg->handle_advance_map(*osdmap, *lastmap, newup, newacting, 0);
     pg->unlock();
   }
 }
@@ -3383,8 +3239,6 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
-  epoch_t up_thru = osdmap->get_up_thru(whoami);
-  
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
 
   epoch_t oldest_last_clean = osdmap->get_epoch();
@@ -3395,7 +3249,6 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
-    pg->check_recovery_op_pulls(osdmap);
 
     if (pg->is_primary())
       num_pg_primary++;
@@ -3407,44 +3260,16 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (pg->is_primary() && pg->info.history.last_epoch_clean < oldest_last_clean)
       oldest_last_clean = pg->info.history.last_epoch_clean;
     
-    if (g_conf.osd_check_for_log_corruption)
-      pg->check_log_for_corruption(store);
-
-    if (pg->is_active() && pg->is_primary() &&
-	(pg->missing.num_missing() > pg->missing_loc.size())) {
-      if (pg->all_unfound_are_lost(osdmap)) {
-	pg->mark_all_unfound_as_lost(t);
-      }
-    }
-
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);
       pg->unlock();
       continue;
     }
-    if (pg->is_active()) {
-      // i am active
-      if (pg->is_primary() &&
-	  !pg->snap_trimq.empty() &&
-	  pg->is_clean())
-	pg->queue_snap_trim();
-    }
-    else if (pg->is_primary() &&
-	     !pg->is_active()) {
-      // i am (inactive) primary
-      if ((!pg->is_peering() && !pg->is_replay()) || 
-	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
-	pg->do_peer(t, tfin, query_map, &info_map);
-    }
-    else if (pg->is_stray() &&
-	     pg->get_primary() >= 0) {
-      // i am residual|replica
-      notify_list[pg->get_primary()].push_back(pg->info);
-    }
-    if (pg->is_primary())
-      pg->update_stats();
 
+    PG::RecoveryCtx rctx(&query_map, &info_map, &notify_list, &tfin, &t);
+    pg->handle_activate_map(&rctx);
+    
     pg->unlock();
   }  
 
@@ -3799,7 +3624,9 @@ void OSD::kick_pg_split_queue()
 
       wake_pg_waiters(pg->info.pgid);
 
-      pg->do_peer(*t, fin->contexts, query_map, &info_map);
+      PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+      pg->handle_create(&rctx);
+
       pg->update_stats();
       pg->unlock();
       created++;
@@ -4016,7 +3843,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);
-      pg->do_peer(*t, fin->contexts, query_map, &info_map);
+      PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+      pg->handle_create(&rctx);
       pg->update_stats();
 
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4122,39 +3950,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (!pg)
       continue;
 
-    if (pg->peer_info.count(from) &&
-	pg->peer_info[from].last_update == it->last_update) {
-      dout(10) << *pg << " got dup osd" << from << " info " << *it << ", identical to ours" << dendl;
-    } else if (pg->peer_info.count(from) &&
-	       pg->is_active()) {
-      dout(10) << *pg << " got dup osd" << from << " info " << *it
-	       << " but pg is active, keeping our info " << pg->peer_info[from]
-	       << dendl;
-    } else {
-      dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
-      pg->peer_info[from] = *it;
-      pg->might_have_unfound.insert(from);
-
-      unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-      pg->info.history.merge(it->history);
-      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-
-      // stray?
-      if (!pg->is_acting(from)) {
-	dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
-	pg->stray_set.insert(from);
-	pg->state_clear(PG_STATE_CLEAN);
-      }
-      
-      pg->do_peer(*t, fin->contexts, query_map, &info_map);
-      pg->update_stats();
-    }
-
-    if (pg->is_active() && pg->have_unfound()) {
-      // Make sure we've requested MISSING information from every OSD
-      // we know about.
-      pg->discover_all_missing(query_map);
-    }
+    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+    pg->handle_notify(from, *it, &rctx);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
@@ -4172,140 +3969,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   m->put();
 }
 
-
-
-/** PGLog
- * from non-primary to primary
- *  includes log and info
- * from primary to non-primary
- *  includes log for use in recovery
- * NOTE: called with opqueue active.
- */
-
-void OSD::_process_pg_info(epoch_t epoch, int from,
-			   PG::Info &info, 
-			   PG::Log &log, 
-			   PG::Missing *missing,
-			   map< int, map<pg_t,PG::Query> >& query_map,
-			   map<int, MOSDPGInfo*>* info_map,
-			   int& created)
-{
-  ObjectStore::Transaction *t;
-  C_Contexts *fin;  
-  PG *pg;
-
-  pg = get_or_create_pg(info, epoch, from, created, false, &t, &fin);
-  if (!pg)
-    return;
-
-  dout(10) << *pg << ": " << __func__ << " info: " << info << ", ";
-  if (log.empty())
-    *_dout << "(log omitted)";
-  else
-    *_dout << "log: " << log;
-  *_dout << ", ";
-  if (!missing)
-    *_dout << "(missing omitted)";
-  else
-    *_dout << "missing: " << *missing;
-  *_dout << dendl;
-
-  // don't update history (yet) if we are active and primary; the replica
-  // may be telling us they have activated (and committed) but we can't
-  // share that until _everyone_ does the same.
-  if (pg->is_active() && pg->is_primary() && pg->is_acting(from) &&
-      pg->info.history.last_epoch_started < pg->info.history.same_acting_since &&
-      info.history.last_epoch_started >= pg->info.history.same_acting_since) {
-    dout(10) << " peer osd" << from << " activated and committed" << dendl;
-    pg->peer_activated.insert(from);
-    if (pg->peer_activated.size() == pg->acting.size())
-      pg->all_activated_and_committed();
-  } else {
-    unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-    pg->info.history.merge(info.history);
-    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-  }
-
-  // dump log
-  dout(15) << *pg << " my log = ";
-  pg->log.print(*_dout);
-  *_dout << std::endl;
-  if (!log.empty()) {
-    *_dout << *pg << " osd" << from << " log = ";
-    log.print(*_dout);
-  }
-  *_dout << dendl;
-
-  if (pg->is_primary()) {
-    // i am PRIMARY
-    if (pg->is_active())  {
-      // PG is ACTIVE
-      if (!pg->is_clean()) {
-	dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
-	pg->search_for_missing(info, missing, from);
-	if (pg->have_unfound()) {
-	  // Make sure we've requested MISSING information from every OSD
-	  // we know about.
-	  pg->discover_all_missing(query_map);
-	}
-	queue_for_recovery(pg);  // in case we found something.
-      }
-    }
-    else if (missing) {
-      // PG is INACTIVE
-      pg->proc_replica_log(*t, info, log, *missing, from);
-      
-      // peer
-      pg->do_peer(*t, fin->contexts, query_map, info_map);
-      pg->update_stats();
-    }
-  } else if (!pg->info.dne()) {
-    if (!pg->is_active()) {
-      // INACTIVE REPLICA
-      assert(from == pg->acting[0]);
-      pg->merge_log(*t, info, log, from);
-
-      // We should have the right logs before activating.
-      assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
-      assert(pg->log.head == pg->info.last_update);
-
-      pg->activate(*t, fin->contexts, query_map, info_map);
-    } else {
-      // ACTIVE REPLICA
-      assert(pg->is_replica());
-
-      // just update our stats
-      dout(10) << *pg << " writing updated stats" << dendl;
-      pg->info.stats = info.stats;
-
-      // Handle changes to purged_snaps
-      interval_set<snapid_t> p;
-      p.union_of(info.purged_snaps, pg->info.purged_snaps);
-      p.subtract(pg->info.purged_snaps);
-      pg->info.purged_snaps = info.purged_snaps;
-      if (!p.empty()) {
-	dout(10) << " purged_snaps " << pg->info.purged_snaps
-		 << " -> " << info.purged_snaps
-		 << " removed " << p << dendl;
-	pg->adjust_local_snaps(*t, p);
-      }
-    }
-    
-    pg->write_info(*t);
-    
-    if (!log.empty()) {
-      dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
-      pg->merge_log(*t, info, log, from);
-    }
-  }
-
-  int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-  assert(tr == 0);
-
-  pg->unlock();
-}
-
-
 void OSD::handle_pg_log(MOSDPGLog *m) 
 {
   dout(7) << "handle_pg_log " << *m << " from " << m->get_source() << dendl;
@@ -4314,17 +3977,29 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     return;
 
   int from = m->get_source().num();
-  int created = 0;
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
+  int created = 0;
+  ObjectStore::Transaction *t;
+  C_Contexts *fin;  
+  PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
+			    from, created, false, &t, &fin);
+  if (!pg)
+    return;
+
   map< int, map<pg_t,PG::Query> > query_map;
-  _process_pg_info(m->get_epoch(), from, 
-		   m->info, m->log, &m->missing, query_map, 0,
-		   created);
+  map< int, MOSDPGInfo* > info_map;
+  PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+  pg->handle_log(from, m, &rctx);
+  pg->unlock();
   do_queries(query_map);
+  do_infos(info_map);
+
+  int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+  assert(!tr);
+
   if (created)
     update_heartbeat_peers();
-
   m->put();
 }
 
@@ -4337,18 +4012,28 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
+  map< int, MOSDPGInfo* > info_map;
 
-  PG::Log empty_log;
-  map<int,MOSDPGInfo*> info_map;
   int created = 0;
-  map< int, map<pg_t,PG::Query> > query_map;
 
   for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
-       ++p) 
-    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, query_map, &info_map, created);
+       ++p) {
+    ObjectStore::Transaction *t = 0;
+    C_Contexts *fin = 0;
+    PG *pg = get_or_create_pg(*p, m->get_epoch(), 
+			      from, created, false, &t, &fin);
+    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
+    if (!pg)
+      continue;
+    pg->handle_info(from, *p, &rctx);
 
-  do_queries(query_map);
+    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(!tr);
+
+    pg->unlock();
+  }
+
   do_infos(info_map);
   if (created)
     update_heartbeat_peers();
@@ -4402,6 +4087,8 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
 
 void OSD::handle_pg_missing(MOSDPGMissing *m)
 {
+  assert(0); // MOSDPGMissing is fantastical
+#if 0
   dout(7) << __func__  << " " << *m << " from " << m->get_source() << dendl;
 
   if (!require_osd_peer(m))
@@ -4414,13 +4101,14 @@ void OSD::handle_pg_missing(MOSDPGMissing *m)
   map< int, map<pg_t,PG::Query> > query_map;
   PG::Log empty_log;
   int created = 0;
-  _process_pg_info(m->get_epoch(), from, m->info,
+  _pro-cess_pg_info(m->get_epoch(), from, m->info, //misspelling added to prevent erroneous finds
 		   empty_log, &m->missing, query_map, NULL, created);
   do_queries(query_map);
   if (created)
     update_heartbeat_peers();
 
   m->put();
+#endif
 }
 
 /** PGQuery
@@ -4439,7 +4127,6 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  int created = 0;
   map< int, vector<PG::Info> > notify_list;
   
   for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
@@ -4469,15 +4156,15 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       PG::Info empty(pgid);
       notify_list[from].push_back(empty);
       continue;
-    } else {
-      pg = _lookup_lock_pg(pgid);
-      if (m->get_epoch() < pg->info.history.same_acting_since) {
-        dout(10) << *pg << " handle_pg_query changed in "
-                 << pg->info.history.same_acting_since
-                 << " (msg from " << m->get_epoch() << ")" << dendl;
-	pg->unlock();
-        continue;
-      }
+    }
+
+    pg = _lookup_lock_pg(pgid);
+    if (m->get_epoch() < pg->info.history.same_acting_since) {
+      dout(10) << *pg << " handle_pg_query changed in "
+	       << pg->info.history.same_acting_since
+	       << " (msg from " << m->get_epoch() << ")" << dendl;
+      pg->unlock();
+      continue;
     }
 
     if (pg->deleting) {
@@ -4499,56 +4186,14 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
     reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
     // ok, process query!
-    assert(!pg->acting.empty());
-    assert(from == pg->acting[0]);
-
-    if (it->second.type == PG::Query::INFO) {
-      // info
-      dout(10) << *pg << " sending info" << dendl;
-      notify_list[from].push_back(pg->info);
-    } else {
-      if (it->second.type == PG::Query::BACKLOG &&
-	  !pg->log.backlog) {
-	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
-	queue_generate_backlog(pg);
-      } else {
-	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), pg->info);
-	mlog->missing = pg->missing;
-	
-	// primary -> other, when building master log
-	if (it->second.type == PG::Query::LOG) {
-	  dout(10) << *pg << " sending info+missing+log since " << it->second.since
-		   << dendl;
-	  mlog->log.copy_after(pg->log, it->second.since);
-	}
-	
-	if (it->second.type == PG::Query::BACKLOG) {
-	  dout(10) << *pg << " sending info+missing+backlog" << dendl;
-	  assert(pg->log.backlog);
-	  mlog->log = pg->log;
-	} 
-	else if (it->second.type == PG::Query::FULLLOG) {
-	  dout(10) << *pg << " sending info+missing+full log" << dendl;
-	  mlog->log.copy_non_backlog(pg->log);
-	}
-	
-	dout(10) << *pg << " sending " << mlog->log << " " << mlog->missing << dendl;
-	//m->log.print(cout);
-	
-	_share_map_outgoing(osdmap->get_cluster_inst(from));
-	cluster_messenger->send_message(mlog, m->get_connection());
-      }
-    }    
-
+    PG::RecoveryCtx rctx(0, 0, &notify_list, 0, 0);
+    pg->handle_query(from, it->second, &rctx);
     pg->unlock();
   }
   
   do_notifies(notify_list);   
 
   m->put();
-
-  if (created)
-    update_heartbeat_peers();
 }
 
 
@@ -4774,6 +4419,13 @@ void OSD::generate_backlog(PG *pg)
   pg->lock();
   dout(10) << *pg << " generate_backlog" << dendl;
 
+  int tr;
+  map< int, map<pg_t,PG::Query> > query_map;
+  map< int, MOSDPGInfo* > info_map;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  C_Contexts *fin = new C_Contexts;
+  PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+
   if (!pg->generate_backlog_epoch) {
     dout(10) << *pg << " generate_backlog was canceled" << dendl;
     goto out;
@@ -4794,27 +4446,14 @@ void OSD::generate_backlog(PG *pg)
     goto out2;
   }
 
-  if (!pg->is_primary()) {
-    dout(10) << *pg << "  sending info+missing+backlog to primary" << dendl;
-    assert(!pg->is_active());  // for now
-    MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
-    m->missing = pg->missing;
-    m->log = pg->log;
-    _share_map_outgoing(osdmap->get_cluster_inst(pg->get_primary()));
-    cluster_messenger->send_message(m, osdmap->get_cluster_inst(pg->get_primary()));
-  } else {
-    dout(10) << *pg << "  generated backlog, peering" << dendl;
-
-    map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts;
-    pg->do_peer(*t, fin->contexts, query_map, NULL);
-    do_queries(query_map);
-    pg->write_info(*t);
-    pg->write_log(*t);
-    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
-  }
+  pg->handle_backlog_generated(&rctx);
+  do_queries(query_map);
+  do_infos(info_map);
+  pg->write_info(*t);
+  pg->write_log(*t);
+  tr = store->queue_transaction(&pg->osr, t, 
+				new ObjectStore::C_DeleteTransaction(t), fin);
+  assert(!tr);
 
  out2:
   map_lock.put_read();

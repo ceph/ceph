@@ -899,10 +899,10 @@ private:
       return &pools[p];
     return NULL;
   }
-  unsigned get_pg_size(pg_t pg) {
-    assert(pools.count(pg.pool()));
-    pg_pool_t &pool = pools[pg.pool()];
-    return pool.get_size();
+  unsigned get_pg_size(pg_t pg) const {
+    map<int,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.get_size();
   }
   int get_pg_type(pg_t pg) {
     assert(pools.count(pg.pool()));
@@ -944,20 +944,27 @@ private:
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
-  int calc_pg_rank(int osd, vector<int>& acting, int nrep=0) {
-    if (!nrep) nrep = acting.size();
+  static int calc_pg_rank(int osd, vector<int>& acting, int nrep=0) {
+    if (!nrep)
+      nrep = acting.size();
     for (int i=0; i<nrep; i++) 
-      if (acting[i] == osd) return i;
+      if (acting[i] == osd)
+	return i;
     return -1;
   }
-  int calc_pg_role(int osd, vector<int>& acting, int nrep=0) {
-    if (!nrep) nrep = acting.size();
+  static int calc_pg_role(int osd, vector<int>& acting, int nrep=0) {
+    if (!nrep)
+      nrep = acting.size();
     int rank = calc_pg_rank(osd, acting, nrep);
     
-    if (rank < 0) return PG_ROLE_STRAY;
-    else if (rank == 0) return PG_ROLE_HEAD;
-    else if (rank == 1) return PG_ROLE_ACKER;
-    else return PG_ROLE_MIDDLE;
+    if (rank < 0)
+      return PG_ROLE_STRAY;
+    else if (rank == 0) 
+      return PG_ROLE_HEAD;
+    else if (rank == 1) 
+      return PG_ROLE_ACKER;
+    else
+      return PG_ROLE_MIDDLE;
   }
   
   int get_pg_role(pg_t pg, int osd) {

@@ -496,6 +496,7 @@ protected:
   map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
   map<pg_t, list<Message*> > waiting_for_pg;
+  PGRecoveryStats pg_recovery_stats;
 
   PGPool *_get_pool(int id);
   void _put_pool(PGPool *p);
@@ -660,15 +661,6 @@ protected:
   void handle_pg_remove(class MOSDPGRemove *m);
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
-
-  // helper for handle_pg_log and handle_pg_info
-  void _process_pg_info(epoch_t epoch, int from,
-			PG::Info &info, 
-			PG::Log &log, 
-			PG::Missing *missing,
-			map< int, map<pg_t,PG::Query> >& query_map,
-			map<int, MOSDPGInfo*>* info_map,
-			int& created);
 
   // backlogs
   xlist<PG*> backlog_queue;
@@ -845,6 +837,7 @@ protected:
   void unreg_last_pg_scrub(pg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     pair<utime_t,pg_t> p(t, pgid);
+    assert(last_scrub_pg.count(p));
     last_scrub_pg.erase(p);
   }
 

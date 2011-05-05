@@ -662,6 +662,7 @@ public:
   { }
   ~ReplicatedPG() {}
 
+
   void do_op(MOSDOp *op);
   void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
