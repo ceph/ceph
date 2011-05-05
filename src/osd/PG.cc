@@ -3408,7 +3408,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
       info.history.same_primary_since = osdmap.get_epoch();
     }
 
-    dout(10) << *this << " noting past " << i << dendl;
+    dout(10) << " noting past " << i << dendl;
     dirty_info = true;
   }
 
@@ -4380,8 +4380,8 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
       continue;
     }
 
-    // FIXME: do we really need to request the whole log here?  can we
-    //        build peer_missing with less?
+    // We pull the log from the peer's last_epoch_started to ensure we
+    // get enough log to detect divergent updates.
     dout(10) << " requesting missing from osd" << *i << dendl;
     context< RecoveryMachine >().send_query(*i,
       Query(Query::LOG,
