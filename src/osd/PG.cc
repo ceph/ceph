@@ -4100,7 +4100,6 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_active());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
-  pg->state_set(PG_STATE_PEERING);
 }
 
 boost::statechart::result 
