@@ -541,7 +541,7 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   newargv[newargc++] = "-o";
   newargv[newargc++] = "default_permissions";
 
-  newargv[newargc++] = "-d";
+  //newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 
