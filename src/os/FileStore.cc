@@ -2585,7 +2585,7 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
 {
 
   if (!ioctl_fiemap) {
-    map<off_t, size_t> m;
+    map<uint64_t, uint64_t> m;
     m[offset] = len;
     ::encode(m, bl);
     return 0;
@@ -2593,7 +2593,7 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
 
 
   struct fiemap *fiemap = NULL;
-  map<off_t, size_t> extmap;
+  map<uint64_t, uint64_t> extmap;
 
   dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 

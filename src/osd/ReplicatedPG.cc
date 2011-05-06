@@ -1093,10 +1093,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = r;
           break;
 	}
-        map<off_t, size_t> m;
+        map<uint64_t, uint64_t> m;
         bufferlist::iterator iter = bl.begin();
         ::decode(m, iter);
-        map<off_t, size_t>::iterator miter;
+        map<uint64_t, uint64_t>::iterator miter;
         bufferlist data_bl;
         for (miter = m.begin(); miter != m.end(); ++miter) {
           bufferlist tmpbl;
