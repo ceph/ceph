@@ -264,6 +264,10 @@ rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
+rados_sync_SOURCES = rados_sync.cc
+rados_sync_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_PROGRAMS += rados_sync
+
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testradospp_SOURCES = testradospp.cc
