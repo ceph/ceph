@@ -1448,6 +1448,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
     return;
   }
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
+  assert(dn->is_auth());
 
   // nothing to cow on a null dentry, fix caller
   if (!dnl)
