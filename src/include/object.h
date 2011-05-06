@@ -152,6 +152,13 @@ struct object_locator_t {
 };
 WRITE_CLASS_ENCODER(object_locator_t)
 
+inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
+  return l.pool == r.pool && l.preferred == r.preferred && l.key == r.key;
+}
+inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
+  return !(l == r);
+}
+
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;

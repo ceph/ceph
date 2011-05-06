@@ -383,6 +383,17 @@ void ReplicatedPG::do_op(MOSDOp *op)
     osd->reply_op_error(op, r);
     return;
   }
+  
+  // make sure locator is consistent
+  if (op->get_object_locator() != obc->obs.oi.oloc) {
+    dout(10) << " provided locator " << op->get_object_locator() 
+	     << " != object's " << obc->obs.oi.oloc
+	     << " on " << obc->obs.oi.soid << dendl;
+    osd->clog.warn() << "bad locator " << op->get_object_locator() 
+		     << " on object " << obc->obs.oi.oloc
+		     << " loc " << op->get_object_locator() 
+		     << " op " << *op << "\n";
+  }
 
   if ((op->may_read()) && (obc->obs.oi.lost)) {
     // This object is lost. Reading from it returns an error.
