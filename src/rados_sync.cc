@@ -37,6 +37,8 @@ static const char XATTR_PREFIX[] = "user.rados.";
 static const size_t XATTR_PREFIX_LEN =
 	sizeof(XATTR_PREFIX)/sizeof(XATTR_PREFIX[0]);
 
+static const char ERR_PREFIX[] = "[ERROR]        ";
+
 /* Linux seems to use ENODATA instead of ENOATTR when an extended attribute
  * is missing */
 #ifndef ENOATTR
@@ -63,46 +65,47 @@ static int xattr_test(const char *dir_name)
 {
   int ret;
   int fd = -1;
-  ostringstream oss;
-  oss << dir_name << "/xattr_test_file";
+  const char file_name[] = "/xattr_test_file";
+  char path[strlen(dir_name) + strlen(file_name) + 1];
+  snprintf(path, sizeof(path), "%s/%s", dir_name, file_name);
 
   char buf[] = "12345";
   char buf2[sizeof(buf)];
   memset(buf2, 0, sizeof(buf2));
 
-  fd = open(oss.str().c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0700);
+  fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0700);
   if (fd < 0) {
     ret = errno;
-    cerr << "xattr_test: unable to open '" << oss.str() << "': "
+    cerr << ERR_PREFIX << "xattr_test: unable to open '" << path << "': "
 	 << cpp_strerror(ret) << std::endl;
     goto done;
   }
   ret = fsetxattr(fd, XATTR_FULLNAME, buf, sizeof(buf), 0);
   if (ret) {
     ret = errno;
-    cerr << "xattr_test: fsetxattr failed with error " << cpp_strerror(ret)
-	 << std::endl;
+    cerr << ERR_PREFIX << "xattr_test: fsetxattr failed with error "
+	 << cpp_strerror(ret) << std::endl;
     goto done;
   }
   if (close(fd) < 0) {
     ret = errno;
     fd = -1;
-    cerr << "xattr_test: close failed with error " << cpp_strerror(ret)
-	 << std::endl;
+    cerr << ERR_PREFIX << "xattr_test: close failed with error "
+	 << cpp_strerror(ret) << std::endl;
     goto done;
   }
   fd = -1;
-  ret = getxattr(oss.str().c_str(), XATTR_FULLNAME, buf2, sizeof(buf2));
+  ret = getxattr(path, XATTR_FULLNAME, buf2, sizeof(buf2));
   if (ret < 0) {
     ret = errno;
-    cerr << "xattr_test: fgetxattr failed with error " << cpp_strerror(ret)
-	 << std::endl;
+    cerr << ERR_PREFIX << "xattr_test: fgetxattr failed with error "
+	 << cpp_strerror(ret) << std::endl;
     goto done;
   }
   if (memcmp(buf, buf2, sizeof(buf))) {
     ret = ENOTSUP;
-    cerr << "xattr_test: failed to read back the same xattr value "
-         << "that we set." << std::endl;
+    cerr << ERR_PREFIX << "xattr_test: failed to read back the same xattr "
+         << "value that we set." << std::endl;
     goto done;
   }
   ret = 0;
@@ -111,13 +114,13 @@ done:
   if (fd >= 0) {
     close(fd);
     fd = -1;
-    unlink(oss.str().c_str());
   }
+  unlink(path);
   if (ret) {
-    cerr << "xattr_test: the filesystem at " << dir_name << " does not appear to "
-         << "support extended attributes. Please remount your filesystem with "
-	 << "extended attributes enabled, or pick a different directory."
-	 << std::endl;
+    cerr << ERR_PREFIX << "xattr_test: the filesystem at " << dir_name << " does "
+         << "not appear to support extended attributes. Please remount your "
+	 << "filesystem with extended attributes enabled, or pick a different "
+	 << "directory." << std::endl;
   }
   return ret;
 }
@@ -158,8 +161,8 @@ public:
     if (!fp) {
       ret = errno;
       if (ret != ENOENT) {
-	cerr << "BackedUpObject::from_file: error while trying to open '"
-	     << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "BackedUpObject::from_file: error while trying to "
+	     << "open '" << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
       }
       return ret;
     }
@@ -170,20 +173,28 @@ public:
     if (ret) {
       ret = errno;
       fclose(fp);
-      cerr << "BackedUpObject::from_file: error while trying to stat '"
-	   << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
+      cerr << ERR_PREFIX << "BackedUpObject::from_file: error while trying "
+	   << "to stat '" << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
       return ret;
     }
 
     // get fullname
     ssize_t res = fgetxattr(fd, XATTR_FULLNAME, NULL, 0);
     if (res <= 0) {
-      ret = (res == 0) ? ENOATTR : errno;
       fclose(fp);
-      if (ret == ENOATTR)
-	cerr << "no " << XATTR_FULLNAME << " attribute found." << std::endl;
-      else
-	cerr << "getxattr error: " << cpp_strerror(ret) << std::endl;
+      ret = errno;
+      if (res == 0) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_file: found empty "
+	     << XATTR_FULLNAME << " attribute on '" << file_name
+	     << "'" << std::endl;
+	ret = ENOATTR;
+      } else if (ret == ENOATTR) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_file: there was no "
+	     << XATTR_FULLNAME << " attribute found on '" << file_name
+	     << "'" << std::endl;
+      } else {
+	cerr << ERR_PREFIX << "getxattr error: " << cpp_strerror(ret) << std::endl;
+      }
       return ret;
     }
     char rados_name_[res + 1];
@@ -192,7 +203,8 @@ public:
     if (res < 0) {
       ret = errno;
       fclose(fp);
-      cerr << "getxattr error: " << cpp_strerror(ret) << std::endl;
+      cerr << ERR_PREFIX << "BackedUpObject::getxattr(" << XATTR_FULLNAME
+	   << ") error: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
 
@@ -205,8 +217,8 @@ public:
     ret = o->read_xattrs(fileno(fp));
     if (ret) {
       fclose(fp);
-      cerr << "BackedUpObject::from_file(file_name = '" << file_name
-	   << "', dir_name = '" << dir_name << "'): "
+      cerr << ERR_PREFIX << "BackedUpObject::from_file(file_name = '"
+	   << file_name << "', dir_name = '" << dir_name << "'): "
 	   << "read_xattrs returned " << ret << std::endl;
       delete o;
       return ret;
@@ -224,7 +236,7 @@ public:
     time_t rados_time_ = 0;
     int ret = io_ctx.stat(rados_name_, &rados_size_, &rados_time_);
     if (ret) {
-      cerr << "BackedUpObject::from_rados(rados_name_ = '"
+      cerr << ERR_PREFIX << "BackedUpObject::from_rados(rados_name_ = '"
 	   << rados_name_ << "'): stat failed with error " << ret << std::endl;
       return ret;
     }
@@ -356,7 +368,7 @@ public:
     FILE *fp = fopen(file_name, "w");
     if (!fp) {
       int err = errno;
-      cerr << "download: error opening '" << file_name << "':"
+      cerr << ERR_PREFIX << "download: error opening '" << file_name << "':"
 	   <<  cpp_strerror(err) << std::endl;
       return err;
     }
@@ -367,7 +379,7 @@ public:
       bufferlist bl;
       int rlen = io_ctx.read(rados_name, bl, CHUNK_SZ, off);
       if (rlen < 0) {
-	cerr << "download: io_ctx.read(" << rados_name << ") returned "
+	cerr << ERR_PREFIX << "download: io_ctx.read(" << rados_name << ") returned "
 	     << rlen << std::endl;
 	return rlen;
       }
@@ -378,7 +390,7 @@ public:
       size_t flen = fwrite(bl.c_str(), 1, rlen, fp);
       if (flen != (size_t)rlen) {
 	int err = errno;
-	cerr << "download: fwrite(" << file_name << ") error: "
+	cerr << ERR_PREFIX << "download: fwrite(" << file_name << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -390,18 +402,14 @@ public:
     int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
     if (res) {
       int err = errno;
-      cerr << "download: fsetxattr(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fsetxattr(" << file_name << ") error: "
 	   << cpp_strerror(err) << std::endl;
       fclose(fp);
-      if (err == ENOENT) {
-	cerr << "Please make sure you have xattrs enabled on the filesystem "
-	     << "you're trying to back up to!" << std::endl;
-      }
       return err;
     }
     if (fclose(fp)) {
       int err = errno;
-      cerr << "download: fclose(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fclose(" << file_name << ") error: "
 	   << cpp_strerror(err) << std::endl;
       return err;
     }
@@ -413,7 +421,7 @@ public:
     FILE *fp = fopen(file_name, "r");
     if (!fp) {
       int err = errno;
-      cerr << "upload: error opening '" << file_name << "': "
+      cerr << ERR_PREFIX << "upload: error opening '" << file_name << "': "
 	   << cpp_strerror(err) << std::endl;
       return err;
     }
@@ -421,7 +429,7 @@ public:
     // already something there.
     int ret = io_ctx.trunc(rados_name, 0);
     if (ret) {
-      cerr << "upload: trunc failed with error " << ret << std::endl;
+      cerr << ERR_PREFIX << "upload: trunc failed with error " << ret << std::endl;
       return ret;
     }
     uint64_t off = 0;
@@ -431,7 +439,7 @@ public:
       int flen = fread(buf, CHUNK_SZ, 1, fp);
       if (flen < 0) {
 	int err = errno;
-	cerr << "upload: fread(" << file_name << ") error: "
+	cerr << ERR_PREFIX << "upload: fread(" << file_name << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -446,12 +454,12 @@ public:
       int rlen = io_ctx.write(rados_name, bl, flen, off);
       if (rlen < 0) {
 	fclose(fp);
-	cerr << "upload: rados_write error: " << rlen << std::endl;
+	cerr << ERR_PREFIX << "upload: rados_write error: " << rlen << std::endl;
 	return rlen;
       }
       if (rlen != flen) {
 	fclose(fp);
-	cerr << "upload: rados_write error: short write" << std::endl;
+	cerr << ERR_PREFIX << "upload: rados_write error: short write" << std::endl;
 	return -EIO;
       }
       off += rlen;
@@ -475,48 +483,49 @@ private:
   {
     ssize_t blen = flistxattr(fd, NULL, 0);
     if (blen > 0x1000000) {
-      cerr << "BackedUpObject::read_xattrs: unwilling to allocate a buffer of size "
-	   << blen << " on the stack for flistxattr." << std::endl;
-      return EDOM;
+      cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: unwilling to allocate a "
+	   << "buffer of size " << blen << " on the stack for flistxattr." << std::endl;
+      return ENOBUFS;
     }
     char buf[blen + 1];
     memset(buf, 0, sizeof(buf));
     ssize_t blen2 = flistxattr(fd, buf, blen);
     if (blen != blen2) {
-      cerr << "BackedUpObject::read_xattrs: xattrs changed while we were trying to "
+      cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: xattrs changed while "
+	   << "we were trying to "
 	   << "list them? First length was " << blen << ", but now it's " << blen2
 	   << std::endl;
       return EDOM;
     }
     const char *b = buf;
-    while (b) {
+    while (*b) {
       size_t bs = strlen(b);
       if (strncmp(b, XATTR_PREFIX, XATTR_PREFIX_LEN) == 0) {
 	ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
 	if (attr_len < 0) {
 	  int err = errno;
-	  cerr << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
+	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
 	       << rados_name << "', xattr_name='" << b << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  return EDOM;
 	}
 	char *attr = (char*)malloc(attr_len);
 	if (!attr) {
-	  cerr << "BackedUpObject::read_xattrs: malloc(" << attr_len
+	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: malloc(" << attr_len
 	       << ") failed for xattr_name='" << b << "'" << std::endl;
 	  return ENOBUFS;
 	}
 	ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
 	if (attr_len2 < 0) {
 	  int err = errno;
-	  cerr << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
+	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
 	       << rados_name << "', xattr_name='" << b << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  free(attr);
 	  return EDOM;
 	}
 	if (attr_len2 != attr_len) {
-	  cerr << "BackedUpObject::read_xattrs: xattr changed whil we were "
+	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs: xattr changed whil we were "
 	       << "trying to get it? fgetxattr(rados_name = '"<< rados_name
 	       << "', xattr_name='" << b << "') returned a different length "
 	       << "than when we first called it! old_len = " << attr_len
@@ -560,7 +569,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     std::list < std::string > diff;
     ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), &sobj);
     if (ret) {
-      cerr << "do_export: error getting BackedUpObject from rados." << std::endl;
+      cerr << ERR_PREFIX << "error getting BackedUpObject from rados." << std::endl;
       return ret;
     }
     std::string obj_path(sobj->get_fs_path(dir_name));
@@ -570,7 +579,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       flags |= CHANGED_CONTENTS;
     }
     else if (ret) {
-      cerr << "do_export: BackedUpObject::from_file returned "
+      cerr << ERR_PREFIX << "BackedUpObject::from_file returned "
 	   << ret << std::endl;
       return ret;
     }
@@ -584,7 +593,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     if (flags & CHANGED_CONTENTS) {
       ret = sobj->download(io_ctx, obj_path.c_str());
       if (ret) {
-	cerr << "do_export: download error: " << ret << std::endl;
+	cerr << ERR_PREFIX << "download error: " << ret << std::endl;
 	return ret;
       }
     }
@@ -594,13 +603,13 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       flags |= CHANGED_XATTRS;
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
-	cerr << "do_export: internal error on line: " << __LINE__ << std::endl;
+	cerr << ERR_PREFIX << "internal error on line: " << __LINE__ << std::endl;
 	return -ENOSYS;
       }
       ret = setxattr(obj_path.c_str(), x->c_str(), xattr->data, xattr->len, 0);
       if (ret) {
 	ret = errno;
-	cerr << "sexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "sexattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -610,7 +619,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       ret = removexattr(obj_path.c_str(), x->c_str());
       if (ret) {
 	ret = errno;
-	cerr << "removexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "removexattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -637,7 +646,8 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
   DIR *dp = opendir(dir_name);
   if (!dp) {
     int err = errno;
-    cerr << "opendir(" << dir_name << ") error: " << cpp_strerror(err) << std::endl;
+    cerr << ERR_PREFIX << "opendir(" << dir_name << ") error: "
+	 << cpp_strerror(err) << std::endl;
     return err;
   }
   while (true) {
@@ -658,17 +668,18 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       continue;
     ret = BackedUpObject::from_file(de->d_name, dir_name, &sobj);
     if (ret) {
-      cerr << "do_import: BackedUpObject::from_file: got error "
+      cerr << ERR_PREFIX << "BackedUpObject::from_file: got error "
 	   << ret << std::endl;
       return ret;
     }
-    ret = BackedUpObject::from_rados(io_ctx, de->d_name, &dobj);
+    const char *rados_name(sobj->get_rados_name());
+    ret = BackedUpObject::from_rados(io_ctx, rados_name, &dobj);
     if (ret == ENOENT) {
       flags |= CHANGED_CONTENTS;
       sobj->get_xattrs(only_in_a);
     }
     else if (ret) {
-      cerr << "do_import: BackedUpObject::from_rados returned "
+      cerr << ERR_PREFIX << "BackedUpObject::from_rados returned "
 	   << ret << std::endl;
       return ret;
     }
@@ -683,7 +694,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     if (flags & CHANGED_CONTENTS) {
       ret = sobj->upload(io_ctx, de->d_name);
       if (ret) {
-	cerr << "do_import: upload error: " << ret << std::endl;
+	cerr << ERR_PREFIX << "upload error: " << ret << std::endl;
 	return ret;
       }
     }
@@ -693,33 +704,34 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       flags |= CHANGED_XATTRS;
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
-	cerr << "do_import: internal error on line: " << __LINE__ << std::endl;
+	cerr << ERR_PREFIX << "internal error on line: " << __LINE__ << std::endl;
 	return -ENOSYS;
       }
       bufferlist bl;
       bl.append(xattr->data, xattr->len);
-      ret = io_ctx.setxattr(sobj->get_rados_name(), x->c_str(), bl);
+      ret = io_ctx.setxattr(rados_name, x->c_str(), bl);
       if (ret) {
 	ret = errno;
-	cerr << "io_ctx.sexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "io_ctx.sexattr error: " << cpp_strerror(ret)
+	     << std::endl;
 	return ret;
       }
     }
     for (std::list < std::string >::const_iterator x = only_in_b.begin();
 	 x != only_in_b.end(); ++x) {
       flags |= CHANGED_XATTRS;
-      ret = io_ctx.rmxattr(sobj->get_rados_name(), x->c_str());
+      ret = io_ctx.rmxattr(rados_name, x->c_str());
       if (ret) {
 	ret = errno;
-	cerr << "rmxattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "rmxattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
     if (flags & CHANGED_CONTENTS) {
-      cout << "[downloaded]   " << sobj->get_rados_name() << std::endl;
+      cout << "[downloaded]   " << rados_name << std::endl;
     }
     else if (flags & CHANGED_XATTRS) {
-      cout << "[xattr]        " << sobj->get_rados_name() << std::endl;
+      cout << "[xattr]        " << rados_name << std::endl;
     }
   }
   cout << "[done]" << std::endl;
