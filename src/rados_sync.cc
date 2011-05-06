@@ -548,13 +548,17 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
   librados::ObjectIterator oi = io_ctx.objects_begin();
   librados::ObjectIterator oi_end = io_ctx.objects_end();
   for (; oi != oi_end; ++oi) {
+    enum {
+      CHANGED_XATTRS = 0x1,
+      CHANGED_CONTENTS = 0x2,
+    };
+    int flags = 0;
     BackedUpObject *sobj = NULL;
     BackedUpObject *dobj = NULL;
     string rados_name(*oi);
     std::list < std::string > only_in_a;
     std::list < std::string > only_in_b;
     std::list < std::string > diff;
-    bool need_download = false;
     ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), &sobj);
     if (ret) {
       cerr << "do_export: error getting BackedUpObject from rados." << std::endl;
@@ -564,7 +568,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     ret = BackedUpObject::from_file(obj_path.c_str(), dir_name, &dobj);
     if (ret == ENOENT) {
       sobj->get_xattrs(only_in_a);
-      need_download = true;
+      flags |= CHANGED_CONTENTS;
     }
     else if (ret) {
       cerr << "do_export: BackedUpObject::from_file returned "
@@ -575,10 +579,10 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       sobj->xattr_diff(*dobj, only_in_a, only_in_b, diff);
       if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
           (sobj->get_mtime() == dobj->get_mtime())) {
-	need_download = true;
+	flags |= CHANGED_CONTENTS;
       }
     }
-    if (need_download) {
+    if (flags & CHANGED_CONTENTS) {
       ret = sobj->download(io_ctx, obj_path.c_str());
       if (ret) {
 	cerr << "do_export: download error: " << ret << std::endl;
@@ -588,6 +592,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     diff.splice(diff.begin(), only_in_a);
     for (std::list < std::string >::const_iterator x = diff.begin();
 	 x != diff.end(); ++x) {
+      flags |= CHANGED_XATTRS;
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
 	cerr << "do_export: internal error on line: " << __LINE__ << std::endl;
@@ -602,6 +607,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     }
     for (std::list < std::string >::const_iterator x = only_in_b.begin();
 	 x != only_in_b.end(); ++x) {
+      flags |= CHANGED_XATTRS;
       ret = removexattr(obj_path.c_str(), x->c_str());
       if (ret) {
 	ret = errno;
@@ -609,7 +615,14 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
 	return ret;
       }
     }
+    if (flags & CHANGED_CONTENTS) {
+      cout << "[uploaded]     " << rados_name << std::endl;
+    }
+    else if (flags & CHANGED_XATTRS) {
+      cout << "[xattr]        " << rados_name << std::endl;
+    }
   }
+  cout << "[done]" << std::endl;
   // TODO: list whole rados bucket, delete non-referenced
   return 0;
 }
@@ -629,12 +642,16 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     return err;
   }
   while (true) {
+    enum {
+      CHANGED_XATTRS = 0x1,
+      CHANGED_CONTENTS = 0x2,
+    };
     BackedUpObject *sobj = NULL;
     BackedUpObject *dobj = NULL;
     std::list < std::string > only_in_a;
     std::list < std::string > only_in_b;
     std::list < std::string > diff;
-    bool need_upload = false;
+    int flags = 0;
     struct dirent *de = readdir(dp);
     if (!de)
       break;
@@ -648,7 +665,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     }
     ret = BackedUpObject::from_rados(io_ctx, de->d_name, &dobj);
     if (ret == ENOENT) {
-      need_upload = true;
+      flags |= CHANGED_CONTENTS;
       sobj->get_xattrs(only_in_a);
     }
     else if (ret) {
@@ -660,11 +677,11 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       sobj->xattr_diff(*dobj, only_in_a, only_in_b, diff);
       if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
           (sobj->get_mtime() == dobj->get_mtime())) {
-	need_upload = true;
+	flags |= CHANGED_CONTENTS;
       }
     }
 
-    if (need_upload) {
+    if (flags & CHANGED_CONTENTS) {
       ret = sobj->upload(io_ctx, de->d_name);
       if (ret) {
 	cerr << "do_import: upload error: " << ret << std::endl;
@@ -674,6 +691,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     diff.splice(diff.begin(), only_in_a);
     for (std::list < std::string >::const_iterator x = diff.begin();
 	 x != diff.end(); ++x) {
+      flags |= CHANGED_XATTRS;
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
 	cerr << "do_import: internal error on line: " << __LINE__ << std::endl;
@@ -690,6 +708,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     }
     for (std::list < std::string >::const_iterator x = only_in_b.begin();
 	 x != only_in_b.end(); ++x) {
+      flags |= CHANGED_XATTRS;
       ret = io_ctx.rmxattr(sobj->get_rados_name(), x->c_str());
       if (ret) {
 	ret = errno;
@@ -697,7 +716,14 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
 	return ret;
       }
     }
+    if (flags & CHANGED_CONTENTS) {
+      cout << "[downloaded]   " << sobj->get_rados_name() << std::endl;
+    }
+    else if (flags & CHANGED_XATTRS) {
+      cout << "[xattr]        " << sobj->get_rados_name() << std::endl;
+    }
   }
+  cout << "[done]" << std::endl;
   // TODO: list whole directory, delete non-referenced
   return 0;
 }
