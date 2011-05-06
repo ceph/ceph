@@ -1,7 +1,5 @@
 #!/bin/bash
 
-VERBOSE=0
-
 die() {
     echo "$@"
     exit 1
@@ -14,7 +12,6 @@ test_rados_sync.sh: tests rados_sync
 -k:        keep temp files
 -h:        this help message
 -p:        set temporary pool to use [optional]
--v:        be verbose
 EOF
 }
 
@@ -61,22 +58,27 @@ TDIR=`mktemp -d -t test_rados_sync.XXXXXXXXXX` || die "mktemp failed"
 [ $KEEP_TEMP_FILES -eq 0 ] && trap "rm -rf ${TDIR}; exit" INT TERM EXIT
 
 mkdir "$TDIR/dira"
-touch "$TDIR/dira/00037b0_foo"
-attr -q -s rados_full_name -V "foo" "$TDIR/dira/00037b0_foo"
-touch "$TDIR/dira/00037b0_foo2"
-attr -q -s rados_full_name -V "foo2" "$TDIR/dira/00037b0_foo2"
-touch "$TDIR/dira/00037b0_bar"
-attr -q -s rados_full_name -V "bar" "$TDIR/dira/00037b0_bar"
+touch "$TDIR/dira/000029c4_foo"
+attr -q -s rados_full_name -V "foo" "$TDIR/dira/000029c4_foo"
+touch "$TDIR/dira/00003036_foo2"
+attr -q -s rados_full_name -V "foo2" "$TDIR/dira/00003036_foo2"
+touch "$TDIR/dira/000027d5_bar"
+attr -q -s rados_full_name -V "bar" "$TDIR/dira/000027d5_bar"
 mkdir "$TDIR/dirb"
 
 # make sure that --create works
 run "$RADOS_TOOL" rmpool "$POOL"
-
 run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
 
 # make sure that lack of --create fails
 run_expect_succ "$RADOS_TOOL" rmpool "$POOL"
 run_expect_fail "$RADOS_SYNC" import "$TDIR/dira" "$POOL"
+
+# export some stuff
+run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
+run_expect_succ "$RADOS_SYNC" --create export "$POOL" "$TDIR/dirb"
+diff -q -r "$TDIR/dira" "$TDIR/dirb" \
+    || die "failed to export the same stuff we imported!"
 
 echo "SUCCESS!"
 exit 0
