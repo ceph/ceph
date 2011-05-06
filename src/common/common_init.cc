@@ -186,10 +186,11 @@ void common_init(std::vector < const char* >& args,
   install_standard_sighandlers();
 
   if (code_env == CODE_ENVIRONMENT_DAEMON) {
-    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
-	 << "and is only suitable for **" << TEXT_NORMAL << std::endl;
-    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
-	 << "with important data.       **" << TEXT_NORMAL << std::endl;
+    cout << TEXT_YELLOW
+	 << " ** WARNING: Ceph is still under development.  Any feedback can be directed  **"
+	 << TEXT_NORMAL << "\n" << TEXT_YELLOW
+	 << " **          at ceph-devel@vger.kernel.org or http://ceph.newdream.net/.     **"
+	 << TEXT_NORMAL << std::endl;
     output_ceph_version();
   }
 }
