@@ -786,13 +786,9 @@ private:
   }
 
   // pg -> (osd list)
-  int pg_to_osds(pg_t pg, vector<int>& osds) {
+private:
+  int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) {
     // map to osds[]
-    int p = pg.pool();
-    if (!pools.count(p)) {
-      return osds.size();
-    }
-    pg_pool_t &pool = pools[p];
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
 
@@ -833,7 +829,7 @@ private:
   }
 
   // pg -> (up osd list)
-  void raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) {
+  void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) {
     up.clear();
     for (unsigned i=0; i<raw.size(); i++) {
       if (!exists(raw[i]) || is_down(raw[i])) 
@@ -842,8 +838,8 @@ private:
     }
   }
   
-  bool raw_to_temp_osds(pg_t pg, vector<int>& raw, vector<int>& temp) {
-    pg = raw_pg_to_pg(pg);
+  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) {
+    pg = pool.raw_pg_to_pg(pg);
     map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
     if (p != pg_temp.end()) {
       temp.clear();
@@ -857,25 +853,42 @@ private:
     return false;
   }
 
+public:
+  int pg_to_osds(pg_t pg, vector<int>& raw) {
+    const pg_pool_t *pool = get_pg_pool(pg.pool());
+    if (!pool)
+      return 0;
+    return _pg_to_osds(*pool, pg, raw);
+  }
+
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) {         // list of osd addr's
+    const pg_pool_t *pool = get_pg_pool(pg.pool());
+    if (!pool)
+      return 0;
     vector<int> raw;
-    pg_to_osds(pg, raw);
-    if (!raw_to_temp_osds(pg, raw, acting))
-      raw_to_up_osds(pg, raw, acting);
+    _pg_to_osds(*pool, pg, raw);
+    if (!_raw_to_temp_osds(*pool, pg, raw, acting))
+      _raw_to_up_osds(pg, raw, acting);
     return acting.size();
   }
 
   void pg_to_raw_up(pg_t pg, vector<int>& up) {
+    const pg_pool_t *pool = get_pg_pool(pg.pool());
+    if (!pool)
+      return;
     vector<int> raw;
-    pg_to_osds(pg, raw);
-    raw_to_up_osds(pg, raw, up);
+    _pg_to_osds(*pool, pg, raw);
+    _raw_to_up_osds(pg, raw, up);
   }
   
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
+    const pg_pool_t *pool = get_pg_pool(pg.pool());
+    if (!pool)
+      return;
     vector<int> raw;
-    pg_to_osds(pg, raw);
-    raw_to_up_osds(pg, raw, up);
-    if (!raw_to_temp_osds(pg, raw, acting))
+    _pg_to_osds(*pool, pg, raw);
+    _raw_to_up_osds(pg, raw, up);
+    if (!_raw_to_temp_osds(*pool, pg, raw, acting))
       acting = up;
   }
 
