@@ -4293,7 +4293,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 			  newest_update,
 			  oldest_update);
 
-  if (!pg->choose_acting(newest_update_osd == -1 ? 0 : newest_update_osd)) {
+  if (!pg->choose_acting(newest_update_osd == -1 ? pg->osd->whoami : newest_update_osd)) {
     post_event(NeedNewMap());
   } else {
     if (need_backlog && !pg->log.backlog) {
