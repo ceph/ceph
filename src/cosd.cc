@@ -21,12 +21,13 @@
 #include <string>
 using namespace std;
 
+#include "osd/OSD.h"
+
 #include "common/config.h"
 
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
 
-#include "osd/OSD.h"
 
 #include "msg/SimpleMessenger.h"
 
