@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
@@ -10,10 +10,10 @@ do_killall() {
 
 usage="usage: $0 [all] [mon] [mds] [osd]\n"
 
-let stop_all=1
-let stop_mon=0
-let stop_mds=0
-let stop_osd=0
+stop_all=1
+stop_mon=0
+stop_mds=0
+stop_osd=0
 
 while [ $# -ge 1 ]; do
     case $1 in
