@@ -834,6 +834,11 @@ int main(int argc, const char **argv)
   std::string dir_name = (action == "import") ? src : dst;
 
   if (action == "import") {
+    if (access(dir_name.c_str(), R_OK)) {
+	cerr << argv[0] << ": source directory '" << dst
+	     << "' appears to be inaccessible." << std::endl;
+	exit(ENOENT);
+    }
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
@@ -851,7 +856,7 @@ int main(int argc, const char **argv)
 	}
       }
       else {
-	cerr << argv[0] << ": directory '" << dst << "' does not exist. Use "
+	cerr << argv[0] << ": directory '" << dst << "' is not accessible. Use "
 	     << "--create to try to create it.\n";
 	exit(ENOENT);
       }
