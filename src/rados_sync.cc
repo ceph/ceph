@@ -30,12 +30,13 @@
 #include "common/errno.h"
 #include "include/rados/librados.hpp"
 
+using std::auto_ptr;
 using namespace librados;
 
 static const char * const XATTR_FULLNAME = "user.rados_full_name";
 static const char XATTR_PREFIX[] = "user.rados.";
 static const size_t XATTR_PREFIX_LEN =
-	sizeof(XATTR_PREFIX)/sizeof(XATTR_PREFIX[0]);
+	sizeof(XATTR_PREFIX)/sizeof(XATTR_PREFIX[0]) - 1;
 
 static const char ERR_PREFIX[] = "[ERROR]        ";
 
@@ -152,7 +153,7 @@ class BackedUpObject
 {
 public:
   static int from_file(const char *file_name, const char *dir_name,
-			    BackedUpObject **obj)
+			    std::auto_ptr<BackedUpObject> &obj)
   {
     int ret;
     char obj_path[strlen(dir_name) + strlen(file_name) + 2];
@@ -225,12 +226,12 @@ public:
     }
 
     fclose(fp);
-    *obj = o;
+    obj.reset(o);
     return 0;
   }
 
   static int from_rados(IoCtx& io_ctx, const char *rados_name_,
-			BackedUpObject **obj)
+			auto_ptr<BackedUpObject> &obj)
   {
     uint64_t rados_size_ = 0;
     time_t rados_time_ = 0;
@@ -244,7 +245,7 @@ public:
       return ret;
     }
     BackedUpObject *o = new BackedUpObject(rados_name_, rados_size_, rados_time_);
-    *obj = o;
+    obj.reset(o);
     return 0;
   }
 
@@ -259,10 +260,18 @@ public:
     free(rados_name);
   }
 
-  /* Given a rados object name, return something which looks kind of like
-   * the first part of the name. This is just a convenience for sysadmins,
-   * so that they can sort of get an idea of what is stored in the backup
-   * files. The extended attribute has the real, full object name.
+  /* Given a rados object name, return something which looks kind of like the
+   * first part of the name.
+   *
+   * The actual file name that the backed-up object is stored in is irrelevant
+   * to rados_sync. The only reason to make it human-readable at all is to make
+   * things easier on sysadmins.  The XATTR_FULLNAME extended attribute has the
+   * real, full object name.
+   *
+   * This function turns unicode into a bunch of 'at' signs. This could be
+   * fixed. If you try, be sure to handle all the multibyte characters
+   * correctly.
+   * I guess a better hash would be nice too.
    */
   std::string get_fs_path(const char *dir_name) const
   {
@@ -304,7 +313,29 @@ public:
     return oss.str();
   }
 
-  void xattr_diff(const BackedUpObject &rhs,
+  /* Convert the xattrs on this BackedUpObject to a kind of JSON-like string.
+   * This is only used for debugging.
+   * Note that we're assuming we can just treat the xattr data as a 
+   * null-terminated string, which isn't true. Again, this is just for debugging,
+   * so it doesn't matter.
+   */
+  std::string xattrs_to_str() const
+  {
+    ostringstream oss;
+    std::string prefix;
+    for (std::map < std::string, Xattr* >::const_iterator x = xattrs.begin();
+	   x != xattrs.end(); ++x)
+    {
+      oss << prefix << "{" << x->first << "," << x->second->data << "}";
+      prefix = ", ";
+    }
+    return oss.str();
+  }
+
+  /* Diff the extended attributes on this BackedUpObject with those found on a
+   * different BackedUpObject
+   */
+  void xattr_diff(const BackedUpObject *rhs,
 		  std::list < std::string > &only_in_a,
 		  std::list < std::string > &only_in_b,
 		  std::list < std::string > &diff) const
@@ -315,8 +346,8 @@ public:
     for (std::map < std::string, Xattr* >::const_iterator x = xattrs.begin();
 	   x != xattrs.end(); ++x)
     {
-      std::map < std::string, Xattr* >::const_iterator r = rhs.xattrs.find(x->first);
-      if (r == rhs.xattrs.end()) {
+      std::map < std::string, Xattr* >::const_iterator r = rhs->xattrs.find(x->first);
+      if (r == rhs->xattrs.end()) {
 	only_in_a.push_back(x->first);
       }
       else {
@@ -326,10 +357,10 @@ public:
 	  diff.push_back(x->first);
       }
     }
-    for (std::map < std::string, Xattr* >::const_iterator r = rhs.xattrs.begin();
-	   r != rhs.xattrs.end(); ++r)
+    for (std::map < std::string, Xattr* >::const_iterator r = rhs->xattrs.begin();
+	   r != rhs->xattrs.end(); ++r)
     {
-      std::map < std::string, Xattr* >::const_iterator x = rhs.xattrs.find(r->first);
+      std::map < std::string, Xattr* >::const_iterator x = rhs->xattrs.find(r->first);
       if (x == xattrs.end()) {
 	only_in_b.push_back(r->first);
       }
@@ -566,20 +597,20 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       CHANGED_CONTENTS = 0x2,
     };
     int flags = 0;
-    BackedUpObject *sobj = NULL;
-    BackedUpObject *dobj = NULL;
+    auto_ptr <BackedUpObject> sobj;
+    auto_ptr <BackedUpObject> dobj;
     string rados_name(*oi);
     std::list < std::string > only_in_a;
     std::list < std::string > only_in_b;
     std::list < std::string > diff;
-    ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), &sobj);
+    ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), sobj);
     if (ret) {
       cerr << ERR_PREFIX << "couldn't get '" << rados_name << "' from rados: error "
 	   << ret << std::endl;
       return ret;
     }
     std::string obj_path(sobj->get_fs_path(dir_name));
-    ret = BackedUpObject::from_file(obj_path.c_str(), dir_name, &dobj);
+    ret = BackedUpObject::from_file(obj_path.c_str(), dir_name, dobj);
     if (ret == ENOENT) {
       sobj->get_xattrs(only_in_a);
       flags |= CHANGED_CONTENTS;
@@ -590,7 +621,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       return ret;
     }
     else {
-      sobj->xattr_diff(*dobj, only_in_a, only_in_b, diff);
+      sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
       if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
           (sobj->get_mtime() == dobj->get_mtime())) {
 	flags |= CHANGED_CONTENTS;
@@ -661,8 +692,8 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       CHANGED_XATTRS = 0x1,
       CHANGED_CONTENTS = 0x2,
     };
-    BackedUpObject *sobj = NULL;
-    BackedUpObject *dobj = NULL;
+    auto_ptr <BackedUpObject> sobj;
+    auto_ptr <BackedUpObject> dobj;
     std::list < std::string > only_in_a;
     std::list < std::string > only_in_b;
     std::list < std::string > diff;
@@ -672,14 +703,14 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       break;
     if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
       continue;
-    ret = BackedUpObject::from_file(de->d_name, dir_name, &sobj);
+    ret = BackedUpObject::from_file(de->d_name, dir_name, sobj);
     if (ret) {
       cerr << ERR_PREFIX << "BackedUpObject::from_file: got error "
 	   << ret << std::endl;
       return ret;
     }
     const char *rados_name(sobj->get_rados_name());
-    ret = BackedUpObject::from_rados(io_ctx, rados_name, &dobj);
+    ret = BackedUpObject::from_rados(io_ctx, rados_name, dobj);
     if (ret == -ENOENT) {
       flags |= CHANGED_CONTENTS;
       sobj->get_xattrs(only_in_a);
@@ -690,7 +721,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       return ret;
     }
     else {
-      sobj->xattr_diff(*dobj, only_in_a, only_in_b, diff);
+      sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
       if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
           (sobj->get_mtime() == dobj->get_mtime())) {
 	flags |= CHANGED_CONTENTS;
@@ -704,9 +735,8 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
 	return ret;
       }
     }
-    diff.splice(diff.begin(), only_in_a);
-    for (std::list < std::string >::const_iterator x = diff.begin();
-	 x != diff.end(); ++x) {
+    for (std::list < std::string >::const_iterator x = only_in_a.begin();
+	 x != only_in_a.end(); ++x) {
       flags |= CHANGED_XATTRS;
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
@@ -718,7 +748,31 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       ret = io_ctx.setxattr(rados_name, x->c_str(), bl);
       if (ret) {
 	ret = errno;
-	cerr << ERR_PREFIX << "io_ctx.sexattr error: " << cpp_strerror(ret)
+	cerr << ERR_PREFIX << "io_ctx.sexattr error1: " << cpp_strerror(ret)
+	     << std::endl;
+	return ret;
+      }
+    }
+    for (std::list < std::string >::const_iterator x = diff.begin();
+	 x != diff.end(); ++x) {
+      flags |= CHANGED_XATTRS;
+      const Xattr *xattr = sobj->get_xattr(*x);
+      if (xattr == NULL) {
+	cerr << ERR_PREFIX << "internal error on line: " << __LINE__ << std::endl;
+	return -ENOSYS;
+      }
+      bufferlist bl;
+      bl.append(xattr->data, xattr->len);
+      ret = io_ctx.rmxattr(rados_name, x->c_str());
+      if (ret) {
+	cerr << ERR_PREFIX << "io_ctx.rmxattr error2: " << cpp_strerror(ret)
+	     << std::endl;
+	return ret;
+      }
+      ret = io_ctx.setxattr(rados_name, x->c_str(), bl);
+      if (ret) {
+	ret = errno;
+	cerr << ERR_PREFIX << "io_ctx.sexattr error2: " << cpp_strerror(ret)
 	     << std::endl;
 	return ret;
       }
@@ -729,7 +783,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       ret = io_ctx.rmxattr(rados_name, x->c_str());
       if (ret) {
 	ret = errno;
-	cerr << ERR_PREFIX << "rmxattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << ERR_PREFIX << "rmxattr error3: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
