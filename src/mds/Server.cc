@@ -5171,11 +5171,6 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth())
     mdcache->predirty_journal_parents(mdr, metablob, srcdnl->get_inode(), destdn->get_dir(), flags, 1);
 
-  metablob->add_dir_context(srcdn->get_dir());
-  metablob->add_dir_context(destdn->get_dir());
-  if (straydn)
-    metablob->add_dir_context(straydn->get_dir());
-
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
   snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
 
@@ -5204,8 +5199,10 @@ void Server::_rename_prepare(MDRequest *mdr,
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-      ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
+      if (srcdnl->get_inode()->is_auth()) {
+	mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+	ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
+      }
     } else {
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -5227,8 +5224,12 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
     
   // src
-  mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
-  metablob->add_null_dentry(srcdn, true);
+  if (srcdn->is_auth()) {
+    dout(10) << " journaling srcdn " << *srcdn << dendl;
+    mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
+    metablob->add_null_dentry(srcdn, true);
+  } else
+    dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
 
   // make renamed inode first track the dn
   if (srcdnl->is_primary() && destdn->is_auth())
