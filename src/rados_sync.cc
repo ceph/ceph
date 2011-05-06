@@ -84,7 +84,15 @@ static int xattr_test(const char *dir_name)
 	 << std::endl;
     goto done;
   }
-  ret = fgetxattr(fd, XATTR_FULLNAME, buf2, sizeof(buf2));
+  if (close(fd) < 0) {
+    ret = errno;
+    fd = -1;
+    cerr << "xattr_test: close failed with error " << cpp_strerror(ret)
+	 << std::endl;
+    goto done;
+  }
+  fd = -1;
+  ret = getxattr(oss.str().c_str(), XATTR_FULLNAME, buf2, sizeof(buf2));
   if (ret < 0) {
     ret = errno;
     cerr << "xattr_test: fgetxattr failed with error " << cpp_strerror(ret)
@@ -93,18 +101,23 @@ static int xattr_test(const char *dir_name)
   }
   if (memcmp(buf, buf2, sizeof(buf))) {
     ret = ENOTSUP;
-    cerr << "xattr_test: the filesystem at " << dir_name << " does not appear to "
-         << "support extended attributes. Please remount your filesystem with "
-	 << "extended attribute enabled, or pick a different backup destination. "
-	 << std::endl;
+    cerr << "xattr_test: failed to read back the same xattr value "
+         << "that we set." << std::endl;
     goto done;
   }
+  ret = 0;
 
 done:
   if (fd >= 0) {
     close(fd);
     fd = -1;
     unlink(oss.str().c_str());
+  }
+  if (ret) {
+    cerr << "xattr_test: the filesystem at " << dir_name << " does not appear to "
+         << "support extended attributes. Please remount your filesystem with "
+	 << "extended attributes enabled, or pick a different directory."
+	 << std::endl;
   }
   return ret;
 }
