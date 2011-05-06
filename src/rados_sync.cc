@@ -809,31 +809,31 @@ int main(int argc, const char **argv)
   IoCtx io_ctx;
   std::string pool_name = (action == "import") ? dst : src;
   ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
+  if ((ret == -ENOENT) && (action == "import")) {
+    if (create) {
+      ret = rados.pool_create(pool_name.c_str());
+      if (ret) {
+	cerr << argv[0] << ": pool_create failed with error " << ret
+	     << std::endl;
+	exit(ret);
+      }
+      ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
+    }
+    else {
+      cerr << argv[0] << ": pool '" << pool_name << "' does not exist. Use "
+	   << "--create to try to create it." << std::endl;
+      exit(ENOENT);
+    }
+  }
   if (ret) {
     cerr << argv[0] << ": error opening pool " << pool_name << ": "
 	 << cpp_strerror(ret) << std::endl;
-    return ret;
+    exit(ret);
   }
 
   std::string dir_name = (action == "import") ? src : dst;
 
   if (action == "import") {
-    if (rados.pool_lookup(pool_name.c_str()) < 0) {
-      if (create) {
-	ret = rados.pool_create(pool_name.c_str());
-	if (ret) {
-	  cerr << argv[0] << ": pool_create failed with error " << ret
-	       << std::endl;
-	  exit(ret);
-	}
-      }
-      else {
-	cerr << argv[0] << ": pool '" << pool_name << "' does not exist. Use "
-	     << "--create to try to create it." << std::endl;
-	exit(ENOENT);
-      }
-    }
-
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
