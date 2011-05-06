@@ -560,7 +560,8 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       cerr << "do_export: error getting BackedUpObject from rados." << std::endl;
       return ret;
     }
-    ret = BackedUpObject::from_file(rados_name.c_str(), dir_name, &dobj);
+    std::string obj_path(sobj->get_fs_path(dir_name));
+    ret = BackedUpObject::from_file(obj_path.c_str(), dir_name, &dobj);
     if (ret == ENOENT) {
       sobj->get_xattrs(only_in_a);
       need_download = true;
@@ -577,7 +578,6 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
 	need_download = true;
       }
     }
-    std::string obj_path(sobj->get_fs_path(dir_name));
     if (need_download) {
       ret = sobj->download(io_ctx, obj_path.c_str());
       if (ret) {
