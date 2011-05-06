@@ -59,6 +59,56 @@ options:\n\
 ";
 }
 
+static int xattr_test(const char *dir_name)
+{
+  int ret;
+  int fd = -1;
+  ostringstream oss;
+  oss << dir_name << "/xattr_test_file";
+
+  char buf[] = "12345";
+  char buf2[sizeof(buf)];
+  memset(buf2, 0, sizeof(buf2));
+
+  fd = open(oss.str().c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0700);
+  if (fd < 0) {
+    ret = errno;
+    cerr << "xattr_test: unable to open '" << oss.str() << "': "
+	 << cpp_strerror(ret) << std::endl;
+    goto done;
+  }
+  ret = fsetxattr(fd, XATTR_FULLNAME, buf, sizeof(buf), 0);
+  if (ret) {
+    ret = errno;
+    cerr << "xattr_test: fsetxattr failed with error " << cpp_strerror(ret)
+	 << std::endl;
+    goto done;
+  }
+  ret = fgetxattr(fd, XATTR_FULLNAME, buf2, sizeof(buf2));
+  if (ret < 0) {
+    ret = errno;
+    cerr << "xattr_test: fgetxattr failed with error " << cpp_strerror(ret)
+	 << std::endl;
+    goto done;
+  }
+  if (memcmp(buf, buf2, sizeof(buf))) {
+    ret = ENOTSUP;
+    cerr << "xattr_test: the filesystem at " << dir_name << " does not appear to "
+         << "support extended attributes. Please remount your filesystem with "
+	 << "extended attribute enabled, or pick a different backup destination. "
+	 << std::endl;
+    goto done;
+  }
+
+done:
+  if (fd >= 0) {
+    close(fd);
+    fd = -1;
+    unlink(oss.str().c_str());
+  }
+  return ret;
+}
+
 // Stores a length and a chunk of malloc()ed data
 class Xattr {
 public:
@@ -96,7 +146,7 @@ public:
     if (!fp) {
       ret = errno;
       if (ret != ENOENT) {
-	cout << "BackedUpObject::from_file: error while trying to open '"
+	cerr << "BackedUpObject::from_file: error while trying to open '"
 	     << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
       }
       return ret;
@@ -108,7 +158,7 @@ public:
     if (ret) {
       ret = errno;
       fclose(fp);
-      cout << "BackedUpObject::from_file: error while trying to stat '"
+      cerr << "BackedUpObject::from_file: error while trying to stat '"
 	   << obj_path << "': " <<  cpp_strerror(ret) << std::endl;
       return ret;
     }
@@ -119,9 +169,9 @@ public:
       ret = errno;
       fclose(fp);
       if (ret == ENOATTR)
-	cout << "no " << XATTR_FULLNAME << " attribute found." << std::endl;
+	cerr << "no " << XATTR_FULLNAME << " attribute found." << std::endl;
       else
-	cout << "getxattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << "getxattr error: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     char rados_name_[res + 1];
@@ -130,7 +180,7 @@ public:
     if (res < 0) {
       ret = errno;
       fclose(fp);
-      cout << "getxattr error: " << cpp_strerror(ret) << std::endl;
+      cerr << "getxattr error: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
 
@@ -143,7 +193,7 @@ public:
     ret = o->read_xattrs(fileno(fp));
     if (ret) {
       fclose(fp);
-      cout << "BackedUpObject::from_file(file_name = '" << file_name
+      cerr << "BackedUpObject::from_file(file_name = '" << file_name
 	   << "', dir_name = '" << dir_name << "'): "
 	   << "read_xattrs returned " << ret << std::endl;
       delete o;
@@ -162,7 +212,7 @@ public:
     time_t rados_time_ = 0;
     int ret = io_ctx.stat(rados_name_, &rados_size_, &rados_time_);
     if (ret) {
-      cout << "BackedUpObject::from_rados(rados_name_ = '"
+      cerr << "BackedUpObject::from_rados(rados_name_ = '"
 	   << rados_name_ << "'): stat failed with error " << ret << std::endl;
       return ret;
     }
@@ -187,7 +237,7 @@ public:
    * so that they can sort of get an idea of what is stored in the backup
    * files. The extended attribute has the real, full object name.
    */
-  std::string get_fs_path() const
+  std::string get_fs_path(const char *dir_name) const
   {
     size_t i;
     uint32_t hash = 0;
@@ -197,8 +247,8 @@ public:
     }
     if (sz > 200)
       sz = 200;
-    char fs_path[8 + sz + 1];
-    sprintf(fs_path, "%08x", hash);
+    char fs_path[9 + sz + 1];
+    sprintf(fs_path, "%08x_", hash);
     for (i = 0; i < sz; ++i) {
       // Just replace anything that looks funny with an 'at' sign.
       // Unicode also gets turned into 'at' signs.
@@ -219,10 +269,12 @@ public:
 	c = '@';
       else if (c == '\r')
 	c = '@';
-      fs_path[8 + i] = c;
+      fs_path[9 + i] = c;
     }
-    fs_path[8 + i] = '\0';
-    return fs_path;
+    fs_path[9 + i] = '\0';
+    ostringstream oss;
+    oss << dir_name << "/" << fs_path;
+    return oss.str();
   }
 
   void xattr_diff(const BackedUpObject &rhs,
@@ -292,7 +344,7 @@ public:
     FILE *fp = fopen(file_name, "w");
     if (!fp) {
       int err = errno;
-      cout << "download: error opening '" << file_name << "':"
+      cerr << "download: error opening '" << file_name << "':"
 	   <<  cpp_strerror(err) << std::endl;
       return err;
     }
@@ -301,15 +353,20 @@ public:
     static const int CHUNK_SZ = 32765;
     while (true) {
       bufferlist bl;
-      int rlen = io_ctx.read(file_name, bl, CHUNK_SZ, off);
+      int rlen = io_ctx.read(rados_name, bl, CHUNK_SZ, off);
+      if (rlen < 0) {
+	cerr << "download: io_ctx.read(" << rados_name << ") returned "
+	     << rlen << std::endl;
+	return rlen;
+      }
       if (rlen < CHUNK_SZ)
 	off = 0;
       else
 	off += rlen;
-      size_t flen = fwrite(bl.c_str(), rlen, 1, fp);
+      size_t flen = fwrite(bl.c_str(), 1, rlen, fp);
       if (flen != (size_t)rlen) {
 	int err = errno;
-	cout << "download: fwrite(" << file_name << ") error: "
+	cerr << "download: fwrite(" << file_name << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -319,16 +376,20 @@ public:
     }
     size_t attr_sz = strlen(rados_name) + 1;
     int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
-    if (res != (int)attr_sz) {
+    if (res) {
       int err = errno;
-      cout << "download: fsetxattr(" << file_name << ") error: "
+      cerr << "download: fsetxattr(" << file_name << ") error: "
 	   << cpp_strerror(err) << std::endl;
       fclose(fp);
+      if (err == ENOENT) {
+	cerr << "Please make sure you have xattrs enabled on the filesystem "
+	     << "you're trying to back up to!" << std::endl;
+      }
       return err;
     }
     if (fclose(fp)) {
       int err = errno;
-      cout << "download: fclose(" << file_name << ") error: "
+      cerr << "download: fclose(" << file_name << ") error: "
 	   << cpp_strerror(err) << std::endl;
       return err;
     }
@@ -340,7 +401,7 @@ public:
     FILE *fp = fopen(file_name, "r");
     if (!fp) {
       int err = errno;
-      cout << "upload: error opening '" << file_name << "': "
+      cerr << "upload: error opening '" << file_name << "': "
 	   << cpp_strerror(err) << std::endl;
       return err;
     }
@@ -348,7 +409,7 @@ public:
     // already something there.
     int ret = io_ctx.trunc(rados_name, 0);
     if (ret) {
-      cout << "upload: trunc failed with error " << ret << std::endl;
+      cerr << "upload: trunc failed with error " << ret << std::endl;
       return ret;
     }
     uint64_t off = 0;
@@ -358,7 +419,7 @@ public:
       int flen = fread(buf, CHUNK_SZ, 1, fp);
       if (flen < 0) {
 	int err = errno;
-	cout << "upload: fread(" << file_name << ") error: "
+	cerr << "upload: fread(" << file_name << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -373,12 +434,12 @@ public:
       int rlen = io_ctx.write(rados_name, bl, flen, off);
       if (rlen < 0) {
 	fclose(fp);
-	cout << "upload: rados_write error: " << rlen << std::endl;
+	cerr << "upload: rados_write error: " << rlen << std::endl;
 	return rlen;
       }
       if (rlen != flen) {
 	fclose(fp);
-	cout << "upload: rados_write error: short write" << std::endl;
+	cerr << "upload: rados_write error: short write" << std::endl;
 	return -EIO;
       }
       off += rlen;
@@ -402,7 +463,7 @@ private:
   {
     ssize_t blen = flistxattr(fd, NULL, 0);
     if (blen > 0x1000000) {
-      cout << "BackedUpObject::read_xattrs: unwilling to allocate a buffer of size "
+      cerr << "BackedUpObject::read_xattrs: unwilling to allocate a buffer of size "
 	   << blen << " on the stack for flistxattr." << std::endl;
       return EDOM;
     }
@@ -410,7 +471,7 @@ private:
     memset(buf, 0, sizeof(buf));
     ssize_t blen2 = flistxattr(fd, buf, blen);
     if (blen != blen2) {
-      cout << "BackedUpObject::read_xattrs: xattrs changed while we were trying to "
+      cerr << "BackedUpObject::read_xattrs: xattrs changed while we were trying to "
 	   << "list them? First length was " << blen << ", but now it's " << blen2
 	   << std::endl;
       return EDOM;
@@ -422,28 +483,28 @@ private:
 	ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
 	if (attr_len < 0) {
 	  int err = errno;
-	  cout << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
+	  cerr << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
 	       << rados_name << "', xattr_name='" << b << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  return EDOM;
 	}
 	char *attr = (char*)malloc(attr_len);
 	if (!attr) {
-	  cout << "BackedUpObject::read_xattrs: malloc(" << attr_len
+	  cerr << "BackedUpObject::read_xattrs: malloc(" << attr_len
 	       << ") failed for xattr_name='" << b << "'" << std::endl;
 	  return ENOBUFS;
 	}
 	ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
 	if (attr_len2 < 0) {
 	  int err = errno;
-	  cout << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
+	  cerr << "BackedUpObject::read_xattrs: fgetxattr(rados_name = '"
 	       << rados_name << "', xattr_name='" << b << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  free(attr);
 	  return EDOM;
 	}
 	if (attr_len2 != attr_len) {
-	  cout << "BackedUpObject::read_xattrs: xattr changed whil we were "
+	  cerr << "BackedUpObject::read_xattrs: xattr changed whil we were "
 	       << "trying to get it? fgetxattr(rados_name = '"<< rados_name
 	       << "', xattr_name='" << b << "') returned a different length "
 	       << "than when we first called it! old_len = " << attr_len
@@ -483,7 +544,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     bool need_download = false;
     ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), &sobj);
     if (ret) {
-      cout << "do_export: error getting BackedUpObject from rados." << std::endl;
+      cerr << "do_export: error getting BackedUpObject from rados." << std::endl;
       return ret;
     }
     ret = BackedUpObject::from_file(rados_name.c_str(), dir_name, &dobj);
@@ -492,7 +553,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       need_download = true;
     }
     else if (ret) {
-      cout << "do_export: BackedUpObject::from_file returned "
+      cerr << "do_export: BackedUpObject::from_file returned "
 	   << ret << std::endl;
       return ret;
     }
@@ -503,11 +564,11 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
 	need_download = true;
       }
     }
-    std::string obj_path(sobj->get_fs_path());
+    std::string obj_path(sobj->get_fs_path(dir_name));
     if (need_download) {
       ret = sobj->download(io_ctx, obj_path.c_str());
       if (ret) {
-	cout << "do_export: download error: " << ret << std::endl;
+	cerr << "do_export: download error: " << ret << std::endl;
 	return ret;
       }
     }
@@ -516,13 +577,13 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
 	 x != diff.end(); ++x) {
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
-	cout << "do_export: internal error on line: " << __LINE__ << std::endl;
+	cerr << "do_export: internal error on line: " << __LINE__ << std::endl;
 	return -ENOSYS;
       }
       ret = setxattr(obj_path.c_str(), x->c_str(), xattr->data, xattr->len, 0);
       if (ret) {
 	ret = errno;
-	cout << "sexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << "sexattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -531,7 +592,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       ret = removexattr(obj_path.c_str(), x->c_str());
       if (ret) {
 	ret = errno;
-	cout << "removexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << "removexattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -551,7 +612,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
   DIR *dp = opendir(dir_name);
   if (!dp) {
     int err = errno;
-    cout << "opendir(" << dir_name << ") error: " << cpp_strerror(err) << std::endl;
+    cerr << "opendir(" << dir_name << ") error: " << cpp_strerror(err) << std::endl;
     return err;
   }
   while (true) {
@@ -568,7 +629,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       continue;
     ret = BackedUpObject::from_file(de->d_name, dir_name, &sobj);
     if (ret) {
-      cout << "do_import: BackedUpObject::from_file: got error "
+      cerr << "do_import: BackedUpObject::from_file: got error "
 	   << ret << std::endl;
       return ret;
     }
@@ -578,7 +639,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       sobj->get_xattrs(only_in_a);
     }
     else if (ret) {
-      cout << "do_import: BackedUpObject::from_rados returned "
+      cerr << "do_import: BackedUpObject::from_rados returned "
 	   << ret << std::endl;
       return ret;
     }
@@ -593,7 +654,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     if (need_upload) {
       ret = sobj->upload(io_ctx, de->d_name);
       if (ret) {
-	cout << "do_import: upload error: " << ret << std::endl;
+	cerr << "do_import: upload error: " << ret << std::endl;
 	return ret;
       }
     }
@@ -602,7 +663,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
 	 x != diff.end(); ++x) {
       const Xattr *xattr = sobj->get_xattr(*x);
       if (xattr == NULL) {
-	cout << "do_import: internal error on line: " << __LINE__ << std::endl;
+	cerr << "do_import: internal error on line: " << __LINE__ << std::endl;
 	return -ENOSYS;
       }
       bufferlist bl;
@@ -610,7 +671,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       ret = io_ctx.setxattr(sobj->get_rados_name(), x->c_str(), bl);
       if (ret) {
 	ret = errno;
-	cout << "io_ctx.sexattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << "io_ctx.sexattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -619,7 +680,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       ret = io_ctx.rmxattr(sobj->get_rados_name(), x->c_str());
       if (ret) {
 	ret = errno;
-	cout << "rmxattr error: " << cpp_strerror(ret) << std::endl;
+	cerr << "rmxattr error: " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
     }
@@ -643,7 +704,7 @@ int main(int argc, const char **argv)
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       exit(1);
-    } else if (ceph_argparse_flag(args, i, "-c", "--create", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-C", "--create", (char*)NULL)) {
       create = true;
     } else {
       // begin positional arguments
@@ -653,6 +714,7 @@ int main(int argc, const char **argv)
   if ((i != args.end()) &&
       ((strcmp(*i, "import") == 0) || (strcmp(*i, "export") == 0))) {
     action = *i;
+    ++i;
   }
   else {
     cerr << argv[0] << ": You must specify either 'import' or 'export'.\n";
@@ -661,17 +723,19 @@ int main(int argc, const char **argv)
   }
   if (i != args.end()) {
     src = *i;
+    ++i;
   }
   else {
-    cerr << argv[0] << ": You must give a source '.\n";
+    cerr << argv[0] << ": You must give a source.\n";
     cerr << "Use --help to show help.\n";
     exit(1);
   }
   if (i != args.end()) {
     dst = *i;
+    ++i;
   }
   else {
-    cerr << argv[0] << ": You must give a destination '.\n";
+    cerr << argv[0] << ": You must give a destination.\n";
     cerr << "Use --help to show help.\n";
     exit(1);
   }
@@ -687,14 +751,15 @@ int main(int argc, const char **argv)
      exit(1);
   }
   IoCtx io_ctx;
-  std::string pool_name = (action == "import") ? src : dst;
-
+  std::string pool_name = (action == "import") ? dst : src;
   ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
   if (ret) {
     cerr << argv[0] << ": error opening pool " << pool_name << ": "
 	 << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
+  std::string dir_name = (action == "import") ? src : dst;
 
   if (action == "import") {
     if (rados.pool_lookup(pool_name.c_str()) < 0) {
@@ -713,23 +778,31 @@ int main(int argc, const char **argv)
       }
     }
 
+    ret = xattr_test(dir_name.c_str());
+    if (ret)
+      return ret;
     return do_import(io_ctx, src.c_str());
   }
   else {
     if (access(dst.c_str(), W_OK)) {
-      ret = mkdir(dst.c_str(), 0700);
-      if (ret < 0) {
-	ret = errno;
-	cerr << argv[0] << ": mkdir(" << dst << ") failed with error " << ret
-	     << std::endl;
-	exit(ret);
+      if (create) {
+	ret = mkdir(dst.c_str(), 0700);
+	if (ret < 0) {
+	  ret = errno;
+	  cerr << argv[0] << ": mkdir(" << dst << ") failed with error " << ret
+	       << std::endl;
+	  exit(ret);
+	}
+      }
+      else {
+	cerr << argv[0] << ": directory '" << dst << "' does not exist. Use "
+	     << "--create to try to create it.\n";
+	exit(ENOENT);
       }
     }
-    else {
-      cerr << argv[0] << ": directory '" << dst << "' does not exist. Use "
-	   << "--create to try to create it.\n";
-      exit(ENOENT);
-    }
+    ret = xattr_test(dir_name.c_str());
+    if (ret)
+      return ret;
     return do_export(io_ctx, dst.c_str());
   }
 }
