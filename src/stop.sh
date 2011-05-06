@@ -35,8 +35,8 @@ while [ $# -ge 1 ]; do
 	* )
 	    printf "$usage"
 	    exit
-        esac
-        shift
+    esac
+    shift
 done
 
 if [ $stop_all -eq 1 ]; then
