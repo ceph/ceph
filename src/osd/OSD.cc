@@ -13,6 +13,7 @@
  */
 
 
+#include "osd/PG.h"
 
 #include "include/types.h"
 

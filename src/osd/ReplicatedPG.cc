@@ -11,6 +11,7 @@
  * 
  */
 
+#include "PG.h"
 #include "ReplicatedPG.h"
 #include "OSD.h"
 #include "PGLS.h"

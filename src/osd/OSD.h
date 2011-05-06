@@ -15,6 +15,8 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
+#include "PG.h"
+
 #include "msg/Dispatcher.h"
 
 #include "common/Mutex.h"
@@ -24,7 +26,6 @@
 #include "common/LogClient.h"
 
 #include "os/ObjectStore.h"
-#include "PG.h"
 #include "OSDCaps.h"
 
 #include "common/DecayCounter.h"
