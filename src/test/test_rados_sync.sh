@@ -65,6 +65,15 @@ attr -q -s rados_full_name -V "foo2" "$TDIR/dira/00003036_foo2"
 touch "$TDIR/dira/000027d5_bar"
 attr -q -s rados_full_name -V "bar" "$TDIR/dira/000027d5_bar"
 mkdir "$TDIR/dirb"
+mkdir "$TDIR/dirc"
+touch "$TDIR/dirc/000029c4_foo"
+attr -q -s rados_full_name -V "foo" "$TDIR/dirc/000029c4_foo"
+attr -q -s "user.rados.toothbrush" -V "toothbrush" "$TDIR/dirc/000029c4_foo"
+attr -q -s "user.rados.toothpaste" -V "crest" "$TDIR/dirc/000029c4_foo"
+attr -q -s "user.rados.floss" -V "myfloss" "$TDIR/dirc/000029c4_foo"
+touch "$TDIR/dirc/00003036_foo2"
+attr -q -s "user.rados.toothbrush" -V "green" "$TDIR/dirc/00003036_foo2"
+attr -q -s rados_full_name -V "foo2" "$TDIR/dirc/00003036_foo2"
 
 # make sure that --create works
 run "$RADOS_TOOL" rmpool "$POOL"
@@ -74,11 +83,29 @@ run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
 run_expect_succ "$RADOS_TOOL" rmpool "$POOL"
 run_expect_fail "$RADOS_SYNC" import "$TDIR/dira" "$POOL"
 
-# export some stuff
 run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
+
+# inaccessible import src should fail
+run_expect_fail "$RADOS_SYNC" import "$TDIR/dir_nonexistent" "$POOL"
+
+# export some stuff
 run_expect_succ "$RADOS_SYNC" --create export "$POOL" "$TDIR/dirb"
 diff -q -r "$TDIR/dira" "$TDIR/dirb" \
     || die "failed to export the same stuff we imported!"
+
+# import some stuff with extended attributes on it
+run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL"
+
+# export some stuff with extended attributes on it
+run_expect_succ "$RADOS_SYNC" -C export "$POOL" "$TDIR/dirc_copy"
+
+# check to make sure extended attributes were preserved
+PRE_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc/000029c4_foo"`
+POST_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc_copy/000029c4_foo"`
+if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
+    die "xattr not preserved across import/export! \
+\$PRE_EXPORT = $PRE_EXPORT, \$POST_EXPORT = $POST_EXPORT"
+fi
 
 echo "SUCCESS!"
 exit 0
