@@ -152,9 +152,8 @@ public:
 			    BackedUpObject **obj)
   {
     int ret;
-    ostringstream oss;
-    oss << dir_name << "/" << file_name;
-    const char *obj_path = oss.str().c_str();
+    char obj_path[strlen(dir_name) + strlen(file_name) + 2];
+    snprintf(obj_path, sizeof(obj_path), "%s/%s", dir_name, file_name);
     FILE *fp = fopen(obj_path, "r");
     if (!fp) {
       ret = errno;
@@ -166,7 +165,7 @@ public:
     }
     int fd = fileno(fp);
     struct stat st_buf;
-    memset(&st_buf, 0, sizeof(struct stat));
+    memset(&st_buf, 0, sizeof(st_buf));
     ret = fstat(fd, &st_buf);
     if (ret) {
       ret = errno;
@@ -178,8 +177,8 @@ public:
 
     // get fullname
     ssize_t res = fgetxattr(fd, XATTR_FULLNAME, NULL, 0);
-    if (res < 0) {
-      ret = errno;
+    if (res <= 0) {
+      ret = (res == 0) ? ENOATTR : errno;
       fclose(fp);
       if (ret == ENOATTR)
 	cerr << "no " << XATTR_FULLNAME << " attribute found." << std::endl;
