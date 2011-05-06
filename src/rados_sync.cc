@@ -66,7 +66,7 @@ static int xattr_test(const char *dir_name)
   int ret;
   int fd = -1;
   const char file_name[] = "/xattr_test_file";
-  char path[strlen(dir_name) + strlen(file_name) + 1];
+  char path[strlen(dir_name) + strlen(file_name) + 2];
   snprintf(path, sizeof(path), "%s/%s", dir_name, file_name);
 
   char buf[] = "12345";
@@ -235,7 +235,10 @@ public:
     uint64_t rados_size_ = 0;
     time_t rados_time_ = 0;
     int ret = io_ctx.stat(rados_name_, &rados_size_, &rados_time_);
-    if (ret) {
+    if (ret == -ENOENT) {
+      // don't complain here about ENOENT
+      return ret;
+    } else if (ret) {
       cerr << ERR_PREFIX << "BackedUpObject::from_rados(rados_name_ = '"
 	   << rados_name_ << "'): stat failed with error " << ret << std::endl;
       return ret;
@@ -416,12 +419,14 @@ public:
     return 0;
   }
 
-  int upload(IoCtx &io_ctx, const char *file_name)
+  int upload(IoCtx &io_ctx, const char *file_name, const char *dir_name)
   {
-    FILE *fp = fopen(file_name, "r");
+    char path[strlen(file_name) + strlen(dir_name) + 2];
+    snprintf(path, sizeof(path), "%s/%s", dir_name, file_name);
+    FILE *fp = fopen(path, "r");
     if (!fp) {
       int err = errno;
-      cerr << ERR_PREFIX << "upload: error opening '" << file_name << "': "
+      cerr << ERR_PREFIX << "upload: error opening '" << path << "': "
 	   << cpp_strerror(err) << std::endl;
       return err;
     }
@@ -569,7 +574,8 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
     std::list < std::string > diff;
     ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), &sobj);
     if (ret) {
-      cerr << ERR_PREFIX << "error getting BackedUpObject from rados." << std::endl;
+      cerr << ERR_PREFIX << "couldn't get '" << rados_name << "' from rados: error "
+	   << ret << std::endl;
       return ret;
     }
     std::string obj_path(sobj->get_fs_path(dir_name));
@@ -674,7 +680,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     }
     const char *rados_name(sobj->get_rados_name());
     ret = BackedUpObject::from_rados(io_ctx, rados_name, &dobj);
-    if (ret == ENOENT) {
+    if (ret == -ENOENT) {
       flags |= CHANGED_CONTENTS;
       sobj->get_xattrs(only_in_a);
     }
@@ -692,7 +698,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
     }
 
     if (flags & CHANGED_CONTENTS) {
-      ret = sobj->upload(io_ctx, de->d_name);
+      ret = sobj->upload(io_ctx, de->d_name, dir_name);
       if (ret) {
 	cerr << ERR_PREFIX << "upload error: " << ret << std::endl;
 	return ret;
