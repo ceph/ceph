@@ -22,6 +22,9 @@
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 
+// re-include our assert to clobber boost's
+#include "include/assert.h" 
+
 #include "include/types.h"
 #include "osd_types.h"
 #include "include/buffer.h"
