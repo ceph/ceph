@@ -10,6 +10,8 @@ class RGWRados  : public RGWAccess
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
 
+  int open_bucket_ctx(std::string& bucket, librados::IoCtx&  io_ctx);
+
   struct GetObjState {
     librados::IoCtx io_ctx;
     bool sent_data;
