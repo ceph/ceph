@@ -17,6 +17,7 @@
 /mount.ceph
 /osdmaptool
 /rados
+/rados_sync
 /radosacl
 /radosgw
 /radosgw_admin
