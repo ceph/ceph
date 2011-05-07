@@ -1131,6 +1131,12 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   log.print(*_dout);
   *_dout << dendl;
 
+  if (missing.num_missing() == 0) {
+    // advance last_complete since nothing else is missing!
+    info.last_complete = info.last_update;
+    write_info(t);
+  }
+
   // Send out the PG log to all replicas
   // So that they know what is lost
   share_pg_log(old_last_update);
@@ -3961,8 +3967,7 @@ PG::RecoveryState::Active::react(const ActMap&) {
 
   if (pg->missing.num_missing() > pg->missing_loc.size()) {
     if (pg->all_unfound_are_lost(pg->osd->osdmap)) {
-      pg->mark_all_unfound_as_lost(
-	*context< RecoveryMachine >().get_cur_transaction());
+      pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());
     }
   }
 
