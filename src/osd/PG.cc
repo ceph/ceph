@@ -1048,6 +1048,8 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
       return false;
     }
   }
+  dout(10) << "all_unfound_are_lost all of might_have_unfound " << might_have_unfound 
+	   << " are marked lost!" << dendl;
   return true;
 }
 
@@ -1392,7 +1394,8 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a) {
-      might_have_unfound.insert(*a);
+      if (*a != osd->whoami)
+	might_have_unfound.insert(*a);
     }
   }
 
@@ -1401,10 +1404,6 @@ void PG::build_might_have_unfound()
        p != peer_info.end();
        p++)
     might_have_unfound.insert(p->first);
-
-  // The objects which are unfound on the primary can't be found on the
-  // primary itself.
-  might_have_unfound.erase(osd->whoami);
 
   dout(15) << __func__ << ": built " << might_have_unfound << dendl;
 }
