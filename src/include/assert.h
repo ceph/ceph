@@ -56,17 +56,7 @@ extern void __ceph_assert_fail(const char *assertion, const char *file, int line
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
-// wipe any prior assert definition
-#ifdef assert
-# undef assert
-#endif
-
 #define ceph_assert(expr)							\
-  ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
-
-#define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
@@ -113,3 +103,12 @@ using namespace ceph;
 
 #endif
 
+// wipe any prior assert definition
+#ifdef assert
+# undef assert
+#endif
+
+#define assert(expr)							\
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
