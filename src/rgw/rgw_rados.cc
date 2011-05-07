@@ -729,14 +729,13 @@ int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, 
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
 
-RGW_LOG(0) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << std::endl;
+  RGW_LOG(15) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << std::endl;
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
   r = io_ctx.tmap_update(obj, cmdbl);
-RGW_LOG(0) << "tmap_set done" << std::endl;
 
   return r;
 }
