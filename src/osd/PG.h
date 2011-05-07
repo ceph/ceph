@@ -907,11 +907,21 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
-    struct BacklogComplete : boost::statechart::event< BacklogComplete > {};
-    struct ActMap : boost::statechart::event< ActMap > {};
-    struct Activate : boost::statechart::event< Activate > {};
-    struct Initialize : boost::statechart::event< Initialize > {};
-    struct Load : boost::statechart::event< Load > {};
+    struct BacklogComplete : boost::statechart::event< BacklogComplete > {
+      BacklogComplete() : boost::statechart::event< BacklogComplete >() {}
+    };
+    struct ActMap : boost::statechart::event< ActMap > {
+      ActMap() : boost::statechart::event< ActMap >() {}
+    };
+    struct Activate : boost::statechart::event< Activate > {
+      Activate() : boost::statechart::event< Activate >() {}
+    };
+    struct Initialize : boost::statechart::event< Initialize > {
+      Initialize() : boost::statechart::event< Initialize >() {}
+    };
+    struct Load : boost::statechart::event< Load > {
+      Load() : boost::statechart::event< Load >() {}
+    };
 
 
     /* States */
@@ -1027,8 +1037,12 @@ public:
       boost::statechart::result react(const AdvMap&);
     };
 
-    struct MakePrimary : boost::statechart::event< MakePrimary > {};
-    struct MakeStray : boost::statechart::event< MakeStray > {};
+    struct MakePrimary : boost::statechart::event< MakePrimary > {
+      MakePrimary() : boost::statechart::event< MakePrimary >() {}
+    };
+    struct MakeStray : boost::statechart::event< MakeStray > {
+      MakeStray() : boost::statechart::event< MakeStray >() {}
+    };
     struct Primary;
     struct Stray;
 
@@ -1044,7 +1058,9 @@ public:
 
     struct Peering;
     struct Pending;
-    struct NeedNewMap : boost::statechart::event< NeedNewMap > {};
+    struct NeedNewMap : boost::statechart::event< NeedNewMap > {
+      NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
+    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       Primary(my_context ctx);
@@ -1134,7 +1150,9 @@ public:
     };
 
     struct GetLog;
-    struct GotInfo : boost::statechart::event< GotInfo > {};
+    struct GotInfo : boost::statechart::event< GotInfo > {
+      GotInfo() : boost::statechart::event< GotInfo >() {}
+    };
 
     struct GetInfo : boost::statechart::state< GetInfo, Peering >, NamedState {
       set<int> peer_info_requested;
@@ -1153,7 +1171,9 @@ public:
     };
 
     struct GetMissing;
-    struct GotLog : boost::statechart::event< GotLog > {};
+    struct GotLog : boost::statechart::event< GotLog > {
+      GotLog() : boost::statechart::event< GotLog >() {}
+    };
 
     struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
       int newest_update_osd;
