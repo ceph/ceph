@@ -94,7 +94,12 @@ diff -q -r "$TDIR/dira" "$TDIR/dirb" \
     || die "failed to export the same stuff we imported!"
 
 # import some stuff with extended attributes on it
-run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL"
+run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee $TDIR/out
+run_expect_succ grep -q '\[xattr\]' $TDIR/out
+
+# the second time, the xattrs should match, so there should be nothing to do.
+run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee $TDIR/out
+run_expect_fail grep -q '\[xattr\]' $TDIR/out
 
 # export some stuff with extended attributes on it
 run_expect_succ "$RADOS_SYNC" -C export "$POOL" "$TDIR/dirc_copy"
