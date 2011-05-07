@@ -4506,8 +4506,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       if (i->snap == CEPH_NOSNAP)
 	s.insert(*i);
 
-    if (s.size() != info.stats.num_objects)
-      dout(10) << " WARNING: " << s.size() << " != num_objects " << info.stats.num_objects << dendl;
+    dout(10) << " " << s.size() << " local objects" << dendl;
 
     set<sobject_t> did;
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
