@@ -67,8 +67,6 @@ void usage()
   cerr << "   mksnap <snap-name>               create snap <snap-name>\n";
   cerr << "   rmsnap <snap-name>               remove snap <snap-name>\n";
   cerr << "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n";
-  cerr << "   import <dir>                     import pool from a directory\n";
-  cerr << "   export <dir>                     export pool into a directory\n";
   cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations]\n";
   cerr << "                                    default is 16 concurrent IOs and 4 MB op size\n\n";
 
@@ -155,104 +153,6 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
     }
     close(fd);
   }
-  return 0;
-}
-
-static int import_dir(IoCtx& io_ctx, string path, const char *name, int prefix_len, int op_size)
-{
-  string dir_str;
-  if (!path.empty())
-    dir_str = path + "/";
-  dir_str += name;
-
-  DIR *dir = opendir(dir_str.c_str());
-  if (!dir) {
-    int err = -errno;
-    generic_dout(0) << "couldn't open " << dir_str << ": " << strerror(-err) << dendl;
-    return -errno;
-  }
-
-  struct dirent *dent;
-  dent = readdir(dir);
-  while (dent) {
-    if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
-      goto next;
-    char buf[dir_str.size() + 1 + strlen(dent->d_name) + 1];
-    sprintf(buf, "%s/%s", dir_str.c_str(), dent->d_name);
-    generic_dout(0) << buf << dendl;
-    struct stat s;
-    if (stat(buf, &s) < 0) {
-      int err = -errno;
-      generic_dout(0) << "WARNING: failed to stat " << buf << ": " << strerror(-err) << dendl;
-    }
-    if (s.st_mode & S_IFDIR) {
-      import_dir(io_ctx, dir_str, dent->d_name, prefix_len, op_size); 
-    } else {
-      const char *oid = buf + prefix_len + 1; // cut out the the dir name from the object name
-      do_put(io_ctx, oid, buf, op_size, false);
-    }
-next:
-    dent = readdir(dir);
-  }
-  closedir(dir);
-  return 0;
-}
-
-static int do_import(IoCtx& io_ctx, const char *dir_name, int op_size)
-{
-  string empty;
-  return import_dir(io_ctx, empty, dir_name, strlen(dir_name), op_size);
-}
-
-static int do_export(IoCtx& io_ctx, const char *dir_name)
-{
-  map<string, bool> dircache;
-  map<string, bool>::iterator iter;
-  string path = dir_name;
-  path += "/";
-
-  bool skip;
-  librados::ObjectIterator i = io_ctx.objects_begin();
-  librados::ObjectIterator i_end = io_ctx.objects_end();
-  int r = mkdir(dir_name, 0700);
-  if (r < 0) {
-    r = -errno;
-    if (r != -EEXIST)
-      return r;
-  }
-  for (; i != i_end; ++i) {
-    string name = *i;
-    int start = 0;
-    int pos = name.find('/');
-    skip = false;
-    while (pos >= 0) {
-      string dest = path;
-      dest += name.substr(0, pos);
-      if (dest.compare("..") == 0) {
-        skip = true;
-        break;
-      }
-      iter = dircache.find(dest);
-      if (iter == dircache.end()) {
-        generic_dout(0) << "mkdir: " << dest << dendl;
-        mkdir(dest.c_str(), 0700);
-        dircache[dest] = true;
-      }
-      start = pos + 1;
-      if ((size_t)start < name.size())
-        pos = name.find('/', start);
-      else
-        break;
-    }
-    if (skip)
-      continue;
-    if ((size_t)start == name.size())
-      continue;
-    string newfile = path + name;
-    generic_dout(0) << "exporting " << name << " => " << newfile << dendl;
-    do_get(io_ctx, name.c_str(), newfile.c_str(), false);
-  }
-
   return 0;
 }
 
@@ -727,26 +627,6 @@ int main(int argc, const char **argv)
     }
     cout << "rolled back pool " << pool_name
 	 << " to snapshot " << nargs[2] << std::endl;
-  }
-  else if (strcmp(nargs[0], "import") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage();
-
-    ret = do_import(io_ctx, nargs[1], op_size);
-    if (ret < 0) {
-      cerr << "error importing " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      return 1;
-    }
-  }
-  else if (strcmp(nargs[0], "export") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage();
-
-    ret = do_export(io_ctx, nargs[1]);
-    if (ret < 0) {
-      cerr << "error exporting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      return 1;
-    }
   }
   else if (strcmp(nargs[0], "bench") == 0) {
     if (!pool_name || nargs.size() < 3)
