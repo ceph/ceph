@@ -277,7 +277,9 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
     a = va_arg(ap, char*);
     if (a == NULL)
       return false;
-    if (strcmp(a, first) == 0) {
+    char a2[strlen(a)+1];
+    dashes_to_underscores(a, a2);
+    if (strcmp(a2, first) == 0) {
       i = args.erase(i);
       return true;
     }
