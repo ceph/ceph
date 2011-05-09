@@ -633,7 +633,7 @@ private:
   std::map < std::string, Xattr* > xattrs;
 };
 
-static int do_export(IoCtx& io_ctx, const char *dir_name)
+static int do_export(IoCtx& io_ctx, const char *dir_name, bool force)
 {
   int ret;
   librados::ObjectIterator oi = io_ctx.objects_begin();
@@ -657,21 +657,26 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
       return ret;
     }
     std::string obj_path(sobj->get_fs_path(dir_name));
-    ret = BackedUpObject::from_path(obj_path.c_str(), dobj);
-    if (ret == ENOENT) {
-      sobj->get_xattrs(only_in_a);
-      flags |= CHANGED_CONTENTS;
-    }
-    else if (ret) {
-      cerr << ERR_PREFIX << "BackedUpObject::from_path returned "
-	   << ret << std::endl;
-      return ret;
+    if (force) {
+      flags |= (CHANGED_CONTENTS | CHANGED_XATTRS);
     }
     else {
-      sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
-      if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
-          (sobj->get_mtime() == dobj->get_mtime())) {
+      ret = BackedUpObject::from_path(obj_path.c_str(), dobj);
+      if (ret == ENOENT) {
+	sobj->get_xattrs(only_in_a);
 	flags |= CHANGED_CONTENTS;
+      }
+      else if (ret) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_path returned "
+	     << ret << std::endl;
+	return ret;
+      }
+      else {
+	sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
+	if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
+	    (sobj->get_mtime() == dobj->get_mtime())) {
+	  flags |= CHANGED_CONTENTS;
+	}
       }
     }
     if (flags & CHANGED_CONTENTS) {
@@ -707,7 +712,10 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
 	return ret;
       }
     }
-    if (flags & CHANGED_CONTENTS) {
+    if (force) {
+      cout << "[force]        " << rados_name << std::endl;
+    }
+    else if (flags & CHANGED_CONTENTS) {
       cout << "[exported]     " << rados_name << std::endl;
     }
     else if (flags & CHANGED_XATTRS) {
@@ -719,7 +727,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name)
   return 0;
 }
 
-static int do_import(IoCtx& io_ctx, const char *dir_name)
+static int do_import(IoCtx& io_ctx, const char *dir_name, bool force)
 {
   int ret = mkdir(dir_name, 0700);
   if (ret < 0) {
@@ -757,24 +765,28 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
       return ret;
     }
     const char *rados_name(sobj->get_rados_name());
-    ret = BackedUpObject::from_rados(io_ctx, rados_name, dobj);
-    if (ret == -ENOENT) {
-      flags |= CHANGED_CONTENTS;
-      sobj->get_xattrs(only_in_a);
-    }
-    else if (ret) {
-      cerr << ERR_PREFIX << "BackedUpObject::from_rados returned "
-	   << ret << std::endl;
-      return ret;
+    if (force) {
+      flags |= (CHANGED_CONTENTS | CHANGED_XATTRS);
     }
     else {
-      sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
-      if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
-          (sobj->get_mtime() == dobj->get_mtime())) {
+      ret = BackedUpObject::from_rados(io_ctx, rados_name, dobj);
+      if (ret == -ENOENT) {
 	flags |= CHANGED_CONTENTS;
+	sobj->get_xattrs(only_in_a);
+      }
+      else if (ret) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_rados returned "
+	     << ret << std::endl;
+	return ret;
+      }
+      else {
+	sobj->xattr_diff(dobj.get(), only_in_a, only_in_b, diff);
+	if ((sobj->get_rados_size() == dobj->get_rados_size()) &&
+	    (sobj->get_mtime() == dobj->get_mtime())) {
+	  flags |= CHANGED_CONTENTS;
+	}
       }
     }
-
     if (flags & CHANGED_CONTENTS) {
       ret = sobj->upload(io_ctx, de->d_name, dir_name);
       if (ret) {
@@ -835,7 +847,10 @@ static int do_import(IoCtx& io_ctx, const char *dir_name)
 	return ret;
       }
     }
-    if (flags & CHANGED_CONTENTS) {
+    if (force) {
+      cout << "[force]        " << rados_name << std::endl;
+    }
+    else if (flags & CHANGED_CONTENTS) {
       cout << "[imported]     " << rados_name << std::endl;
     }
     else if (flags & CHANGED_XATTRS) {
@@ -851,6 +866,7 @@ int main(int argc, const char **argv)
 {
   int ret;
   bool create = false;
+  bool force = false;
   vector<const char*> args;
   std::string action, src, dst;
   argv_to_vec(argc, argv, args);
@@ -864,6 +880,8 @@ int main(int argc, const char **argv)
       exit(1);
     } else if (ceph_argparse_flag(args, i, "-C", "--create", (char*)NULL)) {
       create = true;
+    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
+      force = true;
     } else {
       // begin positional arguments
       break;
@@ -944,7 +962,7 @@ int main(int argc, const char **argv)
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
-    return do_import(io_ctx, src.c_str());
+    return do_import(io_ctx, src.c_str(), force);
   }
   else {
     if (access(dst.c_str(), W_OK)) {
@@ -966,6 +984,6 @@ int main(int argc, const char **argv)
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
-    return do_export(io_ctx, dst.c_str());
+    return do_export(io_ctx, dst.c_str(), force);
   }
 }
