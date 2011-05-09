@@ -980,7 +980,7 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
 
     // did someone in the prior set go down?
     if (osdmap->is_down(o) && prior.down.count(o) == 0) {
-      dout(10) << "prior_set_affected: osd" << osd << " now down" << dendl;
+      dout(10) << "prior_set_affected: osd" << o << " now down" << dendl;
       return true;
     }
 
@@ -3870,7 +3870,7 @@ PG::RecoveryState::Primary::react(const BacklogComplete&) {
 
 boost::statechart::result 
 PG::RecoveryState::Primary::react(const MNotifyRec& notevt) {
-  dout(7) << "handle_pg_notify from " << notevt.from << dendl;
+  dout(7) << "handle_pg_notify from osd" << notevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->peer_info.count(notevt.from) &&
       pg->peer_info[notevt.from].last_update == notevt.info.last_update) {
