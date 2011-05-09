@@ -4379,7 +4379,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  for (vector<int>::iterator i = pg->acting.begin()++;
+  for (vector<int>::iterator i = pg->acting.begin() + 1;
        i != pg->acting.end();
        ++i) {
     const Info& pi = pg->peer_info[*i];
