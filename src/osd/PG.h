@@ -1066,7 +1066,7 @@ public:
     };
 
     struct Peering;
-    struct Pending;
+    struct WaitActingChange;
     struct NeedNewMap : boost::statechart::event< NeedNewMap > {
       NeedNewMap() : boost::statechart::event< NeedNewMap >() {}
     };
@@ -1079,14 +1079,18 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::transition< NeedNewMap, Pending >
+	boost::statechart::transition< NeedNewMap, WaitActingChange >
 	> reactions;
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
     };
 
-    struct Pending : boost::statechart::simple_state< Pending, Primary> {};
+    struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
+			      NamedState {
+      WaitActingChange(my_context ctx);
+      void exit();
+    };
     
     struct GetInfo;
     struct Active;

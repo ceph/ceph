@@ -4409,6 +4409,17 @@ PG::RecoveryState::GetLog::~GetLog() {
     msg->put();
 }
 
+/*------WaitActingChange--------*/
+PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Peering/WaitActingChange";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+
+void PG::RecoveryState::WaitActingChange::exit() {
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
 /*------GetMissing--------*/
 PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
 {
