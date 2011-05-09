@@ -101,6 +101,10 @@ run_expect_succ grep -q '\[xattr\]' $TDIR/out
 run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee $TDIR/out
 run_expect_fail grep -q '\[xattr\]' $TDIR/out
 
+# now force it to copy everything
+run_expect_succ "$RADOS_SYNC" --force import "$TDIR/dirc" "$POOL" | tee $TDIR/out2
+run_expect_succ grep '\[force\]' $TDIR/out2
+
 # export some stuff with extended attributes on it
 run_expect_succ "$RADOS_SYNC" -C export "$POOL" "$TDIR/dirc_copy"
 
