@@ -3775,6 +3775,14 @@ std::ostream& operator<<(std::ostream& oss,
 #define dout_prefix (*_dout << context< RecoveryMachine >().pg->gen_prefix() \
 		     << "state<" << get_state_name() << ">: ")
 
+/*------Crashed-------*/
+PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
+  state_name = "Crashed";
+  context< RecoveryMachine >().log_enter(state_name);
+  assert(0 == "we got a bad state machine event");
+}
+
+
 /*------Initial-------*/
 PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
   state_name = "Initial";

@@ -996,7 +996,7 @@ public:
     };
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
-      Crashed(my_context ctx) : my_base(ctx) { assert(0); }
+      Crashed(my_context ctx);
     };
 
     struct Started;
