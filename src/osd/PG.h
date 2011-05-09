@@ -925,6 +925,12 @@ public:
     struct Load : boost::statechart::event< Load > {
       Load() : boost::statechart::event< Load >() {}
     };
+    struct GotInfo : boost::statechart::event< GotInfo > {
+      GotInfo() : boost::statechart::event< GotInfo >() {}
+    };
+    struct NeedUpThru : boost::statechart::event< NeedUpThru > {
+      NeedUpThru() : boost::statechart::event< NeedUpThru >() {};
+    };
 
 
     /* States */
@@ -1153,9 +1159,6 @@ public:
     };
 
     struct GetLog;
-    struct GotInfo : boost::statechart::event< GotInfo > {
-      GotInfo() : boost::statechart::event< GotInfo >() {}
-    };
 
     struct GetInfo : boost::statechart::state< GetInfo, Peering >, NamedState {
       set<int> peer_info_requested;
@@ -1197,6 +1200,8 @@ public:
       boost::statechart::result react(const BacklogComplete&);
     };
 
+    struct WaitUpThru;
+
     struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
       set<int> peer_missing_requested;
 
@@ -1204,10 +1209,24 @@ public:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< MLogRec >
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::transition< NeedUpThru, WaitUpThru >
 	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
     };
+
+    struct WaitUpThru : boost::statechart::state< WaitUpThru, Peering >, NamedState {
+      WaitUpThru(my_context ctx);
+      void exit();
+
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< ActMap >,
+	boost::statechart::custom_reaction< MLogRec >
+	> reactions;
+      boost::statechart::result react(const ActMap& am);
+      boost::statechart::result react(const MLogRec& logrec);
+    };
+
 
     RecoveryMachine machine;
     PG *pg;
@@ -1297,6 +1316,8 @@ public:
   void build_prior(std::auto_ptr<PgPriorSet> &prior_set);
   void clear_prior();
   bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
+
+  bool adjust_need_up_thru(PgPriorSet &prior, const OSDMap *osdmap);
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,

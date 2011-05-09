@@ -1015,7 +1015,7 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
       }
     }
   }
-  
+
   // did a significant osd's up_thru change?
   for (map<int,epoch_t>::const_iterator p = prior.up_thru.begin();
        p != prior.up_thru.end();
@@ -1028,6 +1028,18 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
       return true;
     }
 
+  return false;
+}
+
+bool PG::adjust_need_up_thru(PgPriorSet &prior, const OSDMap *osdmap)
+{
+  epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
+  if (need_up_thru &&
+      up_thru >= info.history.same_acting_since) {
+    dout(10) << "adjust_need_up_thru now " << up_thru << ", need_up_thru now false" << dendl;
+    need_up_thru = false;
+    return true;
+  }
   return false;
 }
 
@@ -1181,13 +1193,26 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
   }
 
   if (prior.some_down) {
-    need_up_thru = true;
     for (vector<Interval>::iterator i = prior.inter_up_thru.begin();
 	 i != prior.inter_up_thru.end();
 	 ++i) {
       OSDMap *lastmap = osd->get_map(i->last);
       prior.up_thru[i->acting[0]] = lastmap->get_up_thru(i->acting[0]);
     }
+  }
+  
+  // NOTE: we can skip the up_thru check if this is a new PG and there
+  // were no prior intervals.
+  if (info.history.epoch_created < info.history.same_acting_since &&
+      osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
+    dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	     << " < same_since " << info.history.same_acting_since
+	     << ", must notify monitor" << dendl;
+    need_up_thru = true;
+  } else {
+    dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	     << " >= same_since " << info.history.same_acting_since
+	     << ", all is well" << dendl;
   }
 }
 
@@ -3907,8 +3932,8 @@ PG::RecoveryState::Peering::Peering(my_context ctx)
   pg->state_set(PG_STATE_PEERING);
 } 
 
-boost::statechart::result 
-PG::RecoveryState::Peering::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap) 
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Peering advmap" << dendl;
   if (pg->prior_set_affected(*prior_set.get(), &advmap.osdmap)) {
@@ -3917,6 +3942,9 @@ PG::RecoveryState::Peering::react(const AdvMap& advmap) {
     post_event(advmap);
     return transit< Reset >();
   }
+  
+  pg->adjust_need_up_thru(*prior_set.get(), &advmap.osdmap);
+  
   return forward_event();
 }
 
@@ -4199,7 +4227,8 @@ void PG::RecoveryState::Stray::exit() {
 }
 
 /*--------GetInfo---------*/
-PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) 
+{
   state_name = "Started/Primary/Peering/GetInfo";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -4210,14 +4239,14 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) {
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  if (pg->need_up_thru) {
-    post_event(NeedNewMap());
-  } else {
-    get_infos();
-  }
+  if (pg->need_up_thru)
+    pg->osd->queue_want_up_thru(pg->info.history.same_acting_since);
+
+  get_infos();
 }
 
-void PG::RecoveryState::GetInfo::get_infos() {
+void PG::RecoveryState::GetInfo::get_infos()
+{
   PG *pg = context< RecoveryMachine >().pg;
   auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
 
@@ -4245,8 +4274,8 @@ void PG::RecoveryState::GetInfo::get_infos() {
   }
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) {
+boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) 
+{
   set<int>::iterator p = peer_info_requested.find(infoevt.from);
   if (p != peer_info_requested.end())
     peer_info_requested.erase(p);
@@ -4395,7 +4424,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
       //        can infer the rest!
       dout(10) << " osd" << *i << " has no missing, identical log" << dendl;
       pg->peer_missing[*i];
-      pg->search_for_missing(pg->peer_info[*i], &pg->peer_missing[*i], *i);
+      pg->search_for_missing(pi, &pg->peer_missing[*i], *i);
       continue;
     }
 
@@ -4410,6 +4439,13 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
   }
 
   if (peer_missing_requested.empty()) {
+    if (pg->need_up_thru) {
+      dout(10) << " still need up_thru update before going active" << dendl;
+      post_event(NeedUpThru());
+      return;
+    }
+
+    // all good!
     post_event(Activate());
   }
 }
@@ -4433,6 +4469,41 @@ void PG::RecoveryState::GetMissing::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
+/*------WaitUpThru--------*/
+PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Peering/WaitUpThru";
+  context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am) {
+  PG *pg = context< RecoveryMachine >().pg;
+  if (!pg->need_up_thru) {
+    post_event(Activate());
+    return discard_event();
+  }
+  return forward_event();
+}
+
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& logevt)
+{
+  dout(10) << "searching osd" << logevt.from
+           << " log for unfound items" << dendl;
+  PG *pg = context< RecoveryMachine >().pg;
+  bool got_missing = pg->search_for_missing(logevt.msg->info,
+                                            &pg->missing, logevt.from);
+
+  // hmm.. should we?
+  (void)got_missing;
+  //if (got_missing)
+  //pg->osd->queue_for_recovery(pg);
+
+  return discard_event();
+}
+
+void PG::RecoveryState::WaitUpThru::exit() {
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
 
 /*----RecoveryState::RecoveryMachine Methods-----*/
 #undef dout_prefix
