@@ -159,68 +159,61 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
 /**********************************************
 
 **********************************************/
-
-int main(int argc, const char **argv)
+static int rados_tool_common(const std::map < std::string, std::string > &opts,
+                             std::vector<const char*> &nargs)
 {
-  DEFINE_CONF_VARS(usage);
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  keyring_init(&g_conf);
-
-  vector<const char*> nargs;
-  bufferlist indata, outdata;
-
-  const char *pool_name = 0;
-
+  int ret;
+  bool create_pool = false;
+  const char *pool_name = NULL;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
-
-  const char *snapname = 0;
+  const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
+  std::map<std::string, std::string>::const_iterator i;
 
-  bool create_pool = false;
-
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("pool", 'p')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&pool_name, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("snapid", 'S')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
-    } else if (CEPH_ARGPARSE_EQ("snap", 's')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&snapname, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
-      usage();
-    } else if (CEPH_ARGPARSE_EQ("concurrent-ios", 't')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("block-size", 'b')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&op_size, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("create-pool", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&create_pool, OPT_BOOL);
-    } else if (args[i][0] == '-' && nargs.empty()) {
-      cerr << "unrecognized option " << args[i] << std::endl;
-      usage();
-    } else
-      nargs.push_back(args[i]);
+  i = opts.find("create");
+  if (i != opts.end()) {
+    create_pool = true;
+  }
+  i = opts.find("pool");
+  if (i != opts.end()) {
+    pool_name = i->second.c_str();
+  }
+  i = opts.find("concurrent-ios");
+  if (i != opts.end()) {
+    concurrent_ios = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("block-size");
+  if (i != opts.end()) {
+    op_size = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("snap");
+  if (i != opts.end()) {
+    snapname = i->second.c_str();
+  }
+  i = opts.find("snapid");
+  if (i != opts.end()) {
+    snapid = strtoll(i->second.c_str(), NULL, 10);
   }
 
-  if (nargs.empty())
+  if (nargs.empty()) {
     usage();
+    return 1;
+  }
 
   // open rados
   Rados rados;
-  if (rados.init_with_config(&g_conf) < 0) {
-     cerr << "couldn't initialize rados!" << std::endl;
-     exit(1);
+  ret = rados.init_with_config(&g_conf);
+  if (ret) {
+     cerr << "couldn't initialize rados! error " << ret << std::endl;
+     return ret;
   }
 
-  if (rados.connect() < 0) {
-     cerr << "couldn't connect to cluster!" << std::endl;
-     exit(1);
+  ret = rados.connect();
+  if (ret) {
+     cerr << "couldn't connect to cluster! error " << ret << std::endl;
+     return ret;
   }
-
-  int ret = 0;
   char buf[80];
 
   if (create_pool && !pool_name) {
@@ -487,6 +480,7 @@ int main(int argc, const char **argv)
     if (nargs.size() < 3)
       usage();
     if (strcmp(nargs[1], "dump") == 0) {
+      bufferlist outdata;
       string oid(nargs[2]);
       ret = io_ctx.read(oid, outdata, 0, 0);
       if (ret < 0) {
@@ -655,3 +649,39 @@ int main(int argc, const char **argv)
   return (ret < 0) ? 1 : 0;
 }
 
+int main(int argc, const char **argv)
+{
+  DEFINE_CONF_VARS(usage);
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  keyring_init(&g_conf);
+
+  std::map < std::string, std::string > opts;
+  std::vector<const char*>::iterator i;
+  std::string val;
+  for (i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      exit(0);
+    } else if (ceph_argparse_flag(args, i, "-C", "--create", "--create-pool",
+				  (char*)NULL)) {
+      opts["create"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+      opts["pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
+      opts["concurrent-ios"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
+      opts["snap"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {
+      opts["snapid"] = val;
+    } else {
+      // begin positional arguments
+      break;
+    }
+  }
+
+  return rados_tool_common(opts, args);
+}
