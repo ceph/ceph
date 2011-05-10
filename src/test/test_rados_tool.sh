@@ -7,7 +7,7 @@ die() {
 
 usage() {
     cat <<EOF
-test_rados_sync.sh: tests rados_sync
+test_rados_tool.sh: tests rados_tool
 -c:        RADOS configuration file to use [optional]
 -k:        keep temp files
 -h:        this help message
@@ -34,11 +34,10 @@ run() {
 
 DNAME="`dirname $0`"
 DNAME="`readlink -f $DNAME`"
-RADOS_SYNC="`readlink -f \"$DNAME/../rados_sync\"`"
 RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
 KEEP_TEMP_FILES=0
 POOL=trs_pool
-[ -x "$RADOS_SYNC" ] || die "couldn't find $RADOS_SYNC binary to test"
+[ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary"
 which attr &>/dev/null
 [ $? -eq 0 ] || die "you must install the 'attr' tool to manipulate \
@@ -46,7 +45,7 @@ extended attributes."
 
 while getopts  "c:hkp:" flag; do
     case $flag in
-        c)  RADOS_SYNC="$RADOS_SYNC -c $OPTARG";;
+        c)  RADOS_TOOL="$RADOS_TOOL -c $OPTARG";;
         k)  KEEP_TEMP_FILES=1;;
         h)  usage; exit 0;;
         p)  POOL=$OPTARG;;
@@ -54,7 +53,7 @@ while getopts  "c:hkp:" flag; do
     esac
 done
 
-TDIR=`mktemp -d -t test_rados_sync.XXXXXXXXXX` || die "mktemp failed"
+TDIR=`mktemp -d -t test_rados_tool.XXXXXXXXXX` || die "mktemp failed"
 [ $KEEP_TEMP_FILES -eq 0 ] && trap "rm -rf ${TDIR}; exit" INT TERM EXIT
 
 mkdir "$TDIR/dira"
@@ -77,36 +76,36 @@ attr -q -s rados_full_name -V "foo2" "$TDIR/dirc/00003036_foo2"
 
 # make sure that --create works
 run "$RADOS_TOOL" rmpool "$POOL"
-run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
+run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
 
 # make sure that lack of --create fails
 run_expect_succ "$RADOS_TOOL" rmpool "$POOL"
-run_expect_fail "$RADOS_SYNC" import "$TDIR/dira" "$POOL"
+run_expect_fail "$RADOS_TOOL" import "$TDIR/dira" "$POOL"
 
-run_expect_succ "$RADOS_SYNC" --create import "$TDIR/dira" "$POOL"
+run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
 
 # inaccessible import src should fail
-run_expect_fail "$RADOS_SYNC" import "$TDIR/dir_nonexistent" "$POOL"
+run_expect_fail "$RADOS_TOOL" import "$TDIR/dir_nonexistent" "$POOL"
 
 # export some stuff
-run_expect_succ "$RADOS_SYNC" --create export "$POOL" "$TDIR/dirb"
+run_expect_succ "$RADOS_TOOL" --create export "$POOL" "$TDIR/dirb"
 diff -q -r "$TDIR/dira" "$TDIR/dirb" \
     || die "failed to export the same stuff we imported!"
 
 # import some stuff with extended attributes on it
-run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
+run_expect_succ "$RADOS_TOOL" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
 run_expect_succ grep -q '\[xattr\]' $TDIR/out
 
 # the second time, the xattrs should match, so there should be nothing to do.
-run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
+run_expect_succ "$RADOS_TOOL" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
 run_expect_fail grep -q '\[xattr\]' "$TDIR/out"
 
 # now force it to copy everything
-run_expect_succ "$RADOS_SYNC" --force import "$TDIR/dirc" "$POOL" | tee "$TDIR/out2"
+run_expect_succ "$RADOS_TOOL" --force import "$TDIR/dirc" "$POOL" | tee "$TDIR/out2"
 run_expect_succ grep '\[force\]' "$TDIR/out2"
 
 # export some stuff with extended attributes on it
-run_expect_succ "$RADOS_SYNC" -C export "$POOL" "$TDIR/dirc_copy"
+run_expect_succ "$RADOS_TOOL" -C export "$POOL" "$TDIR/dirc_copy"
 
 # check to make sure extended attributes were preserved
 PRE_EXPORT=`attr -qg rados.toothbrush "$TDIR/dirc/000029c4_foo"`
@@ -117,13 +116,13 @@ if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
 fi
 
 # trigger a rados delete using --delete-after
-run_expect_succ "$RADOS_SYNC" --create export "$POOL" "$TDIR/dird"
+run_expect_succ "$RADOS_TOOL" --create export "$POOL" "$TDIR/dird"
 rm -f "$TDIR/dird/000029c4_foo"
-run_expect_succ "$RADOS_SYNC" --delete-after import "$TDIR/dird" "$POOL" | tee "$TDIR/out3"
+run_expect_succ "$RADOS_TOOL" --delete-after import "$TDIR/dird" "$POOL" | tee "$TDIR/out3"
 run_expect_succ grep '\[deleted\]' "$TDIR/out3"
 
 # trigger a local delete using --delete-after
-run_expect_succ "$RADOS_SYNC" --delete-after export "$POOL" "$TDIR/dirc" | tee "$TDIR/out4"
+run_expect_succ "$RADOS_TOOL" --delete-after export "$POOL" "$TDIR/dirc" | tee "$TDIR/out4"
 run_expect_succ grep '\[deleted\]' "$TDIR/out4"
 [ -e "$TDIR/dird/000029c4_foo" ] && die "--delete-after failed to delete a file!"
 

@@ -46,22 +46,6 @@ static const char ERR_PREFIX[] = "[ERROR]        ";
 #define ENOATTR ENODATA
 #endif
 
-static void usage()
-{
-  cerr << "usage:\n\
-\n\
-Importing data from a local directory to a rados pool:\n\
-rados_sync [options] import <local-directory> <rados-pool>\n\
-\n\
-Exporting data from a rados pool to a local directory:\n\
-rados_sync [options] export <rados-pool> <local-directory>\n\
-\n\
-options:\n\
--h or --help            This help message\n\
--c or --create          Create destination pools or directories that don't exist\n\
-";
-}
-
 static int xattr_test(const char *dir_name)
 {
   int ret;
@@ -961,41 +945,22 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
   return 0;
 }
 
-int main(int argc, const char **argv)
+int rados_tool_sync(const std::map < std::string, std::string > &opts,
+                             std::vector<const char*> &args)
 {
   int ret;
-  bool create = false;
-  bool force = false;
-  bool delete_after = false;
-  vector<const char*> args;
+  bool force = opts.count("force");
+  bool delete_after = opts.count("delete-after");
+  bool create = opts.count("create");
   std::string action, src, dst;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-
-  std::vector<const char*>::iterator i;
-  for (i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
-      exit(1);
-    } else if (ceph_argparse_flag(args, i, "-C", "--create", (char*)NULL)) {
-      create = true;
-    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
-      force = true;
-    } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
-      delete_after = true;
-    } else {
-      // begin positional arguments
-      break;
-    }
-  }
+  std::vector<const char*>::iterator i = args.begin();
   if ((i != args.end()) &&
       ((strcmp(*i, "import") == 0) || (strcmp(*i, "export") == 0))) {
     action = *i;
     ++i;
   }
   else {
-    cerr << argv[0] << ": You must specify either 'import' or 'export'.\n";
+    cerr << "rados" << ": You must specify either 'import' or 'export'.\n";
     cerr << "Use --help to show help.\n";
     exit(1);
   }
@@ -1004,7 +969,7 @@ int main(int argc, const char **argv)
     ++i;
   }
   else {
-    cerr << argv[0] << ": You must give a source.\n";
+    cerr << "rados" << ": You must give a source.\n";
     cerr << "Use --help to show help.\n";
     exit(1);
   }
@@ -1013,7 +978,7 @@ int main(int argc, const char **argv)
     ++i;
   }
   else {
-    cerr << argv[0] << ": You must give a destination.\n";
+    cerr << "rados" << ": You must give a destination.\n";
     cerr << "Use --help to show help.\n";
     exit(1);
   }
@@ -1021,11 +986,11 @@ int main(int argc, const char **argv)
   // open rados
   Rados rados;
   if (rados.init_with_config(&g_conf) < 0) {
-     cerr << argv[0] << ": failed to initialize Rados!" << std::endl;
+     cerr << "rados" << ": failed to initialize Rados!" << std::endl;
      exit(1);
   }
   if (rados.connect() < 0) {
-     cerr << argv[0] << ": failed to connect to Rados cluster!" << std::endl;
+     cerr << "rados" << ": failed to connect to Rados cluster!" << std::endl;
      exit(1);
   }
   IoCtx io_ctx;
@@ -1035,20 +1000,20 @@ int main(int argc, const char **argv)
     if (create) {
       ret = rados.pool_create(pool_name.c_str());
       if (ret) {
-	cerr << argv[0] << ": pool_create failed with error " << ret
+	cerr << "rados" << ": pool_create failed with error " << ret
 	     << std::endl;
 	exit(ret);
       }
       ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
     }
     else {
-      cerr << argv[0] << ": pool '" << pool_name << "' does not exist. Use "
+      cerr << "rados" << ": pool '" << pool_name << "' does not exist. Use "
 	   << "--create to try to create it." << std::endl;
       exit(ENOENT);
     }
   }
   if (ret < 0) {
-    cerr << argv[0] << ": error opening pool " << pool_name << ": "
+    cerr << "rados" << ": error opening pool " << pool_name << ": "
 	 << cpp_strerror(ret) << std::endl;
     exit(ret);
   }
@@ -1057,7 +1022,7 @@ int main(int argc, const char **argv)
 
   if (action == "import") {
     if (access(dir_name.c_str(), R_OK)) {
-	cerr << argv[0] << ": source directory '" << dst
+	cerr << "rados" << ": source directory '" << dst
 	     << "' appears to be inaccessible." << std::endl;
 	exit(ENOENT);
     }
@@ -1072,13 +1037,13 @@ int main(int argc, const char **argv)
 	ret = mkdir(dst.c_str(), 0700);
 	if (ret < 0) {
 	  ret = errno;
-	  cerr << argv[0] << ": mkdir(" << dst << ") failed with error " << ret
+	  cerr << "rados" << ": mkdir(" << dst << ") failed with error " << ret
 	       << std::endl;
 	  exit(ret);
 	}
       }
       else {
-	cerr << argv[0] << ": directory '" << dst << "' is not accessible. Use "
+	cerr << "rados" << ": directory '" << dst << "' is not accessible. Use "
 	     << "--create to try to create it.\n";
 	exit(ENOENT);
       }

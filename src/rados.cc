@@ -33,58 +33,63 @@ using namespace librados;
 #include <errno.h>
 #include <dirent.h>
 
+int rados_tool_sync(const std::map < std::string, std::string > &opts,
+                             std::vector<const char*> &args);
+
 void usage()
 {
-  cerr << "usage: rados [options] [commands]" << std::endl;
-  /*  cerr << "If no commands are specified, enter interactive mode.\n";
-  cerr << "Commands:" << std::endl;
-  cerr << "   stop              -- cleanly shut down file system" << std::endl
-       << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
-       << "   ..." << std::endl;
-  */
-  cerr << "Commands:\n";
-  cerr << "   lspools                         list pools\n";
-  cerr << "   df                              show per-pool and total usage\n\n";
-
-  cerr << "Pool commands:\n";
-  cerr << "   get <obj-name> [outfile]         fetch object\n";
-  cerr << "   put <obj-name> [infile]          write object\n";
-  cerr << "   create <obj-name>                create object\n";
-  cerr << "   rm <obj-name>                    remove object\n";
-  cerr << "   listxattr <obj-name>\n";
-  cerr << "   getxattr <obj-name> attr\n";
-  cerr << "   setxattr <obj-name> attr val\n";
-  cerr << "   rmxattr <obj-name> attr\n";
-  cerr << "   stat objname                     stat the named object\n";
-  cerr << "   ls                               list objects in pool\n\n";
-  cerr << "   chown 123                        change the pool owner to auid 123\n";
-  cerr << "   mapext <obj-name>\n";
-  cerr << "   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
-       << "                                    [with auid 123[and using crush rule 4]]\n";
-  cerr << "   rmpool <pool-name>               remove pool <pool-name>'\n";
-  cerr << "   mkpool <pool-name>               create the pool <pool-name>\n";
-  cerr << "   lssnap                           list snaps\n";
-  cerr << "   mksnap <snap-name>               create snap <snap-name>\n";
-  cerr << "   rmsnap <snap-name>               remove snap <snap-name>\n";
-  cerr << "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n";
-  cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations]\n";
-  cerr << "                                    default is 16 concurrent IOs and 4 MB op size\n\n";
-
-  cerr << "Options:\n";
-  cerr << "   -p pool\n";
-  cerr << "   --pool=pool\n";
-  cerr << "        select given pool by name\n";
-  cerr << "   -b op_size\n";
-  cerr << "        set the size of write ops for put or benchmarking";
-  cerr << "   -s name\n";
-  cerr << "   --snap name\n";
-  cerr << "        select given snap name for (read) IO\n";
-  cerr << "   -i infile\n";
-  cerr << "   -o outfile\n";
-  cerr << "        specify input or output file (for certain commands)\n";
-  cerr << "   --create-pool\n";
-  cerr << "        create the pool that was specified\n";
-  exit(1);
+  cerr << \
+"usage: rados [options] [commands]\n"
+"POOL COMMANDS\n"
+"   lspools                         list pools\n"
+"   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
+"                                    [with auid 123[and using crush rule 4]]\n"
+"   rmpool <pool-name>               remove pool <pool-name>'\n"
+"   mkpool <pool-name>               create the pool <pool-name>\n"
+"   df                              show per-pool and total usage\n"
+"   ls                               list objects in pool\n\n"
+"   chown 123                        change the pool owner to auid 123\n"
+"OBJECT COMMANDS\n"
+"   get <obj-name> [outfile]         fetch object\n"
+"   put <obj-name> [infile]          write object\n"
+"   create <obj-name>                create object\n"
+"   rm <obj-name>                    remove object\n"
+"   listxattr <obj-name>\n"
+"   getxattr <obj-name> attr\n"
+"   setxattr <obj-name> attr val\n"
+"   rmxattr <obj-name> attr\n"
+"   stat objname                     stat the named object\n"
+"   mapext <obj-name>\n"
+"   lssnap                           list snaps\n"
+"   mksnap <snap-name>               create snap <snap-name>\n"
+"   rmsnap <snap-name>               remove snap <snap-name>\n"
+"   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
+"                                    default is 16 concurrent IOs and 4 MB op size\n\n"
+"IMPORT AND EXPORT\n"
+"   import [options] <local-directory> <rados-pool>\n"
+"       Upload <local-directory> to <rados-pool>\n"
+"   export [options] rados-pool> <local-directory>\n"
+"       Download <rados-pool> to <local-directory>\n"
+"   options:\n"
+"       -f / --force                 Copy everything, even if it hasn't changed.\n"
+"       -d / --delete-after          After synchronizing, delete unreferenced\n"
+"                                    files or objects from the target bucket\n"
+"                                    or directory.\n"
+"GLOBAL OPTIONS:\n"
+"   -p pool\n"
+"   --pool=pool\n"
+"        select given pool by name\n"
+"   -b op_size\n"
+"        set the size of write ops for put or benchmarking"
+"   -s name\n"
+"   --snap name\n"
+"        select given snap name for (read) IO\n"
+"   -i infile\n"
+"   -o outfile\n"
+"        specify input or output file (for certain commands)\n"
+"   --create\n"
+"        create the pool or directory that was specified\n";
 }
 
 static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, bool check_stdio)
@@ -196,11 +201,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     snapid = strtoll(i->second.c_str(), NULL, 10);
   }
 
-  if (nargs.empty()) {
-    usage();
-    return 1;
-  }
-
   // open rados
   Rados rados;
   ret = rados.init_with_config(&g_conf);
@@ -260,6 +260,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     io_ctx.snap_set_read(snapid);
     cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
   }
+
+  assert(!nargs.empty());
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
@@ -666,6 +668,10 @@ int main(int argc, const char **argv)
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       exit(0);
+    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
+      opts["force"] = "true";
+    } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
+      opts["delete-after"] = "true";
     } else if (ceph_argparse_flag(args, i, "-C", "--create", "--create-pool",
 				  (char*)NULL)) {
       opts["create"] = "true";
@@ -683,5 +689,12 @@ int main(int argc, const char **argv)
     }
   }
 
-  return rados_tool_common(opts, args);
+  if (args.empty()) {
+    cerr << "rados: you must give an action. Try --help" << std::endl;
+    return 1;
+  }
+  if ((strcmp(args[0], "import") == 0) || (strcmp(args[0], "export") == 0))
+    return rados_tool_sync(opts, args);
+  else
+    return rados_tool_common(opts, args);
 }
