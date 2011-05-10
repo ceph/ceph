@@ -327,7 +327,8 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgw_add_bucket(s->user.user_id, s->bucket_str);
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
+				s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   if (ret && ret != -EEXIST)   
@@ -335,8 +336,7 @@ void RGWCreateBucket::execute()
 
   existed = (ret == -EEXIST);
 
-  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
-				s->user.auid);
+  ret = rgw_add_bucket(s->user.user_id, s->bucket_str);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_remove_bucket(s->user.user_id, s->bucket_str);
 
