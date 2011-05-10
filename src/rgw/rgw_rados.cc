@@ -359,7 +359,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
 
-  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << endl;
+  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << dendl;
 
   void *handle = NULL;
 
@@ -425,7 +425,7 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   librados::IoCtx io_ctx;
   r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
   if (r < 0) {
-    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << std::endl;
+    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
     return r;
   }
 
@@ -584,7 +584,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     r = state->io_ctx.getxattrs(oid, *attrs);
     if (rgw_log_level >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
-        RGW_LOG(20) << "Read xattr: " << iter->first << endl;
+        RGW_LOG(20) << "Read xattr: " << iter->first << dendl;
       }
     }
     if (r < 0)
@@ -596,7 +596,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   r = -ECANCELED;
   if (mod_ptr) {
-    RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << endl;
+    RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
     if (ctime < *mod_ptr) {
       err->http_ret = 304;
       err->s3_code = "NotModified";
@@ -606,7 +606,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   }
 
   if (unmod_ptr) {
-    RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << endl;
+    RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
     if (ctime > *unmod_ptr) {
       err->http_ret = 412;
       err->s3_code = "PreconditionFailed";
@@ -620,7 +620,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
     r = -ECANCELED;
     if (if_match) {
-      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << endl;
+      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
       if (strcmp(if_match, etag.c_str())) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -629,7 +629,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     }
 
     if (if_nomatch) {
-      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << endl;
+      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
         err->http_ret = 304;
         err->s3_code = "NotModified";
@@ -671,9 +671,9 @@ int RGWRados::get_obj(void **handle,
   if (len > RGW_MAX_CHUNK_SIZE)
     len = RGW_MAX_CHUNK_SIZE;
 
-  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << endl;
+  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   int r = state->io_ctx.read(oid, bl, len, ofs);
-  RGW_LOG(20) << "rados->read r=" << r << endl;
+  RGW_LOG(20) << "rados->read r=" << r << dendl;
 
   if (r > 0) {
     *data = (char *)malloc(r);
@@ -729,7 +729,7 @@ int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, 
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
 
-  RGW_LOG(15) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << std::endl;
+  RGW_LOG(15) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << dendl;
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);

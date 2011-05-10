@@ -16,6 +16,7 @@
 #define CEPH_RGW_COMMON_H
 
 #include "common/ceph_crypto.h"
+#include "common/debug.h"
 #include "fcgiapp.h"
 
 #include <string.h>
@@ -47,7 +48,7 @@ extern string rgw_root_bucket;
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
 #define RGW_LOG_BEGIN "RADOS S3 Gateway:"
-#define RGW_LOG(x) if ((x) <= rgw_log_level) cout << RGW_LOG_BEGIN << " "
+#define RGW_LOG(x) pdout(x, rgw_log_level)
 
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2

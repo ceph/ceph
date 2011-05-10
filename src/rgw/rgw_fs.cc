@@ -382,7 +382,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
     case ERANGE:
       break;
     default:
-      RGW_LOG(20) << "getxattr on " << path << " returned" << -errno << endl;
+      RGW_LOG(20) << "getxattr on " << path << " returned" << -errno << dendl;
       return -errno;
     }
     len *= 2;
@@ -424,7 +424,7 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
   r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
 
   int ret = (r < 0 ? -errno : 0);
-  RGW_LOG(20) << "setxattr: path=" << buf << " ret=" << ret << endl;
+  RGW_LOG(20) << "setxattr: path=" << buf << " ret=" << ret << dendl;
 
   return ret;
 }
@@ -500,7 +500,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
  
     r = -ECANCELED;
     if (if_match) {
-      RGW_LOG(10) << "ETag: " << etag << " " << " If-Match: " << if_match << endl;
+      RGW_LOG(10) << "ETag: " << etag << " " << " If-Match: " << if_match << dendl;
       if (strcmp(if_match, etag)) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -509,7 +509,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
     }
 
     if (if_nomatch) {
-      RGW_LOG(10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << endl;
+      RGW_LOG(10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << dendl;
       if (strcmp(if_nomatch, etag) == 0) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -552,7 +552,7 @@ int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj,
       pos += r;
     } else {
       if (!r) {
-        RGW_LOG(20) << "pos=" << pos << " r=" << r << " len=" << len << endl;
+        RGW_LOG(20) << "pos=" << pos << " r=" << r << " len=" << len << dendl;
         r = -EIO; /* should not happen as we validated file size earlier */
         break;
       }

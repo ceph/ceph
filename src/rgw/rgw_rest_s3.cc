@@ -417,7 +417,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
 
   /* first get the user info */
   if (rgw_get_user_info_by_access_key(auth_id, s->user) < 0) {
-    RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << endl;
+    RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
     return false;
   }
 
@@ -425,7 +425,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
    
   string auth_hdr;
   get_auth_header(s, auth_hdr, qsr);
-  RGW_LOG(10) << "auth_hdr:" << endl << auth_hdr << endl;
+  RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
 
   const char *key = s->user.secret_key.c_str();
   int key_len = strlen(key);
@@ -437,14 +437,14 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
 		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   if (ret < 0) {
-    RGW_LOG(10) << "ceph_armor failed" << endl;
+    RGW_LOG(10) << "ceph_armor failed" << dendl;
     return false;
   }
   b64[ret] = '\0';
 
-  RGW_LOG(15) << "b64=" << b64 << endl;
-  RGW_LOG(15) << "auth_sign=" << auth_sign << endl;
-  RGW_LOG(15) << "compare=" << auth_sign.compare(b64) << endl;
+  RGW_LOG(15) << "b64=" << b64 << dendl;
+  RGW_LOG(15) << "auth_sign=" << auth_sign << dendl;
+  RGW_LOG(15) << "compare=" << auth_sign.compare(b64) << dendl;
   return (auth_sign.compare(b64) == 0);
 }
 

@@ -19,7 +19,7 @@ int rgw_log_op(struct req_state *s)
     return 0;
 
   if (!s->bucket) {
-    RGW_LOG(0) << "nothing to log for operation" << std::endl;
+    RGW_LOG(0) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   entry.bucket = s->bucket;
@@ -79,7 +79,7 @@ int rgw_log_op(struct req_state *s)
   }
 done:
   if (ret < 0)
-    RGW_LOG(0) << "failed to log entry" << std::endl;
+    RGW_LOG(0) << "failed to log entry" << dendl;
 
   return ret;
 }

@@ -20,7 +20,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
 
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
-  RGW_LOG(0) << "bl=" << buf << std::endl;
+  RGW_LOG(0) << "bl=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   memset(k, 0, sizeof(k));
@@ -96,7 +96,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
 
   int len = strlen(token);
   if (len & 1) {
-    RGW_LOG(0) << "invalid token length" << std::endl;
+    RGW_LOG(0) << "invalid token length" << dendl;
     return -EINVAL;
   }
 
@@ -119,18 +119,18 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     ::decode(nonce, iter);
     ::decode(expiration, iter);
   } catch (buffer::error *err) {
-    RGW_LOG(0) << "failed to decode token" << std::endl;
+    RGW_LOG(0) << "failed to decode token" << dendl;
     return -EINVAL;
   }
   if (expiration < g_clock.now()) {
-    RGW_LOG(0) << "old timed out token was used now=" << g_clock.now() << " token.expiration=" << expiration << std::endl;
+    RGW_LOG(0) << "old timed out token was used now=" << g_clock.now() << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 
   if ((ret = rgw_get_user_info_by_openstack(os_user, info)) < 0)
     return ret;
 
-  RGW_LOG(0) << "os_user=" << os_user << std::endl;
+  RGW_LOG(0) << "os_user=" << os_user << dendl;
 
   bufferlist tok;
   ret = build_token(os_user, info.openstack_key, nonce, expiration, tok);
@@ -138,14 +138,14 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     return ret;
 
   if (tok.length() != bl.length()) {
-    RGW_LOG(0) << "tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << std::endl;
+    RGW_LOG(0) << "tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
     return -EPERM;
   }
 
   if (memcmp(tok.c_str(), bl.c_str(), tok.length()) != 0) {
     char buf[tok.length() * 2 + 1];
     buf_to_hex((const unsigned char *)tok.c_str(), tok.length(), buf);
-    RGW_LOG(0) << "tokens mismatch tok=" << buf << std::endl;
+    RGW_LOG(0) << "tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
 
@@ -156,7 +156,7 @@ void RGW_OS_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  RGW_LOG(0) << "RGW_OS_Auth_Get::execute()" << std::endl;
+  RGW_LOG(0) << "RGW_OS_Auth_Get::execute()" << dendl;
 
   const char *key = FCGX_GetParam("HTTP_X_AUTH_KEY", s->fcgx->envp);
   const char *user = FCGX_GetParam("HTTP_X_AUTH_USER", s->fcgx->envp);
@@ -168,7 +168,7 @@ void RGW_OS_Auth_Get::execute()
   bufferlist bl;
 
   if (!os_url || !url_prefix) {
-    RGW_LOG(0) << "server is misconfigured, missing RGW_OPENSTACK_URL_PREFIX or RGW_OPENSTACK_URL" << std::endl;
+    RGW_LOG(0) << "server is misconfigured, missing RGW_OPENSTACK_URL_PREFIX or RGW_OPENSTACK_URL" << dendl;
     ret = -EINVAL;
     goto done;
   }
@@ -180,7 +180,7 @@ void RGW_OS_Auth_Get::execute()
     goto done;
 
   if (info.openstack_key.compare(key) != 0) {
-    RGW_LOG(0) << "RGW_OS_Auth_Get::execute(): bad openstack key" << std::endl;
+    RGW_LOG(0) << "RGW_OS_Auth_Get::execute(): bad openstack key" << dendl;
     ret = -EPERM;
     goto done;
   }

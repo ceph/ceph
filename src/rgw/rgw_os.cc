@@ -20,7 +20,7 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
-  RGW_LOG(10) << "read_http_header" << std::endl;
+  RGW_LOG(10) << "read_http_header" << dendl;
 
   while (s != end) {
     if (*s == '\r') {
@@ -29,7 +29,7 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
     }
     if (*s == '\n') {
       *p = '\0';
-      RGW_LOG(10) << "os_auth:" << line << std::endl;
+      RGW_LOG(10) << "os_auth:" << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
@@ -64,7 +64,7 @@ static int rgw_os_validate_token(const char *token, struct rgw_os_auth_info *inf
   char url_buf[auth_url.size() + 1 + strlen(token) + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token);
 
-  RGW_LOG(10) << "rgw_os_validate_token url=" << url_buf << std::endl;
+  RGW_LOG(10) << "rgw_os_validate_token url=" << url_buf << dendl;
 
   curl_handle = curl_easy_init();
 
@@ -102,7 +102,7 @@ bool rgw_verify_os_token(req_state *s)
     return ret;
 
   if (!info.user) {
-    RGW_LOG(0) << "openstack auth didn't authorize a user" << std::endl;
+    RGW_LOG(0) << "openstack auth didn't authorize a user" << dendl;
     return false;
   }
 
@@ -111,14 +111,14 @@ bool rgw_verify_os_token(req_state *s)
 
   string openstack_user = s->os_user;
 
-  RGW_LOG(0) << "openstack user=" << s->os_user << std::endl;
+  RGW_LOG(0) << "openstack user=" << s->os_user << dendl;
 
   if (rgw_get_user_info_by_openstack(openstack_user, s->user) < 0) {
-    RGW_LOG(0) << "couldn't map openstack user" << std::endl;
+    RGW_LOG(0) << "couldn't map openstack user" << dendl;
     return false;
   }
 
-  RGW_LOG(0) << "user_id=" << s->user.user_id << " access_key=" << s->user.access_key << std::endl;
+  RGW_LOG(0) << "user_id=" << s->user.user_id << " access_key=" << s->user.access_key << dendl;
 
   return true;
 }

@@ -41,7 +41,7 @@ static int parse_range(const char *range, off_t& ofs, off_t& end)
   if (end_str.length())
   end = atoll(end_str.c_str());
 
-  RGW_LOG(10) << "parse_range ofs=" << ofs << " end=" << end << endl;
+  RGW_LOG(10) << "parse_range ofs=" << ofs << " end=" << end << dendl;
 
   if (end < ofs)
     goto done;
@@ -65,7 +65,7 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
     string name = iter->first;
 #define X_AMZ_META "x-amz-meta"
     if (name.find(X_AMZ_META) == 0) {
-      RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << endl;
+      RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
       string& val = iter->second;
       bufferlist bl;
       bl.append(val.c_str(), val.size() + 1);
@@ -96,9 +96,9 @@ static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, 
       bufferlist::iterator iter = bl.begin();
       policy->decode(iter);
       if (rgw_log_level >= 15) {
-        RGW_LOG(15) << "Read AccessControlPolicy" << endl;
+        RGW_LOG(15) << "Read AccessControlPolicy" << dendl;
         policy->to_xml(cerr);
-        RGW_LOG(15) << endl;
+        RGW_LOG(15) << dendl;
       }
     }
   }
@@ -230,7 +230,7 @@ void RGWListBuckets::execute()
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
-    RGW_LOG(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << endl;
+    RGW_LOG(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
 
     /*
 
@@ -396,17 +396,17 @@ void RGWPutObj::execute()
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
     if (supplied_md5_b64) {
-      RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
+      RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
       ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
 			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
-      RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
+      RGW_LOG(15) << "ceph_armor ret=" << ret << dendl;
       if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
         ret = -ERR_INVALID_DIGEST;
         goto done;
       }
 
       buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
-      RGW_LOG(15) << "supplied_md5=" << supplied_md5 << endl;
+      RGW_LOG(15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
     MD5 hash;
@@ -478,7 +478,7 @@ static bool parse_copy_source(const char *src, string& bucket, string& object)
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
 
-  RGW_LOG(15) << "decoded src=" << src << endl;
+  RGW_LOG(15) << "decoded src=" << src << dendl;
 
   if (*src == '/') ++src;
 
@@ -611,7 +611,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
 
   RGWUserInfo owner_info;
   if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
-    RGW_LOG(10) << "owner info does not exist" << endl;
+    RGW_LOG(10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
   ACLOwner& new_owner = dest.get_owner();
@@ -633,9 +633,9 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
     case ACL_TYPE_EMAIL_USER:
       {
         string email = src_grant->get_id();
-        RGW_LOG(10) << "grant user email=" << email << endl;
+        RGW_LOG(10) << "grant user email=" << email << dendl;
         if (rgw_get_user_info_by_email(email, grant_user) < 0) {
-          RGW_LOG(10) << "grant user email not found or other error" << endl;
+          RGW_LOG(10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
         id = grant_user.user_id;
@@ -646,12 +646,12 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
           id = src_grant->get_id();
     
         if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(id, grant_user) < 0) {
-          RGW_LOG(10) << "grant user does not exist:" << id << endl;
+          RGW_LOG(10) << "grant user does not exist:" << id << dendl;
         } else {
           ACLPermission& perm = src_grant->get_permission();
           new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
-          RGW_LOG(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << endl;
+          RGW_LOG(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << dendl;
         }
       }
       break;
@@ -662,7 +662,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
             group.compare(RGW_URI_AUTH_USERS) == 0) {
           new_grant = *src_grant;
           grant_ok = true;
-          RGW_LOG(10) << "new grant: " << new_grant.get_id() << endl;
+          RGW_LOG(10) << "new grant: " << new_grant.get_id() << dendl;
         }
       }
     default:
@@ -716,7 +716,7 @@ void RGWPutACLs::execute()
   if (get_params() < 0)
     goto done;
 
-  RGW_LOG(15) << "read len=" << len << " data=" << (data ? data : "") << endl;
+  RGW_LOG(15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!s->canned_acl.empty() && len) {
     ret = -EINVAL;
@@ -747,9 +747,9 @@ void RGWPutACLs::execute()
   }
 
   if (rgw_log_level >= 15) {
-    RGW_LOG(15) << "Old AccessControlPolicy" << endl;
+    RGW_LOG(15) << "Old AccessControlPolicy" << dendl;
     policy->to_xml(cout);
-    RGW_LOG(15) << endl;
+    RGW_LOG(15) << dendl;
   }
 
   ret = rebuild_policy(*policy, new_policy);
@@ -757,9 +757,9 @@ void RGWPutACLs::execute()
     goto done;
 
   if (rgw_log_level >= 15) {
-    RGW_LOG(15) << "New AccessControlPolicy" << endl;
+    RGW_LOG(15) << "New AccessControlPolicy" << dendl;
     new_policy.to_xml(cout);
-    RGW_LOG(15) << endl;
+    RGW_LOG(15) << dendl;
   }
 
   new_policy.encode(bl);
@@ -792,7 +792,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   if (rgw_log_level >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
-      RGW_LOG(20) << p << endl;
+      RGW_LOG(20) << p << dendl;
     }
   }
   s->fcgx = fcgx;
@@ -820,7 +820,7 @@ int RGWHandler::do_read_permissions(bool only_bucket)
   int ret = read_acls(s, only_bucket);
 
   if (ret < 0)
-    RGW_LOG(10) << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << endl;
+    RGW_LOG(10) << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
 
   return ret;
 }

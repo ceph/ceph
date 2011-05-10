@@ -121,21 +121,21 @@ bool ACLGrant::xml_end(const char *el) {
     acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
     if (acl_name)
       name = acl_name->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << endl;
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << dendl;
     break;
   case ACL_TYPE_GROUP:
     acl_uri = (ACLURI *)acl_grantee->find_first("URI");
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << endl;
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << dendl;
     break;
   case ACL_TYPE_EMAIL_USER:
     acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
     if (!acl_email)
       return false;
     email = acl_email->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << endl;
+    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << dendl;
     break;
   default:
     // unknown user type
@@ -176,15 +176,15 @@ bool RGWAccessControlList::xml_end(const char *el) {
 }
 
 int RGWAccessControlList::get_perm(string& id, int perm_mask) {
-  RGW_LOG(5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << endl;
+  RGW_LOG(5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
   if (!user_map_initialized)
     init_user_map();
   map<string, int>::iterator iter = acl_user_map.find(id);
   if (iter != acl_user_map.end()) {
-    RGW_LOG(5) << "Found permission: " << iter->second << endl;
+    RGW_LOG(5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  RGW_LOG(5) << "Permissions for user not found" << endl;
+  RGW_LOG(5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
@@ -260,7 +260,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
     }
   }
 
-  RGW_LOG(5) << "Getting permissions id=" << id << " owner=" << owner << endl;
+  RGW_LOG(5) << "Getting permissions id=" << id << " owner=" << owner << dendl;
 
   return perm;
 }
@@ -342,7 +342,7 @@ bool RGWXMLParser::init()
 {
   p = XML_ParserCreate(NULL);
   if (!p) {
-    RGW_LOG(10) << "RGWXMLParser::init(): ERROR allocating memory" << endl;
+    RGW_LOG(10) << "RGWXMLParser::init(): ERROR allocating memory" << dendl;
     return false;
   }
   XML_SetElementHandler(p, ::xml_start, ::xml_end);

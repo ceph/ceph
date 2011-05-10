@@ -15,6 +15,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
+#include "common/errno.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
@@ -60,21 +61,29 @@ int main(int argc, const char **argv)
 
   curl_global_init(CURL_GLOBAL_ALL);
 
+  // dout() messages will be sent to stderr, but FCGX wants messages on stdout
+  // Redirect stderr to stdout.
+  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  if (TEMP_FAILURE_RETRY(dup2(STDOUT_FILENO, STDERR_FILENO) < 0)) {
+    int err = errno;
+    cout << "failed to redirect stderr to stdout: " << cpp_strerror(err)
+	 << std::endl;
+    return ENOSYS;
+  }
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
-
   if (!RGWAccess::init_storage_provider("rados", &g_conf)) {
-    cerr << "Couldn't init storage provider (RADOS)" << std::endl;
-    return 5; //EIO
+    derr << "Couldn't init storage provider (RADOS)" << dendl;
+    return EIO;
   }
 
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
-
-  ceph::crypto::init();
+  common_postfork();
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
@@ -89,7 +98,7 @@ int main(int argc, const char **argv)
     }
 
     if (!handler->authorize(&s)) {
-      RGW_LOG(10) << "failed to authorize request" << std::endl;
+      RGW_LOG(10) << "failed to authorize request" << dendl;
       abort_early(&s, -EPERM);
       goto done;
     }

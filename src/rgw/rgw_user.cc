@@ -63,7 +63,7 @@ int rgw_store_user_info(RGWUserInfo& info)
     RGWUserInfo inf;
     int r = rgw_get_user_info_by_openstack(info.openstack_name, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << std::endl;
+      RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << dendl;
       return -EEXIST;
     }
   }
@@ -73,7 +73,7 @@ int rgw_store_user_info(RGWUserInfo& info)
     RGWUserInfo inf;
     int r = rgw_get_user_info_by_access_key(info.access_key, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      RGW_LOG(0) << "can't store user info, access key already mapped to another user" << std::endl;
+      RGW_LOG(0) << "can't store user info, access key already mapped to another user" << dendl;
       return -EEXIST;
     }
   }
@@ -207,7 +207,7 @@ static void store_buckets(string& user_id, RGWUserBuckets& buckets)
     string bucket_name = iter->first;
     int r = rgw_add_bucket(user_id, bucket_name);
     if (r < 0)
-      RGW_LOG(0) << "failed to store bucket information for user " << user_id << " bucket=" << bucket_name << std::endl;
+      RGW_LOG(0) << "failed to store bucket information for user " << user_id << " bucket=" << bucket_name << dendl;
   }
 }
 
@@ -279,7 +279,7 @@ done:
    map<string, RGWBucketEnt>& m = buckets.get_buckets();
    int r = rgwstore->update_containers_stats(m);
    if (r < 0)
-     RGW_LOG(0) << "could not get stats for buckets" << std::endl;
+     RGW_LOG(0) << "could not get stats for buckets" << dendl;
 
   }
   return 0;
@@ -320,7 +320,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
     ret = rgwstore->tmap_create(ui_uid_bucket, buckets_obj_id, bucket_name, bl);
     if (ret < 0) {
       RGW_LOG(0) << "error adding bucket to directory: "
-		 << cpp_strerror(-ret)<< std::endl;
+		 << cpp_strerror(-ret)<< dendl;
     }
   } else {
     RGWUserBuckets buckets;
@@ -339,7 +339,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
       ret = rgw_write_buckets_attr(user_id, buckets);
       break;
     default:
-      RGW_LOG(10) << "rgw_write_buckets_attr returned " << ret << endl;
+      RGW_LOG(10) << "rgw_write_buckets_attr returned " << ret << dendl;
       break;
     }
   }
@@ -360,7 +360,7 @@ int rgw_remove_bucket(string user_id, string bucket_name)
     ret = rgwstore->tmap_del(ui_uid_bucket, buckets_obj_id, bucket_name);
     if (ret < 0) {
       RGW_LOG(0) << "error removing bucket from directory: "
-		 << cpp_strerror(-ret)<< std::endl;
+		 << cpp_strerror(-ret)<< dendl;
     }
   } else {
     RGWUserBuckets buckets;

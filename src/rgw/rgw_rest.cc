@@ -301,7 +301,7 @@ void init_entities_from_header(struct req_state *s)
   if (!gateway_dns_name)
     gateway_dns_name = "s3.";
 
-  RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << endl;
+  RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
   s->bucket = NULL;
   s->bucket_str = "";
@@ -321,7 +321,7 @@ void init_entities_from_header(struct req_state *s)
   if (s->host) {
     string h(s->host);
 
-    RGW_LOG(10) << "host=" << s->host << endl;
+    RGW_LOG(10) << "host=" << s->host << dendl;
     pos = h.find(gateway_dns_name);
 
     if (pos > 0 && h[pos - 1] == '.') {
@@ -386,21 +386,21 @@ void init_entities_from_header(struct req_state *s)
     }
   }
 
-  RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << std::endl;
+  RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << dendl;
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     string ver;
     string auth_key;
 
-    RGW_LOG(10) << "before2" << std::endl;
+    RGW_LOG(10) << "before2" << dendl;
     next_tok(req, ver, '/');
-    RGW_LOG(10) << "ver=" << ver << std::endl;
+    RGW_LOG(10) << "ver=" << ver << dendl;
     next_tok(req, auth_key, '/');
-    RGW_LOG(10) << "auth_key=" << auth_key << std::endl;
+    RGW_LOG(10) << "auth_key=" << auth_key << dendl;
     s->os_auth_token = FCGX_GetParam("HTTP_X_AUTH_TOKEN", s->fcgx->envp);
     next_tok(req, first, '/');
 
-    RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
+    RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
     if (first.size() == 0)
       goto done;
 
@@ -480,7 +480,7 @@ static void init_auth_info(struct req_state *s)
   for (int i=0; (p = s->fcgx->envp[i]); ++i) {
 #define HTTP_X_AMZ "HTTP_X_AMZ"
     if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
-      RGW_LOG(10) << "amz>> " << p << endl;
+      RGW_LOG(10) << "amz>> " << p << dendl;
       const char *amz = p+5; /* skip the HTTP_ part */
       const char *eq = strchr(amz, '=');
       if (!eq) /* shouldn't happen! */
@@ -513,7 +513,7 @@ static void init_auth_info(struct req_state *s)
   }
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
-    RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << endl;
+    RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 }
 
@@ -636,7 +636,7 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
   ret = validate_object_name(s->object_str.c_str());
   if (ret)
     return ret;
-  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << endl;
+  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << dendl;
 
   init_auth_info(s);
 

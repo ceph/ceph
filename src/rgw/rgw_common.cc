@@ -73,7 +73,7 @@ void calc_hmac_sha1(const char *key, int key_len,
   char hex_str[(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2) + 1];
   buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 
-  RGW_LOG(15) << "hmac=" << hex_str << endl;
+  RGW_LOG(15) << "hmac=" << hex_str << dendl;
 }
 
 int NameVal::parse()
@@ -90,7 +90,7 @@ int NameVal::parse()
     val = str.substr(delim_pos + 1);
   }
 
-  RGW_LOG(10) << "parsed: name=" << name << " val=" << val << endl;
+  RGW_LOG(10) << "parsed: name=" << name << " val=" << val << dendl;
   return ret; 
 }
 
@@ -176,13 +176,13 @@ static char hex_to_num(char c)
 
 bool url_decode(string& src_str, string& dest_str)
 {
-  RGW_LOG(10) << "in url_decode with " << src_str << endl;
+  RGW_LOG(10) << "in url_decode with " << src_str << dendl;
   const char *src = src_str.c_str();
   char dest[src_str.size()];
   int pos = 0;
   char c;
 
-  RGW_LOG(10) << "src=" << (void *)src << std::endl;
+  RGW_LOG(10) << "src=" << (void *)src << dendl;
 
   while (*src) {
     if (*src != '%') {
@@ -257,7 +257,7 @@ done:
     buf = (char *)realloc(buf, max_len);
   }
   if (!buf) {
-    RGW_LOG(0) << "RGWFormatter::write_data: failed allocating " << max_len << " bytes" << std::endl;
+    RGW_LOG(0) << "RGWFormatter::write_data: failed allocating " << max_len << " bytes" << dendl;
     goto done_free;
   }
   pos = len;
@@ -265,7 +265,7 @@ done:
     pos--; // squash null termination
   strcpy(buf + pos, p);
   len = pos + strlen(p) + 1;
-  RGW_LOG(0) << "RGWFormatter::write_data: len= " << len << " bytes" << std::endl;
+  RGW_LOG(0) << "RGWFormatter::write_data: len= " << len << " bytes" << dendl;
 done_free:
   if (!p_on_stack)
     free(p);
@@ -276,7 +276,7 @@ void RGWFormatter::flush()
   if (!buf)
     return;
 
-  RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << std::endl;
+  RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
   CGI_PutStr(s, buf, len - 1);
   free(buf);
   buf = NULL;
