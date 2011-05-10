@@ -39,6 +39,8 @@ int librgw_acl_bin2xml(const char *bin, int bin_len, char **xml)
 
     // convert to XML C string
     *xml = strdup(ss.str().c_str());
+    if (!*xml)
+      return -ENOBUFS;
     return 0;
   }
   catch (...) {
@@ -53,6 +55,7 @@ void librgw_free_xml(char *xml)
 
 int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
 {
+  char *bin_ = NULL;
   try {
     RGWXMLParser parser;
     if (!parser.init()) {
@@ -69,7 +72,7 @@ int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
     bufferlist bl;
     policy->encode(bl);
 
-    char *bin_ = (char*)malloc(bl.length());
+    bin_ = (char*)malloc(bl.length());
     if (!bin_) {
       return -ENOBUFS;
     }
@@ -81,6 +84,9 @@ int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
     return 0;
   }
   catch (...) {
+    if (!bin_)
+      free(bin_);
+    bin_ = NULL;
     return -2000;
   }
 }
