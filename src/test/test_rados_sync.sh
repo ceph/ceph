@@ -94,16 +94,16 @@ diff -q -r "$TDIR/dira" "$TDIR/dirb" \
     || die "failed to export the same stuff we imported!"
 
 # import some stuff with extended attributes on it
-run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee $TDIR/out
+run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
 run_expect_succ grep -q '\[xattr\]' $TDIR/out
 
 # the second time, the xattrs should match, so there should be nothing to do.
-run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee $TDIR/out
-run_expect_fail grep -q '\[xattr\]' $TDIR/out
+run_expect_succ "$RADOS_SYNC" import "$TDIR/dirc" "$POOL" | tee "$TDIR/out"
+run_expect_fail grep -q '\[xattr\]' "$TDIR/out"
 
 # now force it to copy everything
-run_expect_succ "$RADOS_SYNC" --force import "$TDIR/dirc" "$POOL" | tee $TDIR/out2
-run_expect_succ grep '\[force\]' $TDIR/out2
+run_expect_succ "$RADOS_SYNC" --force import "$TDIR/dirc" "$POOL" | tee "$TDIR/out2"
+run_expect_succ grep '\[force\]' "$TDIR/out2"
 
 # export some stuff with extended attributes on it
 run_expect_succ "$RADOS_SYNC" -C export "$POOL" "$TDIR/dirc_copy"
@@ -115,6 +115,17 @@ if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
     die "xattr not preserved across import/export! \
 \$PRE_EXPORT = $PRE_EXPORT, \$POST_EXPORT = $POST_EXPORT"
 fi
+
+# trigger a rados delete using --delete-after
+run_expect_succ "$RADOS_SYNC" --create export "$POOL" "$TDIR/dird"
+rm -f "$TDIR/dird/000029c4_foo"
+run_expect_succ "$RADOS_SYNC" --delete-after import "$TDIR/dird" "$POOL" | tee "$TDIR/out3"
+run_expect_succ grep '\[deleted\]' "$TDIR/out3"
+
+# trigger a local delete using --delete-after
+run_expect_succ "$RADOS_SYNC" --delete-after export "$POOL" "$TDIR/dirc" | tee "$TDIR/out4"
+run_expect_succ grep '\[deleted\]' "$TDIR/out4"
+[ -e "$TDIR/dird/000029c4_foo" ] && die "--delete-after failed to delete a file!"
 
 echo "SUCCESS!"
 exit 0

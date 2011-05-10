@@ -126,6 +126,32 @@ done:
   return ret;
 }
 
+class DirHolder {
+public:
+  DirHolder()
+    : dp(NULL)
+  {
+  }
+  ~DirHolder() {
+    if (!dp)
+      return;
+    if (closedir(dp)) {
+      int err = errno;
+      cerr << ERR_PREFIX << "closedir failed: " << cpp_strerror(err) << std::endl;
+    }
+    dp = NULL;
+  }
+  int opendir(const char *dir_name) {
+    dp = ::opendir(dir_name);
+    if (!dp) {
+      int err = errno;
+      return err;
+    }
+    return 0;
+  }
+  DIR *dp;
+};
+
 // Stores a length and a chunk of malloc()ed data
 class Xattr {
 public:
@@ -633,7 +659,8 @@ private:
   std::map < std::string, Xattr* > xattrs;
 };
 
-static int do_export(IoCtx& io_ctx, const char *dir_name, bool force)
+static int do_export(IoCtx& io_ctx, const char *dir_name,
+		     bool force, bool delete_after)
 {
   int ret;
   librados::ObjectIterator oi = io_ctx.objects_begin();
@@ -722,12 +749,54 @@ static int do_export(IoCtx& io_ctx, const char *dir_name, bool force)
       cout << "[xattr]        " << rados_name << std::endl;
     }
   }
+  if (delete_after) {
+    DirHolder dh;
+    int err = dh.opendir(dir_name);
+    if (err) {
+      cerr << ERR_PREFIX << "opendir(" << dir_name << ") error: "
+	   << cpp_strerror(err) << std::endl;
+      return err;
+    }
+    while (true) {
+      struct dirent *de = readdir(dh.dp);
+      if (!de)
+	break;
+      if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
+	continue;
+      auto_ptr <BackedUpObject> lobj;
+      ret = BackedUpObject::from_file(de->d_name, dir_name, lobj);
+      if (ret) {
+	cout << ERR_PREFIX << "BackedUpObject::from_file: delete loop: "
+	     << "got error " << ret << std::endl;
+	return ret;
+      }
+      auto_ptr <BackedUpObject> robj;
+      ret = BackedUpObject::from_rados(io_ctx, lobj->get_rados_name(), robj);
+      if (ret == -ENOENT) {
+	// The entry doesn't exist on the remote server; delete it locally
+	char path[strlen(dir_name) + strlen(de->d_name) + 2];
+	snprintf(path, sizeof(path), "%s/%s", dir_name, de->d_name);
+	if (unlink(path)) {
+	  ret = errno;
+	  cerr << ERR_PREFIX << "error unlinking '" << path << "': "
+	       << cpp_strerror(ret) << std::endl;
+	  return ret;
+	}
+	cout << "[deleted]      " << "removed '" << de->d_name << "'" << std::endl;
+      }
+      else if (ret) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_rados: delete loop: "
+	     << "got error " << ret << std::endl;
+	return ret;
+      }
+    }
+  }
   cout << "[done]" << std::endl;
-  // TODO: list whole rados bucket, delete non-referenced
   return 0;
 }
 
-static int do_import(IoCtx& io_ctx, const char *dir_name, bool force)
+static int do_import(IoCtx& io_ctx, const char *dir_name,
+		     bool force, bool delete_after)
 {
   int ret = mkdir(dir_name, 0700);
   if (ret < 0) {
@@ -735,12 +804,12 @@ static int do_import(IoCtx& io_ctx, const char *dir_name, bool force)
     if (err != EEXIST)
       return err;
   }
-  DIR *dp = opendir(dir_name);
-  if (!dp) {
-    int err = errno;
+  DirHolder dh;
+  ret = dh.opendir(dir_name);
+  if (ret) {
     cerr << ERR_PREFIX << "opendir(" << dir_name << ") error: "
-	 << cpp_strerror(err) << std::endl;
-    return err;
+	 << cpp_strerror(ret) << std::endl;
+    return ret;
   }
   while (true) {
     enum {
@@ -753,7 +822,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name, bool force)
     std::list < std::string > only_in_b;
     std::list < std::string > diff;
     int flags = 0;
-    struct dirent *de = readdir(dp);
+    struct dirent *de = readdir(dh.dp);
     if (!de)
       break;
     if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
@@ -857,8 +926,38 @@ static int do_import(IoCtx& io_ctx, const char *dir_name, bool force)
       cout << "[xattr]        " << rados_name << std::endl;
     }
   }
+  if (delete_after) {
+    librados::ObjectIterator oi = io_ctx.objects_begin();
+    librados::ObjectIterator oi_end = io_ctx.objects_end();
+    for (; oi != oi_end; ++oi) {
+      string rados_name(*oi);
+      auto_ptr <BackedUpObject> robj;
+      ret = BackedUpObject::from_rados(io_ctx, rados_name.c_str(), robj);
+      if (ret) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_rados in delete loop "
+	     << "returned " << ret << std::endl;
+	return ret;
+      }
+      std::string obj_path(robj->get_fs_path(dir_name));
+      auto_ptr <BackedUpObject> lobj;
+      ret = BackedUpObject::from_path(obj_path.c_str(), lobj);
+      if (ret == ENOENT) {
+	ret = io_ctx.remove(rados_name);
+	if (ret) {
+	  cerr << ERR_PREFIX << "io_ctx.remove(" << obj_path << ") failed "
+	       << "with error " << ret << std::endl;
+	  return ret;
+	}
+	cout << "[deleted]      " << "removed '" << rados_name << "'" << std::endl;
+      }
+      else if (ret) {
+	cerr << ERR_PREFIX << "BackedUpObject::from_path in delete loop "
+	     << "returned " << ret << std::endl;
+	return ret;
+      }
+    }
+  }
   cout << "[done]" << std::endl;
-  // TODO: list whole directory, delete non-referenced
   return 0;
 }
 
@@ -867,6 +966,7 @@ int main(int argc, const char **argv)
   int ret;
   bool create = false;
   bool force = false;
+  bool delete_after = false;
   vector<const char*> args;
   std::string action, src, dst;
   argv_to_vec(argc, argv, args);
@@ -882,6 +982,8 @@ int main(int argc, const char **argv)
       create = true;
     } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
       force = true;
+    } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
+      delete_after = true;
     } else {
       // begin positional arguments
       break;
@@ -962,7 +1064,7 @@ int main(int argc, const char **argv)
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
-    return do_import(io_ctx, src.c_str(), force);
+    return do_import(io_ctx, src.c_str(), force, delete_after);
   }
   else {
     if (access(dst.c_str(), W_OK)) {
@@ -984,6 +1086,6 @@ int main(int argc, const char **argv)
     ret = xattr_test(dir_name.c_str());
     if (ret)
       return ret;
-    return do_export(io_ctx, dst.c_str(), force);
+    return do_export(io_ctx, dst.c_str(), force, delete_after);
   }
 }
