@@ -20,6 +20,7 @@
 #include <iostream>
 #include <string>
 #include <pthread.h>
+#include <errno.h>
 using namespace std;
 
 #include "common/config.h"
@@ -319,6 +320,12 @@ struct librados::ObjListCtx {
 
 class librados::RadosClient : public Dispatcher
 {
+  enum {
+    DISCONNECTED, 
+    CONNECTING,
+    CONNECTED,
+  } state;
+
   OSDMap osdmap;
   MonClient monclient;
   SimpleMessenger *messenger;
@@ -346,8 +353,9 @@ class librados::RadosClient : public Dispatcher
   SafeTimer timer;
 
 public:
-  RadosClient() : messenger(NULL), objecter(NULL),
-	    lock("radosclient"), timer(lock), max_watch_cookie(0)
+  RadosClient() : state(DISCONNECTED),
+		  messenger(NULL), objecter(NULL),
+		  lock("radosclient"), timer(lock), max_watch_cookie(0)
   {
   }
 
@@ -622,30 +630,41 @@ public:
 int librados::RadosClient::
 connect()
 {
-  // get monmap
-  int ret = monclient.build_initial_monmap();
-  if (ret < 0)
-    return ret;
+  int err;
+  uint64_t nonce;
 
+  // already connected?
+  if (state == CONNECTING)
+    return -EINPROGRESS;
+  if (state == CONNECTED)
+    return -EISCONN;
+  state = CONNECTING;
+
+  // get monmap
+  err = monclient.build_initial_monmap();
+  if (err < 0)
+    goto out;
+
+  err = -ENOMEM;
   messenger = new SimpleMessenger();
   if (!messenger)
-    return -ENOMEM;
+    goto out;
 
   dout(1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
   messenger->register_entity(entity_name_t::CLIENT(-1));
   dout(1) << "starting objecter" << dendl;
 
+  err = -ENOMEM;
   objecter = new Objecter(messenger, &monclient, &osdmap, lock, timer);
   if (!objecter)
-    return -ENOMEM;
+    goto out;
   objecter->set_balanced_budget();
 
   monclient.set_messenger(messenger);
 
   messenger->add_dispatcher_head(this);
 
-  uint64_t nonce;
   rados_instance.inc();
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.read());
 
@@ -657,11 +676,11 @@ connect()
   dout(1) << "calling monclient init" << dendl;
   monclient.init();
 
-  int err = monclient.authenticate(g_conf.client_mount_timeout);
+  err = monclient.authenticate(g_conf.client_mount_timeout);
   if (err) {
     dout(0) << g_conf.name << " authentication error " << strerror(-err) << dendl;
     shutdown();
-    return err;
+    goto out;
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
@@ -677,11 +696,16 @@ connect()
     dout(1) << "waiting for osdmap" << dendl;
     cond.Wait(lock);
   }
+  state = CONNECTED;
   lock.Unlock();
 
   dout(1) << "init done" << dendl;
+  err = 0;
 
-  return 0;
+ out:
+  if (err)
+    state = DISCONNECTED;
+  return err;
 }
 
 void librados::RadosClient::
@@ -692,6 +716,7 @@ shutdown()
   if (objecter)
     objecter->shutdown();
   timer.shutdown();
+  state = DISCONNECTED;
   lock.Unlock();
   if (messenger) {
     messenger->shutdown();
