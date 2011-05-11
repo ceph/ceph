@@ -673,7 +673,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
     derr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
   r = io_ctx.remove(md_oid);
-  if (r < 0)
+  if (r < 0 && r != -ENOENT)
     derr << "warning: couldn't remove old metadata" << dendl;
   notify_change(io_ctx, md_oid, NULL, NULL);
 
