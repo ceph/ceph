@@ -350,8 +350,10 @@ void MonClient::shutdown()
   monc_lock.Lock();
   timer.shutdown();
 
-  cur_con->put();
-  cur_con = NULL;
+  if (cur_con) {
+    cur_con->put();
+    cur_con = NULL;
+  }
 
   monc_lock.Unlock();
 }
