@@ -5773,7 +5773,7 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
   tout << name << std::endl;
 
   // only user xattrs, for now
-  if (strncmp(name, "user.", 5))
+  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
     return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
