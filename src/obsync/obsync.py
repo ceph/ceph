@@ -544,6 +544,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
+            ex = None
             for retry_num in S3RetryIterator.create():
                 try:
                     xml = src_acl.acl_policy.to_xml()
@@ -583,6 +584,9 @@ class S3RetryIterator(object):
         return self
     def next(self):
         t = self.cur_try
+        if (os.environ.has_key("DST_CONSISTENCY") and \
+                os.environ["DST_CONSISTENCY"] == "read_after_write"):
+            raise StopIteration
         if (self.cur_try >= len(self.try_times)):
             raise StopIteration
         sleep_time = self.try_times[self.cur_try]

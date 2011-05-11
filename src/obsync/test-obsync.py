@@ -66,7 +66,7 @@ def read_config():
 
         config[name] = {}
         for var in [ 'access_key', 'host', 'secret_key', 'user_id',
-                     'display_name', 'email', ]:
+                     'display_name', 'email', 'consistency', ]:
             try:
                 config[name][var] = cfg.get(section, var)
             except ConfigParser.NoOptionError:
@@ -111,6 +111,8 @@ def obsync(src, dst, misc):
         full.append(dst.url)
         e["DST_AKEY"] = dst.akey
         e["DST_SKEY"] = dst.skey
+        if (dst.consistency != None):
+            e["DST_CONSISTENCY"] = dst.consistency
     else:
         full.append(dst)
     full.extend(misc)
@@ -162,13 +164,22 @@ def count_obj_in_dir(d):
 def xuser(src, dst):
     return [ "--xuser", config[src]["user_id"] + "=" + config[dst]["user_id"]]
 
+def get_optional(h, k):
+    if (h.has_key(k)):
+        print "found " + str(h[k])
+        return h[k]
+    else:
+        print "found nothing"
+        return None
+
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
-    def __init__(self, name, url, akey, skey):
+    def __init__(self, name, url, akey, skey, consistency):
         self.name = name
         self.url = url
         self.akey = akey
         self.skey = skey
+        self.consistency = consistency
 
 ###### Main #######
 # change directory to obsync directory
@@ -201,10 +212,12 @@ config = read_config()
 opts.buckets = []
 opts.buckets.append(ObSyncTestBucket(config["main"]["bucket_name"], \
     "s3://" + config["main"]["host"] + "/" + config["main"]["bucket_name"], \
-    config["main"]["access_key"], config["main"]["secret_key"]))
+    config["main"]["access_key"], config["main"]["secret_key"],
+    get_optional(config["main"], "consistency")))
 opts.buckets.append(ObSyncTestBucket(config["alt"]["bucket_name"], \
     "s3://" + config["alt"]["host"] + "/" + config["alt"]["bucket_name"], \
-    config["alt"]["access_key"], config["alt"]["secret_key"]))
+    config["alt"]["access_key"], config["alt"]["secret_key"],
+    get_optional(config["alt"], "consistency")))
 
 if not config["main"]["user_id"]:
     raise Exception("You must specify a user_id for the main section.")
