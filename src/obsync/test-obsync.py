@@ -115,6 +115,9 @@ def obsync(src, dst, misc):
         full.append(dst)
     full.extend(misc)
     if (opts.more_verbose):
+        for k,v in e.items():
+            print str(k) + "=" + str(v) + " ",
+        print
         for f in full:
             print f,
         print
@@ -155,6 +158,9 @@ def count_obj_in_dir(d):
             continue
         num_objects = num_objects + 1
     return num_objects
+
+def xuser(src, dst):
+    return [ "--xuser", config[src]["user_id"] + "=" + config[dst]["user_id"]]
 
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
@@ -409,15 +415,15 @@ obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
             ["--no-preserve-acls", "-c"])
 # test ACL transformations, again
 obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
-            ["-d", "-c", "--xuser",
-            config["alt"]["user_id"] + "=" + config["main"]["user_id"]])
+            ["-d", "-c"] + xuser("alt", "main"))
 
 if (opts.verbose):
     print "copying dir1 to " + opts.buckets[0].name
 obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
 if (opts.verbose):
     print "copying " + opts.buckets[0].name + " to " + opts.buckets[1].name
-obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
+obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"] + \
+            xuser("main", "alt"))
 if (opts.verbose):
     print "copying bucket1 to dir4..."
 obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
@@ -426,7 +432,7 @@ if (opts.verbose):
     print "successfully copied " + opts.buckets[0].name + " to " + \
         opts.buckets[1].name
 if (opts.verbose):
-    print "adding another object to " + opts.buckets[1]
+    print "adding another object to " + opts.buckets[1].name
 os.mkdir("%s/small" % tdir)
 f = open("%s/small/new_thing" % tdir, 'w')
 f.write("a new object!!!")
@@ -441,7 +447,8 @@ if (bucket1_count != bucket0_count + 1):
 bucket0_count=%d, bucket1_count=%d" % (bucket0_count, bucket1_count))
 if (opts.verbose):
     print "copying bucket0 to bucket1..."
-obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
+obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"] + \
+        xuser("main", "alt"))
 obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
 obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
 bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
