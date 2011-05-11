@@ -7893,7 +7893,7 @@ public:
   C_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
     cache(c), dn(d) { }
   void finish(int r) {
-    cache->_purge_stray_purged(dn);
+    cache->_purge_stray_purged(dn, r);
   }
 };
 
@@ -7978,8 +7978,9 @@ public:
   }
 };
 
-void MDCache::_purge_stray_purged(CDentry *dn)
+void MDCache::_purge_stray_purged(CDentry *dn, int r)
 {
+  assert (r == 0 || r == -ENOENT);
   CInode *in = dn->get_projected_linkage()->get_inode();
   dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;
 
