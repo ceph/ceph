@@ -189,7 +189,7 @@ else:
     # use environment variables and command line
     host = args[0]
     aws_access_key_id=os.environ["AKEY"]
-    aws_secret_access_key=os.environ["SKEY"]
+    secret_key=os.environ["SKEY"]
 
 conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
                 host = host,
