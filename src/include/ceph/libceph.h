@@ -121,6 +121,21 @@ int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
 
 int ceph_sync_fs(struct ceph_mount_info *cmount);
 
+/* xattr support */
+int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	void *value, size_t size);
+int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	void *value, size_t size);
+int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size);
+int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size);
+int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name);
+int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const char *name);
+int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	const void *value, size_t size, int flags);
+int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	const void *value, size_t size, int flags);
+
+
 
 /* expose file layout */
 int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);

@@ -65,6 +65,10 @@ int main(int argc, const char **argv)
     printf("error connecting\n");
     exit(1);
   }
+  if (rados_connect(cl) == 0) {
+    printf("second connect attempt didn't return an error\n");
+    exit(1);
+  }
 
   /* create an io_ctx */
   r = rados_pool_create(cl, "foo");

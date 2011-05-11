@@ -5563,6 +5563,71 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
 // ----------
 // xattrs
 
+int Client::getxattr(const char *path, const char *name, void *value, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, true);
+  return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
+}
+
+int Client::lgetxattr(const char *path, const char *name, void *value, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, false);
+  return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
+}
+
+int Client::listxattr(const char *path, char *list, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, true);
+  return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
+}
+
+int Client::llistxattr(const char *path, char *list, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, false);
+  return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
+}
+
+int Client::removexattr(const char *path, const char *name)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, true);
+  return Client::_removexattr(ceph_inode, name, getuid(), getgid());
+}
+
+int Client::lremovexattr(const char *path, const char *name)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, false);
+  return Client::_removexattr(ceph_inode, name, getuid(), getgid());
+}
+
+int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, true);
+  return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
+}
+
+int Client::lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+{
+  Mutex::Locker lock(client_lock);
+  Inode *ceph_inode;
+  Client::path_walk(path, &ceph_inode, false);
+  return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
+}
+
+
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		      int uid, int gid)
 {
@@ -5708,7 +5773,7 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
   tout << name << std::endl;
 
   // only user xattrs, for now
-  if (strncmp(name, "user.", 5))
+  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
     return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
