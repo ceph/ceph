@@ -2856,6 +2856,26 @@ void FileStore::sync_and_flush()
   dout(10) << "sync_and_flush done" << dendl;
 }
 
+int FileStore::snapshot(const string& name)
+{
+  dout(10) << "snapshot " << name << dendl;
+  sync_and_flush();
+  
+  if (!btrfs) {
+    dout(0) << "snapshot " << name << " failed, no btrfs" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  btrfs_ioctl_vol_args vol_args;
+  vol_args.fd = current_fd;
+  snprintf(vol_args.name, sizeof(vol_args.name), "clustersnap_%s", name.c_str());
+
+  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
+  if (r)
+    derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
+
+  return r;
+}
 
 // -------------------------------
 // attributes
