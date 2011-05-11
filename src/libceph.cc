@@ -416,6 +416,48 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
   return cmount->get_client()->setattr(relpath, attr, mask);
 }
 
+// *xattr() calls supporting samba/vfs
+extern "C" int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
+{
+  return cmount->get_client()->getxattr(path, name, value, size);
+}
+
+extern "C" int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
+{
+  return cmount->get_client()->lgetxattr(path, name, value, size);
+}
+
+extern "C" int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
+{
+  return cmount->get_client()->listxattr(path, list, size);
+}
+
+extern "C" int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
+{
+  return cmount->get_client()->llistxattr(path, list, size);
+}
+
+extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
+{
+  return cmount->get_client()->removexattr(path, name);
+}
+
+extern "C" int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
+{
+  return cmount->get_client()->lremovexattr(path, name);
+}
+
+extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
+{
+  return cmount->get_client()->setxattr(path, name, value, size, flags);
+}
+
+extern "C" int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
+{
+  return cmount->get_client()->lsetxattr(path, name, value, size, flags);
+}
+/* end xattr support */
+
 extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   return cmount->get_client()->chmod(path, mode);
