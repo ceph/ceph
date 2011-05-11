@@ -1332,9 +1332,10 @@ void PG::choose_log_location(bool &need_backlog,
   }
 
   oldest_update = info.last_update;
-  for (vector<int>::const_iterator it = ++up.begin();
+  for (vector<int>::const_iterator it = up.begin();
        it != up.end();
        ++it) {
+    if (*it == osd->whoami) continue;
     const Info &pi = peer_info.find(*it)->second;
     if (oldest_update > pi.last_update) {
       oldest_update = pi.last_update;
@@ -3897,6 +3898,7 @@ PG::RecoveryState::Primary::Primary(my_context ctx) : my_base(ctx) {
 boost::statechart::result 
 PG::RecoveryState::Primary::react(const BacklogComplete&) {
   PG *pg = context< RecoveryMachine >().pg;
+  dout(10) << "BacklogComplete" << dendl;
   pg->choose_acting(pg->osd->whoami);
   return discard_event();
 }
@@ -4312,7 +4314,8 @@ void PG::RecoveryState::GetInfo::exit() {
 
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
-  my_base(ctx), newest_update_osd(-1), need_backlog(false), msg(0)
+  my_base(ctx), newest_update_osd(-1), need_backlog(false),
+  wait_on_backlog(false), msg(0)
 {
   state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
