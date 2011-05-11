@@ -1224,15 +1224,6 @@ int FileStore::mount()
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
       char s[PATH_MAX];
-      uint64_t warp_seq_forward = 0;
-
-      uint64_t curr_seq;
-      {
-	int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-	assert(fd >= 0);
-	TEMP_FAILURE_RETRY(::close(fd));
-      }
-      dout(10) << "current/ seq was " << curr_seq << dendl;
 
       if (g_conf.osd_rollback_to_cluster_snap.length()) {
 	derr << TEXT_RED
@@ -1242,8 +1233,15 @@ int FileStore::mount()
 	assert(cluster_snaps.count(g_conf.osd_rollback_to_cluster_snap));
 	snprintf(s, sizeof(s), "%s/" CLUSTER_SNAP_ITEM, basedir.c_str(),
 		 g_conf.osd_rollback_to_cluster_snap.c_str());
-	//warp_seq_forward = curr_seq;
       } else {
+	uint64_t curr_seq;
+	{
+	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	  assert(fd >= 0);
+	  TEMP_FAILURE_RETRY(::close(fd));
+	}
+	dout(10) << " current/ seq was " << curr_seq << dendl;
+
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
 	
@@ -1263,9 +1261,6 @@ int FileStore::mount()
 	       << ", newest snap is " << cp << dendl;
 	  cerr << TEXT_YELLOW
 	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
-	  
-	  // FIXME this seems wrong?
-	  warp_seq_forward = cp;
 	}
 
         dout(10) << "mount rolling back to consistent snap " << cp << dendl;
@@ -1309,16 +1304,6 @@ int FileStore::mount()
 	goto close_basedir_fd;
       }
       TEMP_FAILURE_RETRY(::close(vol_args.fd));
-
-      if (warp_seq_forward) {
-	dout(10) << "warping seq forward to " << warp_seq_forward << dendl;
-	uint64_t foo;
-        int fd = read_op_seq(current_op_seq_fn.c_str(), &foo);
-	assert(fd >= 0);
-        /* we'll use the higher version from now on */
-        write_op_seq(fd, warp_seq_forward);
-	TEMP_FAILURE_RETRY(::close(fd));
-      }
     }
   }
   initial_op_seq = 0;
