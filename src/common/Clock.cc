@@ -24,3 +24,16 @@ Clock::Clock() {
 
 Clock::~Clock() {
 }
+
+utime_t Clock::now() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  utime_t n(&tv);
+  n += g_conf.clock_offset;
+  if (n < last) {
+    //derr << "WARNING: clock jumped backwards from " << last << " to " << n << dendl;
+    n = last;    // clock jumped backwards!
+  } else
+    last = n;
+  return n;
+}

@@ -245,6 +245,8 @@ public:
   double paxos_min_wait;
   double paxos_observer_timeout;
 
+  double clock_offset;
+
   // auth
   std::string auth_supported;
   double auth_mon_ticket_ttl;

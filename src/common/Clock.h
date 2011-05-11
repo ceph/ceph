@@ -30,17 +30,7 @@ class Clock {
   Clock();
   ~Clock();
 
-  utime_t now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    utime_t n(&tv);
-    if (n < last) {
-      //derr << "WARNING: clock jumped backwards from " << last << " to " << n << dendl;
-      n = last;    // clock jumped backwards!
-    } else
-      last = n;
-    return n;
-  }
+  utime_t now();
 
   utime_t recent_now() {
     return last;
@@ -58,7 +48,6 @@ class Clock {
   time_t gettime() {
     return now().sec();
   }
-
 };
 
 extern Clock g_clock;

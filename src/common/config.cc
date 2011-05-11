@@ -212,6 +212,7 @@ struct config_option config_optionsp[] = {
   OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
   OPTION(paxos_min_wait, OPT_DOUBLE, 0.05),  // min time to gather updates for after period of inactivity
   OPTION(paxos_observer_timeout, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
+  OPTION(clock_offset, OPT_DOUBLE, 0), // how much to offset the system clock by with g_clock
   OPTION(auth_supported, OPT_STR, "none"),
   OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12),
   OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60),
