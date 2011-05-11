@@ -5559,8 +5559,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // journal it?
   if (srcdn->is_auth() ||
-      (destdnl->get_inode() && destdnl->get_inode()->is_auth()) ||
-      srcdnl->get_inode()->is_any_caps()) {
+      (destdnl->get_inode() && destdnl->get_inode()->is_auth())) {
     // journal.
     mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
