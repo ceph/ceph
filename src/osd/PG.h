@@ -492,7 +492,7 @@ public:
 
     // recovery pointers
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
-    eversion_t last_requested;           // last object requested by primary
+    version_t last_requested;           // last object requested by primary
 
     /****/
     IndexedLog() {}
@@ -504,7 +504,7 @@ public:
     }
     void reset_recovery_pointers() {
       complete_to = log.end();
-      last_requested = eversion_t();
+      last_requested = 0;
     }
 
     bool logged_object(const sobject_t& oid) const {
@@ -651,7 +651,7 @@ public:
     WRITE_CLASS_ENCODER(item)
 
     map<sobject_t, item> missing;         // oid -> (need v, have v)
-    map<eversion_t, sobject_t> rmissing;  // v -> oid
+    map<version_t, sobject_t> rmissing;  // v -> oid
 
     unsigned int num_missing() const;
     bool have_missing() const;
@@ -681,7 +681,7 @@ public:
       for (map<sobject_t,item>::iterator it = missing.begin();
 	   it != missing.end();
 	   ++it)
-	rmissing[it->second.need] = it->first;
+	rmissing[it->second.need.version] = it->first;
     }
   };
   WRITE_CLASS_ENCODER(Missing)

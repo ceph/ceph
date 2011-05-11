@@ -4222,7 +4222,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
       pulling.erase(*i);
       finish_recovery_op(*i);
     }
-    log.last_requested = eversion_t();
+    log.last_requested = 0;
     pull_from_peer.erase(j++);
   }
 }
@@ -4290,10 +4290,10 @@ int ReplicatedPG::recover_primary(int max)
   int started = 0;
   int skipped = 0;
 
-  map<eversion_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
+  map<version_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
   while (p != missing.rmissing.end()) {
     sobject_t soid;
-    eversion_t v = p->first;
+    version_t v = p->first;
 
     if (log.objects.count(p->second)) {
       latest = log.objects[p->second];
@@ -4447,15 +4447,16 @@ int ReplicatedPG::recover_replicas(int max)
 
     // oldest first!
     const Missing &m(pm->second);
-    for (map<eversion_t, sobject_t>::const_iterator p = m.rmissing.begin();
+    for (map<version_t, sobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
       const sobject_t soid(p->second);
-      eversion_t v = p->first;
+
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
 	continue;
       }
+
       if (missing.is_missing(soid)) {
 	if (missing_loc.find(soid) == missing_loc.end())
 	  dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
@@ -4465,7 +4466,8 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      started += recover_object_replicas(soid, v);
+      map<sobject_t,Missing::item>::const_iterator p = m.missing.find(soid);
+      started += recover_object_replicas(soid, p->second.need);
     }
   }
 
