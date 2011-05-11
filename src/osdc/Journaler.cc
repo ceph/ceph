@@ -646,7 +646,7 @@ void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
 	   << ", prezeroing/prezero was " << prezeroing_pos << "/" << prezero_pos
 	   << ", pending " << pending_zero
 	   << dendl;
-  assert(r == 0);
+  assert(r == 0 || r == -ENOENT);
 
   if (start == prezero_pos) {
     prezero_pos += len;
