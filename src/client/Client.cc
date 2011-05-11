@@ -1987,8 +1987,9 @@ void Client::check_caps(Inode *in, bool is_delayed)
       goto ack;
 
     if (wanted == cap->wanted &&         // mds knows what we want.
-	(cap->issued & ~retain) == 0)    // and we don't have anything we wouldn't like
-      continue;   
+	((cap->issued & ~retain) == 0) &&// and we don't have anything we wouldn't like
+	!in->dirty_caps)                 // and we have no dirty caps
+      continue;
 
     if (now < in->hold_caps_until) {
       dout(10) << "delaying cap release" << dendl;
