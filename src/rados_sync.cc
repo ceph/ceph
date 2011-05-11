@@ -927,7 +927,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
       ret = BackedUpObject::from_path(obj_path.c_str(), lobj);
       if (ret == ENOENT) {
 	ret = io_ctx.remove(rados_name);
-	if (ret) {
+	if (ret && ret != -ENOENT) {
 	  cerr << ERR_PREFIX << "io_ctx.remove(" << obj_path << ") failed "
 	       << "with error " << ret << std::endl;
 	  return ret;
