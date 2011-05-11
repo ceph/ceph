@@ -2509,7 +2509,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 
     
   // create inode.
-  mdr->now = g_clock.real_now();
+  mdr->now = g_clock.now();
 
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
@@ -2611,7 +2611,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   dir->verify_fragstat();
 #endif
 
-  mdr->now = g_clock.real_now();
+  mdr->now = g_clock.now();
 
   snapid_t snapid = mdr->snapid;
 
@@ -2996,7 +2996,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   pi = cur->project_inode();
 
-  utime_t now = g_clock.real_now();
+  utime_t now = g_clock.now();
 
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
@@ -3062,7 +3062,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 
   // prepare
   inode_t *pi = in->project_inode();
-  pi->mtime = pi->ctime = g_clock.real_now();
+  pi->mtime = pi->ctime = g_clock.now();
   pi->version = in->pre_dirty();
 
   pi->truncate_from = pi->size;
@@ -3151,7 +3151,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->layout = layout;
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
+  pi->ctime = g_clock.now();
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -3298,7 +3298,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
+  pi->ctime = g_clock.now();
   pi->xattr_version++;
   px->erase(name);
   (*px)[name] = buffer::create(len);
@@ -3350,7 +3350,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
+  pi->ctime = g_clock.now();
   pi->xattr_version++;
   px->erase(name);
 
@@ -3453,7 +3453,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = g_clock.real_now();
+  mdr->now = g_clock.now();
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				   req->head.args.mknod.mode, &layout);
@@ -3533,7 +3533,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // new inode
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = g_clock.real_now();
+  mdr->now = g_clock.now();
 
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
@@ -3607,7 +3607,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mdr->now = g_clock.real_now();
+  mdr->now = g_clock.now();
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
 
   unsigned mode = S_IFLNK | 0777;
@@ -3683,7 +3683,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   // pick mtime
   if (mdr->now == utime_t())
-    mdr->now = g_clock.real_now();
+    mdr->now = g_clock.now();
 
   // does the target need an anchor?
   if (targeti->is_auth()) {
@@ -4319,7 +4319,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // yay!
   if (mdr->now == utime_t())
-    mdr->now = g_clock.real_now();
+    mdr->now = g_clock.now();
 
   // NOTE: this is non-optimal.  we create an anchor at the old
   // location, and then change it.  we can do better, but it's more
@@ -4865,7 +4865,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- declare now --
   if (mdr->now == utime_t())
-    mdr->now = g_clock.real_now();
+    mdr->now = g_clock.now();
 
   // -- prepare witnesses --
 

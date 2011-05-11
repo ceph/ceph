@@ -24,57 +24,39 @@
 
 class Clock {
  protected:
-  //utime_t start_offset;
-  //utime_t abs_last;
   utime_t last;
-  utime_t zero;
 
  public:
   Clock();
   ~Clock();
 
-  // real time.
-  utime_t real_now() {
-    utime_t realnow = now();
-    realnow += zero;
-    //gettimeofday(&realnow.timeval(), NULL);
-    return realnow;
-  }
-
   utime_t now() {
-    //lock.Lock();  
     struct timeval tv;
     gettimeofday(&tv, NULL);
     utime_t n(&tv);
-    n -= zero;
     if (n < last) {
       //derr << "WARNING: clock jumped backwards from " << last << " to " << n << dendl;
       n = last;    // clock jumped backwards!
     } else
       last = n;
-    //lock.Unlock();
     return n;
   }
+
   utime_t recent_now() {
     return last;
   }
 
-  void realify(utime_t& t) {
-    t += zero;
-  }
-
   void make_timespec(utime_t& t, struct timespec *ts) {
-    utime_t real = t;
-    realify(real);
+    utime_t time = t;
 
     memset(ts, 0, sizeof(*ts));
-    ts->tv_sec = real.sec();
-    ts->tv_nsec = real.nsec();
+    ts->tv_sec = time.sec();
+    ts->tv_nsec = time.nsec();
   }
 
   // absolute time
   time_t gettime() {
-    return real_now().sec();
+    return now().sec();
   }
 
 };

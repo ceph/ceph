@@ -1812,7 +1812,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
   // declare now?
   if (mut->now == utime_t())
-    mut->now = g_clock.real_now();
+    mut->now = g_clock.now();
 
   if (in->is_base())
     return;

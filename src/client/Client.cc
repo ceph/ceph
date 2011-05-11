@@ -955,7 +955,7 @@ int Client::make_request(MetaRequest *request,
 			 bufferlist *pdirbl)
 {
   // time the call
-  utime_t start = g_clock.real_now();
+  utime_t start = g_clock.now();
   
   bool nojournal = false;
   int op = request->get_op();
@@ -1060,7 +1060,7 @@ int Client::make_request(MetaRequest *request,
   
   // -- log times --
   if (client_logger) {
-    utime_t lat = g_clock.real_now();
+    utime_t lat = g_clock.now();
     lat -= request->sent_stamp;
     dout(20) << "lat " << lat << dendl;
     client_logger->favg(l_c_lat,(double)lat);
@@ -4999,7 +4999,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   dout(10) << "cur file size is " << in->size << dendl;
 
   // time it.
-  utime_t start = g_clock.real_now();
+  utime_t start = g_clock.now();
     
   // copy into fresh buffer (since our write may be resub, async)
   bufferptr bp;
@@ -5052,7 +5052,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // time
-  utime_t lat = g_clock.real_now();
+  utime_t lat = g_clock.now();
   lat -= start;
   if (client_logger)
     client_logger->favg(l_c_wrlat,(double)lat);
@@ -5075,7 +5075,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // mtime
-  in->mtime = g_clock.real_now();
+  in->mtime = g_clock.now();
   mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
