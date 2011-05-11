@@ -37,7 +37,7 @@ import tempfile
 import time
 import traceback
 
-# Command-line options 
+# Command-line options
 global opts
 
 # Translation table mapping users in the source to users in the destination.
@@ -544,21 +544,18 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
-            ex = None
-            for retry_num in S3RetryIterator.create():
-                try:
-                    xml = src_acl.acl_policy.to_xml()
+            xml = src_acl.acl_policy.to_xml()
+            try:
+                def fn():
                     self.bucket.set_xml_acl(xml, k)
-                    ex = None
-                except boto.exception.S3ResponseError, e:
-                    ex = e
-            if (ex):
+                do_with_s3_retries(fn)
+            except boto.exception.S3ResponseError, e:
                 print >>stderr, "ERROR SETTING ACL on object '" + sobj.name + "'"
                 print >>stderr
                 print >>stderr, "************* ACL: *************"
                 print >>stderr, str(xml)
                 print >>stderr, "********************************"
-                raise ex
+                raise
 
     def remove(self, obj):
         if (opts.dry_run):
@@ -576,29 +573,27 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
 # For example, setting the ACL on a newly created object may fail with an
 # "object not found" error if the object creation hasn't yet become visible to
 # us.
-class S3RetryIterator(object):
-    def __init__(self, cur_try, try_times):
-        self.cur_try = cur_try
-        self.try_times = try_times
-    def __iter__(self):
-        return self
-    def next(self):
-        t = self.cur_try
-        if (os.environ.has_key("DST_CONSISTENCY") and \
-                os.environ["DST_CONSISTENCY"] == "read_after_write"):
-            raise StopIteration
-        if (self.cur_try >= len(self.try_times)):
-            raise StopIteration
-        sleep_time = self.try_times[self.cur_try]
-        if (opts.more_verbose):
-            print "retrying operation after " + str(sleep_time) + \
-                " second delay"
-        time.sleep(sleep_time)
-        self.cur_try = self.cur_try + 1
-        return t
-    @staticmethod
-    def create():
-        return S3RetryIterator(0, [5, 15, 60])
+def do_with_s3_retries(fn):
+    if (os.environ.has_key("DST_CONSISTENCY") and
+            os.environ["DST_CONSISTENCY"] == "eventual"):
+        sleep_times = [5, 10, 60, -1]
+    else:
+        sleep_times = [-1]
+    for stime in sleep_times:
+        try:
+            fn()
+            return
+        except boto.exception.S3ResponseError, e:
+            if (stime == -1):
+                raise
+            if (opts.verbose):
+                print "encountered s3 response error: ",
+            if (opts.more_verbose):
+                print str(e) + ": ",
+            if (opts.verbose):
+                print "retrying operation after " + str(stime) + \
+                    " second delay"
+            time.sleep(stime)
 
 ###### FileStore #######
 class FileStoreIterator(object):
