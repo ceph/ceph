@@ -4332,13 +4332,6 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetInfo::react(const MInfoRec& infoevt) {
-  // notify and info are equivalent in this context.
-  post_event(MInfoRec(infoevt.from, infoevt.info));
-  return discard_event();
-}
-
 void PG::RecoveryState::GetInfo::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }

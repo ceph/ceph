@@ -1179,11 +1179,9 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::transition< GotInfo, GetLog >,
-	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::custom_reaction< MInfoRec >
+	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       boost::statechart::result react(const MNotifyRec& infoevt);
-      boost::statechart::result react(const MInfoRec& infoevt);
     };
 
     struct GetMissing;
