@@ -52,6 +52,16 @@ def mkbucket(conn, opts):
     print "done."
     return 0
 
+def rmobjects(conn, opts):
+    bucket = conn.get_bucket(opts.bucket_name)
+    print "deleting all objects from bucket '%s' ..." % opts.bucket_name
+    bucket = conn.get_bucket(opts.bucket_name)
+    for key in bucket.list():
+        print key.name
+        bucket.delete_key(key)
+    print "done."
+    return 0
+
 def rmbucket(conn, opts):
     bucket = conn.get_bucket(opts.bucket_name)
     print "deleting bucket '%s' ..." % opts.bucket_name
@@ -165,6 +175,10 @@ parser.add_option("-o", "--object-name", dest="obj_name", help="object name")
 parser.add_option("--put", dest="put_file", help="put FILE")
 parser.add_option("--get", dest="get_file", help="get to FILE")
 parser.add_option("--rm", action="store_true", dest="rm", help="remove an object")
+parser.add_option("--rmobjects", action="store_true", dest="rmobjects",
+    help="remove all objects from a bucket")
+parser.add_option("--rm_rf", action="store_true", dest="rm_rf",
+    help="remove all objects from a bucket and remove the bucket")
 parser.add_option("--head", action="store_true", dest="head",
     help="use the HEAD operation to find out about an object")
 parser.add_option("--putacl", dest="putacl_file", help="set XML acl from FILE")
@@ -202,6 +216,14 @@ elif opts.list_objects:
     sys.exit(list_objects(conn, opts))
 elif opts.mkbucket:
     sys.exit(mkbucket(conn, opts))
+elif opts.rmobjects:
+    sys.exit(rmobjects(conn, opts))
+elif opts.rm_rf:
+    ret =rmobjects(conn, opts)
+    if (ret):
+        sys.exit(ret)
+    ret = rmbucket(conn, opts)
+    sys.exit(ret)
 elif opts.rmbucket:
     sys.exit(rmbucket(conn, opts))
 elif not opts.obj_name:
