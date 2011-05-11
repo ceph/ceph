@@ -23,29 +23,13 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from optparse import OptionParser
 from sys import stderr
+import ConfigParser
 import boto
 import os
 import string
 import sys
 
-global conn
-
-def getenv(a):
-    if os.environ.has_key(a):
-        return os.environ[a]
-    else:
-        return None
-
-def strip_prefix(prefix, s):
-    if not (s[0:len(prefix)] == prefix):
-        return None
-    return s[len(prefix):]
-
-def list_all_buckets(args):
-    parser = OptionParser()
-    parser.add_option("-v", "--verbose", action="store_true",
-        dest="verbose", default=False, help="verbose output")
-    (opts, args) = parser.parse_args(args)
+def list_all_buckets(conn, opts):
     blrs = conn.get_all_buckets()
     for b in blrs:
         if (opts.verbose):
@@ -53,235 +37,189 @@ def list_all_buckets(args):
         else:
             print b
 
-def mkbucket(args):
-    if (len(args) < 1):
-        print "must give an argument to mkbucket"
-        return 255
-    bucket_name = args[0]
-    print "creating bucket '%s' ..." % bucket_name
-    bucket = conn.create_bucket(bucket_name)
+def list_objects(conn, opts):
+    if opts.list_objects == True:
+        prefix = None
+    else:
+        prefix = opts.list_objects
+    bucket = conn.get_bucket(opts.bucket_name)
+    for key in bucket.list(prefix = prefix):
+        print key.name
+
+def mkbucket(conn, opts):
+    print "creating bucket '%s' ..." % opts.bucket_name
+    bucket = conn.create_bucket(opts.bucket_name)
     print "done."
     return 0
 
-def rmbucket(args):
-    if (len(args) < 1):
-        print "must give an argument to rmbucket"
-        return 255
-    bucket = conn.get_bucket(args[0])
-    print "deleting bucket '%s' ..." % args[0]
+def rmbucket(conn, opts):
+    bucket = conn.get_bucket(opts.bucket_name)
+    print "deleting bucket '%s' ..." % opts.bucket_name
     bucket.delete()
     print "done."
     return 0
 
-def bucket_exists(args):
-    if (len(args) < 1):
-        print "must give an argument to exists"
-        return 255
-    bucket = conn.get_bucket(opts.bucket_exists)
+def bucket_exists(conn, opts):
+    bucket = conn.get_bucket(opts.bucket_name)
     if (bucket == None):
-        print "bucket '%s' does not exist"
+        print "bucket '%s' does not exist" % opts.bucket_name
         return 1
     else:
-        print "found bucket '%s'."
+        print "found bucket '%s'." % opts.bucket_name
+        if (opts.verbose):
+            print bucket.__dict__
     return 0
 
-def put_obj(bucket_name, args):
-    parser = OptionParser()
-    parser.add_option("-f", "--filename", dest="filename",
-                        help="file name (default stdin)")
-    (opts, args) = parser.parse_args(args)
-    if (len(args) < 1):
-        print "put requires an argument: the object name"
-        return 255
-    obj_name = args[0]
-    print "uploading to bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
+def put_obj(conn, opts):
+    print "uploading to bucket: '%s', object name: '%s'" % \
+        (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
     k = Key(bucket)
-    k.key = obj_name
-    if (opts.filename == None):
-        print "sorry, no support for put-from-stdin yet. use -f"
-        return 255
-    else:
-        k.set_contents_from_filename(opts.filename)
+    k.key = opts.obj_name
+    k.set_contents_from_filename(opts.put_file)
 
-def put_obj_acl(bucket_name, args):
-    parser = OptionParser()
-    parser.add_option("-f", "--filename", dest="filename",
-                        help="file name (default stdin)")
-    (opts, args) = parser.parse_args(args)
-    if (len(args) < 1):
-        print "put_acl requires an argument: the object name"
-        return 255
-    obj_name = args[0]
+def put_obj_acl(conn, opts):
     print "uploading object ACL to bucket: '%s', object name: '%s'" \
-        % (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
+        % (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
     k = Key(bucket)
-    k.key = obj_name
-    if (opts.filename == None):
-        print "sorry, no support for put-from-stdin yet. use -f"
-        return 255
-    else:
-        f = open(opts.filename, "r")
-        try:
-            xml = f.read()
-        finally:
-            f.close()
-        k.set_xml_acl(xml)
+    k.key = opts.obj_name
+    f = open(opts.putacl_file, "r")
+    try:
+        xml = f.read()
+    finally:
+        f.close()
+    k.set_xml_acl(xml)
+    return 0
 
-def get_obj(bucket_name, args):
-    parser = OptionParser()
-    parser.add_option("-f", "--filename", dest="filename",
-                        help="file name (default stdin)")
-    (opts, args) = parser.parse_args(args)
-    if (len(args) < 1):
-        print "get requires an argument: the object name"
-        return 255
-    obj_name = args[0]
-    print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
+def get_obj(conn, opts):
+    print "downloading from bucket: '%s', object name: '%s'" % \
+        (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
     k = Key(bucket)
-    k.key = obj_name
-    if (opts.filename == None):
+    k.key = opts.obj_name
+    if (opts.get_file == "-"):
         k.get_contents_to_file(sys.stdout)
     else:
-        k.get_contents_to_filename(opts.filename)
+        k.get_contents_to_filename(opts.get_file)
+    return 0
 
-def get_obj_acl(bucket_name, args):
-    parser = OptionParser()
-    parser.add_option("-f", "--filename", dest="filename",
-                        help="file name (default stdin)")
-    (opts, args) = parser.parse_args(args)
-    if (len(args) < 1):
-        print "get_acl requires an argument: the object name to get the acl for"
-        return 255
-    obj_name = args[0]
+def get_obj_acl(conn, opts):
     print "downloading object acl from bucket: '%s', object name: '%s'" % \
-        (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
+        (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
     k = Key(bucket)
-    k.key = obj_name
+    k.key = opts.obj_name
     xml = k.get_xml_acl()
-    if (opts.filename == None):
+    if (opts.getacl_file == "-"):
         print xml
     else:
-        f = open(opts.filename, "w")
+        f = open(opts.getacl_file, "w")
         try:
             f.write(xml)
         finally:
             f.close()
 
-def list_obj(bucket_name, args):
-    if (len(args) < 1):
-        prefix = None
-    else:
-        prefix = args[0]
-    bucket = conn.get_bucket(bucket_name)
-    for key in bucket.list(prefix = prefix):
-        print key.name
-
-def rm_obj(bucket_name, args):
-    if (len(args) < 1):
-        obj_name = None
-    else:
-        obj_name = args[0]
-    print "removing from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
-    bucket.delete_key(obj_name)
+def rm_obj(conn, opts):
+    print "removing from bucket: '%s', object name: '%s'" \
+        % (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
+    bucket.delete_key(opts.obj_name)
     print "done."
+    return 0
 
-def head_obj(bucket_name, args):
-    parser = OptionParser()
-    parser.add_option("-f", "--filename", dest="filename",
-                        help="file name (default stdin)")
-    (opts, args) = parser.parse_args(args)
-    if (len(args) < 1):
-        print "get requires an argument: the object name"
-        return 255
-    obj_name = args[0]
-    print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
-    bucket = conn.get_bucket(bucket_name)
-    k = bucket.get_key(k, obj_name)
+def head_obj(conn, opts):
+    print "downloading from bucket: '%s', object name: '%s'" \
+        % (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
+    k = bucket.get_key(opts.obj_name)
     print k
 
-def usage():
-    print """
-boto_tool.py
-    ./boto_tool.py -h
-    ./boto_tool.py --help
-        Show this help
-    ./boto_tool.py <host> ls
-        Lists all buckets in a host
-    ./boto_tool.py <host> <bucket> ls
-        Lists all objects in a bucket
-    ./boto_tool.py <host> <bucket> ls <prefix>
-        Lists all objects in a bucket that have a given prefix
-    ./boto_tool.py <host> mkbucket <bucket>
-        Create a new bucket
-    ./boto_tool.py <host> rmbucket <bucket>
-        Remove a bucket
-    ./boto_tool.py <host> exists <bucket>
-        Tests if a bucket exists
-    ./boto_tool.py <host> <bucket> put <object> [opts]
-        Upload an object
-        opts:
-            -f filename            file name (default stdin)
-    ./boto_tool.py <host> <bucket> get <object> [opts]
-        Gets an object
-        opts:
-            -f filename            file name (default stdout)
-    ./boto_tool.py <host> <bucket> head <object> [opts]
-        Gets the headers of an object
-"""
+########################## main ##########################
+host = None
+aws_access_key_id = None
+secret_key = None
 
-if (len(sys.argv) < 3):
-    usage()
-    sys.exit(255)
+USAGE = """
+boto_tool.py is a simple S3 client that can be used for testing.
+It uses libboto.
 
-if (sys.argv[1] == "-h") or (sys.argv[1] == "--help"):
-    usage()
-    sys.exit(0)
+ENVIRONMENT VARIABLES
+S3TEST_CONF:      if this is set, we'll get the host, access key, and secret
+key from this file.
+AKEY              AWS access key
+SKEY              AWS secret access key"""
 
-host = sys.argv[1]
+parser = OptionParser(USAGE)
+parser.add_option("-b", "--bucket-name",
+    dest="bucket_name", help="specify bucket name")
+parser.add_option("-l", "--list-objects", action="store_true", \
+    dest="list_objects", help="list all objects")
+parser.add_option("-L", "--list-objects-with-prefix",
+    dest="list_objects", help="list all objects with the given prefix")
+parser.add_option("--mkbucket", action="store_true",
+    dest="mkbucket", help="create a bucket")
+parser.add_option("--rmbucket", action="store_true",
+    dest="rmbucket", help="remove a bucket")
+parser.add_option("-o", "--object-name", dest="obj_name", help="object name")
+parser.add_option("--put", dest="put_file", help="put FILE")
+parser.add_option("--get", dest="get_file", help="get to FILE")
+parser.add_option("--rm", action="store_true", dest="rm", help="remove an object")
+parser.add_option("--head", action="store_true", dest="head",
+    help="use the HEAD operation to find out about an object")
+parser.add_option("--putacl", dest="putacl_file", help="set XML acl from FILE")
+parser.add_option("--getacl", dest="getacl_file", help="dump XML acl into FILE")
+parser.add_option("-v", "--verbose", action="store_true", dest="verbose",
+    help="be verbose")
+(opts, args) = parser.parse_args()
+
+if os.environ.has_key("S3TEST_CONF"):
+    # use S3TEST_CONF
+    path = os.environ["S3TEST_CONF"]
+    cfg = ConfigParser.RawConfigParser()
+    with file(path) as f:
+        cfg.readfp(f)
+        host = cfg.get("DEFAULT", "host")
+        aws_access_key_id = cfg.get("s3 main", "access_key")
+        secret_key = cfg.get("s3 main", "secret_key")
+elif len(args) < 1:
+    print >>stderr, "boto_tool: You must specify an action. Try --help."
+    sys.exit(1)
+else:
+    # use environment variables and command line
+    host = args[0]
+    aws_access_key_id=os.environ["AKEY"]
+    aws_secret_access_key=os.environ["SKEY"]
 
 conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
                 host = host,
-                aws_access_key_id=getenv("AKEY"),
-                aws_secret_access_key=getenv("SKEY"))
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=secret_key)
 
-if (sys.argv[2] == "ls"):
-    sys.exit(list_all_buckets(sys.argv[3:]))
-elif (sys.argv[2] == "mkbucket"):
-    sys.exit(mkbucket(sys.argv[3:]))
-elif (sys.argv[2] == "rmbucket"):
-    sys.exit(rmbucket(sys.argv[3:]))
-elif (sys.argv[2] == "exists"):
-    sys.exit(bucket_exists(sys.argv[3:]))
+if not opts.bucket_name:
+    sys.exit(list_all_buckets(conn, opts))
+elif opts.list_objects:
+    sys.exit(list_objects(conn, opts))
+elif opts.mkbucket:
+    sys.exit(mkbucket(conn, opts))
+elif opts.rmbucket:
+    sys.exit(rmbucket(conn, opts))
+elif not opts.obj_name:
+    sys.exit(bucket_exists(conn, opts))
+elif opts.put_file:
+    sys.exit(put_obj(conn, opts))
+elif opts.get_file:
+    sys.exit(get_obj(conn, opts))
+elif opts.rm:
+    sys.exit(rm_obj(conn, opts))
+elif opts.head:
+    sys.exit(head_obj(conn, opts))
+elif opts.putacl_file:
+    sys.exit(put_obj_acl(conn, opts))
+elif opts.getacl_file:
+    sys.exit(get_obj_acl(conn, opts))
+elif opts.head:
+    sys.exit(head_obj(conn, opts))
 else:
-    # bucket operations
-    wb = strip_prefix("bucket:", sys.argv[2])
-    if (wb):
-        bucket_name = wb
-    else:
-        bucket_name = sys.argv[2]
-    if (len(sys.argv) < 4):
-        print "too few arguments. -h for help."
-        sys.exit(255)
-    if (sys.argv[3] == "put"):
-        sys.exit(put_obj(bucket_name, sys.argv[4:]))
-    if (sys.argv[3] == "putacl"):
-        sys.exit(put_obj_acl(bucket_name, sys.argv[4:]))
-    elif (sys.argv[3] == "get"):
-        sys.exit(get_obj(bucket_name, sys.argv[4:]))
-    elif (sys.argv[3] == "getacl"):
-        sys.exit(get_obj_acl(bucket_name, sys.argv[4:]))
-    elif (sys.argv[3] == "ls"):
-        sys.exit(list_obj(bucket_name, sys.argv[4:]))
-    elif (sys.argv[3] == "rm"):
-        sys.exit(rm_obj(bucket_name, sys.argv[4:]))
-    elif (sys.argv[3] == "head"):
-        sys.exit(head_obj(bucket_name, sys.argv[4:]))
-    else:
-        print "unknown operation on bucket"
-        sys.exit(255)
-
+    print "unknown arguments. Try --help"
+    sys.exit(255)
