@@ -1554,6 +1554,14 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       out << ".";
       op.data.write(op.op.cls.class_len, op.op.cls.method_len, out);
     }
+  } else if (ceph_osd_op_type_pg(op.op.op)) {
+    switch (op.op.op) {
+    case CEPH_OSD_OP_PGLS:
+    case CEPH_OSD_OP_PGLS_FILTER:
+      out << " cookie " << op.op.pgls.cookie;
+      out << " start_epoch " << op.op.pgls.start_epoch;
+      break;
+    }
   }
   return out;
 }

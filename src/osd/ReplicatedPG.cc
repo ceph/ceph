@@ -263,6 +263,15 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(uint64_t)(p->op.pgls.cookie);
 
+	// reset cookie?
+	if (p->op.pgls.start_epoch &&
+	    p->op.pgls.start_epoch < info.history.same_primary_since) {
+	  dout(10) << " pgls sequence started epoch " << p->op.pgls.start_epoch
+		   << " < same_primary_since " << info.history.same_primary_since
+		   << ", resetting cookie" << dendl;
+	  response.handle = 0;
+	}
+
 	uint64_t high_bit = 1ull << 63;
 	if ((response.handle & high_bit) == 0) {
 	  // it's an offset into the missing set
