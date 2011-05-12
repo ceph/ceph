@@ -257,7 +257,9 @@ int RGWCopyObj_REST::get_params()
 
 int RGWPutACLs_REST::get_params()
 {
-  size_t cl = atoll(s->length);
+  size_t cl = 0;
+  if (s->length)
+    cl = atoll(s->length);
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
