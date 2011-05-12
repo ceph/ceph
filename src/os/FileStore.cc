@@ -3696,7 +3696,8 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   }
 
   if (handle && *handle) {
-    seekdir(dir, *(off_t *)handle);
+    dout(10) << "collection_list_partial seeking to " << *handle << dendl;
+    seekdir(dir, *handle);
     *handle = 0;
   }
 
@@ -3733,8 +3734,10 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
     }
   }
 
-  if (handle && !end)
+  if (handle && !end) {
     *handle = (collection_list_handle_t)telldir(dir);
+    dout(10) << "collection_list_partial finished at " << *handle << dendl;
+  }
 
   ::closedir(dir);
 

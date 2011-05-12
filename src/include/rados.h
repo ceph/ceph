@@ -379,6 +379,7 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) cls;
 		struct {
 			__le64 cookie, count;
+			__le32 start_epoch; /* for the pgls sequence */
 		} __attribute__ ((packed)) pgls;
 	        struct {
 		        __le64 snapid;

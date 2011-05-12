@@ -1535,7 +1535,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     while (log.complete_to->version <= info.last_complete)
       log.complete_to++;
     assert(log.complete_to != log.log.end());
-    log.last_requested = eversion_t();
+    log.last_requested = 0;
     dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
@@ -2805,7 +2805,7 @@ void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer
     missing.add(soid, oi.version, eversion_t());
     missing_loc[soid].insert(ok_peer);
 
-    log.last_requested = eversion_t();
+    log.last_requested = 0;
   }
   osd->queue_for_recovery(this);
 }
@@ -3623,18 +3623,18 @@ void PG::Missing::add_next_event(Log::Entry& e)
       // new object.
       //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
       if (missing.count(e.soid))  // already missing divergent item
-	rmissing.erase(missing[e.soid].need);
+	rmissing.erase(missing[e.soid].need.version);
       missing[e.soid] = item(e.version, eversion_t());  // .have = nil
     } else if (missing.count(e.soid)) {
       // already missing (prior).
       //assert(missing[e.soid].need == e.prior_version);
-      rmissing.erase(missing[e.soid].need);
+      rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;  // leave .have unchanged.
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
     }
-    rmissing[e.version] = e.soid;
+    rmissing[e.version.version] = e.soid;
   } else
     rm(e.soid, e.version);
 }
@@ -3646,12 +3646,12 @@ void PG::Missing::add_event(Log::Entry& e)
       if (missing[e.soid].need >= e.version)
 	return;   // already missing same or newer.
       // missing older, revise need
-      rmissing.erase(missing[e.soid].need);
+      rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;
     } else
       // not missing => have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
-    rmissing[e.version] = e.soid;
+    rmissing[e.version.version] = e.soid;
   } else
     rm(e.soid, e.version);
 }
@@ -3659,24 +3659,24 @@ void PG::Missing::add_event(Log::Entry& e)
 void PG::Missing::revise_need(sobject_t oid, eversion_t need)
 {
   if (missing.count(oid)) {
-    rmissing.erase(missing[oid].need);
+    rmissing.erase(missing[oid].need.version);
     missing[oid].need = need;            // no not adjust .have
   } else {
     missing[oid] = item(need, eversion_t());
   }
-  rmissing[need] = oid;
+  rmissing[need.version] = oid;
 }
 
 void PG::Missing::add(const sobject_t& oid, eversion_t need, eversion_t have)
 {
   missing[oid] = item(need, have);
-  rmissing[need] = oid;
+  rmissing[need.version] = oid;
 }
 
 void PG::Missing::rm(const sobject_t& oid, eversion_t v)
 {
   if (missing.count(oid) && missing[oid].need <= v) {
-    rmissing.erase(missing[oid].need);
+    rmissing.erase(missing[oid].need.version);
     missing.erase(oid);
   }
 }
@@ -3685,13 +3685,13 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
 {
   assert(missing.count(oid));
   assert(missing[oid].need <= v);
-  rmissing.erase(missing[oid].need);
+  rmissing.erase(missing[oid].need.version);
   missing.erase(oid);
 }
 
 void PG::Missing::got(const std::map<sobject_t, Missing::item>::iterator &m)
 {
-  rmissing.erase(m->second.need);
+  rmissing.erase(m->second.need.version);
   missing.erase(m);
 }
 

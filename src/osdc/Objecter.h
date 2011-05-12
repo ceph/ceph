@@ -95,19 +95,21 @@ struct ObjectOperation {
     ops[s].op.watch.flag = flag;
     ops[s].data.append(inbl);
   }
-  void add_pgls(int op, uint64_t count, uint64_t cookie) {
+  void add_pgls(int op, uint64_t count, uint64_t cookie, epoch_t start_epoch) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
     ops[s].op.pgls.cookie = cookie;
+    ops[s].op.pgls.start_epoch = start_epoch;
   }
-  void add_pgls_filter(int op, uint64_t count, bufferlist& filter, uint64_t cookie) {
+  void add_pgls_filter(int op, uint64_t count, bufferlist& filter, uint64_t cookie, epoch_t start_epoch) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
     ops[s].op.pgls.cookie = cookie;
+    ops[s].op.pgls.start_epoch = start_epoch;
     string cname = "pg";
     string mname = "filter";
     ::encode(cname, ops[s].data);
@@ -118,11 +120,11 @@ struct ObjectOperation {
   // ------
 
   // pg
-  void pg_ls(uint64_t count, bufferlist& filter, uint64_t cookie) {
+  void pg_ls(uint64_t count, bufferlist& filter, uint64_t cookie, epoch_t start_epoch) {
     if (filter.length() == 0)
-      add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
+      add_pgls(CEPH_OSD_OP_PGLS, count, cookie, start_epoch);
     else
-      add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie);
+      add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie, start_epoch);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
@@ -310,6 +312,7 @@ public:
     bool paused;
 
     eversion_t *objver;
+    epoch_t *reply_epoch;
 
     utime_t stamp;
 
@@ -320,7 +323,7 @@ public:
       used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
-      paused(false), objver(ov) {
+      paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
     }
   };
@@ -369,6 +372,7 @@ public:
   struct ListContext {
     int current_pg;
     uint64_t cookie;
+    epoch_t current_pg_epoch;
     int starting_pg_num;
     bool at_end;
 
@@ -381,7 +385,7 @@ public:
 
     bufferlist extra_info;
 
-    ListContext() : current_pg(0), cookie(0), starting_pg_num(0),
+    ListContext() : current_pg(0), cookie(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),
 		    pool_snap_seq(0), max_entries(0) {}
   };
@@ -391,11 +395,12 @@ public:
     Context *final_finish;
     bufferlist *bl;
     Objecter *objecter;
+    epoch_t epoch;
     C_List(ListContext *lc, Context * finish, bufferlist *b, Objecter *ob) :
-      list_context(lc), final_finish(finish), bl(b), objecter(ob) {}
+      list_context(lc), final_finish(finish), bl(b), objecter(ob), epoch(0) {}
     void finish(int r) {
       if (r >= 0) {
-        objecter->_list_reply(list_context, bl, final_finish);
+        objecter->_list_reply(list_context, bl, final_finish, epoch);
       } else {
         final_finish->finish(r);
         delete final_finish;
@@ -529,7 +534,8 @@ public:
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
   
-  void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
+  void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish,
+		   epoch_t reply_epoch);
 
   void resend_mon_ops();
 

@@ -257,14 +257,49 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         dout(10) << " pgls pg=" << op->get_pg() << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
-        dout(10) << " pgls pg=" << op->get_pg() << dendl;
+        dout(10) << " pgls pg=" << op->get_pg() << " count " << p->op.pgls.count << dendl;
 	// read into a buffer
+        vector<sobject_t> sentries;
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(uint64_t)(p->op.pgls.cookie);
-        vector<sobject_t> sentries;
-	result = osd->store->collection_list_partial(coll, snapid,
-						     sentries, p->op.pgls.count,
-	                                             &response.handle);
+
+	// reset cookie?
+	if (p->op.pgls.start_epoch &&
+	    p->op.pgls.start_epoch < info.history.same_primary_since) {
+	  dout(10) << " pgls sequence started epoch " << p->op.pgls.start_epoch
+		   << " < same_primary_since " << info.history.same_primary_since
+		   << ", resetting cookie" << dendl;
+	  response.handle = 0;
+	}
+
+	uint64_t high_bit = 1ull << 63;
+	if ((response.handle & high_bit) == 0) {
+	  // it's an offset into the missing set
+	  version_t v = response.handle;
+	  dout(10) << " handle low/missing " << v << dendl;
+	  map<version_t, sobject_t>::iterator mp = missing.rmissing.lower_bound(v);
+	  result = 0;
+	  while (sentries.size() < p->op.pgls.count) {
+	    if (mp == missing.rmissing.end()) {
+	      dout(10) << " handle finished low/missing, moving to high/ondisk" << dendl;
+	      response.handle = high_bit;
+	      break;
+	    }
+	    sentries.push_back(mp->second);
+	    response.handle = mp->first + 1;
+	  }
+	}
+	if (sentries.size() < p->op.pgls.count &&
+	    (response.handle & high_bit)) {
+	  // it's a readdir cookie
+	  response.handle &= high_bit - 1ull;
+	  dout(10) << " handle high/missing " << response.handle << dendl;
+	  result = osd->store->collection_list_partial(coll, snapid,
+						       sentries, p->op.pgls.count - sentries.size(),
+						       &response.handle);
+	  response.handle |= high_bit;
+	}
+
 	if (result == 0) {
           vector<sobject_t>::iterator iter;
           for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
@@ -4224,7 +4259,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
       pulling.erase(*i);
       finish_recovery_op(*i);
     }
-    log.last_requested = eversion_t();
+    log.last_requested = 0;
     pull_from_peer.erase(j++);
   }
 }
@@ -4292,10 +4327,10 @@ int ReplicatedPG::recover_primary(int max)
   int started = 0;
   int skipped = 0;
 
-  map<eversion_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
+  map<version_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
   while (p != missing.rmissing.end()) {
     sobject_t soid;
-    eversion_t v = p->first;
+    version_t v = p->first;
 
     if (log.objects.count(p->second)) {
       latest = log.objects[p->second];
@@ -4449,15 +4484,16 @@ int ReplicatedPG::recover_replicas(int max)
 
     // oldest first!
     const Missing &m(pm->second);
-    for (map<eversion_t, sobject_t>::const_iterator p = m.rmissing.begin();
+    for (map<version_t, sobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
       const sobject_t soid(p->second);
-      eversion_t v = p->first;
+
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
 	continue;
       }
+
       if (missing.is_missing(soid)) {
 	if (missing_loc.find(soid) == missing_loc.end())
 	  dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
@@ -4467,7 +4503,8 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      started += recover_object_replicas(soid, v);
+      map<sobject_t,Missing::item>::const_iterator p = m.missing.find(soid);
+      started += recover_object_replicas(soid, p->second.need);
     }
   }
 
