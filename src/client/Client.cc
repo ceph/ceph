@@ -2941,6 +2941,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     if ((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
       _flush(in);
     else {
+      cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check_caps(in, true);
     }
 
