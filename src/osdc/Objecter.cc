@@ -751,6 +751,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (op->objver)
     *op->objver = m->get_version();
+  if (op->reply_epoch)
+    *op->reply_epoch = m->get_map_epoch();
 
   // got data?
   if (op->outbl) {
@@ -833,6 +835,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     dout(10) << "The placement groups have changed, restarting with " << pg_num << dendl;
     list_context->current_pg = 0;
     list_context->cookie = 0;
+    list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
   if (list_context->current_pg == pg_num){ //this context got all the way through
@@ -842,7 +845,8 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   }
 
   ObjectOperation op;
-  op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie);
+  op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie,
+	   list_context->current_pg_epoch);
 
   bufferlist *bl = new bufferlist();
   C_List *onack = new C_List(list_context, onfinish, bl, this);
@@ -855,13 +859,14 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   o->priority = op.priority;
   o->snapid = list_context->pool_snap_seq;
   o->outbl = bl;
+  o->reply_epoch = &onack->epoch;
 
   o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
 
   op_submit(o);
 }
 
-void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish)
+void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish, epoch_t reply_epoch)
 {
   dout(10) << "_list_reply" << dendl;
 
@@ -873,6 +878,11 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
     ::decode(extra_info, iter);
   }
   list_context->cookie = (uint64_t)response.handle;
+  if (!list_context->current_pg_epoch) {
+    // first pgls result, set epoch marker
+    dout(20) << "first pgls piece, reply_epoch is " << reply_epoch << dendl;
+    list_context->current_pg_epoch = reply_epoch;
+  }
 
   int response_size = response.entries.size();
   dout(20) << "response.entries.size " << response_size
@@ -890,17 +900,19 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
       return;
     }
   }
-  //if we make this this far, there are no objects left in the current pg, but we want more!
+
+  // if we make this this far, there are no objects left in the current pg, but we want more!
   ++list_context->current_pg;
+  list_context->current_pg_epoch = 0;
   dout(20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
-  if(list_context->current_pg < list_context->starting_pg_num){ //we have more pgs to go through
+  if (list_context->current_pg < list_context->starting_pg_num){ // we have more pgs to go through
     list_context->cookie = 0;
     delete bl;
     list_objects(list_context, final_finish);
     return;
   }
   
-  //if we make it this far, there are no more pgs
+  // if we make it this far, there are no more pgs
   dout(20) << "out of pgs, returning to" << final_finish << dendl;
   list_context->at_end = true;
   delete bl;
