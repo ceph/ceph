@@ -3267,6 +3267,11 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     goto done;
   }
 
+  if (dname == ".") {
+    *target = dir;
+    goto done;
+  }
+
   if (dname.length() > NAME_MAX) {
     r = -ENAMETOOLONG;
     goto done;
