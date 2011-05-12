@@ -174,6 +174,23 @@ int main(int argc, const char **argv)
   if (strncmp((char *) aybabtu, aybabtu_reference,7)) {
     cerr << "ceph_getxattr error: no match (" << aybabtu << ") should be (" << aybabtu_reference << cpp_strerror(ret) << std::endl;
   }
+  cout << "Attempting lstat on '/.'" << std::endl;
+  ret = ceph_lstat(cmount, "/.", &stbuf);
+  if (ret) {
+    cerr << "ceph_lstat error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_lstat: success" << std::endl;
+  }
+  cout << "Attempting lstat on '.'" << std::endl;
+  ret = ceph_lstat(cmount, ".", &stbuf);
+  if (ret) {
+    cerr << "ceph_lstat error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_lstat: success" << std::endl;
+  }
+
 
   ceph_shutdown(cmount);
 
