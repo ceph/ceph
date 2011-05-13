@@ -1908,6 +1908,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   if (cap == in->auth_cap) {
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
+    dout(15) << "auth cap, setting max_size = " << in->requested_max_size << dendl;
   }
   messenger->send_message(m, mdsmap->get_inst(mds));
 }
@@ -2918,7 +2919,8 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 
   // max_size
   bool kick_writers = false;
-  if (m->get_max_size() != in->max_size) {
+  if (cap == in->auth_cap &&
+      m->get_max_size() != in->max_size) {
     dout(10) << "max_size " << in->max_size << " -> " << m->get_max_size() << dendl;
     in->max_size = m->get_max_size();
     if (in->max_size > in->wanted_max_size) {

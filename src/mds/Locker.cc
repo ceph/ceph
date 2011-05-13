@@ -2357,7 +2357,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   uint64_t new_max = old_max;
   
   if (in->is_file()) {
+    dout(20) << "inode is file" << dendl;
     if (cap && ((cap->issued() | cap->wanted()) & CEPH_CAP_ANY_FILE_WR)) {
+      dout(20) << "client has write caps; m->get_max_size="
+               << m->get_max_size() << "; old_max=" << old_max << dendl;
       if (m->get_max_size() > new_max) {
 	dout(10) << "client requests file_max " << m->get_max_size()
 		 << " > max " << old_max << dendl;
