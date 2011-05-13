@@ -4077,7 +4077,7 @@ PG::RecoveryState::Active::react(const MLogRec& logevt) {
            << " log for unfound items" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   bool got_missing = pg->search_for_missing(logevt.msg->info,
-                                            &pg->missing, logevt.from);
+                                            &logevt.msg->missing, logevt.from);
   if (got_missing)
     pg->osd->queue_for_recovery(pg);
   return discard_event();
@@ -4506,7 +4506,7 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
            << " log for unfound items" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   bool got_missing = pg->search_for_missing(logevt.msg->info,
-                                            &pg->missing, logevt.from);
+                                            &logevt.msg->missing, logevt.from);
 
   // hmm.. should we?
   (void)got_missing;
