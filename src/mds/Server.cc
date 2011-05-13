@@ -5559,6 +5559,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // journal it?
   if (srcdn->is_auth() ||
+      srci->is_auth() ||
       (destdnl->get_inode() && destdnl->get_inode()->is_auth())) {
     // journal.
     mdr->ls = mdlog->get_current_segment();
