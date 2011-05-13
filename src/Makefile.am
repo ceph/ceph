@@ -743,10 +743,12 @@ libclient_a_SOURCES = \
 dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
 
-python_PYTHON = pybind/rados.py
+python_PYTHON = pybind/rados.py \
+		pybind/rgw.py
 
 if WITH_DEBUG
-dist_bin_SCRIPTS += test/ceph-pybind-test.py
+dist_bin_SCRIPTS += test/ceph-pybind-test.py \
+		    test/ceph-pybind-rgw-test.py
 endif
 
 # headers... and everything else we want to include in a 'make dist' 

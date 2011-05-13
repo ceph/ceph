@@ -16,10 +16,13 @@
 #include "include/rados/librgw.h"
 #include "rgw/rgw_acl.h"
 #include "rgw_acl.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <sstream>
 #include <string.h>
+
+#define RGW_LOG(x) pdout(x, g_conf.rgw_log)
 
 int librgw_acl_bin2xml(const char *bin, int bin_len, char **xml)
 {
@@ -43,7 +46,12 @@ int librgw_acl_bin2xml(const char *bin, int bin_len, char **xml)
       return -ENOBUFS;
     return 0;
   }
+  catch (const std::exception &e) {
+    RGW_LOG(-1) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
+    return -2000;
+  }
   catch (...) {
+    RGW_LOG(-1) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
     return -2000;
   }
 }
@@ -83,12 +91,16 @@ int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
     *bin_len = bin_len_;
     return 0;
   }
-  catch (...) {
-    if (!bin_)
-      free(bin_);
-    bin_ = NULL;
-    return -2000;
+  catch (const std::exception &e) {
+    RGW_LOG(-1) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
   }
+  catch (...) {
+    RGW_LOG(-1) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
+  }
+  if (!bin_)
+    free(bin_);
+  bin_ = NULL;
+  return -2000;
 }
 
 void librgw_free_bin(char *bin)
