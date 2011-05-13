@@ -10,7 +10,7 @@
     buckets list               list buckets
     bucket unlink              unlink bucket from specified user
     policy                     read bucket/object policy
-    log show                   dump a log from specific bucket, date
+    log show                   dump a log from specific object or (bucket + date)
   options:
      --uid=<id>                user id
      --access-key=<id>         S3 access key
