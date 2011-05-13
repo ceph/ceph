@@ -17,6 +17,7 @@
 #include <stdlib.h>
 
 #include <errno.h>
+#include <dirent.h>
 #include <iostream>
 #include <fcntl.h>
 #include <sys/xattr.h>
@@ -190,8 +191,41 @@ int main(int argc, const char **argv)
   } else {
     cout << "ceph_lstat: success" << std::endl;
   }
+  cout << "Attempting readdir_r" << std::endl;
+  ret = ceph_mkdir(cmount, "readdir_r_test",  0777);
+  if (ret) {
+    cerr << "ceph_mkdir error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_mkdir: success" << std::endl;
+  }
+  struct ceph_dir_result *readdir_r_test_dir;
+  ret = ceph_opendir(cmount, "readdir_r_test", &readdir_r_test_dir);
+  if (ret != 0) {
+    cerr << "ceph_opendir error: unexpected result from trying to open readdir_r_test: "
+	 << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_opendir: success" << std::endl;
+  }
+  ret = ceph_open(cmount, "readdir_r_test/opened_file", O_CREAT, 0666);
+  if (ret < 0) {
+    cerr << "ceph_open O_CREAT error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_open: success" << std::endl;
+  }
 
-
+  struct dirent * result;
+  result = (struct dirent *) malloc(sizeof(struct dirent));
+  ret = ceph_readdir_r(cmount, readdir_r_test_dir, result);
+  if (ret != 0) {
+    cerr << "ceph_readdir_r: fail, returned: " << ret << std::endl;
+  } else {
+    cerr << "ceph_readdir_r: success: " << *result->d_name << std::endl;
+    return 1;
+  }
+  
   ceph_shutdown(cmount);
 
   return 0;
