@@ -248,14 +248,13 @@ librados_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 # librgw
 if WITH_RADOSGW
 librgw_SOURCES = \
-	$(my_radosgw_src) \
-	rgw/librgw.cc
+	$(my_libradosgw_src) \
 	${libcommon_a_SOURCES}
 librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
-librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^librgw_.*' \
+librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	 -lexpat -lpthread -lm -lcurl
 lib_LTLIBRARIES += librgw.la
 
@@ -305,10 +304,13 @@ testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 
 if WITH_RADOSGW
+my_libradosgw_src = \
+	rgw/librgw.cc \
+	rgw/rgw_acl.cc
+
 my_radosgw_src = \
 	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
-	rgw/rgw_acl.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_access.cc \
 	rgw/rgw_op.cc \
