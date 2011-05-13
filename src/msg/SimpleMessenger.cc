@@ -1741,6 +1741,14 @@ void SimpleMessenger::Pipe::writer()
       continue;
     }
     
+    if (close_on_empty) {
+      // this is slightly hacky
+      dout(10) << "writer queue empty, closing" << dendl;
+      policy.lossy = true;
+      fault();
+      continue;
+    }
+
     // wait
     dout(20) << "writer sleeping" << dendl;
     cond.Wait(pipe_lock);
@@ -2678,6 +2686,44 @@ void SimpleMessenger::mark_down(Connection *con)
     p->put();
   } else {
     dout(1) << "mark_down " << con << " -- pipe dne" << dendl;
+  }
+  lock.Unlock();
+}
+
+void SimpleMessenger::mark_down_on_empty(Connection *con)
+{
+  lock.Lock();
+  Pipe *p = (Pipe *)con->get_pipe();
+  if (p) {
+    p->pipe_lock.Lock();
+    p->unregister_pipe();
+    if (p->out_q.empty()) {
+      dout(1) << "mark_down_on_empty " << con << " -- " << p << " closing (queue is empty)" << dendl;
+      p->stop();
+    } else {
+      dout(1) << "mark_down_on_empty " << con << " -- " << p << " marking (queue is not empty)" << dendl;
+      p->close_on_empty = true;
+    }
+    p->pipe_lock.Unlock();
+    p->put();
+  } else {
+    dout(1) << "mark_down_on_empty " << con << " -- pipe dne" << dendl;
+  }
+  lock.Unlock();
+}
+
+void SimpleMessenger::mark_disposable(Connection *con)
+{
+  lock.Lock();
+  Pipe *p = (Pipe *)con->get_pipe();
+  if (p) {
+    dout(1) << "mark_disposable " << con << " -- " << p << dendl;
+    p->pipe_lock.Lock();
+    p->policy.lossy = true;
+    p->pipe_lock.Unlock();
+    p->put();
+  } else {
+    dout(1) << "mark_disposable " << con << " -- pipe dne" << dendl;
   }
   lock.Unlock();
 }
