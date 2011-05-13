@@ -4325,8 +4325,10 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
     return -1;
 
   *c->de = *de;
-  *c->st = *st;
-  *c->stmask = stmask;
+  if (c->st)
+    *c->st = *st;
+  if (c->stmask)
+    *c->stmask = stmask;
   c->full = true;
   return 0;  
 }
