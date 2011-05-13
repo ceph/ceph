@@ -20,24 +20,19 @@ using namespace std;
 #define RGW_PERM_WRITE_ACP       0x08
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL 
+#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
 
 class XMLObj;
 
 class XMLObjIter {
-  map<string, XMLObj *>::iterator cur;
-  map<string, XMLObj *>::iterator end;
+  typedef map<string, XMLObj *>::iterator map_iter_t;
+  map_iter_t cur;
+  map_iter_t end;
 public:
-  XMLObjIter() {}
-  void set(map<string, XMLObj *>::iterator& _cur, map<string, XMLObj *>::iterator& _end) { cur = _cur; end = _end; }
-  XMLObj *get_next() { 
-    XMLObj *obj = NULL;
-    if (cur != end) {
-      obj = cur->second;
-      ++cur;
-    }
-    return obj;
-  };
+  XMLObjIter();
+  ~XMLObjIter();
+  void set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end);
+  XMLObj *get_next();
 };
 
 /**
@@ -56,49 +51,16 @@ protected:
   multimap<string, XMLObj *> children;
   map<string, string> attr_map;
 public:
-  virtual ~XMLObj() { }
-  bool xml_start(XMLObj *parent, const char *el, const char **attr) {
-    this->parent = parent;
-    type = el;
-    for (int i = 0; attr[i]; i += 2) {
-      attr_map[attr[i]] = string(attr[i + 1]);
-    }
-    return true;
-  }
-  virtual bool xml_end(const char *el) { return true; }
-  virtual void xml_handle_data(const char *s, int len) { data = string(s, len); }
-  string& get_data() { return data; }
-  XMLObj *get_parent() { return parent; }
-  void add_child(string el, XMLObj *obj) {
-    children.insert(pair<string, XMLObj *>(el, obj));
-  }
-
-  bool get_attr(string name, string& attr) {
-    map<string, string>::iterator iter = attr_map.find(name);
-    if (iter == attr_map.end())
-      return false;
-    attr = iter->second;
-    return true;
-  }
-
-  XMLObjIter find(string name) {
-    XMLObjIter iter;
-    map<string, XMLObj *>::iterator first;
-    map<string, XMLObj *>::iterator last;
-    first = children.find(name);
-    last = children.upper_bound(name);
-    iter.set(first, last);
-    return iter;
-  }
-
-  XMLObj *find_first(string name) {
-    XMLObjIter iter;
-    map<string, XMLObj *>::iterator first;
-    first = children.find(name);
-    if (first != children.end())
-      return first->second;
-    return NULL;
-  }
+  virtual ~XMLObj();
+  bool xml_start(XMLObj *parent, const char *el, const char **attr);
+  virtual bool xml_end(const char *el);
+  virtual void xml_handle_data(const char *s, int len);
+  string& get_data();
+  XMLObj *get_parent();
+  void add_child(string el, XMLObj *obj);
+  bool get_attr(string name, string& attr);
+  XMLObjIter find(string name);
+  XMLObj *find_first(string name);
 
   friend ostream& operator<<(ostream& out, XMLObj& obj);
 };
@@ -107,11 +69,11 @@ class ACLPermission : public XMLObj
 {
   int flags;
 public:
-  ACLPermission() : flags(0) {}
-  ~ACLPermission() {}
+  ACLPermission();
+  ~ACLPermission();
   bool xml_end(const char *el);
-  int get_permissions() { return flags; }
-  void set_permissions(int perm) { flags = perm; }
+  int get_permissions();
+  void set_permissions(int perm);
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -123,20 +85,7 @@ public:
     ::decode(struct_v, bl);
     ::decode(flags, bl);
   }
-  void to_xml(ostream& out) {
-    if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
-     out << "<Permission>FULL_CONTROL</Permission>";
-    } else {
-      if (flags & RGW_PERM_READ)
-        out << "<Permission>READ</Permission>";
-      if (flags & RGW_PERM_WRITE)
-        out << "<Permission>WRITE</Permission>";
-      if (flags & RGW_PERM_READ_ACP)
-        out << "<Permission>READ_ACP</Permission>";
-      if (flags & RGW_PERM_WRITE_ACP)
-        out << "<Permission>WRITE_ACP</Permission>";
-    }
-  }
+  void to_xml(ostream& out);
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
@@ -150,37 +99,12 @@ class ACLGranteeType
 {
   __u32 type;
 public:
-  ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
-  const char *to_string() {
-    switch (type) {
-    case ACL_TYPE_CANON_USER:
-      return "CanonicalUser";
-    case ACL_TYPE_EMAIL_USER:
-      return "AmazonCustomerByEmail";
-    case ACL_TYPE_GROUP:
-      return "Group";
-     default:
-      return "unknown";
-    }
-  }
-  ACLGranteeTypeEnum get_type() { return (ACLGranteeTypeEnum)type; };
-  void set(ACLGranteeTypeEnum t) { type = t; }
-
-  void set(const char *s) {
-    if (!s) {
-      type = ACL_TYPE_UNKNOWN;
-      return;
-    }
-    if (strcmp(s, "CanonicalUser") == 0)
-      type = ACL_TYPE_CANON_USER;
-    else if (strcmp(s, "AmazonCustomerByEmail") == 0)
-      type = ACL_TYPE_EMAIL_USER;
-    else if (strcmp(s, "Group") == 0)
-      type = ACL_TYPE_GROUP;
-    else
-      type = ACL_TYPE_UNKNOWN;
-  }
-
+  ACLGranteeType();
+  ~ACLGranteeType();
+  const char *to_string();
+  ACLGranteeTypeEnum get_type();
+  void set(ACLGranteeTypeEnum t);
+  void set(const char *s);
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -198,27 +122,27 @@ class ACLGrantee : public XMLObj
 {
   string type;
 public:
-  ACLGrantee() {} 
-  ~ACLGrantee() {}
+  ACLGrantee();
+  ~ACLGrantee();
 
   bool xml_start(const char *el, const char **attr);
 
-  string& get_type() { return type; }
+  string& get_type();
 };
 
 
 class ACLGrant : public XMLObj
 {
   ACLGranteeType type;
-  
+
   string id;
   string uri;
   string email;
   ACLPermission permission;
   string name;
 public:
-  ACLGrant() {}
-  ~ACLGrant() {}
+  ACLGrant();
+  ~ACLGrant();
 
   bool xml_end(const char *el);
 
@@ -301,8 +225,8 @@ class RGWAccessControlList : public XMLObj
 
   void init_user_map();
 public:
-  RGWAccessControlList() : user_map_initialized(false) {}
-  ~RGWAccessControlList() {}
+  RGWAccessControlList();
+  ~RGWAccessControlList();
 
   bool xml_end(const char *el);
   int get_perm(string& id, int perm_mask);
@@ -348,8 +272,8 @@ class ACLOwner : public XMLObj
   string id;
   string display_name;
 public:
-  ACLOwner() {}
-  ~ACLOwner() {}
+  ACLOwner();
+  ~ACLOwner();
 
   bool xml_end(const char *el);
   void encode(bufferlist& bl) const {
@@ -386,8 +310,8 @@ class RGWAccessControlPolicy : public XMLObj
   ACLOwner owner;
 
 public:
-  RGWAccessControlPolicy() {}
-  ~RGWAccessControlPolicy() {}
+  RGWAccessControlPolicy();
+  ~RGWAccessControlPolicy();
 
   bool xml_end(const char *el);
 
@@ -447,15 +371,8 @@ class RGWXMLParser : public XMLObj
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
 public:
-  RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true) {}
-  ~RGWXMLParser() {
-    free(buf);
-    vector<XMLObj *>::iterator iter;
-    for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      XMLObj *obj = *iter;
-      delete obj;
-    }
-  }
+  RGWXMLParser();
+  ~RGWXMLParser();
   bool init();
   bool xml_start(const char *el, const char **attr);
   bool xml_end(const char *el);

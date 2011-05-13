@@ -12,14 +12,160 @@ using namespace std;
 
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
-                                  
+
+XMLObjIter::
+XMLObjIter()
+{
+}
+
+XMLObjIter::
+~XMLObjIter()
+{
+}
+
+void XMLObjIter::
+set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end)
+{
+  cur = _cur;
+  end = _end;
+}
+
+XMLObj *XMLObjIter::
+get_next()
+{
+  XMLObj *obj = NULL;
+  if (cur != end) {
+    obj = cur->second;
+    ++cur;
+  }
+  return obj;
+};
+
 ostream& operator<<(ostream& out, XMLObj& obj) {
    out << obj.type << ": " << obj.data;
    return out;
 }
 
+XMLObj::
+~XMLObj()
+{
+}
 
-bool ACLPermission::xml_end(const char *el) {
+bool XMLObj::
+xml_start(XMLObj *parent, const char *el, const char **attr)
+{
+  this->parent = parent;
+  type = el;
+  for (int i = 0; attr[i]; i += 2) {
+    attr_map[attr[i]] = string(attr[i + 1]);
+  }
+  return true;
+}
+
+bool XMLObj::
+xml_end(const char *el)
+{
+  return true;
+}
+
+void XMLObj::
+xml_handle_data(const char *s, int len)
+{
+  data = string(s, len);
+}
+
+string& XMLObj::
+XMLObj::get_data()
+{
+  return data;
+}
+
+XMLObj *XMLObj::
+XMLObj::get_parent()
+{
+  return parent;
+}
+
+void XMLObj::
+add_child(string el, XMLObj *obj)
+{
+  children.insert(pair<string, XMLObj *>(el, obj));
+}
+
+bool XMLObj::
+get_attr(string name, string& attr)
+{
+  map<string, string>::iterator iter = attr_map.find(name);
+  if (iter == attr_map.end())
+    return false;
+  attr = iter->second;
+  return true;
+}
+
+XMLObjIter XMLObj::
+find(string name)
+{
+  XMLObjIter iter;
+  map<string, XMLObj *>::iterator first;
+  map<string, XMLObj *>::iterator last;
+  first = children.find(name);
+  last = children.upper_bound(name);
+  iter.set(first, last);
+  return iter;
+}
+
+XMLObj *XMLObj::
+find_first(string name)
+{
+  XMLObjIter iter;
+  map<string, XMLObj *>::iterator first;
+  first = children.find(name);
+  if (first != children.end())
+    return first->second;
+  return NULL;
+}
+
+ACLPermission::
+ACLPermission() : flags(0)
+{
+}
+
+ACLPermission::~ACLPermission()
+{
+}
+
+int ACLPermission::
+get_permissions()
+{
+  return flags;
+}
+
+void ACLPermission::
+set_permissions(int perm)
+{
+  flags = perm;
+}
+
+void ACLPermission::
+to_xml(ostream& out)
+{
+  if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
+   out << "<Permission>FULL_CONTROL</Permission>";
+  } else {
+    if (flags & RGW_PERM_READ)
+      out << "<Permission>READ</Permission>";
+    if (flags & RGW_PERM_WRITE)
+      out << "<Permission>WRITE</Permission>";
+    if (flags & RGW_PERM_READ_ACP)
+      out << "<Permission>READ_ACP</Permission>";
+    if (flags & RGW_PERM_WRITE_ACP)
+      out << "<Permission>WRITE_ACP</Permission>";
+  }
+}
+
+bool ACLPermission::
+xml_end(const char *el)
+{
   const char *s = data.c_str();
   if (strcasecmp(s, "READ") == 0) {
     flags |= RGW_PERM_READ;
@@ -38,6 +184,76 @@ bool ACLPermission::xml_end(const char *el) {
     return true;
   }
   return false;
+}
+
+ACLGranteeType::
+ACLGranteeType() : type(ACL_TYPE_UNKNOWN)
+{
+}
+
+ACLGranteeType::
+~ACLGranteeType()
+{
+}
+
+const char *ACLGranteeType::
+to_string()
+{
+  switch (type) {
+  case ACL_TYPE_CANON_USER:
+    return "CanonicalUser";
+  case ACL_TYPE_EMAIL_USER:
+    return "AmazonCustomerByEmail";
+  case ACL_TYPE_GROUP:
+    return "Group";
+   default:
+    return "unknown";
+  }
+}
+
+ACLGranteeTypeEnum ACLGranteeType::
+get_type()
+{
+  return (ACLGranteeTypeEnum)type;
+};
+
+void ACLGranteeType::
+set(ACLGranteeTypeEnum t)
+{
+  type = t;
+}
+
+void ACLGranteeType::
+set(const char *s)
+{
+  if (!s) {
+    type = ACL_TYPE_UNKNOWN;
+    return;
+  }
+  if (strcmp(s, "CanonicalUser") == 0)
+    type = ACL_TYPE_CANON_USER;
+  else if (strcmp(s, "AmazonCustomerByEmail") == 0)
+    type = ACL_TYPE_EMAIL_USER;
+  else if (strcmp(s, "Group") == 0)
+    type = ACL_TYPE_GROUP;
+  else
+    type = ACL_TYPE_UNKNOWN;
+}
+
+ACLGrantee::
+ACLGrantee()
+{
+}
+
+ACLGrantee::
+~ACLGrantee()
+{
+}
+
+string& ACLGrantee::
+get_type()
+{
+  return type;
 }
 
 class ACLID : public XMLObj
@@ -65,12 +281,22 @@ public:
 class ACLDisplayName : public XMLObj
 {
 public:
- ACLDisplayName() {} 
+ ACLDisplayName() {}
  ~ACLDisplayName() {}
 };
 
+ACLOwner::
+ACLOwner()
+{
+}
+
+ACLOwner::
+~ACLOwner()
+{
+}
+
 bool ACLOwner::xml_end(const char *el) {
-  ACLID *acl_id = (ACLID *)find_first("ID");  
+  ACLID *acl_id = (ACLID *)find_first("ID");
   ACLID *acl_name = (ACLID *)find_first("DisplayName");
 
   // ID is mandatory
@@ -85,6 +311,16 @@ bool ACLOwner::xml_end(const char *el) {
     display_name = "";
 
   return true;
+}
+
+ACLGrant::
+ACLGrant()
+{
+}
+
+ACLGrant::
+~ACLGrant()
+{
 }
 
 bool ACLGrant::xml_end(const char *el) {
@@ -142,6 +378,16 @@ bool ACLGrant::xml_end(const char *el) {
     return false;
   };
   return true;
+}
+
+RGWAccessControlList::
+RGWAccessControlList() : user_map_initialized(false)
+{
+}
+
+RGWAccessControlList::
+~RGWAccessControlList()
+{
 }
 
 void RGWAccessControlList::init_user_map()
@@ -222,6 +468,16 @@ bool RGWAccessControlList::create_canned(string id, string name, string canned_a
 
 }
 
+RGWAccessControlPolicy::
+RGWAccessControlPolicy()
+{
+}
+
+RGWAccessControlPolicy::
+~RGWAccessControlPolicy()
+{
+}
+
 bool RGWAccessControlPolicy::xml_end(const char *el) {
   RGWAccessControlList *acl_p =
       (RGWAccessControlList *)find_first("AccessControlList");
@@ -246,7 +502,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
     /* this is the owner, it has implicit permissions */
     if (id.compare(owner.get_id()) == 0) {
       perm |= RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP;
-      perm &= perm_mask; 
+      perm &= perm_mask;
     }
   }
 
@@ -272,30 +528,46 @@ void xml_start(void *data, const char *el, const char **attr) {
     handler->set_failure();
 }
 
+RGWXMLParser::
+RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
+{
+}
+
+RGWXMLParser::
+~RGWXMLParser()
+{
+  free(buf);
+  vector<XMLObj *>::iterator iter;
+  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+    XMLObj *obj = *iter;
+    delete obj;
+  }
+}
+
 bool RGWXMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new RGWAccessControlPolicy();    
+    obj = new RGWAccessControlPolicy();
   } else if (strcmp(el, "Owner") == 0) {
-    obj = new ACLOwner();    
+    obj = new ACLOwner();
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new RGWAccessControlList();    
+    obj = new RGWAccessControlList();
   } else if (strcmp(el, "ID") == 0) {
-    obj = new ACLID(); 
+    obj = new ACLID();
   } else if (strcmp(el, "DisplayName") == 0) {
-    obj = new ACLDisplayName(); 
+    obj = new ACLDisplayName();
   } else if (strcmp(el, "Grant") == 0) {
-    obj = new ACLGrant(); 
+    obj = new ACLGrant();
   } else if (strcmp(el, "Grantee") == 0) {
-    obj = new ACLGrantee(); 
+    obj = new ACLGrantee();
   } else if (strcmp(el, "Permission") == 0) {
-    obj = new ACLPermission(); 
+    obj = new ACLPermission();
   } else if (strcmp(el, "URI") == 0) {
-    obj = new ACLURI(); 
+    obj = new ACLURI();
   } else if (strcmp(el, "EmailAddress") == 0) {
-    obj = new ACLEmail(); 
+    obj = new ACLEmail();
   } else {
-    obj = new XMLObj(); 
+    obj = new XMLObj();
   }
   if (!obj->xml_start(cur_obj, el, attr))
     return false;
