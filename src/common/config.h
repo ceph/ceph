@@ -425,6 +425,7 @@ public:
   bool osd_check_for_log_corruption;  // bleh
 
   bool osd_use_stale_snap;
+  std::string osd_rollback_to_cluster_snap;
 
   uint32_t osd_max_notify_timeout;
 

@@ -2905,15 +2905,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
 
-  // flush here so that the peering code can re-read any pg data off
-  // disk that it needs to... say for backlog generation.  (hmm, is
-  // this really needed?)
-  osd_lock.Unlock();
-  store->flush();
-  osd_lock.Lock();
-
-  assert(osd_lock.is_locked());
-
   logger->inc(l_osd_map);
 
   ObjectStore::Transaction t;
@@ -2973,6 +2964,31 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     assert(0 == "MOSDMap lied about what maps it had?");
   }
+
+  // check for cluster snapshot
+  string cluster_snap;
+  for (epoch_t cur = superblock.current_epoch + 1; cur <= m->get_last() && cluster_snap.length() == 0; cur++) {
+    OSDMap *newmap = get_map(cur);
+    cluster_snap = newmap->get_cluster_snapshot();
+  }
+
+  // flush here so that the peering code can re-read any pg data off
+  // disk that it needs to... say for backlog generation.  (hmm, is
+  // this really needed?)
+  osd_lock.Unlock();
+  if (cluster_snap.length()) {
+    dout(0) << "creating cluster snapshot '" << cluster_snap << "'" << dendl;
+    int r = store->snapshot(cluster_snap);
+    if (r)
+      dout(0) << "failed to create cluster snapshot: " << cpp_strerror(r) << dendl;
+  } else {
+    store->flush();
+  }
+  osd_lock.Lock();
+
+  assert(osd_lock.is_locked());
+
+
   if (!superblock.oldest_map)
     superblock.oldest_map = m->get_first();
   superblock.newest_map = m->get_last();
