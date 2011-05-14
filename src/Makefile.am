@@ -28,27 +28,26 @@ endif
 
 
 # monitor
-cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
+cmon_SOURCES = cmon.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 cmon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cmon
 
 # osd
-cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
+cosd_SOURCES = cosd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += cosd
 cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
-cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
+cmds_SOURCES = cmds.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 ceph_SOURCES = \
-	msg/SimpleMessenger.cc \
 	tools/ceph.cc \
 	tools/common.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -75,7 +74,6 @@ ceph_tool_gui_DATA = \
 	tools/gui_resources/stats_window.glade \
 	tools/gui_resources/stopped_mds.svg
 gceph_SOURCES = \
-	msg/SimpleMessenger.cc \
 	tools/common.cc \
 	tools/gceph.cc \
 	tools/gui.cc
@@ -113,7 +111,7 @@ librados_config_LDADD = librados.la $(EXTRALIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
-csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
+csyn_SOURCES = csyn.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += csyn
 
@@ -122,7 +120,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 
 # fuse targets?
 if WITH_FUSE
-cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse_ll.cc
+cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
@@ -156,18 +154,18 @@ psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += psim
 
-test_mutate_SOURCES = test/test_mutate.cc msg/SimpleMessenger.cc
+test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
 
-testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
+testmsgr_SOURCES = testmsgr.cc
 testmsgr_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
-dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
+dumpjournal_SOURCES = dumpjournal.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -203,7 +201,6 @@ lib_LTLIBRARIES += libcrush.la
 libceph_la_SOURCES = \
 	libceph.cc \
 	client/Client.cc \
-	msg/SimpleMessenger.cc \
 	${libcommon_a_SOURCES} \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
@@ -231,7 +228,6 @@ bin_DEBUGPROGRAMS += testsignal_handlers
 # librados
 librados_SOURCES = \
 	librados.cc \
-	msg/SimpleMessenger.cc \
 	osdc/Objecter.cc \
 	${libcommon_a_SOURCES}
 librados_la_SOURCES = ${librados_SOURCES}
@@ -632,6 +628,7 @@ libcommon_files = \
 	common/safe_io.c \
 	common/str_list.cc \
 	common/errno.cc \
+	msg/SimpleMessenger.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
