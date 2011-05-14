@@ -1079,10 +1079,12 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< NeedNewMap, WaitActingChange >
 	> reactions;
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MNotifyRec&);
     };
 

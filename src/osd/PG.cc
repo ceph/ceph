@@ -3928,6 +3928,25 @@ PG::RecoveryState::Primary::react(const ActMap&) {
   return discard_event();
 }
 
+boost::statechart::result
+PG::RecoveryState::Primary::react(const AdvMap& advmap) 
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  OSDMap &osdmap = advmap.osdmap;
+
+  // Remove any downed osds from peer_info
+  map<int,PG::Info>::iterator p = pg->peer_info.begin();
+  while (p != pg->peer_info.end()) {
+    if (!osdmap.is_up(p->first)) {
+      dout(10) << " dropping down osd" << p->first << " info " << p->second << dendl;
+      pg->peer_missing.erase(p->first);
+      pg->peer_info.erase(p++);
+    } else
+      p++;
+  }
+  return forward_event();
+}
+
 void PG::RecoveryState::Primary::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
