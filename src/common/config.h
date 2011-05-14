@@ -503,6 +503,7 @@ public:
   bool  bdev_debug_check_io_overlap;
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
+  int   rgw_log;
 
   DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
   std::ostream _dout;

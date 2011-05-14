@@ -44,9 +44,6 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
   return oss;
 }
 
-/* Loglevel of the gateway */
-int rgw_log_level = 20;
-
 int parse_time(const char *time_str, time_t *time)
 {
   struct tm tm;
