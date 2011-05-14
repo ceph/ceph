@@ -1294,7 +1294,8 @@ bool PG::choose_acting(int newest_update_osd)
   return true;
 }
 
-void PG::choose_log_location(bool &need_backlog,
+void PG::choose_log_location(const PgPriorSet &prior_set,
+			     bool &need_backlog,
 			     bool &wait_on_backlog,
 			     int &pull_from,
 			     eversion_t &newest_update,
@@ -1308,6 +1309,10 @@ void PG::choose_log_location(bool &need_backlog,
   for (map<int, Info>::const_iterator it = peer_info.begin();
        it != peer_info.end();
        ++it) {
+    // Only consider osds in the prior set
+    if (prior_set.cur.find(it->first) == prior_set.cur.end()) {
+      continue;
+    }
     if (best_info->last_update < it->second.last_update) {
       best_info = &(it->second);
       pull_from = it->first;
@@ -4328,7 +4333,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   eversion_t newest_update;
   eversion_t oldest_update;
-  pg->choose_log_location(need_backlog,
+  pg->choose_log_location(*context< Peering >().prior_set.get(),
+			  need_backlog,
 			  wait_on_backlog,
 			  newest_update_osd,
 			  newest_update,

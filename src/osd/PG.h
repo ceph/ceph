@@ -1373,7 +1373,8 @@ public:
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  void choose_log_location(bool &need_backlog,
+  void choose_log_location(const PgPriorSet &prior_set,
+			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,
 			   eversion_t &newest_update,
