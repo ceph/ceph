@@ -227,8 +227,10 @@ int MonClient::get_monmap_privately()
   hunting = true;  // reset this to true!
   cur_mon.clear();
 
-  cur_con->put();
-  cur_con = NULL;
+  if (cur_con) {
+    cur_con->put();
+    cur_con = NULL;
+  }
 
   if (monmap.epoch)
     return 0;
