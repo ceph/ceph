@@ -1200,10 +1200,11 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< BacklogComplete >,
-	boost::statechart::transition< GotLog, GetMissing >
+	boost::statechart::custom_reaction< GotLog >
 	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const BacklogComplete&);
+      boost::statechart::result react(const GotLog&);
     };
 
     struct WaitUpThru;

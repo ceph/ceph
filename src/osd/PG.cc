@@ -4416,7 +4416,8 @@ PG::RecoveryState::GetLog::react(const BacklogComplete&) {
   return forward_event();
 }
 
-void PG::RecoveryState::GetLog::exit() {
+boost::statechart::result 
+PG::RecoveryState::GetLog::react(const GotLog&) {
   dout(10) << "leaving GetLog" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (msg) {
@@ -4425,7 +4426,10 @@ void PG::RecoveryState::GetLog::exit() {
 			msg->info, msg->log, msg->missing, 
 			newest_update_osd);
   }
+  return transit< GetMissing >();
+}
 
+void PG::RecoveryState::GetLog::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
