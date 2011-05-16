@@ -36,6 +36,7 @@ import sys
 import tempfile
 import time
 import traceback
+import xattr
 
 # Command-line options
 global opts
@@ -55,6 +56,23 @@ class InvalidLocalName(Exception):
 
 class NonexistentStore(Exception):
     pass
+
+###### Test Extended Attribute Support #######
+def test_xattr_support(path):
+    test_file = path + "/$TEST"
+    f = open(test_file, 'w')
+    f.close
+    try:
+        xattr.set(test_file, "test", "123", namespace=xattr.NS_USER)
+        if xattr.get(test_file, "test", namespace=xattr.NS_USER) !=  "123":
+            raise Exception("test_xattr_support: failed to set an xattr and " + \
+                "read it back.")
+    except IOError, e:
+        print >>stderr, "**** ERRROR: You do not appear to have xattr support " + \
+            "at %s ****" % path
+        raise
+    finally:
+        os.unlink(test_file)
 
 ###### Helper functions #######
 def mkdir_p(path):
@@ -638,6 +656,7 @@ class FileStore(Store):
         elif (not os.path.isdir(self.base)):
             raise NonexistentStore()
         Store.__init__(self, "file://" + url)
+        test_xattr_support(self.base)
     def __str__(self):
         return "file://" + self.base
     def get_acl(self, obj):
