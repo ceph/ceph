@@ -684,8 +684,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {
       opts["snapid"] = val;
     } else {
-      // begin positional arguments
-      break;
+      if (val[0] == '-')
+        usage();
+      i++;
     }
   }
 
