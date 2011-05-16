@@ -54,6 +54,7 @@ class MonmapMonitor : public PaxosService {
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
+  enum health_status_t get_health(std::ostream &ss) const;
 
   /*
    * Since monitors are pretty

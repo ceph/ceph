@@ -253,3 +253,16 @@ void MonmapMonitor::tick()
   update_from_paxos();
 }
 
+enum health_status_t MonmapMonitor::get_health(std::ostream &ss) const
+{
+  enum health_status_t ret(HEALTH_OK);
+  
+  int max = mon->monmap->size();
+  int actual = mon->get_quorum().size();
+  if (actual < max) {
+    ret = HEALTH_WARN;
+    ss << (max-actual) << " mons down, quorum " << mon->get_quorum();
+  }
+
+  return ret;
+}
