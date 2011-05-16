@@ -402,7 +402,9 @@ void Client::update_inode_file_bits(Inode *in,
   // be careful with size, mtime, atime
   if (issued & (CEPH_CAP_FILE_EXCL|
 		CEPH_CAP_FILE_WR|
-		CEPH_CAP_FILE_BUFFER)) {
+		CEPH_CAP_FILE_BUFFER|
+		CEPH_CAP_AUTH_EXCL|
+		CEPH_CAP_XATTR_EXCL)) {
     dout(30) << "Yay have enough caps to look at our times" << dendl;
     if (ctime > in->ctime) 
       in->ctime = ctime;
