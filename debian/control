@@ -280,3 +280,11 @@ Description: debugging symbols for radosgw
  service.
  .
  This package contains debugging symbols for radosgw.
+
+Package: obsync
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python, python-boto
+Description: synchronize data between cloud object storage providers or a local directory
+ obsync is a tool to synchronize objects between cloud object
+ storage providers, such as Amazon S3 (or compatible services), a
+ Ceph RADOS cluster, or a local directory.
