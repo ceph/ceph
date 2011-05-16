@@ -44,13 +44,11 @@ global opts
 # Translation table mapping users in the source to users in the destination.
 global xuser
 
-###### Constants classes #######
+###### Constants #######
 RGW_META_BUCKET_NAME = ".rgw"
+ACL_XATTR = "user.rados_acl"
 
 ###### Exception classes #######
-class LocalFileIsAcl(Exception):
-    pass
-
 class InvalidLocalName(Exception):
     pass
 
@@ -153,8 +151,6 @@ def s3_name_to_local_name(s3_name):
     return s3_name
 
 def local_name_to_s3_name(local_name):
-    if local_name.find(r'$acl') != -1:
-        raise LocalFileIsAcl()
     local_name = re.sub(r'\$slash', "/", local_name)
     mre = re.compile("[$][^$]")
     if mre.match(local_name):
@@ -162,12 +158,6 @@ def local_name_to_s3_name(local_name):
 sequence we don't understand.")
     local_name = re.sub(r'\$\$', "$", local_name)
     return local_name
-
-def get_local_acl_file_name(local_name):
-    if local_name.find(r'$acl') != -1:
-        raise LocalFileIsAcl()
-    return os.path.dirname(local_name) + "/." + \
-        os.path.basename(local_name) + "$acl"
 
 ###### ACLs #######
 
@@ -432,14 +422,6 @@ class LocalCopy(object):
 
 class LocalAcl(object):
     @staticmethod
-    def from_file(obj_name, file_name):
-        f = open(file_name, "r")
-        try:
-            xml = f.read()
-        finally:
-            f.close()
-        return LocalAcl.from_xml(obj_name, xml)
-    @staticmethod
     def from_xml(obj_name, xml):
         acl_policy = AclPolicy.from_xml(xml)
         return LocalAcl(obj_name, acl_policy)
@@ -465,16 +447,12 @@ class LocalAcl(object):
         if (self.acl_policy == None):
             return
         self.acl_policy.set_owner(owner_id)
-    def write_to_file(self, file_name):
-        """ Write this ACL to a file """
+    def write_to_xattr(self, file_name):
+        """ Write this ACL to an extended attribute """
         if (self.acl_policy == None):
             return
         xml = self.acl_policy.to_xml()
-        f = open(file_name, 'w')
-        try:
-            f.write(xml)
-        finally:
-            f.close()
+        xattr.set(file_name, ACL_XATTR, xml)
 
 ###### S3 store #######
 class S3StoreIterator(object):
@@ -660,12 +638,13 @@ class FileStore(Store):
     def __str__(self):
         return "file://" + self.base
     def get_acl(self, obj):
-        acl_name = get_local_acl_file_name(obj.local_name())
-        acl_path = self.base + "/" + acl_name
-        if (os.path.exists(acl_path)):
-            return LocalAcl.from_file(obj.name, acl_path)
-        else:
-            return LocalAcl.get_empty(obj.name)
+        try:
+            xml = xattr.get(obj.local_name(), ACL_XATTR)
+        except IOError, e:
+            if e.errno == 2:
+                return LocalAcl.get_empty(obj.name)
+            raise
+        return LocalAcl.from_xml(obj.name, xml)
     def make_local_copy(self, obj):
         local_name = obj.local_name()
         return LocalCopy(obj.name, self.base + "/" + local_name, False)
@@ -697,7 +676,7 @@ class FileStore(Store):
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
         if (src_acl.acl_policy != None):
-            src_acl.write_to_file(self.base + "/" + get_local_acl_file_name(lname))
+            src_acl.write_to_xattr(d)
     def remove(self, obj):
         if (opts.dry_run):
             return
