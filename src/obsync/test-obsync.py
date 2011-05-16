@@ -29,6 +29,7 @@ import subprocess
 import random
 import sys
 import tempfile
+import xattr
 
 global opts
 global tdir
@@ -134,12 +135,10 @@ def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
         shutil.rmtree(tdir)
 
-def compare_directories(dir_a, dir_b, ignore_acl = True, expect_same = True):
+def compare_directories(dir_a, dir_b, expect_same = True):
     if (opts.verbose):
         print "comparing directories %s and %s" % (dir_a, dir_b)
     full = ["diff", "-q"]
-    if (ignore_acl):
-        full.extend(["-x", "*$acl"])
     full.extend(["-r", dir_a, dir_b])
     ret = subprocess.call(full)
     if ((ret == 0) and (not expect_same)):
@@ -155,9 +154,6 @@ def count_obj_in_dir(d):
     """counts the number of objects in a directory (WITHOUT recursing)"""
     num_objects = 0
     for f in os.listdir(d):
-        # skip ACL side files
-        if (f.find(r'$acl') != -1):
-            continue
         num_objects = num_objects + 1
     return num_objects
 
@@ -324,7 +320,7 @@ obsync_check("file://%s/dir1" % tdir, "file://%s/dir1b2" % tdir,
 
 # Create synthetic ACL
 obsync_check("file://%s/dir1" % tdir, "file://%s/dira" % tdir, ["-c"])
-synthetic_xml = \
+synthetic_xml1 = \
 "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n\
 <Owner>\n\
 <ID>" + config["main"]["user_id"] + "</ID>\n\
@@ -341,31 +337,36 @@ xsi:type=\"CanonicalUser\">\n\
 </Grant>\n\
 </AccessControlList>\n\
 </AccessControlPolicy>"
-f = open("%s/dira/.a$acl" % tdir, "w")
-try:
-    f.write(synthetic_xml)
-finally:
-    f.close()
+xattr.set("%s/dira/a" % tdir, "user.rados_acl", synthetic_xml1)
+print "set attr on %s" % ("%s/dira/a" % tdir)
 # test ACL transformations
-obsync_check("file://%s/dira" % tdir, "file://%s/dirb" % tdir,
-            ["-d", "-c", "--xuser",
-            config["main"]["user_id"] + "=" + config["alt"]["user_id"]])
-# The transformation should result in different directories
-compare_directories("%s/dira" % tdir, "%s/dirb" % tdir, \
-    ignore_acl=False, expect_same=False)
-# Test ACL syncing. It should sync the ACLs even when the object data is
-# the same!
-old_acl = open("/%s/dira/.a$acl" % tdir)
-old_acl.read()
-old_acl.close()
-obsync_check("file://%s/dirb" % tdir, "file://%s/dira" % tdir, ["-d"])
-new_acl = open("/%s/dira/.a$acl" % tdir)
-new_acl.read()
-new_acl.close()
-if (old_acl == new_acl):
-    raise Exception("expected obsync to synchronize ACLs, but it left a \
-destination ACL the same, despite the fact that it had different \
-users in it.")
+# canonicalize xml by parse + write out
+obsync_check("file://%s/dira" % tdir, "file://%s/dira2" % tdir,
+            ["-d", "-c"] + xuser("main", "alt"))
+# test that ACL is preserved
+obsync_check("file://%s/dira2" % tdir, "file://%s/dira3" % tdir,
+            ["-d", "-c"])
+synthetic_xml2 = xattr.get("%s/dira2/a" % tdir, "user.rados_acl")
+synthetic_xml3 = xattr.get("%s/dira3/a" % tdir, "user.rados_acl")
+if (synthetic_xml2 != synthetic_xml3):
+    raise Exception("xml not preserved across obsync!")
+# test ACL transformation
+obsync_check("file://%s/dira3" % tdir, "file://%s/dira4" % tdir,
+            ["-d", "-c"] + xuser("main", "alt"))
+synthetic_xml4 = xattr.get("%s/dira4/a" % tdir, "user.rados_acl")
+if (synthetic_xml3 != synthetic_xml4):
+    raise Exception("user translation was a no-op")
+obsync_check("file://%s/dira4" % tdir, "file://%s/dira5" % tdir,
+            ["-d", "-c"])
+synthetic_xml5 = xattr.get("%s/dira5/a" % tdir, "user.rados_acl")
+if (synthetic_xml4 != synthetic_xml5):
+    raise Exception("xml not preserved across obsync!")
+# test ACL transformation back
+obsync_check("file://%s/dira5" % tdir, "file://%s/dira6" % tdir,
+            ["-d", "-c"] + xuser("alt", "main"))
+if (synthetic_xml5 != synthetic_xml2):
+    raise Exception("expected to transform XML back to original form \
+through a double xuser")
 
 # first, let's empty out the S3 bucket
 os.mkdir("%s/empty1" % tdir)
@@ -426,9 +427,6 @@ obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
             ["--no-preserve-acls"])
 obsync_check(opts.buckets[0], "file://%s/dir1_no-preserve-acls" % tdir,
             ["--no-preserve-acls", "-c"])
-# test ACL transformations, again
-obsync_check("file://%s/dirb" % tdir, opts.buckets[0],
-            ["-d", "-c"] + xuser("alt", "main"))
 
 if (opts.verbose):
     print "copying dir1 to " + opts.buckets[0].name

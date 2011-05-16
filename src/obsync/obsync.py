@@ -246,7 +246,7 @@ class AclGrant(object):
         if (xusers.has_key(self.user_id)):
             self.user_id = xusers[self.user_id]
             # It's not clear what the new pretty-name should be, so just leave it blank.
-            self.display_name = ""
+            self.display_name = None
     def equals(self, rhs):
         if (self.user_id != rhs.user_id):
             return False
@@ -281,7 +281,11 @@ class AclPolicy(object):
                 user_type = grantee.attrib["type"]
             else:
                 user_type = grantee.attrib["{%s}type" % NS2]
-            display_name = grantee.find("{%s}DisplayName" % NS).text
+            display_name_node = grantee.find("{%s}DisplayName" % NS)
+            if (display_name_node != None):
+                display_name = grantee.find("{%s}DisplayName" % NS).text
+            else:
+                display_name = None
             permission = g.find("{%s}Permission" % NS).text
             grant_user_id = grantee_attribute_to_user_type(user_type) + user_id
             grants[grant_user_id] = AclGrant(grant_user_id, display_name, permission)
@@ -302,8 +306,9 @@ class AclPolicy(object):
             grantee_elem.set("{%s}type" % NS2, user_type_to_attr(get_user_type(g.user_id)))
             user_id_elem = etree.SubElement(grantee_elem, "{%s}ID" % NS)
             user_id_elem.text = strip_user_type(g.user_id)
-            display_name_elem = etree.SubElement(grantee_elem, "{%s}DisplayName" % NS)
-            display_name_elem.text = g.display_name
+            if (g.display_name != None):
+                display_name_elem = etree.SubElement(grantee_elem, "{%s}DisplayName" % NS)
+                display_name_elem.text = g.display_name
             permission_elem = etree.SubElement(grant_elem, "{%s}Permission" % NS)
             permission_elem.text = g.permission
         return etree.tostring(root, encoding="UTF-8")
@@ -373,6 +378,8 @@ class Object(object):
         return True
     def local_name(self):
         return s3_name_to_local_name(self.name)
+    def local_path(self, base):
+        return base + "/" + s3_name_to_local_name(self.name)
     @staticmethod
     def from_file(obj_name, path):
         f = open(path, 'r')
@@ -639,19 +646,19 @@ class FileStore(Store):
         return "file://" + self.base
     def get_acl(self, obj):
         try:
-            xml = xattr.get(obj.local_name(), ACL_XATTR)
+            xml = xattr.get(obj.local_path(self.base), ACL_XATTR)
         except IOError, e:
-            if e.errno == 2:
+            #print "failed to get XML ACL from %s" % obj.local_name()
+            if e.errno == 61:
                 return LocalAcl.get_empty(obj.name)
             raise
         return LocalAcl.from_xml(obj.name, xml)
     def make_local_copy(self, obj):
-        local_name = obj.local_name()
-        return LocalCopy(obj.name, self.base + "/" + local_name, False)
+        return LocalCopy(obj.name, obj.local_path(self.base), False)
     def all_objects(self):
         return FileStoreIterator(self.base)
     def locate_object(self, obj):
-        path = self.base + "/" + obj.local_name()
+        path = obj.local_path(self.base)
         found = os.path.isfile(path)
         if (opts.more_verbose):
             if (found):
@@ -675,8 +682,7 @@ class FileStore(Store):
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
-        if (src_acl.acl_policy != None):
-            src_acl.write_to_xattr(d)
+        src_acl.write_to_xattr(d)
     def remove(self, obj):
         if (opts.dry_run):
             return
