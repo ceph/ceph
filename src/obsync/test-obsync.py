@@ -38,7 +38,7 @@ nonce = 0
 
 ###### Constants #######
 ACL_XATTR = "rados.acl"
-META_XATTR_PREFIX = "rados.meta."
+CONTENT_TYPE_XATTR = "rados.content_type"
 
 ###### Helper functions #######
 def get_nonce():
@@ -176,26 +176,24 @@ def xattr_sync_impl(file_name, meta):
     xlist = xattr.get_all(file_name, namespace=xattr.NS_USER)
     to_delete = []
     to_set = {}
-    for k_name,v in meta.items():
-        to_set[k_name] = v
+    for k,v in meta.items():
+        to_set[k] = v
     for k,v in xlist:
-        if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
+        if (k == ACL_XATTR):
             continue
-        k_name = k[len(META_XATTR_PREFIX):]
-        if (not meta.has_key(k_name)):
-            to_delete.append(k_name)
-        elif (meta[k_name] == v):
-            del to_set[k_name]
+        if (not meta.has_key(k)):
+            to_delete.append(k)
+        elif (meta[k] == v):
+            del to_set[k]
     return to_delete, to_set
 
 def xattr_sync(file_name, meta):
     """ Synchronize the xattrs on a file with a hash of our choosing """
     to_delete, to_set = xattr_sync_impl(file_name, meta)
-    for k_name in to_delete:
-        xattr.remove(file_name, META_XATTR_PREFIX + k_name)
-    for k_name,v in to_set.items():
-        xattr.set(file_name, META_XATTR_PREFIX + k_name,
-                    v, namespace=xattr.NS_USER)
+    for k in to_delete:
+        xattr.remove(file_name, k)
+    for k,v in to_set.items():
+        xattr.set(file_name, k, v, namespace=xattr.NS_USER)
 
 def assert_xattr(file_name, meta):
     """ Raise an exception if the xattrs on a file are not what we expect """
@@ -212,10 +210,9 @@ def assert_xattr(file_name, meta):
     print "GOT: {",
     sep = ""
     for k,v in xattr.get_all(file_name, namespace=xattr.NS_USER):
-        if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
+        if (k == ACL_XATTR):
             continue
-        k_name = k[len(META_XATTR_PREFIX):]
-        print "%s%s:%s" % (sep, k_name, v),
+        print "%s%s:%s" % (sep, k, v),
         sep = ", "
     print "}",
     print
@@ -534,17 +531,19 @@ eggfile = "%s/content_type_test/eggy_thing" % tdir
 f = open(hamfile, 'w')
 f.write("SPAM SPAM SPAM")
 f.close()
-xattr_sync(hamfile, { "content_type" : "Ham" })
-assert_xattr(hamfile, { "content_type" : "Ham" })
+xattr_sync(hamfile, { CONTENT_TYPE_XATTR : "Ham" })
+assert_xattr(hamfile, { CONTENT_TYPE_XATTR : "Ham" })
 f = open(eggfile, 'w')
 f.write("eggs")
 f.close()
-xattr_sync(eggfile, { "content_type" : "Eggs" })
+xattr_sync(eggfile, { CONTENT_TYPE_XATTR : "Eggs" })
 obsync_check("%s/content_type_test" % tdir, opts.buckets[0], ["--delete-after"])
 obsync_check(opts.buckets[0], "%s/content_type_test2" % tdir, ["-c"])
 assert_xattr("%s/content_type_test2/hammy_thing" % tdir,
-        { "content_type" : "Ham" })
+        { CONTENT_TYPE_XATTR : "Ham" })
 assert_xattr("%s/content_type_test2/eggy_thing" % tdir,
-        { "content_type" : "Eggs" })
+        { CONTENT_TYPE_XATTR : "Eggs" })
+
+# Check that content-type is preserved
 
 sys.exit(0)

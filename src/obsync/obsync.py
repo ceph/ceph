@@ -48,7 +48,7 @@ global xuser
 RGW_META_BUCKET_NAME = ".rgw"
 ACL_XATTR = "rados.acl"
 META_XATTR_PREFIX = "rados.meta."
-CONTENT_TYPE_XATTR = "content_type"
+CONTENT_TYPE_XATTR = "rados.content_type"
 
 ###### Exception classes #######
 class InvalidLocalName(Exception):
@@ -57,7 +57,7 @@ class InvalidLocalName(Exception):
 class NonexistentStore(Exception):
     pass
 
-###### Test Extended Attribute Support #######
+###### Extended Attributes #######
 def test_xattr_support(path):
     test_file = path + "/$TEST"
     f = open(test_file, 'w')
@@ -73,6 +73,15 @@ def test_xattr_support(path):
         raise
     finally:
         os.unlink(test_file)
+
+def xattr_is_metadata(k):
+    # miscellaneous user-defined metadata
+    if (k[:len(META_XATTR_PREFIX)] == META_XATTR_PREFIX):
+        return True
+    # content-type
+    elif (k == CONTENT_TYPE_XATTR):
+        return True
+    return False
 
 ###### Helper functions #######
 def mkdir_p(path):
@@ -410,10 +419,8 @@ class Object(object):
             else:
                 raise
         for k,v in xlist:
-            if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
-                continue
-            k_name = k[len(META_XATTR_PREFIX):]
-            meta[k_name] = v
+            if xattr_is_metadata(k):
+                meta[k] = v
         #print "Object.from_file: path="+path+",md5=" + bytes_to_str(md5) +",size=" + str(size)
         return Object(obj_name, md5, size, meta)
 
@@ -720,8 +727,8 @@ class FileStore(Store):
         shutil.copy(s, d)
         src_acl.write_to_xattr(d)
         # Store metadata in extended attributes
-        for k_name,v in obj.meta.items():
-            xattr.set(d, META_XATTR_PREFIX + k_name, v, namespace=xattr.NS_USER)
+        for k,v in obj.meta.items():
+            xattr.set(d, k, v, namespace=xattr.NS_USER)
     def remove(self, obj):
         if (opts.dry_run):
             return
