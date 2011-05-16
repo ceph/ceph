@@ -99,7 +99,7 @@ def read_config():
     return config
 
 def obsync(src, dst, misc):
-    full = ["./obsync.py"]
+    full = ["./obsync"]
     e = {}
     if (isinstance(src, ObSyncTestBucket)):
         full.append(src.url)
