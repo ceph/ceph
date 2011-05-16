@@ -36,6 +36,10 @@ global tdir
 global nonce
 nonce = 0
 
+###### Constants #######
+ACL_XATTR = "rados.acl"
+META_XATTR_PREFIX = "rados.meta."
+
 ###### Helper functions #######
 def get_nonce():
     global nonce
@@ -167,6 +171,55 @@ def get_optional(h, k):
     else:
         print "found nothing"
         return None
+
+def xattr_sync_impl(file_name, meta):
+    xlist = xattr.get_all(file_name, namespace=xattr.NS_USER)
+    to_delete = []
+    to_set = {}
+    for k_name,v in meta.items():
+        to_set[k_name] = v
+    for k,v in xlist:
+        if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
+            continue
+        k_name = k[len(META_XATTR_PREFIX):]
+        if (not meta.has_key(k_name)):
+            to_delete.append(k_name)
+        elif (meta[k_name] == v):
+            del to_set[k_name]
+    return to_delete, to_set
+
+def xattr_sync(file_name, meta):
+    """ Synchronize the xattrs on a file with a hash of our choosing """
+    to_delete, to_set = xattr_sync_impl(file_name, meta)
+    for k_name in to_delete:
+        xattr.remove(file_name, META_XATTR_PREFIX + k_name)
+    for k_name,v in to_set.items():
+        xattr.set(file_name, META_XATTR_PREFIX + k_name,
+                    v, namespace=xattr.NS_USER)
+
+def assert_xattr(file_name, meta):
+    """ Raise an exception if the xattrs on a file are not what we expect """
+    to_delete, to_set = xattr_sync_impl(file_name, meta)
+    if (len(to_delete) == 0) and (len(to_set) == 0):
+        return
+    print "XATTRS DIFFER: ",
+    print "EXPECTED: {",
+    sep = ""
+    for k,v in meta.items():
+        print sep + str(k) + " : " + str(v),
+        sep = ", "
+    print "}",
+    print "GOT: {",
+    sep = ""
+    for k,v in xattr.get_all(file_name, namespace=xattr.NS_USER):
+        if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
+            continue
+        k_name = k[len(META_XATTR_PREFIX):]
+        print "%s%s:%s" % (sep, k_name, v),
+        sep = ", "
+    print "}",
+    print
+    raise Exception("extended attributes are not what we expect on %s" % file_name)
 
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
@@ -337,7 +390,8 @@ xsi:type=\"CanonicalUser\">\n\
 </Grant>\n\
 </AccessControlList>\n\
 </AccessControlPolicy>"
-xattr.set("%s/dira/a" % tdir, "user.rados_acl", synthetic_xml1)
+xattr.set("%s/dira/a" % tdir, ACL_XATTR, synthetic_xml1,
+            namespace=xattr.NS_USER)
 print "set attr on %s" % ("%s/dira/a" % tdir)
 # test ACL transformations
 # canonicalize xml by parse + write out
@@ -346,19 +400,23 @@ obsync_check("file://%s/dira" % tdir, "file://%s/dira2" % tdir,
 # test that ACL is preserved
 obsync_check("file://%s/dira2" % tdir, "file://%s/dira3" % tdir,
             ["-d", "-c"])
-synthetic_xml2 = xattr.get("%s/dira2/a" % tdir, "user.rados_acl")
-synthetic_xml3 = xattr.get("%s/dira3/a" % tdir, "user.rados_acl")
+synthetic_xml2 = xattr.get("%s/dira2/a" % tdir, ACL_XATTR,
+                        namespace=xattr.NS_USER)
+synthetic_xml3 = xattr.get("%s/dira3/a" % tdir, ACL_XATTR,
+                        namespace=xattr.NS_USER)
 if (synthetic_xml2 != synthetic_xml3):
     raise Exception("xml not preserved across obsync!")
 # test ACL transformation
 obsync_check("file://%s/dira3" % tdir, "file://%s/dira4" % tdir,
             ["-d", "-c"] + xuser("main", "alt"))
-synthetic_xml4 = xattr.get("%s/dira4/a" % tdir, "user.rados_acl")
+synthetic_xml4 = xattr.get("%s/dira4/a" % tdir, ACL_XATTR,
+                        namespace=xattr.NS_USER)
 if (synthetic_xml3 != synthetic_xml4):
     raise Exception("user translation was a no-op")
 obsync_check("file://%s/dira4" % tdir, "file://%s/dira5" % tdir,
             ["-d", "-c"])
-synthetic_xml5 = xattr.get("%s/dira5/a" % tdir, "user.rados_acl")
+synthetic_xml5 = xattr.get("%s/dira5/a" % tdir, ACL_XATTR,
+                        namespace=xattr.NS_USER)
 if (synthetic_xml4 != synthetic_xml5):
     raise Exception("xml not preserved across obsync!")
 # test ACL transformation back
@@ -468,5 +526,25 @@ if (bucket0_count != bucket1_count):
     raise RuntimeError("error! expected the same number of objects \
 in bucket0 and bucket1. bucket0_count=%d, bucket1_count=%d" \
 % (bucket0_count, bucket1_count))
+
+# Check that content-type is preserved
+os.mkdir("%s/content_type_test" % tdir)
+hamfile = "%s/content_type_test/hammy_thing" % tdir
+eggfile = "%s/content_type_test/eggy_thing" % tdir
+f = open(hamfile, 'w')
+f.write("SPAM SPAM SPAM")
+f.close()
+xattr_sync(hamfile, { "content_type" : "Ham" })
+assert_xattr(hamfile, { "content_type" : "Ham" })
+f = open(eggfile, 'w')
+f.write("eggs")
+f.close()
+xattr_sync(eggfile, { "content_type" : "Eggs" })
+obsync_check("%s/content_type_test" % tdir, opts.buckets[0], ["--delete-after"])
+obsync_check(opts.buckets[0], "%s/content_type_test2" % tdir, ["-c"])
+assert_xattr("%s/content_type_test2/hammy_thing" % tdir,
+        { "content_type" : "Ham" })
+assert_xattr("%s/content_type_test2/eggy_thing" % tdir,
+        { "content_type" : "Eggs" })
 
 sys.exit(0)

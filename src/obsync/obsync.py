@@ -46,7 +46,9 @@ global xuser
 
 ###### Constants #######
 RGW_META_BUCKET_NAME = ".rgw"
-ACL_XATTR = "user.rados_acl"
+ACL_XATTR = "rados.acl"
+META_XATTR_PREFIX = "rados.meta."
+CONTENT_TYPE_XATTR = "content_type"
 
 ###### Exception classes #######
 class InvalidLocalName(Exception):
@@ -364,10 +366,11 @@ def test_acl_policy():
 
 ###### Object #######
 class Object(object):
-    def __init__(self, name, md5, size):
+    def __init__(self, name, md5, size, meta):
         self.name = name
         self.md5 = md5
         self.size = int(size)
+        self.meta = meta
     def equals(self, rhs):
         if (self.name != rhs.name):
             return False
@@ -375,6 +378,16 @@ class Object(object):
             return False
         if (self.size != rhs.size):
             return False
+        for k,v in self.meta.items():
+            if (not rhs.meta.has_key(k)):
+                return False
+            if (rhs.meta[k] != v):
+                return False
+        for k,v in rhs.meta.items():
+            if (not self.meta.has_key(k)):
+                return False
+            if (self.meta[k] != v):
+                return False
         return True
     def local_name(self):
         return s3_name_to_local_name(self.name)
@@ -388,8 +401,21 @@ class Object(object):
         finally:
             f.close()
         size = os.path.getsize(path)
+        meta = {}
+        try:
+            xlist = xattr.get_all(path, namespace=xattr.NS_USER)
+        except IOError, e:
+            if e.errno == 2:
+                return meta
+            else:
+                raise
+        for k,v in xlist:
+            if (k[:len(META_XATTR_PREFIX)] != META_XATTR_PREFIX):
+                continue
+            k_name = k[len(META_XATTR_PREFIX):]
+            meta[k_name] = v
         #print "Object.from_file: path="+path+",md5=" + bytes_to_str(md5) +",size=" + str(size)
-        return Object(obj_name, md5, size)
+        return Object(obj_name, md5, size, meta)
 
 ###### Store #######
 class Store(object):
@@ -459,12 +485,23 @@ class LocalAcl(object):
         if (self.acl_policy == None):
             return
         xml = self.acl_policy.to_xml()
-        xattr.set(file_name, ACL_XATTR, xml)
+        xattr.set(file_name, ACL_XATTR, xml, namespace=xattr.NS_USER)
 
 ###### S3 store #######
+def s3_key_to_meta(k):
+    meta = {}
+    if (k.__dict__.has_key("content_type")):
+        meta[CONTENT_TYPE_XATTR] = k.content_type
+    return meta
+
+def meta_to_s3_key(k, meta):
+    if (meta.has_key(CONTENT_TYPE_XATTR)):
+        k.set_metadata("Content-Type", meta[CONTENT_TYPE_XATTR])
+
 class S3StoreIterator(object):
     """S3Store iterator"""
-    def __init__(self, blrs):
+    def __init__(self, bucket, blrs):
+        self.bucket = bucket
         self.blrs = blrs
     def __iter__(self):
         return self
@@ -472,7 +509,9 @@ class S3StoreIterator(object):
         # This will raise StopIteration when there are no more objects to
         # iterate on
         key = self.blrs.next()
-        ret = Object(key.name, etag_to_md5(key.etag), key.size)
+        # Issue a HEAD request to get content-type and other metadata
+        k = self.bucket.get_key(key.name)
+        ret = Object(key.name, etag_to_md5(key.etag), key.size, s3_key_to_meta(k))
         return ret
 
 class S3Store(Store):
@@ -527,24 +566,21 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         return LocalCopy(obj.name, temp_file, True)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
-        return S3StoreIterator(blrs.__iter__())
+        return S3StoreIterator(self.bucket, blrs.__iter__())
     def locate_object(self, obj):
         k = self.bucket.get_key(obj.name)
         if (k == None):
             return None
-        return Object(obj.name, etag_to_md5(k.etag), k.size)
+        return Object(obj.name, etag_to_md5(k.etag), k.size, s3_key_to_meta(k))
     def upload(self, local_copy, src_acl, obj):
         if (opts.more_verbose):
             print "S3Store.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
         if (opts.dry_run):
             return
-#        mime = mimetypes.guess_type(local_copy.path)[0]
-#        if (mime == NoneType):
-#            mime = "application/octet-stream"
         k = Key(self.bucket)
         k.key = obj.name
-        #k.set_metadata("Content-Type", mime)
+        meta_to_s3_key(k, obj.meta)
         k.set_contents_from_filename(local_copy.path)
         if (src_acl.acl_policy != None):
             xml = src_acl.acl_policy.to_xml()
@@ -646,7 +682,8 @@ class FileStore(Store):
         return "file://" + self.base
     def get_acl(self, obj):
         try:
-            xml = xattr.get(obj.local_path(self.base), ACL_XATTR)
+            xml = xattr.get(obj.local_path(self.base), ACL_XATTR,
+                            namespace=xattr.NS_USER)
         except IOError, e:
             #print "failed to get XML ACL from %s" % obj.local_name()
             if e.errno == 61:
@@ -679,10 +716,12 @@ class FileStore(Store):
         s = local_copy.path
         lname = obj.local_name()
         d = self.base + "/" + lname
-        #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
         src_acl.write_to_xattr(d)
+        # Store metadata in extended attributes
+        for k_name,v in obj.meta.items():
+            xattr.set(d, META_XATTR_PREFIX + k_name, v, namespace=xattr.NS_USER)
     def remove(self, obj):
         if (opts.dry_run):
             return
@@ -779,7 +818,8 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         except rados.ObjectNotFound:
             return None
         md5 = self.ioctx.get_xattr(key, "user.rgw.etag")
-        return Object(key, md5, size)
+        # TODO: support meta
+        return Object(key, md5, size, {})
     def __str__(self):
         return "rados:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
     def get_acl(self, obj):
@@ -831,6 +871,7 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             if (len(buf) < 8192):
                 break
             off += 8192
+        # TODO: examine obj.meta
         self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
         self.ioctx.set_xattr(obj.name, "user.rgw.acl", self.acl_hack)
         self.ioctx.set_xattr(obj.name, "user.rgw.content_type",
