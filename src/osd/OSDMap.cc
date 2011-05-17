@@ -17,6 +17,14 @@
 #include "common/config.h"
 
 
+struct qi {
+  int item;
+  int depth;
+  float weight;
+  qi() {}
+  qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
+};
+
 
 void OSDMap::print(ostream& out) const
 {
@@ -83,6 +91,73 @@ void OSDMap::print(ostream& out) const
     out << "blacklist " << p->first << " expires " << p->second << "\n";
   
   // ignore pg_swap_primary
+}
+
+void OSDMap::print_osd_line(int cur, ostream& out) const
+{
+  out << "osd." << cur << "\t";
+  if (!exists(cur))
+    out << "DNE\t\t";
+  else {
+    if (is_up(cur))
+      out << "up\t";
+    else
+      out << "down\t";
+    out << (exists(cur) ? get_weightf(cur):0) << "\t";
+  }
+}
+
+void OSDMap::print_tree(ostream& out) const
+{
+  out << "# id\tweight\ttype name\tup/down\treweight\n";
+  set<int> touched;
+  set<int> roots;
+  crush.find_roots(roots);
+  for (set<int>::iterator p = roots.begin(); p != roots.end(); p++) {
+    list<qi> q;
+    q.push_back(qi(*p, 0, crush.get_bucket_weight(*p) / (float)0x10000));
+    while (!q.empty()) {
+      int cur = q.front().item;
+      int depth = q.front().depth;
+      float weight = q.front().weight;
+      q.pop_front();
+
+      out << cur << "\t" << weight << "\t";
+      for (int k=0; k<depth; k++)
+	out << "\t";
+
+      if (cur >= 0) {
+	print_osd_line(cur, out);
+	out << "\n";
+	touched.insert(cur);
+	continue;
+      }
+
+      int type = crush.get_bucket_type(cur);
+      out << crush.get_type_name(type) << " " << crush.get_item_name(cur) << "\n";
+
+      // queue bucket contents...
+      int s = crush.get_bucket_size(cur);
+      for (int k=s-1; k>=0; k--)
+	q.push_front(qi(crush.get_bucket_item(cur, k), depth+1,
+			(float)crush.get_bucket_item_weight(cur, k) / (float)0x10000));
+    }
+  }
+
+  set<int> stray;
+  for (int i=0; i<max_osd; i++)
+    if (exists(i) && touched.count(i) == 0)
+      stray.insert(i);
+  
+  if (!stray.empty()) {
+    out << "\n";
+    for (set<int>::iterator p = stray.begin(); p != stray.end(); ++p) {
+      out << *p << "\t0\t";
+      print_osd_line(*p, out);
+      out << "\n";
+    }
+  }
+    
 }
 
 void OSDMap::print_summary(ostream& out) const

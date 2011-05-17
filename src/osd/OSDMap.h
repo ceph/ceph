@@ -1008,9 +1008,12 @@ public:
 		    int pg_bits, int pgp_bits, int lpg_bits);
   static void build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& poolsets, int num_osd, int num_dom=0);
 
-
+private:
+  void print_osd_line(int cur, ostream& out) const;
+public:
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
+  void print_tree(ostream& out) const;
 
 };
 
