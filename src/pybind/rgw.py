@@ -13,24 +13,28 @@ class Rgw(object):
     """librgw python wrapper"""
     def __init__(self):
         self.lib = CDLL('librgw.so')
+        self.rgw = c_void_p(0)
+        ret = self.lib.librgw_create(byref(self.rgw), 0)
+        if (ret != 0):
+            raise Exception("librgw_create failed with error %d" % ret)
+    def __del__(self):
+        self.lib.librgw_shutdown(self.rgw)
     def acl_bin2xml(self, blob):
         blob_buf = ctypes.create_string_buffer(blob[:])
         xml = c_char_p(0)
-        ret = self.lib.librgw_acl_bin2xml(byref(blob_buf), len(blob), byref(xml))
+        ret = self.lib.librgw_acl_bin2xml(self.rgw, byref(blob_buf), len(blob), byref(xml))
         if (ret != 0):
-            raise Exception(ret, "acl_bin2xml failed with error %d" % ret)
-        retstr = str(xml)
-        self.lib.librgw_free_xml(xml)
-        return retstr
+            raise Exception("acl_bin2xml failed with error %d" % ret)
+        rets = ctypes.string_at(xml)
+        self.lib.librgw_free_xml(self.rgw, xml)
+        return rets
     def acl_xml2bin(self, xml):
         blen = c_int(0)
         blob = c_void_p(0)
-        print "WATERMELON 1"
-        ret = self.lib.librgw_acl_xml2bin(c_char_p(xml), byref(blob), byref(blen))
+        ret = self.lib.librgw_acl_xml2bin(self.rgw, c_char_p(xml),
+                                          byref(blob), byref(blen))
         if (ret != 0):
-            raise Exception(ret, "acl_bin2xml failed with error %d" % ret)
-        print "WATERMELON 2"
-        retblob = ctypes.cast(blob, ctypes.POINTER(ctypes.c_ubyte * blen.value))
-        rets = str(retblob)
-        self.lib.librgw_free_bin(blob)
+            raise Exception("acl_bin2xml failed with error %d" % ret)
+        rets = ctypes.string_at(blob, blen)
+        self.lib.librgw_free_bin(self.rgw, blob)
         return rets
