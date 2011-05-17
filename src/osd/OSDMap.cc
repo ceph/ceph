@@ -148,6 +148,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   // new
   crush.create();
 
+  crush.set_type_name(0, "osd");
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
 
