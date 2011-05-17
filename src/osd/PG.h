@@ -1371,14 +1371,14 @@ public:
   
   void trim_write_ahead();
 
-  bool choose_acting(int newest_update_osd);
+  bool choose_acting(int newest_update_osd) const;
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map,
 			  eversion_t &oldest_update);
   eversion_t calc_oldest_known_update() const;
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  void choose_log_location(const PgPriorSet &prior_set,
+  bool choose_log_location(const PgPriorSet &prior_set,
 			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,

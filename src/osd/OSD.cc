@@ -3935,8 +3935,14 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
 {
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
-       ++p) 
+       ++p) { 
+    for (vector<PG::Info>::iterator i = p->second->pg_info.begin();
+	 i != p->second->pg_info.end();
+	 ++i) {
+      dout(20) << "Sending info " << *i << " to osd" << p->first << dendl;
+    }
     cluster_messenger->send_message(p->second, osdmap->get_cluster_inst(p->first));
+  }
   info_map.clear();
 }
 
