@@ -751,12 +751,16 @@ void usage()
   cout << "   --build --num_osd N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
   cout << "                           'name (uniform|straw|list|tree) size'\n";
-  cout << "   --test mapfn          test a range of inputs on the map\n";
+  cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
+  cout << "   -i mapfn --add-item <id> <weight> <name> [--loc type name ...]\n";
+  cout << "                         insert an item into the hierarchy at the\n";
+  cout << "                         given location\n";
+  cout << "   -i mapfn --reweight   recalculate bucket weights\n";
   exit(1);
 }
 
