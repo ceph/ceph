@@ -23,6 +23,7 @@ void rgw_err::
 clear()
 {
   http_ret = 200;
+  errno = 0;
   s3_code.clear();
 }
 

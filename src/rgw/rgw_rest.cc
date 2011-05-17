@@ -59,6 +59,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 {
   if (err_no < 0)
     err_no = -err_no;
+  s->err.ret = err_no;
   for (size_t i = 0; i < sizeof(RGW_HTML_ERRORS)/sizeof(RGW_HTML_ERRORS[0]); ++i) {
     const struct rgw_html_errors *r = RGW_HTML_ERRORS + i;
     if (err_no == r->err_no) {

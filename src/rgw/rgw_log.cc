@@ -22,6 +22,10 @@ int rgw_log_op(struct req_state *s)
     RGW_LOG(0) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
+  if (s->err.ret = -ERR_NO_SUCH_BUCKET) {
+    RGW_LOG(0) << "buclet " << s->bucket << " doesn't exist, not logging" << dendl;
+    return 0;
+  }
   entry.bucket = s->bucket;
 
   if (s->object)

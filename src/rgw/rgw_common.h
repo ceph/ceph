@@ -94,6 +94,7 @@ struct rgw_err {
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
 
   int http_ret;
+  int ret;
   std::string s3_code;
   std::string message;
 };
