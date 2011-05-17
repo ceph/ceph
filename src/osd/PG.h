@@ -1090,7 +1090,11 @@ public:
 
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
 			      NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MLogRec >
+	> reactions;
       WaitActingChange(my_context ctx);
+      boost::statechart::result react(const MLogRec&);
       void exit();
     };
     

@@ -4445,6 +4445,12 @@ PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx) : my_base(
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result 
+PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt) {
+  dout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
+  return discard_event();
+}
+
 void PG::RecoveryState::WaitActingChange::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
