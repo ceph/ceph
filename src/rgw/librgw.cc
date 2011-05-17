@@ -39,6 +39,7 @@ int librgw_create(librgw_t *rgw, const char * const id)
       iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
     }
     md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    conf->log_to_stderr = 1; // quiet by default
     conf->parse_env(); // environment variables override
     conf->apply_changes();
 
