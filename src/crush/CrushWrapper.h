@@ -50,8 +50,8 @@ public:
   std::map<int, string> rule_name_map;
 
   /* reverse maps */
-  bool have_rmaps;
-  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  mutable bool have_rmaps;
+  mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
 
 private:
   void build_rmaps() {
@@ -90,9 +90,10 @@ public:
       return type_rmap[name];
     return 0;
   }
-  const char *get_type_name(int t) {
-    if (type_map.count(t))
-      return type_map[t].c_str();
+  const char *get_type_name(int t) const {
+    std::map<int,string>::const_iterator p = type_map.find(t);
+    if (p != type_map.end())
+      return p->second.c_str();
     return 0;
   }
   void set_type_name(int i, const char *n) {
@@ -110,9 +111,10 @@ public:
       return name_rmap[name];
     return 0;  /* hrm */
   }
-  const char *get_item_name(int t) {
-    if (name_map.count(t))
-      return name_map[t].c_str();
+  const char *get_item_name(int t) const {
+    std::map<int,string>::const_iterator p = name_map.find(t);
+    if (p != name_map.end())
+      return p->second.c_str();
     return 0;
   }
   void set_item_name(int i, const char *n) {
@@ -255,7 +257,7 @@ public:
 
   /** buckets **/
 private:
-  crush_bucket *get_bucket(int id) {
+  const crush_bucket *get_bucket(int id) const {
     if (!crush)
       return (crush_bucket *)(-EINVAL);
     unsigned int pos = (unsigned int)(-1 - id);
@@ -269,54 +271,59 @@ private:
   }
 
 public:
-  int get_max_buckets() {
+  int get_max_buckets() const {
     if (!crush) return -EINVAL;
     return crush->max_buckets;
   }
-  int get_next_bucket_id() {
+  int get_next_bucket_id() const {
     if (!crush) return -EINVAL;
     return crush_get_next_bucket_id(crush);
   }
-  bool bucket_exists(int id) {
-    crush_bucket *b = get_bucket(id);
+  bool bucket_exists(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b))
       return false;
     return true;
   }
-  int get_bucket_weight(int id) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_weight(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->weight;
   }
-  int get_bucket_type(int id) {
-    crush_bucket *b = get_bucket(id);
+  float get_bucket_weightf(int id) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return 0;
+    return b->weight / (float)0x10000;
+  }
+  int get_bucket_type(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->type;
   }
-  int get_bucket_alg(int id) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_alg(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->alg;
   }
-  int get_bucket_hash(int id) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_hash(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->hash;
   }
-  int get_bucket_size(int id) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_size(int id) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->size;
   }
-  int get_bucket_item(int id, int pos) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_item(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     if ((__u32)pos >= b->size)
       return PTR_ERR(b);
     return b->items[pos];
   }
-  int get_bucket_item_weight(int id, int pos) {
-    crush_bucket *b = get_bucket(id);
+  int get_bucket_item_weight(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
     return crush_get_bucket_item_weight(b, pos);
   }

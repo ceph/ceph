@@ -26,7 +26,7 @@ const char *crush_bucket_alg_name(int alg)
  * @b: bucket pointer
  * @p: item index in bucket
  */
-int crush_get_bucket_item_weight(struct crush_bucket *b, int p)
+int crush_get_bucket_item_weight(const struct crush_bucket *b, int p)
 {
 	if ((__u32)p >= b->size)
 		return 0;
