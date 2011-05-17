@@ -54,26 +54,38 @@ TEST(LibRGW, FromBin) {
   int ret;
   const char *bin = (const char*)VERSION1_BIN;
   int len = sizeof(VERSION1_BIN) / sizeof(VERSION1_BIN[0]);
+  librgw_t rgw;
+
+  ret = librgw_create(&rgw, NULL);
+  ASSERT_EQ(ret, 0);
 
   char *xml = NULL;
-  ret = librgw_acl_bin2xml(bin, len, &xml);
+  ret = librgw_acl_bin2xml(rgw, bin, len, &xml);
   ASSERT_EQ(ret, 0);
+
+  librgw_shutdown(rgw);
 }
 
 TEST(LibRGW, RoundTrip) {
+
   int ret;
   char *bin = NULL;
   int bin_len = 0;
-  ret = librgw_acl_xml2bin(SAMPLE_XML_1, &bin, &bin_len);
+  librgw_t rgw;
+
+  ret = librgw_create(&rgw, NULL);
+  ASSERT_EQ(ret, 0);
+
+  ret = librgw_acl_xml2bin(rgw, SAMPLE_XML_1, &bin, &bin_len);
   ASSERT_EQ(ret, 0);
 
   char *xml2 = NULL;
-  ret = librgw_acl_bin2xml(bin, bin_len, &xml2);
+  ret = librgw_acl_bin2xml(rgw, bin, bin_len, &xml2);
   ASSERT_EQ(ret, 0);
 
   char *bin2 = NULL;
   int bin_len2 = 0;
-  ret = librgw_acl_xml2bin(xml2, &bin2, &bin_len2);
+  ret = librgw_acl_xml2bin(rgw, xml2, &bin2, &bin_len2);
   ASSERT_EQ(ret, 0);
 
   // the serialized representation should be the same.
@@ -83,7 +95,9 @@ TEST(LibRGW, RoundTrip) {
   // Free memory
   // As you can see, we ignore freeing memory on test failures
   // Don't do this in your real programs!
-  librgw_free_bin(bin);
-  librgw_free_xml(xml2);
-  librgw_free_bin(bin2);
+  librgw_free_bin(rgw, bin);
+  librgw_free_xml(rgw, xml2);
+  librgw_free_bin(rgw, bin2);
+
+  librgw_shutdown(rgw);
 }

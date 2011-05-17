@@ -16,6 +16,8 @@
 #include "include/rados/librgw.h"
 #include "rgw/rgw_acl.h"
 #include "rgw_acl.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "common/config.h"
 
 #include <errno.h>
@@ -24,7 +26,30 @@
 
 #define RGW_LOG(x) pdout(x, g_conf.rgw_log)
 
-int librgw_acl_bin2xml(const char *bin, int bin_len, char **xml)
+static Mutex librgw_init_mutex("librgw_init");
+static int librgw_initialized = 0;
+
+int librgw_create(librgw_t *rgw, const char * const id)
+{
+  librgw_init_mutex.Lock();
+  if (!librgw_initialized) {
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
+    iparams.conf_file = "";
+    if (id) {
+      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+    }
+    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    conf->parse_env(); // environment variables override
+    conf->apply_changes();
+
+    ++librgw_initialized;
+  }
+  librgw_init_mutex.Unlock();
+  *rgw = &g_conf;
+  return 0;
+}
+
+int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
 {
   try {
     // convert to bufferlist
@@ -56,12 +81,12 @@ int librgw_acl_bin2xml(const char *bin, int bin_len, char **xml)
   }
 }
 
-void librgw_free_xml(char *xml)
+void librgw_free_xml(librgw_t rgw, char *xml)
 {
   free(xml);
 }
 
-int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
+int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
 {
   char *bin_ = NULL;
   try {
@@ -103,7 +128,12 @@ int librgw_acl_xml2bin(const char *xml, char **bin, int *bin_len)
   return -2000;
 }
 
-void librgw_free_bin(char *bin)
+void librgw_free_bin(librgw_t rgw, char *bin)
 {
   free(bin);
+}
+
+void librgw_shutdown(librgw_t rgw)
+{
+  // TODO: free configuration, etc.
 }
