@@ -529,6 +529,10 @@ static int decompile_crush_bucket_impl(int i,
   out << " {\n";
   out << "\tid " << i << "\t\t# do not change unnecessarily\n";
 
+  out << "\t# weight ";
+  print_fixedpoint(out, crush.get_bucket_weight(i));
+  out << "\n";
+
   int n = crush.get_bucket_size(i);
 
   int alg = crush.get_bucket_alg(i);
