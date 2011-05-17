@@ -19,6 +19,7 @@
 
 #include <sys/stat.h>
 
+#include "common/errno.h"
 #include "common/config.h"
 
 #include "common/ceph_argparse.h"
@@ -529,6 +530,10 @@ static int decompile_crush_bucket_impl(int i,
   out << " {\n";
   out << "\tid " << i << "\t\t# do not change unnecessarily\n";
 
+  out << "\t# weight ";
+  print_fixedpoint(out, crush.get_bucket_weight(i));
+  out << "\n";
+
   int n = crush.get_bucket_size(i);
 
   int alg = crush.get_bucket_alg(i);
@@ -747,12 +752,16 @@ void usage()
   cout << "   --build --num_osd N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
   cout << "                           'name (uniform|straw|list|tree) size'\n";
-  cout << "   --test mapfn          test a range of inputs on the map\n";
+  cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
   cout << "      [--num-rep n]\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
+  cout << "   -i mapfn --add-item <id> <weight> <name> [--loc type name ...]\n";
+  cout << "                         insert an item into the hierarchy at the\n";
+  cout << "                         given location\n";
+  cout << "   -i mapfn --reweight   recalculate bucket weights\n";
   exit(1);
 }
 
@@ -787,6 +796,12 @@ int main(int argc, const char **argv)
   const char *outfn = 0;
   bool clobber = false;
 
+  bool reweight = false;
+  int add_item = -1;
+  float add_weight = 0;
+  const char *add_name = 0;
+  map<string,string> add_loc;
+
   int build = 0;
   int num_osds =0;
   vector<layer_t> layers;
@@ -802,14 +817,26 @@ int main(int argc, const char **argv)
     } else if (CEPH_ARGPARSE_EQ("decompile", 'd')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
       decompile = true;
+    } else if (CEPH_ARGPARSE_EQ("infn", 'i')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("outfn", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&outfn, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("compile", 'c')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&srcfn, OPT_STR);
       compile = true;
     } else if (CEPH_ARGPARSE_EQ("test", 't')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
       test = true;
+    } else if (CEPH_ARGPARSE_EQ("reweight", '\0')) {
+      reweight = true;
+    } else if (CEPH_ARGPARSE_EQ("add_item", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&add_item, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&add_weight, OPT_FLOAT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&add_name, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("loc", '\0')) {
+      const char *type, *name;
+      CEPH_ARGPARSE_SET_ARG_VAL(&type, OPT_STR);
+      CEPH_ARGPARSE_SET_ARG_VAL(&name, OPT_STR);
+      add_loc[type] = name;
     } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
       verbose++;
     } else if (CEPH_ARGPARSE_EQ("build", '\0')) {
@@ -855,7 +882,7 @@ int main(int argc, const char **argv)
   }
   if (decompile + compile + build > 1)
     usage();
-  if (!compile && !decompile && !build && !test)
+  if (!compile && !decompile && !build && !test && !reweight && add_item < 0)
     usage();
 
   /*
@@ -865,6 +892,7 @@ int main(int argc, const char **argv)
   */
 
   CrushWrapper crush;
+  bool modified = false;
 
   if (infn) {
     bufferlist bl;
@@ -898,8 +926,7 @@ int main(int argc, const char **argv)
     crush.finalize();
     if (r < 0) 
       exit(1);
-    if (!outfn)
-      cout << me << " successfully compiled '" << srcfn << "'.  Use -o file to write it out." << std::endl;
+    modified = true;
   }
 
   if (build) {
@@ -1006,11 +1033,29 @@ int main(int argc, const char **argv)
     crush.finalize();
     dout(0) << "crush max_devices " << crush.crush->max_devices << dendl;
 
-    if (!outfn)
-      cout << me << " successfully built map.  Use -o file to write it out." << std::endl;
+    modified = true;
   }
-  if (compile || build) {
-    if (outfn) {
+
+  if (add_item >= 0) {
+    cout << me << " adding item " << add_item << " weight " << add_weight
+	 << " at " << add_loc << std::endl;
+    int r = crush.insert_device(add_item, (int)(add_weight * (float)0x10000), add_name, add_loc);
+    if (r == 0)
+      modified = true;
+    else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+  if (reweight) {
+    crush.reweight();
+    modified = true;
+  }
+
+  if (modified) {
+    if (!outfn) {
+      cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
+    } else {
       bufferlist bl;
       crush.encode(bl);
       int r = bl.write_file(outfn);

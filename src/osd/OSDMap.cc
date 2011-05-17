@@ -148,6 +148,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   // new
   crush.create();
 
+  crush.set_type_name(0, "osd");
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
 
@@ -180,7 +181,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
 	rweights[i] += 0x10000;
       }
 
-      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_UNIFORM, CRUSH_HASH_DEFAULT, 1, j, items, weights);
+      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, j, items, weights);
       ritems[i] = crush_add_bucket(crush.crush, 0, domain);
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
 

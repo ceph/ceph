@@ -8,10 +8,14 @@
      --build --num_osd N layer1 ...
                            build a new map, where each 'layer' is
                              'name (uniform|straw|list|tree) size'
-     --test mapfn          test a range of inputs on the map
+     -i mapfn --test       test a range of inputs on the map
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r]
         [--num-rep n]
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
+     -i mapfn --add-item <id> <weight> <name> [--loc type name ...]
+                           insert an item into the hierarchy at the
+                           given location
+     -i mapfn --reweight   recalculate bucket weights
   [1]

@@ -235,6 +235,22 @@ static int parent(int n)
 		return n + (1<<h);
 }
 
+static int calc_depth(int size)
+{
+	int depth = 1;
+	int t = size - 1;
+	while (t) {
+		t = t >> 1;
+		depth++;
+	}
+	return depth;
+}
+
+static int calc_node(int i)
+{
+	return ((i+1) << 1)-1;
+}
+
 struct crush_bucket_tree*
 crush_make_tree_bucket(int hash, int type, int size,
 		       int *items,    /* in leaf order */
@@ -243,7 +259,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	struct crush_bucket_tree *bucket;
 	int depth;
 	int node;
-	int t, i, j;
+	int i, j;
 
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
@@ -256,12 +272,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	bucket->h.perm = malloc(sizeof(__u32)*size);
 
 	/* calc tree depth */
-	depth = 1;
-	t = size - 1;
-	while (t) {
-		t = t >> 1;
-		depth++;
-	}
+	depth = calc_depth(size);
 	bucket->num_nodes = 1 << depth;
 	bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
 
@@ -270,7 +281,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
-		node = ((i+1) << 1)-1;
+		node = calc_node(i);
 		printf("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
 		bucket->h.weight += weights[i];
@@ -289,38 +300,14 @@ crush_make_tree_bucket(int hash, int type, int size,
 
 /* straw bucket */
 
-struct crush_bucket_straw *
-crush_make_straw_bucket(int hash, 
-			int type,
-			int size,
-			int *items,
-			int *weights)
+int crush_calc_straw(struct crush_bucket_straw *bucket)
 {
-	struct crush_bucket_straw *bucket;
 	int *reverse;
 	int i, j, k;
-
 	double straw, wbelow, lastw, wnext, pbelow;
 	int numleft;
-
-	bucket = malloc(sizeof(*bucket));
-	memset(bucket, 0, sizeof(*bucket));
-	bucket->h.alg = CRUSH_BUCKET_STRAW;
-	bucket->h.hash = hash;
-	bucket->h.type = type;
-	bucket->h.size = size;
-
-	bucket->h.items = malloc(sizeof(__u32)*size);
-	bucket->h.perm = malloc(sizeof(__u32)*size);
-	bucket->item_weights = malloc(sizeof(__u32)*size);
-	bucket->straws = malloc(sizeof(__u32)*size);
-
-	bucket->h.weight = 0;
-	for (i=0; i<size; i++) {
-		bucket->h.items[i] = items[i];
-		bucket->h.weight += weights[i];
-		bucket->item_weights[i] = weights[i];
-	}
+	int size = bucket->h.size;
+	__u32 *weights = bucket->item_weights;
 
 	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
@@ -384,6 +371,39 @@ crush_make_straw_bucket(int hash,
 	}
 
 	free(reverse);
+	return 0;
+}
+
+struct crush_bucket_straw *
+crush_make_straw_bucket(int hash, 
+			int type,
+			int size,
+			int *items,
+			int *weights)
+{
+	struct crush_bucket_straw *bucket;
+	int i;
+
+	bucket = malloc(sizeof(*bucket));
+	memset(bucket, 0, sizeof(*bucket));
+	bucket->h.alg = CRUSH_BUCKET_STRAW;
+	bucket->h.hash = hash;
+	bucket->h.type = type;
+	bucket->h.size = size;
+
+	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->h.perm = malloc(sizeof(__u32)*size);
+	bucket->item_weights = malloc(sizeof(__u32)*size);
+	bucket->straws = malloc(sizeof(__u32)*size);
+
+	bucket->h.weight = 0;
+	for (i=0; i<size; i++) {
+		bucket->h.items[i] = items[i];
+		bucket->h.weight += weights[i];
+		bucket->item_weights[i] = weights[i];
+	}
+
+	crush_calc_straw(bucket);
 
 	return bucket;
 }
@@ -413,6 +433,302 @@ crush_make_bucket(int alg, int hash, int type, int size,
 
 	case CRUSH_BUCKET_STRAW:
 		return (struct crush_bucket *)crush_make_straw_bucket(hash, type, size, items, weights);
+	}
+	return 0;
+}
+
+
+/************************************************/
+
+int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item, int weight)
+{
+	int newsize = bucket->h.size + 1;
+
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+
+	bucket->h.items[newsize-1] = item;
+	bucket->h.weight += weight;
+	bucket->h.size++;
+
+	return 0;
+}
+
+int crush_add_list_bucket_item(struct crush_bucket_list *bucket, int item, int weight)
+{
+	int newsize = bucket->h.size + 1;
+
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
+	bucket->sum_weights = realloc(bucket->sum_weights, sizeof(__u32)*newsize);
+
+	bucket->h.items[newsize-1] = item;
+	bucket->item_weights[newsize-1] = weight;
+	if (newsize > 1)
+		bucket->sum_weights[newsize-1] = bucket->sum_weights[newsize-2] + weight;
+	else
+		bucket->sum_weights[newsize-1] = weight;
+
+	bucket->h.weight += weight;
+	bucket->h.size++;
+	return 0;
+}
+
+int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int weight)
+{
+	int newsize = bucket->h.size + 1;
+	int depth = calc_depth(newsize);;
+	int node;
+	int j;
+
+	bucket->num_nodes = 1 << depth;
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	bucket->node_weights = realloc(bucket->node_weights, sizeof(__u32)*bucket->num_nodes);
+	
+	node = calc_node(newsize-1);
+	bucket->node_weights[node] = weight;
+
+	for (j=1; j<depth; j++) {
+		node = parent(node);
+		bucket->node_weights[node] += weight;
+		printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+	}
+	
+	bucket->h.weight += weight;
+	bucket->h.size++;
+	return 0;
+}
+
+int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int weight)
+{
+	int newsize = bucket->h.size + 1;
+	
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
+	bucket->straws = realloc(bucket->straws, sizeof(__u32)*newsize);
+
+	bucket->h.items[newsize-1] = item;
+	bucket->item_weights[newsize-1] = weight;
+
+	bucket->h.weight += weight;
+	bucket->h.size++;
+	
+	return crush_calc_straw(bucket);
+}
+
+int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
+{
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return crush_add_uniform_bucket_item((struct crush_bucket_uniform *)b, item, weight);
+	case CRUSH_BUCKET_LIST:
+		return crush_add_list_bucket_item((struct crush_bucket_list *)b, item, weight);
+	case CRUSH_BUCKET_TREE:
+		return crush_add_tree_bucket_item((struct crush_bucket_tree *)b, item, weight);
+	case CRUSH_BUCKET_STRAW:
+		return crush_add_straw_bucket_item((struct crush_bucket_straw *)b, item, weight);
+	default:
+		return -1;
+	}
+	return 0;
+}
+
+/************************************************/
+
+int crush_adjust_uniform_bucket_item_weight(struct crush_bucket_uniform *bucket, int item, int weight)
+{
+	int diff = (weight - bucket->item_weight) * bucket->h.size;
+
+	bucket->item_weight = weight;
+	bucket->h.weight = bucket->item_weight * bucket->h.size;
+
+	return diff;
+}
+
+int crush_adjust_list_bucket_item_weight(struct crush_bucket_list *bucket, int item, int weight)
+{
+	int diff;
+	unsigned i, j;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		if (bucket->h.items[i] == item)
+			break;
+	}
+	if (i == bucket->h.size)
+		return 0;
+
+	diff = weight = bucket->item_weights[i];
+	bucket->item_weights[i] = weight;
+	bucket->h.weight += diff;
+
+	for (j = i; j < bucket->h.size; j++)
+		bucket->sum_weights[j] += diff;
+
+	return diff;
+}
+
+int crush_adjust_tree_bucket_item_weight(struct crush_bucket_tree *bucket, int item, int weight)
+{
+	int diff;
+	int node;
+	unsigned i, j;
+	unsigned depth = calc_depth(bucket->h.size);
+
+	for (i = 0; i < bucket->h.size; i++) {
+		if (bucket->h.items[i] == item)
+			break;
+	}
+	if (i == bucket->h.size)
+		return 0;
+	
+	node = calc_node(i);
+	diff = weight = bucket->node_weights[node];
+	bucket->node_weights[node] = weight;
+	bucket->h.weight += diff;
+
+	for (j=1; j<depth; j++) {
+		node = parent(node);
+		bucket->node_weights[node] += diff;
+	}
+
+	return diff;
+}
+
+int crush_adjust_straw_bucket_item_weight(struct crush_bucket_straw *bucket, int item, int weight)
+{
+	unsigned idx;
+	int diff;
+
+	for (idx = 0; idx < bucket->h.size; idx++)
+		if (bucket->h.items[idx] == item)
+			break;
+	if (idx == bucket->h.size)
+		return 0;
+
+	diff = weight - bucket->item_weights[idx];
+	bucket->item_weights[idx] = weight;
+	bucket->h.weight += diff;
+
+	crush_calc_straw(bucket);
+
+	return diff;
+}
+
+int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight)
+{
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return crush_adjust_uniform_bucket_item_weight((struct crush_bucket_uniform *)b,
+							     item, weight);
+	case CRUSH_BUCKET_LIST:
+		return crush_adjust_list_bucket_item_weight((struct crush_bucket_list *)b,
+							    item, weight);
+	case CRUSH_BUCKET_TREE:
+		return crush_adjust_tree_bucket_item_weight((struct crush_bucket_tree *)b,
+							    item, weight);
+	case CRUSH_BUCKET_STRAW:
+		return crush_adjust_straw_bucket_item_weight((struct crush_bucket_straw *)b,
+							     item, weight);
+	default:
+		return -1;
+	}
+	return 0;
+}
+
+/************************************************/
+
+int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
+{
+	unsigned i;
+	unsigned sum = 0, n = 0, leaves = 0;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		int id = bucket->h.items[i];
+		if (id < 0) {
+			struct crush_bucket *c = crush->buckets[-1-id];
+			crush_reweight_bucket(crush, c);
+			sum += c->weight;
+			n++;
+		} else {
+			leaves++;
+		}
+	}
+
+	if (n > leaves)
+		bucket->item_weight = sum / n;  // more bucket children than leaves, average!
+	bucket->h.weight = bucket->item_weight * bucket->h.size;
+
+	return 0;
+}
+
+int crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
+{
+	unsigned i;
+
+	bucket->h.weight = 0;
+	for (i = 0; i < bucket->h.size; i++) {
+		int id = bucket->h.items[i];
+		if (id < 0) {
+			struct crush_bucket *c = crush->buckets[-1-id];
+			crush_reweight_bucket(crush, c);
+			bucket->item_weights[i] = c->weight;
+		}
+		bucket->h.weight += bucket->item_weights[i];
+	}
+	return 0;
+}
+
+int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
+{
+	unsigned i;
+
+	bucket->h.weight = 0;
+	for (i = 0; i < bucket->h.size; i++) {
+		int node = calc_node(i);
+		int id = bucket->h.items[i];
+		if (id < 0) {
+			struct crush_bucket *c = crush->buckets[-1-id];
+			crush_reweight_bucket(crush, c);
+			bucket->node_weights[node] = c->weight;
+		}
+		bucket->h.weight += bucket->node_weights[node];
+	}
+	return 0;
+}
+
+int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
+{
+	unsigned i;
+
+	bucket->h.weight = 0;
+	for (i = 0; i < bucket->h.size; i++) {
+		int id = bucket->h.items[i];
+		if (id < 0) {
+			struct crush_bucket *c = crush->buckets[-1-id];
+			crush_reweight_bucket(crush, c);
+			bucket->item_weights[i] = c->weight;
+		}
+		bucket->h.weight += bucket->item_weights[i];
+	}
+	return 0;
+}
+
+int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
+{
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
+	case CRUSH_BUCKET_LIST:
+		return crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
+	case CRUSH_BUCKET_TREE:
+		return crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
+	case CRUSH_BUCKET_STRAW:
+		return crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
+	default:
+		return -1;
 	}
 	return 0;
 }
