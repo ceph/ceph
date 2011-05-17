@@ -58,6 +58,16 @@ implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 %endif
 
+%package obsync
+Summary:        synchronize data between cloud object storage providers or a local directory
+Group:          Productivity/Networking/Other
+License:        LGPLv2
+Requires:       python, python-boto
+%description
+obsync is a tool to synchronize objects between cloud object
+storage providers, such as Amazon S3 (or compatible services), a
+Ceph RADOS cluster, or a local directory.
+
 %if %{with_gtk2}
 %package gcephtool
 Summary:        Ceph graphical monitoring tool
