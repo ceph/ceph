@@ -1163,6 +1163,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "dump" ||
+	     m->cmd[1] == "tree" ||
 	     m->cmd[1] == "getmap" ||
 	     m->cmd[1] == "getcrushmap") {
       OSDMap *p = &osdmap;
@@ -1184,6 +1185,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  p->print(ds);
 	  rdata.append(ds);
 	  ss << "dumped osdmap epoch " << p->get_epoch();
+	} else if (m->cmd[1] == "tree") {
+	  stringstream ds;
+	  p->print_tree(ds);
+	  rdata.append(ds);
+	  ss << "dumped osdmap tree epoch " << p->get_epoch();
 	} else if (m->cmd[1] == "getmap") {
 	  p->encode(rdata);
 	  ss << "got osdmap epoch " << p->get_epoch();
