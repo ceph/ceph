@@ -19,6 +19,7 @@
 
 #include <sys/stat.h>
 
+#include "common/errno.h"
 #include "common/config.h"
 
 #include "common/ceph_argparse.h"
@@ -1038,8 +1039,13 @@ int main(int argc, const char **argv)
   if (add_item >= 0) {
     cout << me << " adding item " << add_item << " weight " << add_weight
 	 << " at " << add_loc << std::endl;
-    crush.insert_device(add_item, (int)(add_weight * (float)0x10000), add_name, add_loc);
-    modified = true;
+    int r = crush.insert_device(add_item, (int)(add_weight * (float)0x10000), add_name, add_loc);
+    if (r == 0)
+      modified = true;
+    else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
   if (reweight) {
     crush.reweight();

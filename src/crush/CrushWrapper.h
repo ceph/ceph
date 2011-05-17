@@ -104,6 +104,14 @@ public:
   }
 
   // item/bucket names
+  bool name_exists(const char *s) {
+    string name(s);
+    build_rmaps();
+    return name_rmap.count(name);
+  }
+  bool item_exists(int i) {
+    return name_map.count(i);
+  }
   int get_item_id(const char *s) {
     string name(s);
     build_rmaps();
