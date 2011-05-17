@@ -629,6 +629,7 @@ libcommon_files = \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
+	crush/CrushWrapper.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \

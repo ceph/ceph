@@ -144,6 +144,13 @@ public:
       rule_name_rmap[name] = i;
   }
 
+
+  void find_roots(set<int>& roots) const;
+  int insert_device(int id, int weight, string name, map<string,string>& loc);
+  void adjust_item_weight(int id, int weight);
+  void reweight();
+
+
   /*** devices ***/
   int get_max_devices() {
     if (!crush) return 0;
