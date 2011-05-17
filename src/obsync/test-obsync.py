@@ -544,6 +544,17 @@ assert_xattr("%s/content_type_test2/hammy_thing" % tdir,
 assert_xattr("%s/content_type_test2/eggy_thing" % tdir,
         { CONTENT_TYPE_XATTR : "Eggs" })
 
-# Check that content-type is preserved
+# Check that user-defined metadata is preserved
+os.mkdir("%s/user_defined_md" % tdir)
+sporkfile = "%s/user_defined_md/spork" % tdir
+f = open(sporkfile, 'w')
+f.write("SPAM SPAM SPAM")
+f.close()
+xattr_sync(sporkfile,
+    { "rados.meta.tines" : "3", "rados.content_type" : "application/octet-stream" })
+obsync_check("%s/user_defined_md" % tdir, opts.buckets[0], ["--delete-after"])
+obsync_check(opts.buckets[0], "%s/user_defined_md2" % tdir, ["-c"])
+assert_xattr("%s/user_defined_md2/spork" % tdir,
+    { "rados.meta.tines" : "3", "rados.content_type" : "application/octet-stream" })
 
 sys.exit(0)

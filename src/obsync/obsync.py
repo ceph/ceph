@@ -499,11 +499,19 @@ def s3_key_to_meta(k):
     meta = {}
     if (k.__dict__.has_key("content_type")):
         meta[CONTENT_TYPE_XATTR] = k.content_type
+    for k,v in k.metadata.items():
+        meta[META_XATTR_PREFIX + k] = v
     return meta
 
-def meta_to_s3_key(k, meta):
-    if (meta.has_key(CONTENT_TYPE_XATTR)):
-        k.set_metadata("Content-Type", meta[CONTENT_TYPE_XATTR])
+def meta_to_s3_key(key, meta):
+    for k,v in meta.items():
+        if (k == CONTENT_TYPE_XATTR):
+            key.set_metadata("Content-Type", v)
+        elif (k[:len(META_XATTR_PREFIX)] == META_XATTR_PREFIX):
+            k_name = k[len(META_XATTR_PREFIX):]
+            key.set_metadata(k_name, v)
+        else:
+            raise Exception("can't understand meta entry: %s" % k)
 
 class S3StoreIterator(object):
     """S3Store iterator"""
