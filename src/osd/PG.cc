@@ -1262,7 +1262,7 @@ bool PG::choose_acting(int newest_update_osd) const
        i != up.end();
        ++i) {
     const Info &pi = *i == osd->whoami ? info : peer_info.find(*i)->second;
-    if (best_info.log_tail <= pi.last_update || log.backlog) {
+    if (best_info.log_tail <= pi.last_update || best_info.log_backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(*i);
       dout(10) << " osd" << *i << " (up) accepted" << dendl;
@@ -1279,7 +1279,7 @@ bool PG::choose_acting(int newest_update_osd) const
   up_it = find(up.begin(), up.end(), osd->whoami);
   if (up_it == up.end()) {
     if (want.size() < osd->osdmap->get_pg_size(info.pgid) &&
-	(best_info.log_tail <= info.last_update || log.backlog)) {
+	(best_info.log_tail <= info.last_update || best_info.log_backlog)) {
       dout(10) << " osd" << osd->whoami << " (me) accepted" << dendl;
       want.push_back(osd->whoami);
     } else {
@@ -1299,7 +1299,7 @@ bool PG::choose_acting(int newest_update_osd) const
     if (up_it != up.end())
       continue;
 
-    if (best_info.log_tail <= i->second.last_update || log.backlog) {
+    if (best_info.log_tail <= i->second.last_update || best_info.log_backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(i->first);
       dout(10) << " osd" << i->first << " (stray) accepted" << dendl;
