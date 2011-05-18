@@ -591,6 +591,9 @@ int OSD::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   monc->init();
 
+  // tell monc about log_client so it will know about mon session resets
+  monc->set_log_client(&clog);
+
   osd_lock.Unlock();
 
   monc->authenticate();
@@ -1776,8 +1779,6 @@ void OSD::tick()
   remove_list_lock.Unlock();
 
   map_lock.put_read();
-
-  clog.send_log();
 
   timer.add_event_after(1.0, new C_Tick(this));
 

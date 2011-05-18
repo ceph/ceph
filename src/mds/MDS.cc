@@ -467,6 +467,9 @@ int MDS::init(int wanted_state)
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
   monc->init();
 
+  // tell monc about log_client so it will know about mon session resets
+  monc->set_log_client(&clog);
+  
   monc->authenticate();
   monc->wait_auth_rotating(30.0);
 
@@ -538,8 +541,6 @@ void MDS::tick()
 
   // reschedule
   reset_tick();
-
-  clog.send_log();
 
   if (is_laggy()) {
     dout(5) << "tick bailing out since we seem laggy" << dendl;

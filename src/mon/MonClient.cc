@@ -23,6 +23,7 @@
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/LogClient.h"
 
 #include "MonClient.h"
 #include "MonMap.h"
@@ -444,6 +445,13 @@ void MonClient::handle_auth(MAuthReply *m)
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
       }
+
+      if (log_client) {
+	log_client->reset_session();
+	Message *m = log_client->get_mon_log_message();
+	if (m)
+	  _send_mon_message(m);
+      }
     }
   
     _check_auth_tickets();
@@ -563,6 +571,13 @@ void MonClient::tick()
       _renew_subs();
 
     messenger->send_keepalive(monmap.get_inst(cur_mon));
+   
+    if (state == MC_STATE_HAVE_SESSION &&
+	log_client) {
+      Message *m = log_client->get_mon_log_message();
+      if (m)
+	_send_mon_message(m);
+    }
   }
 
   if (auth)

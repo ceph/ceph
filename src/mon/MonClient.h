@@ -34,7 +34,7 @@ class MMonMap;
 class MMonSubscribeAck;
 class MAuthReply;
 class MAuthRotating;
-
+class LogClient;
 
 enum MonClientState {
   MC_STATE_NONE,
@@ -60,6 +60,8 @@ private:
 
   Mutex monc_lock;
   SafeTimer timer;
+
+  LogClient *log_client;
 
   set<__u32> auth_supported;
 
@@ -168,6 +170,7 @@ public:
     cur_con(NULL),
     monc_lock("MonClient::monc_lock"),
     timer(monc_lock),
+    log_client(NULL),
     hunting(true),
     want_monmap(true),
     want_keys(0), global_id(0),
@@ -179,6 +182,10 @@ public:
 
   void init();
   void shutdown();
+
+  void set_log_client(LogClient *clog) {
+    log_client = clog;
+  }
 
   static int build_initial_monmap(MonMap &);
 

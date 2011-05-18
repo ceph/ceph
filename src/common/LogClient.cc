@@ -103,6 +103,12 @@ void LogClient::do_log(clog_type type, const std::string& s)
     _send_log();
 }
 
+void LogClient::reset_session()
+{
+  Mutex::Locker l(log_lock);
+  last_log_sent = last_log - log_queue.size();
+}
+
 void LogClient::send_log()
 {
   Mutex::Locker l(log_lock);
@@ -136,11 +142,48 @@ void LogClient::_send_log_to_syslog()
   }
 }
 
+Message *LogClient::get_mon_log_message()
+{
+  Mutex::Locker l(log_lock);
+  return _get_mon_log_message();
+}
+
+Message *LogClient::_get_mon_log_message()
+{
+   if (log_queue.empty())
+     return NULL;
+
+  // only send entries that haven't been sent yet during this mon
+  // session!  monclient needs to call reset_session() on mon session
+  // reset for this to work right.
+
+  if (last_log_sent == last_log)
+    return NULL;
+
+  unsigned i = last_log - last_log_sent;
+  dout(10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
+	   << " i " << i << dendl;
+  std::deque<LogEntry> o(i);
+  std::deque<LogEntry>::reverse_iterator p = log_queue.rbegin();
+  while (i > 0) {
+    i--;
+    o[i] = *p++;
+    dout(10) << " will send " << o[i] << dendl;
+  }
+
+  last_log_sent = last_log;
+  
+  MLog *log = new MLog(monmap->get_fsid());
+  log->entries.swap(o);
+
+  return log;
+}
+
 void LogClient::_send_log_to_monitors()
 {
-  if (log_queue.empty())
+  Message *log = _get_mon_log_message();
+  if (!log)
     return;
-  MLog *log = new MLog(monmap->get_fsid(), log_queue);
 
   if (monc) {
     monc->send_mon_message(log);

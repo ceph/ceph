@@ -455,7 +455,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
   mon->clog.info() << m->get_target() << " failed (by "
-		     << m->get_orig_source_inst() << ")\n";
+		   << m->get_orig_source_inst() << ")\n";
   
   int target_osd = m->get_target().name.num();
   int reporter = m->get_orig_source().num();

@@ -58,7 +58,7 @@ public:
 
   LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
     messenger(m), monmap(mm), monc(mc), is_synchronous(flags & FLAG_SYNC),
-    log_lock("LogClient::log_lock"), last_log(0), last_syslog(0) { }
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0), last_syslog(0) { }
 
   void send_log();
   void handle_log_ack(MLogAck *m);
@@ -95,6 +95,9 @@ public:
     do_log(CLOG_SEC, s);
   }
 
+  void reset_session();
+  Message *get_mon_log_message();
+
 private:
   void do_log(clog_type type, std::stringstream& ss);
   void do_log(clog_type type, const std::string& s);
@@ -102,6 +105,7 @@ private:
   void _send_log();
   void _send_log_to_syslog();
   void _send_log_to_monitors();
+  Message *_get_mon_log_message();
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
@@ -111,6 +115,7 @@ private:
   MonClient *monc;
   bool is_synchronous;
   Mutex log_lock;
+  version_t last_log_sent;
   version_t last_log;
   uint64_t last_syslog;
   std::deque<LogEntry> log_queue;
