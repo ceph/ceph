@@ -107,7 +107,7 @@ cephfs_SOURCES = cephfs.cc
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
-librados_config_LDADD = librados.la libcrush.la $(EXTRALIBS)
+librados_config_LDADD = librados.la $(EXTRALIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
@@ -275,7 +275,7 @@ librbd_a_CFLAGS = ${AM_CFLAGS}
 librbd_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc rados_sync.cc
-rados_LDADD = librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
