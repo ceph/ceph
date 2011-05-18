@@ -37,6 +37,7 @@
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "include/page.h"
 
 #define DOUT_SUBSYS ms
 #undef dout_prefix
