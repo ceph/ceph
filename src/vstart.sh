@@ -417,19 +417,13 @@ EOF
 EOF
 		fi
 	    fi
-	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name \
-		--cap mon 'allow *' \
-		--cap osd 'allow *' \
-		--cap mds 'allow' \
-		$key_fn
-	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
+	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name $key_fn
+	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow *' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
 		    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.${name}s \
-			--cap mon 'allow *' \
-			--cap osd 'allow *' \
-			--cap mds 'allow' \
 			dev/mds.${name}s.keyring
-                    $SUDO $CEPH_ADM -i dev/mds.${name}s.keyring auth add mds.${name}s
+                    $SUDO $CEPH_ADM -i dev/mds.${name}s.keyring auth add mds.${name}s \
+			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 	fi
 	
