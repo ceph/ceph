@@ -8,6 +8,9 @@ namespace ceph {
   extern unsigned _page_shift;
 }
 
+#endif
+
+
 #undef PAGE_SIZE
 #define PAGE_SIZE ceph::_page_size
 
@@ -17,4 +20,4 @@ namespace ceph {
 #undef PAGE_SHIFT
 #define PAGE_SHIFT ceph::_page_shift
 
-#endif
+
