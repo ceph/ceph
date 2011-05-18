@@ -7,6 +7,8 @@ cosd \- ceph object storage daemon
 [ \fB\-\-osd\-data \fIdatapath\fR ]
 [ \fB\-\-osd\-journal \fIjournal\fR ]
 [ \fB\-\-mkfs\fR ]
+[ \fB\-\-mkjournal\fR ]
+[ \fB\-\-mkkey\fR ]
 .SH DESCRIPTION
 .B cosd
 is the object storage daemon for the Ceph distributed file system.
@@ -34,7 +36,16 @@ Journal updates to \fIjournal\fP.
 .TP
 \fB\-\-mkfs\fP
 Create an empty object repository.  Normally invoked by
-.BR mkcephfs (8).
+.BR mkcephfs
+(8).  This also initializes the jouranl (if one is defined).
+.TP
+\fB\-\-mkkey\fP
+Generate a new secret key.  This is normally used in combination with \fB\-\-mkfs\fR 
+as it is more convenient than generating a key by hand with \fIcauthtool\fR.
+.TP
+\fB\-\-mkjournal\fP
+Create a new journal file to match an existing object repository.  This is useful if the journal
+device or file is wiped out due to a disk or file system failure.
 .TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
 Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
@@ -49,4 +60,5 @@ http://ceph.newdream.net/wiki for more information.
 .SH SEE ALSO
 .BR ceph (8),
 .BR cmds (8),
-.BR cmon (8)
+.BR cmon (8),
+.BR cauthtool (8)
