@@ -581,6 +581,11 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
         goto done;
       }
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
+
+      // suck in any caps too
+      for (unsigned i=3; i+1<m->cmd.size(); i += 2)
+	::encode(m->cmd[i+1], auth_inc.auth.caps[m->cmd[i]]);
+
       dout(10) << " importing " << auth_inc.name << " " << auth_inc.auth << dendl;
       push_cephx_inc(auth_inc);
 
@@ -604,7 +609,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       mon->key_server.get_auth(auth_inc.name, auth_inc.auth);
 
       map<string,bufferlist> newcaps;
-      for (unsigned i=3; i+1<m->cmd.size(); i++)
+      for (unsigned i=3; i+1<m->cmd.size(); i += 2)
 	::encode(m->cmd[i+1], newcaps[m->cmd[i]]);
 
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
