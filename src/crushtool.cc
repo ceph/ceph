@@ -56,7 +56,11 @@ map<string, int> rule_id;
 
 string string_node(node_t &node)
 {
-  return string(node.value.begin(), node.value.end());
+  string s = string(node.value.begin(), node.value.end());
+  while (s.length() > 0 &&
+	 s[0] == ' ')
+    s = string(s.begin() + 1, s.end());
+  return s;
 }
 
 int int_node(node_t &node) 
@@ -84,7 +88,7 @@ void parse_device(iter_t const& i, CrushWrapper &crush)
   item_id[name] = id;
   id_item[id] = name;
 
-  if (verbose) cout << "device " << id << " " << name << std::endl;
+  if (verbose) cout << "device " << id << " '" << name << "'" << std::endl;
 
   if (id >= crush.get_max_devices())
     crush.set_max_devices(id+1);
@@ -94,7 +98,7 @@ void parse_bucket_type(iter_t const& i, CrushWrapper &crush)
 {
   int id = int_node(i->children[1]);
   string name = string_node(i->children[2]);
-  if (verbose) cout << "type " << id << " " << name << std::endl;
+  if (verbose) cout << "type " << id << " '" << name << "'" << std::endl;
   type_id[name] = id;
   crush.set_type_name(id, name.c_str());
 }
