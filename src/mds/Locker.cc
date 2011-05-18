@@ -3693,7 +3693,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   
   // * -> excl?
   else if (lock->get_state() != LOCK_EXCL &&
-	   //!lock->is_rdlocked() &&
+	   !lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
 	    (in->inode.is_dir() && !in->has_subtree_root_dirfrag())) &&
@@ -3705,7 +3705,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 
   // * -> mixed?
   else if (lock->get_state() != LOCK_MIX &&
-	   //!lock->is_rdlocked() &&
+	   !lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   (lock->get_scatter_wanted() ||
 	    (in->multiple_nonstale_caps() && (wanted & CEPH_CAP_GWR)))) {
