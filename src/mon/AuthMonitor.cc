@@ -445,6 +445,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
+	m->cmd[1] == "caps" ||
         m->cmd[1] == "list") {
       return false;
     }
@@ -587,6 +588,33 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
+    }
+    else if (m->cmd[1] == "caps" && m->cmd.size() >= 3) {
+      KeyServerData::Incremental auth_inc;
+      if (!auth_inc.name.from_str(m->cmd[2])) {
+	ss << "bad entity name";
+	rs = -EINVAL;
+	goto done;
+      }
+      if (!mon->key_server.contains(auth_inc.name)) {
+        ss << "couldn't find entry " << auth_inc.name;
+        rs = -ENOENT;
+        goto done;
+      }
+      mon->key_server.get_auth(auth_inc.name, auth_inc.auth);
+
+      map<string,bufferlist> newcaps;
+      for (unsigned i=3; i+1<m->cmd.size(); i++)
+	::encode(m->cmd[i+1], newcaps[m->cmd[i]]);
+
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.auth.caps = newcaps;
+      push_cephx_inc(auth_inc);
+
+      ss << "updated caps for " << auth_inc.name;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;     
     }
     else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
       string name = m->cmd[2];
