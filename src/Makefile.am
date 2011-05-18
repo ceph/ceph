@@ -494,8 +494,6 @@ CLEANFILES += \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
-	obsync/obsync \
-	obsync/boto_tool \
 	sample.fetch_config
 
 ##
