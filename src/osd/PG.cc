@@ -4309,6 +4309,9 @@ void PG::RecoveryState::GetInfo::get_infos()
        it != prior_set->cur.end();
        ++it) {
     int peer = *it;
+    if (peer == pg->osd->whoami) {
+      continue;
+    }
     if (pg->peer_info.count(peer)) {
       dout(10) << " have osd" << peer << " info " << pg->peer_info[peer] << dendl;
       continue;
@@ -4742,8 +4745,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     if (up[i] != whoami)
       cur.insert(up[i]);
   for (unsigned i=0; i<acting.size(); i++)
-    if (acting[i] != whoami)
-      cur.insert(acting[i]);
+    cur.insert(acting[i]);
 
   // see if i have ever started since joining the pg.  this is important only
   // if we want to exclude lost osds.
