@@ -58,7 +58,7 @@ public:
 
   LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
     messenger(m), monmap(mm), monc(mc), is_synchronous(flags & FLAG_SYNC),
-    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0), last_syslog(0) { }
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0) { }
 
   void send_log();
   void handle_log_ack(MLogAck *m);
@@ -117,7 +117,6 @@ private:
   Mutex log_lock;
   version_t last_log_sent;
   version_t last_log;
-  uint64_t last_syslog;
   std::deque<LogEntry> log_queue;
 
   friend class LogClientTemp;

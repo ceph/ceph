@@ -99,6 +99,14 @@ void LogClient::do_log(clog_type type, const std::string& s)
   e.msg = s;
   log_queue.push_back(e);
   
+  // log synchronously to syslog
+  if (g_conf.clog_to_syslog) {
+    ostringstream oss;
+    oss << e;
+    string str(oss.str());
+    syslog(clog_type_to_syslog_prio(e.type) | LOG_USER, "%s", str.c_str());
+  }
+
   if (is_synchronous)
     _send_log();
 }
@@ -117,29 +125,8 @@ void LogClient::send_log()
 
 void LogClient::_send_log()
 {
-  if (g_conf.clog_to_syslog)
-    _send_log_to_syslog();
   if (g_conf.clog_to_monitors)
     _send_log_to_monitors();
-}
-
-void LogClient::_send_log_to_syslog()
-{
-  std::deque<LogEntry>::const_reverse_iterator rbegin = log_queue.rbegin();
-  std::deque<LogEntry>::const_reverse_iterator rend = log_queue.rend();
-  for (std::deque<LogEntry>::const_reverse_iterator a = rbegin; a != rend; ++a) {
-    const LogEntry entry(*a);
-    if (entry.seq < last_syslog)
-      break;
-    ostringstream oss;
-    oss << entry;
-    string str(oss.str());
-    syslog(clog_type_to_syslog_prio(entry.type) | LOG_USER, "%s", str.c_str());
-  }
-  if (rbegin != rend) {
-    const LogEntry entry(*rbegin);
-    last_syslog = entry.seq;
-  }
 }
 
 Message *LogClient::get_mon_log_message()
