@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+for package in python-dev python-pip python-virtualenv libevent-dev; do
+    if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
+	# add a space after old values
+	missing="${missing:+$missing }$package"
+    fi
+done
+if [ -n "$missing" ]; then
+    aptdcon --install $missing
+fi
+
+virtualenv --no-site-packages --distribute virtualenv
+./virtualenv/bin/pip install -r requirements.txt

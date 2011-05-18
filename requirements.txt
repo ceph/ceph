@@ -1,0 +1,5 @@
+# 0.14 switches to libev, that means bootstrap needs to change too
+gevent ==0.13.6
+paramiko >=1.7.4
+nose >=1.0.0
+fudge >=1.0.3
