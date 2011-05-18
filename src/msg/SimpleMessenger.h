@@ -152,6 +152,7 @@ private:
     Cond cond;
     bool keepalive;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
+    bool close_on_empty;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
@@ -214,7 +215,7 @@ private:
       state(st), 
       connection_state(new Connection),
       reader_running(false), reader_joining(false), writer_running(false),
-      in_qlen(0), keepalive(false), halt_delivery(false),
+      in_qlen(0), keepalive(false), halt_delivery(false), close_on_empty(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {
@@ -473,6 +474,9 @@ private:
 
   void mark_down(const entity_addr_t& addr);
   void mark_down(Connection *con);
+  void mark_down_on_empty(Connection *con);
+  void mark_disposable(Connection *con);
+
   void mark_down_all();
 
   // reaper

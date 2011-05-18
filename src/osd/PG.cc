@@ -1294,7 +1294,8 @@ bool PG::choose_acting(int newest_update_osd)
   return true;
 }
 
-void PG::choose_log_location(bool &need_backlog,
+void PG::choose_log_location(const PgPriorSet &prior_set,
+			     bool &need_backlog,
 			     bool &wait_on_backlog,
 			     int &pull_from,
 			     eversion_t &newest_update,
@@ -1308,6 +1309,10 @@ void PG::choose_log_location(bool &need_backlog,
   for (map<int, Info>::const_iterator it = peer_info.begin();
        it != peer_info.end();
        ++it) {
+    // Only consider osds in the prior set
+    if (prior_set.cur.find(it->first) == prior_set.cur.end()) {
+      continue;
+    }
     if (best_info->last_update < it->second.last_update) {
       best_info = &(it->second);
       pull_from = it->first;
@@ -3925,6 +3930,25 @@ PG::RecoveryState::Primary::react(const ActMap&) {
   return discard_event();
 }
 
+boost::statechart::result
+PG::RecoveryState::Primary::react(const AdvMap& advmap) 
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  OSDMap &osdmap = advmap.osdmap;
+
+  // Remove any downed osds from peer_info
+  map<int,PG::Info>::iterator p = pg->peer_info.begin();
+  while (p != pg->peer_info.end()) {
+    if (!osdmap.is_up(p->first)) {
+      dout(10) << " dropping down osd" << p->first << " info " << p->second << dendl;
+      pg->peer_missing.erase(p->first);
+      pg->peer_info.erase(p++);
+    } else
+      p++;
+  }
+  return forward_event();
+}
+
 void PG::RecoveryState::Primary::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
@@ -4324,7 +4348,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   eversion_t newest_update;
   eversion_t oldest_update;
-  pg->choose_log_location(need_backlog,
+  pg->choose_log_location(*context< Peering >().prior_set.get(),
+			  need_backlog,
 			  wait_on_backlog,
 			  newest_update_osd,
 			  newest_update,
@@ -4387,7 +4412,8 @@ PG::RecoveryState::GetLog::react(const BacklogComplete&) {
   return forward_event();
 }
 
-void PG::RecoveryState::GetLog::exit() {
+boost::statechart::result 
+PG::RecoveryState::GetLog::react(const GotLog&) {
   dout(10) << "leaving GetLog" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (msg) {
@@ -4396,7 +4422,10 @@ void PG::RecoveryState::GetLog::exit() {
 			msg->info, msg->log, msg->missing, 
 			newest_update_osd);
   }
+  return transit< GetMissing >();
+}
 
+void PG::RecoveryState::GetLog::exit() {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -4410,6 +4439,12 @@ PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx) : my_base(
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result 
+PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt) {
+  dout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
+  return discard_event();
 }
 
 void PG::RecoveryState::WaitActingChange::exit() {

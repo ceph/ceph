@@ -32,7 +32,7 @@ void usage()
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  policy                     read bucket/object policy\n";
-  cerr << "  log show                   dump a log from specific bucket, date\n";
+  cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --access-key=<id>         S3 access key\n";
@@ -429,18 +429,21 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!date || !bucket) {
-      if (!date)
-        cerr << "date was not specified" << std::endl;
-      if (!bucket)
-        cerr << "bucket was not specified" << std::endl;
+    if (!object && (!date || !bucket)) {
+      cerr << "object or (both date and bucket) were not specified" << std::endl;
       usage();
     }
 
     string log_bucket = RGW_LOG_BUCKET_NAME;
-    string oid = date;
-    oid += "-";
-    oid += string(bucket);
+    string oid;
+    if (object) {
+      oid = object;
+    } else {
+      oid = date;
+      oid += "-";
+      oid += string(bucket);
+    }
+
     uint64_t size;
     int r = store->obj_stat(log_bucket, oid, &size, NULL);
     if (r < 0) {

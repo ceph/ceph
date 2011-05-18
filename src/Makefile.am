@@ -486,11 +486,16 @@ init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
 BUILT_SOURCES += init-ceph
 sbin_SCRIPTS += mkcephfs
 
+bin_SCRIPTS += obsync/obsync
+bin_SCRIPTS += obsync/boto_tool
+
 CLEANFILES += \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
+	obsync/obsync \
+	obsync/boto_tool \
 	sample.fetch_config
 
 ##
@@ -1059,6 +1064,8 @@ noinst_HEADERS = \
         msg/tcp.cc\
         msg/tcp.h\
 	objclass/objclass.h\
+	obsync/obsync\
+	obsync/boto_tool\
 	os/btrfs_ioctl.h\
         os/Fake.h\
         os/FileJournal.h\

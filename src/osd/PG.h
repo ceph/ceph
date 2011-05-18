@@ -1079,16 +1079,22 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< NeedNewMap, WaitActingChange >
 	> reactions;
       boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
+      boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MNotifyRec&);
     };
 
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
 			      NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< MLogRec >
+	> reactions;
       WaitActingChange(my_context ctx);
+      boost::statechart::result react(const MLogRec&);
       void exit();
     };
     
@@ -1196,10 +1202,11 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< BacklogComplete >,
-	boost::statechart::transition< GotLog, GetMissing >
+	boost::statechart::custom_reaction< GotLog >
 	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const BacklogComplete&);
+      boost::statechart::result react(const GotLog&);
     };
 
     struct WaitUpThru;
@@ -1371,7 +1378,8 @@ public:
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  void choose_log_location(bool &need_backlog,
+  void choose_log_location(const PgPriorSet &prior_set,
+			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,
 			   eversion_t &newest_update,
