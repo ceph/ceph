@@ -12,9 +12,9 @@
  * osdmap encoding versions
  */
 #define CEPH_OSDMAP_INC_VERSION     5
-#define CEPH_OSDMAP_INC_VERSION_EXT 6
+#define CEPH_OSDMAP_INC_VERSION_EXT 7
 #define CEPH_OSDMAP_VERSION         5
-#define CEPH_OSDMAP_VERSION_EXT     6
+#define CEPH_OSDMAP_VERSION_EXT     7
 
 /*
  * fs id

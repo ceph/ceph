@@ -1,3 +1,9 @@
+ceph (0.28-1) experimental; urgency=low
+
+  * New upstream release. 
+
+ -- Sage Weil <sage@newdream.net>  Tue, 17 May 2011 18:03:11 -0700
+
 ceph (0.27.1-1) experimental; urgency=low
 
   * New upstream release. 

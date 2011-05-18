@@ -306,6 +306,8 @@ public:
   void flush();
   void sync_and_flush();
 
+  int snapshot(const string& name);
+
   // attrs
   int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size);
   int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr &bp);

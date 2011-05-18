@@ -188,8 +188,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
   
-  set<LingerOp*> need_resend_linger;
-  set<Op*> need_resend;
+  list<LingerOp*> need_resend_linger;
+  map<tid_t, Op*> need_resend;
 
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
@@ -229,7 +229,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p++) {
 	  LingerOp *op = p->second;
 	  if (recalc_linger_op_target(op))
-	    need_resend_linger.insert(op);
+	    need_resend_linger.push_back(op);
 	}
 
 	// check for changed request mappings
@@ -238,7 +238,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p++) {
 	  Op *op = p->second;
 	  if (recalc_op_target(op))
-	    need_resend.insert(op);
+	    need_resend[op->tid] = op;
 	}
 
 	// osd addr changes?
@@ -287,19 +287,19 @@ void Objecter::handle_osd_map(MOSDMap *m)
       if (op->paused &&
 	  !((op->flags & CEPH_OSD_FLAG_READ) && pauserd) &&   // not still paused as a read
 	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr))    // not still paused as a write
-	need_resend.insert(op);
+	need_resend[op->tid] = op;
     }
 
   // resend requests
-  for (set<Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
-    Op *op = *p;
+  for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
+    Op *op = p->second;
     if (op->session)
-      send_op(*p);
+      send_op(op);
   }
-  for (set<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
+  for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
     LingerOp *op = *p;
     if (op->session)
-      send_linger(*p);
+      send_linger(op);
   }
 
   dump_active();

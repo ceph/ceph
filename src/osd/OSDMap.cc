@@ -44,7 +44,10 @@ void OSDMap::print(ostream& out) const
     out << " pausewr";
   if (test_flag(CEPH_OSDMAP_PAUSEREC))
     out << " pauserec";
-  out << "\n" << std::endl;
+  out << "\n";
+  if (get_cluster_snapshot().length())
+    out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
+  out << "\n";
  
   for (map<int,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     std::string name("<unknown>");

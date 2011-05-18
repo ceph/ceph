@@ -326,6 +326,10 @@ public:
       paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
     }
+
+    bool operator<(const Op& other) const {
+      return tid < other.tid;
+    }
   };
 
   struct C_Stat : public Context {

@@ -1434,6 +1434,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
+    else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
+      pending_inc.cluster_snapshot = m->cmd[2];
+      ss << "creating cluster snap " << m->cmd[2];
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
     else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
