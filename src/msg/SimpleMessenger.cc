@@ -881,8 +881,9 @@ int SimpleMessenger::Pipe::accept()
                                     should let the daemon handle it itself.
     Otherwise, take over other Connection so we don't lose older messages */
     existing->connection_state->reset_pipe(this);
-    existing->connection_state->put();
-    existing->connection_state = NULL;
+
+    // do not clear existing->connection_state, since read_message and write_message both
+    // dereference it without pipe_lock.
 
     // steal queue and out_seq
     existing->requeue_sent();

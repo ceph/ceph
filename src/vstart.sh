@@ -367,18 +367,14 @@ EOF
 EOF
 	    fi
 	    echo mkfs osd$osd
-	    cmd="$SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs"
+	    cmd="$SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs --mkkey"
 	    echo $cmd
 	    $cmd
 
 	    if [ "$cephx" -eq 1 ]; then
 		key_fn=dev/osd$osd/keyring
-		$SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=osd.$osd \
-		    --cap mon 'allow *' \
-		    --cap osd 'allow *' \
-		    $key_fn
 		echo adding osd$osd key to auth repository
-		$SUDO $CEPH_ADM -i $key_fn auth add osd.$osd
+		$SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
 	    fi
 	fi
 	echo start osd$osd

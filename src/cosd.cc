@@ -63,6 +63,7 @@ int main(int argc, const char **argv)
   // osd specific args
   bool mkfs = false;
   bool mkjournal = false;
+  bool mkkey = false;
   bool flushjournal = false;
   char *dump_pg_log = 0;
   FOR_EACH_ARG(args) {
@@ -70,6 +71,8 @@ int main(int argc, const char **argv)
       mkfs = true;
     } else if (CEPH_ARGPARSE_EQ("mkjournal", '\0')) {
       mkjournal = true;
+    } else if (CEPH_ARGPARSE_EQ("mkkey", '\0')) {
+      mkkey = true;
     } else if (CEPH_ARGPARSE_EQ("flush-journal", '\0')) {
       flushjournal = true;
     } else if (CEPH_ARGPARSE_EQ("dump-pg-log", '\0')) {
@@ -140,8 +143,23 @@ int main(int argc, const char **argv)
     if (!g_conf.osd_journal.empty())
       *_dout << " journal " << g_conf.osd_journal;
     *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
-    exit(0);
   }
+  if (mkkey) {
+    EntityName ename(g_conf.name);
+    EntityAuth eauth;
+    eauth.key.create(CEPH_CRYPTO_AES);
+    g_keyring.add(ename, eauth);
+    bufferlist bl;
+    ::encode(g_keyring, bl);
+    int r = bl.write_file(g_conf.keyring.c_str(), 0600);
+    if (r)
+      derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf.keyring
+	   << ": " << cpp_strerror(r) << TEXT_NORMAL << dendl;
+    else
+      derr << "created new key in keyring " << g_conf.keyring << dendl;
+  }
+  if (mkfs || mkkey)
+    exit(0);
   if (mkjournal) {
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {

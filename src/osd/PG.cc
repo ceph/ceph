@@ -3427,7 +3427,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
     i.acting = oldacting;
     i.up = oldup;
 
-    if (oldacting != acting) {
+    if (oldacting != acting || oldup != up) {
       info.history.same_acting_since = osdmap.get_epoch();
     }
     if (oldup != up) {
