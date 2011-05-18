@@ -4291,6 +4291,8 @@ void OSD::_remove_pg(PG *pg)
   
   // reset log, last_complete, in case deletion gets canceled
   pg->info.last_complete = eversion_t();
+  pg->info.last_update = eversion_t();
+  pg->info.log_tail = eversion_t();
   pg->log.zero();
   pg->ondisklog.zero();
 
