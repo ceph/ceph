@@ -4423,7 +4423,11 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 boost::statechart::result 
 PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
   assert(!msg);
-  assert(logevt.from == newest_update_osd);
+  if (logevt.from != newest_update_osd) {
+    dout(10) << "GetLog: discarding log from "
+	     << "non-newest_update_osd osd" << logevt.from << dendl;
+    return discard_event();
+  }
   dout(10) << "GetLog: recieved master log from osd" 
 	   << logevt.from << dendl;
   msg = logevt.msg;
