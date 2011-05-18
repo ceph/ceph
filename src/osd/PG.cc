@@ -1233,6 +1233,7 @@ void PG::clear_primary_state()
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
+  pg_trim_to = eversion_t();
   stray_purged.clear();
   might_have_unfound.clear();
 
