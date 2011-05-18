@@ -375,6 +375,7 @@ struct config_option config_optionsp[] = {
   OPTION(osd_class_dir, OPT_STR, "/usr/lib/rados-classes"),
   OPTION(osd_check_for_log_corruption, OPT_BOOL, false),
   OPTION(osd_use_stale_snap, OPT_BOOL, false),
+  OPTION(osd_rollback_to_cluster_snap, OPT_STR, 0),
   OPTION(osd_max_notify_timeout, OPT_U32, 30), // max notify timeout in seconds
   OPTION(filestore, OPT_BOOL, false),
   OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5),    // seconds

@@ -166,6 +166,8 @@ public:
     vector<entity_addr_t> old_blacklist;
     map<int32_t, entity_addr_t> new_hb_up;
 
+    string cluster_snapshot;
+
     void encode(bufferlist& bl) {
       // base
       __u16 v = CEPH_OSDMAP_INC_VERSION;
@@ -197,6 +199,7 @@ public:
       ::encode(new_blacklist, bl);
       ::encode(old_blacklist, bl);
       ::encode(new_up_internal, bl);
+      ::encode(cluster_snapshot, bl);
     }
     void decode(bufferlist::iterator &p) {
       // base
@@ -235,6 +238,8 @@ public:
       ::decode(old_blacklist, p);
       if (ev >= 6)
         ::decode(new_up_internal, p);
+      if (ev >= 7)
+	::decode(cluster_snapshot, p);
     }
 
     Incremental(epoch_t e=0) :
@@ -273,6 +278,9 @@ private:
   map<string,int> name_pool;
 
   hash_map<entity_addr_t,utime_t> blacklist;
+
+  epoch_t cluster_snapshot_epoch;
+  string cluster_snapshot;
 
  public:
   CrushWrapper     crush;       // hierarchical map
@@ -321,6 +329,12 @@ private:
     b.set_port(0);
     b.set_nonce(0);
     return blacklist.count(b);
+  }
+
+  string get_cluster_snapshot() const {
+    if (cluster_snapshot_epoch == epoch)
+      return cluster_snapshot;
+    return string();
   }
 
   /***** cluster state *****/
@@ -625,6 +639,15 @@ private:
 	 p++)
       blacklist.erase(*p);
 
+    // cluster snapshot?
+    if (inc.cluster_snapshot.length()) {
+      cluster_snapshot = inc.cluster_snapshot;
+      cluster_snapshot_epoch = inc.epoch;
+    } else {
+      cluster_snapshot.clear();
+      cluster_snapshot_epoch = 0;
+    }
+
     // do new crush map last (after up/down stuff)
     if (inc.crush.length()) {
       bufferlist::iterator blp = inc.crush.begin();
@@ -671,6 +694,8 @@ private:
     ::encode(osd_info, bl);
     ::encode(blacklist, bl);
     ::encode(osd_cluster_addr, bl);
+    ::encode(cluster_snapshot_epoch, bl);
+    ::encode(cluster_snapshot, bl);
   }
   
   void decode(bufferlist& bl) {
@@ -724,6 +749,11 @@ private:
       ::decode(osd_cluster_addr, p);
     else
       osd_cluster_addr.resize(osd_addr.size());
+
+    if (ev >= 7) {
+      ::decode(cluster_snapshot_epoch, p);
+      ::decode(cluster_snapshot, p);
+    }      
 
     // index pool names
     name_pool.clear();

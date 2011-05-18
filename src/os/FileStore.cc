@@ -62,6 +62,7 @@
 #define ATTR_MAX_BLOCK_LEN 2048
 
 #define COMMIT_SNAP_ITEM "snap_%lld"
+#define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
 #ifndef __CYGWIN__
 # ifndef DARWIN
@@ -1510,6 +1511,7 @@ int FileStore::mount()
   int ret;
   char buf[PATH_MAX];
   uint64_t initial_op_seq;
+  set<string> cluster_snaps;
 
   if (!g_conf.filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
@@ -1582,8 +1584,11 @@ int FileStore::mount()
       if (!de)
 	break;
       long long unsigned c;
+      char clustersnap[PATH_MAX];
       if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1)
 	snaps.push_back(c);
+      else if (sscanf(de->d_name, CLUSTER_SNAP_ITEM, clustersnap) == 1)
+	cluster_snaps.insert(clustersnap);
     }
     
     if (::closedir(dir) < 0) {
@@ -1594,6 +1599,15 @@ int FileStore::mount()
     }
 
     dout(0) << "mount found snaps " << snaps << dendl;
+    if (cluster_snaps.size())
+      dout(0) << "mount found cluster snaps " << cluster_snaps << dendl;
+  }
+
+  if (g_conf.osd_rollback_to_cluster_snap.length() &&
+      cluster_snaps.count(g_conf.osd_rollback_to_cluster_snap) == 0) {
+    derr << "rollback to cluster snapshot '" << g_conf.osd_rollback_to_cluster_snap << "': not found" << dendl;
+    ret = -ENOENT;
+    goto close_basedir_fd;
   }
 
   if (btrfs && g_conf.filestore_btrfs_snap) {
@@ -1602,32 +1616,48 @@ int FileStore::mount()
     } else if (!btrfs) {
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
-      uint64_t cp = snaps.back();
-      uint64_t curr_seq;
+      char s[PATH_MAX];
 
-      {
-	int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-	assert(fd >= 0);
-	TEMP_FAILURE_RETRY(::close(fd));
-      }
-      dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
-     
-      if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
-        derr << TEXT_RED
-	     << " ** ERROR: current volume data version is not equal to snapshotted version\n"
-	     << "           which can lead to data inconsistency. \n"
-	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
-	     << "           Startup with snapshotted version can be forced using the\n"
-             <<"            'osd use stale snap = true' config option.\n"
-	     << TEXT_NORMAL << dendl;
-	ret = -ENOTSUP;
-	goto close_basedir_fd;
-      }
+      if (g_conf.osd_rollback_to_cluster_snap.length()) {
+	derr << TEXT_RED
+	     << " ** NOTE: rolling back to cluster snapshot " << g_conf.osd_rollback_to_cluster_snap << " **"
+	     << TEXT_NORMAL
+	     << dendl;
+	assert(cluster_snaps.count(g_conf.osd_rollback_to_cluster_snap));
+	snprintf(s, sizeof(s), "%s/" CLUSTER_SNAP_ITEM, basedir.c_str(),
+		 g_conf.osd_rollback_to_cluster_snap.c_str());
+      } else {
+	uint64_t curr_seq;
+	{
+	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	  assert(fd >= 0);
+	  TEMP_FAILURE_RETRY(::close(fd));
+	}
+	dout(10) << " current/ seq was " << curr_seq << dendl;
 
-      if (cp != curr_seq) {
-        derr << "WARNING: user forced start with data sequence mismatch: curr=" << curr_seq << " snap_seq=" << cp << dendl;
-        cerr << TEXT_YELLOW
+	uint64_t cp = snaps.back();
+	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
+	
+	if (cp != curr_seq) {
+	  if (!g_conf.osd_use_stale_snap) { 
+	    derr << TEXT_RED
+		 << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+		 << "           which can lead to data inconsistency. \n"
+		 << "           Current version " << curr_seq << ", last snap " << cp << "\n"
+		 << "           Startup with snapshotted version can be forced using the\n"
+		 <<"            'osd use stale snap = true' config option.\n"
+		 << TEXT_NORMAL << dendl;
+	    ret = -ENOTSUP;
+	    goto close_basedir_fd;
+	  }
+	  derr << "WARNING: user forced start with data sequence mismatch: current was " << curr_seq
+	       << ", newest snap is " << cp << dendl;
+	  cerr << TEXT_YELLOW
 	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
+	}
+
+        dout(10) << "mount rolling back to consistent snap " << cp << dendl;
+	snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
       }
 
       // drop current
@@ -1652,8 +1682,6 @@ int FileStore::mount()
       }
 
       // roll back
-      char s[PATH_MAX];
-      snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
       vol_args.fd = ::open(s, O_RDONLY);
       if (vol_args.fd < 0) {
 	ret = -errno;
@@ -1669,17 +1697,6 @@ int FileStore::mount()
 	goto close_basedir_fd;
       }
       TEMP_FAILURE_RETRY(::close(vol_args.fd));
-      dout(10) << "mount rolled back to consistent snap " << cp << dendl;
-      snaps.pop_back();
-
-      if (cp != curr_seq) {
-        int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-	assert(fd >= 0);
-        /* we'll use the higher version from now on */
-        curr_seq = cp;
-        write_op_seq(fd, curr_seq);
-	TEMP_FAILURE_RETRY(::close(fd));
-      }
     }
   }
   initial_op_seq = 0;
@@ -3220,6 +3237,26 @@ void FileStore::sync_and_flush()
   dout(10) << "sync_and_flush done" << dendl;
 }
 
+int FileStore::snapshot(const string& name)
+{
+  dout(10) << "snapshot " << name << dendl;
+  sync_and_flush();
+  
+  if (!btrfs) {
+    dout(0) << "snapshot " << name << " failed, no btrfs" << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  btrfs_ioctl_vol_args vol_args;
+  vol_args.fd = current_fd;
+  snprintf(vol_args.name, sizeof(vol_args.name), CLUSTER_SNAP_ITEM, name.c_str());
+
+  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
+  if (r)
+    derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
+
+  return r;
+}
 
 // -------------------------------
 // attributes

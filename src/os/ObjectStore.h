@@ -25,6 +25,7 @@
 #include "osd/osd_types.h"
 
 #include <sys/stat.h>
+#include <errno.h>
 
 #ifdef DARWIN
 #include <sys/statvfs.h>
@@ -622,6 +623,8 @@ public:
   virtual void sync() {}
   virtual void flush() {}
   virtual void sync_and_flush() {}
+
+  virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
     
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};
