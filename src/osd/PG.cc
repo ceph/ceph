@@ -1255,53 +1255,59 @@ bool PG::choose_acting(int newest_update_osd) const
 
   const Info &best_info = newest_update_osd == osd->whoami ? 
     info : peer_info.find(newest_update_osd)->second;
-  dout(10) << "best_info is " << best_info << dendl;
+  dout(10) << "choose_acting best_info is " << best_info
+	   << " from osd" << newest_update_osd << dendl;
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
     const Info &pi = *i == osd->whoami ? info : peer_info.find(*i)->second;
-    dout(10) << "Considering osd" << *i << dendl;
     if (best_info.log_tail <= pi.last_update || log.backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(*i);
-      dout(10) << "osd" << *i << "Accepted" << dendl;
+      dout(10) << " osd" << *i << " (up) accepted" << dendl;
     } else {
-      dout(10) << "osd" << *i << "REJECTED" << dendl;
+      dout(10) << " osd" << *i << " (up) REJECTED" << dendl;
     }
   }
 
-  dout(10) << "considering osd" << osd->whoami << " (me) " << dendl;
-  if (want.size() == osd->osdmap->get_pg_size(info.pgid) &&
-      (best_info.log_tail <= info.last_update || log.backlog)) {
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), osd->whoami);
-    dout(10) << "osd" << osd->whoami << " (me) accepted" << dendl;
-    if (up_it == up.end()) {
+  vector<int>::const_iterator up_it;
+
+  if (want.size() >= osd->osdmap->get_pg_size(info.pgid))
+      goto done;
+
+  up_it = find(up.begin(), up.end(), osd->whoami);
+  if (up_it == up.end()) {
+    if (want.size() < osd->osdmap->get_pg_size(info.pgid) &&
+	(best_info.log_tail <= info.last_update || log.backlog)) {
+      dout(10) << " osd" << osd->whoami << " (me) accepted" << dendl;
       want.push_back(osd->whoami);
+    } else {
+      dout(10) << " osd" << osd->whoami << " (me) REJECTED" << dendl;
     }
   } else {
-    dout(10) << "osd" << osd->whoami << " (me) rejected" << dendl;
+    dout(10) << " osd" << osd->whoami << " (me) already included (also up)" << dendl;
   }
 
   for (map<int, Info>::const_iterator i = peer_info.begin();
        i != peer_info.end();
        ++i) {
-    if (want.size() == osd->osdmap->get_pg_size(info.pgid)) {
+    if (want.size() >= osd->osdmap->get_pg_size(info.pgid))
       break;
-    }
+
     vector<int>::const_iterator up_it = find(up.begin(), up.end(), i->first);
-    if (up_it != up.end()) {
+    if (up_it != up.end())
       continue;
-    }
-    dout(10) << "Considering osd" << *i << dendl;
+
     if (best_info.log_tail <= i->second.last_update || log.backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(i->first);
-      dout(10) << "osd" << *i << "Accepted" << dendl;
+      dout(10) << " osd" << i->first << " (stray) accepted" << dendl;
     } else {
-      dout(10) << "osd" << *i << "REJECTED" << dendl;
+      dout(10) << " osd" << i->first << " (stray) REJECTED" << dendl;
     }
   }
 
+ done:
   if (want != acting) {
     dout(10) << "choose_acting  want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
