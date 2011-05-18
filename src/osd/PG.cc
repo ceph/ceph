@@ -1255,15 +1255,17 @@ bool PG::choose_acting(int newest_update_osd) const
 {
   vector<int> want;
 
-  const Info &best_info = newest_update_osd == osd->whoami ? 
-    info : peer_info.find(newest_update_osd)->second;
+  map<int, Info> all_info(peer_info.begin(), peer_info.end());
+  all_info[osd->whoami] = info;
+
+  const Info &best_info = all_info.find(newest_update_osd)->second;
   dout(10) << "choose_acting best_info is " << best_info
 	   << " from osd" << newest_update_osd << dendl;
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
-    const Info &pi = *i == osd->whoami ? info : peer_info.find(*i)->second;
-    if (best_info.log_tail <= pi.last_update || best_info.log_backlog) {
+    const Info &cur_info = all_info.find(*i)->second;
+    if (best_info.log_tail <= cur_info.last_update || best_info.log_backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(*i);
       dout(10) << " osd" << *i << " (up) accepted" << dendl;
@@ -1272,26 +1274,8 @@ bool PG::choose_acting(int newest_update_osd) const
     }
   }
 
-  vector<int>::const_iterator up_it;
-
-  if (want.size() >= osd->osdmap->get_pg_size(info.pgid))
-      goto done;
-
-  up_it = find(up.begin(), up.end(), osd->whoami);
-  if (up_it == up.end()) {
-    if (want.size() < osd->osdmap->get_pg_size(info.pgid) &&
-	(best_info.log_tail <= info.last_update || best_info.log_backlog)) {
-      dout(10) << " osd" << osd->whoami << " (me) accepted" << dendl;
-      want.push_back(osd->whoami);
-    } else {
-      dout(10) << " osd" << osd->whoami << " (me) REJECTED" << dendl;
-    }
-  } else {
-    dout(10) << " osd" << osd->whoami << " (me) already included (also up)" << dendl;
-  }
-
-  for (map<int, Info>::const_iterator i = peer_info.begin();
-       i != peer_info.end();
+  for (map<int, Info>::const_iterator i = all_info.begin();
+       i != all_info.end();
        ++i) {
     if (want.size() >= osd->osdmap->get_pg_size(info.pgid))
       break;
@@ -1309,7 +1293,6 @@ bool PG::choose_acting(int newest_update_osd) const
     }
   }
 
- done:
   if (want != acting) {
     dout(10) << "choose_acting  want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
@@ -1332,19 +1315,21 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
 			     eversion_t &oldest_update) const
 {
   pull_from = -1;
-  const Info *best_info = &info;
+  const Info *best_info = NULL;
   need_backlog = false;
   wait_on_backlog = false;
-  oldest_update = info.last_update;
-  newest_update = info.last_update;
+  map<int, Info> all_info(peer_info.begin(), peer_info.end());
+  all_info[osd->whoami] = info;
 
-  for (map<int, Info>::const_iterator i = peer_info.begin();
-       i != peer_info.end();
+  for (map<int, Info>::const_iterator i = all_info.begin();
+       i != all_info.end();
        ++i) {
     if (prior_set.cur.find(i->first) == prior_set.cur.end()) {
+      dout(10) << "osd" << i->first << " not in current prior set, skipping" << dendl;
       continue;
     }
-    if (i->second.last_update > best_info->last_update ||
+    if (!best_info ||
+	i->second.last_update > best_info->last_update ||
 	((i->second.last_update == best_info->last_update) &&
 	 (i->second.log_tail < best_info->log_tail))) {
       best_info = &(i->second);
@@ -1356,14 +1341,10 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
     }
   }
 
-  if (pull_from >= 0)
-    dout(10) << "choose_log_location newest_update " << newest_update
-	     << " on osd" << pull_from << dendl;
-  else
-    dout(10) << "choose_log_location newest_update " << newest_update
-	     << " (local)" << dendl;
+  dout(10) << "choose_log_location newest_update " << newest_update
+	   << " on osd" << pull_from << dendl;
 
-  if (!choose_acting(pull_from == -1 ? osd->whoami : pull_from)) {
+  if (!choose_acting(pull_from)) {
     return false;
   }
 
@@ -4399,8 +4380,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
     if (need_backlog && !pg->log.backlog) {
       pg->osd->queue_generate_backlog(pg);
     }
-    
-    if (newest_update_osd != -1) {
+
+    if (newest_update_osd != pg->osd->whoami) {
       dout(10) << " requesting master log from osd" << newest_update_osd << dendl;
       context<RecoveryMachine>().send_query(newest_update_osd,
 					    wait_on_backlog ? 
@@ -4412,7 +4393,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
       wait_on_backlog = false;
     }
 
-    if (!wait_on_backlog && newest_update_osd == -1) {
+    if (!wait_on_backlog && newest_update_osd == pg->osd->whoami) {
       dout(10) << " neither backlog nor master log needed, "
 	       << "moving to GetMissing" << dendl;
       post_event(GotLog());
@@ -4444,7 +4425,8 @@ PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
 boost::statechart::result 
 PG::RecoveryState::GetLog::react(const BacklogComplete&) {
   wait_on_backlog = false;
-  if (msg || newest_update_osd == -1) {
+  PG *pg = context< RecoveryMachine >().pg;
+  if (msg || newest_update_osd == pg->osd->whoami) {
     dout(10) << "GetLog: already have/don't need master log." 
 	     << "moving on to GetMissing" << dendl;
     post_event(GotLog());
