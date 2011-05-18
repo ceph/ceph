@@ -1342,7 +1342,9 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
     if (prior_set.cur.find(i->first) == prior_set.cur.end()) {
       continue;
     }
-    if (i->second.last_update > best_info->last_update) {
+    if (i->second.last_update > best_info->last_update ||
+	((i->second.last_update == best_info->last_update) &&
+	 (i->second.log_tail < best_info->log_tail))) {
       best_info = &(i->second);
       pull_from = i->first;
       newest_update = i->second.last_update;
