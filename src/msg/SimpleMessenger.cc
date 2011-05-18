@@ -1775,11 +1775,11 @@ void SimpleMessenger::Pipe::unlock_maybe_reap()
   }
 }
 
-static void alloc_aligned_buffer(bufferlist& data, int len, int off)
+static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
-  int left = len;
-  int head = 0;
+  unsigned left = len;
+  unsigned head = 0;
   if (off & ~PAGE_MASK) {
     // head
     head = MIN(PAGE_SIZE - (off & ~PAGE_MASK), left);
@@ -1787,7 +1787,7 @@ static void alloc_aligned_buffer(bufferlist& data, int len, int off)
     data.push_back(bp);
     left -= head;
   }
-  int middle = left & PAGE_MASK;
+  unsigned middle = left & PAGE_MASK;
   if (middle > 0) {
     bufferptr bp = buffer::create_page_aligned(middle);
     data.push_back(bp);
