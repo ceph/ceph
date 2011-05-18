@@ -29,20 +29,20 @@ endif
 
 # monitor
 cmon_SOURCES = cmon.cc
-cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cmon_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 cmon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cosd_LDADD = libosd.a libos.a libcommon.a -ldl -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += cosd
 cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cmds_LDADD = libmds.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -50,7 +50,7 @@ cmds_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_SOURCES = \
 	tools/ceph.cc \
 	tools/common.cc
-ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_LDADD = libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_GTK2
@@ -77,7 +77,7 @@ gceph_SOURCES = \
 	tools/common.cc \
 	tools/gceph.cc \
 	tools/gui.cc
-gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) \
+gceph_LDADD = libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) \
 	$(GTKMM_LIBS) $(EXTRALIBS)
 gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
@@ -93,9 +93,9 @@ bin_PROGRAMS += ceph cconf cauthtool
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+crushtool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+osdmaptool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/secret.c include/addr_parsing.c
@@ -107,12 +107,12 @@ cephfs_SOURCES = cephfs.cc
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
-librados_config_LDADD = librados.la libcrush.la $(EXTRALIBS)
+librados_config_LDADD = librados.la $(EXTRALIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
 csyn_SOURCES = csyn.cc
-csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+csyn_LDADD = libclient.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += csyn
 
 core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
@@ -121,7 +121,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cfuse_LDADD = -lfuse libclient.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
 
@@ -151,7 +151,7 @@ endif # WITH_TCMALLOC
 
 # debug targets
 psim_SOURCES = psim.cc
-psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+psim_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += psim
 
 test_mutate_SOURCES = test/test_mutate.cc
@@ -166,7 +166,7 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dumpjournal_SOURCES = dumpjournal.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+dumpjournal_LDADD = libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 streamtest_SOURCES = streamtest.cc
@@ -185,18 +185,6 @@ bin_DEBUGPROGRAMS += testsnaps
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
 
-# libcrush.so
-libcrush_la_SOURCES = \
-	crush/builder.c \
-	crush/mapper.c \
-	crush/crush.c \
-	crush/hash.c
-libcrush_la_CFLAGS = ${AM_CFLAGS}
-libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
-libcrush_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'crush_.*'
-libcrush_la_LIBADD = -lm
-lib_LTLIBRARIES += libcrush.la
-
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
@@ -205,20 +193,20 @@ libceph_la_SOURCES = \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+libceph_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testceph_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
-testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testtimers_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testtimers
 
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
-testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
+testdout_streambuf_LDADD = libceph.la -lpthread
 bin_DEBUGPROGRAMS += testdout_streambuf
 
 testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
@@ -233,7 +221,7 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librados_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librados_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
@@ -249,7 +237,7 @@ librgw_SOURCES = \
 librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librgw_la_LIBADD = libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librgw_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	 -lexpat -lpthread -lm -lcurl
 lib_LTLIBRARIES += librgw.la
@@ -266,7 +254,7 @@ librbd_SOURCES = \
 librbd_la_SOURCES = ${librbd_SOURCES}
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la libcrush.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librbd_la_LIBADD = librados.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
 lib_LTLIBRARIES += librbd.la
 
@@ -275,7 +263,7 @@ librbd_a_CFLAGS = ${AM_CFLAGS}
 librbd_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc rados_sync.cc
-rados_LDADD = librados.la libcrush.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
@@ -288,14 +276,14 @@ bin_DEBUGPROGRAMS += testrados testradospp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
 testlibrbd_SOURCES = testlibrbd.c
-testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
+testlibrbd_LDADD = librbd.la librados.la -lpthread -lm \
 		   $(CRYPTO_LIBS) $(EXTRALIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
-testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
+testlibrbdpp_LDADD = librbd.la librados.la -lpthread -lm \
 		     $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 
@@ -322,7 +310,7 @@ my_radosgw_src = \
 	rgw/rgw_escape.c
 
 my_radosgw_ldadd = \
-	librgw.a librados.a libcrush.a -lfcgi -lcurl -lexpat \
+	librgw.a librados.a -lfcgi -lcurl -lexpat \
 	-lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
@@ -382,7 +370,7 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest_main.la
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm \
+unittest_encoding_LDADD = libceph.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
@@ -390,7 +378,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
+unittest_base64_LDADD = libceph.la -lpthread -lm \
 			${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
@@ -517,7 +505,7 @@ endif
 
 
 noinst_LIBRARIES = \
-	libcommon.a libcrush.a \
+	libcommon.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a librados.a librbd.a
 
@@ -588,8 +576,6 @@ common/version.cc: ./ceph_ver.h
 # cleaning
 clean-local:
 	-rm *.so
-#	-rm crush/*.cxx
-#	-rm CrushWrapper.pm
 
 # libs
 libcommon_a_SOURCES = \
@@ -598,6 +584,13 @@ libcommon_a_SOURCES = \
 
 libcommon_a_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+
+crush_files = \
+	crush/builder.c \
+	crush/mapper.c \
+	crush/crush.c \
+	crush/hash.c \
+	crush/CrushWrapper.cc
 
 # this list ommits the ceph_ver.c file
 libcommon_files = \
@@ -632,7 +625,6 @@ libcommon_files = \
 	common/str_list.cc \
 	common/errno.cc \
 	msg/SimpleMessenger.cc \
-	crush/CrushWrapper.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
@@ -659,7 +651,8 @@ libcommon_files = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/pidfile.cc \
-	include/addr_parsing.c
+	include/addr_parsing.c \
+	$(crush_files)
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
@@ -668,11 +661,6 @@ libcommon_files += perfglue/disabled_stubs.cc
 endif
 
 
-libcrush_a_SOURCES = \
-	crush/builder.c \
-	crush/mapper.c \
-	crush/crush.c \
-	crush/hash.c
 
 libmon_a_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
@@ -1118,9 +1106,13 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_confi
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
-	$(libcrush_so_a_SOURCES) $(libcommon_files) $(libcrush_a_SOURCES)  \
-	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
+	$(libcommon_files) $(libmon_a_SOURCES) $(libmds_a_SOURCES) \
+	$(libos_a_SOURCES) $(libosd_a_SOURCES) \
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
+
+if WITH_RADOSGW
+	all_sources += $(librgw_SOURCES)
+endif
 
 install-data-local:
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
