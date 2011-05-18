@@ -1326,7 +1326,7 @@ public:
   void clear_prior();
   bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
 
-  bool adjust_need_up_thru(PgPriorSet &prior, const OSDMap *osdmap);
+  bool adjust_need_up_thru(const OSDMap *osdmap);
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,

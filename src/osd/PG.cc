@@ -1032,7 +1032,7 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
   return false;
 }
 
-bool PG::adjust_need_up_thru(PgPriorSet &prior, const OSDMap *osdmap)
+bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 {
   epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
   if (need_up_thru &&
@@ -3998,7 +3998,7 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
     return transit< Reset >();
   }
   
-  pg->adjust_need_up_thru(*prior_set.get(), &advmap.osdmap);
+  pg->adjust_need_up_thru(&advmap.osdmap);
   
   return forward_event();
 }
