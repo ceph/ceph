@@ -53,16 +53,14 @@ class LogClient : public Dispatcher
 public:
   enum logclient_flag_t {
     NO_FLAGS = 0,
-    FLAG_SYNC = 0x1,
+    FLAG_MON = 0x1,
   };
 
   LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
-    messenger(m), monmap(mm), monc(mc), is_synchronous(flags & FLAG_SYNC),
+    messenger(m), monmap(mm), monc(mc), is_mon(flags & FLAG_MON),
     log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0) { }
 
-  void send_log();
   void handle_log_ack(MLogAck *m);
-  void set_synchronous(bool sync) { is_synchronous = sync; }
 
   LogClientTemp debug() {
     return LogClientTemp(CLOG_DEBUG, *this);
@@ -102,18 +100,15 @@ private:
   void do_log(clog_type type, std::stringstream& ss);
   void do_log(clog_type type, const std::string& s);
   bool ms_dispatch(Message *m);
-  void _send_log();
-  void _send_log_to_syslog();
-  void _send_log_to_monitors();
   Message *_get_mon_log_message();
-  void ms_handle_connect(Connection *con);
+  void ms_handle_connect(Connection *con) {}
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
 
   Messenger *messenger;
   MonMap *monmap;
   MonClient *monc;
-  bool is_synchronous;
+  bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
   version_t last_log;

@@ -97,9 +97,8 @@ void LogClient::do_log(clog_type type, const std::string& s)
   e.seq = ++last_log;
   e.type = type;
   e.msg = s;
-  log_queue.push_back(e);
-  
-  // log synchronously to syslog
+
+  // log to syslog?
   if (g_conf.clog_to_syslog) {
     ostringstream oss;
     oss << e;
@@ -107,26 +106,24 @@ void LogClient::do_log(clog_type type, const std::string& s)
     syslog(clog_type_to_syslog_prio(e.type) | LOG_USER, "%s", str.c_str());
   }
 
-  if (is_synchronous)
-    _send_log();
+  // log to monitor?
+  if (g_conf.clog_to_monitors) {
+    log_queue.push_back(e);
+
+    // if we are a monitor, queue for ourselves, synchronously
+    if (is_mon) {
+      assert(messenger->get_myname().is_mon());
+      dout(10) << "send_log to self" << dendl;
+      Message *log = _get_mon_log_message();
+      messenger->send_message(log, messenger->get_myinst());
+    }
+  }
 }
 
 void LogClient::reset_session()
 {
   Mutex::Locker l(log_lock);
   last_log_sent = last_log - log_queue.size();
-}
-
-void LogClient::send_log()
-{
-  Mutex::Locker l(log_lock);
-  _send_log();
-}
-
-void LogClient::_send_log()
-{
-  if (g_conf.clog_to_monitors)
-    _send_log_to_monitors();
 }
 
 Message *LogClient::get_mon_log_message()
@@ -166,22 +163,6 @@ Message *LogClient::_get_mon_log_message()
   return log;
 }
 
-void LogClient::_send_log_to_monitors()
-{
-  Message *log = _get_mon_log_message();
-  if (!log)
-    return;
-
-  if (monc) {
-    monc->send_mon_message(log);
-  } else {
-    // if we are a monitor, queue for ourselves
-    assert(messenger->get_myname().is_mon());
-    dout(10) << "send_log to self" << dendl;
-    messenger->send_message(log, messenger->get_myinst());
-  }
-}
-
 void LogClient::handle_log_ack(MLogAck *m)
 {
   Mutex::Locker l(log_lock);
@@ -210,13 +191,4 @@ bool LogClient::ms_dispatch(Message *m)
     return true;
   }
   return false;
-}
-
-
-void LogClient::ms_handle_connect(Connection *con)
-{
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    dout(10) << "ms_handle_connect on mon " << con->get_peer_addr() << ", resending pending log events" << dendl;
-    send_log();
-  }
 }

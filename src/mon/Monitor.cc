@@ -90,7 +90,7 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   lock("Monitor::lock"),
   timer(lock),
   monmap(map),
-  clog(messenger, monmap, NULL, LogClient::FLAG_SYNC),
+  clog(messenger, monmap, NULL, LogClient::FLAG_MON),
   store(s),
   
   state(STATE_STARTING), stopping(false),
