@@ -1,4 +1,4 @@
-def patch_paramiko_pkey():
+def patch_100_paramiko_pkey():
     """
     Make paramiko recognize AES-encrypted SSH private keys.
 
@@ -10,7 +10,7 @@ def patch_paramiko_pkey():
     paramiko.pkey.PKey._CIPHER_TABLE['AES-128-CBC'] = { 'cipher': Crypto.Cipher.AES, 'keysize': 16, 'blocksize': 16, 'mode': Crypto.Cipher.AES.MODE_CBC }
 
 
-def patch_logger_getChild():
+def patch_100_logger_getChild():
     """
     Imitate Python 2.7 feature Logger.getChild.
     """
@@ -26,5 +26,6 @@ def patch_all():
     Run all the patch_* functions in this module.
     """
     monkeys = [(k,v) for (k,v) in globals().iteritems() if k.startswith('patch_') and k != 'patch_all']
+    monkeys.sort()
     for k,v in monkeys:
         v()
