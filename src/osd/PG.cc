@@ -3662,6 +3662,8 @@ void PG::Missing::add_next_event(Log::Entry& e)
       //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase(missing[e.soid].need);
       missing[e.soid].need = e.version;  // leave .have unchanged.
+    } else if (e.is_backlog()) {
+      missing[e.soid].need = e.version;
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
@@ -3679,6 +3681,8 @@ void PG::Missing::add_event(Log::Entry& e)
 	return;   // already missing same or newer.
       // missing older, revise need
       rmissing.erase(missing[e.soid].need);
+      missing[e.soid].need = e.version;
+    } else if (e.is_backlog()) {
       missing[e.soid].need = e.version;
     } else
       // not missing => have prior_version (if any)
