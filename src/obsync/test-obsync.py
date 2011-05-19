@@ -104,31 +104,25 @@ def read_config():
     return config
 
 def obsync(src, dst, misc):
+    env = {}
     full = ["./obsync"]
-    e = {}
-    if (isinstance(src, ObSyncTestBucket)):
-        full.append(src.url)
-        e["SRC_AKEY"] = src.akey
-        e["SRC_SKEY"] = src.skey
-    else:
+    if (isinstance(src, str)):
         full.append(src)
-    if (isinstance(dst, ObSyncTestBucket)):
-        full.append(dst.url)
-        e["DST_AKEY"] = dst.akey
-        e["DST_SKEY"] = dst.skey
-        if (dst.consistency != None):
-            e["DST_CONSISTENCY"] = dst.consistency
     else:
+        src.to_src(env, full)
+    if (isinstance(dst, str)):
         full.append(dst)
+    else:
+        dst.to_dst(env, full)
     full.extend(misc)
     if (opts.more_verbose):
-        for k,v in e.items():
+        for k,v in env.items():
             print str(k) + "=" + str(v) + " ",
         print
         for f in full:
             print f,
         print
-    return subprocess.call(full, stderr=opts.error_out, env=e)
+    return subprocess.call(full, stderr=opts.error_out, env=env)
 
 def obsync_check(src, dst, opts):
     ret = obsync(src, dst, opts)
@@ -226,6 +220,16 @@ class ObSyncTestBucket(object):
         self.akey = akey
         self.skey = skey
         self.consistency = consistency
+    def to_src(self, env, args):
+        env["SRC_AKEY"] = self.akey
+        env["SRC_SKEY"] = self.skey
+        args.append(self.url)
+    def to_dst(self, env, args):
+        env["DST_AKEY"] = self.akey
+        env["DST_SKEY"] = self.skey
+        args.append(self.url)
+        if (self.consistency != None):
+            env["DST_CONSISTENCY"] = self.consistency
 
 ###### Main #######
 # change directory to obsync directory
