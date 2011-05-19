@@ -319,6 +319,11 @@ extern "C" int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_res
   return cmount->get_client()->closedir((dir_result_t*)dirp);
 }
 
+extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
+{
+  return cmount->get_client()->readdir((dir_result_t*)dirp);
+}
+
 extern "C" int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de)
 {
   return cmount->get_client()->readdir_r((dir_result_t*)dirp, de);

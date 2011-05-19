@@ -76,6 +76,7 @@ int ceph_chdir(struct ceph_mount_info *cmount, const char *s);
 
 int ceph_opendir(struct ceph_mount_info *cmount, const char *name, struct ceph_dir_result **dirpp);
 int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
+struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
 int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de);
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
 		       struct stat *st, int *stmask);

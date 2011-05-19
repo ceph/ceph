@@ -1204,6 +1204,7 @@ public:
 
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
+  struct dirent * readdir(dir_result_t *d);
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
 

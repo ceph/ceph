@@ -4295,8 +4295,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 }
 
 
-
-
 int Client::readdir_r(dir_result_t *d, struct dirent *de)
 {  
   return readdirplus_r(d, de, 0, 0);
@@ -4332,6 +4330,39 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
     *c->stmask = stmask;
   c->full = true;
   return 0;  
+}
+
+struct dirent * Client::readdir(dir_result_t *d)
+{
+  int ret;
+  static int stmask;
+  static struct dirent de;
+  static struct stat st;
+  single_readdir sr;
+  sr.de = &de;
+  sr.st = &st;
+  sr.stmask = &stmask;
+  sr.full = false;
+
+  /*
+   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like cfuse)
+   * readdir_r_cb=0 end of directory reached on prior call
+   * readdir_r_cb=0 entry filled and offset now at end of the directory
+   * readdir_r_cb=-1 entry is filled successfully, not end of dir
+   * readdir_r_cb=-(other) on error
+   * callback leaves sr.full=false when 'offset is at end of directory'
+   * callback may leave sr.full=false on error
+   * callback sets sr.full=true on 'successfully read dirent'
+   */
+  ret = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
+  if (ret < -1) {
+    errno = -ret;
+    return (dirent *) NULL;
+  }
+  if (sr.full) {
+    return &de;
+  }
+  return (dirent *) NULL;
 }
 
 int Client::readdirplus_r(dir_result_t *d, struct dirent *de, struct stat *st, int *stmask)
