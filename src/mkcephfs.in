@@ -391,14 +391,6 @@ if [ $allhosts -eq 1 ]; then
 	trap "rm -rf $dir ; exit" INT TERM EXIT
     fi
 
-    # temp dir on remote nodes
-    if [ -n "$ssh" ]; then
-	rdir="/tmp/mkfs.ceph.$$"
-	echo "remote temp dir is $rdir"
-    else
-	rdir=$dir
-    fi
-
     $0 --prepare-monmap -d $dir -c $conf
 
     # osd, mds
@@ -412,10 +404,13 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 
 	if [ -n "$ssh" ]; then
-	    echo pushing conf and monmap to $host
+	    rdir="/tmp/mkfs.ceph.$$"
+	    echo pushing conf and monmap to $host:$rdir
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
 	    scp -q $dir/monmap $host:$rdir
+	else
+	    rdir=$dir
 	fi
 	
 	if [ $mkbtrfs -eq 1 ] && [ "$type" = "osd" ]; then

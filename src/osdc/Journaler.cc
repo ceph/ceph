@@ -1001,7 +1001,7 @@ void Journaler::_trim_finish(int r, uint64_t to)
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos
 	   << dendl;
-  assert(r >= 0);
+  assert(r >= 0 || r == -ENOENT);
   
   assert(to <= trimming_pos);
   assert(to > trimmed_pos);
