@@ -1104,7 +1104,7 @@ protected:
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
   void _release(Inode *in, bool checkafter=true);
-  void _flush(Inode *in, Context *onfinish=NULL);
+  bool _flush(Inode *in, Context *onfinish=NULL);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
 

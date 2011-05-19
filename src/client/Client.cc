@@ -2185,13 +2185,13 @@ void Client::_release(Inode *in, bool checkafter)
 }
 
 
-void Client::_flush(Inode *in, Context *onfinish)
+bool Client::_flush(Inode *in, Context *onfinish)
 {
   dout(10) << "_flush " << *in << dendl;
 
   if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
     dout(10) << " nothing to flush" << dendl;
-    return;
+    return true;
   }
 
   if (!onfinish)
@@ -2202,6 +2202,7 @@ void Client::_flush(Inode *in, Context *onfinish)
     onfinish->finish(0);
     delete onfinish;
   }
+  return safe;
 }
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
@@ -2936,10 +2937,11 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 
     if ((cap->issued & ~old_caps) & CEPH_CAP_FILE_CACHE)
       _release(in, false);
-
-    if ((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
-      _flush(in);
-    else {
+    
+    if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER) &&
+	!_flush(in)) {
+      // waitin' for flush
+    } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check_caps(in, true);
     }
@@ -4616,8 +4618,7 @@ int Client::_release(Fh *f)
 
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
-      if (in->caps_used() & (CEPH_CAP_FILE_BUFFER|CEPH_CAP_FILE_WR))
-	_flush(in);
+      _flush(in);
       check_caps(in, false);
     }
   } else {
