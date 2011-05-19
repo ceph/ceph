@@ -63,7 +63,7 @@ Summary:        synchronize data between cloud object storage providers or a loc
 Group:          Productivity/Networking/Other
 License:        LGPLv2
 Requires:       python, python-boto
-%description
+%description obsync
 obsync is a tool to synchronize objects between cloud object
 storage providers, such as Amazon S3 (or compatible services), a
 Ceph RADOS cluster, or a local directory.
