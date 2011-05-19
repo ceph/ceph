@@ -4934,7 +4934,6 @@ public:
 
 void Client::sync_write_commit(Inode *in)
 {
-  client_lock.Lock();
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
@@ -4947,8 +4946,6 @@ void Client::sync_write_commit(Inode *in)
   }
 
   put_inode(in);
-
-  client_lock.Unlock();
 }
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
