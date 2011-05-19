@@ -1726,8 +1726,6 @@ void Client::put_inode(Inode *in, int n)
  * caps
  */
 
-
-
 void Inode::get_cap_ref(int cap)
 {
   int n = 0;
@@ -2211,8 +2209,8 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
   //  Mutex::Locker l(client_lock);
   assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = (Inode *)oset->parent;
-  if (in)
-    _flushed(in);
+  assert(in);
+  _flushed(in);
 }
 
 void Client::_flushed(Inode *in)
