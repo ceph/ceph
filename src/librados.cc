@@ -1895,8 +1895,6 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 int librados::RadosClient::
 getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attrset)
 {
-  utime_t ut = g_clock.now();
-
   Mutex mylock("RadosClient::getexattrs::mylock");
   Cond cond;
   bool done;
@@ -3240,6 +3238,75 @@ extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
   }
 
   return ret;
+}
+
+class RadosXattrsIter {
+public:
+  RadosXattrsIter()
+    : val(NULL)
+  {
+    i = attrset.end();
+  }
+  ~RadosXattrsIter()
+  {
+    free(val);
+    val = NULL;
+  }
+  std::map<std::string, bufferlist> attrset;
+  std::map<std::string, bufferlist>::iterator i;
+  char *val;
+};
+
+extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
+			       rados_xattrs_iter_t *iter)
+{
+  RadosXattrsIter *it = new RadosXattrsIter();
+  if (!it)
+    return ENOMEM;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t obj(oid);
+  int ret = ctx->client->getxattrs(*ctx, obj, it->attrset);
+  if (ret) {
+    delete it;
+    return ret;
+  }
+  it->i = it->attrset.begin();
+
+  RadosXattrsIter **iret = (RadosXattrsIter**)iter;
+  *iret = it;
+  *iter = it;
+  return 0;
+}
+
+extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
+				    const char **name, const char **val, int *len)
+{
+  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  if (it->i == it->attrset.end()) {
+    *name = NULL;
+    *val = NULL;
+    *len = 0;
+    return 0;
+  }
+  free(it->val);
+  const std::string &s(it->i->first);
+  *name = s.c_str();
+  bufferlist &bl(it->i->second);
+  size_t bl_len = bl.length();
+  it->val = (char*)malloc(bl_len);
+  if (!it->val)
+    return ENOMEM;
+  memcpy(it->val, bl.c_str(), bl_len);
+  *val = it->val;
+  *len = bl_len;
+  ++it->i;
+  return 0;
+}
+
+extern "C" void rados_getxattrs_end(rados_xattrs_iter_t iter)
+{
+  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  delete it;
 }
 
 extern "C" int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len)

@@ -32,6 +32,7 @@ typedef void *rados_t;
 typedef void *rados_ioctx_t;
 typedef void *rados_list_ctx_t;
 typedef uint64_t rados_snap_t;
+typedef void *rados_xattrs_iter_t;
 
 struct rados_pool_stat_t {
   uint64_t num_bytes;    // in bytes
@@ -149,6 +150,11 @@ int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
 int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len);
 int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
+
+int rados_getxattrs(rados_ioctx_t io, const char *oid, rados_xattrs_iter_t *iter);
+int rados_getxattrs_next(rados_xattrs_iter_t iter, const char **name,
+			 const char **val, int *len);
+void rados_getxattrs_end(rados_xattrs_iter_t iter);
 
 /* misc */
 int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime);

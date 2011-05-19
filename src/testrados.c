@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "include/rados/librados.h"
@@ -21,7 +21,7 @@
 static void do_rados_setxattr(rados_ioctx_t io_ctx, const char *oid,
 			const char *key, const char *val)
 {
-	int ret = rados_setxattr(io_ctx, oid, key, val, strlen(val));
+	int ret = rados_setxattr(io_ctx, oid, key, val, strlen(val) + 1);
 	if (ret < 0) {
 		printf("rados_setxattr failed with error %d\n", ret);
 		exit(1);
@@ -48,7 +48,53 @@ static void do_rados_getxattr(rados_ioctx_t io_ctx, const char *oid,
 	printf("rados_getxattr %s=%s\n", key, buf);
 }
 
-int main(int argc, const char **argv) 
+static void do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
+			const char **exkeys, const char **exvals)
+{
+	rados_xattrs_iter_t iter;
+	int len, nval = 0, i, nfound = 0, ret = 0;
+
+	for (i = 0; exvals[i]; ++i) {
+		++nval;
+	}
+	ret = rados_getxattrs(io_ctx, oid, &iter);
+	if (ret) {
+		printf("rados_getxattrs(%s) failed with error %d\n", oid, ret);
+		exit(1);
+	}
+	while (1) {
+		const char *key, *val;
+		ret = rados_getxattrs_next(iter, &key, &val, &len);
+		if (ret) {
+			printf("rados_getxattrs(%s): rados_getxattrs_next "
+				"returned error %d\n", oid, ret);
+			exit(1);
+		}
+		if (!key)
+			break;
+		for (i = 0; i < nval; ++i) {
+			if (strcmp(exkeys[i], key))
+				continue;
+			if ((len == strlen(exvals[i]) + 1) && (!strcmp(exvals[i], val))) {
+				nfound++;
+				break;
+			}
+			printf("rados_getxattrs(%s): got key %s, but the "
+				"value was %s rather than %s.\n",
+				oid, key, val, exvals[i]);
+			exit(1);
+		}
+	}
+	if (nfound != nval) {
+		printf("rados_getxattrs(%s): only found %d extended attributes. "
+			"Expected %d\n", oid, nfound, nval);
+		exit(1);
+	}
+	rados_getxattrs_end(iter);
+	printf("rados_getxattrs(%s)\n", oid);
+}
+
+int main(int argc, const char **argv)
 {
 	char tmp[32];
 	int i, r;
@@ -77,7 +123,7 @@ int main(int argc, const char **argv)
 		exit(1);
 	}
 
-	// Can we change it? 
+	// Can we change it?
 	if (rados_conf_set(cl, "log to stderr", "2")) {
 		printf("error: error setting log_to_stderr\n");
 		exit(1);
@@ -172,6 +218,9 @@ int main(int argc, const char **argv)
 	do_rados_getxattr(io_ctx, oid, "a", "1");
 	do_rados_getxattr(io_ctx, oid, "b", "2");
 	do_rados_getxattr(io_ctx, oid, "c", "3");
+	const char *exkeys[] = { "a", "b", "c", NULL };
+	const char *exvals[] = { "1", "2", "3", NULL };
+	do_rados_getxattrs(io_ctx, oid, exkeys, exvals);
 
 	uint64_t size;
 	time_t mtime;
@@ -216,7 +265,7 @@ int main(int argc, const char **argv)
 	printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
 	/* delete a pool */
-	printf("rados_delete_pool = %d\n", r);  
+	printf("rados_delete_pool = %d\n", r);
 	rados_ioctx_destroy(io_ctx);
 
 	r = rados_pool_delete(cl, "foo");
