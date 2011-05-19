@@ -4183,7 +4183,16 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       assert(role != 0);
       dout(10) << " pg " << pgid << " dne" << dendl;
       PG::Info empty(pgid);
-      notify_list[from].push_back(empty);
+      if (it->second.type == PG::Query::LOG ||
+	  it->second.type == PG::Query::BACKLOG ||
+	  it->second.type == PG::Query::FULLLOG) {
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty);
+	_share_map_outgoing(osdmap->get_cluster_inst(from));
+	cluster_messenger->send_message(mlog,
+					osdmap->get_cluster_inst(from));
+      } else {
+	notify_list[from].push_back(empty);
+      }
       continue;
     }
 
