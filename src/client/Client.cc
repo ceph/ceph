@@ -2198,19 +2198,11 @@ void Client::_flush(Inode *in, Context *onfinish)
 
   if (!onfinish)
     onfinish = new C_NoopContext;
+
   bool safe = objectcacher->commit_set(&in->oset, onfinish);
-  if (safe) {
-    if (onfinish) {
-      onfinish->finish(0);
-      delete onfinish;
-    }
-    /* if we're safe, there shouldn't be any refs to CEPH_CAP_FILE_BUFFER
-     * unless we're buffering the entire thing. In that case, clear the bit.
-     */
-    if (in->cap_refs[CEPH_CAP_FILE_BUFFER]) {
-      assert(in->cap_refs[CEPH_CAP_FILE_BUFFER] == 1);
-      put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-    }
+  if (safe && onfinish) {
+    onfinish->finish(0);
+    delete onfinish;
   }
 }
 
@@ -2226,7 +2218,6 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 void Client::_flushed(Inode *in)
 {
   dout(10) << "_flushed " << *in << dendl;
-  assert(in->cap_refs[CEPH_CAP_FILE_BUFFER] == 1);
 
   // release clean pages too, if we dont hold RDCACHE reference
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)

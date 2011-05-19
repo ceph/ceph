@@ -1683,6 +1683,8 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
   
   dout(10) << "truncate_set " << oset << dendl;
 
+  bool were_dirty = oset->dirty_tx > 0;
+
   for (vector<ObjectExtent>::iterator p = exls.begin();
        p != exls.end();
        ++p) {
@@ -1707,6 +1709,11 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
       }
     }
   }
+
+  // did we truncate off dirty data?
+  if (flush_set_callback &&
+      were_dirty && oset->dirty_tx == 0)
+    flush_set_callback(flush_set_callback_arg, oset);
 }
 
 
