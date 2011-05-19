@@ -160,7 +160,6 @@ fi
 %{_bindir}/cdebugpack
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
-%{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
 %{_libdir}/librbd.so.*
 %{_libdir}/rados-classes/libcls_rbd.so.*
@@ -219,7 +218,6 @@ fi
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
 %{_libdir}/libceph.so
-%{_libdir}/libcrush.so
 %{_libdir}/librados.so
 %{_libdir}/librbd.so
 %{_libdir}/rados-classes/libcls_rbd.so

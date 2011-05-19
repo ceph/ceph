@@ -1,7 +1,0 @@
-usr/lib/libcrush.so
-usr/lib/libcrush.a
-usr/lib/libcrush.la
-usr/include/crush/hash.h
-usr/include/crush/types.h
-usr/include/crush/mapper.h
-usr/include/crush/crush.h

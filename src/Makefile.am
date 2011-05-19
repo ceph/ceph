@@ -581,7 +581,6 @@ clean-local:
 libcommon_a_SOURCES = \
 	./ceph_ver.c \
 	$(libcommon_files)
-	$(crush_files)
 
 libcommon_a_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
