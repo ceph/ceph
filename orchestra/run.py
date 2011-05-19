@@ -58,10 +58,6 @@ def copy_to_log(f, logger, loglevel=logging.INFO):
         line = line.rstrip()
         logger.log(loglevel, line)
 
-def copyfileobj_and_close(fsrc, fdst):
-    shutil.copyfileobj(fsrc, fdst)
-    fdst.close()
-
 def copy_and_close(src, fdst):
     if src is not None:
         if isinstance(src, basestring):
@@ -75,7 +71,7 @@ def copy_file_to(f, dst):
         # easier for unit tests
         handler = copy_to_log
     else:
-        handler = copyfileobj_and_close
+        handler = shutil.copyfileobj
     return handler(f, dst)
 
 def run(
