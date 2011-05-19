@@ -1328,10 +1328,16 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
       dout(10) << "osd" << i->first << " not in current prior set, skipping" << dendl;
       continue;
     }
+
+    // We always want the latest last update, but we prefer one that
+    // has a backlog. If last update and backlog status are the same,
+    // prefer the one with the longer log.
     if (!best_info ||
 	i->second.last_update > best_info->last_update ||
 	((i->second.last_update == best_info->last_update) &&
-	 (i->second.log_tail < best_info->log_tail))) {
+	 (((i->second.log_tail < best_info->log_tail &&
+	   (i->second.log_backlog || !best_info->log_backlog))) ||
+	  (i->second.log_backlog && !best_info->log_backlog)))) {
       best_info = &(i->second);
       pull_from = i->first;
       newest_update = i->second.last_update;
