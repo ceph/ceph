@@ -1,7 +1,7 @@
 """librados Python ctypes wrapper
 Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
-from ctypes import CDLL, c_char_p, c_size_t, c_void_p,\
+from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, \
     create_string_buffer, byref, Structure, c_uint64, c_ubyte, c_byte, pointer
 import ctypes
 import datetime
@@ -108,9 +108,9 @@ Rados object in state %s." % (self.state))
         self.shutdown()
 
     def version(self):
-        major = ctypes.c_int()
-        minor = ctypes.c_int()
-        extra = ctypes.c_int()
+        major = c_int(0)
+        minor = c_int(0)
+        extra = c_int(0)
         self.librados.rados_version(byref(major), byref(minor), byref(extra))
         return Version(major.value, minor.value, extra.value)
 
@@ -218,6 +218,31 @@ class ObjectIterator(object):
 
     def __del__(self):
         self.ioctx.librados.rados_objects_list_close(self.ctx)
+
+class XattrIterator(object):
+    """Extended attribute iterator"""
+    def __init__(self, ioctx, it, oid):
+        self.ioctx = ioctx
+        self.it = it
+        self.oid = oid
+    def __iter__(self):
+        return self
+    def next(self):
+        name_ = c_char_p(0)
+        val_ = c_char_p(0)
+        len_ = c_int(0)
+        ret = self.ioctx.librados.\
+            rados_getxattrs_next(self.it, byref(name_), byref(val_), byref(len_))
+        if (ret != 0):
+          raise make_ex(ret, "error iterating over the extended attributes \
+in '%s'" % self.oid)
+        if name_.value == None:
+            raise StopIteration()
+        name = ctypes.string_at(name_)
+        val = ctypes.string_at(val_, len_)
+        return (name, val)
+    def __del__(self):
+        self.ioctx.librados.rados_getxattrs_end(self.it)
 
 class SnapIterator(object):
     """Snapshot iterator"""
@@ -403,6 +428,14 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
         return ret_buf.value
 
+    def get_xattrs(self, oid):
+        self.require_ioctx_open()
+        it = c_void_p(0)
+        ret = self.librados.rados_getxattrs(self.io, oid, byref(it))
+        if ret != 0:
+            raise make_ex(ret, "Failed to get rados xattrs for object %r" % oids)
+        return XattrIterator(self, it, oid)
+
     def set_xattr(self, key, xattr_name, xattr_value):
         self.require_ioctx_open()
         ret = self.librados.rados_setxattr(self.io, c_char_p(key),
@@ -498,6 +531,10 @@ class Object(object):
     def get_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.get_xattr(self.key, xattr_name)
+
+    def get_xattrs(self, xattr_name):
+        self.require_object_exists()
+        return self.ioctx.get_xattrs(self.key, xattr_name)
 
     def set_xattr(self, xattr_name, xattr_value):
         self.require_object_exists()

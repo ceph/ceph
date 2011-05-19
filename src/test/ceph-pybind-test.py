@@ -57,9 +57,31 @@ def_str = foo3_ioctx.read("def")
 if (def_str != "d"):
     raise RuntimeError("error reading object def: expected value d, \
 got %s" % def_str)
-
 for obj in foo3_ioctx.list_objects():
     print str(obj)
+
+# do some things with extended attributes
+foo3_ioctx.set_xattr("abc", "a", "1")
+foo3_ioctx.set_xattr("def", "b", "2")
+foo3_ioctx.set_xattr("abc", "c", "3")
+ret = foo3_ioctx.get_xattr("abc", "a")
+if (ret != "1"):
+  raise RuntimeError("error: expected object abc to have a=1")
+ret = foo3_ioctx.get_xattr("def", "b")
+if (ret != "2"):
+  raise RuntimeError("error: expected object def to have b=2")
+ret = foo3_ioctx.get_xattr("abc", "c")
+if (ret != "3"):
+  raise RuntimeError("error: expected object abc to have c=3")
+found = {}
+for k,v in foo3_ioctx.get_xattrs("abc"):
+  found[k] = v
+if (len(found) != 2):
+  raise RuntimeError("error: expected two extended attributes on abc")
+if (found["a"] != "1"):
+  raise RuntimeError("error: expected object abc to have a=1")
+if (found["c"] != "3"):
+  raise RuntimeError("error: expected object abc to have c=3")
 
 # create some snapshots and do stuff with them
 print "creating snap bjork"
