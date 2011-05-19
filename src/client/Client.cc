@@ -2190,6 +2190,12 @@ void Client::_release(Inode *in, bool checkafter)
 void Client::_flush(Inode *in, Context *onfinish)
 {
   dout(10) << "_flush " << *in << dendl;
+
+  if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
+    dout(10) << " nothing to flush" << dendl;
+    return;
+  }
+
   if (!onfinish)
     onfinish = new C_NoopContext;
   bool safe = objectcacher->commit_set(&in->oset, onfinish);
@@ -5158,7 +5164,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     flushed_metadata = true;
   } else dout(10) << "no metadata needs to commit" << dendl;
 
-
+  // FIXME: this can starve
   while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
     dout(10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 	     << " uncommitted, waiting" << dendl;
