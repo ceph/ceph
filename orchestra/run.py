@@ -108,6 +108,14 @@ class ConnectionLostError(Exception):
             command=self.command,
             )
 
+class CommandResult(object):
+    __slots__ = ['command', 'stdout', 'stderr', 'exitstatus']
+    def __init__(self, command, stdout=None, stderr=None, exitstatus=None):
+        self.command = command
+        self.stdout = stdout
+        self.stderr = stderr
+        self.exitstatus = exitstatus
+
 def run(
     client, args,
     stdin=None, stdout=None, stderr=None,
@@ -159,4 +167,10 @@ def run(
             raise CommandCrashedError(command=r.command)
         if status != 0:
             raise CommandFailedError(command=r.command, exitstatus=status)
-    return status
+
+    return CommandResult(
+        command=r.command,
+        stdout=stdout,
+        stderr=stderr,
+        exitstatus=status,
+        )

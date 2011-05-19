@@ -1,4 +1,5 @@
 from nose.tools import eq_ as eq
+from cStringIO import StringIO
 
 import fudge
 import nose
@@ -33,12 +34,47 @@ def test_run_log_simple():
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(0)
-    got = run.run(
+    r = run.run(
         client=ssh,
         logger=logger,
         args=['foo', 'bar baz'],
         )
-    eq(got, 0)
+    eq(r.exitstatus, 0)
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_capture_stdout():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo 'bar baz'")
+    in_ = fudge.Fake('ChannelFile(stdin)')
+    out = fudge.Fake('ChannelFile(stdout)')
+    err = fudge.Fake('ChannelFile(stderr)')
+    cmd.returns((in_, out, err))
+    in_.expects('close').with_args()
+    out.remember_order()
+    out.expects('read').with_args().returns('foo\nb')
+    out.expects('read').with_args().returns('ar\n')
+    out.expects('read').with_args().returns('')
+    err.expects('xreadlines').with_args().returns(['bad'])
+    logger = fudge.Fake('logger')
+    log_err = fudge.Fake('log_err')
+    logger.expects('getChild').with_args('err').returns(log_err)
+    log_err.expects('log').with_args(logging.INFO, 'bad')
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(0)
+    out_f = StringIO()
+    r = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo', 'bar baz'],
+        stdout=out_f,
+        )
+    eq(r.exitstatus, 0)
+    assert r.stdout is out_f
+    eq(r.stdout.getvalue(), 'foo\nbar\n')
 
 
 @nose.with_setup(fudge.clear_expectations)
@@ -85,13 +121,13 @@ def test_run_status_bad_nocheck():
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(42)
-    got = run.run(
+    r = run.run(
         client=ssh,
         logger=logger,
         args=['foo'],
         check_status=False,
         )
-    eq(got, 42)
+    eq(r.exitstatus, 42)
 
 
 @nose.with_setup(fudge.clear_expectations)
@@ -139,13 +175,13 @@ def test_run_status_crash_nocheck():
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(-1)
-    got = run.run(
+    r = run.run(
         client=ssh,
         logger=logger,
         args=['foo'],
         check_status=False,
         )
-    assert got is None
+    assert r.exitstatus is None
 
 
 @nose.with_setup(fudge.clear_expectations)
@@ -194,10 +230,10 @@ def test_run_status_lost_nocheck():
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(-1)
-    got = run.run(
+    r = run.run(
         client=ssh,
         logger=logger,
         args=['foo'],
         check_status=False,
         )
-    assert got is None
+    assert r.exitstatus is None
