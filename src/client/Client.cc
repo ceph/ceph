@@ -5018,20 +5018,24 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &got, endoff);
   if (r < 0)
     return r;
-  
+
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
   if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-    
+
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
     // wait? (this may block!)
     objectcacher->wait_for_write(size, client_lock);
     
     // async, caching, non-blocking.
     objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
 			     offset, size, bl, g_clock.now(), 0);
+
+    put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
   } else {
     /*
       // atomic, synchronous, blocking.
