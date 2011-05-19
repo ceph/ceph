@@ -512,7 +512,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     obc->ondisk_read_unlock();
   }
 
-  if (result == -EAGAIN) // must have referenced non-existent class
+  if (result == -EAGAIN)
     return;
 
   // prepare the reply
@@ -1417,7 +1417,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
     case CEPH_OSD_OP_ROLLBACK :
-      _rollback_to(ctx, op);
+      result = _rollback_to(ctx, op);
       break;
 
     case CEPH_OSD_OP_ZERO:
@@ -1908,7 +1908,7 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
   info.stats.num_wr++;
 }
 
-void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
+int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 {
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
@@ -1916,11 +1916,12 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   const sobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
   snapid_t snapid = (uint64_t)op.snap.snapid;
+  snapid_t cloneid = 0;
 
   dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
 
   ObjectContext *rollback_to;
-  int ret = find_object_context(soid.oid, oi.oloc, snapid, &rollback_to, false);
+  int ret = find_object_context(soid.oid, oi.oloc, snapid, &rollback_to, false, &cloneid);
   if (ret) {
     if (-ENOENT == ret) {
       // there's no snapshot here, or there's no object.
@@ -1932,7 +1933,11 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       /* a different problem, like degraded pool
        * with not-yet-restored object. We shouldn't have been able
        * to get here; recovery should have completed first! */
-      assert(0);
+      sobject_t rollback_target(soid.oid, cloneid);
+      assert(is_missing_object(rollback_target));
+      dout(20) << "_rollback_to attempted to roll back to a missing object " 
+	       << rollback_target << " (requested snapid: ) " << snapid << dendl;
+      wait_for_missing_object(rollback_target, ctx->op);
     } else {
       // ummm....huh? It *can't* return anything else at time of writing.
       assert(0);
@@ -1980,6 +1985,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       ssc->snapset.clone_overlap[*ssc->snapset.clones.rbegin()] = overlaps;
     }
   }
+  return ret;
 }
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
