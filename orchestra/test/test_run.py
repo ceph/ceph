@@ -6,6 +6,8 @@ import logging
 
 from .. import run
 
+from .util import assert_raises
+
 
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
@@ -30,18 +32,100 @@ def test_run_log_simple():
     log_out.expects('log').with_args(logging.INFO, 'bar')
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
-    channel.expects('recv_exit_status').with_args().returns(42)
+    channel.expects('recv_exit_status').with_args().returns(0)
     got = run.run(
         client=ssh,
         logger=logger,
         args=['foo', 'bar baz'],
+        )
+    eq(got, 0)
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_status_bad():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(42)
+    e = assert_raises(
+        run.CommandFailedError,
+        run.run,
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        )
+    eq(e.command, 'foo')
+    eq(e.exitstatus, 42)
+    eq(str(e), "Command failed with status 42: 'foo'")
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_status_bad_nocheck():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(42)
+    got = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        check_status=False,
         )
     eq(got, 42)
 
 
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
-def test_run_crash_status():
+def test_run_status_crash():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(-1)
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('is_active').with_args().returns(True)
+    e = assert_raises(
+        run.CommandCrashedError,
+        run.run,
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        )
+    eq(e.command, 'foo')
+    eq(str(e), "Command crashed: 'foo'")
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_status_crash_nocheck():
     ssh = fudge.Fake('SSHConnection')
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
@@ -59,5 +143,61 @@ def test_run_crash_status():
         client=ssh,
         logger=logger,
         args=['foo'],
+        check_status=False,
+        )
+    assert got is None
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_status_lost():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(-1)
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('is_active').with_args().returns(False)
+    e = assert_raises(
+        run.ConnectionLostError,
+        run.run,
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        )
+
+    eq(e.command, 'foo')
+    eq(str(e), "SSH connection was lost: 'foo'")
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_status_lost_nocheck():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(-1)
+    got = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        check_status=False,
         )
     assert got is None

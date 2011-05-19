@@ -8,8 +8,9 @@ import shutil
 log = logging.getLogger(__name__)
 
 class RemoteProcess(object):
-    __slots__ = ['stdin', 'stdout', 'stderr', '_get_exitstatus']
-    def __init__(self, stdin, stdout, stderr, get_exitstatus):
+    __slots__ = ['command', 'stdin', 'stdout', 'stderr', '_get_exitstatus']
+    def __init__(self, command, stdin, stdout, stderr, get_exitstatus):
+        self.command = command
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
@@ -44,6 +45,7 @@ def execute(client, args):
     cmd = ' '.join(pipes.quote(a) for a in args)
     (in_, out, err) = client.exec_command(cmd)
     r = RemoteProcess(
+        command=cmd,
         stdin=in_,
         stdout=out,
         stderr=err,
@@ -74,10 +76,43 @@ def copy_file_to(f, dst):
         handler = shutil.copyfileobj
     return handler(f, dst)
 
+
+class CommandFailedError(Exception):
+    def __init__(self, command, exitstatus):
+        self.command = command
+        self.exitstatus = exitstatus
+
+    def __str__(self):
+        return "Command failed with status {status}: {command!r}".format(
+            status=self.exitstatus,
+            command=self.command,
+            )
+
+
+class CommandCrashedError(Exception):
+    def __init__(self, command):
+        self.command = command
+
+    def __str__(self):
+        return "Command crashed: {command!r}".format(
+            command=self.command,
+            )
+
+
+class ConnectionLostError(Exception):
+    def __init__(self, command):
+        self.command = command
+
+    def __str__(self):
+        return "SSH connection was lost: {command!r}".format(
+            command=self.command,
+            )
+
 def run(
     client, args,
     stdin=None, stdout=None, stderr=None,
     logger=None,
+    check_status=True,
     ):
     """
     Run a command remotely.
@@ -89,6 +124,7 @@ def run(
     :param stdout: What to do with standard output. Either a file-like object, a `logging.Logger`, or `None` for copying to default log.
     :param stderr: What to do with standard error. See `stdout`.
     :param logger: If logging, write stdout/stderr to "out" and "err" children of this logger. Defaults to logger named after this module.
+    :param check_status: Whether to raise CalledProcessError on non-zero exit status, and . Defaults to True. All signals and connection loss are made to look like SIGHUP.
     """
     r = execute(client, args)
 
@@ -108,4 +144,19 @@ def run(
     g_err.get()
     g_in.get()
 
-    return r.exitstatus
+    status = r.exitstatus
+    if check_status:
+        if status is None:
+            # command either died due to a signal, or the connection
+            # was lost
+            transport = client.get_transport()
+            if not transport.is_active():
+                # look like we lost the connection
+                raise ConnectionLostError(command=r.command)
+
+            # connection seems healthy still, assuming it was a
+            # signal; sadly SSH does not tell us which signal
+            raise CommandCrashedError(command=r.command)
+        if status != 0:
+            raise CommandFailedError(command=r.command, exitstatus=status)
+    return status
