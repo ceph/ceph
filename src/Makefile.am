@@ -254,7 +254,7 @@ librbd_SOURCES = \
 librbd_la_SOURCES = ${librbd_SOURCES}
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librbd_la_LIBADD = librados.la -lpthread $(EXTRALIBS)
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
 lib_LTLIBRARIES += librbd.la
 
