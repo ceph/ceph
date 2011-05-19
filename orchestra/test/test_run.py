@@ -2,6 +2,7 @@ from nose.tools import eq_ as eq
 from cStringIO import StringIO
 
 import fudge
+import gevent.event
 import nose
 import logging
 
@@ -237,3 +238,35 @@ def test_run_status_lost_nocheck():
         check_status=False,
         )
     assert r.exitstatus is None
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_nowait():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(42)
+    r = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        wait=False,
+        )
+    eq(r.command, 'foo')
+    assert isinstance(r.exitstatus, gevent.event.AsyncResult)
+    e = assert_raises(
+        run.CommandFailedError,
+        r.exitstatus.get,
+        )
+    eq(e.exitstatus, 42)
+    eq(str(e), "Command failed with status 42: 'foo'")
