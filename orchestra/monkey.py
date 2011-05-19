@@ -1,3 +1,17 @@
+def patch_001_paramiko_deprecation():
+    """
+    Silence an an unhelpful DeprecationWarning triggered by Paramiko.
+
+    Not strictly a monkeypatch.
+    """
+    import warnings
+    warnings.filterwarnings(
+        category=DeprecationWarning,
+        message='This application uses RandomPool,',
+        action='ignore',
+        )
+
+
 def patch_100_paramiko_pkey():
     """
     Make paramiko recognize AES-encrypted SSH private keys.
