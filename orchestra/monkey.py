@@ -1,5 +1,7 @@
 import logging
 
+log = logging.getLogger(__name__)
+
 def patch_001_paramiko_deprecation():
     """
     Silence an an unhelpful DeprecationWarning triggered by Paramiko.
@@ -53,4 +55,5 @@ def patch_all():
     monkeys = [(k,v) for (k,v) in globals().iteritems() if k.startswith('patch_') and k != 'patch_all']
     monkeys.sort()
     for k,v in monkeys:
+        log.debug('Patching %s', k)
         v()
