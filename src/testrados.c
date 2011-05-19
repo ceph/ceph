@@ -18,6 +18,36 @@
 #include <stdlib.h>
 #include <time.h>
 
+static void do_rados_setxattr(rados_ioctx_t io_ctx, const char *oid,
+			const char *key, const char *val)
+{
+	int ret = rados_setxattr(io_ctx, oid, key, val, strlen(val));
+	if (ret < 0) {
+		printf("rados_setxattr failed with error %d\n", ret);
+		exit(1);
+	}
+	printf("rados_setxattr %s=%s\n", key, val);
+}
+
+static void do_rados_getxattr(rados_ioctx_t io_ctx, const char *oid,
+			const char *key, const char *expected)
+{
+	size_t blen = strlen(expected) + 1;
+	char buf[blen];
+	memset(buf, 0, sizeof(buf));
+	int r = rados_getxattr(io_ctx, oid, key, buf, blen);
+	if (r < 0) {
+		printf("rados_getxattr(%s) failed with error %d\n", key, r);
+		exit(1);
+	}
+	if (strcmp(buf, expected) != 0) {
+		printf("rados_getxattr(%s) got wrong result! "
+		       "expected: '%s'. got '%s'\n", key, expected, buf);
+		exit(1);
+	}
+	printf("rados_getxattr %s=%s\n", key, buf);
+}
+
 int main(int argc, const char **argv) 
 {
   char tmp[32];
@@ -136,13 +166,12 @@ int main(int argc, const char **argv)
     printf("*** content mismatch ***\n");
 
   /* attrs */
-  r = rados_setxattr(io_ctx, oid, "attr1", "bar", 3);
-  printf("rados_setxattr attr1=bar = %d\n", r);
-  char val[10];
-  r = rados_getxattr(io_ctx, oid, "attr1", val, sizeof(val));
-  printf("rados_getxattr attr1 = %d\n", r);
-  if (memcmp(val, "bar", 3))
-    printf("*** attr value mismatch ***\n");
+  do_rados_setxattr(io_ctx, oid, "b", "2");
+  do_rados_setxattr(io_ctx, oid, "a", "1");
+  do_rados_setxattr(io_ctx, oid, "c", "3");
+  do_rados_getxattr(io_ctx, oid, "a", "1");
+  do_rados_getxattr(io_ctx, oid, "b", "2");
+  do_rados_getxattr(io_ctx, oid, "c", "3");
 
   uint64_t size;
   time_t mtime;
