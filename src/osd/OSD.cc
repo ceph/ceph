@@ -1495,16 +1495,25 @@ void OSD::update_heartbeat_peers()
   for (map<int,epoch_t>::iterator p = old_from.begin();
        p != old_from.end();
        p++) {
-    if (heartbeat_from.count(p->first) == 0 ||
-	heartbeat_inst[p->first] != old_inst[p->first]) {
-      if (heartbeat_to.count(p->first) == 0) {
-	dout(10) << "update_heartbeat_peers: marking down old _from peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	heartbeat_messenger->mark_down(old_inst[p->first].addr);
-      } else {
-	dout(10) << "update_heartbeat_peers: old _from peer " << old_inst[p->first]
-		 << " is still a _to peer, not marking down" << dendl;
-      }
+    assert(old_inst.count(p->first));
+    if (heartbeat_from.count(p->first) && heartbeat_inst[p->first] == old_inst[p->first])
+      continue;
+
+    // share latest map with this peer, just to be nice.
+    dout(10) << "update_heartbeat_peers: sharing map with old _from peer " << old_inst[p->first]
+	     << dendl;
+    _share_map_outgoing(old_inst[p->first]);
+
+    if (heartbeat_to.count(p->first) && old_inst[p->first] == heartbeat_inst[p->first]) {
+      dout(10) << "update_heartbeat_peers: old _from peer " << old_inst[p->first]
+	       << " is still a _to peer, not marking down" << dendl;
+    } else {
+      dout(10) << "update_heartbeat_peers: marking down old _from peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;
+      Connection *con = heartbeat_messenger->get_connection(old_inst[p->first]);
+      heartbeat_messenger->mark_disposable(con);
+      heartbeat_messenger->mark_down_on_empty(con);
+      con->put();
     }
   }
 
