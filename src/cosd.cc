@@ -150,7 +150,7 @@ int main(int argc, const char **argv)
     eauth.key.create(CEPH_CRYPTO_AES);
     g_keyring.add(ename, eauth);
     bufferlist bl;
-    ::encode(g_keyring, bl);
+    g_keyring.encode_plaintext(bl);
     int r = bl.write_file(g_conf.keyring.c_str(), 0600);
     if (r)
       derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf.keyring
