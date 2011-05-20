@@ -1465,13 +1465,12 @@ void Locker::revoke_stale_caps(Session *session)
 	in->state_set(CInode::STATE_NEEDSRECOVER);
 
       if (!in->filelock.is_stable()) eval_gather(&in->filelock);
+      if (!in->linklock.is_stable()) eval_gather(&in->linklock);
       if (!in->authlock.is_stable()) eval_gather(&in->authlock);
       if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
 
       if (in->is_auth()) {
-	if (in->filelock.is_stable()) eval(&in->filelock);
-	if (in->authlock.is_stable()) eval(&in->authlock);
-	if (in->xattrlock.is_stable()) eval(&in->xattrlock);
+	eval(in, CEPH_CAP_LOCKS);
       } else {
 	request_inode_file_caps(in);
       }
