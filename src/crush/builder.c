@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "builder.h"
 #include "hash.h"
@@ -143,6 +144,15 @@ int crush_add_bucket(struct crush_map *map,
 	map->buckets[pos] = bucket;
 
 	return id;
+}
+
+int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucket)
+{
+	int pos = -1 - bucket->id;
+
+	map->buckets[pos] = NULL;
+	crush_destroy_bucket(bucket);
+	return 0;
 }
 
 
@@ -537,6 +547,161 @@ int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 
 /************************************************/
 
+int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item)
+{
+	int i, j;
+	int newsize;
+	
+	for (i = 0; i < bucket->h.size; i++)
+		if (bucket->h.items[i] == item)
+			break;
+	if (i == bucket->h.size)
+		return -ENOENT;
+
+	for (j = i; j < bucket->h.size; j++)
+		bucket->h.items[j] = bucket->h.items[j+1];
+	newsize = --bucket->h.size;
+	bucket->h.weight -= bucket->item_weight;
+
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	return 0;
+}
+
+int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
+{
+	int i, j;
+	int newsize;
+	int weight;
+
+	for (i = 0; i < bucket->h.size; i++)
+		if (bucket->h.items[i] == item)
+			break;
+	if (i == bucket->h.size)
+		return -ENOENT;
+
+	weight = bucket->item_weights[i];
+	for (j = i; j < bucket->h.size; j++) {
+		bucket->h.items[j] = bucket->h.items[j+1];
+		bucket->item_weights[j] = bucket->item_weights[j+1];
+		bucket->sum_weights[j] = bucket->sum_weights[j+1] - weight;
+	}
+	bucket->h.weight -= weight;
+	newsize = --bucket->h.size;
+	
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
+	bucket->sum_weights = realloc(bucket->sum_weights, sizeof(__u32)*newsize);
+	return 0;
+}
+
+int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
+{
+	int i;
+	int newsize;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		int node;
+		int weight;
+		int j;
+		int depth = calc_depth(bucket->h.size);
+
+		if (bucket->h.items[i] != item)
+			continue;
+		
+		node = crush_calc_tree_node(i);
+		weight = bucket->node_weights[node];
+		bucket->node_weights[node] = 0;
+
+		for (j = 1; j < depth; j++) {
+			node = parent(node);
+			bucket->node_weights[node] -= weight;
+			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+		}
+		bucket->h.weight -= weight;
+		break;
+	}
+	if (i == bucket->h.size)
+		return -ENOENT;
+
+	newsize = bucket->h.size;
+	while (newsize > 0) {
+		int node = crush_calc_tree_node(newsize - 1);
+		if (bucket->node_weights[node])
+			break;
+		--newsize;
+	}
+
+	if (newsize != bucket->h.size) {
+		int olddepth, newdepth;
+
+		bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+		bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+
+		olddepth = calc_depth(bucket->h.size);
+		newdepth = calc_depth(newsize);
+		if (olddepth != newdepth) {
+			bucket->num_nodes = 1 << newdepth;
+			bucket->node_weights = realloc(bucket->node_weights,
+						       sizeof(__u32)*bucket->num_nodes);
+		}
+
+		bucket->h.size = newsize;
+	}
+	return 0;
+}
+
+int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
+{
+	int newsize = bucket->h.size - 1;
+	int i, j;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		if (bucket->h.items[i] == item) {
+			bucket->h.size--;
+			bucket->h.weight -= bucket->item_weights[i];
+			for (j = i; j < bucket->h.size; j++) {
+				bucket->h.items[j] = bucket->h.items[j+1];
+				bucket->item_weights[j] = bucket->item_weights[j+1];
+			}
+			break;
+		}
+	}
+	if (i == bucket->h.size)
+		return -ENOENT;
+	
+	bucket->h.items = realloc(bucket->h.items, sizeof(__u32)*newsize);
+	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
+	bucket->straws = realloc(bucket->straws, sizeof(__u32)*newsize);
+
+	return crush_calc_straw(bucket);
+}
+
+int crush_bucket_remove_item(struct crush_bucket *b, int item)
+{
+	/* invalidate perm cache */
+	b->perm_n = 0;
+
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return crush_remove_uniform_bucket_item((struct crush_bucket_uniform *)b, item);
+	case CRUSH_BUCKET_LIST:
+		return crush_remove_list_bucket_item((struct crush_bucket_list *)b, item);
+	case CRUSH_BUCKET_TREE:
+		return crush_remove_tree_bucket_item((struct crush_bucket_tree *)b, item);
+	case CRUSH_BUCKET_STRAW:
+		return crush_remove_straw_bucket_item((struct crush_bucket_straw *)b, item);
+	default:
+		return -1;
+	}
+	return 0;
+}
+
+
+/************************************************/
+
 int crush_adjust_uniform_bucket_item_weight(struct crush_bucket_uniform *bucket, int item, int weight)
 {
 	int diff = (weight - bucket->item_weight) * bucket->h.size;
@@ -731,3 +896,6 @@ int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 	}
 	return 0;
 }
+
+/***************************/
+

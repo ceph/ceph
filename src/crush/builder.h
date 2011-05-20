@@ -20,6 +20,8 @@ struct crush_bucket *crush_make_bucket(int alg, int hash, int type, int size, in
 extern int crush_bucket_add_item(struct crush_bucket *bucket, int item, int weight);
 extern int crush_bucket_adjust_item_weight(struct crush_bucket *bucket, int item, int weight);
 extern int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *bucket);
+extern int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucket);
+extern int crush_bucket_remove_item(struct crush_bucket *bucket, int item);
 
 struct crush_bucket_uniform *
 crush_make_uniform_bucket(int hash, int type, int size,

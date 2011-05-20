@@ -155,6 +155,7 @@ public:
 
   void find_roots(set<int>& roots) const;
   int insert_device(int id, int weight, string name, map<string,string>& loc);
+  int remove_device(int id);
   void adjust_item_weight(int id, int weight);
   void reweight();
 
@@ -284,6 +285,18 @@ private:
       return (crush_bucket *)(-ENOENT);
     return ret;
   }
+  crush_bucket *get_bucket(int id) {
+    if (!crush)
+      return (crush_bucket *)(-EINVAL);
+    unsigned int pos = (unsigned int)(-1 - id);
+    unsigned int max_buckets = crush->max_buckets;
+    if (pos >= max_buckets)
+      return (crush_bucket *)(-ENOENT);
+    crush_bucket *ret = crush->buckets[pos];
+    if (ret == NULL)
+      return (crush_bucket *)(-ENOENT);
+    return ret;
+  }
 
 public:
   int get_max_buckets() const {
@@ -349,7 +362,7 @@ public:
     crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
     return crush_add_bucket(crush, bucketno, b);
   }
-
+  
   void finalize() {
     assert(crush);
     crush_finalize(crush);
