@@ -3644,6 +3644,10 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
   assert(is_active());
   info.stats = oinfo.stats;
 
+  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  info.history.merge(oinfo.history);
+  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
   // Handle changes to purged_snaps
   interval_set<snapid_t> p;
   p.union_of(oinfo.purged_snaps, info.purged_snaps);
