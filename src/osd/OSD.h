@@ -238,7 +238,7 @@ private:
   epoch_t heartbeat_epoch;
   map<int, epoch_t> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
-  map<int, entity_inst_t> heartbeat_inst;
+  map<int, Connection*> heartbeat_con;
   utime_t last_mon_heartbeat;
   Messenger *heartbeat_messenger;
   
@@ -491,6 +491,7 @@ private:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
+  MOSDMap *build_incremental_map_msg(epoch_t since);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
 
 protected:
