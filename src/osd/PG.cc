@@ -2467,15 +2467,15 @@ void PG::log_weirdness()
     if (log.head != log.tail)
       osd->clog.error() << info.pgid
 			<< " log bound mismatch, empty but (" << log.tail 
-			<< "," << log.head << "]"
+			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
 			<< "\n";
   } else {
-    if (((log.log.begin()->version.version <= log.tail.version) &&  // sloppy check
-         !log.backlog) ||
-        (log.log.rbegin()->version != log.head))
+    if ((log.log.begin()->version <= log.tail && !log.backlog) || // sloppy check
+	(log.log.rbegin()->version != log.head && !(log.head == log.tail && log.backlog)))
       osd->clog.error() << info.pgid
 			<< " log bound mismatch, info (" << log.tail 
-			<< "," << log.head << "] actual ["
+			<< "," << log.head << "]" << (log.backlog ? "+backlog":"")
+			<< " actual ["
 			<< log.log.begin()->version << ","
 			<< log.log.rbegin()->version << "]"
 			<< "\n";
@@ -3805,9 +3805,8 @@ ostream& operator<<(ostream& out, const PG& pg)
       out << " (log bound mismatch, empty)";
     }
   } else {
-    if (((pg.log.log.begin()->version.version <= pg.log.tail.version) &&  // sloppy check
-         !pg.log.backlog) ||
-        (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
+    if ((pg.log.log.begin()->version <= pg.log.tail && !pg.log.backlog) || // sloppy check
+        (pg.log.log.rbegin()->version != pg.log.head && !(pg.log.head == pg.log.tail && pg.log.backlog))) {
       out << " (log bound mismatch, actual=["
 	  << pg.log.log.begin()->version << ","
 	  << pg.log.log.rbegin()->version << "]";
