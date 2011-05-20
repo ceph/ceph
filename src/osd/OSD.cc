@@ -1470,7 +1470,7 @@ void OSD::update_heartbeat_peers()
        p != old_to.end();
        p++) {
     assert(old_inst.count(p->first));
-    if (heartbeat_to.count(p->first))
+    if (heartbeat_to.count(p->first) && heartbeat_inst[p->first] == old_inst[p->first])
       continue;
     assert(p->second <= osdmap->get_epoch());
 
