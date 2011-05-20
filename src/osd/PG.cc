@@ -4759,8 +4759,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    */
   // current up and/or acting nodes, of course.
   for (unsigned i=0; i<up.size(); i++)
-    if (up[i] != whoami)
-      cur.insert(up[i]);
+    cur.insert(up[i]);
   for (unsigned i=0; i<acting.size(); i++)
     cur.insert(acting[i]);
 
@@ -4806,10 +4805,8 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     for (unsigned i=0; i<interval.up.size(); i++) {
       int o = interval.up[i];
 
-      if (osdmap.is_up(o)) {  // is up now
-	if (o != whoami)       // and is not me
-	  cur.insert(o);
-      }
+      if (osdmap.is_up(o)) // is up now
+	cur.insert(o);
     }
 
     // consider ACTING osds
