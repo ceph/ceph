@@ -427,8 +427,14 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   get_auth_header(s, auth_hdr, qsr);
   RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
 
-  const char *key = s->user.secret_key.c_str();
-  int key_len = strlen(key);
+  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
+  if (iter == s->user.access_keys.end()) {
+    RGW_LOG(0) << "ERROR: access key not encoded in user info" << dendl;
+    return false;
+  }
+  RGWAccessKey& k = iter->second;
+  const char *key = k.key.c_str();
+  int key_len = k.key.size();
 
   char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);

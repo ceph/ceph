@@ -43,7 +43,7 @@ extern string rgw_root_bucket;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 5
+#define USER_INFO_VER 6
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
@@ -155,17 +155,62 @@ struct fcgx_state {
 
 class RGWAccessControlPolicy;
 
+struct RGWAccessKey {
+  string id;
+  string key;
+  string subuser;
+
+  RGWAccessKey() {}
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+    ::encode(ver, bl);
+    ::encode(id, bl);
+    ::encode(key, bl);
+    ::encode(subuser, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(id, bl);
+     ::decode(key, bl);
+     ::decode(subuser, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWAccessKey);
+
+struct RGWSubUser {
+  string name;
+  uint32_t flags;
+
+  RGWSubUser() {}
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+    ::encode(ver, bl);
+    ::encode(name, bl);
+    ::encode(flags, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(name, bl);
+     ::decode(flags, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWSubUser);
+
 
 struct RGWUserInfo
 {
   uint64_t auid;
   string user_id;
-  string access_key;
-  string secret_key;
   string display_name;
   string user_email;
   string openstack_name;
   string openstack_key;
+  map<string, RGWAccessKey> access_keys;
+  map<string, RGWSubUser> subusers;
 
   RGWUserInfo() : auid(0) {}
 
@@ -173,6 +218,14 @@ struct RGWUserInfo
      __u32 ver = USER_INFO_VER;
      ::encode(ver, bl);
      ::encode(auid, bl);
+     string access_key;
+     string secret_key;
+     if (!access_keys.empty()) {
+       map<string, RGWAccessKey>::const_iterator iter = access_keys.begin();
+       const RGWAccessKey& k = iter->second;
+       access_key = k.id;
+       secret_key = k.key;
+     }
      ::encode(access_key, bl);
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
@@ -180,14 +233,24 @@ struct RGWUserInfo
      ::encode(openstack_name, bl);
      ::encode(openstack_key, bl);
      ::encode(user_id, bl);
+     ::encode(access_keys, bl);
+     ::encode(subusers, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
     ::decode(ver, bl);
      if (ver >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
+     string access_key;
+     string secret_key;
     ::decode(access_key, bl);
     ::decode(secret_key, bl);
+    if (ver < 6) {
+      RGWAccessKey k;
+      k.id = access_key;
+      k.key = secret_key;
+      access_keys[access_key] = k;
+    }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
     if (ver >= 3) ::decode(openstack_name, bl);
@@ -196,15 +259,18 @@ struct RGWUserInfo
       ::decode(user_id, bl);
     else
       user_id = access_key;
+    if (ver >= 6) {
+      ::decode(access_keys, bl);
+      ::decode(subusers, bl);
+    }
   }
 
   void clear() {
     user_id.clear();
-    access_key.clear();
-    secret_key.clear();
     display_name.clear();
     user_email.clear();
     auid = CEPH_AUTH_UID_DEFAULT;
+    access_keys.clear();
   }
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)

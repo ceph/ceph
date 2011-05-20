@@ -118,7 +118,7 @@ bool rgw_verify_os_token(req_state *s)
     return false;
   }
 
-  RGW_LOG(0) << "user_id=" << s->user.user_id << " access_key=" << s->user.access_key << dendl;
+  RGW_LOG(0) << "user_id=" << s->user.user_id << dendl;
 
   return true;
 }

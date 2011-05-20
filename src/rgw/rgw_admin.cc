@@ -326,17 +326,22 @@ int main(int argc, char **argv)
     }
   }
 
-
   int err;
+  map<string, RGWAccessKey>::iterator kiter;
   switch (opt_cmd) {
   case OPT_USER_CREATE:
   case OPT_USER_MODIFY:
     if (user_id)
       info.user_id = user_id;
-    if (access_key)
-      info.access_key = access_key;
-    if (secret_key)
-      info.secret_key = secret_key;
+    if (access_key && secret_key) {
+      RGWAccessKey k;
+      k.id = access_key;
+      k.key = secret_key;
+      info.access_keys[access_key] = k;
+    } else if (access_key || secret_key) {
+      cerr << "access key modification requires both access key and secret key" << std::endl;
+      exit(1);
+    }
     if (display_name)
       info.display_name = display_name;
     if (user_email)
@@ -357,8 +362,12 @@ int main(int argc, char **argv)
 
   case OPT_USER_INFO:
     cout << "User ID: " << info.user_id << std::endl;
-    cout << "Access Key: " << info.access_key << std::endl;
-    cout << "Secret Key: " << info.secret_key << std::endl;
+    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+      RGWAccessKey& k = kiter->second;
+      cout << "User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
+      cout << " Access Key: " << k.id << std::endl;
+      cout << " Secret Key: " << k.key << std::endl;
+    }
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "Email: " << info.user_email << std::endl;
     cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;

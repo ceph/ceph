@@ -28,7 +28,7 @@ void rgw_get_anon_user(RGWUserInfo& info)
 {
   info.user_id = RGW_USER_ANON_ID;
   info.display_name.clear();
-  info.secret_key.clear();
+  info.access_keys.clear();
 }
 
 static int put_obj(string& uid, string& bucket, string& oid, const char *data, size_t size)
@@ -68,13 +68,17 @@ int rgw_store_user_info(RGWUserInfo& info)
     }
   }
 
-  if (info.access_key.size()) {
-    /* check if openstack mapping exists */
+  if (info.access_keys.size()) {
+    /* check if access keys already exist */
     RGWUserInfo inf;
-    int r = rgw_get_user_info_by_access_key(info.access_key, inf);
-    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      RGW_LOG(0) << "can't store user info, access key already mapped to another user" << dendl;
-      return -EEXIST;
+    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+    for (; iter != info.access_keys.end(); ++iter) {
+      RGWAccessKey& k = iter->second;
+      int r = rgw_get_user_info_by_access_key(k.id, inf);
+      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+        RGW_LOG(0) << "can't store user info, access key already mapped to another user" << dendl;
+        return -EEXIST;
+      }
     }
   }
 
@@ -94,10 +98,14 @@ int rgw_store_user_info(RGWUserInfo& info)
       return ret;
   }
 
-  if (info.access_key.size()) {
-    ret = put_obj(info.access_key, ui_key_bucket, info.access_key, uid_bl.c_str(), uid_bl.length());
-    if (ret < 0)
-      return ret;
+  if (info.access_keys.size()) {
+    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+    for (; iter != info.access_keys.end(); ++iter) {
+      RGWAccessKey& k = iter->second;
+      ret = put_obj(k.id, ui_key_bucket, k.id, uid_bl.c_str(), uid_bl.length());
+      if (ret < 0)
+        return ret;
+    }
   }
 
   if (info.openstack_name.size())
