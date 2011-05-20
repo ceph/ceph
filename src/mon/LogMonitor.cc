@@ -82,8 +82,10 @@ void LogMonitor::create_initial(bufferlist& bl)
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
   e.stamp = g_clock.now();
-  e.type = CLOG_ERROR;
-  e.msg = "mkfs";
+  e.type = CLOG_INFO;
+  std::stringstream ss;
+  ss << "mkfs " << mon->monmap->get_fsid();
+  e.msg = ss.str();
   e.seq = 0;
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
 }
