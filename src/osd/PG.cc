@@ -3437,7 +3437,13 @@ void PG::fulfill_log(int from, const Query &query)
     if (query.type == PG::Query::LOG) {
       dout(10) << " sending info+missing+log since " << query.since
 	       << dendl;
-      mlog->log.copy_after(log, query.since);
+      if (query.since != eversion_t() && query.since < log.tail) {
+	osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
+			  << " when my log.tail is " << log.tail
+			  << ", sending full log instead\n";
+	mlog->log = log;           // primary should not have requested this!!
+      } else
+	mlog->log.copy_after(log, query.since);
     }
 	
     if (query.type == PG::Query::BACKLOG) {
@@ -4565,11 +4571,22 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
 
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
-    dout(10) << " requesting missing from osd" << *i << dendl;
-    context< RecoveryMachine >().send_query(*i,
-      Query(Query::LOG,
-	    eversion_t(pi.history.last_epoch_started, 0),
-	    pg->info.history));
+    eversion_t since(pi.history.last_epoch_started, 0);
+    if (pi.log_tail <= since) {
+      dout(10) << " requesting log+missing since " << since << " from osd" << *i << dendl;
+      context< RecoveryMachine >().send_query(*i, Query(Query::LOG, since, pg->info.history));
+    } else if (pi.log_backlog) {
+      dout(10) << " requesting backlog+missing from osd" << *i
+	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
+	       << dendl;
+      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
+    } else {
+      // hmm, is this case valid?
+      dout(10) << " requesting fulllog+missing from osd" << *i
+	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
+	       << dendl;
+      context< RecoveryMachine >().send_query(*i, Query(Query::FULLLOG, pg->info.history));
+    }
     peer_missing_requested.insert(*i);
   }
 
