@@ -4830,6 +4830,9 @@ PG::PgPriorSet::PgPriorSet(int whoami,
       }
 
       if (osdmap.is_up(o)) {  // is up now
+	// include past acting osds if they are up
+	cur.insert(o);
+
 	// did any osds survive _this_ interval?
 	any_survived = true;
       } else if (!pinfo || pinfo->lost_at > interval.first) {
