@@ -452,7 +452,12 @@ private:
   RWLock          map_lock;
   list<Message*>  waiting_for_osdmap;
 
-  hash_map<entity_name_t, epoch_t>  peer_map_epoch;  // FIXME types
+  Mutex peer_map_epoch_lock;
+  map<int, epoch_t> peer_map_epoch;
+  
+  epoch_t get_peer_epoch(int p);
+  epoch_t note_peer_epoch(int p, epoch_t e);
+  void forget_peer_epoch(int p, epoch_t e);
 
   bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 			   Session *session = 0);
