@@ -439,6 +439,9 @@ public:
 	  ::encode(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
 	}
 	break;
+      default:
+	assert(0);
+	break;
       }
     }
 
@@ -579,12 +582,10 @@ public:
       }
 
       case CRUSH_BUCKET_TREE: {
-	unsigned num_nodes;
 	crush_bucket_tree* cbt = (crush_bucket_tree*)bucket;
-	::decode(num_nodes, blp);
-	cbt->num_nodes = num_nodes;
-	cbt->node_weights = (__u32*)calloc(1, num_nodes * sizeof(__u32));
-	for (unsigned j=0; j<num_nodes; j++) {
+	::decode(cbt->num_nodes, blp);
+	cbt->node_weights = (__u32*)calloc(1, cbt->num_nodes * sizeof(__u32));
+	for (unsigned j=0; j<cbt->num_nodes; j++) {
 	  ::decode(cbt->node_weights[j], blp);
 	}
 	break;
