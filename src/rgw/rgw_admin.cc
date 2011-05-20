@@ -188,16 +188,27 @@ int main(int argc, char **argv)
   const char *openstack_user = 0;
   const char *openstack_key = 0;
   const char *date = 0;
+  char *subuser = 0;
   uint64_t auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
   const char *prev_cmd = NULL;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
+  char secret_key_buf[SECRET_KEY_LEN + 1];
+  char public_id_buf[PUBLIC_ID_LEN + 1];
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
+      user_id = strdup(user_id);
+      subuser = strchr(user_id, ':');
+      if (subuser) {
+       *subuser = '\0';
+       subuser++;
+       if (!*subuser)
+         subuser = NULL;
+      }
     } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("secret", 's')) {
@@ -248,7 +259,7 @@ int main(int argc, char **argv)
   if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && !user_id) {
     bool found = false;
     string s;
-    if (user_email) {
+    if (!found && user_email) {
       s = user_email;
       if (rgw_get_user_info_by_email(s, info) >= 0) {
 	found = true;
@@ -285,8 +296,7 @@ int main(int argc, char **argv)
 
     string user_id_str = user_id;
 
-    if (opt_cmd != OPT_USER_CREATE &&
-        info.user_id.empty() &&
+    if (info.user_id.empty() &&
         rgw_get_user_info_by_uid(user_id_str, info) < 0) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
@@ -294,11 +304,9 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_USER_CREATE) {
-    char secret_key_buf[SECRET_KEY_LEN + 1];
-    char public_id_buf[PUBLIC_ID_LEN + 1];
     int ret;
 
-    if (!display_name) {
+    if (!display_name && !subuser) {
       cerr << "display name was not specified, aborting" << std::endl;
       return 0;
     }
@@ -328,6 +336,7 @@ int main(int argc, char **argv)
 
   int err;
   map<string, RGWAccessKey>::iterator kiter;
+  map<string, RGWSubUser>::iterator uiter;
   switch (opt_cmd) {
   case OPT_USER_CREATE:
   case OPT_USER_MODIFY:
@@ -337,8 +346,10 @@ int main(int argc, char **argv)
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
+      if (subuser)
+        k.subuser = subuser;
       info.access_keys[access_key] = k;
-    } else if (access_key || secret_key) {
+   } else if (access_key || secret_key) {
       cerr << "access key modification requires both access key and secret key" << std::endl;
       exit(1);
     }
@@ -352,7 +363,12 @@ int main(int argc, char **argv)
       info.openstack_name = openstack_user;
     if (openstack_key)
       info.openstack_key = openstack_key;
-  
+    if (subuser) {
+      RGWSubUser u;
+      u.name = subuser;
+
+      info.subusers[subuser] = u;
+    }
     if ((err = rgw_store_user_info(info)) < 0) {
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
@@ -362,11 +378,17 @@ int main(int argc, char **argv)
 
   case OPT_USER_INFO:
     cout << "User ID: " << info.user_id << std::endl;
+    cout << "Keys:" << std::endl;
     for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
       RGWAccessKey& k = kiter->second;
-      cout << "User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
-      cout << " Access Key: " << k.id << std::endl;
-      cout << " Secret Key: " << k.key << std::endl;
+      cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
+      cout << "  Access Key: " << k.id << std::endl;
+      cout << "  Secret Key: " << k.key << std::endl;
+    }
+    cout << "Users: " << std::endl;
+    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+      RGWSubUser& u = uiter->second;
+      cout << " Name: " << info.user_id << ":" << u.name << std::endl;
     }
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "Email: " << info.user_email << std::endl;
