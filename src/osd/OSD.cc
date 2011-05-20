@@ -1415,6 +1415,18 @@ void OSD::update_heartbeat_peers()
 
   heartbeat_epoch = osdmap->get_epoch();
 
+  // grandfather newer _to peers
+  for (map<int,epoch_t>::iterator p = old_to.begin();
+       p != old_to.end();
+       p++) {
+    if (p->second > osdmap->get_epoch()) {
+      dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
+	       << " as of " << p->second << dendl;
+      heartbeat_to[p->first] = p->second;
+      heartbeat_inst[p->first] = old_inst[p->first];
+    }
+  }
+
   // build heartbeat to/from set
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
@@ -1461,30 +1473,24 @@ void OSD::update_heartbeat_peers()
     assert(old_inst.count(p->first));
     if (heartbeat_to.count(p->first))
       continue;
-    if (p->second > osdmap->get_epoch()) {
-      dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
-	       << " as of " << p->second << dendl;
-      heartbeat_to[p->first] = p->second;
-      heartbeat_inst[p->first] = old_inst[p->first];
+    assert(p->second <= osdmap->get_epoch());
+    if (heartbeat_from.count(p->first) && old_inst[p->first] == heartbeat_inst[p->first]) {
+      dout(10) << "update_heartbeat_peers: old _to peer " << old_inst[p->first] 
+	       << " is still a _from peer, not marking down" << dendl;
     } else {
-      if (heartbeat_from.count(p->first) && old_inst[p->first] == heartbeat_inst[p->first]) {
-	dout(10) << "update_heartbeat_peers: old _to peer " << old_inst[p->first] 
-		 << " is still a _from peer, not marking down" << dendl;
-      } else {
-	dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	heartbeat_messenger->mark_down(old_inst[p->first].addr);
-      }
+      dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;
+      heartbeat_messenger->mark_down(old_inst[p->first].addr);
+    }
 
-      if (!osdmap->is_down(p->first) &&
-	  osdmap->get_hb_inst(p->first) == old_inst[p->first]) {
-	dout(10) << "update_heartbeat_peers: sharing map with old _to peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	// share latest map with this peer (via the cluster link, NOT
-	// the heartbeat link), so they know not to expect heartbeats
-	// from us.  otherwise they may mark us down!
-	_share_map_outgoing(osdmap->get_cluster_inst(p->first));
-      }
+    if (!osdmap->is_down(p->first) &&
+	osdmap->get_hb_inst(p->first) == old_inst[p->first]) {
+      dout(10) << "update_heartbeat_peers: sharing map with old _to peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;
+      // share latest map with this peer (via the cluster link, NOT
+      // the heartbeat link), so they know not to expect heartbeats
+      // from us.  otherwise they may mark us down!
+      _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
   }
   for (map<int,epoch_t>::iterator p = old_from.begin();
