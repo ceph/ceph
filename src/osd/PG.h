@@ -202,6 +202,8 @@ public:
 	  epoch_created = other.epoch_created;
 	if (last_epoch_started < other.last_epoch_started)
 	  last_epoch_started = other.last_epoch_started;
+	if (last_epoch_clean < other.last_epoch_clean)
+	  last_epoch_clean = other.last_epoch_clean;
 	if (last_epoch_split < other.last_epoch_started)
 	  last_epoch_split = other.last_epoch_started;
 	if (other.last_scrub > last_scrub)
