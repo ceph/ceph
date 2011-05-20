@@ -1461,7 +1461,6 @@ void OSD::update_heartbeat_peers()
 	  dout(10) << "update_heartbeat_peers: new _from osd" << p << " " << heartbeat_inst[p] << dendl;
 	  heartbeat_from_stamp[p] = now;  
 	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true); // request hb
-	  m->set_priority(CEPH_MSG_PRIO_HIGH);
 	  heartbeat_messenger->send_message(m, heartbeat_inst[p]);
 	}
       }
