@@ -1641,7 +1641,7 @@ WRITE_CLASS_ENCODER(PG::OndiskLog)
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
   return out << "ec=" << h.epoch_created
-	     << " les=" << h.last_epoch_started
+	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
 	     << " " << h.same_up_since << "/" << h.same_acting_since << "/" << h.same_primary_since;
 }
 
