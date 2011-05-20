@@ -1167,7 +1167,6 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
     }
   }
-  stringstream out;
   prior_set.reset(new PgPriorSet(osd->whoami,
 				 *osd->osdmap,
 				 past_intervals,
@@ -1175,7 +1174,6 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
 				 acting,
 				 info,
 				 this));
-  dout(10) << out << dendl;
   PgPriorSet &prior(*prior_set.get());
 				 
   // take note that we care about the primary's up_thru.  if it
