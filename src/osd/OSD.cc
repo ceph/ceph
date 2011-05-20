@@ -1538,10 +1538,8 @@ void OSD::reset_heartbeat_peers()
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
-
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
-    dout(20) << "handle_osd_ping from " << m->get_source()
+    dout(20) << "handle_osd_ping from " << m->get_source_inst()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
     m->put();
     return;
@@ -1554,11 +1552,12 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   if (m->ack) {
     if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
-      dout(5) << " ignoring peer " << m->get_source_inst() << " request for heartbeats as_of "
-	      << m->peer_as_of_epoch << " <= current _to as_of " << heartbeat_to[from] << dendl;
+      dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
+	      << " request for heartbeats as_of " << m->peer_as_of_epoch
+	      << " <= current _to as_of " << heartbeat_to[from] << dendl;
     } else {
-      dout(5) << " peer " << m->get_source_inst() << " requesting heartbeats as_of "
-	      << m->peer_as_of_epoch << dendl;
+      dout(5) << "handle_osd_ping peer " << m->get_source_inst()
+	      << " requesting heartbeats as_of " << m->peer_as_of_epoch << dendl;
       heartbeat_to[from] = m->peer_as_of_epoch;
       heartbeat_inst[from] = m->get_source_inst();
       
@@ -1570,16 +1569,21 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   if (heartbeat_from.count(from) &&
       heartbeat_inst[from] == m->get_source_inst()) {
-
     // only take peer stat or share map now if map_lock is uncontended
     if (locked) {
+      dout(20) << "handle_osd_ping " << m->get_source_inst()
+	       << " took stat " << m->peer_stat << dendl;
       if (m->map_epoch && !is_booting())
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
       take_peer_stat(from, m->peer_stat);  // only with map_lock held!
+    } else {
+      dout(20) << "handle_osd_ping " << m->get_source_inst()
+	       << " dropped stat " << m->peer_stat << dendl;
     }
 
     heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
+
     // remove from failure lists if needed
     if (failure_pending.count(from)) {
       send_still_alive(from);
@@ -1587,7 +1591,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     }
     failure_queue.erase(from);
   } else {
-    dout(10) << " ignoring " << m->get_source_inst() << dendl;
+    dout(10) << "handle_osd_ping ignoring " << m->get_source_inst() << dendl;
   }
 
   if (locked) 
