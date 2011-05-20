@@ -388,7 +388,10 @@ void PG::merge_log(ObjectStore::Transaction& t,
   bool changed = false;
 
   if (log.empty() ||
-      (olog.tail > log.head && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
+      (olog.tail > log.head && olog.backlog) ||  // e.g. log=(0,20] olog=(40,50]+backlog) 
+      (log.head <= olog.head &&
+       log.tail >= olog.tail &&
+       !log.backlog && olog.backlog)) {          // olog is clearly superior in every way
 
     if (is_primary()) {
       // we should have our own backlog already; see peer() code where
