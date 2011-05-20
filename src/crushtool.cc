@@ -572,7 +572,7 @@ static int decompile_crush_bucket_impl(int i,
     print_fixedpoint(out, w);
     if (dopos) {
       if (alg == CRUSH_BUCKET_TREE)
-	out << " pos " << (j-1)/2;
+	out << " pos " << j;
       else
 	out << " pos " << j;
     }

@@ -246,11 +246,6 @@ static int calc_depth(int size)
 	return depth;
 }
 
-static int calc_node(int i)
-{
-	return ((i+1) << 1)-1;
-}
-
 struct crush_bucket_tree*
 crush_make_tree_bucket(int hash, int type, int size,
 		       int *items,    /* in leaf order */
@@ -274,6 +269,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	/* calc tree depth */
 	depth = calc_depth(size);
 	bucket->num_nodes = 1 << depth;
+	printf("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
 	bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
 
 	memset(bucket->h.items, 0, sizeof(__u32)*bucket->h.size);
@@ -281,7 +277,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
-		node = calc_node(i);
+		node = crush_calc_tree_node(i);
 		printf("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
 		bucket->h.weight += weights[i];
@@ -487,7 +483,7 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
 	bucket->node_weights = realloc(bucket->node_weights, sizeof(__u32)*bucket->num_nodes);
 	
-	node = calc_node(newsize-1);
+	node = crush_calc_tree_node(newsize-1);
 	bucket->node_weights[node] = weight;
 
 	for (j=1; j<depth; j++) {
@@ -521,6 +517,9 @@ int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int
 
 int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 {
+	/* invalidate perm cache */
+	b->perm_n = 0;
+
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
 		return crush_add_uniform_bucket_item((struct crush_bucket_uniform *)b, item, weight);
@@ -584,7 +583,7 @@ int crush_adjust_tree_bucket_item_weight(struct crush_bucket_tree *bucket, int i
 	if (i == bucket->h.size)
 		return 0;
 	
-	node = calc_node(i);
+	node = crush_calc_tree_node(i);
 	diff = weight = bucket->node_weights[node];
 	bucket->node_weights[node] = weight;
 	bucket->h.weight += diff;
@@ -687,7 +686,7 @@ int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree
 
 	bucket->h.weight = 0;
 	for (i = 0; i < bucket->h.size; i++) {
-		int node = calc_node(i);
+		int node = crush_calc_tree_node(i);
 		int id = bucket->h.items[i];
 		if (id < 0) {
 			struct crush_bucket *c = crush->buckets[-1-id];
