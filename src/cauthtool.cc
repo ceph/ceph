@@ -251,10 +251,7 @@ int main(int argc, const char **argv)
     if (bin_keyring) {
       ::encode(keyring, bl);
     } else {
-      std::ostringstream os;
-      keyring.print(os);
-      string str = os.str();
-      bl.append(str);
+      keyring.encode_plaintext(bl);
     }
     r = bl.write_file(fn, 0600);
     if (r < 0) {
