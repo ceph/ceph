@@ -42,6 +42,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
+#include "common/DoutStreambuf.h"
 #include "include/color.h"
 
 #include "OSDMonitor.h"
@@ -963,6 +964,8 @@ void Monitor::tick()
       remove_session(s);
     }
   }
+
+  g_conf._doss->handle_log_reopen_requests(&g_conf);
 
   new_tick();
 }

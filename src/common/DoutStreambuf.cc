@@ -137,13 +137,15 @@ static int create_symlink(string oldpath, const string &newpath)
 ///////////////////////////// DoutStreambuf /////////////////////////////
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::DoutStreambuf()
-  : flags(0), ofd(-1)
+  : flags(0), ofd(-1), rlr(false)
 {
   // Initialize get pointer to zero so that underflow is called on the first read.
   this->setg(0, 0, 0);
 
   // Initialize output_buffer
   _clear_output_buffer();
+
+  pthread_spin_init(&rlr_lock, PTHREAD_PROCESS_PRIVATE);
 }
 
 template <typename charT, typename traits>
@@ -153,6 +155,7 @@ DoutStreambuf<charT, traits>::~DoutStreambuf()
     TEMP_FAILURE_RETRY(::close(ofd));
     ofd = -1;
   }
+  pthread_spin_destroy(&rlr_lock);
 }
 
 // This function is called when the output buffer is filled.
@@ -381,6 +384,33 @@ DoutStreambuf<charT, traits>::underflow()
   // We can't read from this
   // TODO: some more elegant way of preventing callers from trying to get input from this stream
   assert(0);
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+request_log_reopen(void)
+{
+  pthread_spin_lock(&rlr_lock);
+  rlr = true;
+  pthread_spin_unlock(&rlr_lock);
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+handle_log_reopen_requests(const md_config_t *conf)
+{
+  bool need;
+  pthread_spin_lock(&rlr_lock);
+  need = rlr;
+  pthread_spin_unlock(&rlr_lock);
+  if (!need)
+    return;
+  std::set <std::string> changed;
+  const char **keys = get_tracked_conf_keys();
+  for (const char **k = keys; *k; ++k) {
+    changed.insert(*k);
+  }
+  handle_conf_change(conf, changed);
 }
 
 template <typename charT, typename traits>

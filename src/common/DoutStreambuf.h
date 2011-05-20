@@ -75,6 +75,18 @@ public:
   // (if those sinks are active)
   void dout_emergency_to_file_and_syslog(const char * const str) const;
 
+  // The next two functions are used to implement the Ceph daemons'
+  // SIGHUP handling.
+
+  // Set the request_log_reopen bit.
+  // Signal-safe.
+  void request_log_reopen(void);
+
+  // Read the request_log_reopen bit.
+  // If it's set, reopen the log.
+  // This is meant to be called from an event loop. Not signal-safe.
+  void handle_log_reopen_requests(const md_config_t *conf);
+
 protected:
   // Called when the buffer fills up
   virtual int_type overflow(int_type c);
@@ -108,6 +120,9 @@ private:
   std::string opath;
   std::string symlink_dir;
   std::string isym_path;
+
+  pthread_spinlock_t rlr_lock;
+  bool rlr;
 };
 
 // Secret evil interfaces for writing logs without taking the lock.

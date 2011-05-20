@@ -69,6 +69,7 @@
 
 #include "messages/MWatchNotify.h"
 
+#include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/ProfLogType.h"
 #include "common/Timer.h"
@@ -1814,6 +1815,8 @@ void OSD::tick()
     dispatch_running = false;
     dispatch_cond.Signal();
   }
+
+  g_conf._doss->handle_log_reopen_requests(&g_conf);
 }
 
 // =========================================

@@ -70,6 +70,7 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
+#include "common/DoutStreambuf.h"
 
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
@@ -584,6 +585,8 @@ void MDS::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  g_conf._doss->handle_log_reopen_requests(&g_conf);
 }
 
 
