@@ -665,7 +665,7 @@ protected:
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
-    PG(o, _pool, p, oid, ioid)
+    PG(o, _pool, p, oid, ioid), snap_trimmer_machine(this)
   { }
   ~ReplicatedPG() {}
 
@@ -683,6 +683,57 @@ public:
 		 bufferlist& odata);
   void do_osd_op_effects(OpContext *ctx);
 private:
+  class NotTrimming;
+  class SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
+    ReplicatedPG *pg;
+
+  public:
+    SnapTrimmer(ReplicatedPG *pg) : pg(pg) {}
+
+    struct SnapTrim : boost::statechart::event< SnapTrim > {};
+    struct Reset : boost::statechart::event< SnapTrim > {};
+  private:
+    struct NotTrimming : boost::statechart::state< NotTrimming, SnapTrimmer >, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< SnapTrim >
+	> reactions;
+      NotTrimming(my_context ctx);
+      void exit();
+      boost::statechart::result react(const SnapTrim&);
+    };
+
+    struct TrimmingObjects;
+    struct RepGather;
+    struct Trimming : boost::statechart::state< Trimming, SnapTrimmer, TrimmingObjects >, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::transition< Reset, NotTrimming >
+	> reactions;
+      Trimming(my_context ctx);
+      void exit();
+      set< RepGather* > pending_repops;
+      set< sobject_t > remaining_objects;
+      coll_t col_trimming;
+      snapid_t snap_trimming;
+    };
+
+    struct TrimmingObjects : boost::statechart::state< TrimmingObjects, Trimming >, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< SnapTrim >
+	> reactions;
+      TrimmingObjects(my_context ctx);
+      void exit();
+      boost::statechart::result react(const SnapTrim&);
+    };
+
+    struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, Trimming >, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< SnapTrim >
+	> reactions;
+      WaitingOnReplicas(my_context ctx);
+      void exit();
+      boost::statechart::result react(const SnapTrim&);
+    };
+  } snap_trimmer_machine;
   void _delete_head(OpContext *ctx);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:

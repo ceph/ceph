@@ -4319,6 +4319,9 @@ void ReplicatedPG::on_change()
   pushing.clear();
   pulling.clear();
   pull_from_peer.clear();
+
+  // clear snap_trimmer state
+  snap_trimmer_machine.process_event(SnapTrimmer::Reset());
 }
 
 void ReplicatedPG::on_role_change()
@@ -4871,4 +4874,71 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
   dout(10) << "_scrub (" << mode << ") finish" << dendl;
   return errors;
+}
+
+/*---SnapTrimmer states---*/
+#undef dout_prefix
+#define dout_prefix (*_dout << context< SnapTrimmer >().pg->gen_prefix() \
+		     << "SnapTrimmer state<" << get_state_name() << ">: ")
+
+/* NotTrimming */
+ReplicatedPG::SnapTrimmer::NotTrimming::NotTrimming(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/NotTrimming";
+  //context< SnapTrimmer >().log_enter(state_name);
+}
+
+void ReplicatedPG::SnapTrimmer::NotTrimming::exit()
+{
+  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+}
+
+boost::statechart::result ReplicatedPG::SnapTrimmer::NotTrimming::react(const SnapTrim&)
+{
+  return discard_event();
+}
+
+/* Trimming */
+ReplicatedPG::SnapTrimmer::Trimming::Trimming(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/Trimming";
+  //context< SnapTrimmer >().log_enter(state_name);
+}
+
+void ReplicatedPG::SnapTrimmer::Trimming::exit()
+{
+  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+}
+
+/* TrimmingObjects */
+ReplicatedPG::SnapTrimmer::TrimmingObjects::TrimmingObjects(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/Trimming/TrimmingObjects";
+  //context< SnapTrimmer >().log_enter(state_name);
+}
+
+void ReplicatedPG::SnapTrimmer::TrimmingObjects::exit()
+{
+  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+}
+
+boost::statechart::result ReplicatedPG::SnapTrimmer::TrimmingObjects::react(const SnapTrim&)
+{
+  return discard_event();
+}
+/* WaitingOnReplicasObjects */
+ReplicatedPG::SnapTrimmer::WaitingOnReplicas::WaitingOnReplicas(my_context ctx) : my_base(ctx)
+{
+  state_name = "Started/Primary/Active/Trimming/WaitingOnReplicas";
+  //context< SnapTrimmer >().log_enter(state_name);
+}
+
+void ReplicatedPG::SnapTrimmer::WaitingOnReplicas::exit()
+{
+  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+}
+
+boost::statechart::result ReplicatedPG::SnapTrimmer::WaitingOnReplicas::react(const SnapTrim&)
+{
+  return discard_event();
 }

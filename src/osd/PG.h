@@ -860,6 +860,15 @@ public:
 	context_list(context_list), transaction(transaction) {}
   };
 
+  struct NamedState {
+    const char *state_name;
+    utime_t enter_time;
+    const char *get_state_name() { return state_name; }
+    NamedState() : enter_time(ceph_clock_now(g_ceph_context)) {}
+    virtual ~NamedState() {}
+  };
+
+
   /* Encapsulates PG recovery process */
   class RecoveryState {
     void start_handle(RecoveryCtx *new_ctx) {
