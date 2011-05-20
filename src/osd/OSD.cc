@@ -1492,6 +1492,8 @@ void OSD::update_heartbeat_peers()
       heartbeat_messenger->mark_disposable(con);
       heartbeat_messenger->mark_down_on_empty(con);
       con->put();
+      if (!osdmap->is_up(p->first))
+	forget_peer_epoch(p->first, osdmap->get_epoch());
     }
   }
   for (map<int,epoch_t>::iterator p = old_from.begin();
@@ -1516,6 +1518,8 @@ void OSD::update_heartbeat_peers()
       heartbeat_messenger->mark_disposable(con);
       heartbeat_messenger->mark_down_on_empty(con);
       con->put();
+      if (!osdmap->is_up(p->first))
+	forget_peer_epoch(p->first, osdmap->get_epoch());
     }
   }
 
@@ -2439,12 +2443,12 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 
 bool OSD::heartbeat_dispatch(Message *m)
 {
-  dout(20) << "heartbeat_dispatch " << m << dendl;
+  dout(30) << "heartbeat_dispatch " << m << dendl;
 
   switch (m->get_type()) {
     
   case CEPH_MSG_PING:
-    dout(10) << "ping from " << m->get_source() << dendl;
+    dout(10) << "ping from " << m->get_source_inst() << dendl;
     m->put();
     break;
 
@@ -2885,8 +2889,6 @@ void OSD::note_down_osd(int peer)
   heartbeat_lock.Lock();
 
   // note: update_heartbeat_peers will mark down the heartbeat connection.
-
-  forget_peer_epoch(peer, osdmap->get_epoch());
 
   failure_queue.erase(peer);
   failure_pending.erase(peer);
