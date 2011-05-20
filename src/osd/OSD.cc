@@ -1553,13 +1553,19 @@ void OSD::handle_osd_ping(MOSDPing *m)
   bool locked = map_lock.try_get_read();
 
   if (m->ack) {
-    dout(5) << " peer " << m->get_source_inst() << " requesting heartbeats" << dendl;
-    heartbeat_to[from] = m->peer_as_of_epoch;
-    heartbeat_inst[from] = m->get_source_inst();
-
-    if (locked && m->map_epoch && !is_booting())
-      _share_map_incoming(m->get_source_inst(), m->map_epoch,
-			  (Session*) m->get_connection()->get_priv());
+    if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
+      dout(5) << " ignoring peer " << m->get_source_inst() << " request for heartbeats as_of "
+	      << m->peer_as_of_epoch << " <= current _to as_of " << heartbeat_to[from] << dendl;
+    } else {
+      dout(5) << " peer " << m->get_source_inst() << " requesting heartbeats as_of "
+	      << m->peer_as_of_epoch << dendl;
+      heartbeat_to[from] = m->peer_as_of_epoch;
+      heartbeat_inst[from] = m->get_source_inst();
+      
+      if (locked && m->map_epoch && !is_booting())
+	_share_map_incoming(m->get_source_inst(), m->map_epoch,
+			    (Session*) m->get_connection()->get_priv());
+    }
   }
 
   if (heartbeat_from.count(from) &&
