@@ -4900,5 +4900,12 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     }
   }
 
+  dout(10) << "build_prior final: cur " << cur << " down " << down << " lost " << lost
+	   << " up_thru " << up_thru
+	   << " inter_up_thru " << inter_up_thru
+	   << (crashed ? " crashed":"")
+	   << (pg_down ? " pg_down":"")
+	   << (some_down ? " some_down":"")
+	   << dendl;
 }
 
