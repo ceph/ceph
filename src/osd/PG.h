@@ -1555,6 +1555,8 @@ public:
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
 
+  void log_weirdness();
+
   void queue_snap_trim();
   bool queue_scrub();
 

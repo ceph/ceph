@@ -1574,6 +1574,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     }
   }
 
+  log_weirdness();
+
   // if primary..
   if (is_primary()) {
     // start up replicas
@@ -2442,6 +2444,49 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
   }
+
+  // log any weirdness
+  log_weirdness();
+}
+
+void PG::log_weirdness()
+{
+  if (log.tail != info.log_tail)
+    osd->clog.error() << info.pgid
+		      << " info mismatch, log.tail " << log.tail
+		      << " != info.log_tail " << info.log_tail
+		      << " on osd" << osd->whoami << "\n";
+  if (log.head != info.last_update)
+    osd->clog.error() << info.pgid
+		      << " info mismatch, log.head " << log.head
+		      << " != info.last_update " << info.last_update
+		      << " on osd" << osd->whoami << "\n";
+
+  if (log.log.empty()) {
+    // shoudl it be?
+    if (log.head != log.tail)
+      osd->clog.error() << info.pgid
+			<< " log bound mismatch, empty but (" << log.tail 
+			<< "," << log.head << "]"
+			<< " on osd" << osd->whoami << "\n";
+  } else {
+    if (((log.log.begin()->version.version <= log.tail.version) &&  // sloppy check
+         !log.backlog) ||
+        (log.log.rbegin()->version != log.head))
+      osd->clog.error() << info.pgid
+			<< " log bound mismatch, info (" << log.tail 
+			<< "," << log.head << "] actual ["
+			<< log.log.begin()->version << ","
+			<< log.log.rbegin()->version << "]"
+			<< " on osd" << osd->whoami << "\n";
+  }
+  
+  if (info.last_complete < log.tail && !log.backlog)
+    osd->clog.error() << info.pgid
+		      << " last_complete " << info.last_complete
+		      << " < log.tail " << log.tail
+		      << " and !backlog"
+		      << " on osd" << osd->whoami << "\n";
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
