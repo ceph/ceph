@@ -55,6 +55,7 @@ int main(int argc, const char **argv)
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(&g_conf, 0);
   EntityName ename(g_conf.name);
 
   const char *me = argv[0];

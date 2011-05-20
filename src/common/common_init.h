@@ -17,6 +17,9 @@ enum common_init_flags_t {
 
   // By default, don't read a configuration file
   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE = 0x2,
+
+  // Don't close stderr
+  CINIT_FLAG_NO_CLOSE_STDERR = 0x4,
 };
 
 int keyring_init(md_config_t *conf);
@@ -26,8 +29,7 @@ void complain_about_parse_errors(std::deque<std::string> *parse_errors);
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 void output_ceph_version();
-void common_prefork();
-void common_postfork();
-void common_init_daemonize(const md_config_t *conf);
+int common_init_shutdown_stderr(const md_config_t *conf);
+void common_init_finish(const md_config_t *conf, int flags);
 
 #endif

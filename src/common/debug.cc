@@ -17,14 +17,6 @@ DoutStreambuf <char> *_doss = g_conf._doss;
  */
 pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int dout_handle_daemonize(md_config_t *conf)
-{
-  DoutLocker _dout_locker;
-
-  conf->_doss->handle_stderr_closed();
-  return conf->_doss->handle_pid_change(&g_conf);
-}
-
 void output_ceph_version()
 {
   char buf[1024];

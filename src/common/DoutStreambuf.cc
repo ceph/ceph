@@ -222,9 +222,9 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::handle_stderr_closed()
+void DoutStreambuf<charT, traits>::handle_stderr_shutdown()
 {
-  // should hold the dout_lock here
+  DoutLocker _dout_locker;
   flags &= ~DOUTSB_FLAG_STDERR;
 }
 
@@ -302,7 +302,7 @@ template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::
 handle_pid_change(const md_config_t *conf)
 {
-  // should hold the dout_lock here
+  DoutLocker _dout_locker;
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 

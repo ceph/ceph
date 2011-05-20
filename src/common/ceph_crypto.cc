@@ -38,27 +38,15 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 
 #elif USE_NSS
 
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
 void ceph::crypto::init() {
-  pthread_mutex_lock(&lock);
-  if (crypto_init) {
-    pthread_mutex_unlock(&lock);
-    return;
-  }
   crypto_init = true;
-  pthread_mutex_unlock(&lock);
-
   SECStatus s;
   s = NSS_NoDB_Init(NULL);
   assert(s == SECSuccess);
 }
 
 void ceph::crypto::shutdown() {
-  pthread_mutex_lock(&lock);
-  assert(crypto_init);
   crypto_init = false;
-  pthread_mutex_unlock(&lock);
   SECStatus s;
   s = NSS_Shutdown();
   assert(s == SECSuccess);

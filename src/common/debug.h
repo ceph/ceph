@@ -30,8 +30,6 @@ extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
 class md_config_t;
 extern pthread_mutex_t _dout_lock;
 
-extern int dout_handle_daemonize(md_config_t *conf);
-
 extern void dout_emergency(const char * const str);
 
 extern void dout_emergency(const std::string &str);

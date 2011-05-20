@@ -38,6 +38,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(&g_conf, 0);
 
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 

@@ -66,7 +66,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
-  keyring_init(&g_conf);
 
   // mds specific args
   int shadow = 0;
@@ -163,8 +162,9 @@ int main(int argc, const char **argv)
     messenger->set_policy(entity_name_t::TYPE_CLIENT,
                           SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    if (shadow == MDSMap::STATE_ONESHOT_REPLAY ? false : g_conf.daemonize)
-      common_init_daemonize(&g_conf);
+    if (shadow == MDSMap::STATE_ONESHOT_REPLAY)
+      g_conf.daemonize = false;
+    common_init_finish(&g_conf, 0);
     messenger->start();
 
     // start mds

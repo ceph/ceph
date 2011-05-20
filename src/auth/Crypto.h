@@ -90,7 +90,7 @@ static inline ostream& operator<<(ostream& out, const CryptoKey& k)
  * Driver for a particular algorithm
  *
  * To use these functions, you need to call ceph::crypto::init(), see
- * common/ceph_crypto.h. common_init already does this for you.
+ * common/ceph_crypto.h. common_init_finish does this for you.
  */
 class CryptoHandler {
 public:

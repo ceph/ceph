@@ -55,7 +55,6 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  keyring_init(&g_conf);
 
   vector<const char*> nargs;
   FOR_EACH_ARG(args) {
@@ -109,19 +108,16 @@ int main(int argc, const char **argv, const char *envp[]) {
       exit(1);
     }
 
-    common_prefork();
     childpid = fork();
   }
+
+  common_init_finish(&g_conf, 0);
 
   if (childpid == 0) {
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
 
     cout << "cfuse[" << getpid() << "]: starting ceph client" << std::endl;
-
-    // if we forked, re-init things
-    if (g_conf.daemonize)
-      common_postfork();
     messenger->start_with_nonce(getpid());
 
     // start client

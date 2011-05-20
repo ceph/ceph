@@ -54,7 +54,7 @@ public:
   // Call when you close stderr.  Not strictly necessary, since we would get an
   // error the next time we tried to write to stdedrr. But nicer than waiting
   // for the error to happen.
-  void handle_stderr_closed();
+  void handle_stderr_shutdown();
 
   virtual const char** get_tracked_conf_keys() const;
 
