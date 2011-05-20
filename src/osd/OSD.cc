@@ -3979,6 +3979,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (!pg)
       continue;
 
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
+      pg->unlock();
+      continue;
+    }
+
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
     pg->handle_notify(from, *it, &rctx);
 
@@ -4015,6 +4021,12 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 			    from, created, false, &t, &fin);
   if (!pg) {
     m->put();
+    return;
+  }
+
+  if (pg->old_peering_msg(m->get_epoch())) {
+    dout(10) << "ignoring old peering message " << *m << dendl;
+    pg->unlock();
     return;
   }
 
@@ -4057,6 +4069,13 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
     if (!pg)
       continue;
+
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
+      pg->unlock();
+      continue;
+    }
+
     pg->handle_info(from, *p, &rctx);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4203,6 +4222,12 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " handle_pg_query changed in "
 	       << pg->info.history.same_acting_since
 	       << " (msg from " << m->get_epoch() << ")" << dendl;
+      pg->unlock();
+      continue;
+    }
+
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
       continue;
     }

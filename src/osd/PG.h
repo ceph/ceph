@@ -1277,6 +1277,9 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
+
+  epoch_t last_warm_restart;
+
   friend class OSD;
 
 
@@ -1481,6 +1484,7 @@ public:
     have_master_log(true),
     recovery_state(this),
     need_up_thru(false),
+    last_warm_restart(0),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),
@@ -1563,7 +1567,8 @@ public:
 		    pair<int, Info> &notify_info);
   void fulfill_log(int from, const Query &query);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
-    
+  bool old_peering_msg(const epoch_t &msg_epoch);
+
   // recovery bits
   void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
     recovery_state.handle_notify(from, i, rctx);

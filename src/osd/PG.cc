@@ -3425,6 +3425,11 @@ bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacti
   }
 }
 
+bool PG::old_peering_msg(const epoch_t &msg_epoch)
+{
+  return (last_warm_restart > msg_epoch);
+}
+
 /* Called before initializing peering during advance_map */
 void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting)
 {
@@ -3432,6 +3437,8 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
 
   // -- there was a change! --
   kick();
+
+  last_warm_restart = osdmap.get_epoch();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
@@ -4613,7 +4620,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 }
 
 
-/*----RecoverState Methods-----*/
+/*----RecoveryState Methods-----*/
 #undef dout_prefix
 #define dout_prefix *_dout << machine.pg->gen_prefix() 
 
