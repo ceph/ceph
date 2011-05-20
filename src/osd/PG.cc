@@ -225,7 +225,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   eversion_t lu(oinfo.last_update);
   while (true) {
     if (pp == olog.log.rend()) {
-      lu = olog.tail;
+      if (pp != olog.log.rbegin())   // no last_update adjustment if we discard nothing!
+	lu = olog.tail;
       break;
     }
     const Log::Entry& oe = *pp;
@@ -252,10 +253,10 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       if (oe.is_delete()) {
 	if (ne.is_delete()) {
 	  // old and new are delete
-	  dout(20) << " had " << oe << " new " << ne << " : both deletes" << dendl;
+	  dout(10) << " had " << oe << " new " << ne << " : both deletes" << dendl;
 	} else {
 	  // old delete, new update.
-	  dout(20) << " had " << oe << " new " << ne << " : missing" << dendl;
+	  dout(10) << " had " << oe << " new " << ne << " : missing" << dendl;
 	  omissing.add(ne.soid, ne.version, eversion_t());
 	}
       } else {
