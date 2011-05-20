@@ -4013,8 +4013,10 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   C_Contexts *fin;  
   PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
 			    from, created, false, &t, &fin);
-  if (!pg)
+  if (!pg) {
+    m->put();
     return;
+  }
 
   map< int, map<pg_t,PG::Query> > query_map;
   map< int, MOSDPGInfo* > info_map;
