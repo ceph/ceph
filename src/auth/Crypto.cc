@@ -23,13 +23,14 @@
 # include <pk11pub.h>
 #endif
 
-#include "include/ceph_fs.h"
+#include "common/Clock.h"
+#include "common/armor.h"
+#include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "common/armor.h"
-#include "common/Clock.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
+#include "include/ceph_fs.h"
 
 #include <errno.h>
 
@@ -57,7 +58,7 @@ static int get_random_bytes(int len, bufferlist& bl)
 
 class CryptoNone : public CryptoHandler {
 public:
-  CryptoNone() {}
+  CryptoNone() { }
   ~CryptoNone() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
@@ -210,7 +211,7 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret, cons
 
 class CryptoAES : public CryptoHandler {
 public:
-  CryptoAES() {}
+  CryptoAES() { }
   ~CryptoAES() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
@@ -348,7 +349,6 @@ int CryptoKey::set_secret(int type, bufferptr& s)
   CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
   if (!h)
     return -EOPNOTSUPP;
-
   int ret = h->validate_secret(s);
 
   if (ret < 0)

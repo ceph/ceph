@@ -16,7 +16,21 @@
 
 #include <pthread.h>
 
+static bool crypto_init = false;
+
+void ceph::crypto::assert_init() {
+  assert(crypto_init == true);
+}
+
 #ifdef USE_CRYPTOPP
+void ceph::crypto::init() {
+  crypto_init = true;
+}
+
+void ceph::crypto::shutdown() {
+  crypto_init = false;
+}
+
 // nothing
 ceph::crypto::HMACSHA1::~HMACSHA1()
 {
@@ -25,7 +39,6 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 #elif USE_NSS
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-static bool crypto_init = false;
 
 void ceph::crypto::init() {
   pthread_mutex_lock(&lock);
