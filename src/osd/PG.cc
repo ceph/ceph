@@ -1602,7 +1602,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 	  // the replica's tail is after it's last_complete and it has no backlog.
 	  // ick, this shouldn't normally happen.  but we can compensate!
 	  dout(10) << "activate peer osd" << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
-	  if (log.tail >= pi.last_complete) {
+	  if (log.tail <= pi.last_complete) {
 	    // _our_ log is sufficient, phew!
 	    m->log.copy_after(log, pi.last_complete);
 	  } else {
