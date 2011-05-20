@@ -1178,11 +1178,6 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
   dout(10) << out << dendl;
   PgPriorSet &prior(*prior_set.get());
 				 
-  dout(10) << "build_prior: " << *this << " "
-	   << (prior.crashed ? " crashed":"")
-	   << (prior.pg_down ? " down":"")
-	   << (prior.some_down ? " some_down":"")
-	   << dendl;
   // take note that we care about the primary's up_thru.  if it
   // changes later, it will affect our prior_set, and we'll want
   // to rebuild it!
