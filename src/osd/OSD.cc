@@ -4187,7 +4187,6 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     C_Contexts *fin = 0;
     PG *pg = get_or_create_pg(*p, m->get_epoch(), 
 			      from, created, false, &t, &fin);
-    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
     if (!pg)
       continue;
 
@@ -4196,6 +4195,8 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
       pg->unlock();
       continue;
     }
+
+    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
 
     pg->handle_info(from, *p, &rctx);
 
