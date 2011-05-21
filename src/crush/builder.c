@@ -549,7 +549,7 @@ int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 
 int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item)
 {
-	int i, j;
+	unsigned i, j;
 	int newsize;
 	
 	for (i = 0; i < bucket->h.size; i++)
@@ -570,7 +570,7 @@ int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int it
 
 int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 {
-	int i, j;
+	unsigned i, j;
 	int newsize;
 	int weight;
 
@@ -598,8 +598,8 @@ int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 
 int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 {
-	int i;
-	int newsize;
+	unsigned i;
+	unsigned newsize;
 
 	for (i = 0; i < bucket->h.size; i++) {
 		int node;
@@ -655,7 +655,7 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
 {
 	int newsize = bucket->h.size - 1;
-	int i, j;
+	unsigned i, j;
 
 	for (i = 0; i < bucket->h.size; i++) {
 		if (bucket->h.items[i] == item) {
