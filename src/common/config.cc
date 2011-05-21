@@ -471,9 +471,9 @@ md_config_t::
   remove_observer(_prof_logger_conf_obs);
   remove_observer(_doss);
 
-  free(_doss);
+  delete _doss;
   _doss = NULL;
-  free(_prof_logger_conf_obs);
+  delete _prof_logger_conf_obs;
   _prof_logger_conf_obs = NULL;
 }
 
