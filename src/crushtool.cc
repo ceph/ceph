@@ -805,7 +805,9 @@ int main(int argc, const char **argv)
   float add_weight = 0;
   const char *add_name = 0;
   map<string,string> add_loc;
-  const char *remove_name = 0;
+  const char *remove_name = 0;		      
+  const char *reweight_name = 0;
+  float reweight_weight = 0;
 
   int build = 0;
   int num_osds =0;
@@ -844,6 +846,9 @@ int main(int argc, const char **argv)
       add_loc[type] = name;
     } else if (CEPH_ARGPARSE_EQ("remove_item", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&remove_name, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("reweight_item", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&reweight_name, OPT_STR);
+      CEPH_ARGPARSE_SET_ARG_VAL(&reweight_weight, OPT_FLOAT);      
     } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
       verbose++;
     } else if (CEPH_ARGPARSE_EQ("build", '\0')) {
@@ -889,7 +894,8 @@ int main(int argc, const char **argv)
   }
   if (decompile + compile + build > 1)
     usage();
-  if (!compile && !decompile && !build && !test && !reweight && add_item < 0 && !remove_name)
+  if (!compile && !decompile && !build && !test && !reweight && add_item < 0 &&
+      !remove_name && !reweight_name)
     usage();
 
   /*
@@ -1043,6 +1049,24 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
+  if (reweight_name) {
+    cout << me << " reweighting item " << reweight_name << " to " << reweight_weight << std::endl;
+    int r;
+    if (!crush.name_exists(reweight_name)) {
+      cerr << " name " << reweight_name << " dne" << std::endl;
+      r = -ENOENT;
+    } else {
+      int item = crush.get_item_id(reweight_name);
+      r = crush.adjust_item_weightf(item, reweight_weight);
+    }
+    if (r == 0)
+      modified = true;
+    else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+        
+  }
   if (remove_name) {
     cout << me << " removing item " << remove_name << std::endl;
     int r;

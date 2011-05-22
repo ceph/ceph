@@ -128,7 +128,7 @@ int CrushWrapper::insert_device(int item, int weight, string name,
   return -EINVAL;
 }
 
-void CrushWrapper::adjust_item_weight(int id, int weight)
+int CrushWrapper::adjust_item_weight(int id, int weight)
 {
   cout << "adjust_item_weight " << id << " weight " << weight << std::endl;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
@@ -140,8 +140,10 @@ void CrushWrapper::adjust_item_weight(int id, int weight)
 	int diff = crush_bucket_adjust_item_weight(b, id, weight);
 	cout << "adjust_item_weight " << id << " diff " << diff << std::endl;
 	adjust_item_weight(-1 - bidx, b->weight);
+	return 0;
       }
   }
+  return -ENOENT;
 }
 
 void CrushWrapper::reweight()
