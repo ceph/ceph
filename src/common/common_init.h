@@ -22,7 +22,6 @@ enum common_init_flags_t {
   CINIT_FLAG_NO_CLOSE_STDERR = 0x4,
 };
 
-int keyring_init(CephContext *cct);
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
 void complain_about_parse_errors(std::deque<std::string> *parse_errors);

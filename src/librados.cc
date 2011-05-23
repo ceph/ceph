@@ -638,6 +638,8 @@ IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s)
 int librados::RadosClient::
 connect()
 {
+  common_init_finish(cct);
+
   int err;
   uint64_t nonce;
 
@@ -2646,9 +2648,6 @@ init_with_context(CephContext *cct_)
 int librados::Rados::
 connect()
 {
-  int ret = keyring_init(client->cct);
-  if (ret)
-    return ret;
   return client->connect();
 }
 
@@ -2853,12 +2852,8 @@ extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct_)
 
 extern "C" int rados_connect(rados_t cluster)
 {
-  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
-  int ret = keyring_init(radosp->cct);
-  if (ret)
-    return ret;
-
-  return radosp->connect();
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->connect();
 }
 
 extern "C" void rados_shutdown(rados_t cluster)

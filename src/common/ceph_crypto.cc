@@ -39,6 +39,8 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 #elif USE_NSS
 
 void ceph::crypto::init() {
+  if (crypto_init)
+    return;
   crypto_init = true;
   SECStatus s;
   s = NSS_NoDB_Init(NULL);
@@ -46,6 +48,8 @@ void ceph::crypto::init() {
 }
 
 void ceph::crypto::shutdown() {
+  if (!crypto_init)
+    return;
   crypto_init = false;
   SECStatus s;
   s = NSS_Shutdown();

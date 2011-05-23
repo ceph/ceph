@@ -32,6 +32,7 @@ static int librgw_initialized = 0;
 int librgw_create(librgw_t *rgw, const char * const id)
 {
   librgw_init_mutex.Lock();
+  CephContext *cct;
   if (!librgw_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
     iparams.conf_file = "";
@@ -44,6 +45,10 @@ int librgw_create(librgw_t *rgw, const char * const id)
     cct->_conf->apply_changes();
 
     ++librgw_initialized;
+    common_init_finish(cct);
+  }
+  else {
+    cct = &g_ceph_context;
   }
   librgw_init_mutex.Unlock();
   *rgw = &g_ceph_context;

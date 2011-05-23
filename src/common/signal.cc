@@ -52,7 +52,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 
 void sighup_handler(int signum)
 {
-  g_ceph_context._doss->request_log_reopen();
+  g_ceph_context.reopen_logs();
 }
 
 static void reraise_fatal(int signum)

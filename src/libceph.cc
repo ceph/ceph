@@ -70,6 +70,8 @@ public:
     if (mounted)
       return -EDOM;
 
+    common_init_finish(cct);
+
     //monmap
     monclient = new MonClient();
     if (monclient->build_initial_monmap() < 0) {
@@ -283,9 +285,6 @@ extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
   std::string mount_root;
-
-  keyring_init(cmount->get_ceph_context());
-
   if (root)
     mount_root = root;
   return cmount->mount(mount_root);

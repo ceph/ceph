@@ -294,8 +294,11 @@ void common_init_daemonize(const CephContext *cct, int flags)
   dout(1) << "finished common_init_daemonize" << dendl;
 }
 
+/* Please be sure that this can safely be called multiple times by the
+ * same application. */
 void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
   keyring_init(cct);
+  cct->start_service_thread();
 }

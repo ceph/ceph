@@ -965,8 +965,6 @@ void Monitor::tick()
     }
   }
 
-  g_ceph_context._doss->handle_log_reopen_requests(&g_conf);
-
   new_tick();
 }
 
