@@ -176,7 +176,7 @@ int main(int argc, char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_conf, 0);
+  common_init_finish(&g_conf);
 
   const char *user_id = 0;
   const char *access_key = 0;

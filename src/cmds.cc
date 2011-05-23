@@ -164,7 +164,8 @@ int main(int argc, const char **argv)
 
     if (shadow == MDSMap::STATE_ONESHOT_REPLAY)
       g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_daemonize(&g_conf, 0);
+    common_init_finish(&g_conf);
     messenger->start();
 
     // start mds

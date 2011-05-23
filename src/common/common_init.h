@@ -30,6 +30,7 @@ void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 void output_ceph_version();
 int common_init_shutdown_stderr(const md_config_t *conf);
-void common_init_finish(const md_config_t *conf, int flags);
+void common_init_daemonize(const md_config_t *conf, int flags);
+void common_init_finish(const md_config_t *conf);
 
 #endif

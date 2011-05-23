@@ -83,7 +83,7 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     if (g_conf.monmap.empty() || !osdmapfn)
       usage();
 
@@ -260,7 +260,8 @@ int main(int argc, const char **argv)
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(g_conf.name.get_id(), &store, messenger, &monmap);
 
-  common_init_finish(&g_conf, 0);
+  common_init_daemonize(&g_conf, 0);
+  common_init_finish(&g_conf);
   messenger->start();
 
   uint64_t supported =

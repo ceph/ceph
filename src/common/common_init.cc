@@ -215,8 +215,12 @@ int common_init_shutdown_stderr(const md_config_t *conf)
   return 0;
 }
 
-static void common_init_daemonize(const md_config_t *conf, int flags)
+void common_init_daemonize(const md_config_t *conf, int flags)
 {
+  if (g_code_env != CODE_ENVIRONMENT_DAEMON)
+    return;
+  if (!conf->daemonize)
+    return;
   int num_threads = Thread::get_num_threads();
   if (num_threads > 1) {
     derr << "common_init_daemonize: BUG: there are " << num_threads - 1
@@ -285,12 +289,8 @@ static void common_init_daemonize(const md_config_t *conf, int flags)
   dout(1) << "finished common_init_daemonize" << dendl;
 }
 
-void common_init_finish(const md_config_t *conf, int flags)
+void common_init_finish(const md_config_t *conf)
 {
-  if ((g_code_env == CODE_ENVIRONMENT_DAEMON) && (g_conf.daemonize)) {
-    common_init_daemonize(conf, flags);
-  }
   ceph::crypto::init();
   keyring_init(&g_conf);
 }
-

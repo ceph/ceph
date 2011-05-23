@@ -84,8 +84,7 @@ int main(int argc, const char **argv)
   }
 
   if (dump_pg_log) {
-    g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     bufferlist bl;
     int r = bl.read_file(dump_pg_log);
     if (r >= 0) {
@@ -123,8 +122,7 @@ int main(int argc, const char **argv)
   }
 
   if (mkfs) {
-    g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
     MonClient mc(&rkeys);
     if (mc.build_initial_monmap() < 0)
@@ -144,8 +142,7 @@ int main(int argc, const char **argv)
     *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
-    g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     EntityName ename(g_conf.name);
     EntityAuth eauth;
     eauth.key.create(CEPH_CRYPTO_AES);
@@ -162,8 +159,7 @@ int main(int argc, const char **argv)
   if (mkfs || mkkey)
     exit(0);
   if (mkjournal) {
-    g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
@@ -176,8 +172,7 @@ int main(int argc, const char **argv)
     exit(0);
   }
   if (flushjournal) {
-    g_conf.daemonize = false;
-    common_init_finish(&g_conf, 0);
+    common_init_finish(&g_conf);
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
@@ -277,7 +272,8 @@ int main(int argc, const char **argv)
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.
-  common_init_finish(&g_conf, CINIT_FLAG_NO_CLOSE_STDERR);
+  common_init_daemonize(&g_conf, CINIT_FLAG_NO_CLOSE_STDERR);
+  common_init_finish(&g_conf);
   RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)

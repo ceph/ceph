@@ -825,7 +825,7 @@ int main(int argc, const char **argv)
 
   int opt_cmd = OPT_NO_CMD;
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_conf, 0);
+  common_init_finish(&g_conf);
 
   const char *poolname = NULL;
   uint64_t size = 0;
