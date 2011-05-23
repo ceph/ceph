@@ -29,18 +29,23 @@ void usage()
   cerr << "  user modify                modify user\n";
   cerr << "  user info                  get user info\n";
   cerr << "  user rm                    remove user\n";
+  cerr << "  subuser create             create a new subuser\n" ;
+  cerr << "  subuser modify             modify subuser\n";
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
-  cerr << "   --access-key=<id>         S3 access key\n";
+  cerr << "   --subuser=<name>          subuser name\n";
+  cerr << "   --access-key=<key>        S3 access key\n";
   cerr << "   --os-user=<group:name>    OpenStack user\n";
   cerr << "   --email=<email>\n";
   cerr << "   --auth_uid=<auid>         librados uid\n";
   cerr << "   --secret=<key>            S3 key\n";
   cerr << "   --os-secret=<key>         OpenStack key\n";
+  cerr << "   --gen-access-key          generate random access key\n";
+  cerr << "   --gen-secret              generate random secret key\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
@@ -57,6 +62,8 @@ enum {
   OPT_USER_INFO,
   OPT_USER_MODIFY,
   OPT_USER_RM,
+  OPT_SUBUSER_CREATE,
+  OPT_SUBUSER_MODIFY,
   OPT_BUCKETS_LIST,
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
@@ -97,6 +104,10 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
 {
   const char *sep = "";
   int pos = 0;
+  if (!mask) {
+    snprintf(buf, len, "<none>");
+    return;
+  }
   while (mask) {
     int orig_mask = mask;
     for (int i = 0; rgw_perms[i].mask; i++) {
@@ -120,6 +131,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
   if (strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "log") == 0) {
@@ -142,6 +154,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_MODIFY;
     if (strcmp(cmd, "rm") == 0)
       return OPT_USER_RM;
+  } else if (strcmp(prev_cmd, "subuser") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_SUBUSER_CREATE;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_SUBUSER_MODIFY;
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
@@ -243,7 +260,7 @@ int main(int argc, char **argv)
   const char *openstack_user = 0;
   const char *openstack_key = 0;
   const char *date = 0;
-  char *subuser = 0;
+  const char *subuser = 0;
   const char *access = 0;
   uint32_t perm_mask = 0;
   uint64_t auid = 0;
@@ -252,22 +269,18 @@ int main(int argc, char **argv)
   const char *prev_cmd = NULL;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
+  bool gen_secret;
+  bool gen_key;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
-      user_id = strdup(user_id);
-      subuser = strchr(user_id, ':');
-      if (subuser) {
-       *subuser = '\0';
-       subuser++;
-       if (!*subuser)
-         subuser = NULL;
-      }
     } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access_key, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("subuser", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&subuser, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("secret", 's')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&secret_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("email", 'e')) {
@@ -278,6 +291,10 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&bucket, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("object", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&object, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("gen-access-key", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&gen_key, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("gen-secret", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&gen_secret, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("auth-uid", 'a')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else if (CEPH_ARGPARSE_EQ("os-user", '\0')) {
@@ -347,8 +364,9 @@ int main(int argc, char **argv)
   }
 
 
-  if (opt_cmd == OPT_USER_CREATE || opt_cmd == OPT_USER_MODIFY ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
+  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_CREATE ||
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK ||
+      opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       usage();
@@ -356,22 +374,47 @@ int main(int argc, char **argv)
 
     string user_id_str = user_id;
 
-    if (info.user_id.empty() &&
-        rgw_get_user_info_by_uid(user_id_str, info) < 0) {
+    bool found = (rgw_get_user_info_by_uid(user_id_str, info) >= 0);
+
+    if (opt_cmd == OPT_USER_CREATE) {
+      if (found) {
+        cerr << "error: user already exists" << std::endl;
+        exit(1);
+      }
+    } else if (!found) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
     }
   }
 
-  if (opt_cmd == OPT_USER_CREATE) {
+  if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY) {
+    if (!subuser) {
+      cerr << "subuser creation was requires specifying subuser name" << std::endl;
+      exit(1);
+    }
+    map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
+    bool found = (iter != info.subusers.end());
+    if (opt_cmd == OPT_SUBUSER_CREATE) {
+      if (found) {
+        cerr << "error: subuser already exists" << std::endl;
+        exit(1);
+      }
+    } else if (!found) {
+      cerr << "error: subuser doesn't exist" << std::endl;
+      exit(1);
+    }
+  }
+
+  if ((opt_cmd == OPT_USER_CREATE || opt_cmd == OPT_USER_MODIFY) ||
+      (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY)) {
     int ret;
 
-    if (!display_name && !subuser) {
+    if (opt_cmd == OPT_USER_CREATE && !display_name) {
       cerr << "display name was not specified, aborting" << std::endl;
       return 0;
     }
 
-    if (!secret_key) {
+    if (!secret_key || gen_secret) {
       ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
@@ -379,7 +422,7 @@ int main(int argc, char **argv)
       }
       secret_key = secret_key_buf;
     }
-    if (!access_key) {
+    if (!access_key || gen_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
@@ -400,6 +443,8 @@ int main(int argc, char **argv)
   switch (opt_cmd) {
   case OPT_USER_CREATE:
   case OPT_USER_MODIFY:
+  case OPT_SUBUSER_CREATE:
+  case OPT_SUBUSER_MODIFY:
     if (user_id)
       info.user_id = user_id;
     if (access_key && secret_key) {
