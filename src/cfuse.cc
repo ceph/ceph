@@ -111,7 +111,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     childpid = fork();
   }
 
-  common_init_finish(&g_conf);
+  common_init_finish(&g_ceph_context);
 
   if (childpid == 0) {
     //cout << "child, mounting" << std::endl;

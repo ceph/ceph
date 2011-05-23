@@ -38,15 +38,15 @@ int librgw_create(librgw_t *rgw, const char * const id)
     if (id) {
       iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
     }
-    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    conf->log_to_stderr = 1; // quiet by default
-    conf->parse_env(); // environment variables override
-    conf->apply_changes();
+    CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    cct->_conf->log_to_stderr = 1; // quiet by default
+    cct->_conf->parse_env(); // environment variables override
+    cct->_conf->apply_changes();
 
     ++librgw_initialized;
   }
   librgw_init_mutex.Unlock();
-  *rgw = &g_conf;
+  *rgw = &g_ceph_context;
   return 0;
 }
 

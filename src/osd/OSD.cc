@@ -1793,7 +1793,7 @@ void OSD::tick()
     dispatch_cond.Signal();
   }
 
-  g_conf._doss->handle_log_reopen_requests(&g_conf);
+  g_ceph_context._doss->handle_log_reopen_requests(&g_conf);
 }
 
 // =========================================

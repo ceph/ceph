@@ -37,8 +37,10 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-int keyring_init(md_config_t *conf)
+int keyring_init(CephContext *cct)
 {
+  md_config_t *conf = cct->_conf;
+
   if (!is_supported_auth(CEPH_AUTH_CEPHX))
     return 0;
 
@@ -88,7 +90,7 @@ int keyring_init(md_config_t *conf)
   return ret;
 }
 
-md_config_t *common_preinit(const CephInitParameters &iparams,
+CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
 {
   // set code environment
@@ -96,7 +98,8 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
 
   // Create a configuration object
   // TODO: de-globalize
-  md_config_t *conf = &g_conf; //new md_config_t();
+  CephContext *cct = &g_ceph_context; //new CephContext();
+  md_config_t *conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
@@ -115,7 +118,7 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
-  return conf;
+  return cct;
 }
 
 void complain_about_parse_errors(std::deque<std::string> *parse_errors)
@@ -143,7 +146,8 @@ void common_init(std::vector < const char* >& args,
 {
   CephInitParameters iparams =
     ceph_argparse_early_args(args, module_type, flags);
-  md_config_t *conf = common_preinit(iparams, code_env, flags);
+  CephContext *cct = common_preinit(iparams, code_env, flags);
+  md_config_t *conf = cct->_conf;
 
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
@@ -202,7 +206,7 @@ static void pidfile_remove_void(void)
  * behavior that the file descriptor that gets assigned is the lowest
  * available one.
  */
-int common_init_shutdown_stderr(const md_config_t *conf)
+int common_init_shutdown_stderr(void)
 {
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
@@ -211,14 +215,15 @@ int common_init_shutdown_stderr(const md_config_t *conf)
 	 << err << dendl;
     return 1;
   }
-  conf->_doss->handle_stderr_shutdown();
+  g_ceph_context._doss->handle_stderr_shutdown();
   return 0;
 }
 
-void common_init_daemonize(const md_config_t *conf, int flags)
+void common_init_daemonize(const CephContext *cct, int flags)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return;
+  const md_config_t *conf = cct->_conf;
   if (!conf->daemonize)
     return;
   int num_threads = Thread::get_num_threads();
@@ -272,7 +277,7 @@ void common_init_daemonize(const md_config_t *conf, int flags)
     exit(1);
   }
   if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-    ret = common_init_shutdown_stderr(conf);
+    ret = common_init_shutdown_stderr();
     if (ret) {
       derr << "common_init_daemonize: common_init_shutdown_stderr failed with "
 	   << "error code " << ret << dendl;
@@ -280,7 +285,7 @@ void common_init_daemonize(const md_config_t *conf, int flags)
     }
   }
   pidfile_write(&g_conf);
-  ret = conf->_doss->handle_pid_change(&g_conf);
+  ret = g_ceph_context._doss->handle_pid_change(&g_conf);
   if (ret) {
     derr << "common_init_daemonize: _doss->handle_pid_change failed with "
 	 << "error code " << ret << dendl;
@@ -289,8 +294,8 @@ void common_init_daemonize(const md_config_t *conf, int flags)
   dout(1) << "finished common_init_daemonize" << dendl;
 }
 
-void common_init_finish(const md_config_t *conf)
+void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
-  keyring_init(&g_conf);
+  keyring_init(cct);
 }

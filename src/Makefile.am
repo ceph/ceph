@@ -638,6 +638,7 @@ libcommon_files = \
 	mds/MDSMap.cc \
 	common/common_init.cc \
 	common/ceph_argparse.cc \
+	common/ceph_context.cc \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
@@ -785,6 +786,7 @@ noinst_HEADERS = \
 	common/LogEntry.h\
 	common/WorkQueue.h\
 	common/ceph_argparse.h\
+	common/ceph_context.h\
 	common/debug.h\
 	common/version.h\
 	common/hex.h\

@@ -2638,7 +2638,7 @@ init_with_config(md_config_t *conf)
 int librados::Rados::
 connect()
 {
-  int ret = keyring_init(&g_conf);
+  int ret = keyring_init(&g_ceph_context);
   if (ret)
     return ret;
   return client->connect();
@@ -2808,9 +2808,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
     // TODO: store this conf pointer in the RadosClient and use it as our
     // configuration
-    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    conf->parse_env(); // environment variables override
-    conf->apply_changes();
+    CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    cct->_conf->parse_env(); // environment variables override
+    cct->_conf->apply_changes();
 
     ++rados_initialized;
   }
@@ -2841,7 +2841,7 @@ extern "C" int rados_create_with_config(rados_t *pcluster, md_config_t *conf)
 
 extern "C" int rados_connect(rados_t cluster)
 {
-  int ret = keyring_init(&g_conf);
+  int ret = keyring_init(&g_ceph_context);
   if (ret)
     return ret;
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;

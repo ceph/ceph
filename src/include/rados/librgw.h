@@ -19,8 +19,8 @@
 extern "C" {
 #endif
 
-struct md_config_t;
-typedef struct md_config_t* librgw_t;
+class CephContext;
+typedef CephContext* librgw_t;
 int librgw_create(librgw_t *rgw, const char * const id);
 int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml);
 void librgw_free_xml(librgw_t rgw, char *xml);
