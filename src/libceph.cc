@@ -184,6 +184,10 @@ public:
     return cwd.c_str();
   }
 
+  CephContext *get_ceph_context() const {
+    return cct;
+  }
+
 private:
   uint64_t msgr_nonce;
   bool mounted;
@@ -280,7 +284,7 @@ extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
   std::string mount_root;
 
-  keyring_init(&g_ceph_context);
+  keyring_init(cmount->get_ceph_context());
 
   if (root)
     mount_root = root;

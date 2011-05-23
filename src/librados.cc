@@ -89,10 +89,7 @@ struct librados::IoCtxImpl {
   object_locator_t oloc;
 
   IoCtxImpl() {}
-  IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
-    ref_cnt(0), client(c), poolid(pid),
-    pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf.client_notify_timeout), oloc(pid) {}
+  IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
     // Copy everything except the ref count
@@ -320,6 +317,10 @@ struct librados::ObjListCtx {
 
 class librados::RadosClient : public Dispatcher
 {
+public:
+  CephContext *cct;
+  md_config_t *conf;
+private:
   enum {
     DISCONNECTED, 
     CONNECTING,
@@ -353,8 +354,8 @@ class librados::RadosClient : public Dispatcher
   SafeTimer timer;
 
 public:
-  RadosClient() : state(DISCONNECTED),
-		  messenger(NULL), objecter(NULL),
+  RadosClient(CephContext *cct_) : cct(cct_), conf(cct_->_conf),
+		  state(DISCONNECTED), messenger(NULL), objecter(NULL),
 		  lock("radosclient"), timer(lock), max_watch_cookie(0)
   {
   }
@@ -627,6 +628,13 @@ public:
   }
 };
 
+librados::IoCtxImpl::
+IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s)
+  : ref_cnt(0), client(c), poolid(pid),
+    pool_name(pool_name_), snap_seq(s), assert_ver(0),
+    notify_timeout(c->conf->client_notify_timeout), oloc(pid)
+{}
+
 int librados::RadosClient::
 connect()
 {
@@ -676,9 +684,9 @@ connect()
   dout(1) << "calling monclient init" << dendl;
   monclient.init();
 
-  err = monclient.authenticate(g_conf.client_mount_timeout);
+  err = monclient.authenticate(conf->client_mount_timeout);
   if (err) {
-    dout(0) << g_conf.name << " authentication error " << strerror(-err) << dendl;
+    dout(0) << conf->name << " authentication error " << strerror(-err) << dendl;
     shutdown();
     goto out;
   }
@@ -2630,15 +2638,15 @@ init(const char * const id)
 }
 
 int librados::Rados::
-init_with_config(md_config_t *conf)
+init_with_context(CephContext *cct_)
 {
-  return rados_create_with_config((rados_t *)&client, conf);
+  return rados_create_with_context((rados_t *)&client, cct_);
 }
 
 int librados::Rados::
 connect()
 {
-  int ret = keyring_init(&g_ceph_context);
+  int ret = keyring_init(client->cct);
   if (ret)
     return ret;
   return client->connect();
@@ -2670,7 +2678,8 @@ int librados::Rados::
 conf_get(const char *option, std::string &val)
 {
   char *str;
-  int ret = g_conf.get_val(option, &str, -1);
+  md_config_t *conf = client->cct->_conf;
+  int ret = conf->get_val(option, &str, -1);
   if (ret)
     return ret;
   val = str;
@@ -2799,6 +2808,8 @@ static int rados_initialized = 0;
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
   rados_init_mutex.Lock();
+  CephContext *cct_;
+  // FIXME: get rid of this mutex and the reference to the global
   if (!rados_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
     iparams.conf_file = "";
@@ -2806,16 +2817,17 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
       iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
     }
 
-    // TODO: store this conf pointer in the RadosClient and use it as our
-    // configuration
-    CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    cct->_conf->parse_env(); // environment variables override
-    cct->_conf->apply_changes();
+    cct_ = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    cct_->_conf->parse_env(); // environment variables override
+    cct_->_conf->apply_changes();
 
     ++rados_initialized;
   }
+  else {
+    cct_ = &g_ceph_context;
+  }
   rados_init_mutex.Unlock();
-  librados::RadosClient *radosp = new librados::RadosClient;
+  librados::RadosClient *radosp = new librados::RadosClient(cct_);
   *pcluster = (void *)radosp;
   return 0;
 }
@@ -2824,27 +2836,27 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
  * already called common_init and want to use that particular configuration for
  * their cluster.
  */
-extern "C" int rados_create_with_config(rados_t *pcluster, md_config_t *conf)
+extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct_)
 {
   rados_init_mutex.Lock();
   if (!rados_initialized) {
     ++rados_initialized;
-    /* This is a no-op now. g_conf is still global and we can't actually do
-     * anything useful with the provided conf pointer.
+    /* This is a no-op now. g_ceph_context is still global in libcommon and we
+     * can't actually do anything useful with the provided conf pointer.
      */
   }
   rados_init_mutex.Unlock();
-  librados::RadosClient *radosp = new librados::RadosClient;
+  librados::RadosClient *radosp = new librados::RadosClient(cct_);
   *pcluster = (void *)radosp;
   return 0;
 }
 
 extern "C" int rados_connect(rados_t cluster)
 {
-  int ret = keyring_init(&g_ceph_context);
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  int ret = keyring_init(radosp->cct);
   if (ret)
     return ret;
-  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
 
   return radosp->connect();
 }
@@ -2873,25 +2885,29 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   if (!path)
     path = CEPH_CONF_FILE_DEFAULT;
 
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
   std::list<std::string> conf_files;
   get_str_list(path, conf_files);
   std::deque<std::string> parse_errors;
-  int ret = g_conf.parse_config_files(conf_files, &parse_errors);
+  int ret = conf->parse_config_files(conf_files, &parse_errors);
   if (ret)
     return ret;
-  g_conf.parse_env(); // environment variables override
+  conf->parse_env(); // environment variables override
 
-  g_conf.apply_changes();
+  conf->apply_changes();
   complain_about_parse_errors(&parse_errors);
   return 0;
 }
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
 {
-  int ret = g_conf.set_val(option, value);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
+  int ret = conf->set_val(option, value);
   if (ret)
     return ret;
-  g_conf.apply_changes();
+  conf->apply_changes();
   return 0;
 }
 
@@ -2912,7 +2928,9 @@ extern "C" int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
 extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len)
 {
   char *tmp = buf;
-  return g_conf.get_val(option, &tmp, len);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
+  return conf->get_val(option, &tmp, len);
 }
 
 extern "C" int rados_pool_lookup(rados_t cluster, const char *name)

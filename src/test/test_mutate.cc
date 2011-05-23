@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
   }
 
   Rados rados;
-  if (rados.init_with_config(&g_conf) < 0) {
+  if (rados.init_with_context(&g_ceph_context) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
      return 1;
   }

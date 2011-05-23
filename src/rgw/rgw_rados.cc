@@ -23,14 +23,14 @@ static librados::IoCtx root_pool_ctx;
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::initialize(md_config_t *conf)
+int RGWRados::initialize(CephContext *cct)
 {
   int ret;
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
 
-  ret = rados->init_with_config(conf);
+  ret = rados->init_with_context(cct);
   if (ret < 0)
    return ret;
 

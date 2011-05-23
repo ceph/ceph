@@ -11,7 +11,7 @@
 
 #include "librados.h"
 
-struct md_config_t;
+class CephContext;
 
 namespace librados
 {
@@ -250,7 +250,7 @@ namespace librados
     ~Rados();
 
     int init(const char * const id);
-    int init_with_config(md_config_t * conf);
+    int init_with_context(CephContext *cct_);
     int connect();
     void shutdown();
     int conf_read_file(const char * const path) const;
