@@ -118,7 +118,7 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
     if (ret < 0)
       return ret;
 
-    if (!verify_permission(&bucket_policy, s->user.user_id, RGW_PERM_READ))
+    if (!verify_permission(&bucket_policy, s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
     else
       ret = -ENOENT;
@@ -530,7 +530,7 @@ int RGWCopyObj::init_common()
   if (ret < 0)
     return ret;
 
-  if (!verify_permission(&src_policy, s->user.user_id, RGW_PERM_READ)) {
+  if (!verify_permission(&src_policy, s->user.user_id, s->perm_mask, RGW_PERM_READ)) {
     ret = -EACCES;
     return ret;
   }
@@ -813,6 +813,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   s->os_groups = NULL;
   s->time = g_clock.now();
   s->user.clear();
+  s->perm_mask = 0;
 }
 
 int RGWHandler::do_read_permissions(bool only_bucket)

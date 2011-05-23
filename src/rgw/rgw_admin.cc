@@ -41,6 +41,8 @@ void usage()
   cerr << "   --auth_uid=<auid>         librados uid\n";
   cerr << "   --secret=<key>            S3 key\n";
   cerr << "   --os-secret=<key>         OpenStack key\n";
+  cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
+  cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
@@ -60,6 +62,59 @@ enum {
   OPT_POLICY,
   OPT_LOG_SHOW,
 };
+
+static uint32_t str_to_perm(const char *str)
+{
+  if (strcasecmp(str, "read") == 0)
+    return RGW_PERM_READ;
+  else if (strcasecmp(str, "write") == 0)
+    return RGW_PERM_WRITE;
+  else if (strcasecmp(str, "readwrite") == 0)
+    return RGW_PERM_READ | RGW_PERM_WRITE;
+  else if (strcasecmp(str, "full") == 0)
+    return RGW_PERM_FULL_CONTROL;
+
+  usage();
+  return 0; // unreachable
+}
+
+struct rgw_flags_desc {
+  int mask;
+  const char *str;
+};
+
+static struct rgw_flags_desc rgw_perms[] = {
+ { RGW_PERM_FULL_CONTROL, "full-control" },
+ { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
+ { RGW_PERM_READ, "read" },
+ { RGW_PERM_WRITE, "write" },
+ { RGW_PERM_READ_ACP, "read-acp" },
+ { RGW_PERM_WRITE_ACP, "read-acp" },
+ { 0, NULL }
+};
+
+static void perm_to_str(uint32_t mask, char *buf, int len)
+{
+  const char *sep = "";
+  int pos = 0;
+  while (mask) {
+    int orig_mask = mask;
+    for (int i = 0; rgw_perms[i].mask; i++) {
+      struct rgw_flags_desc *desc = &rgw_perms[i];
+      if ((mask & desc->mask) == desc->mask) {
+        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
+        if (pos == len)
+          return;
+        sep = ", ";
+        mask &= ~desc->mask;
+        if (!mask)
+          return;
+      }
+    }
+    if (mask == orig_mask) // no change
+      break;
+  }
+}
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
@@ -189,6 +244,8 @@ int main(int argc, char **argv)
   const char *openstack_key = 0;
   const char *date = 0;
   char *subuser = 0;
+  const char *access = 0;
+  uint32_t perm_mask = 0;
   uint64_t auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
@@ -229,6 +286,9 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&openstack_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
+      perm_mask = str_to_perm(access);
     } else {
       if (!opt_cmd) {
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
@@ -366,6 +426,7 @@ int main(int argc, char **argv)
     if (subuser) {
       RGWSubUser u;
       u.name = subuser;
+      u.perm_mask = perm_mask;
 
       info.subusers[subuser] = u;
     }
@@ -389,6 +450,9 @@ int main(int argc, char **argv)
     for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
       RGWSubUser& u = uiter->second;
       cout << " Name: " << info.user_id << ":" << u.name << std::endl;
+      char buf[256];
+      perm_to_str(u.perm_mask, buf, sizeof(buf));
+      cout << " Permissions: " << buf << std::endl;
     }
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "Email: " << info.user_email << std::endl;

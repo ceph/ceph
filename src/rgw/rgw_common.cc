@@ -138,19 +138,19 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
-bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int perm)
+bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm)
 {
    if (!policy)
      return false;
 
-   int acl_perm = policy->get_perm(uid, perm);
+   int acl_perm = policy->get_perm(uid, perm) & user_perm_mask;
 
    return (perm == acl_perm);
 }
 
 bool verify_permission(struct req_state *s, int perm)
 {
-  return verify_permission(s->acl, s->user.user_id, perm);
+  return verify_permission(s->acl, s->user.user_id, s->perm_mask, perm);
 }
 
 static char hex_to_num(char c)

@@ -5,6 +5,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_acl.h"
 
 #include "common/armor.h"
 
@@ -435,6 +436,17 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   RGWAccessKey& k = iter->second;
   const char *key = k.key.c_str();
   int key_len = k.key.size();
+
+  if (!k.subuser.empty()) {
+    map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
+    if (uiter == s->user.subusers.end()) {
+      RGW_LOG(0) << "ERROR: could not find subuser: " << k.subuser << dendl;
+      return false;
+    }
+    RGWSubUser& subuser = uiter->second;
+    s->perm_mask = subuser.perm_mask;
+  } else
+    s->perm_mask = RGW_PERM_FULL_CONTROL;
 
   char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);

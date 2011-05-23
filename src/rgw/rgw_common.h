@@ -181,21 +181,21 @@ WRITE_CLASS_ENCODER(RGWAccessKey);
 
 struct RGWSubUser {
   string name;
-  uint32_t flags;
+  uint32_t perm_mask;
 
-  RGWSubUser() {}
+  RGWSubUser() : perm_mask(0) {}
   void encode(bufferlist& bl) const {
      __u32 ver = 1;
     ::encode(ver, bl);
     ::encode(name, bl);
-    ::encode(flags, bl);
+    ::encode(perm_mask, bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(name, bl);
-     ::decode(flags, bl);
+     ::decode(perm_mask, bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
@@ -328,6 +328,7 @@ struct req_state {
    uint64_t bytes_received; // data received
    uint64_t obj_size;
    bool should_log;
+   uint32_t perm_mask;
 
    XMLArgs args;
 
@@ -434,7 +435,7 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
 /** */
 extern int parse_time(const char *time_str, time_t *time);
 /** Check if a user has a permission on that ACL */
-extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int perm);
+extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm);
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
 extern bool verify_permission(struct req_state *s, int perm);
