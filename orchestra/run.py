@@ -17,6 +17,9 @@ class RemoteProcess(object):
         self.stderr = stderr
         self.exitstatus = exitstatus
 
+def quote(args):
+    return ' '.join(pipes.quote(a) for a in args)
+
 def execute(client, args):
     """
     Execute a command remotely.
@@ -30,7 +33,7 @@ def execute(client, args):
     Returns a RemoteProcess, where exitstatus is a callable that will
     block until the exit status is available.
     """
-    cmd = ' '.join(pipes.quote(a) for a in args)
+    cmd = quote(args)
     log.debug('Running: {cmd!r}'.format(cmd=cmd))
     (in_, out, err) = client.exec_command(cmd)
 
