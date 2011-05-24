@@ -127,7 +127,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       indata.append('\n');
     }
   } else {
-    int fd = open(infile, O_RDONLY);
+    int ret, fd = open(infile, O_RDONLY);
     if (fd < 0) {
       char buf[80];
       cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -147,7 +147,10 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
         continue;
       }
       indata.append(buf, count);
-      int ret = io_ctx.write(oid, indata, count, offset);
+      if (offset == 0)
+	ret = io_ctx.write_full(oid, indata);
+      else
+	ret = io_ctx.write(oid, indata, count, offset);
       indata.clear();
 
       if (ret < 0) {
