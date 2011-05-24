@@ -14,7 +14,7 @@ setup(
 
     install_requires=[
         'gevent >=0.13.6',
-        'paramiko >=1.7.4',
+        'paramiko >=1.7.7',
         'nose >=1.0.0',
         'fudge >=1.0.3',
         ],

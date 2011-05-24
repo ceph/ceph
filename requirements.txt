@@ -1,5 +1,6 @@
 # 0.14 switches to libev, that means bootstrap needs to change too
 gevent ==0.13.6
-paramiko >=1.7.4
+# 1.7.7 has AES-128-CBC support for SSH keys, that's needed
+paramiko >=1.7.7
 nose >=1.0.0
 fudge >=1.0.3

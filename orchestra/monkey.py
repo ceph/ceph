@@ -16,18 +16,6 @@ def patch_001_paramiko_deprecation():
         )
 
 
-def patch_100_paramiko_pkey():
-    """
-    Make paramiko recognize AES-encrypted SSH private keys.
-
-    http://comments.gmane.org/gmane.comp.python.paramiko/476
-    """
-    import paramiko.pkey
-    import Crypto.Cipher
-    assert 'AES-128-CBC' not in paramiko.pkey.PKey._CIPHER_TABLE
-    paramiko.pkey.PKey._CIPHER_TABLE['AES-128-CBC'] = { 'cipher': Crypto.Cipher.AES, 'keysize': 16, 'blocksize': 16, 'mode': Crypto.Cipher.AES.MODE_CBC }
-
-
 def patch_100_paramiko_log():
     """
     Silence some noise paramiko likes to log.
