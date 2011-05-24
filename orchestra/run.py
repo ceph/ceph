@@ -234,3 +234,14 @@ def run(
         r.exitstatus = spawn_asyncresult(_check_status, r.exitstatus)
 
     return r
+
+
+def wait(processes):
+    """
+    Wait for all given processes to exit.
+
+    Raise if any one of them fails.
+    """
+    for proc in processes:
+        assert isinstance(proc.exitstatus, gevent.event.AsyncResult)
+        proc.exitstatus.get()
