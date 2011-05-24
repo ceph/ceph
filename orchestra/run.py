@@ -31,6 +31,7 @@ def execute(client, args):
     block until the exit status is available.
     """
     cmd = ' '.join(pipes.quote(a) for a in args)
+    log.debug('Running: {cmd!r}'.format(cmd=cmd))
     (in_, out, err) = client.exec_command(cmd)
 
     def get_exitstatus():
