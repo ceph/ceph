@@ -630,13 +630,11 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
 {
   string straydname;
   in->name_stray_dentry(straydname);
-  
-  assert(get_stray());
 
-  frag_t fg = get_stray()->pick_dirfrag(straydname);
-
-  CDir *straydir = get_stray()->get_or_open_dirfrag(this, fg);
-  
+  CInode *strayi = get_stray();
+  assert(strayi);
+  frag_t fg = strayi->pick_dirfrag(straydname);
+  CDir *straydir = strayi->get_or_open_dirfrag(this, fg);
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
