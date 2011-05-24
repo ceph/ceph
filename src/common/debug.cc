@@ -7,16 +7,6 @@
 #include <iostream>
 #include <sstream>
 
-// Originally, dout was global. Now, there is one for each md_config_t structure.
-// These variables are here temporarily to make the transition easier.
-std::ostream *_dout = &g_conf._dout;
-DoutStreambuf <char> *_doss = g_conf._doss;
-
-/*
- * The dout lock protects calls to dout()
- */
-pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
-
 void output_ceph_version()
 {
   char buf[1024];

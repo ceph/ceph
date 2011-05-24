@@ -162,10 +162,9 @@ int main(int argc, const char **argv)
     messenger->set_policy(entity_name_t::TYPE_CLIENT,
                           SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    if (shadow == MDSMap::STATE_ONESHOT_REPLAY)
-      g_conf.daemonize = false;
-    common_init_daemonize(&g_conf, 0);
-    common_init_finish(&g_conf);
+    if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
+      common_init_daemonize(&g_ceph_context, 0);
+    common_init_finish(&g_ceph_context);
     messenger->start();
 
     // start mds

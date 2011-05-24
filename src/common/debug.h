@@ -16,6 +16,7 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
+#include "common/ceph_context.h"
 #include "common/likely.h"
 #include "common/config.h"		    // need for g_conf
 #include "include/assert.h"
@@ -25,9 +26,6 @@
 #include <streambuf>
 
 
-extern std::ostream *_dout;
-extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
-class md_config_t;
 extern pthread_mutex_t _dout_lock;
 
 extern void dout_emergency(const char * const str);

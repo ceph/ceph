@@ -456,12 +456,6 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
-unittest_SignalSafeQueue_SOURCES = test/SignalSafeQueue.cc
-unittest_SignalSafeQueue_LDFLAGS = -pthread -lcurl ${AM_LDFLAGS}
-unittest_SignalSafeQueue_LDADD =  ${CRYPTO_LIBS} libcommon.a ${UNITTEST_LDADD}
-unittest_SignalSafeQueue_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_SignalSafeQueue
-
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -618,7 +612,6 @@ libcommon_files = \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
-	common/SignalSafeQueue.cc \
 	common/environment.cc\
 	common/sctp_crc32.c\
 	common/assert.cc \
@@ -638,6 +631,7 @@ libcommon_files = \
 	mds/MDSMap.cc \
 	common/common_init.cc \
 	common/ceph_argparse.cc \
+	common/ceph_context.cc \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
@@ -785,6 +779,7 @@ noinst_HEADERS = \
 	common/LogEntry.h\
 	common/WorkQueue.h\
 	common/ceph_argparse.h\
+	common/ceph_context.h\
 	common/debug.h\
 	common/version.h\
 	common/hex.h\
@@ -798,7 +793,6 @@ noinst_HEADERS = \
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
-        common/SignalSafeQueue.h\
         common/ProfLogType.h\
         common/ProfLogger.h\
         common/MemoryModel.h\

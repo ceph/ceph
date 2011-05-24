@@ -58,9 +58,6 @@ using std::string;
 
 const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf";
 
-/* The Ceph configuration. */
-md_config_t g_conf __attribute__((init_priority(103)));
-
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
  fl_stripe_unit: init_le32(1<<22),
@@ -444,9 +441,6 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 md_config_t::
 md_config_t()
-  : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
-    _dout(_doss),
-    _prof_logger_conf_obs(new ProfLoggerConfObs())
 {
   //
   // Note: because our md_config_t structure is a global, the memory used to
@@ -461,20 +455,11 @@ md_config_t()
     set_val_from_default(opt);
   }
 
-  add_observer(_doss);
-  add_observer(_prof_logger_conf_obs);
 }
 
 md_config_t::
 ~md_config_t()
 {
-  remove_observer(_prof_logger_conf_obs);
-  remove_observer(_doss);
-
-  delete _doss;
-  _doss = NULL;
-  delete _prof_logger_conf_obs;
-  _prof_logger_conf_obs = NULL;
 }
 
 void md_config_t::

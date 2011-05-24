@@ -586,8 +586,6 @@ void MDS::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
-
-  g_conf._doss->handle_log_reopen_requests(&g_conf);
 }
 
 

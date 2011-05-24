@@ -203,7 +203,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // open rados
   Rados rados;
-  ret = rados.init_with_config(&g_conf);
+  ret = rados.init_with_context(&g_ceph_context);
   if (ret) {
      cerr << "couldn't initialize rados! error " << ret << std::endl;
      return ret;
@@ -659,7 +659,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_conf);
+  common_init_finish(&g_ceph_context);
 
   std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;
