@@ -384,6 +384,11 @@ int rgw_remove_bucket(string user_id, string bucket_name)
   return ret;
 }
 
+int rgw_remove_key_storage(RGWAccessKey& access_key)
+{
+  rgwstore->delete_obj(access_key.id, ui_key_bucket, access_key.id);
+}
+
 /**
  * delete a user's presence from the RGW system.
  * First remove their bucket ACLs, then delete them
@@ -400,7 +405,12 @@ int rgw_delete_user(RGWUserInfo& info) {
     string bucket_name = i->first;
     rgwstore->delete_obj(info.user_id, rgw_root_bucket, bucket_name);
   }
+  map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
+  for (; kiter != info.access_keys.end(); ++kiter)
+    rgw_remove_key_storage(kiter->second);
+
   rgwstore->delete_obj(info.user_id, ui_uid_bucket, info.user_id);
   rgwstore->delete_obj(info.user_id, ui_email_bucket, info.user_email);
   return 0;
 }
+

@@ -133,4 +133,6 @@ extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 extern int rgw_add_bucket(string user_id, string bucket_name);
 extern int rgw_remove_bucket(string user_id, string bucket_name);
 
+extern int rgw_remove_key_storage(RGWAccessKey& access_key);
+
 #endif

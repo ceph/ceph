@@ -31,6 +31,8 @@ void usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  subuser create             create a new subuser\n" ;
   cerr << "  subuser modify             modify subuser\n";
+  cerr << "  subuser rm                 remove subuser\n";
+  cerr << "  key rm                     remove access key\n";
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  policy                     read bucket/object policy\n";
@@ -64,6 +66,8 @@ enum {
   OPT_USER_RM,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
+  OPT_SUBUSER_RM,
+  OPT_KEY_RM,
   OPT_BUCKETS_LIST,
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
@@ -86,7 +90,7 @@ static uint32_t str_to_perm(const char *str)
 }
 
 struct rgw_flags_desc {
-  int mask;
+  uint32_t mask;
   const char *str;
 };
 
@@ -109,7 +113,7 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
     return;
   }
   while (mask) {
-    int orig_mask = mask;
+    uint32_t orig_mask = mask;
     for (int i = 0; rgw_perms[i].mask; i++) {
       struct rgw_flags_desc *desc = &rgw_perms[i];
       if ((mask & desc->mask) == desc->mask) {
@@ -132,6 +136,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   *need_more = false;
   if (strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
+      strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "log") == 0) {
@@ -159,6 +164,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_SUBUSER_CREATE;
     if (strcmp(cmd, "modify") == 0)
       return OPT_SUBUSER_MODIFY;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_SUBUSER_RM;
+  } else if (strcmp(prev_cmd, "key") == 0) {
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_KEY_RM;
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
@@ -240,6 +250,33 @@ string escape_str(string& src, char c)
   return dest;
 }
 
+static void show_user_info( RGWUserInfo& info)
+{
+  map<string, RGWAccessKey>::iterator kiter;
+  map<string, RGWSubUser>::iterator uiter;
+
+  cout << "User ID: " << info.user_id << std::endl;
+  cout << "Keys:" << std::endl;
+  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+    RGWAccessKey& k = kiter->second;
+    cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
+    cout << "  Access Key: " << k.id << std::endl;
+    cout << "  Secret Key: " << k.key << std::endl;
+  }
+  cout << "Users: " << std::endl;
+  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+    RGWSubUser& u = uiter->second;
+    cout << " Name: " << info.user_id << ":" << u.name << std::endl;
+    char buf[256];
+    perm_to_str(u.perm_mask, buf, sizeof(buf));
+    cout << " Permissions: " << buf << std::endl;
+  }
+  cout << "Display Name: " << info.display_name << std::endl;
+  cout << "Email: " << info.user_email << std::endl;
+  cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
+  cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+}
+
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -273,6 +310,7 @@ int main(int argc, char **argv)
   bool gen_key;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
+  bool user_modify_op;
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
@@ -327,6 +365,33 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_NO_CMD)
     usage();
 
+  if (subuser) {
+    char *suser = strdup(subuser);
+    char *p = strchr(suser, ':');
+    if (!p) {
+      free(suser);
+    } else {
+      *p = '\0';
+      if (user_id) {
+        if (strcmp(user_id, suser) != 0) {
+          cerr << "bad subuser " << subuser << " for uid " << user_id << std::endl;
+          exit(1);
+        }
+      } else
+        user_id = suser;
+      subuser = p + 1;
+    }
+  }
+
+  if (opt_cmd == OPT_KEY_RM && !access_key) {
+    cerr << "error: access key was not specified" << std::endl;
+    usage();
+  }
+
+  user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
+                    opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
+                    opt_cmd == OPT_KEY_RM);
+
   store = RGWAccess::init_storage_provider("rados", &g_conf);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -364,9 +429,8 @@ int main(int argc, char **argv)
   }
 
 
-  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_CREATE ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK ||
-      opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY) {
+  if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       usage();
@@ -387,7 +451,8 @@ int main(int argc, char **argv)
     }
   }
 
-  if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY) {
+  if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY ||
+      opt_cmd == OPT_SUBUSER_RM) {
     if (!subuser) {
       cerr << "subuser creation was requires specifying subuser name" << std::endl;
       exit(1);
@@ -405,8 +470,9 @@ int main(int argc, char **argv)
     }
   }
 
-  if ((opt_cmd == OPT_USER_CREATE || opt_cmd == OPT_USER_MODIFY) ||
-      (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY)) {
+  bool keys_not_requested = (!access_key && !secret_key && !gen_secret && !gen_key);
+
+  if (opt_cmd == OPT_USER_CREATE || (user_modify_op && !keys_not_requested)) {
     int ret;
 
     if (opt_cmd == OPT_USER_CREATE && !display_name) {
@@ -437,9 +503,9 @@ int main(int argc, char **argv)
     }
   }
 
-  int err;
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
+  int err;
   switch (opt_cmd) {
   case OPT_USER_CREATE:
   case OPT_USER_MODIFY:
@@ -480,29 +546,37 @@ int main(int argc, char **argv)
       break;
     }
 
-    /* fall through */
+    show_user_info(info);
+    break;
+
+  case OPT_SUBUSER_RM:
+    uiter = info.subusers.find(subuser);
+    assert (uiter != info.subusers.end());
+    info.subusers.erase(uiter);
+    if ((err = rgw_store_user_info(info)) < 0) {
+      cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
+      break;
+    }
+    show_user_info(info);
+    break;
+
+  case OPT_KEY_RM:
+    kiter = info.access_keys.find(access_key);
+    if (kiter == info.access_keys.end()) {
+      cerr << "key not found" << std::endl;
+    } else {
+      rgw_remove_key_storage(kiter->second);
+      info.access_keys.erase(kiter);
+      if ((err = rgw_store_user_info(info)) < 0) {
+        cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
+        break;
+      }
+    }
+    show_user_info(info);
+    break;
 
   case OPT_USER_INFO:
-    cout << "User ID: " << info.user_id << std::endl;
-    cout << "Keys:" << std::endl;
-    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-      RGWAccessKey& k = kiter->second;
-      cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
-      cout << "  Access Key: " << k.id << std::endl;
-      cout << "  Secret Key: " << k.key << std::endl;
-    }
-    cout << "Users: " << std::endl;
-    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-      RGWSubUser& u = uiter->second;
-      cout << " Name: " << info.user_id << ":" << u.name << std::endl;
-      char buf[256];
-      perm_to_str(u.perm_mask, buf, sizeof(buf));
-      cout << " Permissions: " << buf << std::endl;
-    }
-    cout << "Display Name: " << info.display_name << std::endl;
-    cout << "Email: " << info.user_email << std::endl;
-    cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
-    cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+    show_user_info(info);
     break;
   }
 
