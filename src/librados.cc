@@ -3279,7 +3279,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 }
 
 extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
-				    const char **name, const char **val, int *len)
+				    const char **name, const char **val, size_t *len)
 {
   RadosXattrsIter *it = (RadosXattrsIter*)iter;
   if (it->i == it->attrset.end()) {

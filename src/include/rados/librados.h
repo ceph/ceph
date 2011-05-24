@@ -153,7 +153,7 @@ int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
 
 int rados_getxattrs(rados_ioctx_t io, const char *oid, rados_xattrs_iter_t *iter);
 int rados_getxattrs_next(rados_xattrs_iter_t iter, const char **name,
-			 const char **val, int *len);
+			 const char **val, size_t *len);
 void rados_getxattrs_end(rados_xattrs_iter_t iter);
 
 /* misc */
