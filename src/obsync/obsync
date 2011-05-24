@@ -438,12 +438,12 @@ class Store(object):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
             return S3Store(s3_url, create, akey, skey)
-        rados_url = strip_prefix("rados:", url)
+        rados_url = strip_prefix("rgw:", url)
         if (rados_url):
             dst_owner = None
             if (create and os.environ.has_key("DST_OWNER")):
                 dst_owner = os.environ["DST_OWNER"]
-            return RadosStore(rados_url, create, akey, skey, dst_owner)
+            return RgwStore(rados_url, create, akey, skey, dst_owner)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -750,14 +750,14 @@ class FileStore(Store):
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
 
-###### Rados store #######
-class RadosStoreIterator(object):
-    """RadosStore iterator"""
-    def __init__(self, it, rados_store):
+###### Rgw store #######
+class RgwStoreIterator(object):
+    """RgwStore iterator"""
+    def __init__(self, it, rgw_store):
         self.it = it # has type rados.ObjectIterator
-        self.rados_store = rados_store
-        self.prefix = self.rados_store.prefix
-        self.prefix_len = len(self.rados_store.prefix)
+        self.rgw_store = rgw_store
+        self.prefix = self.rgw_store.prefix
+        self.prefix_len = len(self.rgw_store.prefix)
     def __iter__(self):
         return self
     def next(self):
@@ -769,12 +769,12 @@ class RadosStoreIterator(object):
             # do the prefixes match?
             if rados_obj.key[:self.prefix_len] == self.prefix:
                 break
-        ret = self.rados_store.obsync_obj_from_rgw(rados_obj.key)
+        ret = self.rgw_store.obsync_obj_from_rgw(rados_obj.key)
         if (ret == None):
             raise Exception("internal iterator error")
         return ret
 
-class RadosStore(Store):
+class RgwStore(Store):
     def __init__(self, url, create, akey, skey, owner):
         if (rgw == None):
             rgw = Rgw()
@@ -782,8 +782,8 @@ class RadosStore(Store):
         # Parse the rados url
         conf_end = string.find(url, ":")
         if (conf_end == -1):
-            raise Exception("RadosStore URLs are of the form \
-rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
+            raise Exception("RgwStore URLs are of the form \
+rgw:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
         self.conf_file_path = url[0:conf_end]
         bucket_end = url.find(":", conf_end+1)
         if (bucket_end == -1):
@@ -793,8 +793,8 @@ rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf."
             self.rgw_bucket_name = url[conf_end+1:bucket_end]
             self.key_prefix = url[bucket_end+1:]
         if (self.rgw_bucket_name == ""):
-            raise Exception("RadosStore URLs are of the form \
-rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
+            raise Exception("RgwStore URLs are of the form \
+rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         if (opts.more_verbose):
             print "self.conf_file_path = '" + self.conf_file_path + "', ",
             print "self.rgw_bucket_name = '" + self.rgw_bucket_name + "' ",
@@ -817,7 +817,7 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             if (self.more_verbose):
                 print "using owner \"%s\"" % self.bucket_owner
         self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
-        Store.__init__(self, "rados:" + url)
+        Store.__init__(self, "rgw:" + url)
     def create_rgw_bucket(self, rgw_bucket_name):
         """ Create an rgw bucket named 'rgw_bucket_name' """
         if (self.bucket_owner == None):
@@ -863,7 +863,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
                 "extended attribute %s" % (obj, RGW_META_ETAG))
         return Object(key, md5, size, meta)
     def __str__(self):
-        return "rados:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
+        return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
     def get_acl(self, obj):
         try:
             bin_ = self.ioctx.get_xattr(obj.name, ACL_XATTR)
@@ -875,7 +875,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         temp_file = None
         temp_file_f = None
         try:
-            # read the object from rados in chunks
+            # read the object from rgw in chunks
             temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
             temp_file_f = open(temp_file.name, 'w')
             while True:
@@ -896,12 +896,12 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         return LocalCopy(obj.name, temp_file.name, True)
     def all_objects(self):
         it = self.bucket.list_objects()
-        return RadosStoreIterator(it, self.key_prefix)
+        return RgwStoreIterator(it, self.key_prefix)
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
     def upload(self, local_copy, src_acl, obj):
         if (opts.more_verbose):
-            print "RadosStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+            print "RgwStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
         if (opts.dry_run):
             return
@@ -933,7 +933,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
             return
         self.ioctx.remove_object(obj.name)
         if (opts.more_verbose):
-            print "RadosStore: removed %s" % obj.name
+            print "RgwStore: removed %s" % obj.name
 ###### Functions #######
 def delete_unreferenced(src, dst):
     """ delete everything from dst that is not referenced in src """
