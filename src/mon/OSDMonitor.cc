@@ -1460,7 +1460,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_down(osd)) {
@@ -1483,7 +1483,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "out" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_out(osd)) {
@@ -1506,7 +1506,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "in" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (osdmap.is_in(osd)) {
 	  ss << "osd" << osd << " is already in";
 	} else if (!osdmap.exists(osd)) {
@@ -1562,7 +1562,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "rm" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_up(osd)) {

@@ -202,6 +202,8 @@ public:
 	  epoch_created = other.epoch_created;
 	if (last_epoch_started < other.last_epoch_started)
 	  last_epoch_started = other.last_epoch_started;
+	if (last_epoch_clean < other.last_epoch_clean)
+	  last_epoch_clean = other.last_epoch_clean;
 	if (last_epoch_split < other.last_epoch_started)
 	  last_epoch_split = other.last_epoch_started;
 	if (other.last_scrub > last_scrub)
@@ -1277,6 +1279,9 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
+
+  epoch_t last_warm_restart;
+
   friend class OSD;
 
 
@@ -1326,7 +1331,7 @@ public:
   void clear_prior();
   bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
 
-  bool adjust_need_up_thru(PgPriorSet &prior, const OSDMap *osdmap);
+  bool adjust_need_up_thru(const OSDMap *osdmap);
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,
@@ -1371,14 +1376,14 @@ public:
   
   void trim_write_ahead();
 
-  bool choose_acting(int newest_update_osd);
+  bool choose_acting(int newest_update_osd) const;
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map,
 			  eversion_t &oldest_update);
   eversion_t calc_oldest_known_update() const;
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  void choose_log_location(const PgPriorSet &prior_set,
+  bool choose_log_location(const PgPriorSet &prior_set,
 			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,
@@ -1481,6 +1486,7 @@ public:
     have_master_log(true),
     recovery_state(this),
     need_up_thru(false),
+    last_warm_restart(0),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),
@@ -1551,6 +1557,8 @@ public:
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
 
+  void log_weirdness();
+
   void queue_snap_trim();
   bool queue_scrub();
 
@@ -1563,7 +1571,8 @@ public:
 		    pair<int, Info> &notify_info);
   void fulfill_log(int from, const Query &query);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
-    
+  bool old_peering_msg(const epoch_t &msg_epoch);
+
   // recovery bits
   void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
     recovery_state.handle_notify(from, i, rctx);
@@ -1634,7 +1643,7 @@ WRITE_CLASS_ENCODER(PG::OndiskLog)
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
   return out << "ec=" << h.epoch_created
-	     << " les=" << h.last_epoch_started
+	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
 	     << " " << h.same_up_since << "/" << h.same_acting_since << "/" << h.same_primary_since;
 }
 

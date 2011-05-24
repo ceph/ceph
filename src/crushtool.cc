@@ -121,7 +121,7 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 
   int id = 0;  // none, yet!
   int alg = -1;
-  int hash = -1;
+  int hash = 0;
   set<int> used_items;
   int size = 0;
   

@@ -1714,7 +1714,7 @@ void SimpleMessenger::Pipe::writer()
       Message *m = _get_next_outgoing();
       if (m) {
 	m->set_seq(++out_seq);
-	if (!policy.lossy) {
+	if (!policy.lossy || close_on_empty) {
 	  // put on sent list
 	  sent.push_back(m); 
 	  m->get();
@@ -1743,10 +1743,9 @@ void SimpleMessenger::Pipe::writer()
       continue;
     }
     
-    if (close_on_empty) {
+    if (sent.empty() && close_on_empty) {
       // this is slightly hacky
-      dout(10) << "writer queue empty, closing" << dendl;
-      policy.lossy = true;
+      dout(10) << "writer out and sent queues empty, closing" << dendl;
       fault();
       continue;
     }

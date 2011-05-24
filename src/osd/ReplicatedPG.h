@@ -673,7 +673,7 @@ public:
   void do_osd_op_effects(OpContext *ctx);
 private:
   void _delete_head(OpContext *ctx);
-  void _rollback_to(OpContext *ctx, ceph_osd_op& op);
+  int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
