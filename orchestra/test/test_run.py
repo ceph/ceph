@@ -307,3 +307,12 @@ def test_run_stdin_pipe():
     eq(r.exitstatus.ready(), False)
     got = r.exitstatus.get()
     eq(got, 0)
+
+
+def test_quote_simple():
+    got = run.quote(['a b', ' c', 'd e '])
+    eq(got, "'a b' ' c' 'd e '")
+
+def test_quote_and_quote():
+    got = run.quote(['echo', 'this && is embedded', '&&', 'that was standalone'])
+    eq(got, "echo 'this && is embedded' '&&' 'that was standalone'")
