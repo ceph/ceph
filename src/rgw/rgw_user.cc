@@ -387,6 +387,7 @@ int rgw_remove_bucket(string user_id, string bucket_name)
 int rgw_remove_key_storage(RGWAccessKey& access_key)
 {
   rgwstore->delete_obj(access_key.id, ui_key_bucket, access_key.id);
+  return 0;
 }
 
 /**
