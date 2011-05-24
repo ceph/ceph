@@ -146,6 +146,21 @@ class Sentinel(object):
 
 PIPE = Sentinel('PIPE')
 
+class KludgeFile(object):
+    """
+    Wrap Paramiko's ChannelFile in a way that lets ``f.close()``
+    actually cause an EOF for the remote command.
+    """
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+    def close(self):
+        self._wrapped.close()
+        self._wrapped.channel.shutdown_write()
+
 def run(
     client, args,
     stdin=None, stdout=None, stderr=None,
@@ -168,6 +183,8 @@ def run(
     """
     r = execute(client, args)
 
+    r.stdin = KludgeFile(wrapped=r.stdin)
+
     g_in = None
     if stdin is not PIPE:
         g_in = gevent.spawn(copy_and_close, stdin, r.stdin)
@@ -185,14 +202,15 @@ def run(
 
     if stdout is None:
         stdout = logger.getChild('out')
-    copy_file_to(r.stdout, stdout)
+    g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
     r.stdout = stdout
 
-    g_err.get()
-    if g_in is not None:
-        g_in.get()
-
     def _check_status(status):
+        g_err.get()
+        g_out.get()
+        if g_in is not None:
+            g_in.get()
+
         status = status()
         if check_status:
             if status is None:

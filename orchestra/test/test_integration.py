@@ -1,6 +1,7 @@
 from .. import monkey; monkey.patch_all()
 
 from nose.tools import eq_ as eq
+from cStringIO import StringIO
 
 import os
 import nose
@@ -41,3 +42,21 @@ def test_lost():
         )
     eq(e.command, "sh -c 'kill -ABRT $PPID'")
     eq(str(e), "SSH connection was lost: \"sh -c 'kill -ABRT $PPID'\"")
+
+def test_pipe():
+    ssh = connection.connect(HOST)
+    r = run.run(
+        client=ssh,
+        args=['cat'],
+        stdin=run.PIPE,
+        stdout=StringIO(),
+        wait=False,
+        )
+    eq(r.stdout.getvalue(), '')
+    r.stdin.write('foo\n')
+    r.stdin.write('bar\n')
+    r.stdin.close()
+
+    got = r.exitstatus.get()
+    eq(got, 0)
+    eq(r.stdout.getvalue(), 'foo\nbar\n')
