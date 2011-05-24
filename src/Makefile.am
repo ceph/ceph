@@ -1113,7 +1113,7 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_confi
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
 
 if WITH_RADOSGW
-	all_sources += $(librgw_SOURCES)
+all_sources += $(librgw_SOURCES)
 endif
 
 install-data-local:
