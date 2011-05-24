@@ -10,6 +10,8 @@ from .. import connection, run
 
 from .util import assert_raises
 
+HOST = None
+
 def setup():
     try:
         host = os.environ['ORCHESTRA_TEST_HOST']
