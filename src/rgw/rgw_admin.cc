@@ -32,6 +32,7 @@ void usage()
   cerr << "  subuser create             create a new subuser\n" ;
   cerr << "  subuser modify             modify subuser\n";
   cerr << "  subuser rm                 remove subuser\n";
+  cerr << "  key create                 create access key\n";
   cerr << "  key rm                     remove access key\n";
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
@@ -67,6 +68,7 @@ enum {
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
+  OPT_KEY_CREATE,
   OPT_KEY_RM,
   OPT_BUCKETS_LIST,
   OPT_BUCKET_UNLINK,
@@ -167,6 +169,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "rm") == 0)
       return OPT_SUBUSER_RM;
   } else if (strcmp(prev_cmd, "key") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_KEY_CREATE;
     if (strcmp(cmd, "rm") == 0)
       return OPT_KEY_RM;
   } else if (strcmp(prev_cmd, "buckets") == 0) {
@@ -390,7 +394,7 @@ int main(int argc, char **argv)
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
-                    opt_cmd == OPT_KEY_RM);
+                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM);
 
   store = RGWAccess::init_storage_provider("rados", &g_conf);
   if (!store) {
@@ -470,7 +474,8 @@ int main(int argc, char **argv)
     }
   }
 
-  bool keys_not_requested = (!access_key && !secret_key && !gen_secret && !gen_key);
+  bool keys_not_requested = (!access_key && !secret_key && !gen_secret && !gen_key &&
+                             opt_cmd != OPT_KEY_CREATE);
 
   if (opt_cmd == OPT_USER_CREATE || (user_modify_op && !keys_not_requested)) {
     int ret;
@@ -511,6 +516,7 @@ int main(int argc, char **argv)
   case OPT_USER_MODIFY:
   case OPT_SUBUSER_CREATE:
   case OPT_SUBUSER_MODIFY:
+  case OPT_KEY_CREATE:
     if (user_id)
       info.user_id = user_id;
     if (access_key && secret_key) {
