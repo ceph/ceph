@@ -17,8 +17,24 @@ class RemoteProcess(object):
         self.stderr = stderr
         self.exitstatus = exitstatus
 
+class Raw(object):
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return '{cls}({value!r})'.format(
+            cls=self.__class__.__name__,
+            value=self.value,
+            )
+
 def quote(args):
-    return ' '.join(pipes.quote(a) for a in args)
+    def _quote(args):
+        for a in args:
+            if isinstance(a, Raw):
+                yield a.value
+            else:
+                yield pipes.quote(a)
+    return ' '.join(_quote(args))
 
 def execute(client, args):
     """

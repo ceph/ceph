@@ -316,3 +316,7 @@ def test_quote_simple():
 def test_quote_and_quote():
     got = run.quote(['echo', 'this && is embedded', '&&', 'that was standalone'])
     eq(got, "echo 'this && is embedded' '&&' 'that was standalone'")
+
+def test_quote_and_raw():
+    got = run.quote(['true', run.Raw('&&'), 'echo', 'yay'])
+    eq(got, "true && echo yay")

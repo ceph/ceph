@@ -62,3 +62,12 @@ def test_pipe():
     got = r.exitstatus.get()
     eq(got, 0)
     eq(r.stdout.getvalue(), 'foo\nbar\n')
+
+def test_and():
+    ssh = connection.connect(HOST)
+    r = run.run(
+        client=ssh,
+        args=['true', run.Raw('&&'), 'echo', 'yup'],
+        stdout=StringIO(),
+        )
+    eq(r.stdout.getvalue(), 'yup\n')
