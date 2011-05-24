@@ -4115,10 +4115,15 @@ PG::RecoveryState::Active::react(const ActMap&) {
   if (g_conf.osd_check_for_log_corruption)
     pg->check_log_for_corruption(pg->osd->store);
 
-  if (pg->missing.num_missing() > pg->missing_loc.size()) {
-    if (pg->all_unfound_are_lost(pg->osd->osdmap)) {
+  int unfound = pg->missing.num_missing() - pg->missing_loc.size();
+  if (unfound > 0 &&
+      pg->all_unfound_are_lost(pg->osd->osdmap)) {
+    if (g_conf.osd_auto_mark_unfound_lost) {
+      pg->osd->clog.error() << pg->info.pgid << " has " << unfound
+			    << " objects unfound and apparently lost, automatically marking lost\n";
       pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());
-    }
+    } else
+      pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
 
   if (!pg->snap_trimq.empty() &&

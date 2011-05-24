@@ -433,6 +433,7 @@ public:
   int   osd_min_down_reports;
   int   osd_replay_window;
   bool  osd_preserve_trimmed_log;
+  bool  osd_auto_mark_unfound_lost;
 
   float osd_recovery_delay_start;
   int osd_recovery_max_active;
