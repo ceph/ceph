@@ -72,6 +72,8 @@ public:
     ::encode(keys, bl);
   }
   void decode(bufferlist::iterator& bl);
+
+  void encode_plaintext(bufferlist& bl);
 };
 WRITE_CLASS_ENCODER(KeyRing)
 

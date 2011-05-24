@@ -35,13 +35,13 @@ static int nonce_seed = 0;
 class ceph_mount_info
 {
 public:
-  ceph_mount_info(uint64_t msgr_nonce_, md_config_t *conf)
+  ceph_mount_info(uint64_t msgr_nonce_, CephContext *cct_)
     : msgr_nonce(msgr_nonce_),
       mounted(false),
       client(NULL),
       monclient(NULL),
       messenger(NULL),
-      conf(conf)
+      cct(cct_)
   {
   }
 
@@ -69,6 +69,8 @@ public:
   {
     if (mounted)
       return -EDOM;
+
+    common_init_finish(cct);
 
     //monmap
     monclient = new MonClient();
@@ -140,12 +142,12 @@ public:
     std::list<std::string> conf_files;
     get_str_list(path, conf_files);
     std::deque<std::string> parse_errors;
-    int ret = conf->parse_config_files(conf_files, &parse_errors);
+    int ret = cct->_conf->parse_config_files(conf_files, &parse_errors);
     if (ret)
       return ret;
-    conf->parse_env(); // environment variables override
+    cct->_conf->parse_env(); // environment variables override
 
-    conf->apply_changes();
+    cct->_conf->apply_changes();
     complain_about_parse_errors(&parse_errors);
     return 0;
   }
@@ -154,23 +156,23 @@ public:
   {
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    conf->parse_argv(args);
-    conf->apply_changes();
+    cct->_conf->parse_argv(args);
+    cct->_conf->apply_changes();
   }
 
   int conf_set(const char *option, const char *value)
   {
-    int ret = conf->set_val(option, value);
+    int ret = cct->_conf->set_val(option, value);
     if (ret)
       return ret;
-    conf->apply_changes();
+    cct->_conf->apply_changes();
     return 0;
   }
 
   int conf_get(const char *option, char *buf, size_t len)
   {
     char *tmp = buf;
-    return conf->get_val(option, &tmp, len);
+    return cct->_conf->get_val(option, &tmp, len);
   }
 
   Client *get_client()
@@ -184,13 +186,17 @@ public:
     return cwd.c_str();
   }
 
+  CephContext *get_ceph_context() const {
+    return cct;
+  }
+
 private:
   uint64_t msgr_nonce;
   bool mounted;
   Client *client;
   MonClient *monclient;
   SimpleMessenger *messenger;
-  md_config_t *conf;
+  CephContext *cct;
   std::string cwd;
 };
 
@@ -209,12 +215,12 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
   return VERSION;
 }
 
-static int ceph_create_with_config_impl(struct ceph_mount_info **cmount, md_config_t *conf)
+static int ceph_create_with_context_impl(struct ceph_mount_info **cmount, CephContext *cct)
 {
   // should hold libceph_init_mutex here
   libceph_initialized = true;
   uint64_t nonce = (uint64_t)++nonce_seed * 1000000ull + (uint64_t)getpid();
-  *cmount = new struct ceph_mount_info(nonce, conf);
+  *cmount = new struct ceph_mount_info(nonce, cct);
   return 0;
 }
 
@@ -222,7 +228,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
 {
   int ret;
   libceph_init_mutex.Lock();
-  md_config_t *conf = &g_conf;
+  CephContext *cct = &g_ceph_context;
   if (!libceph_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
     iparams.conf_file = "";
@@ -230,20 +236,20 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
       iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
     }
 
-    conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    conf->parse_env(); // environment variables override
-    conf->apply_changes();
+    cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    cct->_conf->parse_env(); // environment variables coverride
+    cct->_conf->apply_changes();
   }
-  ret = ceph_create_with_config_impl(cmount, conf);
+  ret = ceph_create_with_context_impl(cmount, cct);
   libceph_init_mutex.Unlock();
   return ret;
 }
 
-extern "C" int ceph_create_with_config(struct ceph_mount_info **cmount, md_config_t *conf)
+extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
 {
   int ret;
   libceph_init_mutex.Lock();
-  ret = ceph_create_with_config_impl(cmount, conf);
+  ret = ceph_create_with_context_impl(cmount, cct);
   libceph_init_mutex.Unlock();
   return ret;
 }
@@ -279,9 +285,6 @@ extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
   std::string mount_root;
-
-  keyring_init(&g_conf);
-
   if (root)
     mount_root = root;
   return cmount->mount(mount_root);

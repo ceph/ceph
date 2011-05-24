@@ -1376,9 +1376,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
       bufferlist data(m->get_data());
+      CrushWrapper crush;
       try {
 	bufferlist::iterator bl(data.begin());
-	CrushWrapper crush;
 	crush.decode(bl);
       }
       catch (const std::exception &e) {
@@ -1386,6 +1386,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "Failed to parse crushmap: " << e.what();
 	goto out;
       }
+
+      if (crush.get_max_devices() > osdmap.get_max_osd()) {
+	err = -ERANGE;
+	ss << "crushmap max_devices " << crush.get_max_devices()
+	   << " > osdmap max_osd " << osdmap.get_max_osd();
+	goto out;
+      }
+
       pending_inc.crush = data;
       string rs = "set crush map";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1410,7 +1418,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     */
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
-      pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
+      int newmax = atoi(m->cmd[2].c_str());
+      if (newmax < osdmap.crush.get_max_devices()) {
+	err = -ERANGE;
+	ss << "cannot set max_osd to " << newmax << " which is < crush max_devices "
+	   << osdmap.crush.get_max_devices();
+	goto out;
+      }
+
+      pending_inc.new_max_osd = newmax;
       ss << "set new max_osd = " << pending_inc.new_max_osd;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1444,7 +1460,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_down(osd)) {
@@ -1467,7 +1483,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "out" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_out(osd)) {
@@ -1490,7 +1506,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "in" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (osdmap.is_in(osd)) {
 	  ss << "osd" << osd << " is already in";
 	} else if (!osdmap.exists(osd)) {
@@ -1546,7 +1562,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "rm" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
 	  ss << "osd" << osd << " does not exist";
 	} else if (osdmap.is_up(osd)) {

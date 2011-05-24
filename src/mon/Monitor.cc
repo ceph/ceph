@@ -42,6 +42,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
+#include "common/DoutStreambuf.h"
 #include "include/color.h"
 
 #include "OSDMonitor.h"

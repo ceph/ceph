@@ -29,6 +29,7 @@ extern "C" {
 
 struct ceph_mount_info;
 struct ceph_dir_result;
+struct CephContext;
 
 const char *ceph_version(int *major, int *minor, int *patch);
 
@@ -36,7 +37,7 @@ const char *ceph_version(int *major, int *minor, int *patch);
 int ceph_create(struct ceph_mount_info **cmount, const char * const id);
 
 /* initialization with an existing configuration */
-int ceph_create_with_config(struct ceph_mount_info **cmount, struct md_config_t *conf);
+int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
 /* Activate the mount */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);

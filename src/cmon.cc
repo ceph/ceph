@@ -63,7 +63,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
-  keyring_init(&g_conf);
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
@@ -83,6 +82,7 @@ int main(int argc, const char **argv)
 
   // -- mkfs --
   if (mkfs) {
+    common_init_finish(&g_ceph_context);
     if (g_conf.monmap.empty() || !osdmapfn)
       usage();
 
@@ -243,7 +243,6 @@ int main(int argc, const char **argv)
 
   // bind
   SimpleMessenger *messenger = new SimpleMessenger();
-
   int rank = monmap.get_rank(g_conf.name.get_id());
 
   cout << "starting " << g_conf.name << " rank " << rank
@@ -260,8 +259,8 @@ int main(int argc, const char **argv)
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(g_conf.name.get_id(), &store, messenger, &monmap);
 
-  if (g_conf.daemonize)
-    common_init_daemonize(&g_conf);
+  common_init_daemonize(&g_ceph_context, 0);
+  common_init_finish(&g_ceph_context);
   messenger->start();
 
   uint64_t supported =

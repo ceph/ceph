@@ -54,7 +54,7 @@ public:
   // Call when you close stderr.  Not strictly necessary, since we would get an
   // error the next time we tried to write to stdedrr. But nicer than waiting
   // for the error to happen.
-  void handle_stderr_closed();
+  void handle_stderr_shutdown();
 
   virtual const char** get_tracked_conf_keys() const;
 
@@ -74,6 +74,9 @@ public:
   // Output a string directly to the file and to syslog
   // (if those sinks are active)
   void dout_emergency_to_file_and_syslog(const char * const str) const;
+
+  // Reopen the logs
+  void reopen_logs(const md_config_t *conf);
 
 protected:
   // Called when the buffer fills up

@@ -30,13 +30,11 @@ static void _init_supported(void)
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     if (iter->compare("cephx") == 0) {
-      dout(10) << "supporting cephx auth protocol" << dendl;
       auth_supported[CEPH_AUTH_CEPHX] = true;
     } else if (iter->compare("none") == 0) {
       auth_supported[CEPH_AUTH_NONE] = true;
-      dout(10) << "supporting *none* auth protocol" << dendl;
     } else {
-      dout(0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
+      derr << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
   _supported_initialized = true;

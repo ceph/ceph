@@ -40,10 +40,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
 #define LOG_TO_STDERR_SOME 1
 #define LOG_TO_STDERR_ALL 2
 
-template <typename T, typename U>
-class DoutStreambuf;
-
-struct md_config_t {
+class md_config_t {
 public:
   /* Maps configuration options to the observer listening for them. */
   typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
@@ -505,13 +502,7 @@ public:
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
   int   rgw_log;
-
-  DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
-  std::ostream _dout;
-  md_config_obs_t *_prof_logger_conf_obs;
 };
-
-extern md_config_t g_conf;
 
 typedef enum {
 	OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,

@@ -985,7 +985,7 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
 
   // open rados
   Rados rados;
-  if (rados.init_with_config(&g_conf) < 0) {
+  if (rados.init_with_context(&g_ceph_context) < 0) {
      cerr << "rados" << ": failed to initialize Rados!" << std::endl;
      exit(1);
   }

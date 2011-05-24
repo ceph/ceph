@@ -69,6 +69,7 @@
 
 #include "messages/MWatchNotify.h"
 
+#include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/ProfLogType.h"
 #include "common/Timer.h"
@@ -433,6 +434,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   op_wq(this, &op_tp),
   osdmap(NULL),
   map_lock("OSD::map_lock"),
+  peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   map_cache_lock("OSD::map_cache_lock"), map_cache_keep_from(0),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
@@ -1409,14 +1411,27 @@ void OSD::update_heartbeat_peers()
   old_from_stamp.swap(heartbeat_from_stamp);
 
   map<int, epoch_t> old_to, old_from;
-  map<int, entity_inst_t> old_inst;
+  map<int, Connection*> old_con;
   old_to.swap(heartbeat_to);
   old_from.swap(heartbeat_from);
-  old_inst.swap(heartbeat_inst);
+  old_con.swap(heartbeat_con);
 
   utime_t now = g_clock.now();
 
   heartbeat_epoch = osdmap->get_epoch();
+
+  // grandfather newer _to peers
+  for (map<int,epoch_t>::iterator p = old_to.begin();
+       p != old_to.end();
+       p++) {
+    if (p->second > osdmap->get_epoch()) {
+      dout(10) << "update_heartbeat_peers: keeping newer _to peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " as of " << p->second << dendl;
+      heartbeat_to[p->first] = p->second;
+      heartbeat_con[p->first] = old_con[p->first];
+    }
+  }
 
   // build heartbeat to/from set
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
@@ -1431,9 +1446,10 @@ void OSD::update_heartbeat_peers()
       if (heartbeat_to.count(p))
 	continue;
       heartbeat_to[p] = osdmap->get_epoch();
-      heartbeat_inst[p] = osdmap->get_hb_inst(p);
-      if (old_to.count(p) == 0 || old_inst[p] != heartbeat_inst[p])
-	dout(10) << "update_heartbeat_peers: new _to osd" << p << " " << heartbeat_inst[p] << dendl;
+      heartbeat_con[p] = heartbeat_messenger->get_connection(osdmap->get_hb_inst(p));
+      if (old_to.count(p) == 0 || old_con[p] != heartbeat_con[p])
+	dout(10) << "update_heartbeat_peers: new _to osd" << p
+		 << " " << heartbeat_con[p]->get_peer_addr() << dendl;
     }
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
@@ -1443,67 +1459,90 @@ void OSD::update_heartbeat_peers()
 	if (heartbeat_from.count(p))
 	  continue;
 	heartbeat_from[p] = osdmap->get_epoch();
-	heartbeat_inst[p] = osdmap->get_hb_inst(p);
+	heartbeat_con[p] = heartbeat_messenger->get_connection(osdmap->get_hb_inst(p));
 	if (old_from_stamp.count(p) && old_from.count(p) &&
-	    old_inst[p] == heartbeat_inst[p]) {
+	    old_con[p] == heartbeat_con[p]) {
 	  // have a stamp _AND_ i'm not new to the set
 	  heartbeat_from_stamp[p] = old_from_stamp[p];
 	} else {
-	  dout(10) << "update_heartbeat_peers: new _from osd" << p << " " << heartbeat_inst[p] << dendl;
+	  dout(10) << "update_heartbeat_peers: new _from osd" << p
+		   << " " << heartbeat_con[p]->get_peer_addr() << dendl;
 	  heartbeat_from_stamp[p] = now;  
-	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true); // request hb
-	  m->set_priority(CEPH_MSG_PRIO_HIGH);
-	  heartbeat_messenger->send_message(m, heartbeat_inst[p]);
+	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat,
+				     MOSDPing::REQUEST_HEARTBEAT);
+	  heartbeat_messenger->send_message(m, heartbeat_con[p]);
 	}
       }
     }
   }
+
+  map<int, Connection*> down;
+
   for (map<int,epoch_t>::iterator p = old_to.begin();
        p != old_to.end();
        p++) {
-    assert(old_inst.count(p->first));
-    if (heartbeat_to.count(p->first))
+    assert(old_con.count(p->first));
+    if (heartbeat_to.count(p->first) && heartbeat_con[p->first] == old_con[p->first])
       continue;
-    if (p->second > osdmap->get_epoch()) {
-      dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
-	       << " as of " << p->second << dendl;
-      heartbeat_to[p->first] = p->second;
-      heartbeat_inst[p->first] = old_inst[p->first];
-    } else {
-      if (heartbeat_from.count(p->first) && old_inst[p->first] == heartbeat_inst[p->first]) {
-	dout(10) << "update_heartbeat_peers: old _to peer " << old_inst[p->first] 
-		 << " is still a _from peer, not marking down" << dendl;
-      } else {
-	dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	heartbeat_messenger->mark_down(old_inst[p->first].addr);
-      }
+    assert(p->second <= osdmap->get_epoch());
 
-      if (!osdmap->is_down(p->first) &&
-	  osdmap->get_hb_inst(p->first) == old_inst[p->first]) {
-	dout(10) << "update_heartbeat_peers: sharing map with old _to peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	// share latest map with this peer (via the cluster link, NOT
-	// the heartbeat link), so they know not to expect heartbeats
-	// from us.  otherwise they may mark us down!
-	_share_map_outgoing(osdmap->get_cluster_inst(p->first));
-      }
+    // share latest map with this peer so they know not to expect
+    // heartbeats from us.  otherwise they may mark us down!
+    if (osdmap->is_up(p->first)) {
+      dout(10) << "update_heartbeat_peers: sharing map with old _to peer osd" << p->first << dendl;
+      _share_map_outgoing(osdmap->get_cluster_inst(p->first));
+    }
+
+    if (heartbeat_from.count(p->first) && old_con[p->first] == heartbeat_con[p->first]) {
+      dout(10) << "update_heartbeat_peers: old _to peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " is still a _from peer, not marking down" << dendl;
+    } else {
+      dout(10) << "update_heartbeat_peers: will mark down old _to peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " as of " << p->second << dendl;
+      down[p->first] = old_con[p->first];
     }
   }
   for (map<int,epoch_t>::iterator p = old_from.begin();
        p != old_from.end();
        p++) {
-    if (heartbeat_from.count(p->first) == 0 ||
-	heartbeat_inst[p->first] != old_inst[p->first]) {
-      if (heartbeat_to.count(p->first) == 0) {
-	dout(10) << "update_heartbeat_peers: marking down old _from peer " << old_inst[p->first] 
-		 << " as of " << p->second << dendl;
-	heartbeat_messenger->mark_down(old_inst[p->first].addr);
-      } else {
-	dout(10) << "update_heartbeat_peers: old _from peer " << old_inst[p->first]
-		 << " is still a _to peer, not marking down" << dendl;
-      }
+    assert(old_con.count(p->first));
+    if (heartbeat_from.count(p->first) && heartbeat_con[p->first] == old_con[p->first])
+      continue;
+
+    // share latest map with this peer, just to be nice.
+    if (osdmap->is_up(p->first)) {
+      dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd" << p->first << dendl;
+      _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
+
+    if (heartbeat_to.count(p->first) && old_con[p->first] == heartbeat_con[p->first]) {
+      dout(10) << "update_heartbeat_peers: old _from peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " is still a _to peer, not marking down" << dendl;
+    } else {
+      dout(10) << "update_heartbeat_peers: will mark down old _from peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " as of " << p->second << dendl;
+      down[p->first] = old_con[p->first];
+    }
+  }
+  for (map<int, Connection*>::iterator p = down.begin(); p != down.end(); ++p) {
+    Connection *con = p->second;
+    heartbeat_messenger->mark_disposable(con);
+    if (!osdmap->is_up(p->first)) {
+      dout(10) << "update_heartbeat_peers: telling old peer osd" << p->first
+	       << " " << old_con[p->first]->get_peer_addr()
+	       << " they are down" << dendl;
+      heartbeat_messenger->send_message(new MOSDPing(osdmap->get_fsid(), heartbeat_epoch,
+						     heartbeat_epoch, my_stat,
+						     MOSDPing::YOU_DIED), con);
+    }
+    heartbeat_messenger->mark_down_on_empty(con);
+    con->put();
+    if (!osdmap->is_up(p->first))
+      forget_peer_epoch(p->first, osdmap->get_epoch());
   }
 
   dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
@@ -1528,7 +1567,10 @@ void OSD::reset_heartbeat_peers()
   heartbeat_to.clear();
   heartbeat_from.clear();
   heartbeat_from_stamp.clear();
-  heartbeat_inst.clear();
+  while (!heartbeat_con.empty()) {
+    heartbeat_con.begin()->second->put();
+    heartbeat_con.erase(heartbeat_con.begin());
+  }
   failure_queue.clear();
   heartbeat_lock.Unlock();
 
@@ -1536,10 +1578,8 @@ void OSD::reset_heartbeat_peers()
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
-
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
-    dout(20) << "handle_osd_ping from " << m->get_source()
+    dout(20) << "handle_osd_ping from " << m->get_source_inst()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
     m->put();
     return;
@@ -1550,36 +1590,62 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   bool locked = map_lock.try_get_read();
 
-  if (m->ack) {
-    dout(5) << " peer " << m->get_source_inst() << " requesting heartbeats" << dendl;
-    heartbeat_to[from] = m->peer_as_of_epoch;
-    heartbeat_inst[from] = m->get_source_inst();
-
-    if (locked && m->map_epoch && !is_booting())
-      _share_map_incoming(m->get_source_inst(), m->map_epoch,
-			  (Session*) m->get_connection()->get_priv());
-  }
-
-  if (heartbeat_from.count(from) &&
-      heartbeat_inst[from] == m->get_source_inst()) {
-
-    // only take peer stat or share map now if map_lock is uncontended
-    if (locked) {
-      if (m->map_epoch && !is_booting())
+  switch (m->op) {
+  case MOSDPing::REQUEST_HEARTBEAT:
+    if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
+      dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
+	      << " request for heartbeats as_of " << m->peer_as_of_epoch
+	      << " <= current _to as_of " << heartbeat_to[from] << dendl;
+    } else {
+      dout(5) << "handle_osd_ping peer " << m->get_source_inst()
+	      << " requesting heartbeats as_of " << m->peer_as_of_epoch << dendl;
+      heartbeat_to[from] = m->peer_as_of_epoch;
+      heartbeat_con[from] = m->get_connection();
+      heartbeat_con[from]->get();
+      
+      if (locked && m->map_epoch && !is_booting())
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
-      take_peer_stat(from, m->peer_stat);  // only with map_lock held!
     }
+    break;
 
-    heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
-    // remove from failure lists if needed
-    if (failure_pending.count(from)) {
-      send_still_alive(from);
-      failure_pending.erase(from);
+  case MOSDPing::HEARTBEAT:
+    if (heartbeat_from.count(from) &&
+	heartbeat_con[from] == m->get_connection()) {
+      // only take peer stat or share map now if map_lock is uncontended
+      if (locked) {
+	dout(20) << "handle_osd_ping " << m->get_source_inst()
+		 << " took stat " << m->peer_stat << dendl;
+	if (m->map_epoch && !is_booting())
+	  _share_map_incoming(m->get_source_inst(), m->map_epoch,
+			      (Session*) m->get_connection()->get_priv());
+	take_peer_stat(from, m->peer_stat);  // only with map_lock held!
+      } else {
+	dout(20) << "handle_osd_ping " << m->get_source_inst()
+		 << " dropped stat " << m->peer_stat << dendl;
+      }
+
+      note_peer_epoch(from, m->map_epoch);
+      
+      heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
+      
+      // remove from failure lists if needed
+      if (failure_pending.count(from)) {
+	send_still_alive(from);
+	failure_pending.erase(from);
+      }
+      failure_queue.erase(from);
+    } else {
+      dout(10) << "handle_osd_ping ignoring " << m->get_source_inst() << dendl;
     }
-    failure_queue.erase(from);
-  } else {
-    dout(10) << " ignoring " << m->get_source_inst() << dendl;
+    break;
+
+  case MOSDPing::YOU_DIED:
+    dout(10) << "handle_osd_ping " << m->get_source_inst() << " says i am down in " << m->map_epoch
+	     << dendl;
+    monc->sub_want("osdmap", m->map_epoch, CEPH_SUBSCRIBE_ONETIME);
+    monc->renew_subs();
+    break;
   }
 
   if (locked) 
@@ -1587,6 +1653,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   heartbeat_lock.Unlock();
   m->put();
+
 }
 
 void OSD::heartbeat_entry()
@@ -1678,7 +1745,7 @@ void OSD::heartbeat()
        i != heartbeat_to.end();
        i++) {
     int peer = i->first;
-    if (heartbeat_inst.count(peer)) {
+    if (heartbeat_con.count(peer)) {
       my_stat_on_peer[peer] = my_stat;
       dout(30) << "heartbeat allocating ping for osd" << peer << dendl;
       Message *m = new MOSDPing(osdmap->get_fsid(),
@@ -1687,7 +1754,7 @@ void OSD::heartbeat()
 				my_stat);
       m->set_priority(CEPH_MSG_PRIO_HIGH);
       dout(30) << "heartbeat sending ping to osd" << peer << dendl;
-      heartbeat_messenger->send_message(m, heartbeat_inst[peer]);
+      heartbeat_messenger->send_message(m, heartbeat_con[peer]);
     }
   }
 
@@ -2284,6 +2351,51 @@ done:
 // --------------------------------------
 // dispatch
 
+epoch_t OSD::get_peer_epoch(int peer)
+{
+  Mutex::Locker l(peer_map_epoch_lock);
+  map<int,epoch_t>::iterator p = peer_map_epoch.find(peer);
+  if (p == peer_map_epoch.end())
+    return 0;
+  return p->second;
+}
+
+epoch_t OSD::note_peer_epoch(int peer, epoch_t e)
+{
+  Mutex::Locker l(peer_map_epoch_lock);
+  map<int,epoch_t>::iterator p = peer_map_epoch.find(peer);
+  if (p != peer_map_epoch.end()) {
+    if (p->second < e) {
+      dout(10) << "note_peer_epoch osd" << peer << " has " << e << dendl;
+      p->second = e;
+    } else {
+      dout(30) << "note_peer_epoch osd" << peer << " has " << p->second << " >= " << e << dendl;
+    }
+    return p->second;
+  } else {
+    dout(10) << "note_peer_epoch osd" << peer << " now has " << e << dendl;
+    peer_map_epoch[peer] = e;
+    return e;
+  }
+}
+ 
+void OSD::forget_peer_epoch(int peer, epoch_t as_of) 
+{
+  Mutex::Locker l(peer_map_epoch_lock);
+  map<int,epoch_t>::iterator p = peer_map_epoch.find(peer);
+  if (p != peer_map_epoch.end()) {
+    if (p->second <= as_of) {
+      dout(10) << "forget_peer_epoch osd" << peer << " as_of " << as_of
+	       << " had " << p->second << dendl;
+      peer_map_epoch.erase(p);
+    } else {
+      dout(10) << "forget_peer_epoch osd" << peer << " as_of " << as_of
+	       << " has " << p->second << " - not forgetting" << dendl;
+    }
+  }
+}
+
+
 bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 			      Session* session)
 {
@@ -2318,15 +2430,12 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
       (osdmap->get_cluster_inst(inst.name.num()) == inst ||
        osdmap->get_hb_inst(inst.name.num()) == inst)) {
     // remember
-    if (peer_map_epoch[inst.name] < epoch) {
-      dout(20) << "peer " << inst.name << " has " << epoch << dendl;
-      peer_map_epoch[inst.name] = epoch;
-    }
-    
-    // older?
-    if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {
+    epoch_t has = note_peer_epoch(inst.name.num(), epoch);
+
+    // share?
+    if (has < osdmap->get_epoch()) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
-      peer_map_epoch[inst.name] = osdmap->get_epoch();  // so we don't send it again.
+      note_peer_epoch(inst.name.num(), osdmap->get_epoch());
       send_incremental_map(epoch, osdmap->get_cluster_inst(inst.name.num()));
       shared = true;
     }
@@ -2342,14 +2451,18 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 {
   assert(inst.name.is_osd());
 
+  int peer = inst.name.num();
+
   // send map?
-  if (peer_map_epoch.count(inst.name)) {
-    epoch_t pe = peer_map_epoch[inst.name];
+  epoch_t pe = get_peer_epoch(peer);
+  if (pe) {
     if (pe < osdmap->get_epoch()) {
       send_incremental_map(pe, inst);
-      peer_map_epoch[inst.name] = osdmap->get_epoch();
-    }
+      note_peer_epoch(peer, osdmap->get_epoch());
+    } else
+      dout(20) << "_share_map_outgoing " << inst << " already has epoch " << pe << dendl;
   } else {
+    dout(20) << "_share_map_outgoing " << inst << " don't know epoch, doing nothing" << dendl;
     // no idea about peer's epoch.
     // ??? send recent ???
     // do nothing.
@@ -2359,12 +2472,12 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 
 bool OSD::heartbeat_dispatch(Message *m)
 {
-  dout(20) << "heartbeat_dispatch " << m << dendl;
+  dout(30) << "heartbeat_dispatch " << m << dendl;
 
   switch (m->get_type()) {
     
   case CEPH_MSG_PING:
-    dout(10) << "ping from " << m->get_source() << dendl;
+    dout(10) << "ping from " << m->get_source_inst() << dendl;
     m->put();
     break;
 
@@ -2798,23 +2911,23 @@ void OSD::wait_for_new_map(Message *m)
  * assimilate new OSDMap(s).  scan pgs, etc.
  */
 
-void OSD::note_down_osd(int osd)
+void OSD::note_down_osd(int peer)
 {
-  cluster_messenger->mark_down(osdmap->get_cluster_addr(osd));
+  cluster_messenger->mark_down(osdmap->get_cluster_addr(peer));
 
   heartbeat_lock.Lock();
 
   // note: update_heartbeat_peers will mark down the heartbeat connection.
 
-  peer_map_epoch.erase(entity_name_t::OSD(osd));
-  failure_queue.erase(osd);
-  failure_pending.erase(osd);
+  failure_queue.erase(peer);
+  failure_pending.erase(peer);
 
   heartbeat_lock.Unlock();
 }
-void OSD::note_up_osd(int osd)
+
+void OSD::note_up_osd(int peer)
 {
-  peer_map_epoch.erase(entity_name_t::OSD(osd));
+  forget_peer_epoch(peer, osdmap->get_epoch() - 1);
 }
 
 void OSD::handle_osd_map(MOSDMap *m)
@@ -3308,11 +3421,8 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 }
 
 
-void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
+MOSDMap *OSD::build_incremental_map_msg(epoch_t since)
 {
-  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
-           << " to " << inst << dendl;
-  
   MOSDMap *m = new MOSDMap(monc->get_fsid());
   
   for (epoch_t e = osdmap->get_epoch();
@@ -3329,6 +3439,15 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
       assert(0);  // we should have all maps.
     }
   }
+  return m;
+}
+
+void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
+{
+  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
+           << " to " << inst << dendl;
+  
+  MOSDMap *m = build_incremental_map_msg(since);
   Messenger *msgr = client_messenger;
   if (entity_name_t::TYPE_OSD == inst.name._type)
     msgr = cluster_messenger;
@@ -3936,8 +4055,14 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
 {
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
-       ++p) 
+       ++p) { 
+    for (vector<PG::Info>::iterator i = p->second->pg_info.begin();
+	 i != p->second->pg_info.end();
+	 ++i) {
+      dout(20) << "Sending info " << *i << " to osd" << p->first << dendl;
+    }
     cluster_messenger->send_message(p->second, osdmap->get_cluster_inst(p->first));
+  }
   info_map.clear();
 }
 
@@ -3974,6 +4099,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (!pg)
       continue;
 
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
+      pg->unlock();
+      continue;
+    }
+
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
     pg->handle_notify(from, *it, &rctx);
 
@@ -4008,8 +4139,16 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   C_Contexts *fin;  
   PG *pg = get_or_create_pg(m->info, m->get_epoch(), 
 			    from, created, false, &t, &fin);
-  if (!pg)
+  if (!pg) {
+    m->put();
     return;
+  }
+
+  if (pg->old_peering_msg(m->get_epoch())) {
+    dout(10) << "ignoring old peering message " << *m << dendl;
+    pg->unlock();
+    return;
+  }
 
   map< int, map<pg_t,PG::Query> > query_map;
   map< int, MOSDPGInfo* > info_map;
@@ -4047,9 +4186,17 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     C_Contexts *fin = 0;
     PG *pg = get_or_create_pg(*p, m->get_epoch(), 
 			      from, created, false, &t, &fin);
-    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
     if (!pg)
       continue;
+
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
+      pg->unlock();
+      continue;
+    }
+
+    PG::RecoveryCtx rctx(0, &info_map, 0, &fin->contexts, t);
+
     pg->handle_info(from, *p, &rctx);
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4178,7 +4325,16 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       assert(role != 0);
       dout(10) << " pg " << pgid << " dne" << dendl;
       PG::Info empty(pgid);
-      notify_list[from].push_back(empty);
+      if (it->second.type == PG::Query::LOG ||
+	  it->second.type == PG::Query::BACKLOG ||
+	  it->second.type == PG::Query::FULLLOG) {
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty);
+	_share_map_outgoing(osdmap->get_cluster_inst(from));
+	cluster_messenger->send_message(mlog,
+					osdmap->get_cluster_inst(from));
+      } else {
+	notify_list[from].push_back(empty);
+      }
       continue;
     }
 
@@ -4187,6 +4343,12 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " handle_pg_query changed in "
 	       << pg->info.history.same_acting_since
 	       << " (msg from " << m->get_epoch() << ")" << dendl;
+      pg->unlock();
+      continue;
+    }
+
+    if (pg->old_peering_msg(m->get_epoch())) {
+      dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
       continue;
     }
@@ -4286,6 +4448,8 @@ void OSD::_remove_pg(PG *pg)
   
   // reset log, last_complete, in case deletion gets canceled
   pg->info.last_complete = eversion_t();
+  pg->info.last_update = eversion_t();
+  pg->info.log_tail = eversion_t();
   pg->log.zero();
   pg->ondisklog.zero();
 

@@ -17,6 +17,60 @@ void CrushWrapper::find_roots(set<int>& roots) const
 }
 
 
+int CrushWrapper::remove_device(int item)
+{
+  cout << "remove_device item" << std::endl;
+
+  crush_bucket *was_bucket = 0;
+  int ret = -ENOENT;
+
+  set<int> roots;
+  find_roots(roots);
+  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
+    list<int> q;
+    q.push_back(*p);
+    while (!q.empty()) {
+      int id = q.front();
+      q.pop_front();
+
+      if (id >= 0)
+	continue;  // it's a leaf.
+
+      crush_bucket *b = get_bucket(id);
+      if (!b) {
+	cout << "remove_device warning: bad reference to bucket " << id << std::endl;
+	continue;
+      }
+
+      for (unsigned i=0; i<b->size; ++i) {
+	int id = b->items[i];
+	if (id == item) {
+	  if (item < 0) {
+	    crush_bucket *t = get_bucket(item);
+	    if (t && t->size) {
+	      cout << "remove_device bucket " << item << " has " << t->size << " items, not empty" << std::endl;
+	      return -ENOTEMPTY;
+	    }	    
+	    was_bucket = t;
+	  }
+	  cout << "remove_device removing item " << item << " from bucket " << b->id << std::endl;
+	  crush_bucket_remove_item(b, item);
+	  ret = 0;
+	}
+	if (id < 0)
+	  q.push_front(id);
+      }
+    }
+  }
+
+  if (was_bucket) {
+    cout << "remove_device removing bucket " << item << std::endl;
+    crush_remove_bucket(crush, was_bucket);
+  }
+  
+  return ret;
+}
+
 int CrushWrapper::insert_device(int item, int weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
@@ -63,7 +117,7 @@ int CrushWrapper::insert_device(int item, int weight, string name,
       
     cout << "insert_device adding " << item << " weight " << weight
 	    << " to bucket " << id << std::endl;
-    crush_bucket *b = (crush_bucket *)get_bucket(id);
+    crush_bucket *b = get_bucket(id);
     assert(b);
     crush_bucket_add_item(b, item, 0);
     adjust_item_weight(item, weight);
@@ -74,7 +128,7 @@ int CrushWrapper::insert_device(int item, int weight, string name,
   return -EINVAL;
 }
 
-void CrushWrapper::adjust_item_weight(int id, int weight)
+int CrushWrapper::adjust_item_weight(int id, int weight)
 {
   cout << "adjust_item_weight " << id << " weight " << weight << std::endl;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
@@ -86,8 +140,10 @@ void CrushWrapper::adjust_item_weight(int id, int weight)
 	int diff = crush_bucket_adjust_item_weight(b, id, weight);
 	cout << "adjust_item_weight " << id << " diff " << diff << std::endl;
 	adjust_item_weight(-1 - bidx, b->weight);
+	return 0;
       }
   }
+  return -ENOENT;
 }
 
 void CrushWrapper::reweight()
@@ -97,7 +153,7 @@ void CrushWrapper::reweight()
   for (set<int>::iterator p = roots.begin(); p != roots.end(); p++) {
     if (*p >= 0)
       continue;
-    crush_bucket *b = (struct crush_bucket *)get_bucket(*p);
+    crush_bucket *b = get_bucket(*p);
     cout << "reweight bucket " << *p << std::endl;
     crush_reweight_bucket(crush, b);
   }

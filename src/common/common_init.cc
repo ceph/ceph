@@ -37,8 +37,10 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-int keyring_init(md_config_t *conf)
+int keyring_init(CephContext *cct)
 {
+  md_config_t *conf = cct->_conf;
+
   if (!is_supported_auth(CEPH_AUTH_CEPHX))
     return 0;
 
@@ -88,7 +90,7 @@ int keyring_init(md_config_t *conf)
   return ret;
 }
 
-md_config_t *common_preinit(const CephInitParameters &iparams,
+CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
 {
   // set code environment
@@ -96,7 +98,8 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
 
   // Create a configuration object
   // TODO: de-globalize
-  md_config_t *conf = &g_conf; //new md_config_t();
+  CephContext *cct = &g_ceph_context; //new CephContext();
+  md_config_t *conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
@@ -115,9 +118,7 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
-
-  ceph::crypto::init();
-  return conf;
+  return cct;
 }
 
 void complain_about_parse_errors(std::deque<std::string> *parse_errors)
@@ -145,7 +146,8 @@ void common_init(std::vector < const char* >& args,
 {
   CephInitParameters iparams =
     ceph_argparse_early_args(args, module_type, flags);
-  md_config_t *conf = common_preinit(iparams, code_env, flags);
+  CephContext *cct = common_preinit(iparams, code_env, flags);
+  md_config_t *conf = cct->_conf;
 
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
@@ -195,29 +197,35 @@ void common_init(std::vector < const char* >& args,
   }
 }
 
-// TODO: until this is exposed to libceph/librados somehow, the
-// library users cannot fork and expect to keep using the library
-void common_prefork() {
-  // NSS is evil and breaks in forked children; shut it down properly
-  // and re-init in both parent and child, after the fork
-  ceph::crypto::shutdown();
-}
-
-void common_postfork() {
-  ceph::crypto::init();
-}
-
 static void pidfile_remove_void(void)
 {
   pidfile_remove();
 }
 
-// callers that fork must either use common_init_daemonize for that, or
-// call common_prefork/common_postfork around the bit where they fork
-void common_init_daemonize(const md_config_t *conf)
+/* Map stderr to /dev/null. This isn't really re-entrant; we rely on the old unix
+ * behavior that the file descriptor that gets assigned is the lowest
+ * available one.
+ */
+int common_init_shutdown_stderr(void)
 {
-  common_prefork();
+  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "common_init_shutdown_stderr: open(/dev/null) failed: error "
+	 << err << dendl;
+    return 1;
+  }
+  g_ceph_context._doss->handle_stderr_shutdown();
+  return 0;
+}
 
+void common_init_daemonize(const CephContext *cct, int flags)
+{
+  if (g_code_env != CODE_ENVIRONMENT_DAEMON)
+    return;
+  const md_config_t *conf = cct->_conf;
+  if (!conf->daemonize)
+    return;
   int num_threads = Thread::get_num_threads();
   if (num_threads > 1) {
     derr << "common_init_daemonize: BUG: there are " << num_threads - 1
@@ -225,7 +233,7 @@ void common_init_daemonize(const md_config_t *conf)
     exit(1);
   }
 
-  int ret = daemon(1, 0);
+  int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
     derr << "common_init_daemonize: BUG: daemon error: "
@@ -246,11 +254,51 @@ void common_init_daemonize(const md_config_t *conf)
 	 << "to run at exit." << dendl;
   }
 
-  // move these things into observers.
+  /* This is the old trick where we make file descriptors 0, 1, and possibly 2
+   * point to /dev/null.
+   *
+   * We have to do this because otherwise some arbitrary call to open() later
+   * in the program might get back one of these file descriptors. It's hard to
+   * guarantee that nobody ever writes to stdout, even though they're not
+   * supposed to.
+   */
+  TEMP_FAILURE_RETRY(close(STDIN_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "common_init_daemonize: open(/dev/null) failed: error "
+	 << err << dendl;
+    exit(1);
+  }
+  TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "common_init_daemonize: open(/dev/null) failed: error "
+	 << err << dendl;
+    exit(1);
+  }
+  if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
+    ret = common_init_shutdown_stderr();
+    if (ret) {
+      derr << "common_init_daemonize: common_init_shutdown_stderr failed with "
+	   << "error code " << ret << dendl;
+      exit(1);
+    }
+  }
   pidfile_write(&g_conf);
-  dout_handle_daemonize(&g_conf);
-
+  ret = g_ceph_context._doss->handle_pid_change(&g_conf);
+  if (ret) {
+    derr << "common_init_daemonize: _doss->handle_pid_change failed with "
+	 << "error code " << ret << dendl;
+    exit(1);
+  }
   dout(1) << "finished common_init_daemonize" << dendl;
+}
 
-  common_postfork();
+/* Please be sure that this can safely be called multiple times by the
+ * same application. */
+void common_init_finish(CephContext *cct)
+{
+  ceph::crypto::init();
+  keyring_init(cct);
+  cct->start_service_thread();
 }

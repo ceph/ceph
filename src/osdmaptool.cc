@@ -51,6 +51,7 @@ int main(int argc, const char **argv)
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(&g_ceph_context);
 
   const char *me = argv[0];
 
@@ -158,10 +159,17 @@ int main(int argc, const char **argv)
       cerr << me << ": error reading crush map from " << import_crush << std::endl;
       exit(1);
     }
+
     // validate
     CrushWrapper cw;
     bufferlist::iterator p = cbl.begin();
     cw.decode(p);
+
+    if (cw.get_max_devices() > osdmap.get_max_osd()) {
+      cerr << me << ": crushmap max_devices " << cw.get_max_devices()
+	   << " > osdmap max_osd " << osdmap.get_max_osd() << std::endl;
+      exit(1);
+    }
     
     // apply
     OSDMap::Incremental inc;

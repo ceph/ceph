@@ -219,9 +219,9 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::handle_stderr_closed()
+void DoutStreambuf<charT, traits>::handle_stderr_shutdown()
 {
-  // should hold the dout_lock here
+  DoutLocker _dout_locker;
   flags &= ~DOUTSB_FLAG_STDERR;
 }
 
@@ -299,7 +299,7 @@ template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::
 handle_pid_change(const md_config_t *conf)
 {
-  // should hold the dout_lock here
+  DoutLocker _dout_locker;
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
@@ -381,6 +381,18 @@ DoutStreambuf<charT, traits>::underflow()
   // We can't read from this
   // TODO: some more elegant way of preventing callers from trying to get input from this stream
   assert(0);
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+reopen_logs(const md_config_t *conf)
+{
+  std::set <std::string> changed;
+  const char **keys = get_tracked_conf_keys();
+  for (const char **k = keys; *k; ++k) {
+    changed.insert(*k);
+  }
+  handle_conf_change(conf, changed);
 }
 
 template <typename charT, typename traits>

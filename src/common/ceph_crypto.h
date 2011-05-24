@@ -16,12 +16,10 @@
 # include <cryptopp/hmac.h>
 namespace ceph {
   namespace crypto {
-    static inline void init() {
-      // nothing
-    }
-    static inline void shutdown() {
-      // nothing
-    }
+    void assert_init();
+    void init();
+    void shutdown();
+
     using CryptoPP::Weak::MD5;
     using CryptoPP::SHA1;
     using CryptoPP::SHA256;
@@ -53,6 +51,7 @@ typedef unsigned char byte;
 
 namespace ceph {
   namespace crypto {
+    void assert_init();
     void init();
     void shutdown();
     class Digest {

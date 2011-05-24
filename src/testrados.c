@@ -52,7 +52,7 @@ static void do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 			const char **exkeys, const char **exvals)
 {
 	rados_xattrs_iter_t iter;
-	int len, nval = 0, i, nfound = 0, ret = 0;
+	int nval = 0, i, nfound = 0, ret = 0;
 
 	for (i = 0; exvals[i]; ++i) {
 		++nval;
@@ -63,7 +63,8 @@ static void do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 		exit(1);
 	}
 	while (1) {
-		const char *key, *val;
+	        size_t len;
+	        const char *key, *val;
 		ret = rados_getxattrs_next(iter, &key, &val, &len);
 		if (ret) {
 			printf("rados_getxattrs(%s): rados_getxattrs_next "

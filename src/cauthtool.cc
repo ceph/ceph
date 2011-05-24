@@ -55,6 +55,7 @@ int main(int argc, const char **argv)
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(&g_ceph_context);
   EntityName ename(g_conf.name);
 
   const char *me = argv[0];
@@ -251,10 +252,7 @@ int main(int argc, const char **argv)
     if (bin_keyring) {
       ::encode(keyring, bl);
     } else {
-      std::ostringstream os;
-      keyring.print(os);
-      string str = os.str();
-      bl.append(str);
+      keyring.encode_plaintext(bl);
     }
     r = bl.write_file(fn, 0600);
     if (r < 0) {

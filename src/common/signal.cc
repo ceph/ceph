@@ -13,6 +13,7 @@
  */
 
 #include "common/BackTrace.h"
+#include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/pidfile.h"
 #include "common/debug.h"
@@ -51,10 +52,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 
 void sighup_handler(int signum)
 {
-  /* In the past, users had to send a SIGHUP to the process after making a
-   * change to certain parts of the logging configuration. Now, this is no
-   * longer necessary. Now we want to ignore SIGHUP signals.
-   */
+  g_ceph_context.reopen_logs();
 }
 
 static void reraise_fatal(int signum)

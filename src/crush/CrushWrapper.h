@@ -155,7 +155,11 @@ public:
 
   void find_roots(set<int>& roots) const;
   int insert_device(int id, int weight, string name, map<string,string>& loc);
-  void adjust_item_weight(int id, int weight);
+  int remove_device(int id);
+  int adjust_item_weight(int id, int weight);
+  int adjust_item_weightf(int id, float weight) {
+    return adjust_item_weight(id, (int)(weight * (float)0x10000));
+  }
   void reweight();
 
 
@@ -284,6 +288,18 @@ private:
       return (crush_bucket *)(-ENOENT);
     return ret;
   }
+  crush_bucket *get_bucket(int id) {
+    if (!crush)
+      return (crush_bucket *)(-EINVAL);
+    unsigned int pos = (unsigned int)(-1 - id);
+    unsigned int max_buckets = crush->max_buckets;
+    if (pos >= max_buckets)
+      return (crush_bucket *)(-ENOENT);
+    crush_bucket *ret = crush->buckets[pos];
+    if (ret == NULL)
+      return (crush_bucket *)(-ENOENT);
+    return ret;
+  }
 
 public:
   int get_max_buckets() const {
@@ -349,7 +365,7 @@ public:
     crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
     return crush_add_bucket(crush, bucketno, b);
   }
-
+  
   void finalize() {
     assert(crush);
     crush_finalize(crush);
@@ -438,6 +454,9 @@ public:
 	  ::encode(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], bl);
 	  ::encode(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
 	}
+	break;
+      default:
+	assert(0);
 	break;
       }
     }
@@ -579,12 +598,10 @@ public:
       }
 
       case CRUSH_BUCKET_TREE: {
-	unsigned num_nodes;
 	crush_bucket_tree* cbt = (crush_bucket_tree*)bucket;
-	::decode(num_nodes, blp);
-	cbt->num_nodes = num_nodes;
-	cbt->node_weights = (__u32*)calloc(1, num_nodes * sizeof(__u32));
-	for (unsigned j=0; j<num_nodes; j++) {
+	::decode(cbt->num_nodes, blp);
+	cbt->node_weights = (__u32*)calloc(1, cbt->num_nodes * sizeof(__u32));
+	for (unsigned j=0; j<cbt->num_nodes; j++) {
 	  ::decode(cbt->node_weights[j], blp);
 	}
 	break;

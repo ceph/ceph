@@ -161,7 +161,7 @@ else
         debug ms = 1'
     COSDDEBUG='
         lockdep = 1
-        debug ms = 1
+        debug ms = 20
         debug osd = 25
         debug monc = 20
         debug journal = 20

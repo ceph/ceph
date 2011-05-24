@@ -825,7 +825,7 @@ int main(int argc, const char **argv)
 
   int opt_cmd = OPT_NO_CMD;
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  keyring_init(&g_conf);
+  common_init_finish(&g_ceph_context);
 
   const char *poolname = NULL;
   uint64_t size = 0;
@@ -942,7 +942,7 @@ int main(int argc, const char **argv)
   }
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP);
-  if (talk_to_cluster && rados.init_with_config(&g_conf) < 0) {
+  if (talk_to_cluster && rados.init_with_context(&g_ceph_context) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }

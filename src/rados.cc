@@ -127,7 +127,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       indata.append('\n');
     }
   } else {
-    int fd = open(infile, O_RDONLY);
+    int ret, fd = open(infile, O_RDONLY);
     if (fd < 0) {
       char buf[80];
       cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -147,7 +147,10 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
         continue;
       }
       indata.append(buf, count);
-      int ret = io_ctx.write(oid, indata, count, offset);
+      if (offset == 0)
+	ret = io_ctx.write_full(oid, indata);
+      else
+	ret = io_ctx.write(oid, indata, count, offset);
       indata.clear();
 
       if (ret < 0) {
@@ -203,7 +206,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // open rados
   Rados rados;
-  ret = rados.init_with_config(&g_conf);
+  ret = rados.init_with_context(&g_ceph_context);
   if (ret) {
      cerr << "couldn't initialize rados! error " << ret << std::endl;
      return ret;
@@ -659,7 +662,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  keyring_init(&g_conf);
+  common_init_finish(&g_ceph_context);
 
   std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;

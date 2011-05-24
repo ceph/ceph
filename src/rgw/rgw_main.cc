@@ -75,6 +75,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(&g_ceph_context);
 
   if (!RGWAccess::init_storage_provider("rados", &g_conf)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
@@ -83,7 +84,6 @@ int main(int argc, const char **argv)
 
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
-  common_postfork();
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {

@@ -187,6 +187,13 @@ private:
             << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
         m->put();
       }
+
+      if (sent.empty() && close_on_empty) {
+	// this is slightly hacky
+	dout(10) << "reader got last ack, queue empty, closing" << dendl;
+	policy.lossy = true;
+	fault();
+      }
     }
 
     // threads

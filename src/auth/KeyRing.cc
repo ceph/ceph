@@ -14,6 +14,7 @@
 
 #include <errno.h>
 #include <map>
+#include <sstream>
 
 #include "common/config.h"
 #include "common/debug.h"
@@ -64,6 +65,13 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
   return 0;
 }
 
+void KeyRing::encode_plaintext(bufferlist& bl)
+{
+  std::ostringstream os;
+  print(os);
+  string str = os.str();
+  bl.append(str);
+}
 
 void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 {

@@ -23,13 +23,27 @@
 
 class MOSDPing : public Message {
  public:
+  enum {
+    HEARTBEAT = 0,
+    REQUEST_HEARTBEAT = 1,
+    YOU_DIED = 2,
+  };
+  const char *get_op_name(int op) {
+    switch (op) {
+    case HEARTBEAT: return "heartbeat";
+    case REQUEST_HEARTBEAT: return "request_heartbeat";
+    case YOU_DIED: return "you_died";
+    default: return "???";
+    }
+  }
+
   ceph_fsid_t fsid;
   epoch_t map_epoch, peer_as_of_epoch;
-  bool ack;
+  __u8 op;
   osd_peer_stat_t peer_stat;
 
-  MOSDPing(const ceph_fsid_t& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, bool a=false) : 
-    Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), ack(a), peer_stat(ps) { }
+  MOSDPing(const ceph_fsid_t& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, __u8 o=HEARTBEAT) : 
+    Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o), peer_stat(ps) { }
   MOSDPing() {}
 private:
   ~MOSDPing() {}
@@ -40,23 +54,21 @@ public:
     ::decode(fsid, p);
     ::decode(map_epoch, p);
     ::decode(peer_as_of_epoch, p);
-    ::decode(ack, p);
+    ::decode(op, p);
     ::decode(peer_stat, p);
   }
   void encode_payload() {
     ::encode(fsid, payload);
     ::encode(map_epoch, payload);
     ::encode(peer_as_of_epoch, payload);
-    ::encode(ack, payload);
+    ::encode(op, payload);
     ::encode(peer_stat, payload);
   }
 
   const char *get_type_name() { return "osd_ping"; }
   void print(ostream& out) {
-    out << "osd_ping(e" << map_epoch << " as_of " << peer_as_of_epoch;
-    if (ack)
-      out << " ACK";
-    out << ")";
+    out << "osd_ping(e" << map_epoch << " as_of " << peer_as_of_epoch
+	<< " " << get_op_name(op) << ")";
   }
 };
 

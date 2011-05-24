@@ -83,10 +83,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!mkfs)
-    keyring_init(&g_conf);
-
   if (dump_pg_log) {
+    common_init_finish(&g_ceph_context);
     bufferlist bl;
     int r = bl.read_file(dump_pg_log);
     if (r >= 0) {
@@ -123,13 +121,12 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  // get monmap
-  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
-  MonClient mc(&rkeys);
-  if (mc.build_initial_monmap() < 0)
-    return -1;
-
   if (mkfs) {
+    common_init_finish(&g_ceph_context);
+    RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
+    MonClient mc(&rkeys);
+    if (mc.build_initial_monmap() < 0)
+      return -1;
     if (mc.get_monmap_privately() < 0)
       return -1;
 
@@ -145,12 +142,13 @@ int main(int argc, const char **argv)
     *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
+    common_init_finish(&g_ceph_context);
     EntityName ename(g_conf.name);
     EntityAuth eauth;
     eauth.key.create(CEPH_CRYPTO_AES);
     g_keyring.add(ename, eauth);
     bufferlist bl;
-    ::encode(g_keyring, bl);
+    g_keyring.encode_plaintext(bl);
     int r = bl.write_file(g_conf.keyring.c_str(), 0600);
     if (r)
       derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf.keyring
@@ -161,6 +159,7 @@ int main(int argc, const char **argv)
   if (mkfs || mkkey)
     exit(0);
   if (mkjournal) {
+    common_init_finish(&g_ceph_context);
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
@@ -173,6 +172,7 @@ int main(int argc, const char **argv)
     exit(0);
   }
   if (flushjournal) {
+    common_init_finish(&g_ceph_context);
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
@@ -270,11 +270,17 @@ int main(int argc, const char **argv)
   cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 				SimpleMessenger::Policy::stateless_server(0, 0));
 
-
+  // Set up crypto, daemonize, etc.
+  // Leave stderr open in case we need to report errors.
+  common_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
+  common_init_finish(&g_ceph_context);
+  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
+  MonClient mc(&rkeys);
+  if (mc.build_initial_monmap() < 0)
+    return -1;
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
 		     g_conf.osd_data, g_conf.osd_journal);
-
   int err = osd->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
@@ -282,8 +288,9 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  if (g_conf.daemonize)
-    common_init_daemonize(&g_conf);
+  // Now close the standard file descriptors
+  common_init_shutdown_stderr();
+
   client_messenger->start();
   messenger_hb->start();
   cluster_messenger->start();

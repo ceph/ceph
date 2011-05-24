@@ -26,7 +26,7 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 
-struct md_config_t;
+struct CephContext;
 
 typedef void *rados_t;
 typedef void *rados_ioctx_t;
@@ -57,7 +57,7 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_create(rados_t *cluster, const char * const id);
 
 /* initialize rados with an existing configuration. */
-int rados_create_with_config(rados_t *cluster, struct md_config_t *conf);
+int rados_create_with_context(rados_t *cluster, struct CephContext *cct_);
 
 /* Connect to the cluster */
 int rados_connect(rados_t cluster);
@@ -153,7 +153,7 @@ int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
 
 int rados_getxattrs(rados_ioctx_t io, const char *oid, rados_xattrs_iter_t *iter);
 int rados_getxattrs_next(rados_xattrs_iter_t iter, const char **name,
-			 const char **val, int *len);
+			 const char **val, size_t *len);
 void rados_getxattrs_end(rados_xattrs_iter_t iter);
 
 /* misc */
