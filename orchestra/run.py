@@ -132,7 +132,7 @@ def spawn_asyncresult(fn, *args, **kwargs):
             r.set_exception(e)
         else:
             r.set(value)
-    g = gevent.spawn(wrapper)
+    gevent.spawn(wrapper)
 
     return r
 
