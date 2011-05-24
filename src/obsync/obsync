@@ -29,6 +29,7 @@ import mimetypes
 import os
 from StringIO import StringIO
 import rados
+import rgw
 import re
 import shutil
 import string
@@ -45,7 +46,8 @@ global opts
 global xuser
 
 # Librgw instance
-global rgw
+global lrgw
+lrgw = None
 
 ###### Constants #######
 ACL_XATTR = "rados.acl"
@@ -776,8 +778,9 @@ class RgwStoreIterator(object):
 
 class RgwStore(Store):
     def __init__(self, url, create, akey, skey, owner):
-        if (rgw == None):
-            rgw = Rgw()
+        global lrgw
+        if (lrgw == None):
+            lrgw = rgw.Rgw()
         self.owner = owner
         # Parse the rados url
         conf_end = string.find(url, ":")
@@ -811,7 +814,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             # Figure out what owner we should use when creating objects.
             # We use the owner of the destination bucket
             bin_ = meta_ctx.get_xattr(self.rgw_bucket_name, "user.rgw.acl")
-            xml = rgw.acl_bin2xml(bin_)
+            xml = lrgw.acl_bin2xml(bin_)
             acl = AclPolicy.from_xml(obj.name, xml)
             self.bucket_owner = acl.owner_id
             if (self.more_verbose):
@@ -819,6 +822,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
         Store.__init__(self, "rgw:" + url)
     def create_rgw_bucket(self, rgw_bucket_name):
+        global lrgw
         """ Create an rgw bucket named 'rgw_bucket_name' """
         if (self.bucket_owner == None):
             raise Exception("Can't create a bucket without knowing who " +
@@ -829,7 +833,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             meta_ctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
             meta_ctx.write(rgw_bucket_name, "", 0)
             print "meta_ctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
-                    "user.rgw.acl=" + self.acl_hack + ")"
+                    "user.rgw.acl=" + self.dst_owner + ")"
             new_bucket_acl = "\
 <AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"> \
 <Owner><ID>%s</ID></Owner><AccessControlList>\
@@ -838,7 +842,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
 <DisplayName>display-name</DisplayName></Grantee> \
 <Permission>FULL_CONTROL</Permission></Grant>\
 </AccessControlList></AccessControlPolicy>" % (self.dst_owner, self.dst_owner)
-            new_bucket_acl_bin = rgw.acl_xml2bin(new_bucket_acl)
+            new_bucket_acl_bin = lrgw.acl_xml2bin(new_bucket_acl)
             meta_ctx.set_xattr(rgw_bucket_name, "user.rgw.acl", new_bucket_acl_bin)
         finally:
             if (meta_ctx):
@@ -865,11 +869,12 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
     def __str__(self):
         return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
     def get_acl(self, obj):
+        global lrgw
         try:
             bin_ = self.ioctx.get_xattr(obj.name, ACL_XATTR)
         except rados.ObjectNotFound:
             return LocalAcl.get_empty(obj.name)
-        xml = rgw.acl_bin2xml(bin_)
+        xml = lrgw.acl_bin2xml(bin_)
         return LocalAcl.from_xml(obj.name, xml)
     def make_local_copy(self, obj):
         temp_file = None
@@ -900,6 +905,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
     def upload(self, local_copy, src_acl, obj):
+        global lrgw
         if (opts.more_verbose):
             print "RgwStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
@@ -918,7 +924,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
         if (src_acl.acl_policy != None):
             xml = src_acl.acl_policy.to_xml()
-            bin_ = rgw.acl_xml2bin(xml)
+            bin_ = lrgw.acl_xml2bin(xml)
             self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
         for k,v in obj.meta.items():
             self.ioctx.set_xattr(obj.name,
