@@ -60,18 +60,15 @@ int CrushWrapper::remove_item(int item)
   return ret;
 }
 
-int CrushWrapper::insert_device(int item, int weight, string name,
+int CrushWrapper::insert_item(int item, int weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
-  cout << "insert_device item " << item << " weight " << weight
+  cout << "insert_item item " << item << " weight " << weight
 	  << " name " << name << " loc " << loc << std::endl;
 
   if (name_exists(name.c_str())) {
-    cerr << "error: device name '" << name << "' already exists" << std::endl;
-    return -EEXIST;
-  }
-  if (item_exists(item)) {
-    cerr << "error: device id '" << item << "' already exists" << std::endl;
+    cerr << "error: device name '" << name << "' already exists as id "
+	 << get_item_id(name.c_str()) << std::endl;
     return -EEXIST;
   }
 
@@ -90,7 +87,7 @@ int CrushWrapper::insert_device(int item, int weight, string name,
     int id = get_item_id(loc[p->second].c_str());
     if (!id) {
       // create the bucket
-      cout << "insert_device creating bucket " << loc[p->second] << std::endl;
+      cout << "insert_item creating bucket " << loc[p->second] << std::endl;
       int empty = 0;
       id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &item, &empty);
       set_item_name(id, loc[p->second].c_str());
@@ -100,14 +97,22 @@ int CrushWrapper::insert_device(int item, int weight, string name,
 
     // add to an existing bucket
     if (!bucket_exists(id)) {
-      cout << "insert_device don't have bucket " << id << std::endl;
+      cout << "insert_item don't have bucket " << id << std::endl;
       return -EINVAL;
     }
-      
-    cout << "insert_device adding " << item << " weight " << weight
-	    << " to bucket " << id << std::endl;
+
     crush_bucket *b = get_bucket(id);
     assert(b);
+
+    // make sure the item doesn't already exist in this bucket
+    for (unsigned j=0; j<b->size; j++)
+      if (b->items[j] == item) {
+	cerr << "insert_item " << item << " already exists in bucket " << b->id << std::endl;
+	return -EEXIST;
+      }
+    
+    cout << "insert_item adding " << item << " weight " << weight
+	 << " to bucket " << id << std::endl;
     crush_bucket_add_item(b, item, 0);
     adjust_item_weight(item, weight);
     return 0;
