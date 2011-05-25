@@ -759,8 +759,8 @@ class RgwStoreIterator(object):
     def __init__(self, it, rgw_store):
         self.it = it # has type rados.ObjectIterator
         self.rgw_store = rgw_store
-        self.prefix = self.rgw_store.prefix
-        self.prefix_len = len(self.rgw_store.prefix)
+#        self.prefix = self.rgw_store.prefix
+#        self.prefix_len = len(self.rgw_store.prefix)
     def __iter__(self):
         return self
     def next(self):
@@ -770,8 +770,8 @@ class RgwStoreIterator(object):
             # iterate on
             rados_obj = self.it.next()
             # do the prefixes match?
-            if rados_obj.key[:self.prefix_len] == self.prefix:
-                break
+#            if rados_obj.key[:self.prefix_len] == self.prefix:
+#                break
         ret = self.rgw_store.obsync_obj_from_rgw(rados_obj.key)
         if (ret == None):
             raise Exception("internal iterator error")
@@ -817,13 +817,10 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             ioctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
             try:
                 bin_ = ioctx.get_xattr(self.rgw_bucket_name, RGW_META_ACL)
-                print "bin_ = %s" % type(bin_)
-                print "self.rgw_bucket_name=%s, len(bin_) = %d" % \
-                    (self.rgw_bucket_name, len(bin_))
                 xml = lrgw.acl_bin2xml(bin_)
-                acl = AclPolicy.from_xml(obj.name, xml)
+                acl = AclPolicy.from_xml(xml)
                 self.bucket_owner = acl.owner_id
-                if (self.more_verbose):
+                if (opts.more_verbose):
                     print "using owner \"%s\"" % self.bucket_owner
             finally:
                ioctx.close()
@@ -875,7 +872,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
                 "extended attribute %s" % (obj, RGW_META_ETAG))
         return Object(key, md5, size, meta)
     def __str__(self):
-        return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
+        return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name
     def get_acl(self, obj):
         global lrgw
         try:
@@ -908,8 +905,8 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
             raise
         return LocalCopy(obj.name, temp_file.name, True)
     def all_objects(self):
-        it = self.bucket.list_objects()
-        return RgwStoreIterator(it, self.key_prefix)
+        it = self.ioctx.list_objects()
+        return RgwStoreIterator(it, self)
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
     def upload(self, local_copy, src_acl, obj):
@@ -1023,6 +1020,8 @@ parser.add_option("-c", "--create-dest", action="store_true", \
 parser.add_option("--delete-before", action="store_true", \
     dest="delete_before", help="delete objects that aren't in SOURCE from \
 DESTINATION before transferring any objects")
+parser.add_option("--boto-retries", dest="boto_retries", type="int",
+    help="set number of times we'll retry the same S3 operation")
 parser.add_option("-d", "--delete-after", action="store_true", \
     dest="delete_after", help="delete objects that aren't in SOURCE from \
 DESTINATION after doing all transfers.")
@@ -1048,6 +1047,11 @@ xuser = {}
 if (opts.run_unit_tests):
     test_acl_policy()
     sys.exit(0)
+
+if opts.boto_retries != None:
+    if not boto.config.has_section('Boto'):
+        boto.config.add_section('Boto')
+    boto.config.set('Boto', 'num_retries', str(opts.boto_retries))
 
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):

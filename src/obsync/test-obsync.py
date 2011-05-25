@@ -132,6 +132,7 @@ def obsync(src, dst, misc):
     else:
         dst.to_dst(env, full)
     full.extend(misc)
+    full.append("--boto-retries=1")
     if (opts.more_verbose):
         for k,v in env.items():
             print str(k) + "=" + str(v) + " ",
