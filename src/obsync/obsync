@@ -55,6 +55,7 @@ META_XATTR_PREFIX = "rados.meta."
 CONTENT_TYPE_XATTR = "rados.content_type"
 
 RGW_META_BUCKET_NAME = ".rgw"
+RGW_USERS_UID_BUCKET_NAME = ".users.uid"
 RGW_META_ETAG = "user.rgw.etag"
 RGW_META_PREFIX = "user.x-amz-meta-"
 RGW_META_CONTENT_TYPE = "user.content_type"
@@ -792,6 +793,8 @@ class RgwStore(Store):
         if (lrgw == None):
             lrgw = rgw.Rgw()
         self.owner = owner
+        self.user_exists_cache = {}
+        self.users_uid_ioctx = None
         print "self.owner = %s" % (self.owner)
         # Parse the rados url
         conf_end = string.find(url, ":")
@@ -816,6 +819,8 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         self.rados = rados.Rados()
         self.rados.conf_read_file(self.conf_file_path)
         self.rados.connect()
+        if self.owner != None and not self.user_exists(self.owner):
+            raise Exception("Unknown owner! DST_OWNER=%s" % self.owner)
         if (not self.rados.pool_exists(self.rgw_bucket_name)):
             if (create):
                 self.create_rgw_bucket(self.rgw_bucket_name)
@@ -919,6 +924,18 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         return RgwStoreIterator(it, self)
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
+    def user_exists(self, user_id):
+        if (self.user_exists_cache.has_key(user_id)):
+            return self.user_exists_cache[user_id]
+        if (self.users_uid_ioctx == None):
+            # will be closed in __del__
+            self.users_uid_ioctx = self.rados.open_ioctx(RGW_USERS_UID_BUCKET_NAME)
+        try:
+            self.users_uid_ioctx.stat(user_id)
+        except rados.ObjectNotFound:
+            return False
+        self.user_exists_cache[user_id] = True
+        return True
     def upload(self, local_copy, src_acl, obj):
         global lrgw
         if (opts.more_verbose):
