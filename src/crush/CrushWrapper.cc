@@ -17,48 +17,32 @@ void CrushWrapper::find_roots(set<int>& roots) const
 }
 
 
-int CrushWrapper::remove_device(int item)
+int CrushWrapper::remove_item(int item)
 {
-  cout << "remove_device item" << std::endl;
+  cout << "remove_item " << item << std::endl;
 
   crush_bucket *was_bucket = 0;
   int ret = -ENOENT;
 
-  set<int> roots;
-  find_roots(roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
-    list<int> q;
-    q.push_back(*p);
-    while (!q.empty()) {
-      int id = q.front();
-      q.pop_front();
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
 
-      if (id >= 0)
-	continue;  // it's a leaf.
-
-      crush_bucket *b = get_bucket(id);
-      if (!b) {
-	cout << "remove_device warning: bad reference to bucket " << id << std::endl;
-	continue;
-      }
-
-      for (unsigned i=0; i<b->size; ++i) {
-	int id = b->items[i];
-	if (id == item) {
-	  if (item < 0) {
-	    crush_bucket *t = get_bucket(item);
-	    if (t && t->size) {
-	      cout << "remove_device bucket " << item << " has " << t->size << " items, not empty" << std::endl;
-	      return -ENOTEMPTY;
-	    }	    
-	    was_bucket = t;
-	  }
-	  cout << "remove_device removing item " << item << " from bucket " << b->id << std::endl;
-	  crush_bucket_remove_item(b, item);
-	  ret = 0;
+    for (unsigned i=0; i<b->size; ++i) {
+      int id = b->items[i];
+      if (id == item) {
+	if (item < 0) {
+	  crush_bucket *t = get_bucket(item);
+	  if (t && t->size) {
+	    cout << "remove_device bucket " << item << " has " << t->size << " items, not empty" << std::endl;
+	    return -ENOTEMPTY;
+	  }	    
+	  was_bucket = t;
 	}
-	if (id < 0)
-	  q.push_front(id);
+	cout << "remove_device removing item " << item << " from bucket " << b->id << std::endl;
+	crush_bucket_remove_item(b, item);
+	ret = 0;
       }
     }
   }
@@ -67,6 +51,11 @@ int CrushWrapper::remove_device(int item)
     cout << "remove_device removing bucket " << item << std::endl;
     crush_remove_bucket(crush, was_bucket);
   }
+  if (item >= 0 && name_map.count(item)) {
+    name_map.erase(item);
+    have_rmaps = false;
+    ret = 0;
+  }  
   
   return ret;
 }

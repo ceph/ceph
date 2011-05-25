@@ -1075,7 +1075,7 @@ int main(int argc, const char **argv)
       r = -ENOENT;
     } else {
       int remove_item = crush.get_item_id(remove_name);
-      r = crush.remove_device(remove_item);
+      r = crush.remove_item(remove_item);
     }
     if (r == 0)
       modified = true;

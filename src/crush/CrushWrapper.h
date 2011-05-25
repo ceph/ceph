@@ -155,7 +155,7 @@ public:
 
   void find_roots(set<int>& roots) const;
   int insert_device(int id, int weight, string name, map<string,string>& loc);
-  int remove_device(int id);
+  int remove_item(int id);
   int adjust_item_weight(int id, int weight);
   int adjust_item_weightf(int id, float weight) {
     return adjust_item_weight(id, (int)(weight * (float)0x10000));
