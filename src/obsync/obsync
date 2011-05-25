@@ -58,8 +58,12 @@ RGW_META_BUCKET_NAME = ".rgw"
 RGW_USERS_UID_BUCKET_NAME = ".users.uid"
 RGW_META_ETAG = "user.rgw.etag"
 RGW_META_PREFIX = "user.x-amz-meta-"
-RGW_META_CONTENT_TYPE = "user.content_type"
+RGW_META_CONTENT_TYPE = "user.rgw.content_type"
 RGW_META_ACL = "user.rgw.acl"
+
+def vvprint(s):
+    if (opts.more_verbose):
+        print s
 
 ###### Exception classes #######
 class InvalidLocalName(Exception):
@@ -399,21 +403,27 @@ class Object(object):
         self.meta = meta
     def equals(self, rhs):
         if (self.name != rhs.name):
+            vvprint("EQUALS: self.name = %s, rhs.name = %s" % (self.name, rhs.name))
             return False
         if (self.md5 != rhs.md5):
+            vvprint("EQUALS: self.md5 = %s, rhs.md5 = %s" % (self.md5, rhs.md5))
             return False
         if (self.size != rhs.size):
+            vvprint("EQUALS: self.size = %d, rhs.size = %d" % (self.size, rhs.size))
             return False
         for k,v in self.meta.items():
             if (not rhs.meta.has_key(k)):
+                vvprint("EQUALS: rhs.meta lacks key %s" % k)
                 return False
             if (rhs.meta[k] != v):
+                vvprint("EQUALS: self.meta[%s] = %s, rhs.meta[%s] = %s" % \
+                    (k, v, k, rhs.meta[k]))
                 return False
         for k,v in rhs.meta.items():
             if (not self.meta.has_key(k)):
+                vvprint("EQUALS: self.meta lacks key %s" % k)
                 return False
-            if (self.meta[k] != v):
-                return False
+        vvprint("EQUALS: the objects are equal.")
         return True
     def local_name(self):
         return s3_name_to_local_name(self.name)
@@ -769,8 +779,8 @@ class RgwStoreIterator(object):
     def __init__(self, it, rgw_store):
         self.it = it # has type rados.ObjectIterator
         self.rgw_store = rgw_store
-#        self.prefix = self.rgw_store.prefix
-#        self.prefix_len = len(self.rgw_store.prefix)
+        self.prefix = self.rgw_store.key_prefix
+        self.prefix_len = len(self.rgw_store.key_prefix)
     def __iter__(self):
         return self
     def next(self):
@@ -780,8 +790,8 @@ class RgwStoreIterator(object):
             # iterate on
             rados_obj = self.it.next()
             # do the prefixes match?
-#            if rados_obj.key[:self.prefix_len] == self.prefix:
-#                break
+            if rados_obj.key[:self.prefix_len] == self.prefix:
+                break
         ret = self.rgw_store.obsync_obj_from_rgw(rados_obj.key)
         if (ret == None):
             raise Exception("internal iterator error")
@@ -795,7 +805,6 @@ class RgwStore(Store):
         self.owner = owner
         self.user_exists_cache = {}
         self.users_uid_ioctx = None
-        print "self.owner = %s" % (self.owner)
         # Parse the rados url
         conf_end = string.find(url, ":")
         if (conf_end == -1):
@@ -867,32 +876,37 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         finally:
             if (ioctx):
                ioctx.close()
-    def obsync_obj_from_rgw(self, obj):
+    def obsync_obj_from_rgw(self, obj_name):
         """Create an obsync object from a Rados object"""
         try:
-            size, tm = self.ioctx.stat(obj)
+            size, tm = self.ioctx.stat(obj_name)
         except rados.ObjectNotFound:
             return None
         md5 = None
         meta = {}
-        for k,v in self.ioctx.get_xattrs(obj):
+        for k,v in self.ioctx.get_xattrs(obj_name):
             if k == RGW_META_ETAG:
                 md5 = v
             elif k == RGW_META_CONTENT_TYPE:
                 meta[CONTENT_TYPE_XATTR] = v
-            elif k[:RGW_META_PREFIX] == RGW_META_PREFIX:
+            elif k[:len(RGW_META_PREFIX)] == RGW_META_PREFIX:
                 meta["rados.meta." + k[RGW_META_PREFIX:]] = v
+            elif opts.more_verbose:
+                print "ignoring unknown xattr " + k
         if (md5 == None):
             raise RuntimeError("error on object %s: expected to find " + \
-                "extended attribute %s" % (obj, RGW_META_ETAG))
-        return Object(key, md5, size, meta)
+                "extended attribute %s" % (obj_name, RGW_META_ETAG))
+        if (opts.more_verbose):
+            print "meta = " + str(meta)
+        return Object(obj_name, md5, size, meta)
     def __str__(self):
         return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name
     def get_acl(self, obj):
         global lrgw
+        bin_ = None
         try:
-            bin_ = self.ioctx.get_xattr(obj.name, ACL_XATTR)
-        except rados.ObjectNotFound:
+            bin_ = self.ioctx.get_xattr(obj.name, RGW_META_ACL)
+        except rados.NoData:
             return LocalAcl.get_empty(obj.name)
         xml = lrgw.acl_bin2xml(bin_)
         return LocalAcl.from_xml(obj.name, xml)
@@ -903,8 +917,9 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
             # read the object from rgw in chunks
             temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
             temp_file_f = open(temp_file.name, 'w')
+            off = 0
             while True:
-                buf = self.ioctx.read(obj.name, off, 8192)
+                buf = self.ioctx.read(obj.name, offset = off, length = 8192)
                 if (len(buf) == 0):
                     break
                 temp_file_f.write(buf)

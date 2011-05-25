@@ -505,6 +505,10 @@ if (whole_file != "a"):
 if (opts.verbose):
     print "successfully copied a directory with --follow-symlinks"
 
+# empty out bucket[0]
+obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
+            ["--delete-after"])
+
 # rgw target tests
 if len(opts.pools) > 0:
     print "testing rgw target"
@@ -514,7 +518,8 @@ if len(opts.pools) > 0:
     f.close()
     obsync_check("%s/rgw1" % tdir, opts.pools[0], [])
     print "testing rgw source"
-    obsync_check(opts.pools[0], "%s/rgw1" % tdir, ["-c"])
+    obsync_check(opts.pools[0], "%s/rgw2" % tdir, ["-c"])
+    compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir)
 #    print "testing rgw target with --create"
 #    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
 
