@@ -1705,12 +1705,15 @@ void PG::replay_queued_ops()
 
 void PG::_activate_committed(epoch_t e)
 {
-  if (e < info.history.same_acting_since) {
-    dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
-    return;
-  }
+  osd->map_lock.get_read();
+  lock();
+  epoch_t cur_epoch = osd->osdmap->get_epoch();
+  entity_inst_t primary = osd->osdmap->get_cluster_inst(acting[0]);
+  osd->map_lock.put_read();
 
-  if (is_primary()) {
+  if (e < last_warm_restart) {
+    dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
+  } else if (is_primary()) {
     peer_activated.insert(osd->whoami);
     dout(10) << "_activate_committed " << e << " peer_activated now " << peer_activated 
 	     << " last_epoch_started " << info.history.last_epoch_started
@@ -1719,12 +1722,13 @@ void PG::_activate_committed(epoch_t e)
       all_activated_and_committed();
   } else {
     dout(10) << "_activate_committed " << e << " telling primary" << dendl;
-    MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
+    MOSDPGInfo *m = new MOSDPGInfo(cur_epoch);
     PG::Info i = info;
     i.history.last_epoch_started = e;
     m->pg_info.push_back(i);
-    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(acting[0]));
+    osd->cluster_messenger->send_message(m, primary);
   }
+  unlock();
 }
 
 /*
