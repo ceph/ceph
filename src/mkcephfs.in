@@ -86,6 +86,8 @@ adminkeyring=""
 conf=""
 dir=""
 moreargs=""
+auto_action=0
+manual_action=0
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -99,27 +101,33 @@ case $1 in
 	    ;;
     --allhosts | -a)
 	    allhosts=1
+            auto_action=1
 	    ;;
     --prepare-monmap)
 	    preparemonmap=1
+            manual_action=1
 	    ;;
     --prepare-osdfs)
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    prepareosdfs=$1
+            manual_action=1
 	    ;;
     --init-daemon)
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    initdaemon=$1
+            manual_action=1
 	    ;;
     --init-local-daemons)
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    initlocaldaemons=$1
+            manual_action=1
 	    ;;
     --prepare-mon)
 	    preparemon=1
+            manual_action=1
 	    ;;
     --mkbtrfs)
 	    mkbtrfs=1
@@ -169,14 +177,15 @@ done
 
 [ -z "$conf" ] && [ -n "$dir" ] && conf="$dir/conf"
 
-if [ $allhosts -eq 1 ]; then
-    if [ $preparemonmap -eq 1 ] || [ -n "$initdaemon" ] || [ -n "$initlocaldaemons" ] || [ -n "$prepareosdfs" ] || [ -n "$preparemon" ] ; then
-	echo "The -a option cannot be combined with other subcommands; see man page."
-	usage_exit
+if [ $manual_action -eq 0 ]; then
+    if [ $auto_action -eq 0 ]; then
+        echo "You must specify an action. See man page."
+        usage_exit
     fi
+elif [ $auto_action -eq 1 ]; then
+    echo "The -a option cannot be combined with other subcommands; see man page."
+    usage_exit
 fi
-
-
 
 ### prepare-monmap ###
 
