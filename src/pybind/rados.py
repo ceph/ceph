@@ -214,7 +214,7 @@ class ObjectIterator(object):
         ret = self.ioctx.librados.rados_objects_list_next(self.ctx, byref(key))
         if ret < 0:
             raise StopIteration()
-        return Object(self.ioctx, key)
+        return Object(self.ioctx, key.value)
 
     def __del__(self):
         self.ioctx.librados.rados_objects_list_close(self.ctx)
