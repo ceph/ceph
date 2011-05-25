@@ -1488,7 +1488,7 @@ void OSD::update_heartbeat_peers()
 
     // share latest map with this peer so they know not to expect
     // heartbeats from us.  otherwise they may mark us down!
-    if (osdmap->is_up(p->first)) {
+    if (osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _to peer osd" << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1512,7 +1512,7 @@ void OSD::update_heartbeat_peers()
       continue;
 
     // share latest map with this peer, just to be nice.
-    if (osdmap->is_up(p->first)) {
+    if (osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd" << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1531,7 +1531,7 @@ void OSD::update_heartbeat_peers()
   for (map<int, Connection*>::iterator p = down.begin(); p != down.end(); ++p) {
     Connection *con = p->second;
     heartbeat_messenger->mark_disposable(con);
-    if (!osdmap->is_up(p->first)) {
+    if (!osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: telling old peer osd" << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
@@ -1616,9 +1616,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (locked) {
 	dout(20) << "handle_osd_ping " << m->get_source_inst()
 		 << " took stat " << m->peer_stat << dendl;
-	if (m->map_epoch && !is_booting())
-	  _share_map_incoming(m->get_source_inst(), m->map_epoch,
-			      (Session*) m->get_connection()->get_priv());
 	take_peer_stat(from, m->peer_stat);  // only with map_lock held!
       } else {
 	dout(20) << "handle_osd_ping " << m->get_source_inst()
@@ -1626,6 +1623,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
       }
 
       note_peer_epoch(from, m->map_epoch);
+      if (locked && !is_booting())
+	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
       heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
       
@@ -2481,6 +2480,8 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
   assert(inst.name.is_osd());
 
   int peer = inst.name.num();
+
+  assert(!is_booting());
 
   // send map?
   epoch_t pe = get_peer_epoch(peer);
