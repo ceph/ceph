@@ -820,8 +820,12 @@ int RGWHandler::do_read_permissions(bool only_bucket)
 {
   int ret = read_acls(s, only_bucket);
 
-  if (ret < 0)
+  if (ret < 0) {
     RGW_LOG(10) << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
+    if (ret == -ENODATA)
+      ret = -EACCES;
+  }
+
 
   return ret;
 }
