@@ -18,7 +18,7 @@ class RGWAccess {
 public:
   virtual ~RGWAccess();
   /** do all necessary setup of the storage device */
-  virtual int initialize(md_config_t *conf) { return 0; }
+  virtual int initialize(CephContext *cct) = 0;
   /** prepare a listing of all buckets. */
   virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle) = 0;
   /** get the next bucket in the provided listing context. */
@@ -184,7 +184,7 @@ public:
    * Given the name of the storage provider, initialize it
    * with the given arguments.
    */
-  static RGWAccess *init_storage_provider(const char *type, md_config_t *conf);
+  static RGWAccess *init_storage_provider(const char *type, CephContext *cct);
   static RGWAccess *store;
 };
 

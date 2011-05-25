@@ -26,6 +26,11 @@ struct rgwfs_state {
 
 #define DIR_NAME "/tmp/radosgw"
 
+int RGWFS::initialize(CephContext *cct)
+{
+  return 0;
+}
+
 int RGWFS::list_buckets_init(string& id, RGWAccessHandle *handle)
 {
   DIR *dir = opendir(DIR_NAME);

@@ -396,7 +396,7 @@ int main(int argc, char **argv)
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM);
 
-  store = RGWAccess::init_storage_provider("rados", &g_conf);
+  store = RGWAccess::init_storage_provider("rados", &g_ceph_context);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
