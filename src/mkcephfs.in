@@ -61,6 +61,7 @@ fi
 
 usage_exit() {
     echo "usage: $0 -a -c ceph.conf [-k adminkeyring] [--mkbtrfs]"
+    echo "   to generate a new ceph cluster on all nodes; for advanced usage see man page"
     echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
     exit
 }
@@ -167,6 +168,14 @@ done
 
 
 [ -z "$conf" ] && [ -n "$dir" ] && conf="$dir/conf"
+
+if [ $allhosts -eq 1 ]; then
+    if [ $preparemonmap -eq 1 ] || [ -n "$initdaemon" ] || [ -n "$initlocaldaemons" ] || [ -n "$prepareosdfs" ] || [ -n "$preparemon" ] ; then
+	echo "The -a option cannot be combined with other subcommands; see man page."
+	usage_exit
+    fi
+fi
+
 
 
 ### prepare-monmap ###
