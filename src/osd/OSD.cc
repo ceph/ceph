@@ -1589,10 +1589,28 @@ void OSD::handle_osd_ping(MOSDPing *m)
   int from = m->get_source().num();
 
   bool locked = map_lock.try_get_read();
+  
+  // ignore (and mark down connection for) old messages 
+  epoch_t e = m->map_epoch;
+  if (!e)
+    e = m->peer_as_of_epoch;
+  if (e <= osdmap->get_epoch() &&
+      ((heartbeat_to.count(from) == 0 && heartbeat_from.count(from) == 0) ||
+       heartbeat_con[from] != m->get_connection())) {
+    dout(5) << "handle_osd_ping marking down peer " << m->get_source_inst()
+	    << " after old message from epoch " << e
+	    << " <= current " << osdmap->get_epoch() << dendl;
+    heartbeat_messenger->mark_down(m->get_connection());
+    goto out;
+  } 
 
   switch (m->op) {
   case MOSDPing::REQUEST_HEARTBEAT:
-    if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
+    if (m->peer_as_of_epoch <= osdmap->get_epoch()) {
+      dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
+	      << " request for heartbeats as_of " << m->peer_as_of_epoch
+	      << " <= current " << osdmap->get_epoch() << dendl;
+    } else if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
       dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
 	      << " request for heartbeats as_of " << m->peer_as_of_epoch
 	      << " <= current _to as_of " << heartbeat_to[from] << dendl;
@@ -1647,6 +1665,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     break;
   }
 
+out:
   if (locked) 
     map_lock.put_read();
 
