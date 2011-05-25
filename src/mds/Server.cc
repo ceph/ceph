@@ -2855,38 +2855,47 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
     return;
   }
 
-  dout(0) << "state prior to lock change: " << *lock_state << dendl;;
+  dout(10) << " state prior to lock change: " << *lock_state << dendl;;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
-    dout(0) << "got unlock" << dendl;
+    dout(10) << " unlock attempt on " << set_lock << dendl;
     list<ceph_filelock> activated_locks;
-    lock_state->remove_lock(set_lock, activated_locks);
+    list<Context*> waiters;
+    if (lock_state->is_waiting(set_lock)) {
+      dout(10) << " unlock removing waiting lock " << set_lock << dendl;
+      lock_state->remove_waiting(set_lock);
+    } else {
+      dout(10) << " unlock attempt on " << set_lock << dendl;
+      lock_state->remove_lock(set_lock, activated_locks);
+      cur->take_waiting(CInode::WAIT_FLOCK, waiters);
+    }
     reply_request(mdr, 0);
     /* For now we're ignoring the activated locks because their responses
      * will be sent when the lock comes up again in rotation by the MDS.
      * It's a cheap hack, but it's easy to code. */
-    list<Context*> waiters;
-    cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     mds->queue_waiters(waiters);
   } else {
-    dout(0) << "got lock" << dendl;
-    if (lock_state->add_lock(set_lock, will_wait)) {
-      // lock set successfully
-      dout(0) << "it succeeded" << dendl;
-      reply_request(mdr, 0);
-    } else {
-      dout(0) << "it failed on this attempt" << dendl;
+    dout(10) << " lock attempt on " << set_lock << dendl;
+    if (mdr->more()->flock_was_waiting &&
+	!lock_state->is_waiting(set_lock)) {
+      dout(10) << " was waiting for lock but not anymore, must have been canceled " << set_lock << dendl;
+      reply_request(mdr, -EINTR);
+    } else if (!lock_state->add_lock(set_lock, will_wait)) {
+      dout(10) << " it failed on this attempt" << dendl;
       // couldn't set lock right now
-      if (!will_wait)
-	reply_request(mdr, -1);
-      else {
-	dout(0) << "but it's a wait" << dendl;
+      if (!will_wait) {
+	reply_request(mdr, -EWOULDBLOCK);
+      } else {
+	dout(10) << " added to waiting list" << dendl;
+	assert(lock_state->is_waiting(set_lock));
+	mdr->more()->flock_was_waiting = true;
 	mds->locker->drop_locks(mdr);
 	mdr->drop_local_auth_pins();
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
       }
-    }
+    } else
+      reply_request(mdr, 0);
   }
-  dout(0) << "state after lock change: " << *lock_state << dendl;
+  dout(10) << " state after lock change: " << *lock_state << dendl;
 }
 
 void Server::handle_client_file_readlock(MDRequest *mdr)

@@ -306,6 +306,9 @@ struct MDRequest : public Mutation {
     map<client_t,uint64_t> sseq_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
+    // for lock/flock
+    bool flock_was_waiting;
+
     // for snaps
     version_t stid;
     bufferlist snapidbl;
@@ -317,6 +320,7 @@ struct MDRequest : public Mutation {
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       destdn_was_remote_inode(0), was_link_merge(false),
+      flock_was_waiting(false),
       stid(0),
       slave_commit(0) { }
   } *_more;
