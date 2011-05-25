@@ -81,9 +81,9 @@ namespace librbd {
       snapname = "";
     }
 
-    snap_t get_snapid(std::string snap_name)
+    snap_t get_snapid(std::string snap_name) const
     {
-      std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
+      std::map<std::string, struct SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end())
 	return it->second.id;
       return CEPH_NOSNAP;
@@ -229,7 +229,7 @@ namespace librbd {
   int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name);
   void close_image(ImageCtx *ictx);
 
-  void trim_image(IoCtx& io_ctx, rbd_obj_header_ondisk *header, uint64_t newsize);
+  void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
   int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
@@ -241,12 +241,12 @@ namespace librbd {
   int tmap_set(IoCtx& io_ctx, const string& imgname);
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid);
-  void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
-  string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
-  uint64_t get_max_block(rbd_obj_header_ondisk *header);
-  uint64_t get_block_size(rbd_obj_header_ondisk *header);
-  uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs);
-  uint64_t get_block_ofs(rbd_obj_header_ondisk *header, uint64_t ofs);
+  void image_info(const rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
+  string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num);
+  uint64_t get_max_block(const rbd_obj_header_ondisk &header);
+  uint64_t get_block_size(const rbd_obj_header_ondisk &header);
+  uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs);
+  uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs);
   int check_io(ImageCtx *ictx, uint64_t off, uint64_t len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
@@ -314,7 +314,7 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   ondisk.snap_names_len = 0;
 }
 
-void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t infosize)
+void image_info(const rbd_obj_header_ondisk& header, image_info_t& info, size_t infosize)
 {
   int obj_order = header.options.order;
   info.size = header.image_size;
@@ -326,39 +326,39 @@ void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t infosi
   bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
 
-string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
+string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num)
 {
   char o[RBD_MAX_BLOCK_NAME_SIZE];
   snprintf(o, RBD_MAX_BLOCK_NAME_SIZE,
-       "%s.%012" PRIx64, header->block_name, num);
+       "%s.%012" PRIx64, header.block_name, num);
   return o;
 }
 
-uint64_t get_max_block(rbd_obj_header_ondisk *header)
+uint64_t get_max_block(const rbd_obj_header_ondisk &header)
 {
-  uint64_t size = header->image_size;
-  int obj_order = header->options.order;
+  uint64_t size = header.image_size;
+  int obj_order = header.options.order;
   uint64_t block_size = 1 << obj_order;
   uint64_t numseg = (size + block_size - 1) >> obj_order;
 
   return numseg;
 }
 
-uint64_t get_block_ofs(rbd_obj_header_ondisk *header, uint64_t ofs)
+uint64_t get_block_ofs(const rbd_obj_header_ondisk &header, uint64_t ofs)
 {
-  int obj_order = header->options.order;
+  int obj_order = header.options.order;
   uint64_t block_size = 1 << obj_order;
   return ofs & (block_size - 1);
 }
 
-uint64_t get_block_size(rbd_obj_header_ondisk *header)
+uint64_t get_block_size(const rbd_obj_header_ondisk &header)
 {
-  return 1 << header->options.order;
+  return 1 << header.options.order;
 }
 
-uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs)
+uint64_t get_block_num(const rbd_obj_header_ondisk &header, uint64_t ofs)
 {
-  int obj_order = header->options.order;
+  int obj_order = header.options.order;
   uint64_t num = ofs >> obj_order;
 
   return num;
@@ -370,7 +370,7 @@ int init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void trim_image(IoCtx& io_ctx, rbd_obj_header_ondisk *header, uint64_t newsize)
+void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize)
 {
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
@@ -511,11 +511,11 @@ int tmap_rm(IoCtx& io_ctx, const string& imgname)
 
 int rollback_image(ImageCtx *ictx, uint64_t snapid)
 {
-  uint64_t numseg = get_max_block(&(ictx->header));
+  uint64_t numseg = get_max_block(ictx->header);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
-    string oid = get_block_oid(&(ictx->header), i);
+    string oid = get_block_oid(ictx->header, i);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
     dout(10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     if (r < 0 && r != -ENOENT)
@@ -703,7 +703,7 @@ int remove(IoCtx& io_ctx, const char *imgname)
   struct rbd_obj_header_ondisk header;
   int r = read_header(io_ctx, md_oid, &header, NULL);
   if (r >= 0) {
-    trim_image(io_ctx, &header, 0);
+    trim_image(io_ctx, header, 0);
     dout(2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
@@ -742,7 +742,7 @@ int resize(ImageCtx *ictx, uint64_t size)
     ictx->header.image_size = size;
   } else {
     dout(2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
-    trim_image(ictx->data_ctx, &(ictx->header), size);
+    trim_image(ictx->data_ctx, ictx->header, size);
     ictx->header.image_size = size;
   }
 
@@ -958,8 +958,8 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
   if (ret < 0)
     return ret;
 
-  uint64_t numseg = get_max_block(&header);
-  uint64_t block_size = get_block_size(&header);
+  uint64_t numseg = get_max_block(header);
+  uint64_t block_size = get_block_size(header);
   int order = header.options.order;
 
   r = create(dest_md_ctx, destname, header.image_size, &order);
@@ -976,8 +976,8 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
 
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
-    string oid = get_block_oid(&header, i);
-    string dest_oid = get_block_oid(&dest_header, i);
+    string oid = get_block_oid(header, i);
+    string dest_oid = get_block_oid(dest_header, i);
     map<uint64_t, uint64_t> m;
     map<uint64_t, uint64_t>::iterator iter;
     r = src_data_ctx.sparse_read(oid, m, bl, block_size, 0);
@@ -1071,15 +1071,15 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 
   int64_t ret;
   int64_t total_read = 0;
-  uint64_t start_block = get_block_num(&ictx->header, off);
-  uint64_t end_block = get_block_num(&ictx->header, off + len);
-  uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len);
+  uint64_t block_size = get_block_size(ictx->header);
   uint64_t left = len;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
-    string oid = get_block_oid(&ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
     uint64_t read_len = min(block_size - block_ofs, left);
 
     map<uint64_t, uint64_t> m;
@@ -1162,15 +1162,15 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
     return r;
 
   size_t total_write = 0;
-  uint64_t start_block = get_block_num(&ictx->header, off);
-  uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->header);
   uint64_t left = len;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
-    string oid = get_block_oid(&ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
     r = ictx->data_ctx.write(oid, bl, write_len, block_ofs);
@@ -1279,9 +1279,9 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     return r;
 
   size_t total_write = 0;
-  uint64_t start_block = get_block_num(&ictx->header, off);
-  uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
-  uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
+  uint64_t block_size = get_block_size(ictx->header);
   uint64_t left = len;
 
   r = check_io(ictx, off, len);
@@ -1290,8 +1290,8 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
-    string oid = get_block_oid(&ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_write);
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_write);
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
     AioBlockCompletion *block_completion = new AioBlockCompletion(c, off, len, NULL);
@@ -1335,15 +1335,15 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 
   int64_t ret;
   int total_read = 0;
-  uint64_t start_block = get_block_num(&ictx->header, off);
-  uint64_t end_block = get_block_num(&ictx->header, off + len);
-  uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t start_block = get_block_num(ictx->header, off);
+  uint64_t end_block = get_block_num(ictx->header, off + len);
+  uint64_t block_size = get_block_size(ictx->header);
   uint64_t left = len;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
-    string oid = get_block_oid(&ictx->header, i);
-    uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_read);
+    string oid = get_block_oid(ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
     uint64_t read_len = min(block_size - block_ofs, left);
 
     map<uint64_t,uint64_t> m;
