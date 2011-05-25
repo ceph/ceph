@@ -60,6 +60,12 @@ got %s" % def_str)
 for obj in foo3_ioctx.list_objects():
     print str(obj)
 
+foo3_ioctx.write_full("ghi", "g\0h\0i")
+ghi_str = foo3_ioctx.read("ghi")
+if (ghi_str != "g\0h\0i"):
+    raise RuntimeError("error reading object ghi: expected value g\\0h\\0\i, \
+got %s" % (ghi_str))
+
 # do some things with extended attributes
 foo3_ioctx.set_xattr("abc", "a", "1")
 foo3_ioctx.set_xattr("def", "b", "2")

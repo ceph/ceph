@@ -502,7 +502,7 @@ class Object(object):
         self.state = "exists"
 
     def __str__(self):
-        return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key.value)
+        return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key)
 
     def require_object_exists(self):
         if self.state != "exists":
