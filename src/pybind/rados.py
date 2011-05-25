@@ -23,6 +23,9 @@ class PermissionError(Exception):
 class ObjectNotFound(Exception):
     pass
 
+class NoData(Exception):
+    pass
+
 class ObjectExists(Exception):
     pass
 
@@ -56,6 +59,8 @@ def make_ex(ret, msg):
         return NoSpace(msg)
     elif (ret == errno.EEXIST):
         return ObjectExists(msg)
+    elif (ret == errno.ENODATA):
+        return NoData(msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
