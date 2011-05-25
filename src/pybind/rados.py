@@ -383,7 +383,7 @@ written." % (self.name, ret, length))
                 c_size_t(length), c_uint64(offset))
         if ret < 0:
             raise make_ex("Ioctx.read(%s): failed to read %s" % (self.name, key))
-        return ret_buf.value
+        return ctypes.string_at(ret_buf, ret)
 
     def get_stats(self):
         self.require_ioctx_open()
