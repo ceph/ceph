@@ -282,6 +282,12 @@ class AclPolicy(object):
         self.owner_display_name = owner_display_name
         self.grants = grants  # dict of { string -> ACLGrant }
     @staticmethod
+    def create_default(owner_id):
+        grants = { }
+        grants[ACL_TYPE_CANON_USER + owner_id] = \
+            AclGrant(ACL_TYPE_CANON_USER + owner_id, None, "FULL_CONTROL")
+        return AclPolicy(owner_id, None, grants)
+    @staticmethod
     def from_xml(s):
         root = etree.parse(StringIO(s))
         owner_id_node = root.find("{%s}Owner/{%s}ID" % (NS,NS))
@@ -437,14 +443,17 @@ class Object(object):
 ###### Store #######
 class Store(object):
     @staticmethod
-    def make_store(url, create, akey, skey):
+    def make_store(url, is_dst, create, akey, skey):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
             return S3Store(s3_url, create, akey, skey)
         rados_url = strip_prefix("rgw:", url)
         if (rados_url):
             dst_owner = None
-            if (create and os.environ.has_key("DST_OWNER")):
+            if (is_dst):
+                if not os.environ.has_key("DST_OWNER"):
+                    raise Exception("You must set DST_OWNER when uploading \
+files to RgwStore.")
                 dst_owner = os.environ["DST_OWNER"]
             return RgwStore(rados_url, create, akey, skey, dst_owner)
         file_url = strip_prefix("file://", url)
@@ -783,6 +792,7 @@ class RgwStore(Store):
         if (lrgw == None):
             lrgw = rgw.Rgw()
         self.owner = owner
+        print "self.owner = %s" % (self.owner)
         # Parse the rados url
         conf_end = string.find(url, ":")
         if (conf_end == -1):
@@ -838,7 +848,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             ioctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
             ioctx.write(rgw_bucket_name, "", 0)
             print "ioctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
-                    "user.rgw.acl=" + self.dst_owner + ")"
+                    "user.rgw.acl=" + self.owner + ")"
             new_bucket_acl = "\
 <AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"> \
 <Owner><ID>%s</ID></Owner><AccessControlList>\
@@ -846,7 +856,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
 xsi:type=\"CanonicalUser\"><ID>%s</ID> \
 <DisplayName>display-name</DisplayName></Grantee> \
 <Permission>FULL_CONTROL</Permission></Grant>\
-</AccessControlList></AccessControlPolicy>" % (self.dst_owner, self.dst_owner)
+</AccessControlList></AccessControlPolicy>" % (self.owner, self.owner)
             new_bucket_acl_bin = lrgw.acl_xml2bin(new_bucket_acl)
             ioctx.set_xattr(rgw_bucket_name, "user.rgw.acl", new_bucket_acl_bin)
         finally:
@@ -927,10 +937,13 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
                 break
             off += 8192
         self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
-        if (src_acl.acl_policy != None):
-            xml = src_acl.acl_policy.to_xml()
-            bin_ = lrgw.acl_xml2bin(xml)
-            self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
+        if (src_acl.acl_policy == None):
+            ap = AclPolicy.create_default(self.owner)
+        else:
+            ap = src_acl.acl_policy
+        xml = ap.to_xml()
+        bin_ = lrgw.acl_xml2bin(xml)
+        self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
         for k,v in obj.meta.items():
             self.ioctx.set_xattr(obj.name,
                     RGW_META_PREFIX + k[META_XATTR_PREFIX:], v)
@@ -1083,7 +1096,7 @@ dst_name = args[1]
 try:
     if (opts.more_verbose):
         print "SOURCE: " + src_name
-    src = Store.make_store(src_name, False,
+    src = Store.make_store(src_name, False, False,
             getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
 except NonexistentStore, e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
@@ -1095,7 +1108,7 @@ except Exception, e:
 try:
     if (opts.more_verbose):
         print "DESTINATION: " + dst_name
-    dst = Store.make_store(dst_name, opts.create,
+    dst = Store.make_store(dst_name, True, opts.create,
             getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
 except NonexistentStore, e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
