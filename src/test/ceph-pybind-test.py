@@ -83,6 +83,12 @@ if (found["a"] != "1"):
 if (found["c"] != "3"):
   raise RuntimeError("error: expected object abc to have c=3")
 
+foo3_ioctx.set_xattr("def", "zeroholder", "a\0b")
+ret = foo3_ioctx.get_xattr("def", "zeroholder")
+if (ret != "a\0b"):
+  raise RuntimeError("error: set_xattr/get_xattr failed with " +
+      "an extended attribute containing NULL")
+
 # create some snapshots and do stuff with them
 print "creating snap bjork"
 foo3_ioctx.create_snap("bjork")

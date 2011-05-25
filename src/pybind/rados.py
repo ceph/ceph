@@ -426,7 +426,7 @@ written." % (self.name, ret, length))
                     c_char_p(xattr_name), ret_buf, c_size_t(ret_length))
         if ret < 0:
             raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
-        return ret_buf.value
+        return ctypes.string_at(ret_buf, ret)
 
     def get_xattrs(self, oid):
         self.require_ioctx_open()
