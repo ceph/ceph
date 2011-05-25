@@ -96,6 +96,11 @@ namespace librbd {
       struct SnapInfo info(id, size);
       snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
     }
+
+    const string md_oid() const
+    {
+      return name + RBD_SUFFIX;
+    }
   };
 
   class WatchCtx : public librados::WatchCtx {
@@ -206,7 +211,7 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(IoCtx& io_ctx, std::vector<string>& names);
-  int create(IoCtx& io_ctx, string& md_oid, const char *imgname, uint64_t size, int *order);
+  int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order);
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int remove(IoCtx& io_ctx, const char *imgname);
@@ -216,7 +221,7 @@ namespace librbd {
   int snap_rollback(ImageCtx *ictx, const char *snap_name);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
   int add_snap(ImageCtx *ictx, const char *snap_name);
-  int rm_snap(IoCtx& io_ctx, string& md_oid, const char *snap_name);
+  int rm_snap(ImageCtx *ictx, const char *snap_name);
   int ictx_check(ImageCtx *ictx);
   int ictx_refresh(ImageCtx *ictx, const char *snap_name);
   int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char *destname);
@@ -225,16 +230,16 @@ namespace librbd {
   void close_image(ImageCtx *ictx);
 
   void trim_image(IoCtx& io_ctx, rbd_obj_header_ondisk *header, uint64_t newsize);
-  int read_rbd_info(IoCtx& io_ctx, string& info_oid, struct rbd_info *info);
+  int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
-  int touch_rbd_info(IoCtx& io_ctx, string& info_oid);
-  int rbd_assign_bid(IoCtx& io_ctx, string& info_oid, uint64_t *id);
-  int read_header_bl(IoCtx& io_ctx, string& md_oid, bufferlist& header, uint64_t *ver);
-  int notify_change(IoCtx& io_ctx, string& oid, uint64_t *pver, ImageCtx *ictx);
-  int read_header(IoCtx& io_ctx, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
-  int write_header(IoCtx& io_ctx, string& md_oid, bufferlist& header);
-  int tmap_set(IoCtx& io_ctx, string& imgname);
-  int tmap_rm(IoCtx& io_ctx, string& imgname);
+  int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
+  int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id);
+  int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver);
+  int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ictx);
+  int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
+  int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header);
+  int tmap_set(IoCtx& io_ctx, const string& imgname);
+  int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid);
   void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
   string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
@@ -379,7 +384,7 @@ void trim_image(IoCtx& io_ctx, rbd_obj_header_ondisk *header, uint64_t newsize)
   }
 }
 
-int read_rbd_info(IoCtx& io_ctx, string& info_oid, struct rbd_info *info)
+int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info)
 {
   int r;
   bufferlist bl;
@@ -397,7 +402,7 @@ int read_rbd_info(IoCtx& io_ctx, string& info_oid, struct rbd_info *info)
   return 0;
 }
 
-int touch_rbd_info(IoCtx& io_ctx, string& info_oid)
+int touch_rbd_info(IoCtx& io_ctx, const string& info_oid)
 {
   bufferlist bl;
   int r = io_ctx.write(info_oid, bl, 0, 0);
@@ -406,7 +411,7 @@ int touch_rbd_info(IoCtx& io_ctx, string& info_oid)
   return 0;
 }
 
-int rbd_assign_bid(IoCtx& io_ctx, string& info_oid, uint64_t *id)
+int rbd_assign_bid(IoCtx& io_ctx, const string& info_oid, uint64_t *id)
 {
   bufferlist bl, out;
   *id = 0;
@@ -426,7 +431,7 @@ int rbd_assign_bid(IoCtx& io_ctx, string& info_oid, uint64_t *id)
 }
 
 
-int read_header_bl(IoCtx& io_ctx, string& md_oid, bufferlist& header, uint64_t *ver)
+int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint64_t *ver)
 {
   int r;
 #define READ_SIZE 4096
@@ -444,7 +449,7 @@ int read_header_bl(IoCtx& io_ctx, string& md_oid, bufferlist& header, uint64_t *
   return 0;
 }
 
-int notify_change(IoCtx& io_ctx, string& oid, uint64_t *pver, ImageCtx *ictx)
+int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ictx)
 {
   uint64_t ver;
 
@@ -462,7 +467,7 @@ int notify_change(IoCtx& io_ctx, string& oid, uint64_t *pver, ImageCtx *ictx)
   return 0;
 }
 
-int read_header(IoCtx& io_ctx, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
+int read_header(IoCtx& io_ctx, const string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
   int r = read_header_bl(io_ctx, md_oid, header_bl, ver);
@@ -475,7 +480,7 @@ int read_header(IoCtx& io_ctx, string& md_oid, struct rbd_obj_header_ondisk *hea
   return 0;
 }
 
-int write_header(IoCtx& io_ctx, string& md_oid, bufferlist& header)
+int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header)
 {
   bufferlist bl;
   int r = io_ctx.write(md_oid, header, header.length(), 0);
@@ -485,7 +490,7 @@ int write_header(IoCtx& io_ctx, string& md_oid, bufferlist& header)
   return r;
 }
 
-int tmap_set(IoCtx& io_ctx, string& imgname)
+int tmap_set(IoCtx& io_ctx, const string& imgname)
 {
   bufferlist cmdbl, emptybl;
   __u8 c = CEPH_OSD_TMAP_SET;
@@ -495,7 +500,7 @@ int tmap_set(IoCtx& io_ctx, string& imgname)
   return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int tmap_rm(IoCtx& io_ctx, string& imgname)
+int tmap_rm(IoCtx& io_ctx, const string& imgname)
 {
   bufferlist cmdbl;
   __u8 c = CEPH_OSD_TMAP_RM;
@@ -550,10 +555,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
-  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
   return 0;
 }
@@ -570,10 +572,7 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (snapid == CEPH_NOSNAP)
     return -ENOENT;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
-  r = rm_snap(ictx->md_ctx, md_oid, snap_name);
+  r = rm_snap(ictx, snap_name);
   if (r < 0)
     return r;
 
@@ -581,15 +580,17 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
   return 0;
 }
 
-int create(IoCtx& io_ctx, string& md_oid, const char *imgname,
-			      uint64_t size, int *order)
+int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 {
   dout(20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
+
+  string md_oid = imgname;
+  md_oid += RBD_SUFFIX;
 
   // make sure it doesn't already exist
   int r = io_ctx.stat(md_oid, NULL, NULL);
@@ -730,9 +731,6 @@ int resize(ImageCtx *ictx, uint64_t size)
   if (r < 0)
     return r;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
   // trim
   if (size == ictx->header.image_size) {
     dout(2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
@@ -751,14 +749,14 @@ int resize(ImageCtx *ictx, uint64_t size)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  r = ictx->md_ctx.write(md_oid, bl, bl.length(), 0);
+  r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
   if (r == -ERANGE)
     derr << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
     derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   } else {
-    notify_change(ictx->md_ctx, md_oid, NULL, ictx);
+    notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
   }
 
   dout(2) << "done." << dendl;
@@ -773,8 +771,6 @@ int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
   if (r < 0)
     return r;
   bufferlist bl, bl2;
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
 
   for (std::map<std::string, struct SnapInfo>::iterator it = ictx->snaps_by_name.begin();
        it != ictx->snaps_by_name.end(); ++it) {
@@ -792,8 +788,6 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
   uint64_t snap_id;
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
@@ -804,22 +798,22 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   ::encode(snap_name, bl);
   ::encode(snap_id, bl);
 
-  r = ictx->md_ctx.exec(md_oid, "rbd", "snap_add", bl, bl2);
+  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
   if (r < 0) {
     derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
-  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
   return 0;
 }
 
-int rm_snap(IoCtx& io_ctx, string& md_oid, const char *snap_name)
+int rm_snap(ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
   ::encode(snap_name, bl);
 
-  int r = io_ctx.exec(md_oid, "rbd", "snap_remove", bl, bl2);
+  int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
     derr << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
     return r;
@@ -858,8 +852,6 @@ int ictx_check(ImageCtx *ictx)
 int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
 
   if (snap_name) {
     dout(20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
@@ -867,12 +859,12 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
     dout(20) << "ictx_refresh " << ictx << " no snap" << dendl;
   }
 
-  int r = read_header(ictx->md_ctx, md_oid, &(ictx->header), NULL);
+  int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
   if (r < 0) {
     derr << "Error reading header: " << cpp_strerror(-r) << dendl;
     return r;
   }
-  r = ictx->md_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
+  r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_list", bl, bl2);
   if (r < 0) {
     derr << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
     return r;
@@ -943,9 +935,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   snap_t new_snapid = ictx->get_snapid(snap_name);
   dout(20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
   return 0;
 }
@@ -972,7 +962,7 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
   uint64_t block_size = get_block_size(&header);
   int order = header.options.order;
 
-  r = create(dest_md_ctx, dest_md_oid, destname, header.image_size, &order);
+  r = create(dest_md_ctx, destname, header.image_size, &order);
   if (r < 0) {
     derr << "header creation failed" << dendl;
     return r;
@@ -1049,10 +1039,8 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
   if (!wctx)
     return -ENOMEM;
   ictx->wctx = wctx;
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
 
-  r = ictx->md_ctx.watch(md_oid, 0, &(wctx->cookie), wctx);
+  r = ictx->md_ctx.watch(ictx->md_oid(), 0, &(wctx->cookie), wctx);
   return r;
 }
 
@@ -1060,11 +1048,8 @@ void close_image(ImageCtx *ictx)
 {
   dout(20) << "close_image " << ictx << dendl;
 
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
   ictx->wctx->invalidate();
-  ictx->md_ctx.unwatch(md_oid, ictx->wctx->cookie);
+  ictx->md_ctx.unwatch(ictx->md_oid(), ictx->wctx->cookie);
   delete ictx->wctx;
   delete ictx;
   ictx = NULL;
@@ -1424,9 +1409,7 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapnam
 
 int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
 {
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
-  int r = librbd::create(io_ctx, md_oid, name, size, order);
+  int r = librbd::create(io_ctx, name, size, order);
   return r;
 }
 
@@ -1630,9 +1613,7 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
-  return librbd::create(io_ctx, md_oid, name, size, order);
+  return librbd::create(io_ctx, name, size, order);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
