@@ -1618,6 +1618,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
       dout(5) << "handle_osd_ping peer " << m->get_source_inst()
 	      << " requesting heartbeats as_of " << m->peer_as_of_epoch << dendl;
       heartbeat_to[from] = m->peer_as_of_epoch;
+      if (heartbeat_con.count(from))
+	heartbeat_con[from]->put();
       heartbeat_con[from] = m->get_connection();
       heartbeat_con[from]->get();
       
