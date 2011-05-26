@@ -682,10 +682,12 @@ assert_xattr("%s/user_defined_md2/spork" % tdir,
 # more rgw target tests
 if len(opts.pools) > 0:
     # synchronize from an s3 bucket to an bucket directly
-    obsync_check(opts.buckets[1], opts.pools[0], ["--delete-after"] + \
-            xuser(sconfig, "main", "alt"))
+    obsync_check(opts.buckets[1], opts.pools[0], ["--delete-after"])
     obsync_check(opts.pools[0], "%s/rgw4" % tdir, ["--delete-after", "-c"])
     obsync_check(opts.buckets[1], "%s/rgw5" % tdir, ["--delete-after", "-c"])
     compare_directories("%s/rgw4" % tdir, "%s/rgw5" % tdir, compare_xattr = True)
+    # restore proper ownership to the bucket
+    obsync_check(opts.buckets[1], opts.pools[0], ["--delete-after"] + \
+            xuser(sconfig, "alt", "main"))
 
 sys.exit(0)
