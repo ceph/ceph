@@ -771,9 +771,12 @@ done:
   free(new_data);
 
   send_response();
-  return;
 }
 
+void RGWInitMultipart::execute()
+{
+  send_response();
+}
 
 void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
 {

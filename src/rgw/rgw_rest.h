@@ -88,6 +88,14 @@ public:
   int get_params();
 };
 
+class RGWInitMultipart_REST : public RGWInitMultipart {
+public:
+  RGWInitMultipart_REST() {}
+  ~RGWInitMultipart_REST() {}
+
+  int get_params();
+};
+
 class RGWHandler_REST : public RGWHandler {
 protected:
   bool is_acl_op(struct req_state *s) {
@@ -98,6 +106,7 @@ protected:
   virtual RGWOp *get_retrieve_op(struct req_state *s, bool get_data) = 0;
   virtual RGWOp *get_create_op(struct req_state *s) = 0;
   virtual RGWOp *get_delete_op(struct req_state *s) = 0;
+  virtual RGWOp *get_post_op(struct req_state *s) = 0;
 
   static int init_rest(struct req_state *s, struct fcgx_state *fcgx);
 public:

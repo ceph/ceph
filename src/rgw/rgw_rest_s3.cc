@@ -244,6 +244,15 @@ void RGWPutACLs_REST_S3::send_response()
   dump_start(s);
 }
 
+void RGWInitMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+  dump_start(s);
+}
+
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
@@ -294,6 +303,14 @@ RGWOp *RGWHandler_REST_S3::get_delete_op(struct req_state *s)
     return &delete_obj_op;
   else if (s->bucket)
     return &delete_bucket_op;
+
+  return NULL;
+}
+
+RGWOp *RGWHandler_REST_S3::get_post_op(struct req_state *s)
+{
+  if (s->object)
+    return &init_multipart;
 
   return NULL;
 }

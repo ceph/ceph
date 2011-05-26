@@ -327,6 +327,23 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWInitMultipart : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWInitMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
 class RGWHandler {
 protected:
   struct req_state *s;

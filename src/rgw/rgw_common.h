@@ -143,6 +143,7 @@ enum http_op {
   OP_PUT,
   OP_DELETE,
   OP_HEAD,
+  OP_POST,
   OP_UNKNOWN,
 };
 

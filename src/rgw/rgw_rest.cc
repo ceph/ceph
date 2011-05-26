@@ -276,6 +276,11 @@ int RGWPutACLs_REST::get_params()
   return ret;
 }
 
+int RGWInitMultipart_REST::get_params()
+{
+  return 0;
+}
+
 static void next_tok(string& str, string& tok, char delim)
 {
   if (str.size() == 0) {
@@ -627,6 +632,8 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_DELETE;
   else if (strcmp(s->method, "HEAD") == 0)
     s->op = OP_HEAD;
+  else if (strcmp(s->method, "POST") == 0)
+    s->op = OP_POST;
   else
     s->op = OP_UNKNOWN;
 
@@ -698,6 +705,9 @@ RGWOp *RGWHandler_REST::get_op()
      break;
    case OP_HEAD:
      op = get_retrieve_op(s, false);
+     break;
+   case OP_POST:
+     op = get_post_op(s);
      break;
    default:
      return NULL;
