@@ -890,7 +890,7 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
             elif k == RGW_META_CONTENT_TYPE:
                 meta[CONTENT_TYPE_XATTR] = v
             elif k[:len(RGW_META_PREFIX)] == RGW_META_PREFIX:
-                meta["rados.meta." + k[RGW_META_PREFIX:]] = v
+                meta["rados.meta." + k[len(RGW_META_PREFIX):]] = v
             elif opts.more_verbose:
                 print "ignoring unknown xattr " + k
         if (md5 == None):
@@ -976,13 +976,13 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         xml = ap.to_xml()
         bin_ = lrgw.acl_xml2bin(xml)
         self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
+        content_type = "application/octet-stream"
         for k,v in obj.meta.items():
-            self.ioctx.set_xattr(obj.name,
-                    RGW_META_PREFIX + k[META_XATTR_PREFIX:], v)
-        if (obj.meta.has_key(CONTENT_TYPE_XATTR)):
-            content_type = meta[CONTENT_TYPE_XATTR]
-        else:
-            content_type = "application/octet-stream"
+            if k == CONTENT_TYPE_XATTR:
+                content_type = v
+            elif k[:len(META_XATTR_PREFIX)] == META_XATTR_PREFIX:
+                self.ioctx.set_xattr(obj.name,
+                        RGW_META_PREFIX + k[len(META_XATTR_PREFIX):], v)
         self.ioctx.set_xattr(obj.name, "user.rgw.content_type", content_type)
     def remove(self, obj):
         if (opts.dry_run):
