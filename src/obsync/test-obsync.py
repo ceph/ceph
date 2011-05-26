@@ -49,8 +49,56 @@ def get_nonce():
     else:
         return random.randint(9999, 99999)
 
+def get_s3_connection(conf):
+    return boto.s3.connection.S3Connection(
+            aws_access_key_id = conf["access_key"],
+            aws_secret_access_key = conf["secret_key"],
+            host = conf["host"],
+            # TODO support & test all variations
+            calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+            is_secure=False,
+            )
+
+def read_s3_config(cfg, section, sconfig, name):
+    # TODO: support 'port', 'is_secure'
+    sconfig[name] = {}
+    for var in [ 'access_key', 'host', 'secret_key', 'user_id',
+                 'display_name', 'email', 'consistency', ]:
+        try:
+            sconfig[name][var] = cfg.get(section, var)
+        except ConfigParser.NoOptionError:
+            pass
+    # Make sure connection works
+    try:
+        conn = get_s3_connection(sconfig[name])
+    except Exception, e:
+        print >>stderr, "error initializing connection!"
+        raise
+
+    # Create bucket name
+    try:
+        template = cfg.get('fixtures', 'bucket prefix')
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+        template = 'test-{random}-'
+    random.seed()
+    try:
+        sconfig[name]["bucket_name"] = \
+            template.format(random=get_nonce())
+    except:
+        print >>stderr, "error parsing bucket prefix template"
+        raise
+
+def read_rgw_config(cfg, section, sconfig, rconfig, name):
+    rconfig[name] = {}
+    for var in [ 'ceph_conf' ]:
+        try:
+            rconfig[name][var] = cfg.get(section, var)
+        except ConfigParser.NoOptionError:
+            pass
+
 def read_config():
-    config = {}
+    sconfig = {}
+    rconfig = {}
     cfg = ConfigParser.RawConfigParser()
     try:
         path = os.environ['S3TEST_CONF']
@@ -65,70 +113,38 @@ def read_config():
             (type_, name) = section.split(None, 1)
         except ValueError:
             continue
-        if type_ != 's3':
-            continue
-        # TODO: support 'port', 'is_secure'
-
-        config[name] = {}
-        for var in [ 'access_key', 'host', 'secret_key', 'user_id',
-                     'display_name', 'email', 'consistency', ]:
-            try:
-                config[name][var] = cfg.get(section, var)
-            except ConfigParser.NoOptionError:
-                pass
-        # Make sure connection works
-        try:
-            conn = boto.s3.connection.S3Connection(
-                aws_access_key_id = config[name]["access_key"],
-                aws_secret_access_key = config[name]["secret_key"],
-                host = config[name]["host"],
-                # TODO support & test all variations
-                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-                )
-        except Exception, e:
-            print >>stderr, "error initializing connection!"
-            raise
-
-        # Create bucket name
-        try:
-            template = cfg.get('fixtures', 'bucket prefix')
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            template = 'test-{random}-'
-        random.seed()
-        try:
-            config[name]["bucket_name"] = \
-                template.format(random=get_nonce())
-        except:
-            print >>stderr, "error parsing bucket prefix template"
-            raise
-    return config
+        if type_ == 's3':
+            read_s3_config(cfg, section, sconfig, name)
+        elif type_ == 'rgw':
+            read_rgw_config(cfg, section, sconfig, rconfig, name)
+    for k,v in rconfig.items():
+        if (not sconfig.has_key(k)):
+            raise Exception("Can't find the S3 bucket associated with \
+    rgw pool %s" % k)
+        v["bucket"] = sconfig[k]
+    return sconfig, rconfig
 
 def obsync(src, dst, misc):
+    env = {}
     full = ["./obsync"]
-    e = {}
-    if (isinstance(src, ObSyncTestBucket)):
-        full.append(src.url)
-        e["SRC_AKEY"] = src.akey
-        e["SRC_SKEY"] = src.skey
-    else:
+    if (isinstance(src, str)):
         full.append(src)
-    if (isinstance(dst, ObSyncTestBucket)):
-        full.append(dst.url)
-        e["DST_AKEY"] = dst.akey
-        e["DST_SKEY"] = dst.skey
-        if (dst.consistency != None):
-            e["DST_CONSISTENCY"] = dst.consistency
     else:
+        src.to_src(env, full)
+    if (isinstance(dst, str)):
         full.append(dst)
+    else:
+        dst.to_dst(env, full)
     full.extend(misc)
+    full.append("--boto-retries=1")
     if (opts.more_verbose):
-        for k,v in e.items():
+        for k,v in env.items():
             print str(k) + "=" + str(v) + " ",
         print
         for f in full:
             print f,
         print
-    return subprocess.call(full, stderr=opts.error_out, env=e)
+    return subprocess.call(full, stderr=opts.error_out, env=env)
 
 def obsync_check(src, dst, opts):
     ret = obsync(src, dst, opts)
@@ -139,19 +155,38 @@ def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
         shutil.rmtree(tdir)
 
-def compare_directories(dir_a, dir_b, expect_same = True):
+def compare_directories(dir_a, dir_b, expect_same = True, compare_xattr = True):
     if (opts.verbose):
         print "comparing directories %s and %s" % (dir_a, dir_b)
-    full = ["diff", "-q"]
-    full.extend(["-r", dir_a, dir_b])
-    ret = subprocess.call(full)
-    if ((ret == 0) and (not expect_same)):
+    info = []
+    for root, dirs, files in os.walk(dir_a):
+        for filename in files:
+            afile = os.path.join(root, filename)
+            bfile = dir_b + afile[len(dir_a):]
+            if (not os.path.exists(bfile)):
+                info.append("Not found: %s: " % bfile)
+            else:
+                ret = subprocess.call(["diff", "-q", afile, bfile])
+                if (ret != 0):
+                    info.append("Files differ: %s and %s" % (afile, bfile))
+                elif compare_xattr:
+                    xinfo = xattr_diff(afile, bfile)
+                    info.extend(xinfo)
+    for root, dirs, files in os.walk(dir_b):
+        for filename in files:
+            bfile = os.path.join(root, filename)
+            afile = dir_a + bfile[len(dir_b):]
+            if (not os.path.exists(afile)):
+                info.append("Not found: %s" % afile)
+    if ((len(info) == 0) and (not expect_same)):
         print "expected the directories %s and %s to differ, but \
 they were the same!" % (dir_a, dir_b)
+        print "\n".join(info)
         raise Exception("compare_directories failed!")
-    if ((ret != 0) and expect_same):
+    if ((len(info) != 0) and expect_same):
         print "expected the directories %s and %s to be the same, but \
 they were different!" % (dir_a, dir_b)
+        print "\n".join(info)
         raise Exception("compare_directories failed!")
 
 def count_obj_in_dir(d):
@@ -161,16 +196,34 @@ def count_obj_in_dir(d):
         num_objects = num_objects + 1
     return num_objects
 
-def xuser(src, dst):
-    return [ "--xuser", config[src]["user_id"] + "=" + config[dst]["user_id"]]
+def xuser(sconfig, src, dst):
+    return [ "--xuser", sconfig[src]["user_id"] + "=" + sconfig[dst]["user_id"]]
 
 def get_optional(h, k):
     if (h.has_key(k)):
-        print "found " + str(h[k])
         return h[k]
     else:
-        print "found nothing"
         return None
+
+def xattr_diff(afile, bfile):
+    def tuple_list_to_hash(tl):
+        ret = {}
+        for k,v in tl:
+            ret[k] = v
+        return ret
+    info = []
+    a_attr = tuple_list_to_hash(xattr.get_all(afile, namespace=xattr.NS_USER))
+    b_attr = tuple_list_to_hash(xattr.get_all(bfile, namespace=xattr.NS_USER))
+    for ka,va in a_attr.items():
+        if b_attr.has_key(ka):
+            if b_attr[ka] != va:
+                info.append("xattrs differ for %s" % ka)
+        else:
+            info.append("only in %s: %s" % (afile, ka))
+    for kb,vb in b_attr.items():
+        if not a_attr.has_key(kb):
+            info.append("only in %s: %s" % (bfile, kb))
+    return info
 
 def xattr_sync_impl(file_name, meta):
     xlist = xattr.get_all(file_name, namespace=xattr.NS_USER)
@@ -220,12 +273,35 @@ def assert_xattr(file_name, meta):
 
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
-    def __init__(self, name, url, akey, skey, consistency):
-        self.name = name
-        self.url = url
-        self.akey = akey
-        self.skey = skey
-        self.consistency = consistency
+    def __init__(self, conf):
+        self.conf = conf
+        self.name = conf["bucket_name"]
+        self.url = "s3://" + conf["host"] + "/" + conf["bucket_name"]
+        self.akey = conf["access_key"]
+        self.skey = conf["secret_key"]
+        self.consistency = get_optional(conf, "consistency")
+    def to_src(self, env, args):
+        env["SRC_AKEY"] = self.akey
+        env["SRC_SKEY"] = self.skey
+        args.append(self.url)
+    def to_dst(self, env, args):
+        env["DST_AKEY"] = self.akey
+        env["DST_SKEY"] = self.skey
+        args.append(self.url)
+        if (self.consistency != None):
+            env["DST_CONSISTENCY"] = self.consistency
+
+class ObSyncTestPool(object):
+    def __init__(self, bucket, ceph_conf):
+        self.bucket = bucket
+        self.ceph_conf = ceph_conf
+    def to_src(self, env, args):
+        args.append(self.get_url())
+    def to_dst(self, env, args):
+        env["DST_OWNER"] = self.bucket["user_id"]
+        args.append(self.get_url())
+    def get_url(self):
+        return "rgw:%s:%s" % (self.ceph_conf, self.bucket["bucket_name"])
 
 ###### Main #######
 # change directory to obsync directory
@@ -254,20 +330,21 @@ if (opts.more_verbose):
     opts.verbose = True
 
 # parse configuration file
-config = read_config()
+sconfig, rconfig = read_config()
 opts.buckets = []
-opts.buckets.append(ObSyncTestBucket(config["main"]["bucket_name"], \
-    "s3://" + config["main"]["host"] + "/" + config["main"]["bucket_name"], \
-    config["main"]["access_key"], config["main"]["secret_key"],
-    get_optional(config["main"], "consistency")))
-opts.buckets.append(ObSyncTestBucket(config["alt"]["bucket_name"], \
-    "s3://" + config["alt"]["host"] + "/" + config["alt"]["bucket_name"], \
-    config["alt"]["access_key"], config["alt"]["secret_key"],
-    get_optional(config["alt"], "consistency")))
+opts.buckets.append(ObSyncTestBucket(sconfig["main"]))
+opts.buckets.append(ObSyncTestBucket(sconfig["alt"]))
 
-if not config["main"]["user_id"]:
+opts.pools = []
+if (rconfig.has_key("main")):
+    if (opts.verbose):
+        print "running rgw target tests..."
+    opts.pools.append(ObSyncTestPool(sconfig["main"], \
+                            rconfig["main"]["ceph_conf"]))
+
+if not sconfig["main"]["user_id"]:
     raise Exception("You must specify a user_id for the main section.")
-if not config["alt"]["user_id"]:
+if not sconfig["alt"]["user_id"]:
     raise Exception("You must specify a user_id for the alt section.")
 
 # set up temporary directory
@@ -373,14 +450,14 @@ obsync_check("file://%s/dir1" % tdir, "file://%s/dira" % tdir, ["-c"])
 synthetic_xml1 = \
 "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n\
 <Owner>\n\
-<ID>" + config["main"]["user_id"] + "</ID>\n\
+<ID>" + sconfig["main"]["user_id"] + "</ID>\n\
 <DisplayName></DisplayName>\n\
 </Owner>\n\
 <AccessControlList>\n\
 <Grant>\n\
   <Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
 xsi:type=\"CanonicalUser\">\n\
-    <ID>" + config["main"]["user_id"] + "</ID>\n\
+    <ID>" + sconfig["main"]["user_id"] + "</ID>\n\
     <DisplayName></DisplayName>\n\
   </Grantee>\n\
   <Permission>FULL_CONTROL</Permission>\n\
@@ -389,11 +466,12 @@ xsi:type=\"CanonicalUser\">\n\
 </AccessControlPolicy>"
 xattr.set("%s/dira/a" % tdir, ACL_XATTR, synthetic_xml1,
             namespace=xattr.NS_USER)
-print "set attr on %s" % ("%s/dira/a" % tdir)
+if (opts.verbose):
+    print "set attr on %s" % ("%s/dira/a" % tdir)
 # test ACL transformations
 # canonicalize xml by parse + write out
 obsync_check("file://%s/dira" % tdir, "file://%s/dira2" % tdir,
-            ["-d", "-c"] + xuser("main", "alt"))
+            ["-d", "-c"] + xuser(sconfig, "main", "alt"))
 # test that ACL is preserved
 obsync_check("file://%s/dira2" % tdir, "file://%s/dira3" % tdir,
             ["-d", "-c"])
@@ -405,7 +483,7 @@ if (synthetic_xml2 != synthetic_xml3):
     raise Exception("xml not preserved across obsync!")
 # test ACL transformation
 obsync_check("file://%s/dira3" % tdir, "file://%s/dira4" % tdir,
-            ["-d", "-c"] + xuser("main", "alt"))
+            ["-d", "-c"] + xuser(sconfig, "main", "alt"))
 synthetic_xml4 = xattr.get("%s/dira4/a" % tdir, ACL_XATTR,
                         namespace=xattr.NS_USER)
 if (synthetic_xml3 != synthetic_xml4):
@@ -418,7 +496,7 @@ if (synthetic_xml4 != synthetic_xml5):
     raise Exception("xml not preserved across obsync!")
 # test ACL transformation back
 obsync_check("file://%s/dira5" % tdir, "file://%s/dira6" % tdir,
-            ["-d", "-c"] + xuser("alt", "main"))
+            ["-d", "-c"] + xuser(sconfig, "alt", "main"))
 if (synthetic_xml5 != synthetic_xml2):
     raise Exception("expected to transform XML back to original form \
 through a double xuser")
@@ -443,7 +521,7 @@ obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 
 # make sure that the copy worked
 obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
-compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
+compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir, compare_xattr = False)
 if (opts.verbose):
     print "successfully copied the sample directory to " + opts.buckets[0].name
 
@@ -465,6 +543,49 @@ if (whole_file != "a"):
 if (opts.verbose):
     print "successfully copied a directory with --follow-symlinks"
 
+# empty out bucket[0]
+obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
+            ["--delete-after"])
+
+def rmbucket(bucket):
+    conn = get_s3_connection(bucket.conf)
+    bucket = conn.get_bucket(bucket.name)
+    bucket.delete()
+
+# rgw target tests
+if len(opts.pools) > 0:
+    rmbucket(opts.buckets[0])
+    os.mkdir("%s/rgw1" % tdir)
+    f = open("%s/rgw1/aaa" % tdir, 'w')
+    f.write("aaa")
+    f.close()
+    f = open("%s/rgw1/crazy" % tdir, 'w')
+    for i in range(0, 1000):
+        f.write("some crazy text\n")
+    f.close()
+    f = open("%s/rgw1/brick" % tdir, 'w')
+    f.write("br\0ick")
+    f.close()
+    # we should fail here, because we didn't supply -c, and the bucket
+    # doesn't exist
+    ret = obsync("%s/rgw1" % tdir, opts.pools[0], [])
+    if (ret == 0):
+        raise RuntimeError("expected this call to obsync to fail, because \
+    we didn't supply -c. But it succeeded.")
+    if (opts.verbose):
+        print "first rgw: call failed as expected."
+    print "testing rgw target with --create"
+    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
+    obsync_check(opts.pools[0], "%s/rgw2" % tdir, ["-c"])
+    compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir, compare_xattr = False)
+    # some tests with xattrs
+    xattr_sync("%s/rgw2/brick" % tdir, { CONTENT_TYPE_XATTR : "bricks" })
+    xattr_sync("%s/rgw2/crazy" % tdir, { CONTENT_TYPE_XATTR : "text/plain",
+            "rados.meta.froobs" : "quux", "rados.meta.gaz" : "luxx" } )
+    obsync_check("%s/rgw2" % tdir, opts.pools[0], [])
+    obsync_check(opts.pools[0], "%s/rgw3" % tdir, ["-c"])
+    compare_directories("%s/rgw2" % tdir, "%s/rgw3" % tdir, compare_xattr = True)
+
 # test escaping
 os.mkdir("%s/escape_dir1" % tdir)
 f = open("%s/escape_dir1/$$foo" % tdir, 'w')
@@ -475,7 +596,8 @@ f.write("blarg/")
 f.close()
 obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
 obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
-compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
+compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir,
+                    compare_xattr = False)
 
 # some more tests with --no-preserve-acls
 obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
@@ -489,11 +611,11 @@ obsync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
 if (opts.verbose):
     print "copying " + opts.buckets[0].name + " to " + opts.buckets[1].name
 obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"] + \
-            xuser("main", "alt"))
+            xuser(sconfig, "main", "alt"))
 if (opts.verbose):
     print "copying bucket1 to dir4..."
 obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
-compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
+compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir, compare_xattr = False)
 if (opts.verbose):
     print "successfully copied " + opts.buckets[0].name + " to " + \
         opts.buckets[1].name
@@ -514,7 +636,7 @@ bucket0_count=%d, bucket1_count=%d" % (bucket0_count, bucket1_count))
 if (opts.verbose):
     print "copying bucket0 to bucket1..."
 obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"] + \
-        xuser("main", "alt"))
+        xuser(sconfig, "main", "alt"))
 obsync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
 obsync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
 bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
@@ -556,5 +678,14 @@ obsync_check("%s/user_defined_md" % tdir, opts.buckets[0], ["--delete-after"])
 obsync_check(opts.buckets[0], "%s/user_defined_md2" % tdir, ["-c"])
 assert_xattr("%s/user_defined_md2/spork" % tdir,
     { "rados.meta.tines" : "3", "rados.content_type" : "application/octet-stream" })
+
+# more rgw target tests
+if len(opts.pools) > 0:
+    # synchronize from an s3 bucket to an bucket directly
+    obsync_check(opts.buckets[1], opts.pools[0], ["--delete-after"] + \
+            xuser(sconfig, "main", "alt"))
+    obsync_check(opts.pools[0], "%s/rgw4" % tdir, ["--delete-after", "-c"])
+    obsync_check(opts.buckets[1], "%s/rgw5" % tdir, ["--delete-after", "-c"])
+    compare_directories("%s/rgw4" % tdir, "%s/rgw5" % tdir, compare_xattr = True)
 
 sys.exit(0)
