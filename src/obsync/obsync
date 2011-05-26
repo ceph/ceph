@@ -835,7 +835,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
                 self.create_rgw_bucket(self.rgw_bucket_name)
             else:
                 raise NonexistentStore()
-        else:
+        elif self.owner == None:
             # Figure out what owner we should use when creating objects.
             # We use the owner of the destination bucket
             ioctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
@@ -843,9 +843,9 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
                 bin_ = ioctx.get_xattr(self.rgw_bucket_name, RGW_META_ACL)
                 xml = lrgw.acl_bin2xml(bin_)
                 acl = AclPolicy.from_xml(xml)
-                self.bucket_owner = acl.owner_id
+                self.owner = acl.owner_id
                 if (opts.more_verbose):
-                    print "using owner \"%s\"" % self.bucket_owner
+                    print "using owner \"%s\"" % self.owner
             finally:
                ioctx.close()
         self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
@@ -853,7 +853,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
     def create_rgw_bucket(self, rgw_bucket_name):
         global lrgw
         """ Create an rgw bucket named 'rgw_bucket_name' """
-        if (self.bucket_owner == None):
+        if (self.owner == None):
             raise Exception("Can't create a bucket without knowing who " +
                     "should own it. Please set DST_OWNER")
         self.rados.create_pool(self.rgw_bucket_name)

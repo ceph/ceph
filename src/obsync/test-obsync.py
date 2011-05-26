@@ -49,6 +49,16 @@ def get_nonce():
     else:
         return random.randint(9999, 99999)
 
+def get_s3_connection(conf):
+    return boto.s3.connection.S3Connection(
+            aws_access_key_id = conf["access_key"],
+            aws_secret_access_key = conf["secret_key"],
+            host = conf["host"],
+            # TODO support & test all variations
+            calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+            is_secure=False,
+            )
+
 def read_s3_config(cfg, section, sconfig, name):
     # TODO: support 'port', 'is_secure'
     sconfig[name] = {}
@@ -60,13 +70,7 @@ def read_s3_config(cfg, section, sconfig, name):
             pass
     # Make sure connection works
     try:
-        conn = boto.s3.connection.S3Connection(
-            aws_access_key_id = sconfig[name]["access_key"],
-            aws_secret_access_key = sconfig[name]["secret_key"],
-            host = sconfig[name]["host"],
-            # TODO support & test all variations
-            calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-            )
+        conn = get_s3_connection(sconfig[name])
     except Exception, e:
         print >>stderr, "error initializing connection!"
         raise
@@ -269,12 +273,13 @@ def assert_xattr(file_name, meta):
 
 ###### ObSyncTestBucket #######
 class ObSyncTestBucket(object):
-    def __init__(self, name, url, akey, skey, consistency):
-        self.name = name
-        self.url = url
-        self.akey = akey
-        self.skey = skey
-        self.consistency = consistency
+    def __init__(self, conf):
+        self.conf = conf
+        self.name = conf["bucket_name"]
+        self.url = "s3://" + conf["host"] + "/" + conf["bucket_name"]
+        self.akey = conf["access_key"]
+        self.skey = conf["secret_key"]
+        self.consistency = get_optional(conf, "consistency")
     def to_src(self, env, args):
         env["SRC_AKEY"] = self.akey
         env["SRC_SKEY"] = self.skey
@@ -327,14 +332,8 @@ if (opts.more_verbose):
 # parse configuration file
 sconfig, rconfig = read_config()
 opts.buckets = []
-opts.buckets.append(ObSyncTestBucket(sconfig["main"]["bucket_name"], \
-    "s3://" + sconfig["main"]["host"] + "/" + sconfig["main"]["bucket_name"], \
-    sconfig["main"]["access_key"], sconfig["main"]["secret_key"],
-    get_optional(sconfig["main"], "consistency")))
-opts.buckets.append(ObSyncTestBucket(sconfig["alt"]["bucket_name"], \
-    "s3://" + sconfig["alt"]["host"] + "/" + sconfig["alt"]["bucket_name"], \
-    sconfig["alt"]["access_key"], sconfig["alt"]["secret_key"],
-    get_optional(sconfig["alt"], "consistency")))
+opts.buckets.append(ObSyncTestBucket(sconfig["main"]))
+opts.buckets.append(ObSyncTestBucket(sconfig["alt"]))
 
 opts.pools = []
 if (rconfig.has_key("main")):
@@ -548,9 +547,14 @@ if (opts.verbose):
 obsync_check("file://%s/empty1" % tdir, opts.buckets[0],
             ["--delete-after"])
 
+def rmbucket(bucket):
+    conn = get_s3_connection(bucket.conf)
+    bucket = conn.get_bucket(bucket.name)
+    bucket.delete()
+
 # rgw target tests
 if len(opts.pools) > 0:
-    print "testing rgw target"
+    rmbucket(opts.buckets[0])
     os.mkdir("%s/rgw1" % tdir)
     f = open("%s/rgw1/aaa" % tdir, 'w')
     f.write("aaa")
@@ -562,8 +566,16 @@ if len(opts.pools) > 0:
     f = open("%s/rgw1/brick" % tdir, 'w')
     f.write("br\0ick")
     f.close()
-    obsync_check("%s/rgw1" % tdir, opts.pools[0], [])
-    print "testing rgw source"
+    # we should fail here, because we didn't supply -c, and the bucket
+    # doesn't exist
+    ret = obsync("%s/rgw1" % tdir, opts.pools[0], [])
+    if (ret == 0):
+        raise RuntimeError("expected this call to obsync to fail, because \
+    we didn't supply -c. But it succeeded.")
+    if (opts.verbose):
+        print "first rgw: call failed as expected."
+    print "testing rgw target with --create"
+    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
     obsync_check(opts.pools[0], "%s/rgw2" % tdir, ["-c"])
     compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir, compare_xattr = False)
     # some tests with xattrs
@@ -573,9 +585,6 @@ if len(opts.pools) > 0:
     obsync_check("%s/rgw2" % tdir, opts.pools[0], [])
     obsync_check(opts.pools[0], "%s/rgw3" % tdir, ["-c"])
     compare_directories("%s/rgw2" % tdir, "%s/rgw3" % tdir, compare_xattr = True)
-
-#    print "testing rgw target with --create"
-#    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
 
 # test escaping
 os.mkdir("%s/escape_dir1" % tdir)
