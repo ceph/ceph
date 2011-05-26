@@ -151,19 +151,38 @@ def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
         shutil.rmtree(tdir)
 
-def compare_directories(dir_a, dir_b, expect_same = True):
+def compare_directories(dir_a, dir_b, expect_same = True, compare_xattr = True):
     if (opts.verbose):
         print "comparing directories %s and %s" % (dir_a, dir_b)
-    full = ["diff", "-q"]
-    full.extend(["-r", dir_a, dir_b])
-    ret = subprocess.call(full)
-    if ((ret == 0) and (not expect_same)):
+    info = []
+    for root, dirs, files in os.walk(dir_a):
+        for filename in files:
+            afile = os.path.join(root, filename)
+            bfile = dir_b + afile[len(dir_a):]
+            if (not os.path.exists(bfile)):
+                info.append("Not found: %s: " % bfile)
+            else:
+                ret = subprocess.call(["diff", "-q", afile, bfile])
+                if (ret != 0):
+                    info.append("Files differ: %s and %s" % (afile, bfile))
+                elif compare_xattr:
+                    xinfo = xattr_diff(afile, bfile)
+                    info.extend(xinfo)
+    for root, dirs, files in os.walk(dir_b):
+        for filename in files:
+            bfile = os.path.join(root, filename)
+            afile = dir_a + bfile[len(dir_b):]
+            if (not os.path.exists(afile)):
+                info.append("Not found: %s" % afile)
+    if ((len(info) == 0) and (not expect_same)):
         print "expected the directories %s and %s to differ, but \
 they were the same!" % (dir_a, dir_b)
+        print "\n".join(info)
         raise Exception("compare_directories failed!")
-    if ((ret != 0) and expect_same):
+    if ((len(info) != 0) and expect_same):
         print "expected the directories %s and %s to be the same, but \
 they were different!" % (dir_a, dir_b)
+        print "\n".join(info)
         raise Exception("compare_directories failed!")
 
 def count_obj_in_dir(d):
@@ -181,6 +200,26 @@ def get_optional(h, k):
         return h[k]
     else:
         return None
+
+def xattr_diff(afile, bfile):
+    def tuple_list_to_hash(tl):
+        ret = {}
+        for k,v in tl:
+            ret[k] = v
+        return ret
+    info = []
+    a_attr = tuple_list_to_hash(xattr.get_all(afile, namespace=xattr.NS_USER))
+    b_attr = tuple_list_to_hash(xattr.get_all(bfile, namespace=xattr.NS_USER))
+    for ka,va in a_attr.items():
+        if b_attr.has_key(ka):
+            if b_attr[ka] != va:
+                info.append("xattrs differ for %s" % ka)
+        else:
+            info.append("only in %s: %s" % (afile, ka))
+    for kb,vb in b_attr.items():
+        if not a_attr.has_key(kb):
+            info.append("only in %s: %s" % (bfile, kb))
+    return info
 
 def xattr_sync_impl(file_name, meta):
     xlist = xattr.get_all(file_name, namespace=xattr.NS_USER)
@@ -483,7 +522,7 @@ obsync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
 
 # make sure that the copy worked
 obsync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
-compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
+compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir, compare_xattr = False)
 if (opts.verbose):
     print "successfully copied the sample directory to " + opts.buckets[0].name
 
@@ -519,7 +558,7 @@ if len(opts.pools) > 0:
     obsync_check("%s/rgw1" % tdir, opts.pools[0], [])
     print "testing rgw source"
     obsync_check(opts.pools[0], "%s/rgw2" % tdir, ["-c"])
-    compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir)
+    compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir, compare_xattr = False)
 #    print "testing rgw target with --create"
 #    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
 
@@ -533,7 +572,8 @@ f.write("blarg/")
 f.close()
 obsync_check("file://%s/escape_dir1" % tdir, opts.buckets[0], ["-d"])
 obsync_check(opts.buckets[0], "file://%s/escape_dir2" % tdir, ["-c"])
-compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir)
+compare_directories("%s/escape_dir1" % tdir, "%s/escape_dir2" % tdir,
+                    compare_xattr = False)
 
 # some more tests with --no-preserve-acls
 obsync_check("file://%s/dir1" % tdir, opts.buckets[0],
@@ -551,7 +591,7 @@ obsync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"] + \
 if (opts.verbose):
     print "copying bucket1 to dir4..."
 obsync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
-compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
+compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir, compare_xattr = False)
 if (opts.verbose):
     print "successfully copied " + opts.buckets[0].name + " to " + \
         opts.buckets[1].name
