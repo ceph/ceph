@@ -555,6 +555,10 @@ if len(opts.pools) > 0:
     f = open("%s/rgw1/aaa" % tdir, 'w')
     f.write("aaa")
     f.close()
+    f = open("%s/rgw1/crazy" % tdir, 'w')
+    for i in range(0, 1000):
+        f.write("some crazy text\n")
+    f.close()
     f = open("%s/rgw1/brick" % tdir, 'w')
     f.write("br\0ick")
     f.close()
@@ -564,9 +568,12 @@ if len(opts.pools) > 0:
     compare_directories("%s/rgw1" % tdir, "%s/rgw2" % tdir, compare_xattr = False)
     # some tests with xattrs
     xattr_sync("%s/rgw2/brick" % tdir, { CONTENT_TYPE_XATTR : "bricks" })
+    xattr_sync("%s/rgw2/crazy" % tdir, { CONTENT_TYPE_XATTR : "text/plain",
+            "rados.meta.froobs" : "quux", "rados.meta.gaz" : "luxx" } )
     obsync_check("%s/rgw2" % tdir, opts.pools[0], [])
     obsync_check(opts.pools[0], "%s/rgw3" % tdir, ["-c"])
     compare_directories("%s/rgw2" % tdir, "%s/rgw3" % tdir, compare_xattr = True)
+
 #    print "testing rgw target with --create"
 #    obsync_check("%s/rgw1" % tdir, opts.pools[0], ["--create"])
 
