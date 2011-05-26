@@ -14,8 +14,13 @@
         [--num-rep n]
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
-     -i mapfn --add-item <id> <weight> <name> [--loc type name ...]
+     -i mapfn --add-item id weight name [--loc type name ...]
                            insert an item into the hierarchy at the
                            given location
-     -i mapfn --reweight   recalculate bucket weights
+     -i mapfn --remove-item name
+                           remove the given item
+     -i mapfn --reweight-item name weight
+                           reweight a given item (and adjust ancestor
+                           weights as needed)
+     -i mapfn --reweight   recalculate all bucket weights
   [1]

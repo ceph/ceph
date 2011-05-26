@@ -762,10 +762,15 @@ void usage()
   cout << "      [--num-rep n]\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
-  cout << "   -i mapfn --add-item <id> <weight> <name> [--loc type name ...]\n";
+  cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
   cout << "                         insert an item into the hierarchy at the\n";
   cout << "                         given location\n";
-  cout << "   -i mapfn --reweight   recalculate bucket weights\n";
+  cout << "   -i mapfn --remove-item name\n"
+       << "                         remove the given item\n";
+  cout << "   -i mapfn --reweight-item name weight\n";
+  cout << "                         reweight a given item (and adjust ancestor\n"
+       << "                         weights as needed)\n";
+  cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
   exit(1);
 }
 
