@@ -679,4 +679,13 @@ obsync_check(opts.buckets[0], "%s/user_defined_md2" % tdir, ["-c"])
 assert_xattr("%s/user_defined_md2/spork" % tdir,
     { "rados.meta.tines" : "3", "rados.content_type" : "application/octet-stream" })
 
+# more rgw target tests
+if len(opts.pools) > 0:
+    # synchronize from an s3 bucket to an bucket directly
+    obsync_check(opts.buckets[1], opts.pools[0], ["--delete-after"] + \
+            xuser(sconfig, "main", "alt"))
+    obsync_check(opts.pools[0], "%s/rgw4" % tdir, ["--delete-after", "-c"])
+    obsync_check(opts.buckets[1], "%s/rgw5" % tdir, ["--delete-after", "-c"])
+    compare_directories("%s/rgw4" % tdir, "%s/rgw5" % tdir, compare_xattr = True)
+
 sys.exit(0)
