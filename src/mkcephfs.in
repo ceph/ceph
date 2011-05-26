@@ -444,6 +444,8 @@ if [ $allhosts -eq 1 ]; then
 	    echo pushing everything to $host
 	    ssh $host mkdir -p $rdir
 	    scp -q $dir/* $host:$rdir
+	else
+	    rdir=$dir
 	fi
 	
 	do_cmd "$0 -d $rdir --init-daemon $name"
