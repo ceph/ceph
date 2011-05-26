@@ -2265,6 +2265,35 @@ void OSD::handle_command(MMonCommand *m)
 	<< " in blocks of " << prettybyte_t(bsize) << " in "
 	<< (end-start) << " sec at " << prettybyte_t(rate) << "/sec\n";
     
+  } else if (m->cmd.size() == 2 && m->cmd[0] == "mark_unfound_lost") {
+    pg_t pgid;
+    if (pgid.parse(m->cmd[1].c_str())) {
+      PG *pg = _lookup_lock_pg(pgid);
+      if (pg) {
+	if (pg->is_primary()) {
+	  int unfound = pg->missing.num_missing() - pg->missing_loc.size();
+	  if (unfound) {
+	    if (pg->all_unfound_are_lost(pg->osd->osdmap)) {
+	      clog.error() << pgid << " has " << unfound
+			   << " objects unfound and apparently lost, marking\n";
+	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	      pg->mark_all_unfound_as_lost(*t);
+	      store->queue_transaction(&pg->osr, t);
+	    } else
+	      clog.error() << "pg " << pgid << " has " << unfound
+			   << " objects but we haven't probed all sources, not marking lost despite command "
+			   << m->cmd << "\n";
+	  } else
+	    clog.error() << "pg " << pgid << " has no unfound objects for command " << m->cmd << "\n";
+	} else
+	  clog.error() << "not primary for pg " << pgid << "; acting is " << pg->acting << "\n";
+	pg->unlock();
+      } else
+	clog.error() << "pg " << pgid << " not found\n";
+    } else {
+      clog.error() << "cannot parse pgid from command '" << m->cmd << "'\n";
+
+    }
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {

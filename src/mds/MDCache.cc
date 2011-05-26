@@ -127,6 +127,7 @@ MDCache::MDCache(MDS *m)
   root = NULL;
   myin = NULL;
 
+  stray_index = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
     strays[i] = NULL;
   }
