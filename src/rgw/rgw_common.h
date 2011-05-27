@@ -119,12 +119,12 @@ class XMLArgs
 {
   string str, empty_str;
   map<string, string> val_map;
-  string sub_resource;
+  map<string, string> sub_resources;
  public:
    XMLArgs() {}
    XMLArgs(string s) : str(s) {}
    /** Set the arguments; as received */
-   void set(string s) { val_map.clear(); sub_resource.clear(); str = s; }
+   void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
    /** parse the received arguments */
    int parse();
    /** Get the value for a specific argument parameter */
@@ -135,7 +135,7 @@ class XMLArgs
      map<string, string>::iterator iter = val_map.find(name);
      return (iter != val_map.end());
    }
-   string& get_sub_resource() { return sub_resource; }
+   map<string, string>& get_sub_resources() { return sub_resources; }
 };
 
 enum http_op {

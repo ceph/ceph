@@ -109,13 +109,14 @@ int XMLArgs::parse()
     if (ret >= 0) {
       val_map[nv.get_name()] = nv.get_val();
 
-      if (ret > 0) { /* this might be a sub-resource */
-        if ((nv.get_name().compare("acl") == 0) ||
-            (nv.get_name().compare("location") == 0) ||
-            (nv.get_name().compare("uploads") == 0) ||
-            (nv.get_name().compare("versionid") == 0) ||
-            (nv.get_name().compare("torrent") == 0))
-          sub_resource = nv.get_name();
+      if ((nv.get_name().compare("acl") == 0) ||
+          (nv.get_name().compare("location") == 0) ||
+          (nv.get_name().compare("uploads") == 0) ||
+          (nv.get_name().compare("partNumber") == 0) ||
+          (nv.get_name().compare("uploadId") == 0) ||
+          (nv.get_name().compare("versionid") == 0) ||
+          (nv.get_name().compare("torrent") == 0)) {
+        sub_resources[nv.get_name()] = nv.get_val();
       }
     }
 

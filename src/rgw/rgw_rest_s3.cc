@@ -354,11 +354,20 @@ static void get_canon_resource(struct req_state *s, string& dest)
 
   dest.append(s->path_name_url.c_str());
 
-  string& sub = s->args.get_sub_resource();
-  if (sub.size() > 0) {
-    dest.append("?");
-    dest.append(sub);
+  map<string, string>& sub = s->args.get_sub_resources();
+  map<string, string>::iterator iter;
+  for (iter = sub.begin(); iter != sub.end(); ++iter) {
+    if (iter == sub.begin())
+      dest.append("?");
+    else
+      dest.append("&");     
+    dest.append(iter->first);
+    if (!iter->second.empty()) {
+      dest.append("=");
+      dest.append(iter->second);
+    }
   }
+  RGW_LOG(0) << "dest=" << dest << dendl;
 }
 
 /*
