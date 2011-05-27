@@ -535,7 +535,7 @@ public class CephFileSystem extends FileSystem {
    */
   public FSDataOutputStream create(Path path,
       FsPermission permission,
-      EnumSet<CreateFlag> flag,
+      boolean overwrite,
       // boolean overwrite,
       int bufferSize,
       short replication,
@@ -554,8 +554,8 @@ public class CephFileSystem extends FileSystem {
     }
     // We ignore replication since that's not configurable here, and
     // progress reporting is quite limited.
-    // Required semantics: if the file exists, overwrite if CreateFlag.OVERWRITE;
-    // throw an exception if !CreateFlag.OVERWRITE.
+    // Required semantics: if the file exists, overwrite if 'overwrite' is set;
+    // otherwise, throw an exception
 
     // Step 1: existence test
     boolean exists = exists(abs_path);
@@ -566,8 +566,7 @@ public class CephFileSystem extends FileSystem {
             "create: Cannot overwrite existing directory \"" + path.toString()
             + "\" with a file");
       }
-      // if (!overwrite)
-      if (!flag.contains(CreateFlag.OVERWRITE)) {
+      if (!overwrite) {
         throw new IOException(
             "createRaw: Cannot open existing file \"" + abs_path.toString()
             + "\" for writing without overwrite flag");
