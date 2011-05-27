@@ -278,7 +278,11 @@ int RGWPutACLs_REST::get_params()
 
 int RGWInitMultipart_REST::get_params()
 {
-  return 0;
+  if (!s->args.exists("uploads")) {
+    ret = -ENOTSUP;
+  }
+
+  return ret;
 }
 
 static void next_tok(string& str, string& tok, char delim)
@@ -673,6 +677,7 @@ int RGWHandler_REST::read_permissions()
     only_bucket = false;
     break;
   case OP_PUT:
+  case OP_POST:
     /* is it a 'create bucket' request? */
     if (is_acl_op(s)) {
       only_bucket = false;
@@ -707,6 +712,7 @@ RGWOp *RGWHandler_REST::get_op()
      op = get_retrieve_op(s, false);
      break;
    case OP_POST:
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
      op = get_post_op(s);
      break;
    default:

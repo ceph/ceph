@@ -112,6 +112,8 @@ int XMLArgs::parse()
       if (ret > 0) { /* this might be a sub-resource */
         if ((nv.get_name().compare("acl") == 0) ||
             (nv.get_name().compare("location") == 0) ||
+            (nv.get_name().compare("uploads") == 0) ||
+            (nv.get_name().compare("versionid") == 0) ||
             (nv.get_name().compare("torrent") == 0))
           sub_resource = nv.get_name();
       }

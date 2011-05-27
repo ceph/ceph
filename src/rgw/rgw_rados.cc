@@ -253,16 +253,23 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
  * size: the amount of data to write (data must be this long)
  * mtime: if non-NULL, writes the given mtime to the bucket storage
  * attrs: all the given attrs are written to bucket storage for the given object
+ * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oid,
-                  time_t *mtime, map<string, bufferlist>& attrs)
+                  time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   librados::IoCtx io_ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
+  if (exclusive) {
+    r = io_ctx.create(oid, true);
+    if (r < 0)
+      return r;
+  }
 
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -392,7 +399,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   }
   attrs = attrset;
 
-  ret = put_obj_meta(id, dest_bucket, dest_obj, mtime, attrs);
+  ret = put_obj_meta(id, dest_bucket, dest_obj, mtime, attrs, false);
 
   finish_get_obj(&handle);
 

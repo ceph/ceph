@@ -47,13 +47,13 @@ public:
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
-                      map<std::string, bufferlist>& attrs) = 0;
+                      map<std::string, bufferlist>& attrs, bool exclusive) = 0;
   virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
                       off_t ofs, size_t len, time_t *mtime) = 0;
 
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_meta(id, bucket, obj, NULL, attrs);
+    int ret = put_obj_meta(id, bucket, obj, NULL, attrs, false);
     if (ret >= 0) {
       ret = put_obj_data(id, bucket, obj, data, -1, len, mtime);
     }

@@ -186,14 +186,14 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
 }
 
 int RGWFS::put_obj_meta(std::string& id, std::string& bucket, std::string& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs)
+                  time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
   int fd;
 
-  fd = open(buf, O_CREAT | O_WRONLY, 0755);
+  fd = open(buf, O_CREAT | O_WRONLY | (exclusive ? O_EXCL : 0), 0755);
   if (fd < 0)
     return -errno;
 

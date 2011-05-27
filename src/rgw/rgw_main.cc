@@ -102,6 +102,7 @@ int main(int argc, const char **argv)
       abort_early(&s, -EPERM);
       goto done;
     }
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
     ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
@@ -109,11 +110,15 @@ int main(int argc, const char **argv)
     }
     if (s.expect_cont)
       dump_continue(&s);
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
 
     op = handler->get_op();
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
     if (op) {
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
       op->execute();
     } else {
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
       abort_early(&s, -ERR_METHOD_NOT_ALLOWED);
     }
 done:

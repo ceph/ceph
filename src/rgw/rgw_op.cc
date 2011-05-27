@@ -454,7 +454,7 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs);
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs, false);
   }
 done:
   send_response();
@@ -775,6 +775,45 @@ done:
 
 void RGWInitMultipart::execute()
 {
+  bufferlist bl;
+  bufferlist aclbl;
+  RGWAccessControlPolicy policy;
+  map<string, bufferlist> attrs;
+
+  if (get_params() < 0)
+    goto done;
+
+  ret = -EINVAL;
+  if (!s->object)
+    goto done;
+
+
+  if (!verify_permission(s, RGW_PERM_WRITE)) {
+    ret = -EACCES;
+    goto done;
+  }
+
+  ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!ret) {
+     ret = -EINVAL;
+     goto done;
+  }
+
+  policy.encode(aclbl);
+
+  attrs[RGW_ATTR_ACL] = aclbl;
+
+  if (s->content_type) {
+    bl.append(s->content_type, strlen(s->content_type) + 1);
+    attrs[RGW_ATTR_CONTENT_TYPE] = bl;
+  }
+
+  get_request_metadata(s, attrs);
+
+  upload_id="blabla";
+
+  ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs, true);
+done:
   send_response();
 }
 

@@ -330,6 +330,7 @@ public:
 class RGWInitMultipart : public RGWOp {
 protected:
   int ret;
+  string upload_id;
 
 public:
   RGWInitMultipart() {}
@@ -337,6 +338,7 @@ public:
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
     ret = 0;
+    upload_id = "";
   }
   void execute();
 

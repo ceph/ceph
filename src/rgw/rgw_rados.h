@@ -43,7 +43,7 @@ public:
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
-              map<std::string, bufferlist>& attrs);
+              map<std::string, bufferlist>& attrs, bool exclusive);
   virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
               off_t ofs, size_t len, time_t *mtime);
   /** Copy an object, with many extra options */
