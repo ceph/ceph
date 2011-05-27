@@ -2586,6 +2586,10 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 void SimpleMessenger::wait()
 {
   lock.Lock();
+  if (!started) {
+    lock.Unlock();
+    return;
+  }
   while (!destination_stopped) {
     dout(10) << "wait: still active" << dendl;
     wait_cond.Wait(lock);
@@ -2608,6 +2612,7 @@ void SimpleMessenger::wait()
     reaper_stop = true;
     lock.Unlock();
     reaper_thread.join();
+    reaper_started = false;
     dout(20) << "wait: stopped reaper thread" << dendl;
   }
 
