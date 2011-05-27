@@ -45,7 +45,7 @@ class Thread {
  public:
   static int get_num_threads(void);
 
-  pthread_t &get_thread_id() { return thread_id; }
+  const pthread_t &get_thread_id() { return thread_id; }
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
 
