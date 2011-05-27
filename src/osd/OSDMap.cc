@@ -201,7 +201,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int pool = ++pool_max;
     pools[pool].v.type = CEPH_PG_TYPE_REP;
-    pools[pool].v.size = 2;
+    pools[pool].v.size = g_conf.osd_pool_default_size;
     pools[pool].v.crush_ruleset = p->first;
     pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].v.pg_num = nosd << pg_bits;
