@@ -810,9 +810,17 @@ void RGWInitMultipart::execute()
 
   get_request_metadata(s, attrs);
 
-  upload_id="blabla";
+  do {
+    char buf[33];
+    gen_rand_alphanumeric(buf, sizeof(buf) - 1);
+    upload_id = buf;
 
-  ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs, true);
+    string tmp_obj_name = s->object_str;
+    tmp_obj_name.append(".");
+    tmp_obj_name.append(upload_id);
+
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, tmp_obj_name, NULL, attrs, true);
+  } while (ret == -EEXIST);
 done:
   send_response();
 }

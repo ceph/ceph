@@ -84,6 +84,11 @@ extern string rgw_root_bucket;
 
 typedef void *RGWAccessHandle;
 
+ /* size should be the required string size + 1 */
+extern int gen_rand_base64(char *dest, int size);
+extern int gen_rand_alphanumeric(char *dest, int size);
+extern int gen_rand_alphanumeric_upper(char *dest, int size);
+
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
