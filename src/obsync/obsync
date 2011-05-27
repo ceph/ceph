@@ -352,6 +352,13 @@ class AclPolicy(object):
             self.owner_display_name = ""
         for k,g in self.grants.items():
             g.translate_users(xusers)
+    def get_all_users(self):
+        """ Get a list of all user ids referenced in this ACL """
+        users = {}
+        users[ACL_TYPE_CANON_USER + self.owner_id] = 1
+        for k,g in self.grants.items():
+            users[k] = 1
+        return users.keys()
     def set_owner(self, owner_id):
         self.owner_id = owner_id
         self.owner_display_name = ""
@@ -828,7 +835,7 @@ rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         self.rados = rados.Rados()
         self.rados.conf_read_file(self.conf_file_path)
         self.rados.connect()
-        if self.owner != None and not self.user_exists(self.owner):
+        if self.owner != None and not self.user_exists(ACL_TYPE_CANON_USER + self.owner):
             raise Exception("Unknown owner! DST_OWNER=%s" % self.owner)
         if (not self.rados.pool_exists(self.rgw_bucket_name)):
             if (create):
@@ -939,18 +946,25 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
         return RgwStoreIterator(it, self)
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
-    def user_exists(self, user_id):
-        if (self.user_exists_cache.has_key(user_id)):
-            return self.user_exists_cache[user_id]
-        if (self.users_uid_ioctx == None):
-            # will be closed in __del__
-            self.users_uid_ioctx = self.rados.open_ioctx(RGW_USERS_UID_BUCKET_NAME)
-        try:
-            self.users_uid_ioctx.stat(user_id)
-        except rados.ObjectNotFound:
-            return False
-        self.user_exists_cache[user_id] = True
-        return True
+    def user_exists(self, user):
+        if (self.user_exists_cache.has_key(user)):
+            return self.user_exists_cache[user]
+        if user[:len(ACL_TYPE_CANON_USER)] == ACL_TYPE_CANON_USER:
+            if (self.users_uid_ioctx == None):
+                # will be closed in __del__
+                self.users_uid_ioctx = self.rados.open_ioctx(RGW_USERS_UID_BUCKET_NAME)
+            try:
+                self.users_uid_ioctx.stat(user[len(ACL_TYPE_CANON_USER):])
+            except rados.ObjectNotFound:
+                return False
+            self.user_exists_cache[user] = True
+            return True
+        elif user[:len(ACL_TYPE_EMAIL_USER)] == ACL_TYPE_EMAIL_USER:
+            raise Exception("rgw target can't handle email users yet.")
+        elif user[:len(ACL_TYPE_GROUP)] == ACL_TYPE_GROUP:
+            raise Exception("rgw target can't handle groups yet.")
+        else:
+            raise Exception("can't understand user name %s" % user)
     def upload(self, local_copy, src_acl, obj):
         global lrgw
         if (opts.more_verbose):
@@ -973,6 +987,10 @@ xsi:type=\"CanonicalUser\"><ID>%s</ID> \
             ap = AclPolicy.create_default(self.owner)
         else:
             ap = src_acl.acl_policy
+        for user in ap.get_all_users():
+            if not self.user_exists(user):
+                raise Exception("You must provide an --xuser entry to translate \
+user %s into something valid for the rgw destination.")
         xml = ap.to_xml()
         bin_ = lrgw.acl_xml2bin(xml)
         self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
