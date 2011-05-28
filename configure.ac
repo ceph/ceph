@@ -141,6 +141,13 @@ AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
 
+# code coverage?
+AC_ARG_ENABLE([coverage],
+            [AS_HELP_STRING([--enable-coverage], [enable code coverage tracking])],
+            [],
+            [enable_coverage=no])
+AM_CONDITIONAL(ENABLE_COVERAGE, test "x$enable_coverage" != xno)
+
 # radosgw?
 AC_ARG_WITH([radosgw],
             [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],

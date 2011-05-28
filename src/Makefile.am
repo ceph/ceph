@@ -503,6 +503,11 @@ if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops
 endif
 
+if ENABLE_COVERAGE
+AM_CFLAGS += -fprofile-arcs -ftest-coverage
+AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
+EXTRALIBS += -lgcov
+endif
 
 noinst_LIBRARIES = \
 	libcommon.a \
