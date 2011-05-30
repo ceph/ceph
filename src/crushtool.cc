@@ -802,6 +802,7 @@ int main(int argc, const char **argv)
   bool compile = false;
   bool decompile = false;
   bool test = false;
+  bool verbose = false;
   const char *outfn = 0;
   bool clobber = false;
 
@@ -833,6 +834,8 @@ int main(int argc, const char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("outfn", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&outfn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&verbose, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("compile", 'c')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&srcfn, OPT_STR);
       compile = true;
@@ -1144,7 +1147,8 @@ int main(int argc, const char **argv)
       for (int x = min_x; x <= max_x; x++) {
 	vector<int> out;
 	crush.do_rule(r, x, out, num_rep, -1, weight);
-	//cout << "rule " << r << " x " << x << " " << out << std::endl;
+	if (verbose)
+	  cout << "rule " << r << " x " << x << " " << out << std::endl;
 	for (unsigned i = 0; i < out.size(); i++)
 	  per[out[i]]++;
 	sizes[out.size()]++;
