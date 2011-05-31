@@ -1,0 +1,63 @@
+#!/usr/bin/python
+
+"""
+Helper script for running long-living processes.
+
+(Name says daemon, but that is intended to mean "long-living", we
+assume child process does not double-fork.)
+
+We start the command passed as arguments, with /dev/null as stdin, and
+then wait for EOF on stdin.
+
+When EOF is seen on stdin, the child process is killed.
+
+When the child process exits, this helper exits too.
+"""
+
+import fcntl
+import os
+import select
+import signal
+import subprocess
+import sys
+
+with file('/dev/null', 'rb') as devnull:
+    proc = subprocess.Popen(
+        args=sys.argv[1:],
+        stdin=devnull,
+        )
+
+flags = fcntl.fcntl(0, fcntl.F_GETFL)
+fcntl.fcntl(0, fcntl.F_SETFL, flags | os.O_NDELAY)
+
+saw_eof = False
+while True:
+    r,w,x = select.select([0], [], [0], 0.2)
+    if r:
+        data = os.read(0, 1)
+        if not data:
+            saw_eof = True
+            proc.send_signal(signal.SIGKILL)
+            break
+
+    if proc.poll() is not None:
+        # child exited
+        break
+
+exitstatus = proc.wait()
+if exitstatus > 0:
+    print >>sys.stderr, '{me}: command failed with exit status {exitstatus:d}'.format(
+        me=os.path.basename(sys.argv[0]),
+        exitstatus=exitstatus,
+        )
+    sys.exit(exitstatus)
+elif exitstatus < 0:
+    if saw_eof and exitstatus == -signal.SIGKILL:
+        # suppress error from the exit we intentionally caused
+        pass
+    else:
+        print >>sys.stderr, '{me}: command crashed with signal {signal:d}'.format(
+            me=os.path.basename(sys.argv[0]),
+            signal=-exitstatus,
+            )
+        sys.exit(1)
