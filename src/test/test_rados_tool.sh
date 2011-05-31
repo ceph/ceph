@@ -57,22 +57,25 @@ TDIR=`mktemp -d -t test_rados_tool.XXXXXXXXXX` || die "mktemp failed"
 [ $KEEP_TEMP_FILES -eq 0 ] && trap "rm -rf ${TDIR}; exit" INT TERM EXIT
 
 mkdir "$TDIR/dira"
-touch "$TDIR/dira/000029c4_foo"
-attr -q -s rados_full_name -V "foo" "$TDIR/dira/000029c4_foo"
-touch "$TDIR/dira/00003036_foo2"
-attr -q -s rados_full_name -V "foo2" "$TDIR/dira/00003036_foo2"
-touch "$TDIR/dira/000027d5_bar"
-attr -q -s rados_full_name -V "bar" "$TDIR/dira/000027d5_bar"
+attr -q -s "rados_sync_ver" -V "1" "$TDIR/dira"
+touch "$TDIR/dira/foo"
+attr -q -s "rados_full_name" -V "foo" "$TDIR/dira/foo"
+touch "$TDIR/dira/foo2"
+attr -q -s "rados_full_name" -V "foo2" "$TDIR/dira/foo2"
+touch "$TDIR/dira/bar"
+attr -q -s "rados_full_name" -V "bar" "$TDIR/dira/bar"
 mkdir "$TDIR/dirb"
+attr -q -s "rados_sync_ver" -V "1" "$TDIR/dirb"
 mkdir "$TDIR/dirc"
-touch "$TDIR/dirc/000029c4_foo"
-attr -q -s rados_full_name -V "foo" "$TDIR/dirc/000029c4_foo"
-attr -q -s "rados.toothbrush" -V "toothbrush" "$TDIR/dirc/000029c4_foo"
-attr -q -s "rados.toothpaste" -V "crest" "$TDIR/dirc/000029c4_foo"
-attr -q -s "rados.floss" -V "myfloss" "$TDIR/dirc/000029c4_foo"
-touch "$TDIR/dirc/00003036_foo2"
-attr -q -s "rados.toothbrush" -V "green" "$TDIR/dirc/00003036_foo2"
-attr -q -s rados_full_name -V "foo2" "$TDIR/dirc/00003036_foo2"
+attr -q -s "rados_sync_ver" -V "1" "$TDIR/dirc"
+touch "$TDIR/dirc/foo"
+attr -q -s "rados_full_name" -V "foo" "$TDIR/dirc/foo"
+attr -q -s "rados.toothbrush" -V "toothbrush" "$TDIR/dirc/foo"
+attr -q -s "rados.toothpaste" -V "crest" "$TDIR/dirc/foo"
+attr -q -s "rados.floss" -V "myfloss" "$TDIR/dirc/foo"
+touch "$TDIR/dirc/foo2"
+attr -q -s "rados.toothbrush" -V "green" "$TDIR/dirc/foo2"
+attr -q -s "rados_full_name" -V "foo2" "$TDIR/dirc/foo2"
 
 # make sure that --create works
 run "$RADOS_TOOL" rmpool "$POOL"
@@ -108,8 +111,8 @@ run_expect_succ grep '\[force\]' "$TDIR/out2"
 run_expect_succ "$RADOS_TOOL" -C export "$POOL" "$TDIR/dirc_copy"
 
 # check to make sure extended attributes were preserved
-PRE_EXPORT=`attr -qg rados.toothbrush "$TDIR/dirc/000029c4_foo"`
-POST_EXPORT=`attr -qg rados.toothbrush "$TDIR/dirc_copy/000029c4_foo"`
+PRE_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc/foo"`
+POST_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc_copy/foo"`
 if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
     die "xattr not preserved across import/export! \
 \$PRE_EXPORT = $PRE_EXPORT, \$POST_EXPORT = $POST_EXPORT"
@@ -117,14 +120,14 @@ fi
 
 # trigger a rados delete using --delete-after
 run_expect_succ "$RADOS_TOOL" --create export "$POOL" "$TDIR/dird"
-rm -f "$TDIR/dird/000029c4_foo"
+rm -f "$TDIR/dird/foo"
 run_expect_succ "$RADOS_TOOL" --delete-after import "$TDIR/dird" "$POOL" | tee "$TDIR/out3"
 run_expect_succ grep '\[deleted\]' "$TDIR/out3"
 
 # trigger a local delete using --delete-after
 run_expect_succ "$RADOS_TOOL" --delete-after export "$POOL" "$TDIR/dirc" | tee "$TDIR/out4"
 run_expect_succ grep '\[deleted\]' "$TDIR/out4"
-[ -e "$TDIR/dird/000029c4_foo" ] && die "--delete-after failed to delete a file!"
+[ -e "$TDIR/dird/foo" ] && die "--delete-after failed to delete a file!"
 
 echo "SUCCESS!"
 exit 0
