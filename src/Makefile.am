@@ -308,6 +308,7 @@ my_radosgw_src = \
 	rgw/rgw_os_auth.cc \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
+	rgw/rgw_multi.cc \
 	rgw/rgw_escape.c
 
 my_radosgw_ldadd = \
@@ -1089,6 +1090,7 @@ noinst_HEADERS = \
 	rgw/rgw_formats.h\
 	rgw/rgw_fs.h\
 	rgw/rgw_log.h\
+	rgw/rgw_multi.h\
 	rgw/rgw_op.h\
 	rgw/rgw_os.h\
 	rgw/rgw_os_auth.h\
