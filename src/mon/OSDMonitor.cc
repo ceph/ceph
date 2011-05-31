@@ -520,7 +520,6 @@ void OSDMonitor::_reported_failure(MOSDFailure *m)
   send_latest(m, m->get_epoch());
 }
 
-
 // boot --
 
 bool OSDMonitor::preprocess_boot(MOSDBoot *m)
@@ -2036,4 +2035,15 @@ void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch, bufferlist *
 					 replyCode, epoch, paxos->get_version(), blp);
   mon->send_reply(m, reply);
   m->put();
+}
+
+void OSDMonitor::send_exits()
+{
+  vector<string> cmd;
+  cmd.push_back("exit");
+  for (int i = 0; i < osdmap.get_max_osd(); ++i) {
+    if (osdmap.is_up(i)) {
+      mon->send_command(osdmap.get_inst(i), cmd, paxos->get_version());
+    }
+  }
 }
