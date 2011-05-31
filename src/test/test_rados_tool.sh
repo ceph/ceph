@@ -129,5 +129,17 @@ run_expect_succ "$RADOS_TOOL" --delete-after export "$POOL" "$TDIR/dirc" | tee "
 run_expect_succ grep '\[deleted\]' "$TDIR/out4"
 [ -e "$TDIR/dird/foo" ] && die "--delete-after failed to delete a file!"
 
+# test hashed pathnames
+mkdir "$TDIR/dird"
+attr -q -s "rados_sync_ver" -V "1" "$TDIR/dird"
+touch "$TDIR/dird/bar@bar_00000000000055ca"
+attr -q -s "rados_full_name" -V "bar/bar" "$TDIR/dird/bar@bar_00000000000055ca"
+run_expect_succ "$RADOS_TOOL" --delete-after import "$TDIR/dird" "$POOL" | tee "$TDIR/out5"
+run_expect_succ grep '\[imported\]' "$TDIR/out5"
+run_expect_succ "$RADOS_TOOL" --delete-after --create export "$POOL" "$TDIR/dire" | tee "$TDIR/out6"
+run_expect_succ grep '\[exported\]' "$TDIR/out6"
+diff -q -r "$TDIR/dird" "$TDIR/dire" \
+    || die "failed to export the same stuff we imported!"
+
 echo "SUCCESS!"
 exit 0
