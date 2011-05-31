@@ -10,7 +10,7 @@ import urllib2
 import sys
 import yaml
 
-from orchestra import connection, run
+from orchestra import connection, run, remote
 # TODO cleanup
 import teuthology.misc as teuthology
 
@@ -28,19 +28,19 @@ if __name__ == '__main__':
     ROLES = config['roles']
 
     connections = [connection.connect(t) for t in config['targets']]
+    remotes = [remote.Remote(name=t, ssh=c) for c,t in zip(connections, config['targets'])]
 
     log.info('Checking for old test directory...')
     has_junk = False
-    for target, conn in zip(config['targets'], connections):
+    for rem in remotes:
         try:
-            run.run(
-                client=conn,
+            rem.run(
                 args=[
                     'test', '!', '-e', '/tmp/cephtest',
                     ],
                 )
         except run.CommandFailedError as e:
-            log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', target)
+            log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', rem)
             has_junk = True
     if has_junk:
         sys.exit(1)
