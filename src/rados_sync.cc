@@ -34,9 +34,9 @@ using std::auto_ptr;
 using namespace librados;
 
 static const char * const XATTR_FULLNAME = "user.rados_full_name";
-static const char XATTR_PREFIX[] = "user.rados.";
-static const size_t XATTR_PREFIX_LEN =
-	sizeof(XATTR_PREFIX)/sizeof(XATTR_PREFIX[0]) - 1;
+static const char USER_XATTR_PREFIX[] = "user.rados.";
+static const size_t USER_XATTR_PREFIX_LEN =
+  sizeof(USER_XATTR_PREFIX) / sizeof(USER_XATTR_PREFIX[0]) - 1;
 
 static const char ERR_PREFIX[] = "[ERROR]        ";
 
@@ -108,6 +108,20 @@ done:
 	 << "directory." << std::endl;
   }
   return ret;
+}
+
+/* Given the name of an extended attribute from a file in the filesystem,
+ * returns an empty string if the extended attribute does not represent a rados
+ * user extended attribute. Otherwise, returns the name of the rados extended
+ * attribute.
+ *
+ * Rados user xattrs are prefixed with USER_XATTR_PREFIX.
+ */
+static std::string get_user_xattr_name(const char *fs_xattr_name)
+{
+  if (strncmp(fs_xattr_name, USER_XATTR_PREFIX, USER_XATTR_PREFIX_LEN))
+    return "";
+  return fs_xattr_name + USER_XATTR_PREFIX_LEN;
 }
 
 class DirHolder {
@@ -562,20 +576,21 @@ private:
     const char *b = buf;
     while (*b) {
       size_t bs = strlen(b);
-      if (strncmp(b, XATTR_PREFIX, XATTR_PREFIX_LEN) == 0) {
+      std::string xattr_name = get_user_xattr_name(b);
+      if (!xattr_name.empty()) {
 	ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
 	if (attr_len < 0) {
 	  int err = errno;
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "fgetxattr(rados_name = '" << rados_name << "', xattr_name='"
-	       << b << "') failed: " << cpp_strerror(err) << std::endl;
+	       << xattr_name << "') failed: " << cpp_strerror(err) << std::endl;
 	  return EDOM;
 	}
 	char *attr = (char*)malloc(attr_len);
 	if (!attr) {
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "malloc(" << attr_len << ") failed for xattr_name='"
-	       << b << "'" << std::endl;
+	       << xattr_name << "'" << std::endl;
 	  return ENOBUFS;
 	}
 	ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
@@ -583,7 +598,7 @@ private:
 	  int err = errno;
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "fgetxattr(rados_name = '" << rados_name << "', "
-	       << "xattr_name='" << b << "') failed: "
+	       << "xattr_name='" << xattr_name << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  free(attr);
 	  return EDOM;
@@ -592,13 +607,13 @@ private:
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: xattr "
 	       << "changed while we were trying to get it? "
 	       << "fgetxattr(rados_name = '"<< rados_name
-	       << "', xattr_name='" << b << "') returned a different length "
+	       << "', xattr_name='" << xattr_name << "') returned a different length "
 	       << "than when we first called it! old_len = " << attr_len
 	       << "new_len = " << attr_len2 << std::endl;
 	  free(attr);
 	  return EDOM;
 	}
-	xattrs[b] = new Xattr(attr, attr_len);
+	xattrs[xattr_name] = new Xattr(attr, attr_len);
       }
       b += (bs + 1);
     }
@@ -627,7 +642,7 @@ private:
 	free(data);
 	return ENOBUFS;
       }
-      xattrs[i->first] = xattr;
+      xattrs[USER_XATTR_PREFIX + i->first] = xattr;
       attrset.erase(i++);
     }
     return 0;
