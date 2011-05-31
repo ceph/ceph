@@ -322,27 +322,11 @@ WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
  * Interfaces with the webserver's XML handling code
  * to parse it in a way that makes sense for the rgw.
  */
-class RGWACLXMLParser : public XMLObj
+class RGWACLXMLParser : public RGWXMLParser
 {
-  XML_Parser p;
-  char *buf;
-  int buf_len;
-  XMLObj *cur_obj;
-  vector<XMLObj *> objs;
+  XMLObj *alloc_obj(const char *el);
 public:
-  RGWACLXMLParser();
-  ~RGWACLXMLParser();
-  bool init();
-  bool xml_start(const char *el, const char **attr);
-  bool xml_end(const char *el);
-  void handle_data(const char *s, int len);
-
-  bool parse(const char *buf, int len, int done);
-  const char *get_xml() { return buf; }
-  void set_failure() { success = false; }
-
-private:
-  bool success;
+  RGWACLXMLParser() {}
 };
 
 #endif

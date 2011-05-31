@@ -96,7 +96,7 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
 {
   char *bin_ = NULL;
   try {
-    RGWXMLParser parser;
+    RGWACLXMLParser parser;
     if (!parser.init()) {
       return -1000;
     }

@@ -10,7 +10,7 @@
 using namespace std;
                                   
 int main(int argc, char **argv) {
-  RGWXMLParser parser;
+  RGWACLXMLParser parser;
 
   if (!parser.init())
     exit(1);

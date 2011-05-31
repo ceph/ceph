@@ -72,9 +72,11 @@ class RGWXMLParser : public XMLObj
   int buf_len;
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
+protected:
+  virtual XMLObj *alloc_obj(const char *el) = 0;
 public:
   RGWXMLParser();
-  ~RGWXMLParser();
+  virtual ~RGWXMLParser();
   bool init();
   bool xml_start(const char *el, const char **attr);
   bool xml_end(const char *el);
