@@ -8,7 +8,7 @@ class Remote(object):
     """
 
     # for unit tests to hook into
-    _runner = run.run
+    _runner = staticmethod(run.run)
 
     def __init__(self, name, ssh, shortname=None):
         self.name = name
