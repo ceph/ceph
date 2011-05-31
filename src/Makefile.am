@@ -290,7 +290,8 @@ bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 if WITH_RADOSGW
 my_libradosgw_src = \
 	rgw/librgw.cc \
-	rgw/rgw_acl.cc
+	rgw/rgw_acl.cc \
+	rgw/rgw_xml.cc
 
 my_radosgw_src = \
 	rgw/rgw_fs.cc \
@@ -1082,6 +1083,7 @@ noinst_HEADERS = \
         perfglue/heap_profiler.h\
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
+	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\

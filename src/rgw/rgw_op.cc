@@ -410,6 +410,21 @@ void RGWPutObj::execute()
     }
 
     MD5 hash;
+    string obj;
+    if (!s->args.exists("uploadId")) {
+      obj = s->object_str;
+    } else {
+      obj = s->object_str;
+      obj.append(".");
+      obj.append(s->args.get("uploadId"));
+      string partNum = s->args.get("partNumber");
+      if (partNum.empty()) {
+        ret = -EINVAL;
+        goto done;
+      }
+      obj.append(".");
+      obj.append(partNum);
+    }
     do {
       get_data();
       if (len > 0) {
@@ -417,7 +432,7 @@ void RGWPutObj::execute()
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
         ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str,
-				     s->object_str, data,
+				     obj, data,
 				     ((ofs == 0) ? -1 : ofs), len, NULL);
         free(data);
         if (ret < 0)
@@ -454,7 +469,7 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs, false);
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, obj, NULL, attrs, false);
   }
 done:
   send_response();
@@ -682,7 +697,7 @@ void RGWPutACLs::execute()
   bufferlist bl;
 
   RGWAccessControlPolicy *policy = NULL;
-  RGWXMLParser parser;
+  RGWACLXMLParser parser;
   RGWAccessControlPolicy new_policy;
   stringstream ss;
   char *orig_data = data;

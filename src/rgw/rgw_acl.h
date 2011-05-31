@@ -8,6 +8,8 @@
 
 #include <expat.h>
 
+#include "rgw_xml.h"
+
 using namespace std;
 
 
@@ -21,49 +23,6 @@ using namespace std;
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
 #define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL
-
-class XMLObj;
-
-class XMLObjIter {
-  typedef map<string, XMLObj *>::iterator map_iter_t;
-  map_iter_t cur;
-  map_iter_t end;
-public:
-  XMLObjIter();
-  ~XMLObjIter();
-  void set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end);
-  XMLObj *get_next();
-};
-
-/**
- * Represents a block of XML.
- * Give the class an XML blob, and it will parse the blob into
- * an attr_name->value map.
- * This really ought to be an abstract class or something; it
- * shouldn't be the startpoint for any parsing. Look at RGWXMLParser for that.
- */
-class XMLObj
-{
-  XMLObj *parent;
-  string type;
-protected:
-  string data;
-  multimap<string, XMLObj *> children;
-  map<string, string> attr_map;
-public:
-  virtual ~XMLObj();
-  bool xml_start(XMLObj *parent, const char *el, const char **attr);
-  virtual bool xml_end(const char *el);
-  virtual void xml_handle_data(const char *s, int len);
-  string& get_data();
-  XMLObj *get_parent();
-  void add_child(string el, XMLObj *obj);
-  bool get_attr(string name, string& attr);
-  XMLObjIter find(string name);
-  XMLObj *find_first(string name);
-
-  friend ostream& operator<<(ostream& out, XMLObj& obj);
-};
 
 class ACLPermission : public XMLObj
 {
@@ -363,7 +322,7 @@ WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
  * Interfaces with the webserver's XML handling code
  * to parse it in a way that makes sense for the rgw.
  */
-class RGWXMLParser : public XMLObj
+class RGWACLXMLParser : public XMLObj
 {
   XML_Parser p;
   char *buf;
@@ -371,8 +330,8 @@ class RGWXMLParser : public XMLObj
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
 public:
-  RGWXMLParser();
-  ~RGWXMLParser();
+  RGWACLXMLParser();
+  ~RGWACLXMLParser();
   bool init();
   bool xml_start(const char *el, const char **attr);
   bool xml_end(const char *el);

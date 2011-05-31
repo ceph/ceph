@@ -13,118 +13,6 @@ using namespace std;
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
-XMLObjIter::
-XMLObjIter()
-{
-}
-
-XMLObjIter::
-~XMLObjIter()
-{
-}
-
-void XMLObjIter::
-set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end)
-{
-  cur = _cur;
-  end = _end;
-}
-
-XMLObj *XMLObjIter::
-get_next()
-{
-  XMLObj *obj = NULL;
-  if (cur != end) {
-    obj = cur->second;
-    ++cur;
-  }
-  return obj;
-};
-
-ostream& operator<<(ostream& out, XMLObj& obj) {
-   out << obj.type << ": " << obj.data;
-   return out;
-}
-
-XMLObj::
-~XMLObj()
-{
-}
-
-bool XMLObj::
-xml_start(XMLObj *parent, const char *el, const char **attr)
-{
-  this->parent = parent;
-  type = el;
-  for (int i = 0; attr[i]; i += 2) {
-    attr_map[attr[i]] = string(attr[i + 1]);
-  }
-  return true;
-}
-
-bool XMLObj::
-xml_end(const char *el)
-{
-  return true;
-}
-
-void XMLObj::
-xml_handle_data(const char *s, int len)
-{
-  data = string(s, len);
-}
-
-string& XMLObj::
-XMLObj::get_data()
-{
-  return data;
-}
-
-XMLObj *XMLObj::
-XMLObj::get_parent()
-{
-  return parent;
-}
-
-void XMLObj::
-add_child(string el, XMLObj *obj)
-{
-  children.insert(pair<string, XMLObj *>(el, obj));
-}
-
-bool XMLObj::
-get_attr(string name, string& attr)
-{
-  map<string, string>::iterator iter = attr_map.find(name);
-  if (iter == attr_map.end())
-    return false;
-  attr = iter->second;
-  return true;
-}
-
-XMLObjIter XMLObj::
-find(string name)
-{
-  XMLObjIter iter;
-  map<string, XMLObj *>::iterator first;
-  map<string, XMLObj *>::iterator last;
-  first = children.find(name);
-  last = children.upper_bound(name);
-  iter.set(first, last);
-  return iter;
-}
-
-XMLObj *XMLObj::
-find_first(string name)
-{
-  XMLObjIter iter;
-  map<string, XMLObj *>::iterator first;
-  first = children.find(name);
-  if (first != children.end())
-    return first->second;
-  return NULL;
-}
-
 ACLPermission::
 ACLPermission() : flags(0)
 {
@@ -521,20 +409,20 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   return perm;
 }
 
-void xml_start(void *data, const char *el, const char **attr) {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+static void xml_start(void *data, const char *el, const char **attr) {
+  RGWACLXMLParser *handler = (RGWACLXMLParser *)data;
 
   if (!handler->xml_start(el, attr))
     handler->set_failure();
 }
 
-RGWXMLParser::
-RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
+RGWACLXMLParser::
+RGWACLXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
 {
 }
 
-RGWXMLParser::
-~RGWXMLParser()
+RGWACLXMLParser::
+~RGWACLXMLParser()
 {
   free(buf);
   vector<XMLObj *>::iterator iter;
@@ -544,7 +432,7 @@ RGWXMLParser::
   }
 }
 
-bool RGWXMLParser::xml_start(const char *el, const char **attr) {
+bool RGWACLXMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
     obj = new RGWAccessControlPolicy();
@@ -582,14 +470,14 @@ bool RGWXMLParser::xml_start(const char *el, const char **attr) {
   return true;
 }
 
-void xml_end(void *data, const char *el) {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+static void xml_end(void *data, const char *el) {
+  RGWACLXMLParser *handler = (RGWACLXMLParser *)data;
 
   if (!handler->xml_end(el))
     handler->set_failure();
 }
 
-bool RGWXMLParser::xml_end(const char *el) {
+bool RGWACLXMLParser::xml_end(const char *el) {
   XMLObj *parent_obj = cur_obj->get_parent();
   if (!cur_obj->xml_end(el))
     return false;
@@ -597,24 +485,24 @@ bool RGWXMLParser::xml_end(const char *el) {
   return true;
 }
 
-void handle_data(void *data, const char *s, int len)
+static void handle_data(void *data, const char *s, int len)
 {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+  RGWACLXMLParser *handler = (RGWACLXMLParser *)data;
 
   handler->handle_data(s, len);
 }
 
-void RGWXMLParser::handle_data(const char *s, int len)
+void RGWACLXMLParser::handle_data(const char *s, int len)
 {
   cur_obj->xml_handle_data(s, len);
 }
 
 
-bool RGWXMLParser::init()
+bool RGWACLXMLParser::init()
 {
   p = XML_ParserCreate(NULL);
   if (!p) {
-    RGW_LOG(10) << "RGWXMLParser::init(): ERROR allocating memory" << dendl;
+    RGW_LOG(10) << "RGWACLXMLParser::init(): ERROR allocating memory" << dendl;
     return false;
   }
   XML_SetElementHandler(p, ::xml_start, ::xml_end);
@@ -623,7 +511,7 @@ bool RGWXMLParser::init()
   return true;
 }
 
-bool RGWXMLParser::parse(const char *_buf, int len, int done)
+bool RGWACLXMLParser::parse(const char *_buf, int len, int done)
 {
   int pos = buf_len;
   buf = (char *)realloc(buf, buf_len + len);
