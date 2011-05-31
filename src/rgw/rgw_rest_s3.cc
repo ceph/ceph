@@ -246,7 +246,6 @@ void RGWPutACLs_REST_S3::send_response()
 
 void RGWInitMultipart_REST_S3::send_response()
 {
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   if (ret)
     set_req_state_err(s, ret);
   dump_errno(s);
@@ -258,6 +257,24 @@ RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
     s->formatter->dump_value_str("Key", s->object);
     s->formatter->dump_value_str("UploadId", upload_id.c_str());
     s->formatter->close_section("InitiateMultipartUploadResult");
+    s->formatter->flush();
+  }
+}
+
+void RGWCompleteMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+  if (ret == 0) { 
+    dump_start(s);
+    s->formatter->open_obj_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    // s->formatter->dump_value_str("Location" ...
+    s->formatter->dump_value_str("Bucket", s->bucket);
+    s->formatter->dump_value_str("Key", s->object);
+    s->formatter->dump_value_str("ETag", upload_id.c_str());
+    s->formatter->close_section("CompleteMultipartUploadResult");
     s->formatter->flush();
   }
 }
@@ -318,10 +335,12 @@ RGWOp *RGWHandler_REST_S3::get_delete_op(struct req_state *s)
 
 RGWOp *RGWHandler_REST_S3::get_post_op(struct req_state *s)
 {
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
-  if (s->object)
-    return &init_multipart;
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  if (s->object) {
+    if (s->args.exists("uploadId"))
+      return &complete_multipart;
+    else
+      return &init_multipart;
+  }
 
   return NULL;
 }

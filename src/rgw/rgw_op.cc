@@ -13,6 +13,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_log.h"
+#include "rgw_multi.h"
 
 using namespace std;
 using ceph::crypto::MD5;
@@ -836,6 +837,41 @@ void RGWInitMultipart::execute()
 
     ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, tmp_obj_name, NULL, attrs, true);
   } while (ret == -EEXIST);
+done:
+  send_response();
+}
+
+void RGWCompleteMultipart::execute()
+{
+  RGWMultiCompleteUpload *parts;
+  map<int, string>::iterator iter;
+  RGWMultiXMLParser parser;
+
+  if (!data) {
+    ret = -EINVAL;
+    goto done;
+  }
+
+  if (!parser.init()) {
+    ret = -EINVAL;
+    goto done;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ret = -EINVAL;
+    goto done;
+  }
+
+  parts = (RGWMultiCompleteUpload *)parser.find_first("CompleteMultipartUpload");
+  if (!parts) {
+    ret = -EINVAL;
+    goto done;
+  }
+
+  for (iter = parts->parts.begin(); iter != parts->parts.end(); ++iter) {
+    RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
+  }
+
 done:
   send_response();
 }

@@ -6,13 +6,12 @@
 
 class RGWMultiCompleteUpload : public XMLObj
 {
-  std::map<int, string> parts;
 public:
   RGWMultiCompleteUpload() {}
   ~RGWMultiCompleteUpload() {}
   bool xml_end(const char *el);
 
-  std::map<int, string>& get_parts() { return parts; }
+  std::map<int, string> parts;
 };
 
 class RGWMultiPart : public XMLObj
@@ -47,6 +46,7 @@ class RGWMultiXMLParser : public RGWXMLParser
   XMLObj *alloc_obj(const char *el);
 public:
   RGWMultiXMLParser() {}
+  ~RGWMultiXMLParser() {}
 };
 
 #endif

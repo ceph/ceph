@@ -97,6 +97,14 @@ public:
   void send_response();
 };
 
+class RGWCompleteMultipart_REST_S3 : public RGWCompleteMultipart_REST {
+public:
+  RGWCompleteMultipart_REST_S3() {}
+  ~RGWCompleteMultipart_REST_S3() {}
+
+  void send_response();
+};
+
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWGetObj_REST_S3 get_obj_op;
   RGWListBuckets_REST_S3 list_buckets_op;
@@ -109,6 +117,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWGetACLs_REST_S3 get_acls_op;
   RGWPutACLs_REST_S3 put_acls_op;
   RGWInitMultipart_REST_S3 init_multipart;
+  RGWCompleteMultipart_REST_S3 complete_multipart;
 
 protected:
 

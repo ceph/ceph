@@ -346,6 +346,31 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWCompleteMultipart : public RGWOp {
+protected:
+  int ret;
+  string upload_id;
+  string etag;
+  char *data;
+  int len;
+
+public:
+  RGWCompleteMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    upload_id = "";
+    etag="";
+    data = NULL;
+    len = 0;
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
 class RGWHandler {
 protected:
   struct req_state *s;

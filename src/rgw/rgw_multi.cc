@@ -43,8 +43,8 @@ bool RGWMultiCompleteUpload::xml_end(const char *el) {
 }
 
 
-XMLObj *RGWXMLParser::alloc_obj(const char *el) {
-  XMLObj * obj;
+XMLObj *RGWMultiXMLParser::alloc_obj(const char *el) {
+  XMLObj *obj = NULL;
   if (strcmp(el, "CompleteMultipartUpload") == 0) {
     obj = new RGWMultiCompleteUpload();
   } else if (strcmp(el, "Part") == 0) {

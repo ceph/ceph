@@ -285,6 +285,32 @@ int RGWInitMultipart_REST::get_params()
   return ret;
 }
 
+int RGWCompleteMultipart_REST::get_params()
+{
+  if (!s->args.exists("uploadId")) {
+    ret = -ENOTSUP;
+    return ret;
+  }
+
+  size_t cl = 0;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       ret = -ENOMEM;
+       return ret;
+    }
+    CGI_GetStr(s, data, cl, len);
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  return ret;
+}
+
 static void next_tok(string& str, string& tok, char delim)
 {
   if (str.size() == 0) {
@@ -712,7 +738,6 @@ RGWOp *RGWHandler_REST::get_op()
      op = get_retrieve_op(s, false);
      break;
    case OP_POST:
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
      op = get_post_op(s);
      break;
    default:
