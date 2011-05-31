@@ -126,14 +126,6 @@ class ConnectionLostError(Exception):
             command=self.command,
             )
 
-class CommandResult(object):
-    __slots__ = ['command', 'stdout', 'stderr', 'exitstatus']
-    def __init__(self, command, stdout=None, stderr=None, exitstatus=None):
-        self.command = command
-        self.stdout = stdout
-        self.stderr = stderr
-        self.exitstatus = exitstatus
-
 def spawn_asyncresult(fn, *args, **kwargs):
     """
     Spawn a Greenlet and pass it's results to an AsyncResult.
