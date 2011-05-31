@@ -179,6 +179,8 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 
   int curpos = 0;
   float bucketweight = 0;
+  bool have_uniform_weight = false;
+  float uniform_weight = 0;
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
@@ -205,6 +207,21 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 	else
 	  assert(0);
       }
+      if (alg == CRUSH_BUCKET_UNIFORM) {
+	if (!have_uniform_weight) {
+	  have_uniform_weight = true;
+	  uniform_weight = weight;
+	} else {
+	  if (uniform_weight != weight) {
+	    cerr << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
+		 << " but previous item(s) have weight " << uniform_weight
+		 << "; uniform bucket items must all have identical weights." << std::endl;
+	    exit(1);
+	  }
+	}
+      }
+	  
+
       if (pos >= size) {
 	cerr << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
 	exit(1);
