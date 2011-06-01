@@ -11,6 +11,7 @@ import sys
 import yaml
 
 from orchestra import connection, run, remote
+import orchestra.cluster
 # TODO cleanup
 import teuthology.misc as teuthology
 
@@ -29,26 +30,26 @@ if __name__ == '__main__':
 
     connections = [connection.connect(t) for t in config['targets']]
     remotes = [remote.Remote(name=t, ssh=c) for c,t in zip(connections, config['targets'])]
+    cluster = orchestra.cluster.Cluster()
+    for rem, roles in zip(remotes, ROLES):
+        cluster.add(rem, roles)
 
     log.info('Checking for old test directory...')
-    has_junk = False
-    for rem in remotes:
-        try:
-            rem.run(
-                args=[
-                    'test', '!', '-e', '/tmp/cephtest',
-                    ],
-                )
-        except run.CommandFailedError as e:
-            log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', rem)
-            has_junk = True
-    if has_junk:
+    processes = cluster.run(
+        args=[
+            'test', '!', '-e', '/tmp/cephtest',
+            ],
+        wait=False,
+        )
+    try:
+        run.wait(processes)
+    except run.CommandFailedError as e:
+        log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', rem)
         sys.exit(1)
 
     log.info('Creating directories...')
     run.wait(
-        run.run(
-            client=conn,
+        cluster.run(
             args=[
                 'install', '-d', '-m0755', '--',
                 '/tmp/cephtest/binary',
@@ -59,7 +60,6 @@ if __name__ == '__main__':
                 ],
             wait=False,
             )
-        for conn in connections
         )
 
     for filename in ['daemon-helper']:
@@ -67,15 +67,14 @@ if __name__ == '__main__':
         src = os.path.join(os.path.dirname(__file__), filename)
         dst = os.path.join('/tmp/cephtest', filename)
         with file(src, 'rb') as f:
-            for conn in connections:
+            for rem in cluster.remotes.iterkeys():
                 teuthology.write_file(
-                    conn=conn,
+                    remote=rem,
                     path=dst,
                     data=f,
                     )
                 f.seek(0)
-                run.run(
-                    client=conn,
+                rem.run(
                     args=[
                         'chmod',
                         'a=rx',
@@ -86,7 +85,7 @@ if __name__ == '__main__':
 
     log.info('Untarring ceph binaries...')
     ceph_bin = urllib2.urlopen(teuthology.get_ceph_binary_url())
-    teuthology.untar_to_dir(ceph_bin, '/tmp/cephtest/binary', connections)
+    teuthology.untar_to_dir(ceph_bin, '/tmp/cephtest/binary', cluster.remotes.keys())
 
     log.info('Writing configs...')
     ips = [host for (host, port) in (conn.get_transport().getpeername() for conn in connections)]
@@ -94,35 +93,28 @@ if __name__ == '__main__':
     conf_fp = StringIO()
     conf.write(conf_fp)
     conf_fp.seek(0)
-    writes = [
-        run.run(
-            client=conn,
-            args=[
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                '/tmp/cephtest/ceph.conf',
-                ],
-            stdin=run.PIPE,
-            wait=False,
-            )
-        for conn in connections
-        ]
+    writes = cluster.run(
+        args=[
+            'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            '/tmp/cephtest/ceph.conf',
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        )
     teuthology.feed_many_stdins_and_close(conf_fp, writes)
     run.wait(writes)
 
     log.info('Setting up mon.0...')
-    mon0_idx = teuthology.server_with_role(ROLES, 'mon.0')
-    run.run(
-        client=connections[mon0_idx],
+    cluster.only('mon.0').run(
         args=[
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--create-keyring',
             '/tmp/cephtest/ceph.keyring',
             ],
         )
-    run.run(
-        client=connections[mon0_idx],
+    cluster.only('mon.0').run(
         args=[
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--gen-key',
@@ -130,14 +122,14 @@ if __name__ == '__main__':
             '/tmp/cephtest/ceph.keyring',
             ],
         )
+    (mon0_remote,) = cluster.only('mon.0').remotes.keys()
     teuthology.create_simple_monmap(
-        ssh=connections[mon0_idx],
+        remote=mon0_remote,
         conf=conf,
         )
 
     log.info('Creating admin key on mon.0...')
-    run.run(
-        client=connections[mon0_idx],
+    cluster.only('mon.0').run(
         args=[
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--gen-key',
@@ -152,71 +144,72 @@ if __name__ == '__main__':
 
     log.info('Copying mon.0 info to all monitors...')
     keyring = teuthology.get_file(
-        conn=connections[mon0_idx],
+        remote=mon0_remote,
         path='/tmp/cephtest/ceph.keyring',
         )
     monmap = teuthology.get_file(
-        conn=connections[mon0_idx],
+        remote=mon0_remote,
         path='/tmp/cephtest/monmap',
         )
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-            if id_ == '0':
-                continue
+    mons = cluster.only(teuthology.is_type('mon'))
+    mons_no_0 = mons.exclude('mon.0')
 
-            # copy mon key and initial monmap
-            log.info('Sending mon0 info to node {idx}'.format(idx=idx))
-            teuthology.write_file(
-                conn=connections[idx],
-                path='/tmp/cephtest/ceph.keyring',
-                data=keyring,
-                )
-            teuthology.write_file(
-                conn=connections[idx],
-                path='/tmp/cephtest/monmap',
-                data=monmap,
-                )
-
-            # no need to do more than once per host
-            break
+    for rem in mons_no_0.remotes.iterkeys():
+        # copy mon key and initial monmap
+        log.info('Sending mon0 info to node {remote}'.format(remote=rem))
+        teuthology.write_file(
+            remote=rem,
+            path='/tmp/cephtest/ceph.keyring',
+            data=keyring,
+            )
+        teuthology.write_file(
+            remote=rem,
+            path='/tmp/cephtest/monmap',
+            data=monmap,
+            )
 
     log.info('Setting up mon nodes...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-            run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
-                    '--clobber',
-                    '--createsimple', '{num:d}'.format(
-                        num=teuthology.num_instances_of_type(ROLES, 'osd'),
-                        ),
-                    '/tmp/cephtest/osdmap',
-                    '--pg_bits', '2',
-                    '--pgp_bits', '4',
-                    ],
-                )
-            run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/cmon',
-                    '--mkfs',
-                    '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    '--monmap=/tmp/cephtest/monmap',
-                    '--osdmap=/tmp/cephtest/osdmap',
-                    '--keyring=/tmp/cephtest/ceph.keyring',
-                    ],
-                )
-            run.run(
-                client=connections[idx],
-                args=[
-                    'rm',
-                    '--',
-                    '/tmp/cephtest/monmap',
-                    '/tmp/cephtest/osdmap',
-                    ],
-                )
+    run.wait(
+        mons.run(
+            args=[
+                '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
+                '--clobber',
+                '--createsimple', '{num:d}'.format(
+                    num=teuthology.num_instances_of_type(ROLES, 'osd'),
+                    ),
+                '/tmp/cephtest/osdmap',
+                '--pg_bits', '2',
+                '--pgp_bits', '4',
+                ],
+            wait=False,
+            ),
+        )
+
+    for id_ in teuthology.all_roles_of_type(ROLES, 'mon'):
+        (rem,) = cluster.only('mon.{id}'.format(id=id_)).remotes.keys()
+        rem.run(
+            args=[
+                '/tmp/cephtest/binary/usr/local/bin/cmon',
+                '--mkfs',
+                '-i', id_,
+                '-c', '/tmp/cephtest/ceph.conf',
+                '--monmap=/tmp/cephtest/monmap',
+                '--osdmap=/tmp/cephtest/osdmap',
+                '--keyring=/tmp/cephtest/ceph.keyring',
+                ],
+            )
+
+    run.wait(
+        mons.run(
+            args=[
+                'rm',
+                '--',
+                '/tmp/cephtest/monmap',
+                '/tmp/cephtest/osdmap',
+                ],
+            wait=False,
+            ),
+        )
 
     mon_daemons = {}
     log.info('Starting mon daemons...')
@@ -266,19 +259,19 @@ if __name__ == '__main__':
                 )
 
     log.info('Setting up client nodes...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                    '--create-keyring',
-                    '--gen-key',
-                    # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
-                    '--name=client.{id}'.format(id=id_),
-                    '/tmp/cephtest/data/client.{id}.keyring'.format(id=id_),
-                    ],
-                )
+    clients = cluster.only(teuthology.is_type('client'))
+    for id_ in teuthology.all_roles_of_type(ROLES, 'client'):
+        (rem,) = cluster.only('client.{id}'.format(id=id_)).remotes.keys()
+        rem.run(
+            args=[
+                '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                '--create-keyring',
+                '--gen-key',
+                # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
+                '--name=client.{id}'.format(id=id_),
+                '/tmp/cephtest/data/client.{id}.keyring'.format(id=id_),
+                ],
+            )
 
     log.info('Reading keys from all nodes...')
     keys = []
@@ -286,7 +279,7 @@ if __name__ == '__main__':
         for type_ in ['osd','mds','client']:
             for id_ in teuthology.roles_of_type(roles_for_host, type_):
                 data = teuthology.get_file(
-                    conn=connections[idx],
+                    remote=remotes[idx],
                     path='/tmp/cephtest/data/{type}.{id}.keyring'.format(
                         type=type_,
                         id=id_,
@@ -297,12 +290,11 @@ if __name__ == '__main__':
     log.info('Adding keys to mon.0...')
     for type_, id_, data in keys:
         teuthology.write_file(
-            conn=connections[mon0_idx],
+            remote=mon0_remote,
             path='/tmp/cephtest/temp.keyring',
             data=data,
             )
-        run.run(
-            client=connections[mon0_idx],
+        mon0_remote.run(
             args=[
                 '/tmp/cephtest/binary/usr/local/bin/cauthtool',
                 '/tmp/cephtest/temp.keyring',
@@ -312,8 +304,7 @@ if __name__ == '__main__':
                     ),
                 ] + list(teuthology.generate_caps(type_)),
             )
-        run.run(
-            client=connections[mon0_idx],
+        mon0_remote.run(
             args=[
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
                 '-c', '/tmp/cephtest/ceph.conf',
@@ -330,8 +321,7 @@ if __name__ == '__main__':
 
     log.info('Setting max_mds...')
     # TODO where does this belong?
-    run.run(
-        client=connections[mon0_idx],
+    mon0_remote.run(
         args=[
             '/tmp/cephtest/binary/usr/local/bin/ceph',
             '-c', '/tmp/cephtest/ceph.conf',
@@ -345,24 +335,22 @@ if __name__ == '__main__':
         )
 
     log.info('Running mkfs on osd nodes...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-            run.run(
-                client=connections[idx],
-                args=[
-                    'mkdir',
-                    os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
-                    ],
-                )
-            run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/cosd',
-                    '--mkfs',
-                    '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf'
-                    ],
-                )
+    for id_ in teuthology.all_roles_of_type(ROLES, 'osd'):
+        (rem,) = cluster.only('osd.{id}'.format(id=id_)).remotes.keys()
+        rem.run(
+            args=[
+                'mkdir',
+                os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
+                ],
+            )
+        rem.run(
+            args=[
+                '/tmp/cephtest/binary/usr/local/bin/cosd',
+                '--mkfs',
+                '-i', id_,
+                '-c', '/tmp/cephtest/ceph.conf'
+                ],
+            )
 
     osd_daemons = {}
     log.info('Starting osd daemons...')
@@ -405,7 +393,7 @@ if __name__ == '__main__':
 
     log.info('Waiting until ceph is healthy...')
     teuthology.wait_until_healthy(
-        conn=connections[mon0_idx],
+        remote=mon0_remote,
         )
 
 
@@ -442,7 +430,7 @@ if __name__ == '__main__':
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
             teuthology.wait_until_fuse_mounted(
-                conn=connections[idx],
+                remote=remotes[idx],
                 fuse=cfuse_daemons[id_],
                 mountpoint=mnt,
                 )
@@ -452,29 +440,27 @@ if __name__ == '__main__':
     # TODO rbd
 
     log.info('Setting up autotest...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            run.run(
-                client=connections[idx],
-                args=[
-                    'mkdir', '/tmp/cephtest/autotest',
-                    run.Raw('&&'),
-                    'wget',
-                    '-nv',
-                    '--no-check-certificate',
-                    'https://github.com/tv42/autotest/tarball/ceph',
-                    '-O-',
-                    run.Raw('|'),
-                    'tar',
-                    '-C', '/tmp/cephtest/autotest',
-                    '-x',
-                    '-z',
-                    '-f-',
-                    '--strip-components=1',
-                    ],
-                )
-            # once per host is enough
-            break
+    run.wait(
+        clients.run(
+            args=[
+                'mkdir', '/tmp/cephtest/autotest',
+                run.Raw('&&'),
+                'wget',
+                '-nv',
+                '--no-check-certificate',
+                'https://github.com/tv42/autotest/tarball/ceph',
+                '-O-',
+                run.Raw('|'),
+                'tar',
+                '-C', '/tmp/cephtest/autotest',
+                '-x',
+                '-z',
+                '-f-',
+                '--strip-components=1',
+                ],
+            wait=False,
+            ),
+        )
 
     log.info('Making a separate scratch dir for every client...')
     for idx, roles_for_host in enumerate(ROLES):
@@ -496,38 +482,37 @@ if __name__ == '__main__':
 
     testname = 'dbench' #TODO
     log.info('Running autotest client test %s...', testname)
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
-            tag = '{testname}.client.{id}'.format(
-                testname=testname,
-                id=id_,
-                )
-            control = '/tmp/cephtest/control.{tag}'.format(tag=tag)
-            teuthology.write_file(
-                conn=connections[idx],
-                path=control,
-                data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
-                    data=json.dumps(dict(
-                            url=testname,
-                            dir=scratch,
-                            # TODO perhaps tag
-                            # results will be in /tmp/cephtest/autotest/client/results/dbench
-                            # or /tmp/cephtest/autotest/client/results/dbench.{tag}
-                            )),
-                    ),
-                )
-            run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/autotest/client/bin/autotest',
-                    '--harness=simple',
-                    '--tag={tag}'.format(tag=tag),
-                    control,
-                    run.Raw('3>&1'),
-                    ],
-                )
+    for id_ in teuthology.all_roles_of_type(ROLES, 'client'):
+        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
+        tag = '{testname}.client.{id}'.format(
+            testname=testname,
+            id=id_,
+            )
+        control = '/tmp/cephtest/control.{tag}'.format(tag=tag)
+        (rem,) = cluster.only('client.{id}'.format(id=id_)).remotes.keys()
+        teuthology.write_file(
+            remote=rem,
+            path=control,
+            data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
+                data=json.dumps(dict(
+                        url=testname,
+                        dir=scratch,
+                        # TODO perhaps tag
+                        # results will be in /tmp/cephtest/autotest/client/results/dbench
+                        # or /tmp/cephtest/autotest/client/results/dbench.{tag}
+                        )),
+                ),
+            )
+        rem.run(
+            args=[
+                '/tmp/cephtest/autotest/client/bin/autotest',
+                '--harness=simple',
+                '--tag={tag}'.format(tag=tag),
+                control,
+                run.Raw('3>&1'),
+                ],
+            )
 
     import code
     import readline
@@ -541,6 +526,7 @@ if __name__ == '__main__':
             config=config,
             ROLES=ROLES,
             connections=connections,
+            cluster=cluster,
             ),
         )
 

@@ -31,7 +31,7 @@ def feed_many_stdins_and_close(fp, processes):
     for proc in processes:
         proc.stdin.close()
 
-def untar_to_dir(fp, dst, conns):
+def untar_to_dir(fp, dst, remotes):
     """
     Untar a ``.tar.gz`` to given hosts and directories.
 
@@ -39,14 +39,13 @@ def untar_to_dir(fp, dst, conns):
     :param conns_and_dirs: a list of 2-tuples `(client, path)`
     """
     untars = [
-        run.run(
-            client=ssh,
+        remote.run(
             logger=log.getChild('cephbin'),
             args=['tar', '-xzf', '-', '-C', dst],
             wait=False,
             stdin=run.PIPE,
             )
-        for ssh in conns
+        for remote in remotes
         ]
     feed_many_stdins_and_close(fp, untars)
     run.wait(untars)
@@ -112,6 +111,20 @@ def roles_of_type(roles_for_host, type_):
         id_ = name[len(prefix):]
         yield id_
 
+def all_roles_of_type(roles, type_):
+    for roles_for_host in roles:
+        for id_ in roles_of_type(roles_for_host, type_):
+            yield id_
+
+def is_type(type_):
+    """
+    Returns a matcher function for whether role is of type given.
+    """
+    prefix = '{type}.'.format(type=type_)
+    def _is_type(role):
+        return role.startswith(prefix)
+    return _is_type
+
 def num_instances_of_type(roles, type_):
     prefix = '{type}.'.format(type=type_)
     num = sum(sum(1 for role in hostroles if role.startswith(prefix)) for hostroles in roles)
@@ -122,7 +135,7 @@ def server_with_role(all_roles, role):
         if role in host_roles:
             return idx
 
-def create_simple_monmap(ssh, conf):
+def create_simple_monmap(remote, conf):
     """
     Writes a simple monmap based on current ceph.conf into <tmpdir>/monmap.
 
@@ -154,14 +167,12 @@ def create_simple_monmap(ssh, conf):
             '--print',
             '/tmp/cephtest/monmap',
             ])
-    run.run(
-        client=ssh,
+    remote.run(
         args=args,
         )
 
-def write_file(conn, path, data):
-    run.run(
-        client=conn,
+def write_file(remote, path, data):
+    remote.run(
         args=[
             'python',
             '-c',
@@ -171,12 +182,11 @@ def write_file(conn, path, data):
         stdin=data,
         )
 
-def get_file(conn, path):
+def get_file(remote, path):
     """
     Read a file from remote host into memory.
     """
-    proc = run.run(
-        client=conn,
+    proc = remote.run(
         args=[
             'cat',
             '--',
@@ -187,11 +197,10 @@ def get_file(conn, path):
     data = proc.stdout.getvalue()
     return data
 
-def wait_until_healthy(conn):
+def wait_until_healthy(remote):
     """Wait until a Ceph cluster is healthy."""
     while True:
-        r = run.run(
-            client=conn,
+        r = remote.run(
             args=[
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
                 '-c', '/tmp/cephtest/ceph.conf',
@@ -207,10 +216,9 @@ def wait_until_healthy(conn):
             break
         time.sleep(1)
 
-def wait_until_fuse_mounted(conn, fuse, mountpoint):
+def wait_until_fuse_mounted(remote, fuse, mountpoint):
     while True:
-        proc = run.run(
-            client=conn,
+        proc = remote.run(
             args=[
                 'stat',
                 '--file-system',
