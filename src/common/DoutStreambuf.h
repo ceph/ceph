@@ -27,9 +27,16 @@
 
 class md_config_t;
 
+class EmergencyLogger {
+public:
+  virtual ~EmergencyLogger();
+  virtual void emergency_log_to_file_and_syslog(const char *const str) const = 0;
+};
+
 template <typename charT, typename traits = std::char_traits<charT> >
 class DoutStreambuf : public std::basic_streambuf<charT, traits>,
-		      public md_config_obs_t
+		      public md_config_obs_t,
+		      public EmergencyLogger
 {
 public:
   enum dout_streambuf_flags_t {
@@ -73,7 +80,7 @@ public:
 
   // Output a string directly to the file and to syslog
   // (if those sinks are active)
-  void dout_emergency_to_file_and_syslog(const char * const str) const;
+  void emergency_log_to_file_and_syslog(const char * const str) const;
 
   // Reopen the logs
   void reopen_logs(const md_config_t *conf);
