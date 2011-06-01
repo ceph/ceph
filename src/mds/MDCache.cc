@@ -6521,71 +6521,77 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       return 1;
     }
     
-    if (dnl && !dnl->is_null()) {
-      CInode *in = dnl->get_inode();
-      
-      // do we have inode?
-      if (!in) {
-        assert(dnl->is_remote());
-        // do i have it?
-        in = get_inode(dnl->get_remote_ino());
-        if (in) {
-	  dout(7) << "linking in remote in " << *in << dendl;
-	  dn->link_remote(dnl, in);
-	} else {
-          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
-	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
-	  if (mds->logger) mds->logger->inc(l_mds_trino);
-          return 1;
-        }        
-      }
+    if (dnl) {
+      if (dnl->is_null()) {
+        dout(12) << "traverse: miss on null dentry " << path[depth] << " in "
+                 << *curdir << dendl;
+        return -ENOENT;
+      } else {
+        CInode *in = dnl->get_inode();
 
-      // forwarder wants replicas?
+        // do we have inode?
+        if (!in) {
+          assert(dnl->is_remote());
+          // do i have it?
+          in = get_inode(dnl->get_remote_ino());
+          if (in) {
+            dout(7) << "linking in remote in " << *in << dendl;
+            dn->link_remote(dnl, in);
+          } else {
+            dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
+            assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
+            open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
+            if (mds->logger) mds->logger->inc(l_mds_trino);
+            return 1;
+          }
+        }
+
+        // forwarder wants replicas?
 #if 0
-      if (mdr && mdr->client_request && 
-	  mdr->client_request->get_mds_wants_replica_in_dirino()) {
-	dout(30) << "traverse: REP is here, " 
-		 << mdr->client_request->get_mds_wants_replica_in_dirino() 
-		 << " vs " << curdir->dirfrag() << dendl;
-	
-	if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
-	    curdir->is_auth() && 
-	    curdir->is_rep() &&
-	    curdir->is_replica(req->get_source().num()) &&
-	    dn->is_auth()
-	    ) {
-	  assert(req->get_source().is_mds());
-	  int from = req->get_source().num();
-	  
-	  if (dn->is_replica(from)) {
-	    dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
-		     << req->get_source() << " dn " << *dn << dendl; 
-	  } else {
-	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
-	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
-	    reply->mark_unsolicited();
-	    reply->starts_with = MDiscoverReply::DENTRY;
-	    replicate_dentry(dn, from, reply->trace);
-	    if (dnl->is_primary())
-	      replicate_inode(in, from, reply->trace);
-	    if (req->get_source() != req->get_orig_source())
-	      mds->send_message_mds(reply, req->get_source().num());
-	    else mds->send_message(reply->req->get_connnection());
-	  }
-	}
-      }
+        if (mdr && mdr->client_request &&
+            mdr->client_request->get_mds_wants_replica_in_dirino()) {
+          dout(30) << "traverse: REP is here, "
+              << mdr->client_request->get_mds_wants_replica_in_dirino()
+              << " vs " << curdir->dirfrag() << dendl;
+
+          if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
+              curdir->is_auth() &&
+              curdir->is_rep() &&
+              curdir->is_replica(req->get_source().num()) &&
+              dn->is_auth()
+          ) {
+            assert(req->get_source().is_mds());
+            int from = req->get_source().num();
+
+            if (dn->is_replica(from)) {
+              dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by "
+                  << req->get_source() << " dn " << *dn << dendl;
+            } else {
+              dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
+              MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
+              reply->mark_unsolicited();
+              reply->starts_with = MDiscoverReply::DENTRY;
+              replicate_dentry(dn, from, reply->trace);
+              if (dnl->is_primary())
+                replicate_inode(in, from, reply->trace);
+              if (req->get_source() != req->get_orig_source())
+                mds->send_message_mds(reply, req->get_source().num());
+              else mds->send_message(reply->req->get_connnection());
+            }
+          }
+        }
 #endif
-      
-      // add to trace, continue.
-      cur = in;
-      touch_inode(cur);
-      if (pdnvec)
-	pdnvec->push_back(dn);
-      if (pin)
-	*pin = cur;
-      depth++;
-      continue;
+
+        // add to trace, continue.
+        cur = in;
+        touch_inode(cur);
+        if (pdnvec)
+          pdnvec->push_back(dn);
+        if (pin)
+          *pin = cur;
+        depth++;
+        continue;
+      }
     }
     
 
@@ -6603,8 +6609,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
 	    dn = NULL;
 	  } else if (dn) {
-	    dout(20) << " had null " << *dn << dendl;
-	    assert(dnl->is_null());
+	    assert(0); // should have fallen out in ->is_null() check above
 	  } else if (curdir->is_frozen()) {
 	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
