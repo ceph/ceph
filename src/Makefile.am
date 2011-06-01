@@ -398,6 +398,11 @@ unittest_signals_LDADD = libceph.la ${UNITTEST_LDADD}
 unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_signals
 
+unittest_simple_spin_SOURCES = test/simple_spin.cc
+unittest_simple_spin_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_simple_spin
+
 unittest_librados_SOURCES = test/librados.cc
 unittest_librados_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_librados_LDADD = librados.la \
@@ -635,6 +640,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
+	common/simple_spin.cc \
 	common/Thread.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
@@ -806,6 +812,7 @@ noinst_HEADERS = \
         common/common_init.h\
 	common/code_environment.h \
         common/signal.h\
+        common/simple_spin.h\
         common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
