@@ -418,8 +418,6 @@ public:
 	  unsigned howmuch = p->length() - p_off;
 	  const char *c_str = p->c_str();
 	  if (len < howmuch) howmuch = len;
-	  if (memchr(c_str + p_off, '\0', howmuch))
-	    throw malformed_input("embedded NULL in string!");
 	  dest.append(c_str + p_off, howmuch);
 
 	  len -= howmuch;
