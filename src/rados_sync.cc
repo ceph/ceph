@@ -197,10 +197,6 @@ public:
 	c = '_';
 	need_hash = true;
       }
-      else if (c == '.') {
-	c = '@';
-	need_hash = true;
-      }
       else if (c == '\n') {
 	c = '@';
 	need_hash = true;
