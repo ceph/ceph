@@ -195,6 +195,10 @@ void common_init(std::vector < const char* >& args,
 	 << TEXT_NORMAL << std::endl;
     output_ceph_version();
   }
+  if (g_lockdep) {
+    cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
+	 << ") ***" << TEXT_NORMAL << std::endl;
+  }
 }
 
 static void pidfile_remove_void(void)

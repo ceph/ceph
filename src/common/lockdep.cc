@@ -1,18 +1,16 @@
-
+#include "BackTrace.h"
+#include "Clock.h"
+#include "common/config.h"
+#include "common/environment.h"
+#include "include/types.h"
 #include "lockdep.h"
 
-#include "include/types.h"
-#include "Clock.h"
-#include "BackTrace.h"
-
 #include <ext/hash_map>
-
-#include "common/config.h"
 
 #define DOUT_SUBSYS lockdep
 
 // global
-int g_lockdep = 0;
+int g_lockdep = get_env_int("CEPH_LOCKDEP");
 
 // disable lockdep when this module destructs.
 struct lockdep_stopper_t {
