@@ -279,6 +279,42 @@ void RGWCompleteMultipart_REST_S3::send_response()
   }
 }
 
+void RGWListMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+  if (ret == 0) { 
+    dump_start(s);
+    s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    map<string, bufferlist>::iterator iter;
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      string name = iter->first;
+      if (name.compare(0, 5, "part.") != 0)
+        continue;
+      string partNum = name.substr(5);
+      string etag;
+      uint64_t len;
+      bufferlist& bl = iter->second;
+      bufferlist::iterator bli = bl.begin();
+      ::decode(etag, bli);
+      ::decode(len, bli);
+      s->formatter->open_obj_section("Part");
+      s->formatter->dump_value_int("PartNumber", partNum.c_str());
+      s->formatter->dump_value_str("ETag", "%s", etag.c_str());
+      s->formatter->dump_value_int("Size", "%llu", len);
+      s->formatter->close_section("Part");
+    }
+    // s->formatter->dump_value_str("Location" ...
+    // s->formatter->dump_value_str("Bucket", s->bucket);
+    // s->formatter->dump_value_str("Key", s->object);
+    // s->formatter->dump_value_str("ETag", upload_id.c_str());
+    s->formatter->close_section("ListMultipartUploadResult");
+    s->formatter->flush();
+  }
+}
+
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
@@ -300,6 +336,9 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_op(struct req_state *s, bool get_data)
   if (s->bucket) {
     if (is_acl_op(s)) {
       return &get_acls_op;
+    } else if (s->args.exists("uploadId")) {
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+      return &list_multipart;
     }
     return get_retrieve_obj_op(s, get_data);
   }

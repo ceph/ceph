@@ -371,6 +371,26 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWListMultipart : public RGWOp {
+protected:
+  int ret;
+  string upload_id;
+  map<string, bufferlist> attrs;
+
+public:
+  RGWListMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    upload_id = "";
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
 class RGWHandler {
 protected:
   struct req_state *s;

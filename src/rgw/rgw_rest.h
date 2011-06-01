@@ -104,6 +104,14 @@ public:
   int get_params();
 };
 
+class RGWListMultipart_REST : public RGWListMultipart {
+public:
+  RGWListMultipart_REST() {}
+  ~RGWListMultipart_REST() {}
+
+  int get_params();
+};
+
 class RGWHandler_REST : public RGWHandler {
 protected:
   bool is_acl_op(struct req_state *s) {

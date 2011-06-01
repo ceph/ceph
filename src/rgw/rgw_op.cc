@@ -109,7 +109,15 @@ static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, 
 
 int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
-  int ret = get_policy_from_attr(policy, bucket, object);
+  string upload_id = s->args.get("uploadId");
+  string obj = object;
+
+  if (!obj.empty() && !upload_id.empty()) {
+    obj.append(".");
+    obj.append(upload_id);
+  }
+
+  int ret = get_policy_from_attr(policy, bucket, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
@@ -370,6 +378,10 @@ void RGWDeleteBucket::execute()
 
 void RGWPutObj::execute()
 {
+  bool multipart;
+  string multipart_meta_obj;
+  string partNum;
+
   ret = -EINVAL;
   if (!s->object) {
     goto done;
@@ -412,13 +424,15 @@ void RGWPutObj::execute()
 
     MD5 hash;
     string obj;
-    if (!s->args.exists("uploadId")) {
+    multipart = s->args.exists("uploadId");
+    if (!multipart) {
       obj = s->object_str;
     } else {
       obj = s->object_str;
       obj.append(".");
       obj.append(s->args.get("uploadId"));
-      string partNum = s->args.get("partNumber");
+      multipart_meta_obj = obj;
+      partNum = s->args.get("partNumber");
       if (partNum.empty()) {
         ret = -EINVAL;
         goto done;
@@ -471,6 +485,20 @@ void RGWPutObj::execute()
     get_request_metadata(s, attrs);
 
     ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, obj, NULL, attrs, false);
+    if (ret < 0)
+      goto done;
+
+    if (multipart) {
+      map<string, bufferlist> meta_attrs;
+      string p = "part.";
+      p.append(partNum);
+      bufferlist bl;
+      ::encode(etag, bl);
+      ::encode(s->obj_size, bl);
+      meta_attrs[p] = bl;
+      
+      ret  = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, multipart_meta_obj, NULL, meta_attrs, false);
+    }
   }
 done:
   send_response();
@@ -798,11 +826,9 @@ void RGWInitMultipart::execute()
 
   if (get_params() < 0)
     goto done;
-
   ret = -EINVAL;
   if (!s->object)
     goto done;
-
 
   if (!verify_permission(s, RGW_PERM_WRITE)) {
     ret = -EACCES;
@@ -846,7 +872,6 @@ void RGWCompleteMultipart::execute()
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
-
   if (!data) {
     ret = -EINVAL;
     goto done;
@@ -871,6 +896,27 @@ void RGWCompleteMultipart::execute()
   for (iter = parts->parts.begin(); iter != parts->parts.end(); ++iter) {
     RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
   }
+
+done:
+  send_response();
+}
+
+void RGWListMultipart::execute()
+{
+  void *handle;
+  string obj = s->object_str;
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
+  obj.append(".");
+  obj.append(upload_id);
+
+  ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+
+  rgwstore->finish_get_obj(&handle);
 
 done:
   send_response();

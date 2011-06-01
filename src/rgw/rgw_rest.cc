@@ -287,7 +287,9 @@ int RGWInitMultipart_REST::get_params()
 
 int RGWCompleteMultipart_REST::get_params()
 {
-  if (!s->args.exists("uploadId")) {
+  upload_id = s->args.get("uploadId");
+
+  if (upload_id.empty()) {
     ret = -ENOTSUP;
     return ret;
   }
@@ -311,6 +313,18 @@ int RGWCompleteMultipart_REST::get_params()
   return ret;
 }
 
+int RGWListMultipart_REST::get_params()
+{
+  upload_id = s->args.get("uploadId");
+RGW_LOG(0) << "upload_id=" << upload_id << dendl;
+
+  if (upload_id.empty()) {
+    ret = -ENOTSUP;
+  }
+RGW_LOG(0) << "upload_id=" << upload_id << dendl;
+
+  return ret;
+}
 static void next_tok(string& str, string& tok, char delim)
 {
   if (str.size() == 0) {
