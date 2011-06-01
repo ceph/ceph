@@ -69,3 +69,9 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_i
   secret = iter->second.key;
   return true;
 }
+
+KeyRing *RotatingKeyRing::
+get_keyring()
+{
+  return keyring;
+}

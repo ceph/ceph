@@ -57,6 +57,11 @@ int main(int argc, const char **argv)
   vector<const char *>::iterator args_iter;
 
   common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
+  KeyRing *cosd_keyring = KeyRing::from_ceph_conf(g_ceph_context._conf);
+  if (!cosd_keyring) {
+    derr << "Unable to get a Ceph keyring." << dendl;
+    return 1;
+  }
 
   ceph_heap_profiler_init();
 
@@ -123,7 +128,7 @@ int main(int argc, const char **argv)
 
   if (mkfs) {
     common_init_finish(&g_ceph_context);
-    RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
+    RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, cosd_keyring);
     MonClient mc(&rkeys);
     if (mc.build_initial_monmap() < 0)
       return -1;
@@ -146,9 +151,9 @@ int main(int argc, const char **argv)
     EntityName ename(g_conf.name);
     EntityAuth eauth;
     eauth.key.create(CEPH_CRYPTO_AES);
-    g_keyring.add(ename, eauth);
+    cosd_keyring->add(ename, eauth);
     bufferlist bl;
-    g_keyring.encode_plaintext(bl);
+    cosd_keyring->encode_plaintext(bl);
     int r = bl.write_file(g_conf.keyring.c_str(), 0600);
     if (r)
       derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf.keyring
@@ -274,7 +279,7 @@ int main(int argc, const char **argv)
   // Leave stderr open in case we need to report errors.
   common_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
   common_init_finish(&g_ceph_context);
-  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
+  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, cosd_keyring);
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;

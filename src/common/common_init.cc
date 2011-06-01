@@ -12,8 +12,6 @@
  *
  */
 
-#include "auth/AuthSupported.h"
-#include "auth/KeyRing.h"
 #include "common/DoutStreambuf.h"
 #include "common/Thread.h"
 #include "common/ceph_argparse.h"
@@ -36,59 +34,6 @@
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
-
-int keyring_init(CephContext *cct)
-{
-  md_config_t *conf = cct->_conf;
-
-  if (!is_supported_auth(CEPH_AUTH_CEPHX))
-    return 0;
-
-  int ret = 0;
-  string filename;
-  if (ceph_resolve_file_search(conf->keyring, filename)) {
-    ret = g_keyring.load(filename);
-  }
-
-  if (!conf->key.empty()) {
-    EntityAuth ea;
-    ea.key.decode_base64(conf->key);
-    g_keyring.add(conf->name, ea);
-
-    ret = 0;
-  } else if (!conf->keyfile.empty()) {
-    char buf[100];
-    int fd = ::open(conf->keyfile.c_str(), O_RDONLY);
-    if (fd < 0) {
-      int err = errno;
-      derr << "unable to open " << conf->keyfile << ": "
-	   << cpp_strerror(err) << dendl;
-      ceph_abort();
-    }
-    memset(buf, 0, sizeof(buf));
-    int len = safe_read(fd, buf, sizeof(buf) - 1);
-    if (len < 0) {
-      derr << "unable to read key from " << conf->keyfile << ": "
-	   << cpp_strerror(len) << dendl;
-      TEMP_FAILURE_RETRY(::close(fd));
-      ceph_abort();
-    }
-    TEMP_FAILURE_RETRY(::close(fd));
-
-    buf[len] = 0;
-    string k = buf;
-    EntityAuth ea;
-    ea.key.decode_base64(k);
-
-    g_keyring.add(conf->name, ea);
-
-    ret = 0;
-  }
-
-  if (ret)
-    derr << "keyring_init: failed to load " << filename << dendl;
-  return ret;
-}
 
 CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
@@ -303,6 +248,5 @@ void common_init_daemonize(const CephContext *cct, int flags)
 void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
-  keyring_init(cct);
   cct->start_service_thread();
 }

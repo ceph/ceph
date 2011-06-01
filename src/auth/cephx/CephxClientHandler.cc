@@ -45,7 +45,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     ::encode(header, bl);
 
     CryptoKey secret;
-    g_keyring.get_master(secret);
+    keyring->get_master(secret);
 
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
@@ -110,7 +110,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     {
       dout(10) << " get_auth_session_key" << dendl;
       CryptoKey secret;
-      g_keyring.get_master(secret);
+      keyring->get_master(secret);
 	
       if (!tickets.verify_service_ticket_reply(secret, indata)) {
 	dout(0) << "could not verify service_ticket reply" << dendl;
@@ -147,7 +147,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       if (rotating_secrets) {
 	RotatingSecrets secrets;
 	CryptoKey secret_key;
-	g_keyring.get_master(secret_key);
+	keyring->get_master(secret_key);
 	if (decode_decrypt(secrets, secret_key, indata) == 0) {
 	  rotating_secrets->set_secrets(secrets);
 	} else {

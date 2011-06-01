@@ -66,6 +66,11 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+  KeyRing *cmds_keyring = KeyRing::from_ceph_conf(g_ceph_context._conf);
+  if (!cmds_keyring) {
+    derr << "Unable to get a Ceph keyring." << dendl;
+    return 1;
+  }
 
   // mds specific args
   int shadow = 0;
@@ -117,7 +122,7 @@ int main(int argc, const char **argv)
   }
 
   // get monmap
-  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_MDS, &g_keyring);
+  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_MDS, cmds_keyring);
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;
@@ -165,6 +170,7 @@ int main(int argc, const char **argv)
     if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
       common_init_daemonize(&g_ceph_context, 0);
     common_init_finish(&g_ceph_context);
+    ...
     messenger->start();
 
     // start mds

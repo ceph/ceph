@@ -14,24 +14,80 @@
 
 #include <errno.h>
 #include <map>
+#include <memory>
 #include <sstream>
 
+#include "auth/AuthSupported.h"
+#include "auth/Crypto.h"
+#include "auth/KeyRing.h"
+#include "common/ConfUtils.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "include/str_list.h"
-#include "common/ConfUtils.h"
-
-#include "Crypto.h"
-#include "auth/KeyRing.h"
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
 #define dout_prefix *_dout << "auth: "
 
-
+using std::auto_ptr;
 using namespace std;
 
-KeyRing g_keyring;
+KeyRing *KeyRing::
+from_ceph_conf(const md_config_t *conf)
+{
+  bool found_key = false;
+  auto_ptr < KeyRing > keyring(new KeyRing());
+
+  if (!is_supported_auth(CEPH_AUTH_CEPHX)) {
+    derr << "KeyRing::from_ceph_conf: CephX auth is not supported." << dendl;
+    return NULL;
+  }
+
+  int ret = 0;
+  string filename;
+  if (ceph_resolve_file_search(conf->keyring, filename)) {
+    ret = keyring->load(filename);
+    if (ret) {
+      derr << "KeyRing::from_ceph_conf: failed to load " << filename
+	   << ": error " << ret << dendl;
+    }
+    else {
+      found_key = true;
+    }
+  }
+
+  if (!conf->key.empty()) {
+    EntityAuth ea;
+    ea.key.decode_base64(conf->key);
+    keyring->add(conf->name, ea);
+    found_key = true;
+  }
+
+  if (!conf->keyfile.empty()) {
+    FILE *fp = fopen(conf->keyfile.c_str(), "r");
+    if (fp) {
+      char buf[100];
+      int res = fread(buf, 1, sizeof(buf) - 1, fp);
+      if (res < 0) {
+	res = ferror(fp);
+	derr << "KeyRing::from_ceph_conf: failed to read '" << conf->keyfile
+	     << "'" << dendl;
+      }
+      else {
+	string k = buf;
+	EntityAuth ea;
+	ea.key.decode_base64(k);
+	keyring->add(conf->name, ea);
+	found_key = true;
+      }
+      fclose(fp);
+    }
+  }
+
+  if (!found_key)
+    return NULL;
+  return keyring.release();
+}
 
 int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps)
 {
