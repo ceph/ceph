@@ -184,11 +184,6 @@ DoutStreambuf<charT, traits>::DoutStreambuf()
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::~DoutStreambuf()
 {
-  if (ofd != -1) {
-    TEMP_FAILURE_RETRY(::close(ofd));
-    ofd = -1;
-  }
-  pthread_mutex_destroy(&lock);
   simple_spin_lock(&dout_emergency_lock);
   for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
     if (dout_emerg_streams[i] == this) {
@@ -197,6 +192,11 @@ DoutStreambuf<charT, traits>::~DoutStreambuf()
     }
   }
   simple_spin_unlock(&dout_emergency_lock);
+  if (ofd != -1) {
+    TEMP_FAILURE_RETRY(::close(ofd));
+    ofd = -1;
+  }
+  pthread_mutex_destroy(&lock);
 }
 
 // This function is called when the output buffer is filled.
