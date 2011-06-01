@@ -24,6 +24,7 @@ class DoutStreambuf;
 class md_config_t;
 class md_config_obs_t;
 class CephContextServiceThread;
+class DoutLocker;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -45,6 +46,12 @@ public:
 
   /* Reopen the log files */
   void reopen_logs();
+
+  /* Lock the dout lock. */
+  void dout_lock(DoutLocker *locker);
+
+  /* Try to lock the dout lock. */
+  void dout_trylock(DoutLocker *locker);
 
 private:
   /* Stop and join the Ceph Context's service thread */

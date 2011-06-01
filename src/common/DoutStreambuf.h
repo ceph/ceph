@@ -23,9 +23,11 @@
 #include "common/config.h"
 
 #include <iosfwd>
+#include <pthread.h>
 #include <string>
 
 class md_config_t;
+class CephContext;
 
 class EmergencyLogger {
 public:
@@ -118,6 +120,11 @@ private:
   std::string opath;
   std::string symlink_dir;
   std::string isym_path;
+
+  // Mutex that protects this output stream
+  pthread_mutex_t lock;
+
+  friend class CephContext;
 };
 
 // Secret evil interfaces for writing logs without taking the lock.

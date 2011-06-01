@@ -17,6 +17,7 @@
 #include "common/Thread.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/debug.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -28,12 +29,6 @@ CephContext g_ceph_context __attribute__((init_priority(103)));
 md_config_t &g_conf(*g_ceph_context._conf);
 std::ostream *_dout(&g_ceph_context._dout);
 DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context._doss);
-
-/*
- * The dout lock protects calls to dout()
- * TODO: needs to become part of CephContext
- */
-pthread_mutex_t _dout_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 class CephContextServiceThread : public Thread
 {
@@ -133,6 +128,22 @@ reopen_logs()
   if (_service_thread)
     _service_thread->reopen_logs();
   pthread_spin_unlock(&_service_thread_lock);
+}
+
+void CephContext::
+dout_lock(DoutLocker *locker)
+{
+  pthread_mutex_t *lock = &_doss->lock;
+  pthread_mutex_lock(lock);
+  locker->lock = lock;
+}
+
+void CephContext::
+dout_trylock(DoutLocker *locker)
+{
+  pthread_mutex_t *lock = &_doss->lock;
+  if (pthread_mutex_trylock(lock) == 0)
+    locker->lock = lock;
 }
 
 void CephContext::

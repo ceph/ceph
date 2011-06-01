@@ -25,9 +25,6 @@
 #include <pthread.h>
 #include <streambuf>
 
-
-extern pthread_mutex_t _dout_lock;
-
 extern void dout_emergency(const char * const str);
 
 extern void dout_emergency(const std::string &str);
@@ -35,12 +32,20 @@ extern void dout_emergency(const std::string &str);
 class DoutLocker
 {
 public:
-  DoutLocker() {
-    pthread_mutex_lock(&_dout_lock);
+  DoutLocker(pthread_mutex_t *lock_)
+    : lock(lock_)
+  {
+    pthread_mutex_lock(lock);
+  }
+  DoutLocker()
+    : lock(NULL)
+  {
   }
   ~DoutLocker() {
-    pthread_mutex_unlock(&_dout_lock);
+    if (lock)
+      pthread_mutex_unlock(lock);
   }
+  pthread_mutex_t *lock;
 };
 
 static inline void _dout_begin_line(signed int prio) {
@@ -74,6 +79,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
     char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
   }\
   DoutLocker __dout_locker; \
+  g_ceph_context.dout_lock(&__dout_locker); \
   _dout_begin_line(v); \
 
 #define dout(v) \

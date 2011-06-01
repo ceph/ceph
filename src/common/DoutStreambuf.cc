@@ -20,6 +20,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/simple_spin.h"
+#include "common/debug.h"
 
 #include <values.h>
 #include <assert.h>
@@ -160,6 +161,16 @@ DoutStreambuf<charT, traits>::DoutStreambuf()
   // Initialize output_buffer
   _clear_output_buffer();
 
+  int ret;
+  pthread_mutexattr_t attr;
+  ret = pthread_mutexattr_init(&attr);
+  assert(ret == 0);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  ret = pthread_mutex_init(&lock, &attr);
+  assert(ret == 0);
+  ret = pthread_mutexattr_destroy(&attr);
+  assert(ret == 0);
+
   simple_spin_lock(&dout_emergency_lock);
   for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
     if (dout_emerg_streams[i] == 0) {
@@ -177,6 +188,7 @@ DoutStreambuf<charT, traits>::~DoutStreambuf()
     TEMP_FAILURE_RETRY(::close(ofd));
     ofd = -1;
   }
+  pthread_mutex_destroy(&lock);
   simple_spin_lock(&dout_emergency_lock);
   for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
     if (dout_emerg_streams[i] == this) {
@@ -253,7 +265,7 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::handle_stderr_shutdown()
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   flags &= ~DOUTSB_FLAG_STDERR;
 }
 
@@ -272,7 +284,7 @@ template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::
 handle_conf_change(const md_config_t *conf, const std::set <std::string> &changed)
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   type_name = conf->name.get_type_name();
 
   flags = 0;
@@ -331,7 +343,7 @@ template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::
 handle_pid_change(const md_config_t *conf)
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
