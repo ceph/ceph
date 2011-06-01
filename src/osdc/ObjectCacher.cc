@@ -1711,9 +1711,9 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
   }
 
   // did we truncate off dirty data?
-  if (flush_set_callback &&
+  if (commit_set_callback &&
       were_dirty && oset->dirty_tx == 0)
-    flush_set_callback(flush_set_callback_arg, oset);
+    commit_set_callback(flush_set_callback_arg, oset);
 }
 
 
