@@ -33,7 +33,7 @@ DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context
  * The dout lock protects calls to dout()
  * TODO: needs to become part of CephContext
  */
-pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t _dout_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 class CephContextServiceThread : public Thread
 {
