@@ -4811,11 +4811,17 @@ void OSD::do_recovery(PG *pg)
 	do_queries(query_map);
       else {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	recovery_wq.lock();
 	pg->recovery_item.remove_myself();	// sigh...
+	recovery_wq.unlock();
+
       }
     }
-    else if (started < max)
+    else if (started < max) {
+      recovery_wq.lock();
       pg->recovery_item.remove_myself();
+      recovery_wq.unlock();
+    }
     
     pg->unlock();
   }

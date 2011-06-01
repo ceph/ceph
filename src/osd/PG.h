@@ -787,6 +787,8 @@ public:
 
   interval_set<snapid_t> snap_trimq;
 
+  /* You should not use these items without taking their respective queue locks
+   * (if they have one) */
   xlist<PG*>::item recovery_item, backlog_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
