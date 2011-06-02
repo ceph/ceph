@@ -1061,7 +1061,10 @@ void OSD::load_pgs()
   assert(pg_map.empty());
 
   vector<coll_t> ls;
-  store->list_collections(ls);
+  int r = store->list_collections(ls);
+  if (r < 0) {
+    derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
+  }
 
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();

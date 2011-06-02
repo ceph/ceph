@@ -3637,13 +3637,17 @@ int FileStore::list_collections(vector<coll_t>& ls)
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/current", basedir.c_str());
 
+  int r = 0;
   DIR *dir = ::opendir(fn);
-  if (!dir)
-    return -errno;
+  if (!dir) {
+    r = -errno;
+    derr << "tried opening directory " << fn << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
 
   struct dirent sde, *de;
   char new_name[PATH_MAX];
-  while (::readdir_r(dir, &sde, &de) == 0) {
+  while ((r = ::readdir_r(dir, &sde, &de)) == 0) {
     if (!de)
       break;
     if (!S_ISDIR(de->d_type << 12))
@@ -3656,9 +3660,14 @@ int FileStore::list_collections(vector<coll_t>& ls)
     lfn_translate(fn, de->d_name, new_name, sizeof(new_name));
     ls.push_back(coll_t(new_name));
   }
-  
+
+  if (r > 0) {
+    derr << "trying readdir_r " << fn << ": " << cpp_strerror(r) << dendl;
+    r = -r;
+  }
+
   ::closedir(dir);
-  return 0;
+  return r;
 }
 
 int FileStore::collection_stat(coll_t c, struct stat *st) 
