@@ -14,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_user.h"
+#include "rgw_acl.h"
 
 using namespace std;
 
@@ -379,6 +380,7 @@ protected:
   map<uint32_t, RGWUploadPartInfo> parts;
   int max_parts;
   int marker;
+  RGWAccessControlPolicy policy;
 
 public:
   RGWListMultipart() {}
@@ -390,6 +392,7 @@ public:
     parts.clear();
     max_parts = 1000;
     marker = 0;
+    policy = RGWAccessControlPolicy();
   }
   void execute();
 

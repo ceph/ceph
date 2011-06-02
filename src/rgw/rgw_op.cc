@@ -489,6 +489,7 @@ void RGWPutObj::execute()
       goto done;
 
     if (multipart) {
+      bl.clear();
       map<string, bufferlist> meta_attrs;
       RGWUploadPartInfo info;
       string p = "part.";
@@ -498,6 +499,7 @@ void RGWPutObj::execute()
       info.size = s->obj_size;
       info.modified = g_clock.now();
       ::encode(info, bl);
+      RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
       
       ret  = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, multipart_meta_obj, NULL, meta_attrs, false);
@@ -870,7 +872,8 @@ done:
   send_response();
 }
 
-static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, RGWUploadPartInfo>& parts)
+static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, RGWUploadPartInfo>& parts,
+                               RGWAccessControlPolicy& policy)
 {
   void *handle;
   map<string, bufferlist> attrs;
@@ -885,6 +888,12 @@ static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, R
 
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     string name = iter->first;
+    if (name.compare(RGW_ATTR_ACL) == 0) {
+      bufferlist& bl = iter->second;
+      bufferlist::iterator bli = bl.begin();
+      ::decode(policy, bli);
+      continue;
+    }
     if (name.compare(0, 5, "part.") != 0)
       continue;
 
@@ -904,6 +913,7 @@ void RGWCompleteMultipart::execute()
   RGWMultiXMLParser parser;
   string obj = s->object_str;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
+  RGWAccessControlPolicy policy;
 
   ret = get_params();
   if (ret < 0)
@@ -937,7 +947,7 @@ void RGWCompleteMultipart::execute()
   obj.append(".");
   obj.append(upload_id);
 
-  ret = get_multiparts_info(s, obj, obj_parts);
+  ret = get_multiparts_info(s, obj, obj_parts, policy);
   if (ret < 0)
     goto done;
 
@@ -955,8 +965,7 @@ void RGWListMultipart::execute()
 
   obj.append(".");
   obj.append(upload_id);
-
-  ret = get_multiparts_info(s, obj, parts);
+  ret = get_multiparts_info(s, obj, parts, policy);
 
 done:
   send_response();

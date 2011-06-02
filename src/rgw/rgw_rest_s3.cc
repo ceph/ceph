@@ -287,11 +287,13 @@ void RGWListMultipart_REST_S3::send_response()
     set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s, "application/xml");
+
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
     map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
     int i, cur_max = 0;
+
     iter = parts.upper_bound(marker);
     for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
       cur_max = test_iter->first;
@@ -304,6 +306,9 @@ void RGWListMultipart_REST_S3::send_response()
     s->formatter->dump_value_str("NextPartNumberMarker", "%d", cur_max + 1);
     s->formatter->dump_value_str("MaxParts", "%d", max_parts);
     s->formatter->dump_value_str("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
+
+    ACLOwner& owner = policy.get_owner();
+    dump_owner(s, owner.get_id(), owner.get_display_name());
 
     for (; iter != parts.end(); ++iter) {
       RGWUploadPartInfo& info = iter->second;
