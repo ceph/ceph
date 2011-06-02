@@ -54,7 +54,7 @@ int main(int argc, const char **argv, char *envp[])
   vec_to_argv(args, argc, argv);
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
@@ -68,7 +68,7 @@ int main(int argc, const char **argv, char *envp[])
     messengers[i] = new SimpleMessenger();
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
     messengers[i]->bind(i * 1000000 + getpid());
-    mclients[i] = new MonClient();
+    mclients[i] = new MonClient(&g_ceph_context);
     mclients[i]->build_initial_monmap();
     Client *client = new Client(messengers[i], mclients[i]);
     client->set_filer_flags(syn_filer_flags);

@@ -73,7 +73,7 @@ public:
     common_init_finish(cct);
 
     //monmap
-    monclient = new MonClient();
+    monclient = new MonClient(cct);
     if (monclient->build_initial_monmap() < 0) {
       shutdown();
       return -1000;

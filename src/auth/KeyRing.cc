@@ -39,8 +39,8 @@ from_ceph_conf(const md_config_t *conf)
   auto_ptr < KeyRing > keyring(new KeyRing());
 
   if (!is_supported_auth(CEPH_AUTH_CEPHX)) {
-    derr << "KeyRing::from_ceph_conf: CephX auth is not supported." << dendl;
-    return NULL;
+    dout(2) << "KeyRing::from_ceph_conf: CephX auth is not supported." << dendl;
+    return keyring.release();
   }
 
   int ret = 0;
@@ -87,6 +87,12 @@ from_ceph_conf(const md_config_t *conf)
   if (!found_key)
     return NULL;
   return keyring.release();
+}
+
+KeyRing *KeyRing::
+create_empty()
+{
+  return new KeyRing();
 }
 
 int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps)

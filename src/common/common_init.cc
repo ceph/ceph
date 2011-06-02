@@ -190,14 +190,6 @@ void common_init_daemonize(const CephContext *cct, int flags)
     exit(1);
   }
 
-  if (!conf->chdir.empty()) {
-    if (::chdir(conf->chdir.c_str())) {
-      int err = errno;
-      derr << "common_init_daemonize: failed to chdir to directory: '"
-	   << conf->chdir << "': " << cpp_strerror(err) << dendl;
-    }
-  }
-
   if (atexit(pidfile_remove_void)) {
     derr << "common_init_daemonize: failed to set pidfile_remove function "
 	 << "to run at exit." << dendl;
@@ -241,6 +233,18 @@ void common_init_daemonize(const CephContext *cct, int flags)
     exit(1);
   }
   dout(1) << "finished common_init_daemonize" << dendl;
+}
+
+void common_init_chdir(const CephContext *cct)
+{
+  const md_config_t *conf = cct->_conf;
+  if (conf->chdir.empty())
+    return;
+  if (::chdir(conf->chdir.c_str())) {
+    int err = errno;
+    derr << "common_init_chdir: failed to chdir to directory: '"
+	 << conf->chdir << "': " << cpp_strerror(err) << dendl;
+  }
 }
 
 /* Please be sure that this can safely be called multiple times by the

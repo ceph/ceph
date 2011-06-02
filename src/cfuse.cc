@@ -81,7 +81,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   int ret = mc.build_initial_monmap();
   if (ret == -EINVAL)
     usage();

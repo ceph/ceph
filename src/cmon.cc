@@ -261,6 +261,7 @@ int main(int argc, const char **argv)
 
   common_init_daemonize(&g_ceph_context, 0);
   common_init_finish(&g_ceph_context);
+  common_init_chdir(&g_ceph_context);
   messenger->start();
 
   uint64_t supported =

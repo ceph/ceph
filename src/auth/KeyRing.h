@@ -30,6 +30,8 @@ class KeyRing {
 public:
   /* Create a KeyRing from a Ceph configuration */
   static KeyRing *from_ceph_conf(const md_config_t *conf);
+  /* Create an empty KeyRing */
+  static KeyRing *create_empty();
 
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 

@@ -57,12 +57,6 @@ int main(int argc, const char **argv)
   vector<const char *>::iterator args_iter;
 
   common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
-  KeyRing *cosd_keyring = KeyRing::from_ceph_conf(g_ceph_context._conf);
-  if (!cosd_keyring) {
-    derr << "Unable to get a Ceph keyring." << dendl;
-    return 1;
-  }
-
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -128,8 +122,7 @@ int main(int argc, const char **argv)
 
   if (mkfs) {
     common_init_finish(&g_ceph_context);
-    RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, cosd_keyring);
-    MonClient mc(&rkeys);
+    MonClient mc(&g_ceph_context);
     if (mc.build_initial_monmap() < 0)
       return -1;
     if (mc.get_monmap_privately() < 0)
@@ -148,12 +141,17 @@ int main(int argc, const char **argv)
   }
   if (mkkey) {
     common_init_finish(&g_ceph_context);
+    KeyRing *keyring = KeyRing::create_empty();
+    if (!keyring) {
+      derr << "Unable to get a Ceph keyring." << dendl;
+      return 1;
+    }
     EntityName ename(g_conf.name);
     EntityAuth eauth;
     eauth.key.create(CEPH_CRYPTO_AES);
-    cosd_keyring->add(ename, eauth);
+    keyring->add(ename, eauth);
     bufferlist bl;
-    cosd_keyring->encode_plaintext(bl);
+    keyring->encode_plaintext(bl);
     int r = bl.write_file(g_conf.keyring.c_str(), 0600);
     if (r)
       derr << TEXT_RED << " ** ERROR: writing new keyring to " << g_conf.keyring
@@ -279,10 +277,10 @@ int main(int argc, const char **argv)
   // Leave stderr open in case we need to report errors.
   common_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
   common_init_finish(&g_ceph_context);
-  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, cosd_keyring);
-  MonClient mc(&rkeys);
+  MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
+  common_init_chdir(&g_ceph_context);
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
 		     g_conf.osd_data, g_conf.osd_journal);

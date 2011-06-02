@@ -22,6 +22,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/strtol.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
@@ -58,6 +59,65 @@ void usage()
   generic_server_usage();
 }
 
+static int do_cmds_special_action(const std::string &action,
+				  const std::string &dump_file, int rank)
+{
+  SimpleMessenger *messenger = new SimpleMessenger();
+  messenger->bind(getpid());
+  MonClient mc(&g_ceph_context);
+  if (mc.build_initial_monmap() < 0)
+    return -1;
+
+  if (action == "dump-journal") {
+    dout(0) << "dumping journal for mds" << rank << " to " << dump_file << dendl;
+    Dumper *journal_dumper = new Dumper(messenger, &mc);
+    journal_dumper->init(rank);
+    journal_dumper->dump(dump_file.c_str());
+    mc.shutdown();
+  }
+  else if (action == "undump-journal") {
+    dout(0) << "undumping journal for mds" << rank << " from " << dump_file << dendl;
+    Dumper *journal_dumper = new Dumper(messenger, &mc);
+    journal_dumper->init(rank);
+    journal_dumper->undump(dump_file.c_str());
+    mc.shutdown();
+  }
+  else if (action == "reset-journal") {
+    dout(0) << "resetting journal" << dendl;
+    Resetter *jr = new Resetter(messenger, &mc);
+    jr->init(rank);
+    jr->reset();
+    mc.shutdown();
+  }
+  else {
+    assert(0);
+  }
+  return 0;
+}
+
+static void set_special_action(std::string &dest, const std::string &act)
+{
+  if (!dest.empty()) {
+    derr << "Parse error! Can't specify more than one action. You "
+	 << "specified both " << act << " and " << dest << "\n" << dendl;
+    usage();
+    exit(1);
+  }
+  dest = act;
+}
+
+static int parse_rank(const char *opt_name, const std::string &val)
+{
+  std::string err;
+  int ret = strict_strtol(val.c_str(), 10, &err);
+  if (!err.empty()) {
+    derr << "error parsing " << opt_name << ": failed to parse rank. "
+	 << "It must be an int." << "\n" << dendl;
+    usage();
+  }
+  return ret;
+}
+
 int main(int argc, const char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -66,146 +126,140 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
-  KeyRing *cmds_keyring = KeyRing::from_ceph_conf(g_ceph_context._conf);
-  if (!cmds_keyring) {
-    derr << "Unable to get a Ceph keyring." << dendl;
-    return 1;
-  }
 
   // mds specific args
   int shadow = 0;
-  int dump_journal = -1;
-  int undump_journal = -1;
-  const char *dump_file = NULL;
-  int reset_journal = -1;
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("dump-journal", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&dump_journal, OPT_INT);
-      CEPH_ARGPARSE_SET_ARG_VAL(&dump_file, OPT_STR);
-      cout << "dumping journal for mds" << dump_journal << " to " << dump_file << std::endl;
-    } else if (CEPH_ARGPARSE_EQ("undump-journal", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&undump_journal, OPT_INT);
-      CEPH_ARGPARSE_SET_ARG_VAL(&dump_file, OPT_STR);
-      cout << "undumping journal for mds" << dump_journal << " to " << dump_file << std::endl;
-    } else if (CEPH_ARGPARSE_EQ("reset-journal", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&reset_journal, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("journal-check", '\0')) {
-      int check_rank;
-      CEPH_ARGPARSE_SET_ARG_VAL(&check_rank, OPT_INT);
-      
+  int rank = -1;
+  std::string dump_file;
+
+  std::string val, action;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_witharg(args, i, &val, "--dump-journal", (char*)NULL)) {
+      set_special_action(action, "dump-journal");
+      rank = parse_rank("dump-journal", val);
+      if (i == args.end()) {
+	derr << "error parsing --dump-journal: you must give a second "
+	     << "dump-journal argument: the filename to dump the journal to. "
+	     << "\n" << dendl;
+	usage();
+      }
+      dump_file = *i++;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--undump-journal", (char*)NULL)) {
+      set_special_action(action, "undump-journal");
+      rank = parse_rank("undump-journal", val);
+      if (i == args.end()) {
+	derr << "error parsing --undump-journal: you must give a second "
+	     << "undump-journal argument: the filename to undump the journal from. "
+	     << "\n" << dendl;
+	usage();
+      }
+      dump_file = *i++;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--reset-journal", (char*)NULL)) {
+      set_special_action(action, "reset-journal");
+      rank = parse_rank("reset-journal", val);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
+      int r = parse_rank("journal-check", val);
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
-      dout(0) << "requesting oneshot_replay for mds" << check_rank << dendl;
+      dout(0) << "requesting oneshot_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      g_conf.mds_standby_for_rank = check_rank;
-      ++i;
-    } else if (CEPH_ARGPARSE_EQ("hot-standby", '\0')) {
-      int check_rank;
-      CEPH_ARGPARSE_SET_ARG_VAL(&check_rank, OPT_INT);
+      g_conf.mds_standby_for_rank = r;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
+      int r = parse_rank("hot-standby", val);
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
-      dout(0) << "requesting standby_replay for mds" << check_rank << dendl;
+      dout(0) << "requesting standby_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
-      g_conf.mds_standby_for_rank = check_rank;
-    } else {
-      derr << "unrecognized arg " << args[i] << dendl;
+      g_conf.mds_standby_for_rank = r;
+    }
+    else {
+      derr << "Error: can't understand argument: " << *i << "\n" << dendl;
       usage();
     }
   }
-  if (g_conf.name.has_default_id() && dump_journal < 0 && reset_journal < 0) {
+
+  // Check for special actions
+  if (!action.empty()) {
+    return do_cmds_special_action(action, dump_file, rank);
+  }
+
+  // Normal startup
+  if (g_conf.name.has_default_id()) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
 
-  // get monmap
-  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_MDS, cmds_keyring);
-  MonClient mc(&rkeys);
-  if (mc.build_initial_monmap() < 0)
-    return -1;
-
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind(getpid());
-  if (dump_journal >= 0) {
-    Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init(dump_journal);
-    journal_dumper->dump(dump_file);
-    mc.shutdown();
-  } else if (undump_journal >= 0) {
-    Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init(undump_journal);
-    journal_dumper->undump(dump_file);
-    mc.shutdown();
-  } else if (reset_journal >= 0) {
-    Resetter *jr = new Resetter(messenger, &mc);
-    jr->init(reset_journal);
-    jr->reset();
-    mc.shutdown();
-  } else {
-    cout << "starting " << g_conf.name << " at " << messenger->get_ms_addr()
-	 << std::endl;
+  cout << "starting " << g_conf.name << " at " << messenger->get_ms_addr()
+       << std::endl;
+  messenger->register_entity(entity_name_t::MDS(-1));
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR |
+    CEPH_FEATURE_DIRLAYOUTHASH;
+  messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::client(supported,
+							CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_MDS,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+			SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    messenger->register_entity(entity_name_t::MDS(-1));
-    assert_warn(messenger);
-    if (!messenger)
-      return 1;
+  if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
+    common_init_daemonize(&g_ceph_context, 0);
+  common_init_finish(&g_ceph_context);
 
-    uint64_t supported =
-      CEPH_FEATURE_UID |
-      CEPH_FEATURE_NOSRCADDR |
-      CEPH_FEATURE_DIRLAYOUTHASH;
-    messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
-    messenger->set_policy(entity_name_t::TYPE_MON,
-                          SimpleMessenger::Policy::client(supported,
-                                                          CEPH_FEATURE_UID));
-    messenger->set_policy(entity_name_t::TYPE_MDS,
-                          SimpleMessenger::Policy::lossless_peer(supported,
-                                                                 CEPH_FEATURE_UID));
-    messenger->set_policy(entity_name_t::TYPE_CLIENT,
-                          SimpleMessenger::Policy::stateful_server(supported, 0));
+  // get monmap
+  MonClient mc(&g_ceph_context);
+  if (mc.build_initial_monmap() < 0)
+    return -1;
+  common_init_chdir(&g_ceph_context);
 
-    if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-      common_init_daemonize(&g_ceph_context, 0);
-    common_init_finish(&g_ceph_context);
-    ...
-    messenger->start();
+  messenger->start();
 
-    // start mds
-    MDS *mds = new MDS(g_conf.name.get_id().c_str(), messenger, &mc);
+  // start mds
+  MDS *mds = new MDS(g_conf.name.get_id().c_str(), messenger, &mc);
 
-    // in case we have to respawn...
-    mds->orig_argc = argc;
-    mds->orig_argv = argv;
+  // in case we have to respawn...
+  mds->orig_argc = argc;
+  mds->orig_argv = argv;
 
-    if (shadow)
-      mds->init(shadow);
-    else
-      mds->init();
+  if (shadow)
+    mds->init(shadow);
+  else
+    mds->init();
 
-    messenger->wait();
+  messenger->wait();
 
-    // yuck: grab the mds lock, so we can be sure that whoever in *mds
-    // called shutdown finishes what they were doing.
-    mds->mds_lock.Lock();
-    mds->mds_lock.Unlock();
+  // yuck: grab the mds lock, so we can be sure that whoever in *mds
+  // called shutdown finishes what they were doing.
+  mds->mds_lock.Lock();
+  mds->mds_lock.Unlock();
 
-    // only delete if it was a clean shutdown (to aid memory leak
-    // detection, etc.).  don't bother if it was a suicide.
-    if (mds->is_stopped())
-      delete mds;
+  // only delete if it was a clean shutdown (to aid memory leak
+  // detection, etc.).  don't bother if it was a suicide.
+  if (mds->is_stopped())
+    delete mds;
 
-    // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
-    char s[20];
-    snprintf(s, sizeof(s), "gmon/%d", getpid());
-    if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
-      dout(0) << "cmds: gmon.out should be in " << s << dendl;
-    }
-
-    generic_dout(0) << "stopped." << dendl;
+  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
+  char s[20];
+  snprintf(s, sizeof(s), "gmon/%d", getpid());
+  if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
+    dout(0) << "cmds: gmon.out should be in " << s << dendl;
   }
+
+  generic_dout(0) << "stopped." << dendl;
   return 0;
 }
 

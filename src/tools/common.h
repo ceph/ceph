@@ -53,6 +53,7 @@ struct ceph_tool_data
   bool concise;
 
   ceph_tool_data() :
+    mc(&g_ceph_context),
     updates(EVERYTHING_UPDATE),
     log(&std::cout),
     slog(NULL),

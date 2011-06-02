@@ -47,6 +47,7 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
+  CephContext *cct;
   MonClientState state;
 
   Messenger *messenger;
@@ -161,10 +162,12 @@ public:
     _sub_got(what, have);
   }
   
+  KeyRing *keyring;
   RotatingKeyRing *rotating_secrets;
 
  public:
-  MonClient(RotatingKeyRing *rkeys=0) :
+  MonClient(CephContext *cct_) :
+    cct(cct_),
     state(MC_STATE_NONE),
     messenger(NULL),
     cur_con(NULL),
@@ -176,11 +179,14 @@ public:
     want_keys(0), global_id(0),
     authenticate_err(0),
     auth(NULL),
-    rotating_secrets(rkeys) { }
+    keyring(NULL),
+    rotating_secrets(NULL)
+  {
+  }
 
   ~MonClient();
 
-  void init();
+  int init();
   void shutdown();
 
   void set_log_client(LogClient *clog) {
@@ -248,6 +254,9 @@ public:
     if (auth)
       auth->add_want_keys(want);
   }
+private:
+  MonClient(const MonClient &rhs);
+  MonClient& operator=(const MonClient &rhs);
 };
 
 #endif

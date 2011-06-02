@@ -43,8 +43,9 @@
 
 MonClient::~MonClient()
 {
-  if (auth)
-    delete auth;
+  delete auth;
+  delete keyring;
+  delete rotating_secrets;
 }
 
 /*
@@ -316,11 +317,18 @@ void MonClient::handle_monmap(MMonMap *m)
 
 // ----------------------
 
-void MonClient::init()
+int MonClient::init()
 {
   dout(10) << "init" << dendl;
 
   messenger->add_dispatcher_head(this);
+
+  keyring = KeyRing::from_ceph_conf(cct->_conf);
+  if (!keyring) {
+    derr << "MonClient::init(): Failed to create keyring" << dendl;
+    return -EDOM;
+  }
+  rotating_secrets = new RotatingKeyRing(CEPH_ENTITY_TYPE_OSD, keyring);
 
   entity_name = g_conf.name;
   
@@ -346,6 +354,7 @@ void MonClient::init()
       dout(0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
+  return 0;
 }
 
 void MonClient::shutdown()

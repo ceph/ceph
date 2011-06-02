@@ -404,7 +404,8 @@ private:
 
 public:
   RadosClient(CephContext *cct_) : cct(cct_), conf(cct_->_conf),
-		  state(DISCONNECTED), messenger(NULL), objecter(NULL),
+		  state(DISCONNECTED), monclient(cct_),
+		  messenger(NULL), objecter(NULL),
 		  lock("radosclient"), timer(lock), max_watch_cookie(0)
   {
   }
