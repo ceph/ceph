@@ -2825,6 +2825,9 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
     return -errno;
   }
 
+  ::lseek64(from, off, SEEK_SET);
+  ::lseek64(to, off, SEEK_SET);
+
   loff_t pos = off;
   loff_t end = off + len;
   int buflen = 4096*32;
