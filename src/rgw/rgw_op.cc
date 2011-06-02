@@ -380,7 +380,7 @@ void RGWPutObj::execute()
 {
   bool multipart;
   string multipart_meta_obj;
-  string partNum;
+  string part_num;
 
   ret = -EINVAL;
   if (!s->object) {
@@ -432,13 +432,13 @@ void RGWPutObj::execute()
       obj.append(".");
       obj.append(s->args.get("uploadId"));
       multipart_meta_obj = obj;
-      partNum = s->args.get("partNumber");
-      if (partNum.empty()) {
+      part_num = s->args.get("partNumber");
+      if (part_num.empty()) {
         ret = -EINVAL;
         goto done;
       }
       obj.append(".");
-      obj.append(partNum);
+      obj.append(part_num);
     }
     do {
       get_data();
@@ -490,11 +490,13 @@ void RGWPutObj::execute()
 
     if (multipart) {
       map<string, bufferlist> meta_attrs;
+      RGWUploadPartInfo info;
       string p = "part.";
-      p.append(partNum);
-      bufferlist bl;
-      ::encode(etag, bl);
-      ::encode(s->obj_size, bl);
+      p.append(part_num);
+      info.num = atoi(part_num.c_str());
+      info.etag = etag;
+      info.size = s->obj_size;
+      ::encode(info, bl);
       meta_attrs[p] = bl;
       
       ret  = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, multipart_meta_obj, NULL, meta_attrs, false);
@@ -872,6 +874,9 @@ void RGWCompleteMultipart::execute()
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
+  string obj = s->object_str;
+  map<string, bufferlist> attrs;
+  void *handle;
 
   ret = get_params();
   if (ret < 0)
@@ -902,6 +907,13 @@ void RGWCompleteMultipart::execute()
     RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
   }
 
+  obj.append(".");
+  obj.append(upload_id);
+
+  ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+  rgwstore->finish_get_obj(&handle);
+
 done:
   send_response();
 }
@@ -910,6 +922,8 @@ void RGWListMultipart::execute()
 {
   void *handle;
   string obj = s->object_str;
+  map<string, bufferlist> attrs;
+  map<string, bufferlist>::iterator iter;
 
   ret = get_params();
   if (ret < 0)
@@ -920,8 +934,19 @@ void RGWListMultipart::execute()
 
   ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
                                   NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
-
   rgwstore->finish_get_obj(&handle);
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    string name = iter->first;
+    if (name.compare(0, 5, "part.") != 0)
+      continue;
+
+    bufferlist& bl = iter->second;
+    bufferlist::iterator bli = bl.begin();
+    RGWUploadPartInfo info;
+    ::decode(info, bli);
+    parts[info.num] = info;
+  }
 
 done:
   send_response();

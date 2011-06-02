@@ -288,22 +288,13 @@ void RGWListMultipart_REST_S3::send_response()
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
-    map<string, bufferlist>::iterator iter;
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-      string name = iter->first;
-      if (name.compare(0, 5, "part.") != 0)
-        continue;
-      string partNum = name.substr(5);
-      string etag;
-      uint64_t len;
-      bufferlist& bl = iter->second;
-      bufferlist::iterator bli = bl.begin();
-      ::decode(etag, bli);
-      ::decode(len, bli);
+    map<uint32_t, RGWUploadPartInfo>::iterator iter;
+    for (iter = parts.begin(); iter != parts.end(); ++iter) {
+      RGWUploadPartInfo& info = iter->second;
       s->formatter->open_obj_section("Part");
-      s->formatter->dump_value_int("PartNumber", partNum.c_str());
-      s->formatter->dump_value_str("ETag", "%s", etag.c_str());
-      s->formatter->dump_value_int("Size", "%llu", len);
+      s->formatter->dump_value_int("PartNumber", "%u", info.num);
+      s->formatter->dump_value_str("ETag", "%s", info.etag.c_str());
+      s->formatter->dump_value_int("Size", "%llu", info.size);
       s->formatter->close_section("Part");
     }
     // s->formatter->dump_value_str("Location" ...

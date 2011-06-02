@@ -419,6 +419,28 @@ struct RGWBucketEnt {
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
+struct RGWUploadPartInfo {
+  uint32_t num;
+  uint64_t size;
+  string etag;
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(num, bl);
+    ::encode(size, bl);
+    ::encode(etag, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(num, bl);
+    ::decode(size, bl);
+    ::decode(etag, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWUploadPartInfo)
+
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;

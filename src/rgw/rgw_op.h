@@ -11,6 +11,7 @@
 
 #include <string>
 
+#include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_user.h"
 
@@ -375,7 +376,7 @@ class RGWListMultipart : public RGWOp {
 protected:
   int ret;
   string upload_id;
-  map<string, bufferlist> attrs;
+  map<uint32_t, RGWUploadPartInfo> parts;
 
 public:
   RGWListMultipart() {}
