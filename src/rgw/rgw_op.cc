@@ -496,6 +496,7 @@ void RGWPutObj::execute()
       info.num = atoi(part_num.c_str());
       info.etag = etag;
       info.size = s->obj_size;
+      info.modified = g_clock.now();
       ::encode(info, bl);
       meta_attrs[p] = bl;
       

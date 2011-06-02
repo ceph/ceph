@@ -423,6 +423,7 @@ struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
   string etag;
+  utime_t modified;
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -430,6 +431,7 @@ struct RGWUploadPartInfo {
     ::encode(num, bl);
     ::encode(size, bl);
     ::encode(etag, bl);
+    ::encode(modified, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -437,6 +439,7 @@ struct RGWUploadPartInfo {
     ::decode(num, bl);
     ::decode(size, bl);
     ::decode(etag, bl);
+    ::decode(modified, bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)

@@ -304,8 +304,18 @@ void RGWListMultipart_REST_S3::send_response()
     s->formatter->dump_value_str("NextPartNumberMarker", "%d", cur_max + 1);
     s->formatter->dump_value_str("MaxParts", "%d", max_parts);
     s->formatter->dump_value_str("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
+
     for (; iter != parts.end(); ++iter) {
       RGWUploadPartInfo& info = iter->second;
+
+      time_t sec = info.modified.sec();
+      struct tm tmp;
+      localtime_r(&sec, &tmp);
+      char buf[TIME_BUF_SIZE];
+      if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
+        s->formatter->dump_value_str("LastModified", buf);
+      }
+
       s->formatter->open_obj_section("Part");
       s->formatter->dump_value_int("PartNumber", "%u", info.num);
       s->formatter->dump_value_str("ETag", "%s", info.etag.c_str());
