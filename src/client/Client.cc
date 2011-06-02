@@ -2736,6 +2736,13 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
   
+  // clear out the flushing caps so they get resent
+  if (in->flushing_caps) {
+    in->dirty_caps |= in->flushing_caps;
+    in->flushing_caps = 0;
+    in->put();
+  }
+
   if (m->get_mseq() > in->exporting_mseq) {
     dout(5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
 	    << " IMPORT from mds" << mds
