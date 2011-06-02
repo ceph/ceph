@@ -5093,6 +5093,19 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
 
+    // or src objects?
+    for (vector<object_t>::const_iterator p = op->src_oids.begin();
+	 p != op->src_oids.end();
+	 ++p) {
+      sobject_t soid(*p, CEPH_NOSNAP);
+      if (pg->is_missing_object(soid)) {
+	pg->wait_for_missing_object(soid, op);
+	pg->unlock();
+	return;
+      }
+    }
+
+    // degraded object?
     if (op->may_write() && pg->is_degraded_object(head)) {
       pg->wait_for_degraded_object(head, op);
       pg->unlock();
@@ -5337,6 +5350,10 @@ int OSD::init_op_flags(MOSDOp *op)
     if (iter->op.op & CEPH_OSD_OP_MODE_WR)
       op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
     if (iter->op.op & CEPH_OSD_OP_MODE_RD)
+      op->rmw_flags |= CEPH_OSD_FLAG_READ;
+
+    // set READ flag if there are src_oids
+    if (op->src_oids.size()) 
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
 
     // set PGOP flag if there are PG ops
