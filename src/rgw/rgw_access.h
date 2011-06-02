@@ -46,16 +46,16 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, std::string& loc, time_t *mtime,
                       map<std::string, bufferlist>& attrs, bool exclusive) = 0;
-  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
                       off_t ofs, size_t len, time_t *mtime) = 0;
 
-  int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t len,
+  int put_obj(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_meta(id, bucket, obj, NULL, attrs, false);
+    int ret = put_obj_meta(id, bucket, obj, loc, NULL, attrs, false);
     if (ret >= 0) {
-      ret = put_obj_data(id, bucket, obj, data, -1, len, mtime);
+      ret = put_obj_data(id, bucket, obj, loc, data, -1, len, mtime);
     }
     return ret;
   }
@@ -121,7 +121,7 @@ public:
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-  virtual int prepare_get_obj(std::string& bucket, std::string& obj, 
+  virtual int prepare_get_obj(std::string& bucket, std::string& obj, std::string& loc,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -133,7 +133,7 @@ public:
             void **handle,
             struct rgw_err *err) = 0;
 
-  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, 
+  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, std::string& loc,
             char **data, off_t ofs, off_t end) = 0;
 
   virtual void finish_get_obj(void **handle) = 0;
@@ -151,7 +151,7 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(std::string& bucket, std::string& obj,
+  virtual int get_attr(std::string& bucket, std::string& obj, std::string& loc,
                        const char *name, bufferlist& dest) = 0;
   /**
    * Set an attr on an object.

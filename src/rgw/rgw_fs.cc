@@ -185,7 +185,7 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
   return 0;
 }
 
-int RGWFS::put_obj_meta(std::string& id, std::string& bucket, std::string& obj,
+int RGWFS::put_obj_meta(std::string& id, std::string& bucket, std::string& obj, std::string& loc,
                   time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -230,7 +230,7 @@ done_err:
   return -errno;
 }
 
-int RGWFS::put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+int RGWFS::put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
                   off_t ofs, size_t size, time_t *mtime)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -295,13 +295,13 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
+  ret = prepare_get_obj(src_bucket, src_obj, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &handle, err);
   if (ret < 0)
     return ret;
  
   do { 
-    ret = get_obj(&handle, src_bucket, src_obj, &data, ofs, end);
+    ret = get_obj(&handle, src_bucket, src_obj, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
     ofs += ret;
@@ -313,7 +313,7 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   }
   attrs = attrset;
 
-  ret = put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(id, dest_bucket, dest_obj, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -397,7 +397,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
   return attr_len;
 }
 
-int RGWFS::get_attr(std::string& bucket, std::string& obj,
+int RGWFS::get_attr(std::string& bucket, std::string& obj, std::string& loc,
                        const char *name, bufferlist& dest)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -434,7 +434,7 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
   return ret;
 }
 
-int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj, 
+int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj, std::string& loc,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -536,7 +536,7 @@ done_err:
   return r;
 }
 
-int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj, 
+int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj, std::string& loc,
             char **data, off_t ofs, off_t end)
 {
   uint64_t len;

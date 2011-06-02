@@ -84,13 +84,13 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, string& object)
+static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, string& object, string& loc)
 {
   bufferlist bl;
   int ret = 0;
 
   if (bucket.size()) {
-    ret = rgwstore->get_attr(bucket, object,
+    ret = rgwstore->get_attr(bucket, object, loc,
                        RGW_ATTR_ACL, bl);
 
     if (ret >= 0) {
@@ -111,19 +111,20 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
 {
   string upload_id = s->args.get("uploadId");
   string obj = object;
+  string loc = object;
 
   if (!obj.empty() && !upload_id.empty()) {
     obj.append(".");
     obj.append(upload_id);
   }
 
-  int ret = get_policy_from_attr(policy, bucket, obj);
+  int ret = get_policy_from_attr(policy, bucket, obj, loc);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy;
     string no_object;
-    ret = get_policy_from_attr(&bucket_policy, bucket, no_object);
+    ret = get_policy_from_attr(&bucket_policy, bucket, no_object, no_object);
     if (ret < 0)
       return ret;
 
@@ -180,7 +181,7 @@ void RGWGetObj::execute()
 
   init_common();
 
-  ret = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
+  ret = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, s->object_str, ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &s->err);
   if (ret < 0)
     goto done;
@@ -191,7 +192,7 @@ void RGWGetObj::execute()
     goto done;
 
   while (ofs <= end) {
-    ret = rgwstore->get_obj(&handle, s->bucket_str, s->object_str, &data, ofs, end);
+    ret = rgwstore->get_obj(&handle, s->bucket_str, s->object_str, s->object_str, &data, ofs, end);
     if (ret < 0) {
       goto done;
     }
@@ -319,7 +320,7 @@ void RGWCreateBucket::execute()
   bool existed;
   bool pol_ret;
 
-  int r = get_policy_from_attr(&old_policy, rgw_root_bucket, s->bucket_str);
+  int r = get_policy_from_attr(&old_policy, rgw_root_bucket, s->bucket_str, s->bucket_str);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
@@ -447,7 +448,7 @@ void RGWPutObj::execute()
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
         ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str,
-				     obj, data,
+				     obj, s->object_str, data,
 				     ((ofs == 0) ? -1 : ofs), len, NULL);
         free(data);
         if (ret < 0)
@@ -484,7 +485,7 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, obj, NULL, attrs, false);
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, obj, s->object_str, NULL, attrs, false);
     if (ret < 0)
       goto done;
 
@@ -502,7 +503,7 @@ void RGWPutObj::execute()
       RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
       
-      ret  = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, multipart_meta_obj, NULL, meta_attrs, false);
+      ret  = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, multipart_meta_obj, s->object_str, NULL, meta_attrs, false);
     }
   }
 done:
@@ -866,7 +867,7 @@ void RGWInitMultipart::execute()
     tmp_obj_name.append(".");
     tmp_obj_name.append(upload_id);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, tmp_obj_name, NULL, attrs, true);
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, tmp_obj_name, s->object_str, NULL, attrs, true);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -879,7 +880,7 @@ static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, R
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
 
-  int ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
+  int ret = rgwstore->prepare_get_obj(s->bucket_str, obj, s->object_str, 0, NULL, &attrs, NULL,
                                       NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
   rgwstore->finish_get_obj(&handle);
 

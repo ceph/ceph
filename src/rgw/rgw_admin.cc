@@ -549,7 +549,7 @@ int main(int argc, char **argv)
       object = "";
     string bucket_str(bucket);
     string object_str(object);
-    int ret = store->get_attr(bucket_str, object_str,
+    int ret = store->get_attr(bucket_str, object_str, object_str,
                        RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;

@@ -19,9 +19,9 @@ public:
                    bool get_content_type);
 
   int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0);
-  int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
+  int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, std::string& loc, time_t *mtime,
 	      map<std::string, bufferlist>& attrs, bool exclusive);
-  int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+  int put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
               off_t ofs, size_t size, time_t *mtime);
   int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
@@ -37,12 +37,12 @@ public:
 
   int get_attr(const char *name, int fd, char **attr);
   int get_attr(const char *name, const char *path, char **attr);
-  int get_attr(std::string& bucket, std::string& obj,
+  int get_attr(std::string& bucket, std::string& obj, std::string& loc,
                const char *name, bufferlist& dest);
   int set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl);
 
-  int prepare_get_obj(std::string& bucket, std::string& obj, 
+  int prepare_get_obj(std::string& bucket, std::string& obj, std::string& loc,
             off_t ofs, off_t *end,
 	    map<std::string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -54,7 +54,7 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  int get_obj(void **handle, std::string& bucket, std::string& obj, 
+  int get_obj(void **handle, std::string& bucket, std::string& obj, std::string& loc,
             char **data, off_t ofs, off_t end);
 
   void finish_get_obj(void **handle);

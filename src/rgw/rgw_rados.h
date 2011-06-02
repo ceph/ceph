@@ -42,9 +42,9 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, std::string& loc, time_t *mtime,
               map<std::string, bufferlist>& attrs, bool exclusive);
-  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
               off_t ofs, size_t len, time_t *mtime);
   /** Copy an object, with many extra options */
   virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
@@ -63,7 +63,7 @@ public:
   virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 
   /** Get the attributes for an object.*/
-  virtual int get_attr(std::string& bucket, std::string& obj,
+  virtual int get_attr(std::string& bucket, std::string& obj, std::string& loc,
                const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
@@ -71,7 +71,7 @@ public:
                        const char *name, bufferlist& bl);
 
   /** Get data about an object out of RADOS and into memory. */
-  virtual int prepare_get_obj(std::string& bucket, std::string& obj, 
+  virtual int prepare_get_obj(std::string& bucket, std::string& obj, std::string& loc,  
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -83,7 +83,7 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, 
+  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, std::string& loc,
             char **data, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);
