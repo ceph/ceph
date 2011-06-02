@@ -5170,7 +5170,8 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(),
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   
   // move srcdn
@@ -5210,6 +5211,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	destdn->first = MAX(destdn->first, next_dest_snap);
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       if (srci->is_auth()) {
+	metablob->add_dir_context(srci->get_parent_dir());
 	mdcache->journal_cow_dentry(mdr, metablob, srci->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
 	ji = metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
       }
