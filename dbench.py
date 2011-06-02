@@ -3,6 +3,7 @@ from orchestra import monkey; monkey.patch_all()
 
 from cStringIO import StringIO
 
+import bunch
 import json
 import logging
 import os
@@ -410,45 +411,6 @@ if __name__ == '__main__':
         remote=mon0_remote,
         )
 
-
-    log.info('Mounting cfuse clients...')
-    cfuse_daemons = {}
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            run.run(
-                client=connections[idx],
-                args=[
-                    'mkdir',
-                    '--',
-                    mnt,
-                    ],
-                )
-            proc = run.run(
-                client=connections[idx],
-                args=[
-                    '/tmp/cephtest/daemon-helper',
-                    '/tmp/cephtest/binary/usr/local/bin/cfuse',
-                    '-f',
-                    '--name', 'client.{id}'.format(id=id_),
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    # TODO cfuse doesn't understand dash dash '--',
-                    mnt,
-                    ],
-                logger=log.getChild('cfuse.{id}'.format(id=id_)),
-                stdin=run.PIPE,
-                wait=False,
-                )
-            cfuse_daemons[id_] = proc
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            teuthology.wait_until_fuse_mounted(
-                remote=remotes[idx],
-                fuse=cfuse_daemons[id_],
-                mountpoint=mnt,
-                )
-
     # TODO kclient mount/umount
 
     # TODO rbd
@@ -528,36 +490,17 @@ if __name__ == '__main__':
                 ],
             )
 
-    import code
-    import readline
-    import rlcompleter
-    rlcompleter.__name__ # silence pyflakes
-    readline.parse_and_bind('tab: complete')
-    code.interact(
-        banner='Ceph test interactive mode, press control-D to exit...',
-        # TODO simplify this
-        local=dict(
-            config=config,
-            ROLES=ROLES,
-            connections=connections,
-            cluster=cluster,
-            ),
+    ctx = bunch.Bunch(
+        cluster=cluster,
         )
-
-    log.info('Unmounting cfuse clients...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            run.run(
-                client=connections[idx],
-                args=[
-                    'fusermount',
-                    '-u',
-                    mnt,
-                    ],
-                )
-    run.wait(cfuse_daemons.itervalues())
-
+    from teuthology.run_tasks import run_tasks
+    run_tasks(
+        tasks=[
+            {'cfuse': ['client.0']},
+            {'interactive': None},
+            ],
+        ctx=ctx,
+        )
 
     log.info('Shutting down mds daemons...')
     for id_, proc in mds_daemons.iteritems():

@@ -16,6 +16,7 @@ setup(
         'orchestra',
         'configobj',
         'PyYAML',
+        'bunch >=1.0.0',
         ],
 
     )
