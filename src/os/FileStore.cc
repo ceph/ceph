@@ -3650,8 +3650,24 @@ int FileStore::list_collections(vector<coll_t>& ls)
   while ((r = ::readdir_r(dir, &sde, &de)) == 0) {
     if (!de)
       break;
-    if (!S_ISDIR(de->d_type << 12))
+    if (de->d_type == DT_UNKNOWN) {
+      // d_type not supported (non-ext[234], btrfs), must stat
+      struct stat sb;
+      char filename[PATH_MAX];
+      snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
+
+      r = ::stat(filename, &sb);
+      if (r == -1) {
+	r = -errno;
+	derr << "stat on " << filename << ": " << cpp_strerror(-r) << dendl;
+	break;
+      }
+      if (!S_ISDIR(sb.st_mode)) {
+	continue;
+      }
+    } else if (!S_ISDIR(de->d_type << 12)) {
       continue;
+    }
     if (de->d_name[0] == '.' &&
 	(de->d_name[1] == '\0' ||
 	 (de->d_name[1] == '.' &&
