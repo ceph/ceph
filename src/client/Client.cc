@@ -2189,7 +2189,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
 {
   dout(10) << "_flush " << *in << dendl;
 
-  if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
+  if (!in->oset.dirty_tx && in->oset.uncommitted.empty()) {
     dout(10) << " nothing to flush" << dendl;
     return true;
   }
@@ -5054,7 +5054,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
-    if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
+    if (!in->oset.dirty_tx && in->oset.uncommitted.empty())
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
