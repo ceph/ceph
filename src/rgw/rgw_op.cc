@@ -869,14 +869,40 @@ done:
   send_response();
 }
 
+static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, RGWUploadPartInfo>& parts)
+{
+  void *handle;
+  map<string, bufferlist> attrs;
+  map<string, bufferlist>::iterator iter;
+
+  int ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
+                                      NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+  rgwstore->finish_get_obj(&handle);
+
+  if (ret < 0)
+    return ret;
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    string name = iter->first;
+    if (name.compare(0, 5, "part.") != 0)
+      continue;
+
+    bufferlist& bl = iter->second;
+    bufferlist::iterator bli = bl.begin();
+    RGWUploadPartInfo info;
+    ::decode(info, bli);
+    parts[info.num] = info;
+  }
+  return 0;
+}
+
 void RGWCompleteMultipart::execute()
 {
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
   string obj = s->object_str;
-  map<string, bufferlist> attrs;
-  void *handle;
+  map<uint32_t, RGWUploadPartInfo> obj_parts;
 
   ret = get_params();
   if (ret < 0)
@@ -910,9 +936,9 @@ void RGWCompleteMultipart::execute()
   obj.append(".");
   obj.append(upload_id);
 
-  ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
-  rgwstore->finish_get_obj(&handle);
+  ret = get_multiparts_info(s, obj, obj_parts);
+  if (ret < 0)
+    goto done;
 
 done:
   send_response();
@@ -920,10 +946,7 @@ done:
 
 void RGWListMultipart::execute()
 {
-  void *handle;
   string obj = s->object_str;
-  map<string, bufferlist> attrs;
-  map<string, bufferlist>::iterator iter;
 
   ret = get_params();
   if (ret < 0)
@@ -932,21 +955,7 @@ void RGWListMultipart::execute()
   obj.append(".");
   obj.append(upload_id);
 
-  ret = rgwstore->prepare_get_obj(s->bucket_str, obj, 0, NULL, &attrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
-  rgwstore->finish_get_obj(&handle);
-
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    string name = iter->first;
-    if (name.compare(0, 5, "part.") != 0)
-      continue;
-
-    bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
-    RGWUploadPartInfo info;
-    ::decode(info, bli);
-    parts[info.num] = info;
-  }
+  ret = get_multiparts_info(s, obj, parts);
 
 done:
   send_response();
