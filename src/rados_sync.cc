@@ -865,13 +865,14 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 	continue;
       if (is_suffix(de->d_name, RADOS_SYNC_TMP_SUFFIX)) {
 	char path[strlen(dir_name) + strlen(de->d_name) + 2];
-	snprintf("%s/%s", sizeof(path), dir_name, de->d_name);
+	snprintf(path, sizeof(path), "%s/%s", dir_name, de->d_name);
 	if (unlink(path)) {
 	  ret = errno;
 	  cerr << ERR_PREFIX << "error unlinking temporary file '" << path << "': "
 	       << cpp_strerror(ret) << std::endl;
 	  return ret;
 	}
+	cout << "[deleted]      " << "removed temporary file '" << de->d_name << "'" << std::endl;
 	continue;
       }
       auto_ptr <BackedUpObject> lobj;

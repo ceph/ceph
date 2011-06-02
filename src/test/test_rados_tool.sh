@@ -141,5 +141,10 @@ run_expect_succ grep '\[exported\]' "$TDIR/out6"
 diff -q -r "$TDIR/dird" "$TDIR/dire" \
     || die "failed to export the same stuff we imported!"
 
+# create a temporary file and validate that export deletes it
+touch "$TDIR/dire/tmp\$tmp"
+run_expect_succ "$RADOS_TOOL" --delete-after --create export "$POOL" "$TDIR/dire" | tee "$TDIR/out7"
+run_expect_succ grep temporary "$TDIR/out7"
+
 echo "SUCCESS!"
 exit 0
