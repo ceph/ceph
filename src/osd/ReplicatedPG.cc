@@ -3985,7 +3985,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	dout(15) << " clone_range " << p->first << " "
 		 << q.get_start() << "~" << q.get_len() << dendl;
 	t->clone_range(coll, p->first, soid,
-		       q.get_start(), q.get_len());
+		       q.get_start(), q.get_len(), q.get_start());
       }
     }
 
