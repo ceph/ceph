@@ -137,6 +137,7 @@ public:
   static const int PIN_NEEDSNAPFLUSH =    20;
   static const int PIN_DIRTYRSTAT =       21;
   static const int PIN_EXPORTINGCAPS =    22;
+  static const int PIN_DIRTYPARENT =      23;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -161,6 +162,7 @@ public:
     case PIN_STRAY: return "stray";
     case PIN_NEEDSNAPFLUSH: return "needsnapflush";
     case PIN_DIRTYRSTAT: return "dirtyrstat";
+    case PIN_DIRTYPARENT: return "dirtyparent";
     default: return generic_pin_name(p);
     }
   }

@@ -1098,13 +1098,18 @@ void CInode::store_parent(Context *fin)
 
 void CInode::_stored_parent(version_t v, Context *fin)
 {
-  if (v == inode.last_renamed_version) {
-    dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
-    item_renamed_file.remove_myself();
-    state_clear(STATE_DIRTYPARENT);
+  if (state_test(STATE_DIRTYPARENT)) {
+    if (v == inode.last_renamed_version) {
+      dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
+      item_renamed_file.remove_myself();
+      state_clear(STATE_DIRTYPARENT);
+      put(PIN_DIRTYPARENT);
+    } else {
+      dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
+	       << ", renamed again, not removing from list" << dendl;
+    }
   } else {
-    dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
-	     << ", renamed again, not removing from list" << dendl;
+    dout(10) << "stored_parent committed v" << v << ", tho i wasn't on the renamed_files list" << dendl;
   }
   if (fin) {
     fin->finish(0);
