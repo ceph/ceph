@@ -316,12 +316,17 @@ int RGWCompleteMultipart_REST::get_params()
 int RGWListMultipart_REST::get_params()
 {
   upload_id = s->args.get("uploadId");
-RGW_LOG(0) << "upload_id=" << upload_id << dendl;
 
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-RGW_LOG(0) << "upload_id=" << upload_id << dendl;
+  string str = s->args.get("part-number-marker");
+  if (!str.empty())
+    marker = atoi(str.c_str());
+  
+  str = s->args.get("max-parts");
+  if (!str.empty())
+    max_parts = atoi(str.c_str());
 
   return ret;
 }

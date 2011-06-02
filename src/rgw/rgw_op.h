@@ -377,6 +377,8 @@ protected:
   int ret;
   string upload_id;
   map<uint32_t, RGWUploadPartInfo> parts;
+  int max_parts;
+  int marker;
 
 public:
   RGWListMultipart() {}
@@ -385,6 +387,9 @@ public:
     RGWOp::init(s);
     ret = 0;
     upload_id = "";
+    parts.clear();
+    max_parts = 1000;
+    marker = 0;
   }
   void execute();
 

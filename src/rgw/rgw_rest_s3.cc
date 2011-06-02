@@ -270,10 +270,12 @@ void RGWCompleteMultipart_REST_S3::send_response()
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_obj_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
-    // s->formatter->dump_value_str("Location" ...
+    const char *gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
+    if (gateway_dns_name)
+      s->formatter->dump_value_str("Location", "%s.%s", s->bucket, gateway_dns_name);
     s->formatter->dump_value_str("Bucket", s->bucket);
     s->formatter->dump_value_str("Key", s->object);
-    s->formatter->dump_value_str("ETag", upload_id.c_str());
+    s->formatter->dump_value_str("ETag", etag.c_str());
     s->formatter->close_section("CompleteMultipartUploadResult");
     s->formatter->flush();
   }
@@ -288,8 +290,21 @@ void RGWListMultipart_REST_S3::send_response()
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
-    map<uint32_t, RGWUploadPartInfo>::iterator iter;
-    for (iter = parts.begin(); iter != parts.end(); ++iter) {
+    map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
+    int i, cur_max = 0;
+    iter = parts.upper_bound(marker);
+    for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
+      cur_max = test_iter->first;
+    }
+    s->formatter->dump_value_str("Bucket", s->bucket);
+    s->formatter->dump_value_str("Key", s->object);
+    s->formatter->dump_value_str("UploadId", upload_id.c_str());
+    s->formatter->dump_value_str("StorageClass", "STANDARD");
+    s->formatter->dump_value_str("PartNumberMarker", "%d", marker);
+    s->formatter->dump_value_str("NextPartNumberMarker", "%d", cur_max + 1);
+    s->formatter->dump_value_str("MaxParts", "%d", max_parts);
+    s->formatter->dump_value_str("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
+    for (; iter != parts.end(); ++iter) {
       RGWUploadPartInfo& info = iter->second;
       s->formatter->open_obj_section("Part");
       s->formatter->dump_value_int("PartNumber", "%u", info.num);
@@ -297,10 +312,6 @@ void RGWListMultipart_REST_S3::send_response()
       s->formatter->dump_value_int("Size", "%llu", info.size);
       s->formatter->close_section("Part");
     }
-    // s->formatter->dump_value_str("Location" ...
-    // s->formatter->dump_value_str("Bucket", s->bucket);
-    // s->formatter->dump_value_str("Key", s->object);
-    // s->formatter->dump_value_str("ETag", upload_id.c_str());
     s->formatter->close_section("ListMultipartUploadResult");
     s->formatter->flush();
   }
@@ -311,7 +322,6 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_dat
   if (is_acl_op(s)) {
     return &get_acls_op;
   }
-
   if (s->object) {
     get_obj_op.set_get_data(get_data);
     return &get_obj_op;
@@ -328,7 +338,6 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_op(struct req_state *s, bool get_data)
     if (is_acl_op(s)) {
       return &get_acls_op;
     } else if (s->args.exists("uploadId")) {
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
       return &list_multipart;
     }
     return get_retrieve_obj_op(s, get_data);
