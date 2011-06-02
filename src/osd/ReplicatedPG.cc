@@ -592,9 +592,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   eval_repop(repop);
   repop->put();
-
-  // drop my obc reference.
-  put_object_context(obc);
 }
 
 
@@ -2714,7 +2711,6 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
 
   dout(10) << "new_repop mode was " << mode << dendl;
   mode.write_start();
-  obc->get();  // we take a ref
   dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
 
   // initialize gather sets
