@@ -42,6 +42,11 @@ static const char * const XATTR_FULLNAME = "user.rados_full_name";
 static const char USER_XATTR_PREFIX[] = "user.rados.";
 static const size_t USER_XATTR_PREFIX_LEN =
   sizeof(USER_XATTR_PREFIX) / sizeof(USER_XATTR_PREFIX[0]) - 1;
+/* It's important that RADOS_SYNC_TMP_SUFFIX contain at least one character
+ * that we wouldn't normally alllow in a file name-- in this case, $ */
+static const char * const RADOS_SYNC_TMP_SUFFIX = "$tmp";
+static const size_t RADOS_SYNC_TMP_SUFFIX_LEN =
+  sizeof(RADOS_SYNC_TMP_SUFFIX) / sizeof(RADOS_SYNC_TMP_SUFFIX[0]) - 1;
 
 static const char ERR_PREFIX[] = "[ERROR]        ";
 
@@ -63,6 +68,16 @@ static std::string get_user_xattr_name(const char *fs_xattr_name)
   if (strncmp(fs_xattr_name, USER_XATTR_PREFIX, USER_XATTR_PREFIX_LEN))
     return "";
   return fs_xattr_name + USER_XATTR_PREFIX_LEN;
+}
+
+/* Returns true if 'suffix' is a suffix of str */
+static bool is_suffix(const char *str, const char *suffix)
+{
+  size_t strlen_str = strlen(str);
+  size_t strlen_suffix = strlen(suffix);
+  if (strlen_str < strlen_suffix)
+    return false;
+  return (strcmp(str + (strlen_str - strlen_suffix), suffix) == 0);
 }
 
 /* Represents a directory in the filesystem that we export rados objects to (or
@@ -190,6 +205,10 @@ public:
 	need_hash = true;
       }
       else if (c == '\\') {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == '$') {
 	c = '@';
 	need_hash = true;
       }
@@ -502,12 +521,14 @@ public:
     return rados_time;
   }
 
-  int download(IoCtx &io_ctx, const char *file_name)
+  int download(IoCtx &io_ctx, const char *path)
   {
-    FILE *fp = fopen(file_name, "w");
+    char tmp_path[strlen(path) + RADOS_SYNC_TMP_SUFFIX_LEN + 1];
+    snprintf(tmp_path, sizeof(tmp_path), "%s%s", path, RADOS_SYNC_TMP_SUFFIX);
+    FILE *fp = fopen(tmp_path, "w");
     if (!fp) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: error opening '" << file_name << "':"
+      cerr << ERR_PREFIX << "download: error opening '" << tmp_path << "':"
 	   <<  cpp_strerror(err) << std::endl;
       return err;
     }
@@ -529,7 +550,7 @@ public:
       size_t flen = fwrite(bl.c_str(), 1, rlen, fp);
       if (flen != (size_t)rlen) {
 	int err = errno;
-	cerr << ERR_PREFIX << "download: fwrite(" << file_name << ") error: "
+	cerr << ERR_PREFIX << "download: fwrite(" << tmp_path << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -541,15 +562,21 @@ public:
     int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
     if (res) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: fsetxattr(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fsetxattr(" << tmp_path << ") error: "
 	   << cpp_strerror(err) << std::endl;
       fclose(fp);
       return err;
     }
     if (fclose(fp)) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: fclose(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fclose(" << tmp_path << ") error: "
 	   << cpp_strerror(err) << std::endl;
+      return err;
+    }
+    if (rename(tmp_path, path)) {
+      int err = errno;
+      cerr << ERR_PREFIX << "download: rename(" << tmp_path << ", "
+	   << path << ") error: " << cpp_strerror(err) << std::endl;
       return err;
     }
     return 0;
@@ -821,6 +848,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
       cout << "[xattr]        " << rados_name << std::endl;
     }
   }
+
   if (delete_after) {
     DirHolder dh;
     int err = dh.opendir(dir_name);
@@ -835,6 +863,17 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 	break;
       if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
 	continue;
+      if (is_suffix(de->d_name, RADOS_SYNC_TMP_SUFFIX)) {
+	char path[strlen(dir_name) + strlen(de->d_name) + 2];
+	snprintf("%s/%s", sizeof(path), dir_name, de->d_name);
+	if (unlink(path)) {
+	  ret = errno;
+	  cerr << ERR_PREFIX << "error unlinking temporary file '" << path << "': "
+	       << cpp_strerror(ret) << std::endl;
+	  return ret;
+	}
+	continue;
+      }
       auto_ptr <BackedUpObject> lobj;
       ret = BackedUpObject::from_file(de->d_name, dir_name, lobj);
       if (ret) {
@@ -896,6 +935,8 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
     if (!de)
       break;
     if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
+      continue;
+    if (is_suffix(de->d_name, RADOS_SYNC_TMP_SUFFIX))
       continue;
     ret = BackedUpObject::from_file(de->d_name, dir_name, sobj);
     if (ret) {
