@@ -192,7 +192,8 @@ void PGMonitor::handle_osd_timeouts()
     return;
   }
 
-  mon->osdmon()->handle_osd_timeouts(now, last_osd_report);
+  if (mon->osdmon()->paxos->is_writeable())
+    mon->osdmon()->handle_osd_timeouts(now, last_osd_report);
 }
 
 void PGMonitor::create_pending()
