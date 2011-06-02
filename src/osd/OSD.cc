@@ -1456,7 +1456,10 @@ void OSD::update_heartbeat_peers()
 	if (heartbeat_from.count(p))
 	  continue;
 	heartbeat_from[p] = osdmap->get_epoch();
-	heartbeat_con[p] = heartbeat_messenger->get_connection(osdmap->get_hb_inst(p));
+	if (!heartbeat_con.count(p)) {
+	  // Don't update _con, might be from a newer map
+	  heartbeat_con[p] = heartbeat_messenger->get_connection(osdmap->get_hb_inst(p));
+	}
 	if (old_from_stamp.count(p) && old_from.count(p) &&
 	    old_con[p] == heartbeat_con[p]) {
 	  // have a stamp _AND_ i'm not new to the set
