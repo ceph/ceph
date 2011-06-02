@@ -872,6 +872,11 @@ void RGWCompleteMultipart::execute()
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
   if (!data) {
     ret = -EINVAL;
     goto done;
