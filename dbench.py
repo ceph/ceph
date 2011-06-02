@@ -6,7 +6,6 @@ from cStringIO import StringIO
 import json
 import logging
 import os
-import urllib2
 import sys
 import yaml
 
@@ -84,8 +83,23 @@ if __name__ == '__main__':
                     )
 
     log.info('Untarring ceph binaries...')
-    ceph_bin = urllib2.urlopen(teuthology.get_ceph_binary_url())
-    teuthology.untar_to_dir(ceph_bin, '/tmp/cephtest/binary', cluster.remotes.keys())
+    ceph_bindir_url = teuthology.get_ceph_binary_url()
+    cluster.run(
+        args=[
+            'uname', '-m',
+            run.Raw('|'),
+            'sed', '-e', 's/^/ceph./; s/$/.tgz/',
+            run.Raw('|'),
+            'wget',
+            '-nv',
+            '-O-',
+            '--base={url}'.format(url=ceph_bindir_url),
+            # need to use --input-file to make wget respect --base
+            '--input-file=-',
+            run.Raw('|'),
+            'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
+            ],
+        )
 
     log.info('Writing configs...')
     ips = [host for (host, port) in (conn.get_transport().getpeername() for conn in connections)]

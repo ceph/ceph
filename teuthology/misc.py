@@ -4,19 +4,20 @@ import os
 import logging
 import configobj
 import time
-
-from orchestra import run
+import urllib2
+import urlparse
 
 log = logging.getLogger(__name__)
 
 def get_ceph_binary_url():
-    machine = os.uname()[4]
-    BRANCH = 'master'
-    CEPH_TARBALL_DEFAULT_URL = 'http://ceph.newdream.net/gitbuilder/output/ref/origin_{branch}/ceph.{machine}.tgz'.format(
-        branch=BRANCH,
-        machine=machine,
-        )
-    return CEPH_TARBALL_DEFAULT_URL
+    BRANCH = 'master' #TODO
+    BASE = 'http://ceph.newdream.net/gitbuilder/output/'
+    sha1_url = urlparse.urljoin(BASE, 'ref/origin_{branch}/sha1'.format(branch=BRANCH))
+    sha1_fp = urllib2.urlopen(sha1_url)
+    sha1 = sha1_fp.read().rstrip('\n')
+    sha1_fp.close()
+    bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
+    return bindir_url
 
 def feed_many_stdins(fp, processes):
     while True:
@@ -30,25 +31,6 @@ def feed_many_stdins_and_close(fp, processes):
     feed_many_stdins(fp, processes)
     for proc in processes:
         proc.stdin.close()
-
-def untar_to_dir(fp, dst, remotes):
-    """
-    Untar a ``.tar.gz`` to given hosts and directories.
-
-    :param fp: a file-like object
-    :param conns_and_dirs: a list of 2-tuples `(client, path)`
-    """
-    untars = [
-        remote.run(
-            logger=log.getChild('cephbin'),
-            args=['tar', '-xzf', '-', '-C', dst],
-            wait=False,
-            stdin=run.PIPE,
-            )
-        for remote in remotes
-        ]
-    feed_many_stdins_and_close(fp, untars)
-    run.wait(untars)
 
 def get_mons(roles, ips):
     mons = {}
