@@ -179,7 +179,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   ::decode(h, p);
   prezeroing_pos = prezero_pos = write_pos = flush_pos = h.write_pos;
   expire_pos = h.expire_pos;
-  trimmed_pos = h.trimmed_pos;
+  trimmed_pos = trimming_pos = h.trimmed_pos;
   init_headers(h);
   state = STATE_ACTIVE;
   finish->finish(r);
