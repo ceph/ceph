@@ -38,6 +38,7 @@ bool RGWMultiCompleteUpload::xml_end(const char *el) {
     int num = part->get_num();
     string etag = part->get_etag();
     parts[num] = etag;
+    part = (RGWMultiPart *)iter.get_next();
   }
   return true;
 }
