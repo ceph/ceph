@@ -322,6 +322,11 @@ radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
 bin_PROGRAMS += radosgw radosgw_admin
+
+rgw_multiparser_SOURCES = $(my_radosgw_src) rgw/rgw_multiparser.cc
+rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_multiparser_LDADD = $(my_radosgw_ldadd)
+bin_DEBUGPROGRAMS += rgw_multiparser
 endif
 
 testcrypto_SOURCES = testcrypto.cc
