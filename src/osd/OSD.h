@@ -932,7 +932,7 @@ protected:
       pg->put();
     }
     void _clear() {
-      while (scrub_finalize_queue.empty()) {
+      while (!scrub_finalize_queue.empty()) {
 	PG *pg = scrub_finalize_queue.front();
 	scrub_finalize_queue.pop_front();
 	pg->put();

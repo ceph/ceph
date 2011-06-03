@@ -135,6 +135,7 @@ public:
     static const int OP_RMATTR =       16;  // cid, oid, attrname
     static const int OP_CLONE =        17;  // cid, oid, newoid
     static const int OP_CLONERANGE =   18;  // cid, oid, newoid, offset, len
+    static const int OP_CLONERANGE2 =  30;  // cid, oid, newoid, srcoff, len, dstoff
 
     static const int OP_TRIMCACHE =    19;  // cid, oid, offset, len
 
@@ -390,14 +391,16 @@ public:
       ::encode(noid, tbl);
       ops++;
     }
-    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, uint64_t off, uint64_t len) {
-      __u32 op = OP_CLONERANGE;
+    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid,
+		     uint64_t srcoff, uint64_t srclen, uint64_t dstoff) {
+      __u32 op = OP_CLONERANGE2;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ::encode(noid, tbl);
-      ::encode(off, tbl);
-      ::encode(len, tbl);
+      ::encode(srcoff, tbl);
+      ::encode(srclen, tbl);
+      ::encode(dstoff, tbl);
       ops++;
     }
     void create_collection(coll_t cid) {

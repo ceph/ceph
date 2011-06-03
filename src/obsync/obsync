@@ -29,6 +29,7 @@ import mimetypes
 import os
 from StringIO import StringIO
 import rados
+import rgw
 import re
 import shutil
 import string
@@ -44,11 +45,25 @@ global opts
 # Translation table mapping users in the source to users in the destination.
 global xuser
 
+# Librgw instance
+global lrgw
+lrgw = None
+
 ###### Constants #######
-RGW_META_BUCKET_NAME = ".rgw"
 ACL_XATTR = "rados.acl"
 META_XATTR_PREFIX = "rados.meta."
 CONTENT_TYPE_XATTR = "rados.content_type"
+
+RGW_META_BUCKET_NAME = ".rgw"
+RGW_USERS_UID_BUCKET_NAME = ".users.uid"
+RGW_META_ETAG = "user.rgw.etag"
+RGW_META_PREFIX = "user.x-amz-meta-"
+RGW_META_CONTENT_TYPE = "user.rgw.content_type"
+RGW_META_ACL = "user.rgw.acl"
+
+def vvprint(s):
+    if (opts.more_verbose):
+        print s
 
 ###### Exception classes #######
 class InvalidLocalName(Exception):
@@ -272,6 +287,12 @@ class AclPolicy(object):
         self.owner_display_name = owner_display_name
         self.grants = grants  # dict of { string -> ACLGrant }
     @staticmethod
+    def create_default(owner_id):
+        grants = { }
+        grants[ACL_TYPE_CANON_USER + owner_id] = \
+            AclGrant(ACL_TYPE_CANON_USER + owner_id, None, "FULL_CONTROL")
+        return AclPolicy(owner_id, None, grants)
+    @staticmethod
     def from_xml(s):
         root = etree.parse(StringIO(s))
         owner_id_node = root.find("{%s}Owner/{%s}ID" % (NS,NS))
@@ -331,6 +352,13 @@ class AclPolicy(object):
             self.owner_display_name = ""
         for k,g in self.grants.items():
             g.translate_users(xusers)
+    def get_all_users(self):
+        """ Get a list of all user ids referenced in this ACL """
+        users = {}
+        users[ACL_TYPE_CANON_USER + self.owner_id] = 1
+        for k,g in self.grants.items():
+            users[k] = 1
+        return users.keys()
     def set_owner(self, owner_id):
         self.owner_id = owner_id
         self.owner_display_name = ""
@@ -382,21 +410,27 @@ class Object(object):
         self.meta = meta
     def equals(self, rhs):
         if (self.name != rhs.name):
+            vvprint("EQUALS: self.name = %s, rhs.name = %s" % (self.name, rhs.name))
             return False
         if (self.md5 != rhs.md5):
+            vvprint("EQUALS: self.md5 = %s, rhs.md5 = %s" % (self.md5, rhs.md5))
             return False
         if (self.size != rhs.size):
+            vvprint("EQUALS: self.size = %d, rhs.size = %d" % (self.size, rhs.size))
             return False
         for k,v in self.meta.items():
             if (not rhs.meta.has_key(k)):
+                vvprint("EQUALS: rhs.meta lacks key %s" % k)
                 return False
             if (rhs.meta[k] != v):
+                vvprint("EQUALS: self.meta[%s] = %s, rhs.meta[%s] = %s" % \
+                    (k, v, k, rhs.meta[k]))
                 return False
         for k,v in rhs.meta.items():
             if (not self.meta.has_key(k)):
+                vvprint("EQUALS: self.meta lacks key %s" % k)
                 return False
-            if (self.meta[k] != v):
-                return False
+        vvprint("EQUALS: the objects are equal.")
         return True
     def local_name(self):
         return s3_name_to_local_name(self.name)
@@ -427,13 +461,19 @@ class Object(object):
 ###### Store #######
 class Store(object):
     @staticmethod
-    def make_store(url, create, akey, skey):
+    def make_store(url, is_dst, create, akey, skey):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
             return S3Store(s3_url, create, akey, skey)
-        rados_url = strip_prefix("rados:", url)
+        rados_url = strip_prefix("rgw:", url)
         if (rados_url):
-            return RadosStore(rados_url, create, akey, skey)
+            dst_owner = None
+            if (is_dst):
+                if not os.environ.has_key("DST_OWNER"):
+                    raise Exception("You must set DST_OWNER when uploading \
+files to RgwStore.")
+                dst_owner = os.environ["DST_OWNER"]
+            return RgwStore(rados_url, create, akey, skey, dst_owner)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -672,11 +712,7 @@ class FileStoreIterator(object):
             # Ignore non-files when iterating.
             if (not os.path.isfile(path)):
                 continue
-            try:
-                obj_name = local_name_to_s3_name(path[len(self.base)+1:])
-            except LocalFileIsAcl, e:
-                # ignore ACL side files when iterating
-                continue
+            obj_name = local_name_to_s3_name(path[len(self.base)+1:])
             return Object.from_file(obj_name, path)
 
 class FileStore(Store):
@@ -744,14 +780,14 @@ class FileStore(Store):
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
 
-###### Rados store #######
-class RadosStoreIterator(object):
-    """RadosStore iterator"""
-    def __init__(self, it, rados_store):
+###### Rgw store #######
+class RgwStoreIterator(object):
+    """RgwStore iterator"""
+    def __init__(self, it, rgw_store):
         self.it = it # has type rados.ObjectIterator
-        self.rados_store = rados_store
-        self.prefix = self.rados_store.prefix
-        self.prefix_len = len(self.rados_store.prefix)
+        self.rgw_store = rgw_store
+        self.prefix = self.rgw_store.key_prefix
+        self.prefix_len = len(self.rgw_store.key_prefix)
     def __iter__(self):
         return self
     def next(self):
@@ -763,18 +799,24 @@ class RadosStoreIterator(object):
             # do the prefixes match?
             if rados_obj.key[:self.prefix_len] == self.prefix:
                 break
-        ret = self.rados_store.obsync_obj_from_rgw(rados_obj.key)
+        ret = self.rgw_store.obsync_obj_from_rgw(rados_obj.key)
         if (ret == None):
             raise Exception("internal iterator error")
         return ret
 
-class RadosStore(Store):
-    def __init__(self, url, create, akey, skey):
+class RgwStore(Store):
+    def __init__(self, url, create, akey, skey, owner):
+        global lrgw
+        if (lrgw == None):
+            lrgw = rgw.Rgw()
+        self.owner = owner
+        self.user_exists_cache = {}
+        self.users_uid_ioctx = None
         # Parse the rados url
         conf_end = string.find(url, ":")
         if (conf_end == -1):
-            raise Exception("RadosStore URLs are of the form \
-rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
+            raise Exception("RgwStore URLs are of the form \
+rgw:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf.")
         self.conf_file_path = url[0:conf_end]
         bucket_end = url.find(":", conf_end+1)
         if (bucket_end == -1):
@@ -784,72 +826,107 @@ rados:path/to/ceph/conf:bucket:key_prefix. Failed to find the path to the conf."
             self.rgw_bucket_name = url[conf_end+1:bucket_end]
             self.key_prefix = url[bucket_end+1:]
         if (self.rgw_bucket_name == ""):
-            raise Exception("RadosStore URLs are of the form \
-rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
+            raise Exception("RgwStore URLs are of the form \
+rgw:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
         if (opts.more_verbose):
             print "self.conf_file_path = '" + self.conf_file_path + "', ",
             print "self.rgw_bucket_name = '" + self.rgw_bucket_name + "' ",
             print "self.key_prefix = '" + self.key_prefix + "'"
-        acl_hack = getenv("ACL_HACK", None)
-        if (acl_hack == None):
-            raise Exception("RadosStore error: You must specify an environment " +
-                "variable called ACL_HACK containing the name of a file. This " +
-                "file contains a serialized RGW ACL that you want " +
-                "to insert into the user.rgw.acl extended attribute of all " +
-                "the objects you create. This is a hack and yes, it will go " +
-                "away soon.")
-        acl_hack_f = open(acl_hack, "r")
-        try:
-            self.acl_hack = acl_hack_f.read()
-        finally:
-            acl_hack_f.close()
         self.rados = rados.Rados()
         self.rados.conf_read_file(self.conf_file_path)
         self.rados.connect()
+        if self.owner != None and not self.user_exists(ACL_TYPE_CANON_USER + self.owner):
+            raise Exception("Unknown owner! DST_OWNER=%s" % self.owner)
         if (not self.rados.pool_exists(self.rgw_bucket_name)):
             if (create):
                 self.create_rgw_bucket(self.rgw_bucket_name)
             else:
                 raise NonexistentStore()
+        elif self.owner == None:
+            # Figure out what owner we should use when creating objects.
+            # We use the owner of the destination bucket
+            ioctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
+            try:
+                bin_ = ioctx.get_xattr(self.rgw_bucket_name, RGW_META_ACL)
+                xml = lrgw.acl_bin2xml(bin_)
+                acl = AclPolicy.from_xml(xml)
+                self.owner = acl.owner_id
+                if (opts.more_verbose):
+                    print "using owner \"%s\"" % self.owner
+            finally:
+               ioctx.close()
         self.ioctx = self.rados.open_ioctx(self.rgw_bucket_name)
-        Store.__init__(self, "rados:" + url)
+        Store.__init__(self, "rgw:" + url)
     def create_rgw_bucket(self, rgw_bucket_name):
+        global lrgw
         """ Create an rgw bucket named 'rgw_bucket_name' """
+        if (self.owner == None):
+            raise Exception("Can't create a bucket without knowing who " +
+                    "should own it. Please set DST_OWNER")
         self.rados.create_pool(self.rgw_bucket_name)
-        meta_ctx = None
+        ioctx = None
         try:
-            meta_ctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
-            meta_ctx.write(rgw_bucket_name, "", 0)
-            print "meta_ctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
-                    "user.rgw.acl, self.acl_hack=" + self.acl_hack + ")"
-            meta_ctx.set_xattr(rgw_bucket_name, "user.rgw.acl", self.acl_hack)
+            ioctx = self.rados.open_ioctx(RGW_META_BUCKET_NAME)
+            ioctx.write(rgw_bucket_name, "", 0)
+            print "ioctx.set_xattr(rgw_bucket_name=" + rgw_bucket_name + ", " + \
+                    "user.rgw.acl=" + self.owner + ")"
+            new_bucket_acl = "\
+<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"> \
+<Owner><ID>%s</ID></Owner><AccessControlList>\
+<Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
+xsi:type=\"CanonicalUser\"><ID>%s</ID> \
+<DisplayName>display-name</DisplayName></Grantee> \
+<Permission>FULL_CONTROL</Permission></Grant>\
+</AccessControlList></AccessControlPolicy>" % (self.owner, self.owner)
+            new_bucket_acl_bin = lrgw.acl_xml2bin(new_bucket_acl)
+            ioctx.set_xattr(rgw_bucket_name, "user.rgw.acl", new_bucket_acl_bin)
         finally:
-            if (meta_ctx):
-               meta_ctx.close()
-    def obsync_obj_from_rgw(self, key):
+            if (ioctx):
+               ioctx.close()
+    def obsync_obj_from_rgw(self, obj_name):
         """Create an obsync object from a Rados object"""
         try:
-            size, tm = self.ioctx.stat(key)
+            size, tm = self.ioctx.stat(obj_name)
         except rados.ObjectNotFound:
             return None
-        md5 = self.ioctx.get_xattr(key, "user.rgw.etag")
-        # TODO: support meta
-        return Object(key, md5, size, {})
+        md5 = None
+        meta = {}
+        for k,v in self.ioctx.get_xattrs(obj_name):
+            if k == RGW_META_ETAG:
+                md5 = v
+            elif k == RGW_META_CONTENT_TYPE:
+                meta[CONTENT_TYPE_XATTR] = v
+            elif k[:len(RGW_META_PREFIX)] == RGW_META_PREFIX:
+                meta["rados.meta." + k[len(RGW_META_PREFIX):]] = v
+            elif opts.more_verbose:
+                print "ignoring unknown xattr " + k
+        if (md5 == None):
+            raise RuntimeError("error on object %s: expected to find " + \
+                "extended attribute %s" % (obj_name, RGW_META_ETAG))
+        if (opts.more_verbose):
+            print "meta = " + str(meta)
+        return Object(obj_name, md5, size, meta)
     def __str__(self):
-        return "rados:" + self.conf_file_path + ":" + self.rgw_bucket_name + ":" + self.key_prefix
+        return "rgw:" + self.conf_file_path + ":" + self.rgw_bucket_name
     def get_acl(self, obj):
-        acl = LocalAcl(obj.name)
-        # todo: set XML ACL
-        return acl
+        global lrgw
+        bin_ = None
+        try:
+            bin_ = self.ioctx.get_xattr(obj.name, RGW_META_ACL)
+        except rados.NoData:
+            return LocalAcl.get_empty(obj.name)
+        xml = lrgw.acl_bin2xml(bin_)
+        return LocalAcl.from_xml(obj.name, xml)
     def make_local_copy(self, obj):
         temp_file = None
         temp_file_f = None
         try:
-            # read the object from rados in chunks
+            # read the object from rgw in chunks
             temp_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
             temp_file_f = open(temp_file.name, 'w')
+            off = 0
             while True:
-                buf = self.ioctx.read(obj.name, off, 8192)
+                buf = self.ioctx.read(obj.name, offset = off, length = 8192)
                 if (len(buf) == 0):
                     break
                 temp_file_f.write(buf)
@@ -857,7 +934,6 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
                     break
                 off += 8192
             temp_file_f.close()
-            # TODO: implement ACLs
         except:
             if (temp_file_f):
                 temp_file_f.close()
@@ -866,13 +942,33 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             raise
         return LocalCopy(obj.name, temp_file.name, True)
     def all_objects(self):
-        it = self.bucket.list_objects()
-        return RadosStoreIterator(it, self.key_prefix)
+        it = self.ioctx.list_objects()
+        return RgwStoreIterator(it, self)
     def locate_object(self, obj):
         return self.obsync_obj_from_rgw(obj.name)
+    def user_exists(self, user):
+        if (self.user_exists_cache.has_key(user)):
+            return self.user_exists_cache[user]
+        if user[:len(ACL_TYPE_CANON_USER)] == ACL_TYPE_CANON_USER:
+            if (self.users_uid_ioctx == None):
+                # will be closed in __del__
+                self.users_uid_ioctx = self.rados.open_ioctx(RGW_USERS_UID_BUCKET_NAME)
+            try:
+                self.users_uid_ioctx.stat(user[len(ACL_TYPE_CANON_USER):])
+            except rados.ObjectNotFound:
+                return False
+            self.user_exists_cache[user] = True
+            return True
+        elif user[:len(ACL_TYPE_EMAIL_USER)] == ACL_TYPE_EMAIL_USER:
+            raise Exception("rgw target can't handle email users yet.")
+        elif user[:len(ACL_TYPE_GROUP)] == ACL_TYPE_GROUP:
+            raise Exception("rgw target can't handle groups yet.")
+        else:
+            raise Exception("can't understand user name %s" % user)
     def upload(self, local_copy, src_acl, obj):
+        global lrgw
         if (opts.more_verbose):
-            print "RadosStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+            print "RgwStore.UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
         if (opts.dry_run):
             return
@@ -886,17 +982,32 @@ rados:/path/to/ceph/conf:pool:key_prefix. Failed to find the bucket.")
             if (len(buf) < 8192):
                 break
             off += 8192
-        # TODO: examine obj.meta
         self.ioctx.set_xattr(obj.name, "user.rgw.etag", obj.md5)
-        self.ioctx.set_xattr(obj.name, "user.rgw.acl", self.acl_hack)
-        self.ioctx.set_xattr(obj.name, "user.rgw.content_type",
-                            "application/octet-stream")
+        if (src_acl.acl_policy == None):
+            ap = AclPolicy.create_default(self.owner)
+        else:
+            ap = src_acl.acl_policy
+        for user in ap.get_all_users():
+            if not self.user_exists(user):
+                raise Exception("You must provide an --xuser entry to translate \
+user %s into something valid for the rgw destination.")
+        xml = ap.to_xml()
+        bin_ = lrgw.acl_xml2bin(xml)
+        self.ioctx.set_xattr(obj.name, "user.rgw.acl", bin_)
+        content_type = "application/octet-stream"
+        for k,v in obj.meta.items():
+            if k == CONTENT_TYPE_XATTR:
+                content_type = v
+            elif k[:len(META_XATTR_PREFIX)] == META_XATTR_PREFIX:
+                self.ioctx.set_xattr(obj.name,
+                        RGW_META_PREFIX + k[len(META_XATTR_PREFIX):], v)
+        self.ioctx.set_xattr(obj.name, "user.rgw.content_type", content_type)
     def remove(self, obj):
         if (opts.dry_run):
             return
         self.ioctx.remove_object(obj.name)
         if (opts.more_verbose):
-            print "RadosStore: removed %s" % obj.name
+            print "RgwStore: removed %s" % obj.name
 ###### Functions #######
 def delete_unreferenced(src, dst):
     """ delete everything from dst that is not referenced in src """
@@ -972,6 +1083,8 @@ parser.add_option("-c", "--create-dest", action="store_true", \
 parser.add_option("--delete-before", action="store_true", \
     dest="delete_before", help="delete objects that aren't in SOURCE from \
 DESTINATION before transferring any objects")
+parser.add_option("--boto-retries", dest="boto_retries", type="int",
+    help="set number of times we'll retry the same S3 operation")
 parser.add_option("-d", "--delete-after", action="store_true", \
     dest="delete_after", help="delete objects that aren't in SOURCE from \
 DESTINATION after doing all transfers.")
@@ -997,6 +1110,11 @@ xuser = {}
 if (opts.run_unit_tests):
     test_acl_policy()
     sys.exit(0)
+
+if opts.boto_retries != None:
+    if not boto.config.has_section('Boto'):
+        boto.config.add_section('Boto')
+    boto.config.set('Boto', 'num_retries', str(opts.boto_retries))
 
 opts.preserve_acls = not opts.no_preserve_acls
 if (opts.create and opts.dry_run):
@@ -1028,7 +1146,7 @@ dst_name = args[1]
 try:
     if (opts.more_verbose):
         print "SOURCE: " + src_name
-    src = Store.make_store(src_name, False,
+    src = Store.make_store(src_name, False, False,
             getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
 except NonexistentStore, e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
@@ -1040,7 +1158,7 @@ except Exception, e:
 try:
     if (opts.more_verbose):
         print "DESTINATION: " + dst_name
-    dst = Store.make_store(dst_name, opts.create,
+    dst = Store.make_store(dst_name, True, opts.create,
             getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
 except NonexistentStore, e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\

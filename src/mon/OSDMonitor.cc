@@ -1695,7 +1695,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
 	} else {
-	  pending_inc.old_pools.insert(pool);
+	  _prepare_remove_pool(pool);
 	  ss << "pool '" << m->cmd[3] << "' deleted";
 	  getline(ss, rs);
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1983,9 +1983,24 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
   return true;
 }
 
+void OSDMonitor::_prepare_remove_pool(int pool)
+{
+  dout(10) << "_prepare_remove_pool " << pool << dendl;
+  pending_inc.old_pools.insert(pool);
+  // remove any pg_temp mappings for this pool too
+  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp.begin();
+       p != osdmap.pg_temp.end();
+       ++p)
+    if (p->first.pool() == pool) {
+      dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
+	       << p->first << dendl;
+      pending_inc.new_pg_temp[p->first].clear();
+    }
+}
+
 bool OSDMonitor::prepare_pool_op_delete(MPoolOp *m)
 {
-  pending_inc.old_pools.insert(m->pool);
+  _prepare_remove_pool(m->pool);
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
   return true;
 }

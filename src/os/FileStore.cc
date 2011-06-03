@@ -1308,7 +1308,7 @@ int FileStore::_detect_fs()
     // clone_range?
     if (g_conf.filestore_btrfs_clone_range) {
       btrfs_clone_range = true;
-      int r = _do_clone_range(fsid_fd, -1, 0, 1);
+      int r = _do_clone_range(fsid_fd, -1, 0, 1, 0);
       if (r == -EBADF) {
 	dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
       } else {
@@ -2442,7 +2442,19 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	sobject_t noid = t.get_oid();
  	uint64_t off = t.get_length();
 	uint64_t len = t.get_length();
-	r = _clone_range(cid, oid, noid, off, len);
+	r = _clone_range(cid, oid, noid, off, len, off);
+      }
+      break;
+
+    case Transaction::OP_CLONERANGE2:
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	sobject_t noid = t.get_oid();
+ 	uint64_t srcoff = t.get_length();
+	uint64_t len = t.get_length();
+ 	uint64_t dstoff = t.get_length();
+	r = _clone_range(cid, oid, noid, srcoff, len, dstoff);
       }
       break;
 
@@ -2795,7 +2807,7 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
     struct stat st;
     ::fstat(o, &st);
     dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " READ+WRITE" << dendl;
-    r = _do_clone_range(o, n, 0, st.st_size);
+    r = _do_clone_range(o, n, 0, st.st_size, 0);
   }
   if (r < 0)
     r = -errno;
@@ -2808,25 +2820,28 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
   return 0;
 }
 
-int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
+int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
-  dout(20) << "_do_clone_range " << off << "~" << len << dendl;
+  dout(20) << "_do_clone_range " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
   
   if (btrfs_clone_range) {
     btrfs_ioctl_clone_range_args a;
     a.src_fd = from;
-    a.src_offset = off;
+    a.src_offset = srcoff;
     a.src_length = len;
-    a.dest_offset = off;
+    a.dest_offset = dstoff;
     r = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
     if (r >= 0)
       return r;
     return -errno;
   }
 
-  loff_t pos = off;
-  loff_t end = off + len;
+  ::lseek64(from, srcoff, SEEK_SET);
+  ::lseek64(to, dstoff, SEEK_SET);
+  
+  loff_t pos = srcoff;
+  loff_t end = srcoff + len;
   int buflen = 4096*32;
   char buf[buflen];
   while (pos < end) {
@@ -2862,13 +2877,14 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
       break;
     pos += r;
   }
-  dout(20) << "_do_clone_range " << off << "~" << len << " = " << r << dendl;
+  dout(20) << "_do_clone_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 
-int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t off, uint64_t len)
+int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid,
+			    uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
-  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << off << "~" << len << dendl;
+  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
 
   int r;
   int o, n;
@@ -2882,12 +2898,13 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
     r = -errno;
     goto out;
   }
-  r = _do_clone_range(o, n, off, len);
+  r = _do_clone_range(o, n, srcoff, len, dstoff);
   ::close(n);
  out:
   ::close(o);
  out2:
-  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << off << "~" << len << " = " << r << dendl;
+  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
+	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 

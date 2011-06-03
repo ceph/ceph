@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <assert.h>
 
 static void do_rados_setxattr(rados_ioctx_t io_ctx, const char *oid,
 			const char *key, const char *val)
@@ -250,6 +251,20 @@ int main(int argc, const char **argv)
 	rados_aio_release(a);
 	rados_aio_release(b);
 
+	/* test flush */
+	printf("testing aio flush\n");
+	rados_completion_t c;
+	rados_aio_create_completion(0, 0, 0, &c);
+	rados_aio_write(io_ctx, "c", c, buf, 100, 0);
+	int safe = rados_aio_is_safe(c);
+	printf("a should not yet be safe and ... %s\n", safe ? "is":"is not");
+	assert(!safe);
+	rados_aio_flush(io_ctx);
+	safe = rados_aio_is_safe(c);
+	printf("a should be safe and ... %s\n", safe ? "is":"is not");
+	assert(safe);
+	rados_aio_release(c);
+	
 	rados_read(io_ctx, "../b/bb_bb_bb\\foo\\bar", buf2, 128, 0);
 
 	/* list objects */

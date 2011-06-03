@@ -60,6 +60,12 @@ got %s" % def_str)
 for obj in foo3_ioctx.list_objects():
     print str(obj)
 
+foo3_ioctx.write_full("ghi", "g\0h\0i")
+ghi_str = foo3_ioctx.read("ghi")
+if (ghi_str != "g\0h\0i"):
+    raise RuntimeError("error reading object ghi: expected value g\\0h\\0\i, \
+got %s" % (ghi_str))
+
 # do some things with extended attributes
 foo3_ioctx.set_xattr("abc", "a", "1")
 foo3_ioctx.set_xattr("def", "b", "2")
@@ -82,6 +88,12 @@ if (found["a"] != "1"):
   raise RuntimeError("error: expected object abc to have a=1")
 if (found["c"] != "3"):
   raise RuntimeError("error: expected object abc to have c=3")
+
+foo3_ioctx.set_xattr("def", "zeroholder", "a\0b")
+ret = foo3_ioctx.get_xattr("def", "zeroholder")
+if (ret != "a\0b"):
+  raise RuntimeError("error: set_xattr/get_xattr failed with " +
+      "an extended attribute containing NULL")
 
 # create some snapshots and do stuff with them
 print "creating snap bjork"

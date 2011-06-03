@@ -188,6 +188,8 @@ int rados_aio_read(rados_ioctx_t io, const char *oid,
 		   rados_completion_t completion,
 		   char *buf, size_t len, uint64_t off);
 
+int rados_aio_flush(rados_ioctx_t io);
+
 /* watch/notify */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
 int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,

@@ -48,6 +48,7 @@ struct ObjectOperation {
   vector<OSDOp> ops;
   int flags;
   int priority;
+  vector<object_t> src_oids;
 
   ObjectOperation() : flags(0), priority(0) {}
 
@@ -64,6 +65,15 @@ struct ObjectOperation {
     ops[s].op.extent.offset = off;
     ops[s].op.extent.length = len;
     ops[s].data.claim_append(bl);
+  }
+  void add_clone_range(int op, uint64_t off, uint64_t len, uint64_t srcoff, int idx) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+    ops[s].op.clonerange.offset = off;
+    ops[s].op.clonerange.length = len;
+    ops[s].op.clonerange.src_offset = srcoff;
+    ops[s].op.clonerange.src_oid_idx = idx;
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     int s = ops.size();
@@ -166,6 +176,12 @@ struct ObjectOperation {
   void sparse_read(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+  }
+
+  void clone_range(object_t& src_oid, uint64_t src_offset, uint64_t len, uint64_t dst_offset) {
+    bufferlist bl;
+    src_oids.push_back(src_oid);
+    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_offset, src_oids.size()-1);
   }
 
   // object attrs
@@ -287,6 +303,7 @@ public:
     
     object_t oid;
     object_locator_t oloc;
+    vector<object_t> src_oids;
 
     pg_t pgid;
     vector<int> acting;
@@ -629,6 +646,7 @@ private:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    o->src_oids = op.src_oids;
     return op_submit(o);
   }
   tid_t read(const object_t& oid, const object_locator_t& oloc, 

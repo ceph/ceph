@@ -23,6 +23,9 @@ class PermissionError(Exception):
 class ObjectNotFound(Exception):
     pass
 
+class NoData(Exception):
+    pass
+
 class ObjectExists(Exception):
     pass
 
@@ -56,6 +59,8 @@ def make_ex(ret, msg):
         return NoSpace(msg)
     elif (ret == errno.EEXIST):
         return ObjectExists(msg)
+    elif (ret == errno.ENODATA):
+        return NoData(msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
@@ -214,7 +219,7 @@ class ObjectIterator(object):
         ret = self.ioctx.librados.rados_objects_list_next(self.ctx, byref(key))
         if ret < 0:
             raise StopIteration()
-        return Object(self.ioctx, key)
+        return Object(self.ioctx, key.value)
 
     def __del__(self):
         self.ioctx.librados.rados_objects_list_close(self.ctx)
@@ -378,7 +383,7 @@ written." % (self.name, ret, length))
                 c_size_t(length), c_uint64(offset))
         if ret < 0:
             raise make_ex("Ioctx.read(%s): failed to read %s" % (self.name, key))
-        return ret_buf.value
+        return ctypes.string_at(ret_buf, ret)
 
     def get_stats(self):
         self.require_ioctx_open()
@@ -426,7 +431,7 @@ written." % (self.name, ret, length))
                     c_char_p(xattr_name), ret_buf, c_size_t(ret_length))
         if ret < 0:
             raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
-        return ret_buf.value
+        return ctypes.string_at(ret_buf, ret)
 
     def get_xattrs(self, oid):
         self.require_ioctx_open()
@@ -497,7 +502,7 @@ class Object(object):
         self.state = "exists"
 
     def __str__(self):
-        return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key.value)
+        return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key)
 
     def require_object_exists(self):
         if self.state != "exists":

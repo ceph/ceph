@@ -221,6 +221,8 @@ enum {
 
 	CEPH_OSD_OP_WATCH   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 15,
 
+	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 16,
+
 	/** attrs **/
 	/* read */
 	CEPH_OSD_OP_GETXATTR  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
@@ -389,6 +391,11 @@ struct ceph_osd_op {
 			__le64 ver;
 			__u8 flag;	/* 0 = unwatch, 1 = watch */
 		} __attribute__ ((packed)) watch;
+		struct {
+			__le64 offset, length;
+			__le64 src_offset;
+			__u8 src_oid_idx;
+		} __attribute__ ((packed)) clonerange;
 };
 	__le32 payload_len;
 } __attribute__ ((packed));

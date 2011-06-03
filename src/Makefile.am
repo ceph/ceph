@@ -779,7 +779,6 @@ noinst_HEADERS = \
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\
-	cm.txt\
 	common/BackTrace.h\
 	common/DoutStreambuf.h\
 	common/LogClient.h\

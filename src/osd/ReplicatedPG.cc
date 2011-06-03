@@ -466,10 +466,32 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   dout(10) << "do_op mode now " << mode << dendl;
 
+  // src_oids
+  vector<ObjectContext*> src_obc;
+  for (vector<object_t>::iterator p = op->src_oids.begin();
+       p != op->src_oids.end();
+       ++p) {
+    ObjectContext *sobc;
+    snapid_t ssnapid;
+    int r = find_object_context(*p, op->get_object_locator(), CEPH_NOSNAP, &sobc, false, &ssnapid);
+    if (r) {
+      osd->reply_op_error(op, r);
+      return;
+    }
+    if (sobc->obs.oi.oloc != obc->obs.oi.oloc) {
+      dout(1) << " src_oid " << *p << " oloc " << sobc->obs.oi.oloc << " != "
+	      << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    }
+    src_obc.push_back(sobc);
+  }  
+
   const sobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops,
 				 &obc->obs, this);
   ctx->obc = obc;
+  ctx->src_obc = src_obc;
 
   if (op->may_write()) {
     // snap
@@ -488,6 +510,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	       << " on " << soid << dendl;
       delete ctx;
       put_object_context(obc);
+      put_object_contexts(src_obc);
       osd->reply_op_error(op, -EOLDSNAPC);
       return;
     }
@@ -497,6 +520,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
       put_object_context(obc);
+      put_object_contexts(src_obc);
       if (oldv <= last_update_ondisk) {
 	osd->reply_op_error(op, 0);
       } else {
@@ -570,6 +594,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     op->put();
     delete ctx;
     put_object_context(obc);
+    put_object_contexts(src_obc);
     return;
   }
 
@@ -585,16 +610,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(ctx, obc, rep_tid);
+  RepGather *repop = new_repop(ctx, obc, rep_tid);  // new repop claims our obc, src_obc refs
   // note: repop now owns ctx AND ctx->op
 
   issue_repop(repop, now, old_last_update, old_exists, old_size, old_version);
 
   eval_repop(repop);
   repop->put();
-
-  // drop my obc reference.
-  put_object_context(obc);
 }
 
 
@@ -1543,6 +1565,31 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       _delete_head(ctx);
       break;
 
+    case CEPH_OSD_OP_CLONERANGE:
+      {
+	if (op.clonerange.src_oid_idx >= ctx->src_obc.size()) {
+	  result = -EINVAL;
+	} else {
+	  if (!obs.exists)
+	    t.touch(coll, obs.oi.soid);
+	  ObjectContext *sobc = ctx->src_obc[op.clonerange.src_oid_idx];
+	  t.clone_range(coll, sobc->obs.oi.soid, obs.oi.soid,
+			op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);
+	  // fix up accounting
+	  uint64_t endoff = op.clonerange.offset + op.clonerange.length;
+	  if (endoff > oi.size) {
+	    info.stats.num_bytes -= oi.size;
+	    info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+	    oi.size = endoff;
+	    info.stats.num_bytes += oi.size;
+	    info.stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
+	  }
+	  ssc->snapset.head_exists = true;
+	  info.stats.num_wr++;
+	}
+      }
+      break;
+      
     case CEPH_OSD_OP_WATCH:
       {
         uint64_t cookie = op.watch.cookie;
@@ -2520,6 +2567,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
   dout(10) << "op_applied mode now " << mode << " (finish_write)" << dendl;
 
   put_object_context(repop->obc);
+  put_object_contexts(repop->src_obc);
   repop->obc = 0;
 
   last_update_applied = repop->v;
@@ -2714,7 +2762,6 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
 
   dout(10) << "new_repop mode was " << mode << dendl;
   mode.write_start();
-  obc->get();  // we take a ref
   dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
 
   // initialize gather sets
@@ -2978,6 +3025,12 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   }
 }
 
+void ReplicatedPG::put_object_contexts(vector<ObjectContext*>& obcv)
+{
+  for (vector<ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
+    put_object_context(*p);
+  obcv.clear();
+}
 
 ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid, bool can_create)
 {
@@ -3985,7 +4038,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	dout(15) << " clone_range " << p->first << " "
 		 << q.get_start() << "~" << q.get_len() << dendl;
 	t->clone_range(coll, p->first, soid,
-		       q.get_start(), q.get_len());
+		       q.get_start(), q.get_len(), q.get_start());
       }
     }
 

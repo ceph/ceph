@@ -42,6 +42,7 @@ private:
   pg_t pgid;
 public:
   vector<OSDOp> ops;
+  vector<object_t> src_oids;
 private:
 
   snapid_t snapid;
@@ -230,7 +231,7 @@ struct ceph_osd_request_head {
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
     } else {
-      header.version = 2;
+      header.version = 3;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
@@ -252,6 +253,8 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
+
+      ::encode(src_oids, payload);
     }
   }
 
@@ -316,6 +319,9 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::decode(peer_stat, p);
+
+      if (header.version >= 3)
+	::decode(src_oids, p);
     }
 
     unsigned off = 0;
@@ -341,6 +347,9 @@ struct ceph_osd_request_head {
     if (snapid != CEPH_NOSNAP)
       out << "@" << snapid;
 
+    if (src_oids.size())
+      out << " src " << src_oids;
+    
     if (oloc.key.size())
       out << " " << oloc;
 

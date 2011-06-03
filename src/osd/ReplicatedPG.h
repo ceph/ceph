@@ -355,6 +355,7 @@ public:
     vector<PG::Log::Entry> log;
 
     ObjectContext *obc;
+    vector<ObjectContext*> src_obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
@@ -390,6 +391,7 @@ public:
 
     OpContext *ctx;
     ObjectContext *obc;
+    vector<ObjectContext*> src_obc;
 
     tid_t rep_tid;
 
@@ -427,6 +429,7 @@ public:
       assert(nref > 0);
       if (--nref == 0) {
 	assert(!obc);
+	assert(src_obc.empty());
 	if (ctx->op)
 	  ctx->op->put();
 	delete ctx;
@@ -485,6 +488,7 @@ protected:
       register_snapset_context(obc->ssc);
   }
   void put_object_context(ObjectContext *obc);
+  void put_object_contexts(vector<ObjectContext*>& obcv);
   int find_object_context(const object_t& oid, const object_locator_t& oloc,
 			  snapid_t snapid, ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);

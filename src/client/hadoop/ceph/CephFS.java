@@ -209,13 +209,13 @@ abstract class CephFS {
   abstract protected int ceph_statfs(String path, CephFileSystem.CephStat fill);
 
   /*
-   * Check how many times a path should be replicated (if it is
-   * degraded it may not actually be replicated this often).
+   * Check how many times a file should be replicated. If it is,
+   * degraded it may not actually be replicated this often.
    * Inputs:
-   *  String path: The path to check.
+   *  int fh: a file descriptor
    * Returns: an int containing the number of times replicated.
    */
-  abstract protected int ceph_replication(String path);
+  abstract protected int ceph_replication(int fh);
 
   /*
    * Find the IP address of the primary OSD for a given file and offset.

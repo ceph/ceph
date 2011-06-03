@@ -1533,6 +1533,11 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
       break;
+    case CEPH_OSD_OP_CLONERANGE:
+      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
+	  << " from obj " << op.op.clonerange.src_oid_idx
+	  << " offset " << op.op.clonerange.src_offset;
+      break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)

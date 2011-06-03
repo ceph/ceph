@@ -74,6 +74,8 @@ int CrushWrapper::insert_item(int item, int weight, string name,
 
   set_item_name(item, name.c_str());
 
+  int cur = item;
+
   for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); p++) {
     if (p->first == 0)
       continue;
@@ -89,9 +91,9 @@ int CrushWrapper::insert_item(int item, int weight, string name,
       // create the bucket
       cout << "insert_item creating bucket " << loc[p->second] << std::endl;
       int empty = 0;
-      id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &item, &empty);
+      id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
       set_item_name(id, loc[p->second].c_str());
-      item = id;
+      cur = id;
       continue;
     }
 
@@ -106,14 +108,16 @@ int CrushWrapper::insert_item(int item, int weight, string name,
 
     // make sure the item doesn't already exist in this bucket
     for (unsigned j=0; j<b->size; j++)
-      if (b->items[j] == item) {
-	cerr << "insert_item " << item << " already exists in bucket " << b->id << std::endl;
+      if (b->items[j] == cur) {
+	cerr << "insert_item " << cur << " already exists in bucket " << b->id << std::endl;
 	return -EEXIST;
       }
     
-    cout << "insert_item adding " << item << " weight " << weight
+    cout << "insert_item adding " << cur << " weight " << weight
 	 << " to bucket " << id << std::endl;
-    crush_bucket_add_item(b, item, 0);
+    crush_bucket_add_item(b, cur, 0);
+
+    // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
     adjust_item_weight(item, weight);
     return 0;
   }

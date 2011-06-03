@@ -1488,7 +1488,7 @@ void OSD::update_heartbeat_peers()
 
     // share latest map with this peer so they know not to expect
     // heartbeats from us.  otherwise they may mark us down!
-    if (osdmap->is_up(p->first)) {
+    if (osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _to peer osd" << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1512,7 +1512,7 @@ void OSD::update_heartbeat_peers()
       continue;
 
     // share latest map with this peer, just to be nice.
-    if (osdmap->is_up(p->first)) {
+    if (osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd" << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1531,7 +1531,7 @@ void OSD::update_heartbeat_peers()
   for (map<int, Connection*>::iterator p = down.begin(); p != down.end(); ++p) {
     Connection *con = p->second;
     heartbeat_messenger->mark_disposable(con);
-    if (!osdmap->is_up(p->first)) {
+    if (!osdmap->is_up(p->first) && !is_booting()) {
       dout(10) << "update_heartbeat_peers: telling old peer osd" << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
@@ -1589,10 +1589,28 @@ void OSD::handle_osd_ping(MOSDPing *m)
   int from = m->get_source().num();
 
   bool locked = map_lock.try_get_read();
+  
+  // ignore (and mark down connection for) old messages 
+  epoch_t e = m->map_epoch;
+  if (!e)
+    e = m->peer_as_of_epoch;
+  if (e <= osdmap->get_epoch() &&
+      ((heartbeat_to.count(from) == 0 && heartbeat_from.count(from) == 0) ||
+       heartbeat_con[from] != m->get_connection())) {
+    dout(5) << "handle_osd_ping marking down peer " << m->get_source_inst()
+	    << " after old message from epoch " << e
+	    << " <= current " << osdmap->get_epoch() << dendl;
+    heartbeat_messenger->mark_down(m->get_connection());
+    goto out;
+  } 
 
   switch (m->op) {
   case MOSDPing::REQUEST_HEARTBEAT:
-    if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
+    if (m->peer_as_of_epoch <= osdmap->get_epoch()) {
+      dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
+	      << " request for heartbeats as_of " << m->peer_as_of_epoch
+	      << " <= current " << osdmap->get_epoch() << dendl;
+    } else if (heartbeat_to.count(from) && m->peer_as_of_epoch <= heartbeat_to[from]) {
       dout(5) << "handle_osd_ping ignoring peer " << m->get_source_inst()
 	      << " request for heartbeats as_of " << m->peer_as_of_epoch
 	      << " <= current _to as_of " << heartbeat_to[from] << dendl;
@@ -1600,6 +1618,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
       dout(5) << "handle_osd_ping peer " << m->get_source_inst()
 	      << " requesting heartbeats as_of " << m->peer_as_of_epoch << dendl;
       heartbeat_to[from] = m->peer_as_of_epoch;
+      if (heartbeat_con.count(from))
+	heartbeat_con[from]->put();
       heartbeat_con[from] = m->get_connection();
       heartbeat_con[from]->get();
       
@@ -1616,9 +1636,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (locked) {
 	dout(20) << "handle_osd_ping " << m->get_source_inst()
 		 << " took stat " << m->peer_stat << dendl;
-	if (m->map_epoch && !is_booting())
-	  _share_map_incoming(m->get_source_inst(), m->map_epoch,
-			      (Session*) m->get_connection()->get_priv());
 	take_peer_stat(from, m->peer_stat);  // only with map_lock held!
       } else {
 	dout(20) << "handle_osd_ping " << m->get_source_inst()
@@ -1626,6 +1643,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
       }
 
       note_peer_epoch(from, m->map_epoch);
+      if (locked && !is_booting())
+	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
       heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
       
@@ -1648,6 +1667,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     break;
   }
 
+out:
   if (locked) 
     map_lock.put_read();
 
@@ -2265,6 +2285,35 @@ void OSD::handle_command(MMonCommand *m)
 	<< " in blocks of " << prettybyte_t(bsize) << " in "
 	<< (end-start) << " sec at " << prettybyte_t(rate) << "/sec\n";
     
+  } else if (m->cmd.size() == 2 && m->cmd[0] == "mark_unfound_lost") {
+    pg_t pgid;
+    if (pgid.parse(m->cmd[1].c_str())) {
+      PG *pg = _lookup_lock_pg(pgid);
+      if (pg) {
+	if (pg->is_primary()) {
+	  int unfound = pg->missing.num_missing() - pg->missing_loc.size();
+	  if (unfound) {
+	    if (pg->all_unfound_are_lost(pg->osd->osdmap)) {
+	      clog.error() << pgid << " has " << unfound
+			   << " objects unfound and apparently lost, marking\n";
+	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	      pg->mark_all_unfound_as_lost(*t);
+	      store->queue_transaction(&pg->osr, t);
+	    } else
+	      clog.error() << "pg " << pgid << " has " << unfound
+			   << " objects but we haven't probed all sources, not marking lost despite command "
+			   << m->cmd << "\n";
+	  } else
+	    clog.error() << "pg " << pgid << " has no unfound objects for command " << m->cmd << "\n";
+	} else
+	  clog.error() << "not primary for pg " << pgid << "; acting is " << pg->acting << "\n";
+	pg->unlock();
+      } else
+	clog.error() << "pg " << pgid << " not found\n";
+    } else {
+      clog.error() << "cannot parse pgid from command '" << m->cmd << "'\n";
+
+    }
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
@@ -2452,6 +2501,8 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
   assert(inst.name.is_osd());
 
   int peer = inst.name.num();
+
+  assert(!is_booting());
 
   // send map?
   epoch_t pe = get_peer_epoch(peer);
@@ -5042,6 +5093,19 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
 
+    // or src objects?
+    for (vector<object_t>::const_iterator p = op->src_oids.begin();
+	 p != op->src_oids.end();
+	 ++p) {
+      sobject_t soid(*p, CEPH_NOSNAP);
+      if (pg->is_missing_object(soid)) {
+	pg->wait_for_missing_object(soid, op);
+	pg->unlock();
+	return;
+      }
+    }
+
+    // degraded object?
     if (op->may_write() && pg->is_degraded_object(head)) {
       pg->wait_for_degraded_object(head, op);
       pg->unlock();
@@ -5286,6 +5350,10 @@ int OSD::init_op_flags(MOSDOp *op)
     if (iter->op.op & CEPH_OSD_OP_MODE_WR)
       op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
     if (iter->op.op & CEPH_OSD_OP_MODE_RD)
+      op->rmw_flags |= CEPH_OSD_FLAG_READ;
+
+    // set READ flag if there are src_oids
+    if (op->src_oids.size()) 
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
 
     // set PGOP flag if there are PG ops

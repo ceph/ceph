@@ -3,6 +3,8 @@
 #ifndef CEPH_MDS_FLOCK_H
 #define CEPH_MDS_FLOCK_H
 
+#include <errno.h>
+
 #include "mdstypes.h"
 
 
@@ -14,6 +16,15 @@ inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   return out;
 }
 
+inline bool operator==(ceph_filelock& l, ceph_filelock& r) {
+  return
+    l.length == r.length &&
+    l.client == r.client &&
+    l.pid == r.pid &&
+    l.pid_namespace == r.pid_namespace &&
+    l.type == r.type;
+}
+
 struct ceph_lock_state_t {
   multimap<uint64_t, ceph_filelock> held_locks;    // current locks
   multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
@@ -21,10 +32,44 @@ struct ceph_lock_state_t {
   map<client_t, int> client_held_lock_counts;
   map<client_t, int> client_waiting_lock_counts;
 
+  bool is_waiting(ceph_filelock &fl) {
+    multimap<uint64_t, ceph_filelock>::iterator p = waiting_locks.find(fl.start);
+    while (p != waiting_locks.end()) {
+      if (p->second.start > fl.start)
+	return false;
+      if (p->second.length == fl.length &&
+	  p->second.client == fl.client &&
+	  p->second.pid == fl.pid &&
+	  p->second.pid_namespace == fl.pid_namespace)
+	return true;
+      ++p;
+    }
+    return false;
+  }
+  void remove_waiting(ceph_filelock& fl) {
+    multimap<uint64_t, ceph_filelock>::iterator p = waiting_locks.find(fl.start);
+    while (p != waiting_locks.end()) {
+      if (p->second.start > fl.start)
+	return;
+      if (p->second.length == fl.length &&
+	  p->second.client == fl.client &&
+	  p->second.pid == fl.pid &&
+	  p->second.pid_namespace == fl.pid_namespace) {
+	waiting_locks.erase(p);
+	return;
+      }
+      ++p;
+    }
+  }
+
   /*
    * Try to set a new lock. If it's blocked and wait_on_fail is true,
    * add the lock to waiting_locks.
    * The lock needs to be of type CEPH_LOCK_EXCL or CEPH_LOCK_SHARED.
+   *
+   * If we already added ourselves to waiting_locks, did_wait will be
+   * true.  If did_wait==true and we're not on the list, that means we
+   * were canceled and we should return an error.
    *
    * Returns true if set, false if not set.
    */
@@ -33,8 +78,9 @@ struct ceph_lock_state_t {
     bool ret = false;
     list<multimap<uint64_t, ceph_filelock>::iterator>
       overlapping_locks, self_overlapping_locks, neighbor_locks;
+
     // first, get any overlapping locks and split them into owned-by-us and not
-    if(get_overlapping_locks(new_lock, overlapping_locks, &neighbor_locks)) {
+    if (get_overlapping_locks(new_lock, overlapping_locks, &neighbor_locks)) {
       dout(15) << "got overlapping lock, splitting by owner" << dendl;
       split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
     }
@@ -44,24 +90,19 @@ struct ceph_lock_state_t {
 	dout(15) << "overlapping lock, and this lock is exclusive, can't set"
 		<< dendl;
 	if (wait_on_fail) {
-	  waiting_locks.
-	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
+	  waiting_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	}
-	ret = false;
       } else { //shared lock, check for any exclusive locks blocking us
 	if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
 	  dout(15) << " blocked by exclusive lock in overlapping_locks" << dendl;
 	  if (wait_on_fail) {
-	    waiting_locks.
-	      insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
+	    waiting_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	  }
-	  ret = false;
 	} else {
 	  //yay, we can insert a shared lock
 	  dout(15) << "inserting shared lock" << dendl;
 	  adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
-	  held_locks.
-	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
+	  held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	  ret = true;
 	}
       }
@@ -72,8 +113,10 @@ struct ceph_lock_state_t {
 			(new_lock.start, new_lock));
       ret = true;
     }
-    if (ret) ++client_held_lock_counts[(client_t)new_lock.client];
-    else if (wait_on_fail) ++client_waiting_lock_counts[(client_t)new_lock.client];
+    if (ret)
+      ++client_held_lock_counts[(client_t)new_lock.client];
+    else if (wait_on_fail)
+      ++client_waiting_lock_counts[(client_t)new_lock.client];
     return ret;
   }
 
@@ -195,7 +238,8 @@ struct ceph_lock_state_t {
 	if (!client_waiting_lock_counts[(client_t)cur_lock.client]) {
 	  client_waiting_lock_counts.erase((client_t)cur_lock.client);
 	}
-	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
+	if (add_lock(cur_lock, true))
+	  activated_locks.push_back(cur_lock);
       }
     }
   }

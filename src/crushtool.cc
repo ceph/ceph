@@ -179,6 +179,8 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 
   int curpos = 0;
   float bucketweight = 0;
+  bool have_uniform_weight = false;
+  float uniform_weight = 0;
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
@@ -205,6 +207,21 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 	else
 	  assert(0);
       }
+      if (alg == CRUSH_BUCKET_UNIFORM) {
+	if (!have_uniform_weight) {
+	  have_uniform_weight = true;
+	  uniform_weight = weight;
+	} else {
+	  if (uniform_weight != weight) {
+	    cerr << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
+		 << " but previous item(s) have weight " << uniform_weight
+		 << "; uniform bucket items must all have identical weights." << std::endl;
+	    exit(1);
+	  }
+	}
+      }
+	  
+
       if (pos >= size) {
 	cerr << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
 	exit(1);
@@ -762,10 +779,15 @@ void usage()
   cout << "      [--num-rep n]\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
-  cout << "   -i mapfn --add-item <id> <weight> <name> [--loc type name ...]\n";
+  cout << "   -i mapfn --add-item id weight name [--loc type name ...]\n";
   cout << "                         insert an item into the hierarchy at the\n";
   cout << "                         given location\n";
-  cout << "   -i mapfn --reweight   recalculate bucket weights\n";
+  cout << "   -i mapfn --remove-item name\n"
+       << "                         remove the given item\n";
+  cout << "   -i mapfn --reweight-item name weight\n";
+  cout << "                         reweight a given item (and adjust ancestor\n"
+       << "                         weights as needed)\n";
+  cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
   exit(1);
 }
 
@@ -797,6 +819,7 @@ int main(int argc, const char **argv)
   bool compile = false;
   bool decompile = false;
   bool test = false;
+  bool verbose = false;
   const char *outfn = 0;
   bool clobber = false;
 
@@ -828,6 +851,8 @@ int main(int argc, const char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("outfn", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&outfn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&verbose, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("compile", 'c')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&srcfn, OPT_STR);
       compile = true;
@@ -1139,7 +1164,8 @@ int main(int argc, const char **argv)
       for (int x = min_x; x <= max_x; x++) {
 	vector<int> out;
 	crush.do_rule(r, x, out, num_rep, -1, weight);
-	//cout << "rule " << r << " x " << x << " " << out << std::endl;
+	if (verbose)
+	  cout << "rule " << r << " x " << x << " " << out << std::endl;
 	for (unsigned i = 0; i < out.size(); i++)
 	  per[out[i]]++;
 	sizes[out.size()]++;
