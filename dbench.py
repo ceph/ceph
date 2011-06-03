@@ -13,6 +13,7 @@ from orchestra import connection, run, remote
 import orchestra.cluster
 # TODO cleanup
 import teuthology.misc as teuthology
+from teuthology.run_tasks import run_tasks
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,10 @@ if __name__ == '__main__':
     cluster = orchestra.cluster.Cluster()
     for rem, roles in zip(remotes, ROLES):
         cluster.add(rem, roles)
+
+    ctx = bunch.Bunch(
+        cluster=cluster,
+        )
 
     log.info('Checking for old test directory...')
     processes = cluster.run(
@@ -414,18 +419,7 @@ if __name__ == '__main__':
 
     # TODO rbd
 
-    ctx = bunch.Bunch(
-        cluster=cluster,
-        )
-    from teuthology.run_tasks import run_tasks
-    run_tasks(
-        tasks=[
-            {'cfuse': ['client.0']},
-            {'autotest': {'client.0': ['dbench']}},
-            {'interactive': None},
-            ],
-        ctx=ctx,
-        )
+    run_tasks(tasks=config['tasks'], ctx=ctx)
 
     log.info('Shutting down mds daemons...')
     for id_, proc in mds_daemons.iteritems():

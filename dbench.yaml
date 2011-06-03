@@ -6,5 +6,8 @@ targets:
 - ubuntu@sepia70.ceph.dreamhost.com
 - ubuntu@sepia71.ceph.dreamhost.com
 - ubuntu@sepia72.ceph.dreamhost.com
-client_types:
-- client.0: kclient
+tasks:
+- cfuse: [client.0]
+- autotest:
+    client.0: [dbench]
+- interactive:
