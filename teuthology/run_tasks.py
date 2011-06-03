@@ -40,8 +40,8 @@ def run_tasks(tasks, ctx):
                         exc_info = (None, None, None)
 
             if exc_info != (None, None, None):
-                log.debug('Exception was not quenched, raising %s', exc_info[1])
-                raise exc_info[0], exc_info[1], exc_info[2]
+                log.debug('Exception was not quenched, exiting: %s: %s', exc_info[0].__name__, exc_info[1])
+                raise SystemExit(1)
         finally:
             # be careful about cyclic references
             del exc_info
