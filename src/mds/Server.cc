@@ -5067,7 +5067,8 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
-			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+			     CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+			     bool not_journaling)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
   if (straydn) dout(10) << " straydn " << *straydn << dendl;
@@ -5201,23 +5202,34 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // dest
+  /* FIXME: this looks to largely assume that a remote
+   * src implies a local dest, that's not good -- we might be
+   * auth for the srci or the desti without being auth on the dentries */
   if (srcdnl->is_remote()) {
+    assert(not_journaling || srcdn->is_auth() ||destdn->is_auth() ||
+           (srcdnl->get_inode() && srcdnl->get_inode()->is_auth()) ||
+           (destdnl->get_inode() && destdnl->get_inode()->is_auth()));
     if (!linkmerge) {
-      if (!destdnl->is_null())
+      if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
-      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      if (srcdnl->get_inode()->is_auth()) {
-	mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+
+      if (destdn->is_auth())
+        metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
+      if (srcdnl->get_inode()->get_parent_dn()->is_auth()) { // it's remote
+        mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
 	ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
       }
     } else {
-      if (!destdnl->is_null())
+      if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
-      metablob->add_primary_dentry(destdn, true, destdnl->get_inode()); 
+
+      if (destdn->is_auth() ||
+          (destdnl->get_inode() && destdnl->get_inode()->is_auth()))
+        metablob->add_primary_dentry(destdn, true, destdnl->get_inode());
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
@@ -5225,11 +5237,14 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdn->is_auth() && srcdnl->get_inode()->snaprealm)
       srcdnl->get_inode()->project_past_snaprealm_parent(dest_realm, snapbl);
     
-    if (!destdnl->is_null())
+    if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
       destdn->first = MAX(destdn->first, next_dest_snap);
-    ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl); 
+
+    if (destdn->is_auth() ||
+        (destdnl->get_inode() && destdnl->get_inode()->is_auth()))
+      ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl);
   }
     
   // src
@@ -5589,7 +5604,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     // prepare anyway; this may twiddle dir_auth
     EMetaBlob blob;
     bufferlist blah;
-    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn);
+    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn, true);
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 }
