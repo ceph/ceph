@@ -5,6 +5,7 @@ import fudge.inspector
 import nose
 
 from .. import remote
+from ..run import RemoteProcess
 
 
 def test_shortname():
@@ -36,7 +37,13 @@ def test_run():
         'more',
         ]
     foo = object()
-    ret = object()
+    ret = RemoteProcess(
+        command='fakey',
+        stdin=None,
+        stdout=None,
+        stderr=None,
+        exitstatus=None,
+        )
     run.expects_call().with_args(
         client=fudge.inspector.arg.passes_test(lambda v: v is ssh),
         args=fudge.inspector.arg.passes_test(lambda v: v is args),
@@ -50,3 +57,4 @@ def test_run():
         foo=foo,
         )
     assert got is ret
+    assert got.remote is r

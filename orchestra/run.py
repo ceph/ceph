@@ -9,7 +9,11 @@ import shutil
 log = logging.getLogger(__name__)
 
 class RemoteProcess(object):
-    __slots__ = ['command', 'stdin', 'stdout', 'stderr', 'exitstatus']
+    __slots__ = [
+        'command', 'stdin', 'stdout', 'stderr', 'exitstatus',
+        # for orchestra.remote.Remote to place a backreference
+        'remote',
+        ]
     def __init__(self, command, stdin, stdout, stderr, exitstatus):
         self.command = command
         self.stdin = stdin
