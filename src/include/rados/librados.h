@@ -141,6 +141,8 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
 
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
+int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
+                      const char *src, uint64_t src_off, size_t len);
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
 int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off);
 int rados_remove(rados_ioctx_t io, const char *oid);

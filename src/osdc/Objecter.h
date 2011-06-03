@@ -178,7 +178,7 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
-  void clone_range(object_t& src_oid, uint64_t src_offset, uint64_t len, uint64_t dst_offset) {
+  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len, uint64_t dst_offset) {
     bufferlist bl;
     src_oids.push_back(src_oid);
     add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_offset, src_oids.size()-1);

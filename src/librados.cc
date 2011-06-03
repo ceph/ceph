@@ -213,8 +213,6 @@ void librados::ObjectOperation::tmap_update(const bufferlist& cmdbl)
 
 
 
-
-
 librados::WatchCtx::
 ~WatchCtx()
 {
@@ -443,6 +441,8 @@ public:
   int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len);
   int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
+  int clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset,
+                  const object_t& src_oid, uint64_t src_offset, uint64_t len);
   int read(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
   int sparse_read(IoCtxImpl& io, const object_t& oid, std::map<uint64_t,uint64_t>& m, bufferlist& bl,
@@ -1342,6 +1342,45 @@ write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
   objecter->write_full(oid, io.oloc,
 		  io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::
+clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const object_t& src_oid, uint64_t src_offset, uint64_t len)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  Mutex mylock("RadosClient::clone_range::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  bufferlist outbl;
+
+  lock.Lock();
+  ::SnapContext snapc;
+  ::ObjectOperation wr;
+  if (io.assert_ver) {
+    wr.assert_version(io.assert_ver);
+    io.assert_ver = 0;
+  }
+  wr.clone_range(src_oid, src_offset, len, dst_offset);
+  objecter->mutate(dst_oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2377,6 +2416,15 @@ write_full(const std::string& oid, bufferlist& bl)
 }
 
 int librados::IoCtx::
+clone_range(const std::string& dst_oid, uint64_t dst_off,
+            const std::string& src_oid, uint64_t src_off,
+            size_t len)
+{
+  object_t src(src_oid), dst(dst_oid);
+  return io_ctx_impl->client->clone_range(*io_ctx_impl, dst, dst_off, src, src_off, len);
+}
+
+int librados::IoCtx::
 read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
 {
   object_t obj(oid);
@@ -3111,6 +3159,14 @@ extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf
   bufferlist bl;
   bl.append(buf, len);
   return ctx->client->write_full(*ctx, oid, bl);
+}
+
+extern "C" int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
+                                 const char *src, uint64_t src_off, size_t len)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t dst_oid(dst), src_oid(src);
+  return ctx->client->clone_range(*ctx, dst_oid, dst_off, src_oid, src_off, len);
 }
 
 extern "C" int rados_trunc(rados_ioctx_t io, const char *o, uint64_t size)
