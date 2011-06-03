@@ -784,7 +784,12 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
 	//scatter_tempsync((ScatterLock*)lock);
 	//else
 	simple_sync(lock);
-      } else 
+      } else if (lock->get_sm() == &sm_filelock) {
+	if (lock->get_state() == LOCK_EXCL)
+	  file_xsyn(lock);
+	else
+	  simple_sync(lock);
+      } else
 	simple_sync(lock);
       return true;
     } else {
@@ -3013,6 +3018,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
+    case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME (and below!)
     default: assert(0);
     }
 
@@ -3058,7 +3064,8 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
   }
 
-  if (lock->get_parent()->is_replicated()) {
+  if (lock->get_parent()->is_replicated() &&
+      lock->get_state() != LOCK_XSYN_EXCL) {    // FIXME
     bufferlist data;
     lock->encode_locked_state(data);
     send_lock_message(lock, LOCK_AC_SYNC, data);
@@ -3082,6 +3089,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
+  case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
   default: assert(0);
   }
   
@@ -3092,7 +3100,8 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     gather++;
   
   if (lock->get_parent()->is_replicated() && 
-      lock->get_state() != LOCK_LOCK_EXCL) {
+      lock->get_state() != LOCK_LOCK_EXCL &&
+      lock->get_state() != LOCK_XSYN_EXCL) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
@@ -3116,7 +3125,6 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   }
 }
 
-
 void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 {
   dout(7) << "simple_lock on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -3134,6 +3142,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   case LOCK_SCAN: lock->set_state(LOCK_SCAN_LOCK); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
+  case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME
   case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
   case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
   default: assert(0);
@@ -3692,7 +3701,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	dout(10) << " waiting for wrlock to drain" << dendl;
     }    
   }
-  
+
   // * -> excl?
   else if (lock->get_state() != LOCK_EXCL &&
 	   !lock->is_rdlocked() &&
@@ -3748,7 +3757,6 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     in->start_scatter(lock);
     if (in->is_replicated()) {
       // data
-
       bufferlist softdata;
       lock->encode_locked_state(softdata);
 
@@ -3768,13 +3776,15 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     switch (lock->get_state()) {
     case LOCK_SYNC: lock->set_state(LOCK_SYNC_MIX); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_MIX); break;
+    case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME (and see below!)
     case LOCK_TSYN: lock->set_state(LOCK_TSYN_MIX); break;
     default: assert(0);
     }
 
     int gather = 0;
     if (in->is_replicated()) {
-      if (lock->get_state() != LOCK_EXCL_MIX) {  // EXCL replica is already LOCK
+      if (lock->get_state() != LOCK_EXCL_MIX &&   // EXCL replica is already LOCK
+	  lock->get_state() != LOCK_XSYN_EXCL) {  // XSYN replica is already LOCK;  ** FIXME here too!
 	send_lock_message(lock, LOCK_AC_MIX);
 	lock->init_gather();
 	gather++;
@@ -3836,12 +3846,14 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
   case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
+  case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
   default: assert(0);
   }
   int gather = 0;
   
   if (in->is_replicated() &&
-      lock->get_state() != LOCK_LOCK_EXCL) {  // if we were lock, replicas are already lock.
+      lock->get_state() != LOCK_LOCK_EXCL &&
+      lock->get_state() != LOCK_XSYN_EXCL) {  // if we were lock, replicas are already lock.
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
@@ -3874,6 +3886,43 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   }
 }
 
+void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
+{
+  dout(7) << "file_xsyn on " << *lock << " on " << *lock->get_parent() << dendl;
+  CInode *in = (CInode *)lock->get_parent();
+  assert(in->is_auth());
+  assert(in->get_loner() >= 0 && in->mds_caps_wanted.empty());
+
+  switch (lock->get_state()) {
+  case LOCK_EXCL: lock->set_state(LOCK_EXCL_XSYN); break;
+  default: assert(0);
+  }
+  
+  int gather = 0;
+  if (lock->is_wrlocked())
+    gather++;
+  if (lock->is_xlocked())
+    gather++;
+  
+  if (in->issued_caps_need_gather(lock)) {
+    if (need_issue)
+      *need_issue = true;
+    else
+      issue_caps(in);
+    gather++;
+  }
+  
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_XSYN);
+    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+    if (need_issue)
+      *need_issue = true;
+    else
+      issue_caps(in);
+  }
+}
 
 void Locker::file_recover(ScatterLock *lock)
 {
