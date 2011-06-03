@@ -478,7 +478,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
       osd->reply_op_error(op, r);
       return;
     }
-    if (sobc->obs.oi.oloc != obc->obs.oi.oloc) {
+    if (sobc->obs.oi.oloc.key != obc->obs.oi.oloc.key &&
+	sobc->obs.oi.oloc.key != obc->obs.oi.soid.oid.name &&
+	sobc->obs.oi.soid.oid.name != obc->obs.oi.oloc.key) {
       dout(1) << " src_oid " << *p << " oloc " << sobc->obs.oi.oloc << " != "
 	      << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
       osd->reply_op_error(op, -EINVAL);
