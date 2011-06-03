@@ -181,6 +181,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
+#define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
 
 enum {
 	/** data **/
@@ -221,7 +222,8 @@ enum {
 
 	CEPH_OSD_OP_WATCH   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 15,
 
-	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 16,
+	/** multi **/
+	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_MULTI | 1,
 
 	/** attrs **/
 	/* read */

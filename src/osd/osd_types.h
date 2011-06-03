@@ -1510,6 +1510,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 struct OSDOp {
   ceph_osd_op op;
   bufferlist data;
+  object_t oid;
 
   OSDOp() {
     memset(&op, 0, sizeof(ceph_osd_op));
@@ -1535,7 +1536,7 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       break;
     case CEPH_OSD_OP_CLONERANGE:
       out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
-	  << " from obj " << op.op.clonerange.src_oid_idx
+	  << " from " << op.oid
 	  << " offset " << op.op.clonerange.src_offset;
       break;
     default:

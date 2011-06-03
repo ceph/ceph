@@ -42,7 +42,6 @@ private:
   pg_t pgid;
 public:
   vector<OSDOp> ops;
-  vector<object_t> src_oids;
 private:
 
   snapid_t snapid;
@@ -174,8 +173,13 @@ public:
   virtual void encode_payload() {
 
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = ops[i].data.length();
-      data.append(ops[i].data);
+      if (ops[i].op.op & CEPH_OSD_OP_TYPE_MULTI) {
+	ops[i].op.payload_len = ops[i].oid.name.length();
+	data.append(ops[i].oid.name);
+      } else {
+	ops[i].op.payload_len = ops[i].data.length();
+	data.append(ops[i].data);
+      }
     }
 
     if (!connection->has_feature(CEPH_FEATURE_OBJECTLOCATOR)) {
@@ -231,7 +235,7 @@ struct ceph_osd_request_head {
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
     } else {
-      header.version = 3;
+      header.version = 2;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
@@ -253,8 +257,6 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
-
-      ::encode(src_oids, payload);
     }
   }
 
@@ -319,15 +321,19 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::decode(peer_stat, p);
-
-      if (header.version >= 3)
-	::decode(src_oids, p);
     }
 
     unsigned off = 0;
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
-      off += ops[i].op.payload_len;
+      if (ops[i].op.op & CEPH_OSD_OP_TYPE_MULTI) {
+	bufferlist t;
+	ops[i].data.substr_of(t, off, ops[i].op.payload_len);
+	off += ops[i].op.payload_len;
+	oid.name = t.c_str();
+      } else {
+	ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+	off += ops[i].op.payload_len;
+      }
     }
   }
 
@@ -347,9 +353,6 @@ struct ceph_osd_request_head {
     if (snapid != CEPH_NOSNAP)
       out << "@" << snapid;
 
-    if (src_oids.size())
-      out << " src " << src_oids;
-    
     if (oloc.key.size())
       out << " " << oloc;
 

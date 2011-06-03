@@ -662,7 +662,6 @@ void Objecter::send_op(Op *op)
   m->get_snaps() = op->snapc.snaps;
 
   m->ops = op->ops;
-  m->src_oids = op->src_oids;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
