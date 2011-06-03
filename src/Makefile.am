@@ -580,7 +580,7 @@ common/version.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
-	-rm *.so
+	-rm *.so *.gcno *.gcda
 
 # libs
 libcommon_a_SOURCES = \
