@@ -89,6 +89,7 @@ def task(ctx, config):
             remote.run(
                 args=[
                     '/tmp/cephtest/autotest/client/bin/autotest',
+                    '--verbose',
                     '--harness=simple',
                     '--tag={tag}'.format(tag=tag),
                     control,
