@@ -55,7 +55,7 @@ def main():
         level=loglevel,
         )
 
-    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config).splitlines()))
+    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
     log.info('Opening connections...')
 
     from orchestra import connection, remote
