@@ -5185,7 +5185,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // add it all to the metablob
   // target inode
-  if (!linkmerge) {
+  if (!linkmerge && destdn->is_auth()) {
     if (destdnl->is_primary()) {
       // project snaprealm, too
       bufferlist snapbl;
