@@ -3665,7 +3665,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
       if (!S_ISDIR(sb.st_mode)) {
 	continue;
       }
-    } else if (!S_ISDIR(de->d_type << 12)) {
+    } else if (de->d_type != DT_DIR) {
       continue;
     }
     if (de->d_name[0] == '.' &&
