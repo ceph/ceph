@@ -29,7 +29,6 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "common/errno.h"
 #include "common/safe_io.h"
        
 #ifndef DARWIN
@@ -147,13 +146,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     if (g_conf.daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
-      int32_t out = r;
-      int ret = safe_write(fd[1], &out, sizeof(out));
-      if (ret) {
-	derr << "cfuse[" << getpid() << "]: failed to write to fd[1]: "
-	     << cpp_strerror(ret) << dendl;
-	ceph_abort();
-      }
+      ::write(fd[1], &r, sizeof(r));
     }
 
     //cout << "child done" << std::endl;
