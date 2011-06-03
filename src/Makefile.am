@@ -1120,12 +1120,29 @@ if WITH_RADOSGW
 all_sources += $(librgw_SOURCES)
 endif
 
-install-data-local:
+if ENABLE_COVERAGE
+COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
+COV_FILES = $(srcdir)/*.gcno
+endif
+
+install-coverage:
+if ENABLE_COVERAGE
+	-mkdir -p $(COV_DIR)
+	-$(INSTALL_DATA) $(COV_FILES) $(COV_DIR)
+endif
+
+uninstall-coverage:
+if ENABLE_COVERAGE
+	-rm $(COV_DIR)/*.gcno
+	-rmdir -p $(COV_DIR)
+endif
+
+install-data-local: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
-uninstall-local:
+uninstall-local: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
