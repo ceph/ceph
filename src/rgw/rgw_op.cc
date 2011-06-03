@@ -874,7 +874,7 @@ done:
 }
 
 static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, RGWUploadPartInfo>& parts,
-                               RGWAccessControlPolicy& policy)
+                               RGWAccessControlPolicy& policy, map<string, bufferlist>& new_attrs)
 {
   void *handle;
   map<string, bufferlist> attrs;
@@ -893,10 +893,13 @@ static int get_multiparts_info(struct req_state *s, string& obj, map<uint32_t, R
       bufferlist& bl = iter->second;
       bufferlist::iterator bli = bl.begin();
       ::decode(policy, bli);
+      new_attrs[RGW_ATTR_ACL] = bl;
       continue;
     }
-    if (name.compare(0, 5, "part.") != 0)
+    if (name.compare(0, 5, "part.") != 0) {
+      new_attrs[iter->first] = iter->second;
       continue;
+    }
 
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
@@ -916,6 +919,7 @@ void RGWCompleteMultipart::execute()
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
+  map<string, bufferlist> attrs;
   off_t ofs = 0;
   string prefix;
 
@@ -945,10 +949,11 @@ void RGWCompleteMultipart::execute()
   }
 
   obj.append(".");
-  prefix = obj;
   obj.append(upload_id);
+  prefix = obj;
+  prefix.append(".");
 
-  ret = get_multiparts_info(s, obj, obj_parts, policy);
+  ret = get_multiparts_info(s, obj, obj_parts, policy, attrs);
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_UPLOAD;
   if (ret < 0)
@@ -969,12 +974,17 @@ void RGWCompleteMultipart::execute()
     }
   }
 
+  ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, s->object_str, NULL, attrs, false);
+  if (ret < 0)
+    goto done;
+
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     obj = prefix;
     char buf[16];
     snprintf(buf, 16, "%d", obj_iter->second.num);
     obj.append(buf);
     rgwstore->clone_range(s->bucket_str, s->object_str, ofs, obj, 0, obj_iter->second.size, s->object_str);
+    ofs += obj_iter->second.size;
   }
 
 done:
@@ -983,6 +993,7 @@ done:
 
 void RGWListMultipart::execute()
 {
+  map<string, bufferlist> xattrs;
   string obj = s->object_str;
 
   ret = get_params();
@@ -991,7 +1002,7 @@ void RGWListMultipart::execute()
 
   obj.append(".");
   obj.append(upload_id);
-  ret = get_multiparts_info(s, obj, parts, policy);
+  ret = get_multiparts_info(s, obj, parts, policy, xattrs);
 
 done:
   send_response();
