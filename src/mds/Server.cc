@@ -5204,9 +5204,6 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // dest
-  /* FIXME: this looks to largely assume that a remote
-   * src implies a local dest, that's not good -- we might be
-   * auth for the srci or the desti without being auth on the dentries */
   if (srcdnl->is_remote()) {
     assert(not_journaling || srcdn->is_auth() ||destdn->is_auth() ||
            (srci && srci->is_auth()) ||
