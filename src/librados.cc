@@ -324,6 +324,7 @@ struct librados::AioCompletionImpl {
 
 void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
+  get();
   aio_write_list_lock.Lock();
   assert(!c->io);
   c->io = this;
@@ -340,16 +341,19 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
   c->aio_write_list_item.remove_myself();
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
+  put();
 }
 
 void librados::IoCtxImpl::flush_aio_writes()
 {
+  get();
   aio_write_list_lock.Lock();
   tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
 	 aio_write_list.front()->aio_write_seq <= seq)
     aio_write_cond.Wait(aio_write_list_lock);
   aio_write_list_lock.Unlock();
+  put();
 }
 
 struct librados::ObjListCtx {
