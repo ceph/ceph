@@ -4,7 +4,6 @@ from orchestra import monkey; monkey.patch_all()
 from cStringIO import StringIO
 
 import bunch
-import json
 import logging
 import os
 import sys
@@ -415,81 +414,6 @@ if __name__ == '__main__':
 
     # TODO rbd
 
-    log.info('Setting up autotest...')
-    run.wait(
-        clients.run(
-            args=[
-                'mkdir', '/tmp/cephtest/autotest',
-                run.Raw('&&'),
-                'wget',
-                '-nv',
-                '--no-check-certificate',
-                'https://github.com/tv42/autotest/tarball/ceph',
-                '-O-',
-                run.Raw('|'),
-                'tar',
-                '-C', '/tmp/cephtest/autotest',
-                '-x',
-                '-z',
-                '-f-',
-                '--strip-components=1',
-                ],
-            wait=False,
-            ),
-        )
-
-    log.info('Making a separate scratch dir for every client...')
-    for idx, roles_for_host in enumerate(ROLES):
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
-            run.run(
-                client=connections[idx],
-                args=[
-                    'sudo',
-                    'install',
-                    '-d',
-                    '-m', '0755',
-                    '--owner={user}'.format(user='ubuntu'), #TODO
-                    '--',
-                    scratch,
-                    ],
-                )
-
-    testname = 'dbench' #TODO
-    log.info('Running autotest client test %s...', testname)
-    for id_ in teuthology.all_roles_of_type(ROLES, 'client'):
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-        scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
-        tag = '{testname}.client.{id}'.format(
-            testname=testname,
-            id=id_,
-            )
-        control = '/tmp/cephtest/control.{tag}'.format(tag=tag)
-        (rem,) = cluster.only('client.{id}'.format(id=id_)).remotes.keys()
-        teuthology.write_file(
-            remote=rem,
-            path=control,
-            data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
-                data=json.dumps(dict(
-                        url=testname,
-                        dir=scratch,
-                        # TODO perhaps tag
-                        # results will be in /tmp/cephtest/autotest/client/results/dbench
-                        # or /tmp/cephtest/autotest/client/results/dbench.{tag}
-                        )),
-                ),
-            )
-        rem.run(
-            args=[
-                '/tmp/cephtest/autotest/client/bin/autotest',
-                '--harness=simple',
-                '--tag={tag}'.format(tag=tag),
-                control,
-                run.Raw('3>&1'),
-                ],
-            )
-
     ctx = bunch.Bunch(
         cluster=cluster,
         )
@@ -497,6 +421,7 @@ if __name__ == '__main__':
     run_tasks(
         tasks=[
             {'cfuse': ['client.0']},
+            {'autotest': {'client.0': ['dbench']}},
             {'interactive': None},
             ],
         ctx=ctx,
