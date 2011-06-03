@@ -5075,9 +5075,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
+  CInode *srci = srcdnl->get_inode();
 
   // primary+remote link merge?
-  bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
+  bool linkmerge = (srci == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
   if (linkmerge && !silent) {
@@ -5119,9 +5120,9 @@ void Server::_rename_prepare(MDRequest *mdr,
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
         destdn->push_projected_linkage(srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       }
-      if (srcdnl->get_inode()->is_auth()) {
-	pi = srcdnl->get_inode()->project_inode();
-	pi->version = srcdnl->get_inode()->pre_dirty();
+      if (srci->is_auth()) {
+	pi = srci->project_inode();
+	pi->version = srci->pre_dirty();
       }
     } else {
       dout(10) << " will merge remote onto primary link" << dendl;
@@ -5134,13 +5135,13 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdn->is_auth()) {
       version_t oldpv;
       if (srcdn->is_auth())
-	oldpv = srcdnl->get_inode()->get_projected_version();
+	oldpv = srci->get_projected_version();
       else
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
-      pi = srcdnl->get_inode()->project_inode(); // project snaprealm if srcdnl->is_primary
+      pi = srci->project_inode(); // project snaprealm if srcdnl->is_primary
                                                  // & srcdnl->snaprealm
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
-      destdn->push_projected_linkage(srcdnl->get_inode());
+      destdn->push_projected_linkage(srci);
     }
   }
 
@@ -5170,16 +5171,17 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(),
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   
   // move srcdn
   int predirty_primary = (srcdnl->is_primary() && srcdn->get_dir() != destdn->get_dir()) ? PREDIRTY_PRIMARY:0;
   int flags = predirty_dir | predirty_primary;
   if (srcdn->is_auth())
-    mdcache->predirty_journal_parents(mdr, metablob, srcdnl->get_inode(), srcdn->get_dir(), PREDIRTY_SHALLOW|flags, -1);
+    mdcache->predirty_journal_parents(mdr, metablob, srci, srcdn->get_dir(), PREDIRTY_SHALLOW|flags, -1);
   if (destdn->is_auth())
-    mdcache->predirty_journal_parents(mdr, metablob, srcdnl->get_inode(), destdn->get_dir(), flags, 1);
+    mdcache->predirty_journal_parents(mdr, metablob, srci, destdn->get_dir(), flags, 1);
 
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
   snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
@@ -5207,7 +5209,7 @@ void Server::_rename_prepare(MDRequest *mdr,
    * auth for the srci or the desti without being auth on the dentries */
   if (srcdnl->is_remote()) {
     assert(not_journaling || srcdn->is_auth() ||destdn->is_auth() ||
-           (srcdnl->get_inode() && srcdnl->get_inode()->is_auth()) ||
+           (srci && srci->is_auth()) ||
            (destdnl->get_inode() && destdnl->get_inode()->is_auth()));
     if (!linkmerge) {
       if (destdn->is_auth() && !destdnl->is_null())
@@ -5217,9 +5219,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 
       if (destdn->is_auth())
         metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      if (srcdnl->get_inode()->get_parent_dn()->is_auth()) { // it's remote
-        mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
+      if (srci->get_parent_dn()->is_auth()) { // it's remote
+	metablob->add_dir_context(srci->get_parent_dir());
+        mdcache->journal_cow_dentry(mdr, metablob, srci->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+	ji = metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
       }
     } else {
       if (destdn->is_auth() && !destdnl->is_null())
@@ -5234,8 +5237,8 @@ void Server::_rename_prepare(MDRequest *mdr,
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
     bufferlist snapbl;
-    if (destdn->is_auth() && srcdnl->get_inode()->snaprealm)
-      srcdnl->get_inode()->project_past_snaprealm_parent(dest_realm, snapbl);
+    if (destdn->is_auth() && srci->snaprealm)
+      srci->project_past_snaprealm_parent(dest_realm, snapbl);
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -5244,7 +5247,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     if (destdn->is_auth() ||
         (destdnl->get_inode() && destdnl->get_inode()->is_auth()))
-      ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl);
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
   }
     
   // src
@@ -5257,7 +5260,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // make renamed inode first track the dn
   if (srcdnl->is_primary() && destdn->is_auth())
-    srcdnl->get_inode()->first = destdn->first;  
+    srci->first = destdn->first;  
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {
@@ -5387,8 +5390,13 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
       if (desti->is_dir()) {
 	mdr->ls->renamed_files.push_back(&desti->item_renamed_file);
-	desti->state_set(CInode::STATE_DIRTYPARENT);
-	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+	if (!desti->state_test(CInode::STATE_DIRTYPARENT)) {
+	  desti->state_set(CInode::STATE_DIRTYPARENT);
+	  desti->get(CInode::PIN_DIRTYPARENT);
+	  dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+	} else {
+	  dout(10) << "re-added dir to logsegment renamed_files list " << *desti << dendl;
+	}
       }
     } else {
       // FIXME: fix up snaprealm!

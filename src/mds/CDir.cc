@@ -1997,6 +1997,7 @@ void CDir::_committed(version_t v, version_t lrv)
       lrv == inode->inode.last_renamed_version) {
     inode->item_renamed_file.remove_myself();
     inode->state_clear(CInode::STATE_DIRTYPARENT);
+    inode->put(CInode::PIN_DIRTYPARENT);
     dout(10) << "_committed  stored parent pointer, removed from renamed_files list " << *inode << dendl;
   }
   
