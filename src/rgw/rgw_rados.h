@@ -46,6 +46,8 @@ public:
               map<std::string, bufferlist>& attrs, bool exclusive);
   virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
               off_t ofs, size_t len, time_t *mtime);
+  virtual int clone_range(std::string& bucket, std::string& dst_oid, off_t dst_ofs,
+                          std::string& src_oid, off_t src_ofs, size_t size, std::string& loc);
   /** Copy an object, with many extra options */
   virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,

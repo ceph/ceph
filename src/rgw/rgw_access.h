@@ -138,7 +138,9 @@ public:
 
   virtual void finish_get_obj(void **handle) = 0;
 
-  /**
+  virtual int clone_range(std::string& bucket, std::string& dst_oid, off_t dst_ofs,
+                          std::string& src_oid, off_t src_ofs, size_t size, std::string& loc) = 0;
+ /**
    * a simple object read without keeping state
    */
   virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl) = 0;

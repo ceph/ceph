@@ -669,6 +669,21 @@ done_err:
   return r;
 }
 
+int RGWRados::clone_range(std::string& bucket, std::string& dst_oid, off_t dst_ofs,
+                          std::string& src_oid, off_t src_ofs, size_t size, std::string& loc)
+{
+  librados::IoCtx io_ctx;
+
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(loc);
+
+  return io_ctx.clone_range(dst_oid, dst_ofs, src_oid, src_ofs, size);
+}
+
+
 int RGWRados::get_obj(void **handle,
             std::string& bucket, std::string& oid, string& loc,
             char **data, off_t ofs, off_t end)

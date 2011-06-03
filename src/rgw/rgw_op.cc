@@ -914,7 +914,10 @@ void RGWCompleteMultipart::execute()
   RGWMultiXMLParser parser;
   string obj = s->object_str;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
+  map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
+  off_t ofs = 0;
+  string prefix;
 
   ret = get_params();
   if (ret < 0)
@@ -941,16 +944,38 @@ void RGWCompleteMultipart::execute()
     goto done;
   }
 
-  for (iter = parts->parts.begin(); iter != parts->parts.end(); ++iter) {
-    RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
-  }
-
   obj.append(".");
+  prefix = obj;
   obj.append(upload_id);
 
   ret = get_multiparts_info(s, obj, obj_parts, policy);
+  if (ret == -ENOENT)
+    ret = -ERR_NO_SUCH_UPLOAD;
   if (ret < 0)
     goto done;
+
+  for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
+       iter != parts->parts.end();
+       ++iter, ++obj_iter) {
+    if (iter->first != (int)obj_iter->first) {
+      RGW_LOG(0) << "parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
+      ret = -ERR_INVALID_PART;
+      goto done;
+    }
+    if (iter->second.compare(obj_iter->second.etag) != 0) {
+      RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
+      ret = -ERR_INVALID_PART;
+      goto done;
+    }
+  }
+
+  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+    obj = prefix;
+    char buf[16];
+    snprintf(buf, 16, "%d", obj_iter->second.num);
+    obj.append(buf);
+    rgwstore->clone_range(s->bucket_str, s->object_str, ofs, obj, 0, obj_iter->second.size, s->object_str);
+  }
 
 done:
   send_response();
