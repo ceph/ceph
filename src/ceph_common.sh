@@ -7,18 +7,6 @@ conf=$default_conf
 
 hostname=`hostname | cut -d . -f 1`
 
-figure_dirs() {
-    if echo $bindir | grep -q \@; then
-	echo "using current dir"
-	BINDIR=.
-	LIBDIR=.
-	ETCDIR=.
-    else
-	echo "all good"
-	
-    fi
-}
-
 verify_conf() {
     # fetch conf?
     if [ -x "$ETCDIR/fetch_config" ] && [ "$conf" = "$default_conf" ]; then
