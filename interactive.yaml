@@ -9,6 +9,4 @@ targets:
 tasks:
 - ceph:
 - cfuse: [client.0]
-- autotest:
-    client.0: [dbench]
 - interactive:

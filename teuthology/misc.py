@@ -93,11 +93,6 @@ def roles_of_type(roles_for_host, type_):
         id_ = name[len(prefix):]
         yield id_
 
-def all_roles_of_type(roles, type_):
-    for roles_for_host in roles:
-        for id_ in roles_of_type(roles_for_host, type_):
-            yield id_
-
 def is_type(type_):
     """
     Returns a matcher function for whether role is of type given.
@@ -107,15 +102,12 @@ def is_type(type_):
         return role.startswith(prefix)
     return _is_type
 
-def num_instances_of_type(roles, type_):
+def num_instances_of_type(cluster, type_):
+    remotes_and_roles = cluster.remotes.items()
+    roles = [roles for (remote, roles) in remotes_and_roles]
     prefix = '{type}.'.format(type=type_)
     num = sum(sum(1 for role in hostroles if role.startswith(prefix)) for hostroles in roles)
     return num
-
-def server_with_role(all_roles, role):
-    for idx, host_roles in enumerate(all_roles):
-        if role in host_roles:
-            return idx
 
 def create_simple_monmap(remote, conf):
     """

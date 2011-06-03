@@ -17,6 +17,13 @@ setup(
         'configobj',
         'PyYAML',
         'bunch >=1.0.0',
+        'argparse >=1.2.1'
         ],
+
+    entry_points={
+        'console_scripts': [
+            'teuthology = teuthology.run:main',
+            ],
+        },
 
     )
