@@ -78,7 +78,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   dout(0) << "i am mon " << args[0] << dendl;
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
   

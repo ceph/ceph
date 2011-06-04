@@ -89,7 +89,7 @@ int main(int argc, const char **argv, const char *envp[])
   int mds = 0;
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
   
