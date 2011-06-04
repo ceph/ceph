@@ -96,8 +96,8 @@ int main(int argc, const char **argv, const char *envp[])
   // start up network
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind(getpid());
-  messenger->start();
   messenger->register_entity(entity_name_t::CLIENT());
+  messenger->start();
   messenger->add_dispatcher_head(&dispatcher);
 
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
