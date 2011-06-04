@@ -18,11 +18,11 @@
 #include <stdint.h>
 #include <pthread.h>
 
+static uint32_t bar = 13;
+static uint32_t *foo = &bar;
+ 
 void simple_spin_lock(simple_spinlock_t *lock)
 {
-  static uint32_t bar = 13;
-  static uint32_t *foo = &bar;
- 
   while(1) {
     __sync_synchronize();
     uint32_t oldval = *lock;
