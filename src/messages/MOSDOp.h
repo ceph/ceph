@@ -173,7 +173,7 @@ public:
   virtual void encode_payload() {
 
     for (unsigned i = 0; i < ops.size(); i++) {
-      if (ops[i].op.op & CEPH_OSD_OP_TYPE_MULTI) {
+      if (ceph_osd_op_type_multi(ops[i].op.op)) {
 	ops[i].op.payload_len = ops[i].oid.name.length();
 	data.append(ops[i].oid.name);
       } else {
