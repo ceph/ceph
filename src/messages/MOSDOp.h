@@ -325,7 +325,7 @@ struct ceph_osd_request_head {
 
     unsigned off = 0;
     for (unsigned i = 0; i < ops.size(); i++) {
-      if (ops[i].op.op & CEPH_OSD_OP_TYPE_MULTI) {
+      if (ceph_osd_op_type_multi(ops[i].op.op)) {
 	bufferlist t;
 	ops[i].data.substr_of(t, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
