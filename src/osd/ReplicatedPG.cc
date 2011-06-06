@@ -717,16 +717,14 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
   sub_op_modify_reply(r);
 }
 
-
-bool ReplicatedPG::snap_trimmer()
+/* Returns head of snap_trimq as snap_to_trim and the relevant objects as 
+ * obs_to_trim */
+bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
+				   coll_t &col_to_trim,
+				   vector<sobject_t> &obs_to_trim)
 {
-  lock();
-  if (!(is_primary() && is_clean() && is_active() && !finalizing_scrub)) {
-    unlock();
-    return true;
-  }
-
-  dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
+  assert_locked();
+  obs_to_trim.clear();
 
   interval_set<snapid_t> s;
   s.intersection_of(snap_trimq, info.purged_snaps);
@@ -736,25 +734,47 @@ bool ReplicatedPG::snap_trimmer()
     snap_trimq.subtract(s);
   }
 
+  dout(10) << "get_obs_to_trim , purged_snaps " << info.purged_snaps << dendl;
+
+  if (snap_trimq.size() == 0) return false;
+
+  snap_to_trim = snap_trimq.range_start();
+  col_to_trim = coll_t(info.pgid, snap_to_trim);
+
+  if (!snap_collections.contains(snap_to_trim)) {
+    return true;
+  }
+
+  osd->store->collection_list(col_to_trim, obs_to_trim);
+
+  return true;
+}
+				   
+
+bool ReplicatedPG::snap_trimmer()
+{
+  lock();
+  if (!(is_primary() && is_clean() && is_active() && !finalizing_scrub)) {
+    unlock();
+    return true;
+  }
 
   epoch_t current_set_started = info.history.last_epoch_started;
+  snapid_t sn;
+  coll_t c;
+  vector<sobject_t> ls;
 
-  while (snap_trimq.size() &&
-	 current_set_started == info.history.last_epoch_started &&
-	 is_active()) {
+  while (current_set_started == info.history.last_epoch_started &&
+	 is_active() &&
+	 get_obs_to_trim(sn, c, ls)) {
 
-    snapid_t sn = snap_trimq.range_start();
-    coll_t c(info.pgid, sn);
-    if (!snap_collections.contains(sn)) {
+    if (ls.empty()) {
       // adjust pg info
       info.purged_snaps.insert(sn);
       snap_trimq.erase(sn);
       dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
       continue;
     }
-    vector<sobject_t> ls;
-    osd->store->collection_list(c, ls);
-
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
 
     for (vector<sobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
