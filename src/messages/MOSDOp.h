@@ -329,7 +329,8 @@ struct ceph_osd_request_head {
 	bufferlist t;
 	ops[i].data.substr_of(t, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
-	oid.name = t.c_str();
+        if (t.length())
+	  oid.name = t.c_str();
       } else {
 	ops[i].data.substr_of(data, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
