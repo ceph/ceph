@@ -147,6 +147,8 @@ int MonClient::build_initial_monmap(MonMap &monmap)
 	   << ": addr='" << val << "'" << std::endl;
       continue;
     }
+    if (addr.get_port() == 0)
+      addr.set_port(CEPH_MON_PORT);    
     monmap.add(m->c_str(), addr);
   }
 
