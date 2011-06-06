@@ -88,3 +88,18 @@ def task(ctx, config):
                     ],
                 )
         run.wait(cfuse_daemons.itervalues())
+
+        for role in config:
+            assert isinstance(role, basestring)
+            PREFIX = 'client.'
+            assert role.startswith(PREFIX)
+            id_ = role[len(PREFIX):]
+            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            remote.run(
+                args=[
+                    'rmdir',
+                    '--',
+                    mnt,
+                    ],
+                )
