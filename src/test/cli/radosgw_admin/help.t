@@ -13,6 +13,7 @@
     key create                 create access key
     key rm                     remove access key
     buckets list               list buckets
+    bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     policy                     read bucket/object policy
     log show                   dump a log from specific object or (bucket + date)
