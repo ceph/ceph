@@ -5090,6 +5090,12 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
 
+  if (srci->is_dir() &&
+      (srcdn->is_auth() || destdn->is_auth())) {
+    dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
+    metablob->renamed_dirino = srci->ino();
+  }
+
   // prepare
   inode_t *pi = 0, *ji = 0;    // renamed inode
   inode_t *tpi = 0, *tji = 0;  // target/overwritten inode

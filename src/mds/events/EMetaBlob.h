@@ -352,6 +352,9 @@ private:
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   inodeno_t opened_ino;
+public:
+  inodeno_t renamed_dirino;
+private:
   
   // ino (pre)allocation.  may involve both inotable AND session state.
   version_t inotablev, sessionmapv;
@@ -371,7 +374,7 @@ private:
 
  public:
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
@@ -391,6 +394,7 @@ private:
     ::encode(truncate_finish, bl);
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
+    ::encode(renamed_dirino, bl);
   } 
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -414,9 +418,9 @@ private:
     ::decode(truncate_start, bl);
     ::decode(truncate_finish, bl);
     ::decode(destroyed_inodes, bl);
-    if (struct_v >= 2) 
+    if (struct_v >= 2) {
       ::decode(client_reqs, bl);
-    else {
+    } else {
       list<metareqid_t> r;
       ::decode(r, bl);
       while (!r.empty()) {
@@ -424,6 +428,8 @@ private:
 	r.pop_front();
       }
     }
+    if (struct_v >= 3)
+      ::decode(renamed_dirino, bl);
   }
 
 

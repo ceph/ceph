@@ -310,7 +310,7 @@ void EString::replay(MDS *mds)
 // EMetaBlob
 
 EMetaBlob::EMetaBlob(MDLog *mdlog) : root(NULL),
-				     opened_ino(0),
+				     opened_ino(0), renamed_dirino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
@@ -461,6 +461,16 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       mds->mdcache->add_inode(in);
     if (root->dirty) in->_mark_dirty(logseg);
     dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
+  }
+
+  CInode *renamed_diri = 0;
+  CDir *olddir = 0;
+  if (renamed_dirino) {
+    renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+    if (renamed_diri)
+      dout(10) << "EMetaBlob.replay renamed inode is " << *renamed_diri << dendl;
+    else
+      dout(10) << "EMetaBlob.replay don't have renamed ino " << renamed_dirino << dendl;
   }
 
   // walk through my dirs (in order!)
@@ -620,6 +630,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->is_primary() &&
+	      dn->get_linkage()->get_inode() == renamed_diri)
+	    olddir = dir;
 	  dir->unlink_inode(dn);
 	}
 	dn->set_version(p->dnv);
@@ -627,6 +640,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
 	assert(dn->last == p->dnlast);
       }
+    }
+  }
+
+  if (renamed_dirino) {
+    if (olddir) {
+      assert(renamed_diri);
+      mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
+    } else {
+      if (!renamed_diri) {
+	renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+	assert(renamed_diri);
+      }
+      // FIXME.
     }
   }
 
