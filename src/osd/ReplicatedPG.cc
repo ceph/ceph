@@ -749,7 +749,143 @@ bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
 
   return true;
 }
-				   
+
+ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
+						   const snapid_t &sn)
+{
+  // load clone info
+  bufferlist bl;
+  ObjectContext *obc;
+  int r = find_object_context(coid.oid, OLOC_BLANK, sn, &obc, false, NULL);
+  assert(r == 0);
+  assert(obc->registered);
+  object_info_t &coi = obc->obs.oi;
+  vector<snapid_t>& snaps = coi.snaps;
+
+  // get snap set context
+  if (!obc->ssc)
+    obc->ssc = get_snapset_context(coid.oid, false);
+  SnapSetContext *ssc = obc->ssc;
+  assert(ssc);
+  SnapSet& snapset = ssc->snapset;
+
+  dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
+  assert(snapset.seq);
+
+  vector<OSDOp> ops;
+  tid_t rep_tid = osd->get_tid();
+  osd_reqid_t reqid(osd->cluster_messenger->get_myname(), 0, rep_tid);
+  OpContext *ctx = new OpContext(NULL, reqid, ops, &obc->obs, this);
+  ctx->mtime = ceph_clock_now(g_ceph_context);
+
+  ctx->at_version.epoch = osd->osdmap->get_epoch();
+  ctx->at_version.version = log.head.version + 1;
+
+
+  RepGather *repop = new_repop(ctx, obc, rep_tid);
+
+  ObjectStore::Transaction *t = &ctx->op_t;
+    
+  // trim clone's snaps
+  vector<snapid_t> newsnaps;
+  for (unsigned i=0; i<snaps.size(); i++)
+    if (!pool->info.is_removed_snap(snaps[i]))
+      newsnaps.push_back(snaps[i]);
+
+  if (newsnaps.empty()) {
+    // remove clone
+    dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
+    t->remove(coll, coid);
+    t->collection_remove(coll_t(info.pgid, snaps[0]), coid);
+    if (snaps.size() > 1)
+      t->collection_remove(coll_t(info.pgid, snaps[snaps.size()-1]), coid);
+
+    // ...from snapset
+    snapid_t last = coid.snap;
+    vector<snapid_t>::iterator p;
+    for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
+      if (*p == last)
+	break;
+    if (p != snapset.clones.begin()) {
+      // not the oldest... merge overlap into next older clone
+      vector<snapid_t>::iterator n = p - 1;
+      interval_set<uint64_t> keep;
+      keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
+      add_interval_usage(keep, info.stats);  // not deallocated
+      snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
+    } else {
+      add_interval_usage(snapset.clone_overlap[last], info.stats);  // not deallocated
+    }
+    info.stats.num_objects--;
+    info.stats.num_object_clones--;
+    info.stats.num_bytes -= snapset.clone_size[last];
+    info.stats.num_kb -= SHIFT_ROUND_UP(snapset.clone_size[last], 10);
+    snapset.clones.erase(p);
+    snapset.clone_overlap.erase(last);
+    snapset.clone_size.erase(last);
+	
+    ctx->log.push_back(Log::Entry(Log::Entry::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
+				  osd_reqid_t(), ctx->mtime));
+    ctx->at_version.version++;
+  } else {
+    // save adjusted snaps for this object
+    dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
+    coi.snaps.swap(newsnaps);
+    vector<snapid_t>& oldsnaps = newsnaps;
+    coi.prior_version = coi.version;
+    coi.version = ctx->at_version;
+    bl.clear();
+    ::encode(coi, bl);
+    t->setattr(coll, coid, OI_ATTR, bl);
+
+    if (oldsnaps[0] != snaps[0]) {
+      t->collection_remove(coll_t(info.pgid, oldsnaps[0]), coid);
+      if (oldsnaps.size() > 1 && oldsnaps[snaps.size() - 1] != snaps[0])
+	t->collection_add(coll_t(info.pgid, snaps[0]), coll, coid);
+    }
+    if (oldsnaps.size() > 1 && oldsnaps[oldsnaps.size()-1] != snaps[snaps.size()-1]) {
+      t->collection_remove(coll_t(info.pgid, oldsnaps[oldsnaps.size()-1]), coid);
+      if (snaps.size() > 1)
+	t->collection_add(coll_t(info.pgid, snaps[snaps.size()-1]), coll, coid);
+    }	      
+
+    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
+				  osd_reqid_t(), ctx->mtime));
+    ctx->at_version.version++;
+  }
+
+  // save head snapset
+  dout(10) << coid << " new snapset " << snapset << dendl;
+
+  sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
+  ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
+  assert(ctx->snapset_obc->registered);
+  if (snapset.clones.empty() && !snapset.head_exists) {
+    dout(10) << coid << " removing " << snapoid << dendl;
+    ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, 
+				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
+    ctx->snapset_obc->obs.exists = false;
+
+    t->remove(coll, snapoid);
+  } else {
+    dout(10) << coid << " updating snapset on " << snapoid << dendl;
+    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, 
+				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
+
+    ctx->snapset_obc->obs.oi.prior_version = ctx->snapset_obc->obs.oi.version;
+    ctx->snapset_obc->obs.oi.version = ctx->at_version;
+
+    bl.clear();
+    ::encode(snapset, bl);
+    t->setattr(coll, snapoid, SS_ATTR, bl);
+
+    bl.clear();
+    ::encode(ctx->snapset_obc->obs.oi, bl);
+    t->setattr(coll, snapoid, OI_ATTR, bl);
+  }
+
+  return repop;
+}
 
 bool ReplicatedPG::snap_trimmer()
 {
@@ -795,146 +931,18 @@ bool ReplicatedPG::snap_trimmer()
 	}
       }
 
-      // load clone info
-      bufferlist bl;
-      ObjectContext *obc;
-      int r = find_object_context(coid.oid, OLOC_BLANK, sn, &obc, false, NULL);
-      assert(r == 0);
-      assert(obc->registered);
-      object_info_t &coi = obc->obs.oi;
-      vector<snapid_t>& snaps = coi.snaps;
-
-      // get snap set context
-      if (!obc->ssc)
-	obc->ssc = get_snapset_context(coid.oid, false);
-      SnapSetContext *ssc = obc->ssc;
-      assert(ssc);
-      SnapSet& snapset = ssc->snapset;
-
-      dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
-      assert(snapset.seq);
-
-      vector<OSDOp> ops;
-      tid_t rep_tid = osd->get_tid();
-      osd_reqid_t reqid(osd->cluster_messenger->get_myname(), 0, rep_tid);
-      OpContext *ctx = new OpContext(NULL, reqid, ops, &obc->obs, this);
-      ctx->mtime = ceph_clock_now(g_ceph_context);
-
-      ctx->at_version.epoch = osd->osdmap->get_epoch();
-      ctx->at_version.version = log.head.version + 1;
-
+      RepGather *repop = trim_object(coid, sn);
       eversion_t old_last_update = log.head;
-      bool old_exists = obc->obs.exists;
-      uint64_t old_size = obc->obs.oi.size;
-      eversion_t old_version = obc->obs.oi.version;
+      bool old_exists = repop->obc->obs.exists;
+      uint64_t old_size = repop->obc->obs.oi.size;
+      eversion_t old_version = repop->obc->obs.oi.version;
 
-      RepGather *repop = new_repop(ctx, obc, rep_tid);  // note: new_repop claims obc, ctx, ctx->op
+      log_op(repop->ctx->log, eversion_t(), repop->ctx->local_t);
 
-      ObjectStore::Transaction *t = &ctx->op_t;
-    
-      // trim clone's snaps
-      vector<snapid_t> newsnaps;
-      for (unsigned i=0; i<snaps.size(); i++)
-	if (!pool->info.is_removed_snap(snaps[i]))
-	  newsnaps.push_back(snaps[i]);
-
-      if (newsnaps.empty()) {
-	// remove clone
-	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
-	t->remove(coll, coid);
-	t->collection_remove(coll_t(info.pgid, snaps[0]), coid);
-	if (snaps.size() > 1)
-	  t->collection_remove(coll_t(info.pgid, snaps[snaps.size()-1]), coid);
-
-	// ...from snapset
-	snapid_t last = coid.snap;
-	vector<snapid_t>::iterator p;
-	for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
-	  if (*p == last)
-	    break;
-	if (p != snapset.clones.begin()) {
-	  // not the oldest... merge overlap into next older clone
-	  vector<snapid_t>::iterator n = p - 1;
-	  interval_set<uint64_t> keep;
-	  keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
-	  add_interval_usage(keep, info.stats);  // not deallocated
- 	  snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
-	} else {
-	  add_interval_usage(snapset.clone_overlap[last], info.stats);  // not deallocated
-	}
-	info.stats.num_objects--;
-	info.stats.num_object_clones--;
-	info.stats.num_bytes -= snapset.clone_size[last];
-	info.stats.num_kb -= SHIFT_ROUND_UP(snapset.clone_size[last], 10);
-	snapset.clones.erase(p);
-	snapset.clone_overlap.erase(last);
-	snapset.clone_size.erase(last);
-	
-	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
-				      osd_reqid_t(), ctx->mtime));
-	ctx->at_version.version++;
-      } else {
-	// save adjusted snaps for this object
-	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
-	coi.snaps.swap(newsnaps);
-	vector<snapid_t>& oldsnaps = newsnaps;
-	coi.prior_version = coi.version;
-	coi.version = ctx->at_version;
-	bl.clear();
-	::encode(coi, bl);
-	t->setattr(coll, coid, OI_ATTR, bl);
-
-	if (oldsnaps[0] != snaps[0]) {
-	  t->collection_remove(coll_t(info.pgid, oldsnaps[0]), coid);
-	  if (oldsnaps.size() > 1 && oldsnaps[snaps.size() - 1] != snaps[0])
-	    t->collection_add(coll_t(info.pgid, snaps[0]), coll, coid);
-	}
-	if (oldsnaps.size() > 1 && oldsnaps[oldsnaps.size()-1] != snaps[snaps.size()-1]) {
-	  t->collection_remove(coll_t(info.pgid, oldsnaps[oldsnaps.size()-1]), coid);
-	  if (snaps.size() > 1)
-	    t->collection_add(coll_t(info.pgid, snaps[snaps.size()-1]), coll, coid);
-	}	      
-
-	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
-				      osd_reqid_t(), ctx->mtime));
-	ctx->at_version.version++;
-      }
-
-      // save head snapset
-      dout(10) << coid << " new snapset " << snapset << dendl;
-
-      sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
-      ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
-      assert(ctx->snapset_obc->registered);
-      if (snapset.clones.empty() && !snapset.head_exists) {
-	dout(10) << coid << " removing " << snapoid << dendl;
-	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, 
-				      ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
-	ctx->snapset_obc->obs.exists = false;
-
-	t->remove(coll, snapoid);
-      } else {
-	dout(10) << coid << " updating snapset on " << snapoid << dendl;
-	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, 
-				      ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
-
-	ctx->snapset_obc->obs.oi.prior_version = ctx->snapset_obc->obs.oi.version;
-	ctx->snapset_obc->obs.oi.version = ctx->at_version;
-
-	bl.clear();
-	::encode(snapset, bl);
-	t->setattr(coll, snapoid, SS_ATTR, bl);
-
-	bl.clear();
-	::encode(ctx->snapset_obc->obs.oi, bl);
-	t->setattr(coll, snapoid, OI_ATTR, bl);
-      }
-
-      log_op(ctx->log, eversion_t(), ctx->local_t);
-
-      issue_repop(repop, ctx->mtime, old_last_update, old_exists, old_size, old_version);
+      issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
 
       eval_repop(repop);
+      put_object_context(repop->obc);
       repop->put();
 
       //int tr = osd->store->queue_transaction(&osr, t);

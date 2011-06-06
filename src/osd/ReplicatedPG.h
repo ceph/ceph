@@ -677,6 +677,7 @@ public:
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<sobject_t> &obs_to_trim);
+  RepGather *trim_object(const sobject_t &coid, const snapid_t &sn);
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
