@@ -41,6 +41,8 @@ public:
   DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
   std::ostream _dout;
 
+  unsigned module_type;
+
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 

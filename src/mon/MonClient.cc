@@ -330,7 +330,7 @@ int MonClient::init()
     derr << "MonClient::init(): Failed to create keyring" << dendl;
     return -EDOM;
   }
-  rotating_secrets = new RotatingKeyRing(CEPH_ENTITY_TYPE_OSD, keyring);
+  rotating_secrets = new RotatingKeyRing(cct->module_type, keyring);
 
   entity_name = g_conf.name;
   

@@ -94,6 +94,8 @@ void common_init(std::vector < const char* >& args,
   CephContext *cct = common_preinit(iparams, code_env, flags);
   md_config_t *conf = cct->_conf;
 
+  cct->module_type = module_type;
+
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
   if (ret == -EDOM) {

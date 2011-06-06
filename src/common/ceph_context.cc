@@ -82,6 +82,7 @@ CephContext::
 CephContext()
   : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
     _dout(_doss),
+    module_type(0),
     _prof_logger_conf_obs(new ProfLoggerConfObs()),
     _service_thread(NULL)
 {
