@@ -1137,6 +1137,11 @@ if ENABLE_COVERAGE
 	-rmdir -p $(COV_DIR)
 endif
 
+check-coverage:
+if ENABLE_COVERAGE
+	-test/coverage.sh -d $(srcdir) -o check-coverage make check
+endif
+
 install-data-local: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
