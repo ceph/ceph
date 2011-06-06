@@ -1,4 +1,4 @@
--e git+https://github.com/tv42/orchestra.git#egg=orchestra
+-e git+git://ceph.newdream.net/orchestra.git#egg=orchestra
 configobj
 PyYAML
 bunch >=1.0.0
