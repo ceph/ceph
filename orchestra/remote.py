@@ -25,6 +25,12 @@ class Remote(object):
     def __str__(self):
         return self.shortname
 
+    def __repr__(self):
+        return '{classname}(name={name!r})'.format(
+            classname=self.__class__.__name__,
+            name=self.name,
+            )
+
     def run(self, **kwargs):
         """
         This calls `orchestra.run.run` with our SSH client.
