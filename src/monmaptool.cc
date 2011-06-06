@@ -70,6 +70,8 @@ int main(int argc, const char **argv)
 	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
+      if (addr.get_port() == 0)
+	addr.set_port(CEPH_MON_PORT);
       add[name] = addr;
       modified = true;
     } else if (CEPH_ARGPARSE_EQ("rm", '\0')) {
