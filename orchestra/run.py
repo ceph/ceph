@@ -190,7 +190,7 @@ def run(
     :param args: command to run
     :type args: list of string
     :param stdin: Standard input to send; either a string, a file-like object, None, or `PIPE`. `PIPE` means caller is responsible for closing stdin, or command may never exit.
-    :param stdout: What to do with standard output. Either a file-like object, a `logging.Logger`, or `None` for copying to default log.
+    :param stdout: What to do with standard output. Either a file-like object, a `logging.Logger`, `PIPE`, or `None` for copying to default log. `PIPE` means caller is responsible for reading, or command may never exit.
     :param stderr: What to do with standard error. See `stdout`.
     :param logger: If logging, write stdout/stderr to "out" and "err" children of this logger. Defaults to logger named after this module.
     :param check_status: Whether to raise CalledProcessError on non-zero exit status, and . Defaults to True. All signals and connection loss are made to look like SIGHUP.
@@ -210,19 +210,29 @@ def run(
     if logger is None:
         logger = log
 
-    if stderr is None:
-        stderr = logger.getChild('err')
-    g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
-    r.stderr = stderr
+    g_err = None
+    if stderr is not PIPE:
+        if stderr is None:
+            stderr = logger.getChild('err')
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
+        r.stderr = stderr
+    else:
+        assert not wait, "Using PIPE for stderr without wait=False would deadlock."
 
-    if stdout is None:
-        stdout = logger.getChild('out')
-    g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
-    r.stdout = stdout
+    g_out = None
+    if stdout is not PIPE:
+        if stdout is None:
+            stdout = logger.getChild('out')
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
+        r.stdout = stdout
+    else:
+        assert not wait, "Using PIPE for stdout without wait=False would deadlock."
 
     def _check_status(status):
-        g_err.get()
-        g_out.get()
+        if g_err is not None:
+            g_err.get()
+        if g_out is not None:
+            g_out.get()
         if g_in is not None:
             g_in.get()
 

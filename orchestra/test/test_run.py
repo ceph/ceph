@@ -309,6 +309,76 @@ def test_run_stdin_pipe():
     eq(got, 0)
 
 
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_stdout_pipe():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('read').with_args().returns('one')
+    out.expects('read').with_args().returns('two')
+    out.expects('read').with_args().returns('')
+    err.expects('xreadlines').with_args().returns([])
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(0)
+    r = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        stdout=run.PIPE,
+        wait=False,
+        )
+    eq(r.command, 'foo')
+    assert isinstance(r.exitstatus, gevent.event.AsyncResult)
+    eq(r.exitstatus.ready(), False)
+    eq(r.stdout.read(), 'one')
+    eq(r.stdout.read(), 'two')
+    eq(r.stdout.read(), '')
+    got = r.exitstatus.get()
+    eq(got, 0)
+
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_run_stderr_pipe():
+    ssh = fudge.Fake('SSHConnection')
+    cmd = ssh.expects('exec_command')
+    cmd.with_args("foo")
+    in_ = fudge.Fake('ChannelFile').is_a_stub()
+    out = fudge.Fake('ChannelFile').is_a_stub()
+    err = fudge.Fake('ChannelFile').is_a_stub()
+    cmd.returns((in_, out, err))
+    out.expects('xreadlines').with_args().returns([])
+    err.expects('read').with_args().returns('one')
+    err.expects('read').with_args().returns('two')
+    err.expects('read').with_args().returns('')
+    logger = fudge.Fake('logger').is_a_stub()
+    channel = fudge.Fake('channel')
+    out.has_attr(channel=channel)
+    channel.expects('recv_exit_status').with_args().returns(0)
+    r = run.run(
+        client=ssh,
+        logger=logger,
+        args=['foo'],
+        stderr=run.PIPE,
+        wait=False,
+        )
+    eq(r.command, 'foo')
+    assert isinstance(r.exitstatus, gevent.event.AsyncResult)
+    eq(r.exitstatus.ready(), False)
+    eq(r.stderr.read(), 'one')
+    eq(r.stderr.read(), 'two')
+    eq(r.stderr.read(), '')
+    got = r.exitstatus.get()
+    eq(got, 0)
+
+
 def test_quote_simple():
     got = run.quote(['a b', ' c', 'd e '])
     eq(got, "'a b' ' c' 'd e '")
