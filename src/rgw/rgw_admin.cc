@@ -35,6 +35,7 @@ void usage()
   cerr << "  key create                 create access key\n";
   cerr << "  key rm                     remove access key\n";
   cerr << "  buckets list               list buckets\n";
+  cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
@@ -71,6 +72,7 @@ enum {
   OPT_KEY_CREATE,
   OPT_KEY_RM,
   OPT_BUCKETS_LIST,
+  OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
   OPT_LOG_SHOW,
@@ -177,6 +179,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
   } else if (strcmp(prev_cmd, "bucket") == 0) {
+    if (strcmp(cmd, "link") == 0)
+      return OPT_BUCKET_LINK;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_BUCKET_UNLINK;
   } else if (strcmp(prev_cmd, "log") == 0) {
@@ -279,6 +283,41 @@ static void show_user_info( RGWUserInfo& info)
   cout << "Email: " << info.user_email << std::endl;
   cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
   cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+}
+
+static int create_bucket(string& bucket, string& user_id, string& display_name, uint64_t auid)
+{
+  RGWAccessControlPolicy policy, old_policy;
+  map<string, bufferlist> attrs;
+  bufferlist aclbl;
+  string empty_obj;
+  int ret;
+
+  // defaule policy (private)
+  policy.create_default(user_id, display_name);
+  policy.encode(aclbl);
+cout << __FILE__ << __LINE__ << std::endl;
+
+cout << __FILE__ << __LINE__ << std::endl;
+  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
+  if (ret && ret != -EEXIST)   
+    goto done;
+
+  ret = rgwstore->set_attr(bucket, empty_obj, RGW_ATTR_ACL, aclbl);
+  if (ret < 0) {
+    cerr << "couldn't set acl on bucket" << std::endl;
+  }
+cout << __FILE__ << __LINE__ << std::endl;
+
+  ret = rgw_add_bucket(user_id, bucket);
+
+  RGW_LOG(0) << "ret=" << ret << dendl;
+
+  if (ret == -EEXIST)
+    ret = 0;
+cout << __FILE__ << __LINE__ << std::endl;
+done:
+  return ret;
 }
 
 int main(int argc, char **argv) 
@@ -434,7 +473,7 @@ int main(int argc, char **argv)
 
 
   if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       usage();
@@ -636,11 +675,49 @@ int main(int argc, char **argv)
     }
   }
 
+  if (opt_cmd == OPT_BUCKET_LINK) {
+    if (!bucket) {
+      cerr << "bucket name was not specified" << std::endl;
+      usage();
+    }
+    string bucket_str(bucket);
+    string uid_str(user_id);
+    
+    string empty_obj;
+    bufferlist aclbl;
+
+    int r = rgwstore->get_attr(bucket_str, empty_obj, RGW_ATTR_ACL, aclbl);
+    if (r >= 0) {
+      RGWAccessControlPolicy policy;
+      ACLOwner owner;
+      try {
+       bufferlist::iterator iter = aclbl.begin();
+       ::decode(policy, iter);
+       owner = policy.get_owner();
+      } catch (buffer::error& err) {
+	dout(10) << "couldn't decode policy" << dendl;
+	return -EINVAL;
+      }
+      cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
+      r = rgw_remove_bucket(owner.get_id(), bucket_str);
+      if (r < 0) {
+	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
+	return r;
+      }
+    }
+
+    r = create_bucket(bucket_str, uid_str, info.display_name, info.auid);
+    if (r < 0)
+        cerr << "error linking bucket to user: r=" << r << std::endl;
+    return -r;
+  }
+
   if (opt_cmd == OPT_BUCKET_UNLINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
       usage();
     }
+
     string bucket_str(bucket);
     int r = rgw_remove_bucket(user_id, bucket_str);
     if (r < 0)

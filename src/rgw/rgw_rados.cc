@@ -224,10 +224,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  * if auid is set, it sets the auid of the underlying rados io_ctx
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
   librados::ObjectOperation op;
-  op.create(true);
+  op.create(exclusive);
 
   for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
     op.setxattr(iter->first.c_str(), iter->second);

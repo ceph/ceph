@@ -43,7 +43,7 @@ public:
                            bool get_content_type) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,

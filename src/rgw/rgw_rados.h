@@ -39,7 +39,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,

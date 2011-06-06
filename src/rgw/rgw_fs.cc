@@ -158,14 +158,19 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
 }
 
 
-int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
+int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
   snprintf(buf, len, "%s/%s", DIR_NAME, bucket.c_str());
 
-  if (mkdir(buf, 0755) < 0)
-    return -errno;
+  int ret = mkdir(buf, 0755);
+  if (ret < 0)
+    ret = -errno;
+  if (ret == -EEXIST && !exclusive)
+    ret = 0;
+  if (ret < 0)
+    return ret;
 
   map<std::string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
