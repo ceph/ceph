@@ -1573,13 +1573,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_CLONERANGE:
       {
 	bufferlist::iterator p = osd_op.data.begin();
-	object_t src_oid;
-	try {
-	  ::decode(src_oid, p);
-	} catch (buffer::error& err) {
-	  result = -EINVAL;
-	  break;
-	}
+	object_t& src_oid = osd_op.oid;
 	ObjectContext *sobc = ctx->src_obc[src_oid];
 
 	if (!obs.exists)
