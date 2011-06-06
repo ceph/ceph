@@ -376,7 +376,8 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
   char* newName;
   bufferlist *cur_contents;
 
-  while (seconds_to_run && (g_clock.now() < finish_time)) {
+  while (seconds_to_run && (g_clock.now() < finish_time) &&
+      write_data->finished > data->started) {
     dataLock.Lock();
     while (1) {
       for (slot = 0; slot < concurrentios; ++slot) {
