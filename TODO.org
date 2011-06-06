@@ -1,0 +1,46 @@
+#+FILETAGS: :newdream:teuthology:todo:
+
+* TODO cleanup properly after a run
+for now, you can run something like this:
+dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
+* TODO osd etc killing while test is running
+* TODO automatic host locking
+* TODO add task for kclient mount/umount task
+- kclient: [client.0]
+* TODO add task for rbd activation on cluster
+- rbd.activate:
+- rbd.activate: [client.0]
+* TODO add task for rbd image creation
+- rbd.create_image: [client.0]
+- rbd.create_image:
+    client.0:
+      image_size: 8192
+* TODO add task for rbd modprobe and dev create on client
+- rbd.modprobe: [client.0]
+- rbd.dev_create: [client.0]
+* TODO add task for mounting fs on top of rbd
+- rbd.mkfs: [client.0]
+- rbd.mount: [client.0]
+* TODO add full service rbd task that wraps the lower-level tasks
+- rbd:
+- rbd: [client.0]
+- rbd:
+    client.0:
+      image_size: 8192
+* TODO make cfuse task default to all clients
+- cfuse: [client.0]
+- cfuse:
+* TODO make kclient task default to all clients
+- kclient: [client.0]
+- kclient:
+* TODO more than one autotest task call
+- autotest:
+    client.0: [dbench, bonnie]
+- autotest:
+    client.0: [dbench, bonnie]
+* TODO MAYBE more defaults for autotest task, so you don't need to list all clients?
+- autotest:
+    default: dbench
+    client.42: [dbench, bonnie]
+- autotest: dbench
+- autotest: [dbench, bonnie]

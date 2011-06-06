@@ -12,6 +12,15 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def task(ctx, config):
+    """
+    Set up and tear down a Ceph cluster.
+
+    For example::
+
+        tasks:
+        - ceph:
+        - interactive:
+    """
     assert config is None
 
     log.info('Checking for old test directory...')

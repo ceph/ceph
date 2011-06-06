@@ -8,6 +8,23 @@ from orchestra import run
 log = logging.getLogger(__name__)
 
 def task(ctx, config):
+    """
+    Run an autotest test on the ceph cluster.
+
+    Only autotest client tests are supported.
+
+    The config is a mapping from role name to list of tests to run on
+    that client.
+
+    For example::
+
+        tasks:
+        - ceph:
+        - cfuse: [client.0, client.1]
+        - autotest:
+            client.0: [dbench]
+            client.1: [bonnie]
+    """
     assert isinstance(config, dict)
 
     log.info('Setting up autotest...')

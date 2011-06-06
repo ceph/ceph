@@ -9,6 +9,18 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def task(ctx, config):
+    """
+    Mount/unmount a ``cfuse`` client.
+
+    The config is expected to be a list of clients to do this
+    operation on. This lets you e.g. set up one client with ``cfuse``
+    and another with ``kclient``.
+
+        tasks:
+        - ceph:
+        - cfuse: [client.0]
+        - interactive:
+    """
     log.info('Mounting cfuse clients...')
     assert isinstance(config, list), \
         "task fuse automatic configuration not supported yet, list all clients"
