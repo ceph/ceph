@@ -72,7 +72,7 @@ struct ObjectOperation {
     ops[s].op.clonerange.offset = off;
     ops[s].op.clonerange.length = len;
     ops[s].op.clonerange.src_offset = srcoff;
-    ::encode(srcoid, ops[s].data);
+    ops[s].oid = srcoid;
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     int s = ops.size();
