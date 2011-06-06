@@ -329,7 +329,7 @@ struct ceph_osd_request_head {
     for (unsigned i = 0; i < ops.size(); i++) {
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
 	bufferlist t;
-	ops[i].data.substr_of(t, off, ops[i].op.payload_len);
+	t.substr_of(data, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
         if (t.length()) {
 	  bufferlist::iterator p = t.begin();

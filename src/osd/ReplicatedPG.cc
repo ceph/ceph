@@ -1585,11 +1585,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_CLONERANGE:
       {
 	bufferlist::iterator p = osd_op.data.begin();
-	ObjectContext *sobc = ctx->src_obc[osd_op.soid];
 
 	if (!obs.exists)
 	  t.touch(coll, obs.oi.soid);
-	t.clone_range(coll, sobc->obs.oi.soid, obs.oi.soid,
+	t.clone_range(coll, osd_op.soid, obs.oi.soid,
 		      op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);
 	// fix up accounting
 	uint64_t endoff = op.clonerange.offset + op.clonerange.length;
