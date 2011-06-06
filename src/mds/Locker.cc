@@ -1124,7 +1124,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   mut->xlocks.erase(lock);
   mut->locks.erase(lock);
   
-  bool do_issue = true;
+  bool do_issue = false;
 
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
