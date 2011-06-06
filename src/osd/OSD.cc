@@ -5097,11 +5097,11 @@ void OSD::handle_op(MOSDOp *op)
     for (vector<OSDOp>::const_iterator p = op->ops.begin();
 	 p != op->ops.end();
 	 ++p) {
-      if (p->oid.name.length() == 0)
+      if (p->soid.oid.name.length() == 0)
 	continue;
-      sobject_t soid(p->oid, CEPH_NOSNAP);
-      if (pg->is_missing_object(soid)) {
-	pg->wait_for_missing_object(soid, op);
+      sobject_t head(p->soid.oid, CEPH_NOSNAP);
+      if (pg->is_missing_object(head)) {
+	pg->wait_for_missing_object(head, op);
 	pg->unlock();
 	return;
       }
@@ -5355,7 +5355,7 @@ int OSD::init_op_flags(MOSDOp *op)
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
 
     // set READ flag if there are src_oids
-    if (iter->oid.name.length())
+    if (iter->soid.oid.name.length())
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
 
     // set PGOP flag if there are PG ops

@@ -467,14 +467,26 @@ void ReplicatedPG::do_op(MOSDOp *op)
   dout(10) << "do_op mode now " << mode << dendl;
 
   // src_oids
-  map<object_t,ObjectContext*> src_obc;
+  map<sobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     OSDOp& osd_op = *p;
-    if (osd_op.oid.name.length()) {
-      if (!src_obc.count(osd_op.oid)) {
+    if (osd_op.soid.oid.name.length()) {
+      if (!src_obc.count(osd_op.soid)) {
 	ObjectContext *sobc;
 	snapid_t ssnapid;
-	int r = find_object_context(osd_op.oid, op->get_object_locator(), CEPH_NOSNAP, &sobc, false, &ssnapid);
+	int r = find_object_context(osd_op.soid.oid, op->get_object_locator(), osd_op.soid.snap,
+				    &sobc, false, &ssnapid);
+	if (r == -EAGAIN) {
+	  // If we're not the primary of this OSD, and we have
+	  // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
+	  // we have to wait for the object.
+	  if (is_primary() || (!(op->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
+	    // missing the specific snap we need; requeue and wait.
+	    sobject_t soid(osd_op.soid.oid, ssnapid);
+	    wait_for_missing_object(soid, op);
+	    return;
+	  }
+	}
 	if (r) {
 	  osd->reply_op_error(op, r);
 	  return;
@@ -482,12 +494,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	if (sobc->obs.oi.oloc.key != obc->obs.oi.oloc.key &&
 	    sobc->obs.oi.oloc.key != obc->obs.oi.soid.oid.name &&
 	    sobc->obs.oi.soid.oid.name != obc->obs.oi.oloc.key) {
-	  dout(1) << " src_oid " << osd_op.oid << " oloc " << sobc->obs.oi.oloc << " != "
+	  dout(1) << " src_oid " << osd_op.soid << " oloc " << sobc->obs.oi.oloc << " != "
 		  << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
 	  osd->reply_op_error(op, -EINVAL);
 	  return;
 	}
-	src_obc[osd_op.oid] = sobc;
+	src_obc[osd_op.soid] = sobc;
       }
     }
   }
@@ -1573,8 +1585,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_CLONERANGE:
       {
 	bufferlist::iterator p = osd_op.data.begin();
-	object_t& src_oid = osd_op.oid;
-	ObjectContext *sobc = ctx->src_obc[src_oid];
+	ObjectContext *sobc = ctx->src_obc[osd_op.soid];
 
 	if (!obs.exists)
 	  t.touch(coll, obs.oi.soid);
@@ -3029,9 +3040,9 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   }
 }
 
-void ReplicatedPG::put_object_contexts(map<object_t,ObjectContext*>& obcv)
+void ReplicatedPG::put_object_contexts(map<sobject_t,ObjectContext*>& obcv)
 {
-  for (map<object_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
+  for (map<sobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
     put_object_context(p->second);
   obcv.clear();
 }

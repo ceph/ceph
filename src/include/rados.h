@@ -400,7 +400,6 @@ struct ceph_osd_op {
 		struct {
 			__le64 offset, length;
 			__le64 src_offset;
-			__u8 src_oid_idx;
 		} __attribute__ ((packed)) clonerange;
 };
 	__le32 payload_len;

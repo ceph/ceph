@@ -174,8 +174,10 @@ public:
 
     for (unsigned i = 0; i < ops.size(); i++) {
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	ops[i].op.payload_len = ops[i].oid.name.length();
-	data.append(ops[i].oid.name);
+	bufferlist bl;
+	::encode(ops[i].soid, bl);
+	ops[i].op.payload_len = bl.length();
+	data.append(bl);
       } else {
 	ops[i].op.payload_len = ops[i].data.length();
 	data.append(ops[i].data);
@@ -329,8 +331,10 @@ struct ceph_osd_request_head {
 	bufferlist t;
 	ops[i].data.substr_of(t, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
-        if (t.length())
-	  oid.name = t.c_str();
+        if (t.length()) {
+	  bufferlist::iterator p = t.begin();
+	  ::decode(ops[i].soid, p);
+	}
       } else {
 	ops[i].data.substr_of(data, off, ops[i].op.payload_len);
 	off += ops[i].op.payload_len;
