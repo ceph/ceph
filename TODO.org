@@ -3,6 +3,7 @@
 * TODO cleanup properly after a run
 for now, you can run something like this:
 dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
+* TODO results gathering
 * TODO osd etc killing while test is running
 * TODO automatic host locking
 * TODO add task for kclient mount/umount task
