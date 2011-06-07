@@ -136,6 +136,10 @@ public:
   bool xlock_start(SimpleLock *lock, MDRequest *mut);
   void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
 
+  void xlock_export(SimpleLock *lock, Mutation *mut);
+  void xlock_import(SimpleLock *lock, Mutation *mut);
+
+
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);

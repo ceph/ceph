@@ -1174,6 +1174,29 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   }
 }
 
+void Locker::xlock_export(SimpleLock *lock, Mutation *mut)
+{
+  dout(10) << "xlock_export on " << *lock << " " << *lock->get_parent() << dendl;
+
+  lock->put_xlock();
+  mut->xlocks.erase(lock);
+  mut->locks.erase(lock);
+
+  MDSCacheObject *p = lock->get_parent();
+  assert(p->state_test(CInode::STATE_AMBIGUOUSAUTH));  // we are exporting this (inode)
+
+  if (!lock->is_stable())
+    lock->get_parent()->auth_unpin(lock);
+
+  lock->set_state(LOCK_LOCK);
+}
+
+void Locker::xlock_import(SimpleLock *lock, Mutation *mut)
+{
+  dout(10) << "xlock_import on " << *lock << " " << *lock->get_parent() << dendl;
+  lock->get_parent()->auth_pin(lock);
+}
+
 
 
 // file i/o -----------------------------------------

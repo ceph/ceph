@@ -5377,9 +5377,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
 	    i !=  mdr->xlocks.end();
 	    ++i)
-	  if (!(*i)->is_locallock() &&
-	      (*i)->get_parent() == destdnl->get_inode())
-	    destdnl->get_inode()->auth_pin(*i);
+	  if ((*i)->get_parent() == destdnl->get_inode() &&
+	      !(*i)->is_locallock())
+	    mds->locker->xlock_import(*i, mdr);
       }
       
       // hack: fix auth bit
@@ -5687,30 +5687,18 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       list<Context*> finished;
 
+      CInode *in = destdnl->get_inode();
+
       // drop our pins
       // we exported, clear out any xlocks that we moved to another MDS
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
-      while(i != mdr->xlocks.end()) {
-        SimpleLock *lock = *i;
-        assert(lock->get_parent() == destdnl->inode ||
-               lock->get_parent() == srcdn);
-        /* if that assert fails then this unlocking code isn't
-         * intelligent enough. */
-        lock->put_xlock();
-        if((!lock->is_stable() &&
-            lock->get_sm()->states[lock->get_next_state()].next == 0) &&
-            !lock->is_locallock()) {
-          dout(20) << "removing lock " << lock << ", will be stable, unpinning" << dendl;
-          lock->get_parent()->auth_unpin(lock);
-        } else if (!lock->is_stable()) {
-          dout(5) << "erasing unstable lock " << lock << lock->get_type()
-                  << " on " << *lock->get_parent() << " without removing pins!"
-                  << dendl;
-        } else {
-          dout(20) << "removing lock " << lock << dendl;
-        }
-        mdr->xlocks.erase(i++);
-        mdr->locks.erase(lock);
+      while (i != mdr->xlocks.end()) {
+        SimpleLock *lock = *i++;
+
+	// we only care about xlocks on the exported inode
+	if (lock->get_parent() == in &&
+	    !lock->is_locallock())
+	  mds->locker->xlock_export(lock, mdr);
       }
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
