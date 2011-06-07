@@ -467,9 +467,10 @@ editpaths = sed \
 	-e 's|@libdir[@]|$(libdir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
-	-e 's|@prefix[@]|$(prefix)|g'
+	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
+init-ceph mkcephfs cdebugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile cdebugpack.in ceph-coverage.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -481,13 +482,15 @@ sbin_SCRIPTS += mkcephfs
 
 bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
+bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
-	sample.fetch_config
+	sample.fetch_config \
+	ceph-coverage
 
 ##
 
@@ -508,6 +511,11 @@ if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops
 endif
 
+if ENABLE_COVERAGE
+AM_CFLAGS += -fprofile-arcs -ftest-coverage
+AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
+EXTRALIBS += -lgcov
+endif
 
 noinst_LIBRARIES = \
 	libcommon.a \
@@ -524,6 +532,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
 	$(srcdir)/cdebugpack.in \
+	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/crbdnamer \
@@ -580,7 +589,7 @@ common/version.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
-	-rm *.so
+	-rm *.so *.gcno *.gcda
 
 # libs
 libcommon_a_SOURCES = \
@@ -1122,12 +1131,34 @@ if WITH_RADOSGW
 all_sources += $(librgw_SOURCES)
 endif
 
-install-data-local:
+if ENABLE_COVERAGE
+COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
+COV_FILES = $(srcdir)/*.gcno
+endif
+
+install-coverage:
+if ENABLE_COVERAGE
+	-mkdir -p $(COV_DIR)
+	-$(INSTALL_DATA) $(COV_FILES) $(COV_DIR)
+endif
+
+uninstall-coverage:
+if ENABLE_COVERAGE
+	-rm $(COV_DIR)/*.gcno
+	-rmdir -p $(COV_DIR)
+endif
+
+check-coverage:
+if ENABLE_COVERAGE
+	-test/coverage.sh -d $(srcdir) -o check-coverage make check
+endif
+
+install-data-local: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
-uninstall-local:
+uninstall-local: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp

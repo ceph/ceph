@@ -58,6 +58,7 @@ crush/CrushWrapper_wrap.cxx
 /cconf
 /cdebugpack
 /cephfs
+/ceph-coverage
 /dumpjournal
 /gceph
 /init-ceph

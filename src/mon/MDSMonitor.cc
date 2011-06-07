@@ -561,9 +561,17 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       m->cmd.erase(m->cmd.begin());
       if (m->cmd[0] == "*") {
 	m->cmd.erase(m->cmd.begin()); //and now we're done with the target num
+	r = -ENOENT;
 	for (unsigned i = 0; i < mdsmap.get_max_mds(); ++i) {
-	  if (mdsmap.is_active(i))
+	  if (mdsmap.is_active(i)) {
 	    mon->send_command(mdsmap.get_inst(i), m->cmd, paxos->get_version());
+	    r = 0;
+	  }
+	}
+	if (r == -ENOENT) {
+	  ss << "no mds active";
+	} else {
+	  ss << "ok";
 	}
       } else {
 	errno = 0;
@@ -1170,4 +1178,16 @@ void MDSMonitor::do_stop()
   propose_pending();
   if (propose_osdmap)
     mon->osdmon()->propose_pending();
+}
+
+void MDSMonitor::send_exits()
+{
+  vector<string> cmd;
+  cmd.push_back("exit");
+  cmd.push_back("immediately");
+  for (unsigned i = 0; i < mdsmap.get_max_mds(); ++i) {
+    if (mdsmap.is_active(i)) {
+      mon->send_command(mdsmap.get_inst(i), cmd, paxos->get_version());
+    }
+  }
 }

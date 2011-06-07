@@ -8,6 +8,8 @@
 *.dsc
 *.changes
 ./config.*
+*.gcda
+*.gcov
 *.gcno
 .deps
 web/*.html
