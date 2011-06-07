@@ -462,9 +462,10 @@ editpaths = sed \
 	-e 's|@libdir[@]|$(libdir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
-	-e 's|@prefix[@]|$(prefix)|g'
+	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
+init-ceph mkcephfs cdebugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile cdebugpack.in ceph-coverage.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -476,13 +477,15 @@ sbin_SCRIPTS += mkcephfs
 
 bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
+bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
-	sample.fetch_config
+	sample.fetch_config \
+	ceph-coverage
 
 ##
 
@@ -524,6 +527,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
 	$(srcdir)/cdebugpack.in \
+	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/crbdnamer \
