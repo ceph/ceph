@@ -5076,6 +5076,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
   CInode *srci = srcdnl->get_inode();
+  CInode *oldin = destdnl->get_inode();
 
   // primary+remote link merge?
   bool linkmerge = (srci == destdnl->get_inode() &&
@@ -5106,15 +5107,16 @@ void Server::_rename_prepare(MDRequest *mdr,
       assert(straydn);  // moving to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
-	tpi = destdnl->get_inode()->project_inode(); //project_snaprealm
+	tpi = oldin->project_inode(); //project_snaprealm
 	tpi->version = straydn->pre_dirty(tpi->version);
       }
-      straydn->push_projected_linkage(destdnl->get_inode());
+      if (straydn->is_auth())
+	straydn->push_projected_linkage(oldin);
     } else if (destdnl->is_remote()) {
       // nlink-- targeti
-      if (destdnl->get_inode()->is_auth()) {
-	tpi = destdnl->get_inode()->project_inode();
-	tpi->version = destdnl->get_inode()->pre_dirty();
+      if (oldin->is_auth()) {
+	tpi = oldin->project_inode();
+	tpi->version = oldin->pre_dirty();
       }
     }
   }
@@ -5133,8 +5135,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     } else {
       dout(10) << " will merge remote onto primary link" << dendl;
       if (destdn->is_auth()) {
-	pi = destdnl->get_inode()->project_inode();
-	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdnl->get_inode()->inode.version);
+	pi = oldin->project_inode();
+	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->inode.version);
       }
     }
   } else {
@@ -5175,10 +5177,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   
   // sub off target
   if (destdn->is_auth() && !destdnl->is_null()) {
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), destdn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, metablob, oldin, destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
     if (destdnl->is_primary())
-      mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(),
+      mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   
@@ -5200,16 +5202,16 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (destdn->is_auth()) {
 	// project snaprealm, too
 	bufferlist snapbl;
-	destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-	straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
-	tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
+	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+	straydn->first = MAX(oldin->first, next_dest_snap);
+	tji = metablob->add_primary_dentry(straydn, true, oldin, 0, &snapbl);
       }
     } else if (destdnl->is_remote()) {
-      if (destdnl->get_inode()->is_auth()) {
+      if (oldin->is_auth()) {
 	// auth for targeti
-	metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
-	mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
-	tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode());
+	metablob->add_dir_context(oldin->get_parent_dir());
+	mdcache->journal_cow_dentry(mdr, metablob, oldin->parent, CEPH_NOSNAP, 0, destdnl);
+	tji = metablob->add_primary_dentry(oldin->parent, true, oldin);
       }
       if (destdn->is_auth()) {
 	// auth for dn, not targeti
@@ -5311,7 +5313,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 		    (srcdnl->is_primary() || destdnl->is_primary()));
 
   // target inode
-  if (!linkmerge && oldin) {
+  if (!linkmerge) {
     if (destdnl->is_primary()) {
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
@@ -5325,7 +5327,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
 
       // nlink-- targeti
-      if (oldin->is_auth()) {
+      if (destdn->is_auth()) {
 	bool hadrealm = (oldin->snaprealm ? true : false);
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
 	if (oldin->snaprealm && !hadrealm)
@@ -5334,7 +5336,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	// FIXME this snaprealm is not filled out correctly
 	//oldin->open_snaprealm();  might be sufficient..	
       }
-    } else {
+    } else if (destdnl->is_remote()) {
       destdn->get_dir()->unlink_inode(destdn);
     }
   }
