@@ -1154,6 +1154,10 @@ void Client::encode_cap_releases(MetaRequest *req, int mds) {
     encode_inode_release(req->old_inode, req,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
+  if (req->other_inode_drop && req->other_inode)
+    encode_inode_release(req->other_inode, req,
+			 mds, req->other_inode_drop,
+			 req->other_inode_unless);
   
   if (req->dentry_drop && req->dentry)
     encode_dentry_release(req->dentry, req,
