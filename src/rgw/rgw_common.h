@@ -19,6 +19,7 @@
 #include "common/debug.h"
 #include "fcgiapp.h"
 
+#include <errno.h>
 #include <string.h>
 #include <string>
 #include <map>
@@ -454,6 +455,41 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
   for (i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
+}
+
+static inline int hexdigit(char c)
+{
+  if (c >= '0' && c <= '9')
+    return (c - '0');
+  c = toupper(c);
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 0xa;
+  return -EINVAL;
+}
+
+static inline int hex_to_buf(const char *hex, char *buf, int len)
+{
+  int i = 0;
+  const char *p = hex;
+  while (*p) {
+    if (i >= len)
+      return -EINVAL;
+    buf[i] = 0;
+    int d = hexdigit(*p);
+    if (d < 0)
+      return d;
+    buf[i] = d << 4;
+    p++;
+    if (!*p)
+      return -EINVAL;
+    d = hexdigit(*p);
+    if (d < 0)
+      return -d;
+    buf[i] += d;
+    i++;
+    p++;
+  }
+  return i;
 }
 
 static inline int rgw_str_to_bool(const char *s, int def_val)

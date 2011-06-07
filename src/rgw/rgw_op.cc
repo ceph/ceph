@@ -922,6 +922,12 @@ void RGWCompleteMultipart::execute()
   map<string, bufferlist> attrs;
   off_t ofs = 0;
   string prefix;
+  MD5 hash;
+  char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  bufferlist etag_bl;
+
+
 
   ret = get_params();
   if (ret < 0)
@@ -956,12 +962,15 @@ void RGWCompleteMultipart::execute()
   ret = get_multiparts_info(s, obj, obj_parts, policy, attrs);
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_UPLOAD;
+  if (parts->parts.size() != obj_parts.size())
+    ret = -ERR_INVALID_PART;
   if (ret < 0)
     goto done;
 
   for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
-       iter != parts->parts.end();
+       iter != parts->parts.end() && obj_iter != obj_parts.end();
        ++iter, ++obj_iter) {
+    char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     if (iter->first != (int)obj_iter->first) {
       RGW_LOG(0) << "parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
       ret = -ERR_INVALID_PART;
@@ -972,7 +981,20 @@ void RGWCompleteMultipart::execute()
       ret = -ERR_INVALID_PART;
       goto done;
     }
+
+    hex_to_buf(obj_iter->second.etag.c_str(), etag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    hash.Update((const byte *)etag, sizeof(etag));
   }
+  hash.Final((byte *)final_etag);
+
+  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
+  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
+           "-%lld", (long long)parts->parts.size());
+  RGW_LOG(0) << "calculated etag: " << final_etag_str << dendl;
+
+  etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
+
+  attrs[RGW_ATTR_ETAG] = etag_bl;
 
   ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, s->object_str, NULL, attrs, false);
   if (ret < 0)
@@ -981,10 +1003,11 @@ void RGWCompleteMultipart::execute()
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     obj = prefix;
     char buf[16];
-    snprintf(buf, 16, "%d", obj_iter->second.num);
+    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
     obj.append(buf);
     rgwstore->clone_range(s->bucket_str, s->object_str, ofs, obj, 0, obj_iter->second.size, s->object_str);
     ofs += obj_iter->second.size;
+
   }
 
 done:
