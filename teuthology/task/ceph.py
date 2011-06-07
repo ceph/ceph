@@ -4,8 +4,10 @@ import contextlib
 import logging
 import os
 import gevent
+import tarfile
 
 from teuthology import misc as teuthology
+from teuthology import safepath
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -421,3 +423,122 @@ def task(ctx, config):
         for id_, proc in mon_daemons.iteritems():
             proc.stdin.close()
         run.wait(mon_daemons.itervalues())
+
+        log.info('Removing uninteresting files...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '--',
+                    '/tmp/cephtest/binary',
+                    '/tmp/cephtest/class_tmp',
+                    '/tmp/cephtest/daemon-helper',
+                    '/tmp/cephtest/ceph.conf',
+                    '/tmp/cephtest/ceph.keyring',
+                    '/tmp/cephtest/temp.keyring',
+                    '/tmp/cephtest/data',
+                    ],
+                wait=False,
+                ),
+            )
+
+        if ctx.archive is not None:
+            os.mkdir(ctx.archive)
+
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'find',
+                        '/tmp/cephtest/log',
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'bzip2',
+                        '-9',
+                        '--',
+                        ],
+                    wait=False,
+                    ),
+                )
+
+            log.info('Transferring logs...')
+            for logtype in ['log', 'profiling-logger']:
+                logdir = os.path.join(ctx.archive, logtype)
+                os.mkdir(logdir)
+                for remote in ctx.cluster.remotes.iterkeys():
+                    path = os.path.join(logdir, remote.shortname)
+                    os.mkdir(path)
+                    log.debug('Transferring logs for %s from %s to %s', remote.shortname, logtype, path)
+                    proc = remote.run(
+                        args=[
+                            'tar',
+                            'c',
+                            '-f', '-',
+                            '-C', '/tmp/cephtest',
+                            '-C', logtype,
+                            '--',
+                            '.',
+                            ],
+                        stdout=run.PIPE,
+                        wait=False,
+                        )
+                    tar = tarfile.open(mode='r|', fileobj=proc.stdout)
+                    while True:
+                        ti = tar.next()
+                        if ti is None:
+                            break
+
+                        if ti.isdir():
+                            # ignore silently; easier to just create leading dirs below
+                            pass
+                        elif ti.isfile():
+                            sub = safepath.munge(ti.name)
+                            safepath.makedirs(root=path, path=os.path.dirname(sub))
+                            tar.makefile(ti, targetpath=os.path.join(path, sub))
+                        else:
+                            if ti.isdev():
+                                type_ = 'device'
+                            elif ti.issym():
+                                type_ = 'symlink'
+                            elif ti.islnk():
+                                type_ = 'hard link'
+                            else:
+                                type_ = 'unknown'
+                            log.info('Ignoring tar entry: %r type %r', ti.name, type_)
+                            continue
+                    proc.exitstatus.get()
+
+        log.info('Removing log files...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '--',
+                    '/tmp/cephtest/log',
+                    '/tmp/cephtest/profiling-logger',
+                    ],
+                wait=False,
+                ),
+            )
+
+        log.info('Tidying up after the test...')
+        # if this fails, one of the above cleanups is flawed; don't
+        # just cram an rm -rf here
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'rmdir',
+                    '--',
+                    '/tmp/cephtest',
+                    ],
+                wait=False,
+                ),
+            )
