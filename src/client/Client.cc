@@ -6219,26 +6219,30 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   todir->make_nosnap_relative_path(to);
   to.push_dentry(toname);
   req->set_filepath(to);
-  req->inode = fromdir;
   req->set_filepath2(from);
-  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
-  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   int res = get_or_create(fromdir, fromname, &req->old_dentry);
   if (res < 0)
     return res;
+  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
+
   res = get_or_create(todir, toname, &req->dentry);
   if (res < 0)
     return res;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
   res = _lookup(fromdir, fromname, &req->old_inode);
   if (res < 0)
     return res;
-  res = _lookup(todir, toname, &req->inode);
-  
+  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+
+  res = _lookup(todir, toname, &req->other_inode);
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  req->inode = fromdir;
+
   res = make_request(req, uid, gid);
 
   dout(10) << "rename result is " << res << dendl;
