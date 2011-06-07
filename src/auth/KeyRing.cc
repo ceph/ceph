@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <errno.h>
@@ -138,36 +138,13 @@ void KeyRing::encode_plaintext(bufferlist& bl)
 void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 {
   int ret;
-
-  bufferlist::iterator iter = bli;
-
-  // find out the size of the buffer
-  char c;
-  int len = 0;
-  try {
-    do {
-      ::decode(c, iter);
-      len++;
-    } while (c);
-  } catch (buffer::error& err) {
-  }
-
-  char *orig_src = new char[len + 1];
-  orig_src[len] = '\0';
-  iter = bli;
-  int i;
-  for (i = 0; i < len; i++) {
-    ::decode(c, iter);
-    orig_src[i] = c;
-  }
-
   bufferlist bl;
-  bl.append(orig_src, len);
+  bli.copy_all(bl);
   ConfFile cf;
   std::deque<std::string> parse_errors;
   if (cf.parse_bufferlist(&bl, &parse_errors) != 0) {
     derr << "cannot parse buffer" << dendl;
-    goto done_err;
+    throw buffer::error();
   }
 
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
@@ -180,7 +157,7 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
     map<string, bufferlist> caps;
     if (!ename.from_str(name)) {
       derr << "bad entity name: " << name << dendl;
-      goto done_err;
+      throw buffer::error();
     }
 
     for (ConfSection::const_line_iter_t l = s->second.lines.begin();
@@ -193,17 +170,10 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
       if (ret < 0) {
         derr << "error setting modifier for [" << name << "] type=" << k
 	     << " val=" << l->val << dendl;
-        goto done_err;
+	throw buffer::error();
       }
     }
   }
-
-  delete[] orig_src;
-  return;
-
-done_err:
-  delete[] orig_src;
-  throw buffer::error();
 }
 
 void KeyRing::decode(bufferlist::iterator& bl) {
