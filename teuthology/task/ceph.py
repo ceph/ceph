@@ -52,7 +52,6 @@ def task(ctx, config):
                 '/tmp/cephtest/log',
                 '/tmp/cephtest/profiling-logger',
                 '/tmp/cephtest/data',
-                '/tmp/cephtest/class_tmp',
                 ],
             wait=False,
             )
@@ -432,7 +431,6 @@ def task(ctx, config):
                     '-rf',
                     '--',
                     '/tmp/cephtest/binary',
-                    '/tmp/cephtest/class_tmp',
                     '/tmp/cephtest/daemon-helper',
                     '/tmp/cephtest/ceph.conf',
                     '/tmp/cephtest/ceph.keyring',

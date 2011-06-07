@@ -5,9 +5,6 @@
 * TODO automatic host locking
 * TODO add task for kclient mount/umount task
 - kclient: [client.0]
-* TODO add task for rbd activation on cluster
-- rbd.activate:
-- rbd.activate: [client.0]
 * TODO add task for rbd image creation
 - rbd.create_image: [client.0]
 - rbd.create_image:
