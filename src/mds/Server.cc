@@ -5177,8 +5177,9 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(),
-				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    if (destdnl->is_primary())
+      mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(),
+					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   
   // move srcdn
