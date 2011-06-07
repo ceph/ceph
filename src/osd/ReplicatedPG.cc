@@ -378,6 +378,12 @@ void ReplicatedPG::calc_trim_to()
   }
 }
 
+ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
+  PG(o, _pool, p, oid, ioid), snap_trimmer_machine(this)
+{ 
+  snap_trimmer_machine.initiate();
+}
+
 /** do_op - do an op
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
@@ -755,8 +761,12 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
 {
   // load clone info
   bufferlist bl;
-  ObjectContext *obc;
+  ObjectContext *obc = 0;
   int r = find_object_context(coid.oid, OLOC_BLANK, sn, &obc, false, NULL);
+  if (r == -ENOENT || coid.snap != obc->obs.oi.soid.snap) {
+    if (obc) put_object_context(obc);
+    return 0;
+  }
   assert(r == 0);
   assert(obc->registered);
   object_info_t &coi = obc->obs.oi;
@@ -890,118 +900,47 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
 bool ReplicatedPG::snap_trimmer()
 {
   lock();
-  if (!(is_primary() && is_clean() && is_active() && !finalizing_scrub)) {
+  dout(10) << "snap_trimmer entry" << dendl;
+  entity_inst_t nobody;
+  if (!mode.try_write(nobody)) {
+    dout(10) << " can't write, requeueing" << dendl;
+    queue_snap_trim();
     unlock();
     return true;
+    /*
+    Cond cond;
+    list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
+    while (!mode.try_write(nobody))
+      cond.Wait(_lock);
+    mode.waiting_cond.erase(q);
+    dout(10) << " done waiting" << dendl;
+    if (!(current_set_started == info.history.last_epoch_started &&
+	  is_active())) {
+      break;
+    }
+    */
   }
 
-  epoch_t current_set_started = info.history.last_epoch_started;
-  snapid_t sn;
-  coll_t c;
-  vector<sobject_t> ls;
+  if (!finalizing_scrub) {
+    dout(10) << "snap_trimmer posting" << dendl;
+    snap_trimmer_machine.process_event(SnapTrim());
+  }
 
-  while (current_set_started == info.history.last_epoch_started &&
-	 is_active() &&
-	 get_obs_to_trim(sn, c, ls)) {
-
-    if (ls.empty()) {
-      // adjust pg info
-      info.purged_snaps.insert(sn);
-      snap_trimq.erase(sn);
-      dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
-      continue;
-    }
-    dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
-
-    for (vector<sobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
-      const sobject_t& coid = *p;
-
-      entity_inst_t nobody;
-      if (!mode.try_write(nobody)) {
-	dout(10) << " can't write, waiting" << dendl;
-	Cond cond;
-	list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
-	while (!mode.try_write(nobody))
-	  cond.Wait(_lock);
-	mode.waiting_cond.erase(q);
-	dout(10) << " done waiting" << dendl;
-	if (!(current_set_started == info.history.last_epoch_started &&
-	      is_active())) {
-	  break;
-	}
-      }
-
-      RepGather *repop = trim_object(coid, sn);
-      eversion_t old_last_update = log.head;
-      bool old_exists = repop->obc->obs.exists;
-      uint64_t old_size = repop->obc->obs.oi.size;
-      eversion_t old_version = repop->obc->obs.oi.version;
-
-      log_op(repop->ctx->log, eversion_t(), repop->ctx->local_t);
-
-      issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
-
-      eval_repop(repop);
-      put_object_context(repop->obc);
-      repop->put();
-
-      //int tr = osd->store->queue_transaction(&osr, t);
-      //assert(tr == 0);
-
-      // give other threads a chance at this pg
-      unlock();
-      lock();
-
-      if (finalizing_scrub) {
-	unlock();
-	return true;
-      }
-
-      if (!(current_set_started == info.history.last_epoch_started &&
-	    is_active())) {
-	break;
-      }
-    }
-
-    // adjust pg info
-    info.purged_snaps.insert(sn);
-    snap_trimq.erase(sn);
-    dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
- 
-    // remove snap collection
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    dout(10) << "removing snap " << sn << " collection " << c << dendl;
-    snap_collections.erase(sn);
-    write_info(*t);
-    t->remove_collection(c);
-    int tr = osd->store->queue_transaction(&osr, t);
-    assert(tr == 0);
-
- 
+  if (snap_trimmer_machine.need_share_pg_info) {
+    dout(10) << "snap_trimmer share_pg_info" << dendl;
+    snap_trimmer_machine.need_share_pg_info = false;
     unlock();
     osd->map_lock.get_read();
     lock();
     share_pg_info();
-    unlock();
     osd->map_lock.put_read();
+  }
 
-    // flush, to make sure the collection adjustments we just made are
-    // reflected when we scan the next collection set.
-    osd->store->flush();
-    lock();
+  if (snap_trimmer_machine.requeue) {
+    dout(10) << "snap_trimmer requeue" << dendl;
+    queue_snap_trim();
+  }
 
-    if (finalizing_scrub) {
-      return true;
-    }
-  }  
-
-  // done
-  dout(10) << "snap_trimmer done" << dendl;
-
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  write_info(*t);
-  int tr = osd->store->queue_transaction(&osr, t);
-  assert(tr == 0);
   unlock();
   return true;
 }
@@ -2727,6 +2666,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty()) {
     calc_min_last_complete_ondisk();
 
+    // kick snap_trimmer if necessary
+    if (repop->queue_snap_trimmer) {
+      queue_snap_trim();
+    }
+
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
     dout(20) << "   q front is " << *repop_queue.front() << dendl; 
@@ -4321,7 +4265,7 @@ void ReplicatedPG::on_change()
   pull_from_peer.clear();
 
   // clear snap_trimmer state
-  snap_trimmer_machine.process_event(SnapTrimmer::Reset());
+  snap_trimmer_machine.process_event(Reset());
 }
 
 void ReplicatedPG::on_role_change()
@@ -4876,69 +4820,196 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   return errors;
 }
 
+/*---SnapTrimmer Logging---*/
+#undef dout_prefix
+#define dout_prefix *_dout << pg->gen_prefix() 
+
+void ReplicatedPG::SnapTrimmer::log_enter(const char *state_name)
+{
+  dout(20) << "enter " << state_name << dendl;
+}
+
+void ReplicatedPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_time)
+{
+  dout(20) << "exit " << state_name << dendl;
+}
+
 /*---SnapTrimmer states---*/
 #undef dout_prefix
 #define dout_prefix (*_dout << context< SnapTrimmer >().pg->gen_prefix() \
 		     << "SnapTrimmer state<" << get_state_name() << ">: ")
 
 /* NotTrimming */
-ReplicatedPG::SnapTrimmer::NotTrimming::NotTrimming(my_context ctx) : my_base(ctx)
+ReplicatedPG::NotTrimming::NotTrimming(my_context ctx) : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/NotTrimming";
-  //context< SnapTrimmer >().log_enter(state_name);
+  state_name = "NotTrimming";
+  context< SnapTrimmer >().requeue = false;
+  context< SnapTrimmer >().log_enter(state_name);
 }
 
-void ReplicatedPG::SnapTrimmer::NotTrimming::exit()
+void ReplicatedPG::NotTrimming::exit()
 {
-  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().requeue = true;
+  context< SnapTrimmer >().log_exit(state_name, enter_time);
 }
 
-boost::statechart::result ReplicatedPG::SnapTrimmer::NotTrimming::react(const SnapTrim&)
+boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
 {
-  return discard_event();
-}
+  ReplicatedPG *pg = context< SnapTrimmer >().pg;
+  dout(10) << "NotTrimming react" << dendl;
+  if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
+    dout(10) << "NotTrimming not primary, active, clean" << dendl;
+    return discard_event();
+  } else if (pg->finalizing_scrub) {
+    dout(10) << "NotTrimming finalizing scrub" << dendl;
+    pg->queue_snap_trim();
+    return discard_event();
+  }
 
-/* Trimming */
-ReplicatedPG::SnapTrimmer::Trimming::Trimming(my_context ctx) : my_base(ctx)
-{
-  state_name = "Started/Primary/Active/Trimming";
-  //context< SnapTrimmer >().log_enter(state_name);
-}
+  vector<sobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
+  snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
+  coll_t &col_to_trim = context<SnapTrimmer>().col_to_trim;
+  if (!pg->get_obs_to_trim(snap_to_trim,
+			   col_to_trim,
+			   obs_to_trim)) {
+    // Nothing to trim
+    dout(10) << "NotTrimming: nothing to trim" << dendl;
+    return discard_event();
+  }
 
-void ReplicatedPG::SnapTrimmer::Trimming::exit()
-{
-  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+  if (obs_to_trim.empty()) {
+    // Nothing to actually trim, just update info and try again
+    pg->info.purged_snaps.insert(snap_to_trim);
+    pg->snap_trimq.erase(snap_to_trim);
+    dout(10) << "NotTrimming: obs_to_trim empty!" << dendl;
+    dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
+	     << pg->snap_trimq << dendl;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->remove_collection(col_to_trim);
+    int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
+    assert(r == 0);
+    post_event(SnapTrim());
+    return discard_event();
+  } else {
+    // Actually have things to trim!
+    dout(10) << "NotTrimming: something to trim!" << dendl;
+    return transit< TrimmingObjects >();
+  }
 }
 
 /* TrimmingObjects */
-ReplicatedPG::SnapTrimmer::TrimmingObjects::TrimmingObjects(my_context ctx) : my_base(ctx)
+ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx) : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/Trimming/TrimmingObjects";
-  //context< SnapTrimmer >().log_enter(state_name);
+  state_name = "Trimming/TrimmingObjects";
+  position = context<SnapTrimmer>().obs_to_trim.begin();
+  assert(position != context<SnapTrimmer>().obs_to_trim.end()); // Would not have transitioned if coll empty
+  context< SnapTrimmer >().log_enter(state_name);
 }
 
-void ReplicatedPG::SnapTrimmer::TrimmingObjects::exit()
+void ReplicatedPG::TrimmingObjects::exit()
 {
-  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().log_exit(state_name, enter_time);
 }
 
-boost::statechart::result ReplicatedPG::SnapTrimmer::TrimmingObjects::react(const SnapTrim&)
+boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 {
+  dout(10) << "TrimmingObjects react" << dendl;
+  ReplicatedPG *pg = context< SnapTrimmer >().pg;
+  vector<sobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
+  snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
+  set<RepGather *> &repops = context<SnapTrimmer>().repops;
+
+  // Done, 
+  if (position == obs_to_trim.end()) {
+    post_event(SnapTrim());
+    return transit< WaitingOnReplicas >();
+  }
+
+  dout(10) << "TrimmingObjects react trimming " << *position << dendl;
+  RepGather *repop = pg->trim_object(*position, snap_to_trim);
+
+  if (repop) {
+    repop->queue_snap_trimmer = true;
+    eversion_t old_last_update = pg->log.head;
+    bool old_exists = repop->obc->obs.exists;
+    uint64_t old_size = repop->obc->obs.oi.size;
+    eversion_t old_version = repop->obc->obs.oi.version;
+    
+    pg->log_op(repop->ctx->log, eversion_t(), repop->ctx->local_t);
+    pg->issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
+    pg->eval_repop(repop);
+    
+    repops.insert(repop);
+    ++position;
+  } else {
+    // object has already been trimmed, this is an extra
+    coll_t col_to_trim(pg->info.pgid, snap_to_trim);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->collection_remove(col_to_trim, *position);
+    int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
+    assert(r == 0);
+  }
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
-ReplicatedPG::SnapTrimmer::WaitingOnReplicas::WaitingOnReplicas(my_context ctx) : my_base(ctx)
+ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx) : my_base(ctx)
 {
-  state_name = "Started/Primary/Active/Trimming/WaitingOnReplicas";
-  //context< SnapTrimmer >().log_enter(state_name);
+  state_name = "Trimming/WaitingOnReplicas";
+  context< SnapTrimmer >().log_enter(state_name);
+  context< SnapTrimmer >().requeue = false;
 }
 
-void ReplicatedPG::SnapTrimmer::WaitingOnReplicas::exit()
+void ReplicatedPG::WaitingOnReplicas::exit()
 {
-  //context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().log_exit(state_name, enter_time);
+
+  // Clean up repops in case of reset
+  set<RepGather *> &repops = context<SnapTrimmer>().repops;
+  for (set<RepGather *>::iterator i = repops.begin();
+       i != repops.end();
+       repops.erase(i++)) {
+    (*i)->put();
+  }
 }
 
-boost::statechart::result ReplicatedPG::SnapTrimmer::WaitingOnReplicas::react(const SnapTrim&)
+boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&)
 {
-  return discard_event();
+  // Have all the repops applied?
+  dout(10) << "Waiting on Replicas react" << dendl;
+  ReplicatedPG *pg = context< SnapTrimmer >().pg;
+  set<RepGather *> &repops = context<SnapTrimmer>().repops;
+  for (set<RepGather *>::iterator i = repops.begin();
+       i != repops.end();
+       repops.erase(i++)) {
+    if (!(*i)->applied || !(*i)->waitfor_ack.empty()) {
+      return discard_event();
+    } else {
+      (*i)->put();
+    }
+  }
+
+  // All applied, now to update and share info
+  snapid_t &sn = context<SnapTrimmer>().snap_to_trim;
+  coll_t &c = context<SnapTrimmer>().col_to_trim;
+
+  pg->info.purged_snaps.insert(sn);
+  pg->snap_trimq.erase(sn);
+  dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
+	   << pg->snap_trimq << dendl;
+  
+  // remove snap collection
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  dout(10) << "removing snap " << sn << " collection " << c << dendl;
+  pg->snap_collections.erase(sn);
+  pg->write_info(*t);
+  t->remove_collection(c);
+  int tr = pg->osd->store->queue_transaction(&pg->osr, t);
+  assert(tr == 0);
+
+  context<SnapTrimmer>().need_share_pg_info = true;
+
+  // Back to the start
+  post_event(SnapTrim());
+  return transit< NotTrimming >();
 }
+
