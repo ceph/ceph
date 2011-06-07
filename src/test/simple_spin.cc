@@ -19,6 +19,7 @@ static void* mythread(void *v)
     counter++;
     simple_spin_unlock(&lock);
   }
+  return NULL;
 }
 
 TEST(SimpleSpin, Test1)
@@ -34,5 +35,5 @@ TEST(SimpleSpin, Test1)
   ASSERT_EQ(ret, 0);
   ret = pthread_join(thread2, NULL);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(counter, 2000000);
+  ASSERT_EQ(counter, 2000000U);
 }
