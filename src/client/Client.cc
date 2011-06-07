@@ -6274,11 +6274,11 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
   req->set_filepath(path);
   filepath existing(in->ino);
   req->set_filepath2(existing);
-  req->inode = in;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  req->inode = in;
+  req->inode = dir;
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
   int res = get_or_create(dir, newname, &req->dentry);
   if (res < 0)
     return res;
