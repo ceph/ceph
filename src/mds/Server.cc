@@ -4662,6 +4662,10 @@ void Server::handle_client_rename(MDRequest *mdr)
       reply_request(mdr, -ENOTEMPTY);
       return;
     }
+    if (srci == oldin && !srcdn->get_dir()->inode->is_stray()) {
+      reply_request(mdr, 0);  // no-op.  POSIX makes no sense.
+      return;
+    }
   }
 
   // -- some sanity checks --
@@ -5082,10 +5086,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   bool linkmerge = (srci == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
-  if (linkmerge && !silent) {
-    reply_request(mdr, 0);  // no-op.  POSIX makes no sense.
-    return;
-  }
+
   if (linkmerge)
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
