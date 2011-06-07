@@ -5124,10 +5124,12 @@ void Server::_rename_prepare(MDRequest *mdr,
   // dest
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
+      // destdn
       if (destdn->is_auth()) {
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
         destdn->push_projected_linkage(srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       }
+      // srci
       if (srci->is_auth()) {
 	pi = srci->project_inode();
 	pi->version = srci->pre_dirty();
@@ -5139,7 +5141,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->inode.version);
       }
     }
-  } else {
+  } else { // primary
     if (destdn->is_auth()) {
       version_t oldpv;
       if (srcdn->is_auth())
@@ -5365,7 +5367,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     } else {
       dout(10) << "merging remote onto primary link" << dendl;
     }
-  } else {
+  } else { // primary
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
       destdn->get_dir()->unlink_inode(destdn);
@@ -5396,22 +5398,21 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       }
       
       // hack: fix auth bit
-      destdnl->get_inode()->state_set(CInode::STATE_AUTH);
+      in->state_set(CInode::STATE_AUTH);
       imported_inode = true;
     }
 
     if (destdn->is_auth()) {
-      CInode *desti = destdnl->get_inode();
-      desti->pop_and_dirty_projected_inode(mdr->ls);
+      in->pop_and_dirty_projected_inode(mdr->ls);
 
-      if (desti->is_dir()) {
-	mdr->ls->renamed_files.push_back(&desti->item_renamed_file);
-	if (!desti->state_test(CInode::STATE_DIRTYPARENT)) {
-	  desti->state_set(CInode::STATE_DIRTYPARENT);
-	  desti->get(CInode::PIN_DIRTYPARENT);
-	  dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+      if (in->is_dir()) {
+	mdr->ls->renamed_files.push_back(&in->item_renamed_file);
+	if (!in->state_test(CInode::STATE_DIRTYPARENT)) {
+	  in->state_set(CInode::STATE_DIRTYPARENT);
+	  in->get(CInode::PIN_DIRTYPARENT);
+	  dout(10) << "added dir to logsegment renamed_files list " << *in << dendl;
 	} else {
-	  dout(10) << "re-added dir to logsegment renamed_files list " << *desti << dendl;
+	  dout(10) << "re-added dir to logsegment renamed_files list " << *in << dendl;
 	}
       }
     } else {
@@ -5429,8 +5430,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   mdr->apply();
 
   // update subtree map?
-  if (destdnl->is_primary() && destdnl->get_inode()->is_dir()) 
-    mdcache->adjust_subtree_after_rename(destdnl->get_inode(),
+  if (destdnl->is_primary() && in->is_dir()) 
+    mdcache->adjust_subtree_after_rename(in,
                                          srcdn->get_dir(),
                                          imported_inode);
 
