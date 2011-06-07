@@ -44,6 +44,8 @@ def task(ctx, config):
     """
     if config is None:
         config = {}
+    assert isinstance(config, dict), \
+        "task ceph only supports a dictionary for configuration"
 
     flavor = None
     if config.get('coverage'):
@@ -68,6 +70,7 @@ def task(ctx, config):
     if failed:
         raise RuntimeError('Stale jobs detected, aborting.')
 
+    coverage_dir = '/tmp/cephtest/archive/coverage'
     log.info('Creating directories...')
     run.wait(
         ctx.cluster.run(
@@ -78,6 +81,7 @@ def task(ctx, config):
                 '/tmp/cephtest/archive/log',
                 '/tmp/cephtest/archive/profiling-logger',
                 '/tmp/cephtest/data',
+                coverage_dir,
                 ],
             wait=False,
             )
@@ -151,6 +155,8 @@ def task(ctx, config):
     log.info('Setting up mon.0...')
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--create-keyring',
             '/tmp/cephtest/ceph.keyring',
@@ -158,6 +164,8 @@ def task(ctx, config):
         )
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--gen-key',
             '--name=mon.',
@@ -173,6 +181,8 @@ def task(ctx, config):
     log.info('Creating admin key on mon.0...')
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
             '--gen-key',
             '--name=client.admin',
@@ -214,6 +224,8 @@ def task(ctx, config):
     run.wait(
         mons.run(
             args=[
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                coverage_dir,
                 '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
                 '--clobber',
                 '--createsimple', '{num:d}'.format(
@@ -231,6 +243,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cmon',
                     '--mkfs',
                     '-i', id_,
@@ -259,6 +273,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/daemon-helper',
                     '/tmp/cephtest/binary/usr/local/bin/cmon',
                     '-f',
@@ -277,6 +293,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
                     '--create-keyring',
                     '--gen-key',
@@ -291,6 +309,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
                     '--create-keyring',
                     '--gen-key',
@@ -305,6 +325,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
                     '--create-keyring',
                     '--gen-key',
@@ -337,6 +359,8 @@ def task(ctx, config):
             )
         mon0_remote.run(
             args=[
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                coverage_dir,
                 '/tmp/cephtest/binary/usr/local/bin/cauthtool',
                 '/tmp/cephtest/temp.keyring',
                 '--name={type}.{id}'.format(
@@ -347,6 +371,8 @@ def task(ctx, config):
             )
         mon0_remote.run(
             args=[
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                coverage_dir,
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
                 '-c', '/tmp/cephtest/ceph.conf',
                 '-k', '/tmp/cephtest/ceph.keyring',
@@ -364,6 +390,8 @@ def task(ctx, config):
     # TODO where does this belong?
     mon0_remote.run(
         args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/ceph',
             '-c', '/tmp/cephtest/ceph.conf',
             '-k', '/tmp/cephtest/ceph.keyring',
@@ -386,6 +414,8 @@ def task(ctx, config):
                 )
             remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
                     '--mkfs',
                     '-i', id_,
@@ -399,6 +429,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/daemon-helper',
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
                     '-f',
@@ -417,6 +449,8 @@ def task(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
                     '/tmp/cephtest/daemon-helper',
                     '/tmp/cephtest/binary/usr/local/bin/cmds',
                     '-f',
@@ -438,20 +472,32 @@ def task(ctx, config):
     try:
         yield
     finally:
-        log.info('Shutting down mds daemons...')
-        for id_, proc in mds_daemons.iteritems():
-            proc.stdin.close()
-        run.wait(mds_daemons.itervalues())
+        if config.get('coverage'):
+            # need to exit cleanly to trigger atexit coverage data writing
+            mon0_remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/ceph',
+                    '-c', '/tmp/cephtest/ceph.conf',
+                    'all_exit'
+                    ]
+                )
+        else:
+            log.info('Shutting down mds daemons...')
+            for id_, proc in mds_daemons.iteritems():
+                proc.stdin.close()
+            run.wait(mds_daemons.itervalues())
 
-        log.info('Shutting down osd daemons...')
-        for id_, proc in osd_daemons.iteritems():
-            proc.stdin.close()
-        run.wait(osd_daemons.itervalues())
+            log.info('Shutting down osd daemons...')
+            for id_, proc in osd_daemons.iteritems():
+                proc.stdin.close()
+            run.wait(osd_daemons.itervalues())
 
-        log.info('Shutting down mon daemons...')
-        for id_, proc in mon_daemons.iteritems():
-            proc.stdin.close()
-        run.wait(mon_daemons.itervalues())
+            log.info('Shutting down mon daemons...')
+            for id_, proc in mon_daemons.iteritems():
+                proc.stdin.close()
+            run.wait(mon_daemons.itervalues())
 
         log.info('Removing uninteresting files...')
         run.wait(

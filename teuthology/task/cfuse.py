@@ -42,6 +42,8 @@ def task(ctx, config):
             )
         proc = remote.run(
             args=[
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                '/tmp/cephtest/coverage',
                 '/tmp/cephtest/daemon-helper',
                 '/tmp/cephtest/binary/usr/local/bin/cfuse',
                 '-f',
