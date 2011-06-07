@@ -5195,18 +5195,26 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // add it all to the metablob
   // target inode
-  if (!linkmerge && destdn->is_auth()) {
+  if (!linkmerge) {
     if (destdnl->is_primary()) {
-      // project snaprealm, too
-      bufferlist snapbl;
-      if (destdn->is_auth())
-        destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-      straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
-      tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
+      if (destdn->is_auth()) {
+	// project snaprealm, too
+	bufferlist snapbl;
+	destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+	straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
+	tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
+      }
     } else if (destdnl->is_remote()) {
-      metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
-      mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
-      tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode());
+      if (destdnl->get_inode()->is_auth()) {
+	// auth for targeti
+	metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
+	mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
+	tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode());
+      }
+      if (destdn->is_auth()) {
+	// auth for dn, not targeti
+	metablob->add_null_dentry(destdn, true);
+      }
     }
   }
 
@@ -5234,8 +5242,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
-      if (destdn->is_auth() ||
-          (destdnl->get_inode() && destdnl->get_inode()->is_auth()))
+      if (destdn->is_auth())
         metablob->add_primary_dentry(destdn, true, destdnl->get_inode());
     }
   } else if (srcdnl->is_primary()) {
@@ -5249,8 +5256,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     else
       destdn->first = MAX(destdn->first, next_dest_snap);
 
-    if (destdn->is_auth() ||
-        (destdnl->get_inode() && destdnl->get_inode()->is_auth()))
+    if (destdn->is_auth())
       ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
   }
     
