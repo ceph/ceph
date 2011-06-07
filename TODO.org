@@ -1,8 +1,5 @@
 #+FILETAGS: :newdream:teuthology:todo:
 
-* TODO cleanup properly after a run
-for now, you can run something like this:
-dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
 * TODO results gathering
 * TODO osd etc killing while test is running
 * TODO automatic host locking
@@ -39,6 +36,9 @@ dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubunt
     client.0: [dbench, bonnie]
 - autotest:
     client.0: [dbench, bonnie]
+* TODO force cleanup on errors
+for now, you can run something like this:
+dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
 * TODO MAYBE more defaults for autotest task, so you don't need to list all clients?
 - autotest:
     default: dbench
