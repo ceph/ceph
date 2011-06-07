@@ -65,7 +65,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "client" << whoami << " "
 
-#define  tout       if (!g_conf.client_trace.empty()) traceout
+#define  tout       if (!g_conf->client_trace.empty()) traceout
 
 
 // static logger
@@ -144,8 +144,8 @@ Client::Client(Messenger *m, MonClient *mc)
 
   num_flushing_caps = 0;
 
-  lru.lru_set_max(g_conf.client_cache_size);
-  lru.lru_set_midpoint(g_conf.client_cache_mid);
+  lru.lru_set_max(g_conf->client_cache_size);
+  lru.lru_set_midpoint(g_conf->client_cache_mid);
 
   // file handles
   free_fd_set.insert(10, 1<<30);
@@ -387,7 +387,7 @@ void Client::update_inode_file_bits(Inode *in,
 	       << truncate_size << dendl;
       in->truncate_size = truncate_size;
       in->oset.truncate_size = truncate_size;
-      if (g_conf.client_oc && prior_size > truncate_size) { //do actual in-memory truncation
+      if (g_conf->client_oc && prior_size > truncate_size) { //do actual in-memory truncation
 	vector<ObjectExtent> ls;
 	filer->file_to_extents(in->ino, &in->layout,
 			       truncate_size, prior_size - truncate_size,
@@ -849,7 +849,7 @@ int Client::choose_target_mds(MetaRequest *req)
     goto out;
   }
 
-  if (g_conf.client_use_random_mds)
+  if (g_conf->client_use_random_mds)
     goto random_mds;
 
   if (req->inode) {
@@ -2982,7 +2982,7 @@ int Client::mount(const std::string &mount_root)
   }
 
   client_lock.Unlock();
-  int r = monclient->authenticate(g_conf.client_mount_timeout);
+  int r = monclient->authenticate(g_conf->client_mount_timeout);
   client_lock.Lock();
   if (r < 0)
     return r;
@@ -3018,12 +3018,12 @@ int Client::mount(const std::string &mount_root)
   _ll_get(root);
 
   // trace?
-  if (!g_conf.client_trace.empty()) {
-    traceout.open(g_conf.client_trace.c_str());
+  if (!g_conf->client_trace.empty()) {
+    traceout.open(g_conf->client_trace.c_str());
     if (traceout.is_open()) {
-      dout(1) << "opened trace file '" << g_conf.client_trace << "'" << dendl;
+      dout(1) << "opened trace file '" << g_conf->client_trace << "'" << dendl;
     } else {
-      dout(1) << "FAILED to open trace file '" << g_conf.client_trace << "'" << dendl;
+      dout(1) << "FAILED to open trace file '" << g_conf->client_trace << "'" << dendl;
     }
   }
 
@@ -3084,7 +3084,7 @@ void Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
-  if (g_conf.client_oc) {
+  if (g_conf->client_oc) {
     // flush/release all buffered data
     hash_map<vinodeno_t, Inode*>::iterator next;
     for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
@@ -3124,7 +3124,7 @@ void Client::unmount()
   //}
 
   // unsafe writes
-  if (!g_conf.client_oc) {
+  if (!g_conf->client_oc) {
     while (unsafe_sync_write > 0) {
       dout(0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
               << dendl;
@@ -3133,8 +3133,8 @@ void Client::unmount()
   }
 
   // stop tracing
-  if (!g_conf.client_trace.empty()) {
-    dout(1) << "closing trace file '" << g_conf.client_trace << "'" << dendl;
+  if (!g_conf->client_trace.empty()) {
+    dout(1) << "closing trace file '" << g_conf->client_trace << "'" << dendl;
     traceout.close();
   }
 
@@ -3180,7 +3180,7 @@ void Client::tick()
 {
   dout(21) << "tick" << dendl;
   tick_event = new C_C_Tick(this);
-  timer.add_event_after(g_conf.client_tick_interval, tick_event);
+  timer.add_event_after(g_conf->client_tick_interval, tick_event);
 
   utime_t now = g_clock.now();
 
@@ -3287,7 +3287,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     goto done;
   }
   
-  if (dname == g_conf.client_snapdir &&
+  if (dname == g_conf->client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
     *target = open_snapdir(dir);
     goto done;
@@ -4834,22 +4834,22 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     in->get_cap_ref(CEPH_CAP_FILE_CACHE);
   
   dout(10) << "readahead=" << readahead << " nr_consec=" << f->nr_consec_read
-	   << " max_byes=" << g_conf.client_readahead_max_bytes
-	   << " max_periods=" << g_conf.client_readahead_max_periods << dendl;
+	   << " max_byes=" << g_conf->client_readahead_max_bytes
+	   << " max_periods=" << g_conf->client_readahead_max_periods << dendl;
 
   // readahead?
   if (readahead &&
       f->nr_consec_read &&
-      (g_conf.client_readahead_max_bytes ||
-       g_conf.client_readahead_max_periods)) {
+      (g_conf->client_readahead_max_bytes ||
+       g_conf->client_readahead_max_periods)) {
     loff_t l = f->consec_read_bytes * 2;
-    if (g_conf.client_readahead_min)
-      l = MAX(l, g_conf.client_readahead_min);
-    if (g_conf.client_readahead_max_bytes)
-      l = MIN(l, g_conf.client_readahead_max_bytes);
+    if (g_conf->client_readahead_min)
+      l = MAX(l, g_conf->client_readahead_min);
+    if (g_conf->client_readahead_max_bytes)
+      l = MIN(l, g_conf->client_readahead_max_bytes);
     loff_t p = in->layout.fl_stripe_count * in->layout.fl_object_size;
-    if (g_conf.client_readahead_max_periods)
-      l = MIN(l, g_conf.client_readahead_max_periods * p);
+    if (g_conf->client_readahead_max_periods)
+      l = MIN(l, g_conf->client_readahead_max_periods * p);
 
     if (l >= 2*p)
       // align large readahead with period
@@ -5059,7 +5059,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+  if (g_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_tx && in->oset.uncommitted.empty())
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -5183,7 +5183,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   dout(3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
   
-  if (g_conf.client_oc)
+  if (g_conf->client_oc)
     _flush(in);
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {

@@ -68,12 +68,12 @@ PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p)
 {
   ratio_monitor = new RatioMonitor(this);
-  g_conf.add_observer(ratio_monitor);
+  g_conf->add_observer(ratio_monitor);
 }
 
 PGMonitor::~PGMonitor()
 {
-  g_conf.remove_observer(ratio_monitor);
+  g_conf->remove_observer(ratio_monitor);
   delete ratio_monitor;
 }
 
@@ -186,7 +186,7 @@ void PGMonitor::handle_osd_timeouts()
   if (!mon->is_leader())
     return;
   utime_t now(g_clock.now());
-  utime_t timeo(g_conf.mon_osd_report_timeout, 0);
+  utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   if (now - mon->get_leader_since() < timeo) {
     // We haven't been the leader for long enough to consider OSD timeouts
     return;
@@ -722,7 +722,7 @@ void PGMonitor::send_pg_creates()
 
     // throttle?
     if (last_sent_pg_create.count(osd) &&
-	now - g_conf.mon_pg_create_interval < last_sent_pg_create[osd]) 
+	now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd]) 
       continue;
       
     dout(20) << "send_pg_creates  " << pgid << " -> osd" << osd 

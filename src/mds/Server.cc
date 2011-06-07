@@ -80,7 +80,7 @@ void Server::open_logger()
   }
 
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.name.get_id().c_str());
+  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
   logger = new ProfLogger(name, &mdserver_logtype);
   logger_add(logger);
 }
@@ -405,7 +405,7 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   utime_t now = g_clock.now();
   utime_t cutoff = now;
-  cutoff -= g_conf.mds_session_timeout;  
+  cutoff -= g_conf->mds_session_timeout;  
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
@@ -425,7 +425,7 @@ void Server::find_idle_sessions()
 
   // autoclose
   cutoff = now;
-  cutoff -= g_conf.mds_session_autoclose;
+  cutoff -= g_conf->mds_session_autoclose;
 
   // don't kick clients if we've been laggy
   if (mds->laggy_until > cutoff) {
@@ -543,7 +543,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->clog.info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")\n";
+       << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
     m->put();
     return;
@@ -656,7 +656,7 @@ void Server::reconnect_gather_finish()
 void Server::reconnect_tick()
 {
   utime_t reconnect_end = reconnect_start;
-  reconnect_end += g_conf.mds_reconnect_timeout;
+  reconnect_end += g_conf->mds_reconnect_timeout;
   if (g_clock.now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
@@ -698,7 +698,7 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 
 void Server::recall_client_state(float ratio)
 {
-  int max_caps_per_client = (int)(g_conf.mds_cache_size * .8);
+  int max_caps_per_client = (int)(g_conf->mds_cache_size * .8);
   int min_caps_per_client = 100;
 
   dout(10) << "recall_client_state " << ratio
@@ -778,7 +778,7 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *trace
 
 void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 {
-  if (!g_conf.mds_early_reply)
+  if (!g_conf->mds_early_reply)
     return;
 
   if (mdr->are_slaves()) {
@@ -1644,7 +1644,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     //assert(0); // just for now.
   }
     
-  int got = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+  int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
   if (got > 0) {
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
@@ -1660,7 +1660,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir())
-    in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
 
   if (layout)
     in->inode.layout = *layout;
@@ -4847,7 +4847,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     return;
   }
 
-  assert(g_conf.mds_kill_rename_at != 1);
+  assert(g_conf->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
@@ -4908,9 +4908,9 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->slaves.empty() && !srci->is_dir())
-    assert(g_conf.mds_kill_rename_at != 2);
+    assert(g_conf->mds_kill_rename_at != 2);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
-    assert(g_conf.mds_kill_rename_at != 3);    
+    assert(g_conf->mds_kill_rename_at != 3);    
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdnl->is_primary()) {
@@ -4948,7 +4948,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (anchorgather) 
       return;  // waiting for anchor prepares
 
-    assert(g_conf.mds_kill_rename_at != 4);
+    assert(g_conf->mds_kill_rename_at != 4);
   }
 
   // -- prepare journal entry --
@@ -4984,9 +4984,9 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   CDentry::linkage_t *destdnl = destdn->get_linkage();
   // test hack: test slave commit
   if (!mdr->more()->slaves.empty() && !destdnl->get_inode()->is_dir())
-    assert(g_conf.mds_kill_rename_at != 5);
+    assert(g_conf->mds_kill_rename_at != 5);
   if (!mdr->more()->slaves.empty() && destdnl->get_inode()->is_dir())
-    assert(g_conf.mds_kill_rename_at != 6);
+    assert(g_conf->mds_kill_rename_at != 6);
   
   // commit anchor updates?
   if (mdr->more()->src_reanchor_atid) 

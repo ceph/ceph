@@ -50,7 +50,7 @@
 void Objecter::init()
 {
   assert(client_lock.is_locked());
-  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+  timer.add_event_after(g_conf->objecter_tick_interval, new C_Tick(this));
   maybe_request_map();
 }
 
@@ -410,7 +410,7 @@ void Objecter::tick()
 
   // look for laggy requests
   utime_t cutoff = g_clock.now();
-  cutoff -= g_conf.objecter_timeout;  // timeout
+  cutoff -= g_conf->objecter_timeout;  // timeout
 
   for (hash_map<tid_t,Op*>::iterator p = ops.begin();
        p != ops.end();
@@ -435,13 +435,13 @@ void Objecter::tick()
   }
     
   // reschedule
-  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+  timer.add_event_after(g_conf->objecter_tick_interval, new C_Tick(this));
 }
 
 void Objecter::resend_mon_ops()
 {
   utime_t cutoff = g_clock.now();
-  cutoff -= g_conf.objecter_mon_retry_interval;
+  cutoff -= g_conf->objecter_mon_retry_interval;
 
 
   for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {

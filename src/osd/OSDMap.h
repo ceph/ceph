@@ -822,7 +822,7 @@ private:
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
 
-    assert(g_conf.osd_pg_layout == CEPH_PG_LAYOUT_CRUSH);
+    assert(g_conf->osd_pg_layout == CEPH_PG_LAYOUT_CRUSH);
     {
       int preferred = pg.preferred();
       if (preferred >= max_osd || preferred >= crush.get_max_devices())
@@ -836,7 +836,7 @@ private:
   
     // no crush, but forcefeeding?
     if (pg.preferred() >= 0 &&
-	g_conf.osd_pg_layout != CEPH_PG_LAYOUT_CRUSH) {
+	g_conf->osd_pg_layout != CEPH_PG_LAYOUT_CRUSH) {
       int osd = pg.preferred();
       
       // already in there?

@@ -122,7 +122,7 @@ int FileJournal::_open_block_device()
     return -EINVAL;
   }
 
-  int64_t conf_journal_sz(g_conf.osd_journal_size);
+  int64_t conf_journal_sz(g_conf->osd_journal_size);
   conf_journal_sz <<= 20;
   if (bdev_sz < conf_journal_sz) {
     dout(0) << __func__ << ": you have configured a journal of size "
@@ -265,10 +265,10 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 			    bool create)
 {
   int ret;
-  int64_t conf_journal_sz(g_conf.osd_journal_size);
+  int64_t conf_journal_sz(g_conf->osd_journal_size);
   conf_journal_sz <<= 20;
 
-  if ((g_conf.osd_journal_size == 0) && (oldsize < ONE_MEG)) {
+  if ((g_conf->osd_journal_size == 0) && (oldsize < ONE_MEG)) {
     derr << "I'm sorry, I don't know how large of a journal to create."
 	 << "Please specify a block device to use as the journal OR "
 	 << "set osd_journal_size in your ceph.conf" << dendl;
@@ -276,7 +276,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   }
 
   if (create && (oldsize < conf_journal_sz)) {
-    uint64_t newsize(g_conf.osd_journal_size);
+    uint64_t newsize(g_conf->osd_journal_size);
     newsize <<= 20;
     dout(10) << "_open extending to " << newsize << " bytes" << dendl;
     ret = ::ftruncate(fd, newsize);
@@ -317,7 +317,7 @@ int FileJournal::create()
   header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;
-  if (g_conf.journal_block_align || directio)
+  if (g_conf->journal_block_align || directio)
     header.alignment = block_size;
   else
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
@@ -347,7 +347,7 @@ int FileJournal::create()
     goto free_buf;
   }
 
-  needed_space = g_conf.osd_max_write_size << 20;
+  needed_space = g_conf->osd_max_write_size << 20;
   needed_space += (2 * sizeof(entry_header_t)) + get_top();
   if (header.max_size - header.start < needed_space) {
     derr << "FileJournal::create: OSD journal is not large enough to hold "
@@ -579,8 +579,8 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
   // gather queued writes
   off64_t queue_pos = write_pos;
 
-  int eleft = g_conf.journal_max_write_entries;
-  unsigned bmax = g_conf.journal_max_write_bytes;
+  int eleft = g_conf->journal_max_write_entries;
+  unsigned bmax = g_conf->journal_max_write_bytes;
 
   if (full_state != FULL_NOTFULL)
     return -ENOSPC;
@@ -610,13 +610,13 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
 
     if (eleft) {
       if (--eleft == 0) {
-	dout(20) << "prepare_multi_write hit max events per write " << g_conf.journal_max_write_entries << dendl;
+	dout(20) << "prepare_multi_write hit max events per write " << g_conf->journal_max_write_entries << dendl;
 	break;
       }
     }
     if (bmax) {
       if (bl.length() >= bmax) {
-	dout(20) << "prepare_multi_write hit max write size " << g_conf.journal_max_write_bytes << dendl;
+	dout(20) << "prepare_multi_write hit max write size " << g_conf->journal_max_write_bytes << dendl;
 	break;
       }
     }
@@ -1160,8 +1160,8 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
 
 void FileJournal::throttle()
 {
-  if (throttle_ops.wait(g_conf.journal_queue_max_ops))
+  if (throttle_ops.wait(g_conf->journal_queue_max_ops))
     dout(1) << "throttle: waited for ops" << dendl;
-  if (throttle_bytes.wait(g_conf.journal_queue_max_bytes))
+  if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
     dout(1) << "throttle: waited for bytes" << dendl;
 }

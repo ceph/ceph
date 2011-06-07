@@ -53,7 +53,7 @@ int ClassHandler::_load_class(ClassData *cls)
       cls->status == ClassData::CLASS_MISSING) {
     char fname[PATH_MAX];
     snprintf(fname, sizeof(fname), "%s/libcls_%s.so",
-	     g_conf.osd_class_dir.c_str(),
+	     g_conf->osd_class_dir.c_str(),
 	     cls->name.c_str());
     dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
 

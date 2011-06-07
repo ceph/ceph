@@ -226,8 +226,8 @@ void common_init_daemonize(const CephContext *cct, int flags)
       exit(1);
     }
   }
-  pidfile_write(&g_conf);
-  ret = g_ceph_context._doss->handle_pid_change(&g_conf);
+  pidfile_write(g_conf);
+  ret = g_ceph_context._doss->handle_pid_change(g_conf);
   if (ret) {
     derr << "common_init_daemonize: _doss->handle_pid_change failed with "
 	 << "error code " << ret << dendl;

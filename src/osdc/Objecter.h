@@ -574,7 +574,7 @@ public:
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
     num_homeless_ops(0),
-    op_throttler(g_conf.objecter_inflight_op_bytes)
+    op_throttler(g_conf->objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
 

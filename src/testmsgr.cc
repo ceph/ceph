@@ -85,7 +85,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   int whoami = mc.monmap.get_rank(args[0]);
   assert(whoami >= 0);
-  g_conf.public_addr = mc.monmap.get_addr(whoami);
+  g_conf->public_addr = mc.monmap.get_addr(whoami);
   SimpleMessenger *rank = new SimpleMessenger();
   int err = rank->bind(getpid());
   if (err < 0)

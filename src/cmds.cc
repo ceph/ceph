@@ -168,7 +168,7 @@ int main(int argc, const char **argv)
       }
       dout(0) << "requesting oneshot_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      g_conf.mds_standby_for_rank = r;
+      g_conf->mds_standby_for_rank = r;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
@@ -178,7 +178,7 @@ int main(int argc, const char **argv)
       }
       dout(0) << "requesting standby_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
-      g_conf.mds_standby_for_rank = r;
+      g_conf->mds_standby_for_rank = r;
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
@@ -192,14 +192,14 @@ int main(int argc, const char **argv)
   }
 
   // Normal startup
-  if (g_conf.name.has_default_id()) {
+  if (g_conf->name.has_default_id()) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
 
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind(getpid());
-  cout << "starting " << g_conf.name << " at " << messenger->get_ms_addr()
+  cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;
   messenger->register_entity(entity_name_t::MDS(-1));
   uint64_t supported =
@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
   messenger->start();
 
   // start mds
-  MDS *mds = new MDS(g_conf.name.get_id().c_str(), messenger, &mc);
+  MDS *mds = new MDS(g_conf->name.get_id().c_str(), messenger, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;

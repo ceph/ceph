@@ -1036,7 +1036,7 @@ inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
   // ugliness!
   utime_t now = g_clock.now();
-  DecayRate rate(g_conf.mds_decay_halflife);
+  DecayRate rate(g_conf->mds_decay_halflife);
   return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
 	     << " " << dl.meta_load(now, rate)
 	     << "]";
@@ -1478,7 +1478,7 @@ protected:
     if (waiting.empty())
       get(PIN_WAITER);
     waiting.insert(pair<uint64_t,Context*>(mask, c));
-    pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
+    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
 			       << dendl;
@@ -1490,14 +1490,14 @@ protected:
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
-	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
+	pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this))
 				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 				   << " tag " << hex << it->first << dec
 				   << " on " << *this
 				   << dendl;
 	waiting.erase(it++);
       } else {
-	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
+	pdout(10,g_conf->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 				   << " tag " << hex << it->first << dec
 				   << " on " << *this 
 				   << dendl;

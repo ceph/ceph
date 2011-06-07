@@ -201,7 +201,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int pool = ++pool_max;
     pools[pool].v.type = CEPH_PG_TYPE_REP;
-    pools[pool].v.size = g_conf.osd_pool_default_size;
+    pools[pool].v.size = g_conf->osd_pool_default_size;
     pools[pool].v.crush_ruleset = p->first;
     pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].v.pg_num = nosd << pg_bits;
@@ -230,11 +230,11 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
 
-  int minrep = g_conf.osd_min_rep;
-  int maxrep = g_conf.osd_max_rep;
+  int minrep = g_conf->osd_min_rep;
+  int maxrep = g_conf->osd_max_rep;
   assert(maxrep >= minrep);
   if (!ndom)
-    ndom = MAX(maxrep, g_conf.osd_max_raid_width);
+    ndom = MAX(maxrep, g_conf->osd_max_raid_width);
   if (ndom > 1 &&
       nosd >= ndom*3 &&
       nosd > 8) {
@@ -301,7 +301,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     // replication
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, maxrep);
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf->osd_min_rep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);

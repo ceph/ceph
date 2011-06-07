@@ -95,7 +95,7 @@ static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       policy->decode(iter);
-      if (g_conf.rgw_log >= 15) {
+      if (g_conf->rgw_log >= 15) {
         RGW_LOG(15) << "Read AccessControlPolicy" << dendl;
         policy->to_xml(cerr);
         RGW_LOG(15) << dendl;
@@ -746,7 +746,7 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (g_conf.rgw_log >= 15) {
+  if (g_conf->rgw_log >= 15) {
     RGW_LOG(15) << "Old AccessControlPolicy" << dendl;
     policy->to_xml(cout);
     RGW_LOG(15) << dendl;
@@ -756,7 +756,7 @@ void RGWPutACLs::execute()
   if (ret < 0)
     goto done;
 
-  if (g_conf.rgw_log >= 15) {
+  if (g_conf->rgw_log >= 15) {
     RGW_LOG(15) << "New AccessControlPolicy" << dendl;
     new_policy.to_xml(cout);
     RGW_LOG(15) << dendl;
@@ -782,14 +782,14 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   if (cgi_env_level != NULL) {
     int level = atoi(cgi_env_level);
     if (level >= 0) {
-      g_conf.rgw_log = level;
+      g_conf->rgw_log = level;
     }
   }
 
   const char *cgi_should_log = FCGX_GetParam("RGW_SHOULD_LOG", fcgx->envp);
   s->should_log = rgw_str_to_bool(cgi_should_log, RGW_SHOULD_LOG_DEFAULT);
 
-  if (g_conf.rgw_log >= 20) {
+  if (g_conf->rgw_log >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
       RGW_LOG(20) << p << dendl;

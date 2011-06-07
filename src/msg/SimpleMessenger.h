@@ -227,7 +227,7 @@ private:
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {
       connection_state->pipe = get();
-      messenger->timeout = g_conf.ms_tcp_read_timeout * 1000; //convert to ms
+      messenger->timeout = g_conf->ms_tcp_read_timeout * 1000; //convert to ms
       if (messenger->timeout == 0)
         messenger->timeout = -1;
     }
@@ -249,13 +249,13 @@ private:
       assert(pipe_lock.is_locked());
       assert(!reader_running);
       reader_running = true;
-      reader_thread.create(g_conf.ms_rwthread_stack_bytes);
+      reader_thread.create(g_conf->ms_rwthread_stack_bytes);
     }
     void start_writer() {
       assert(pipe_lock.is_locked());
       assert(!writer_running);
       writer_running = true;
-      writer_thread.create(g_conf.ms_rwthread_stack_bytes);
+      writer_thread.create(g_conf->ms_rwthread_stack_bytes);
     }
     void join_reader() {
       if (!reader_running)
@@ -557,7 +557,7 @@ public:
     Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
-    dispatch_throttler(g_conf.ms_dispatch_throttle_bytes), need_addr(true),
+    dispatch_throttler(g_conf->ms_dispatch_throttle_bytes), need_addr(true),
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
@@ -573,7 +573,7 @@ public:
 
   int bind(entity_addr_t bind_addr, int64_t nonce);
   int bind(uint64_t nonce) {
-    return bind(g_conf.public_addr, nonce);
+    return bind(g_conf->public_addr, nonce);
   }
   int start_with_nonce(uint64_t nonce);  // if we didn't bind
   int start() {                 // if we did

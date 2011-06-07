@@ -139,7 +139,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
-    if (g_conf.mds_debug_scatterstat && in.is_projected()) {
+    if (g_conf->mds_debug_scatterstat && in.is_projected()) {
       inode_t *pi = in.get_projected_inode();
       out << "->" << pi->dirstat;
     }
@@ -153,7 +153,7 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.inode.rstat;
   if (!(in.inode.rstat == in.inode.accounted_rstat))
     out << "/" << in.inode.accounted_rstat;
-  if (g_conf.mds_debug_scatterstat && in.is_projected()) {
+  if (g_conf->mds_debug_scatterstat && in.is_projected()) {
     inode_t *pi = in.get_projected_inode();
     out << "->" << pi->rstat;
     if (!(pi->rstat == pi->accounted_rstat))
@@ -1345,7 +1345,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dirfragtree.force_to_leaf(p->first);
 	  }
       }
-      if (g_conf.mds_debug_frag)
+      if (g_conf->mds_debug_frag)
 	verify_dirfrags();
     }
     break;
@@ -1725,7 +1725,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  if (pf->fragstat.nsubdirs < 0)
 	    pf->fragstat.nsubdirs = 0;
 
-	  assert(!"bad/negative frag size" == g_conf.mds_verify_scatter);
+	  assert(!"bad/negative frag size" == g_conf->mds_verify_scatter);
 	}
 
 	if (update) {
@@ -1745,7 +1745,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    pi->dirstat = pf->fragstat;
 	    pi->dirstat.version = v;
 
-	    assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	    assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	  }
 	}
       }
@@ -1763,7 +1763,7 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pi->dirstat.nsubdirs < 0)
 	  pi->dirstat.nsubdirs = 0;
 
-	assert(!"bad/negative dir size" == g_conf.mds_verify_scatter);
+	assert(!"bad/negative dir size" == g_conf->mds_verify_scatter);
       }
     }
     break;
@@ -1828,7 +1828,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    pi->rstat = pf->rstat;
 	    pi->rstat.version = v;
 	    
-	    assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	    assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
 	  }
 	}
 	if (update)
@@ -2028,7 +2028,7 @@ void CInode::adjust_nested_auth_pins(int a)
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
-  if (g_conf.mds_debug_auth_pins) {
+  if (g_conf->mds_debug_auth_pins) {
     // audit
     int s = 0;
     for (map<frag_t,CDir*>::iterator p = dirfrags.begin();

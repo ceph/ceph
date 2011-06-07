@@ -99,7 +99,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
   e.msg = s;
 
   // log to syslog?
-  if (g_conf.clog_to_syslog) {
+  if (g_conf->clog_to_syslog) {
     ostringstream oss;
     oss << e;
     string str(oss.str());
@@ -107,7 +107,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
   }
 
   // log to monitor?
-  if (g_conf.clog_to_monitors) {
+  if (g_conf->clog_to_monitors) {
     log_queue.push_back(e);
 
     // if we are a monitor, queue for ourselves, synchronously

@@ -1480,8 +1480,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // -- crash recovery?
   if (is_crashed()) {
     replay_until = g_clock.now();
-    replay_until += g_conf.osd_replay_window;
-    dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window
+    replay_until += g_conf->osd_replay_window;
+    dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
     osd->replay_queue_lock.Lock();
@@ -2097,7 +2097,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   ::encode(ondisklog, blb);
   t.collection_setattr(coll, "ondisklog", blb);
 
-  if (!g_conf.osd_preserve_trimmed_log)
+  if (!g_conf->osd_preserve_trimmed_log)
     t.zero(coll_t::META_COLL, log_oid, 0, ondisklog.tail & ~4095);
 }
 
@@ -2565,7 +2565,7 @@ bool PG::sched_scrub()
   }
 
   // just scrubbed?
-  if (info.history.last_scrub_stamp + g_conf.osd_scrub_min_interval > g_clock.now()) {
+  if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > g_clock.now()) {
     dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
     return true;
   }
@@ -4116,13 +4116,13 @@ PG::RecoveryState::Active::react(const ActMap&) {
   assert(pg->is_primary());
   pg->check_recovery_op_pulls(pg->osd->osdmap);
 	
-  if (g_conf.osd_check_for_log_corruption)
+  if (g_conf->osd_check_for_log_corruption)
     pg->check_log_for_corruption(pg->osd->store);
 
   int unfound = pg->missing.num_missing() - pg->missing_loc.size();
   if (unfound > 0 &&
       pg->all_unfound_are_lost(pg->osd->osdmap)) {
-    if (g_conf.osd_auto_mark_unfound_lost) {
+    if (g_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, automatically marking lost\n";
       pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());

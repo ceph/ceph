@@ -582,7 +582,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   if (attrs) {
     r = state->io_ctx.getxattrs(oid, *attrs);
-    if (g_conf.rgw_log >= 20) {
+    if (g_conf->rgw_log >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         RGW_LOG(20) << "Read xattr: " << iter->first << dendl;
       }

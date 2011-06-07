@@ -132,7 +132,7 @@ create_object_store(const std::string &dev, const std::string &jdev)
   if (::stat(dev.c_str(), &st) != 0)
     return 0;
 
-  if (g_conf.filestore)
+  if (g_conf->filestore)
     return new FileStore(dev, jdev);
 
   if (S_ISDIR(st.st_mode))
@@ -175,20 +175,20 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
     }
 
     // age?
-    if (g_conf.osd_age_time != 0) {
-      if (g_conf.osd_age_time >= 0) {
+    if (g_conf->osd_age_time != 0) {
+      if (g_conf->osd_age_time >= 0) {
 	dout(0) << "aging..." << dendl;
 	Ager ager(store);
-	ager.age(g_conf.osd_age_time,
-		 g_conf.osd_age,
-		 g_conf.osd_age - .05,
+	ager.age(g_conf->osd_age_time,
+		 g_conf->osd_age,
+		 g_conf->osd_age - .05,
 		 50000,
-		 g_conf.osd_age - .05);
+		 g_conf->osd_age - .05);
       }
     }
 
     // benchmark?
-    if (g_conf.osd_auto_weight) {
+    if (g_conf->osd_auto_weight) {
       bufferlist bl;
       bufferptr bp(1048576);
       bp.zero();
@@ -416,9 +416,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	     ceph_osd_feature_ro_compat,
 	     ceph_osd_feature_incompat),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
-  op_tp("OSD::op_tp", g_conf.osd_op_threads),
-  recovery_tp("OSD::recovery_tp", g_conf.osd_recovery_threads),
-  disk_tp("OSD::disk_tp", g_conf.osd_disk_threads),
+  op_tp("OSD::op_tp", g_conf->osd_op_threads),
+  recovery_tp("OSD::recovery_tp", g_conf->osd_recovery_threads),
+  disk_tp("OSD::disk_tp", g_conf->osd_disk_threads),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   heartbeat_messenger(hbm),
@@ -427,9 +427,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   decayrate(5.0),
   stat_oprate(),
   peer_stat_lock("OSD::peer_stat_lock"),
-  read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
+  read_latency_calc(g_conf->osd_max_opq<1 ? 1:g_conf->osd_max_opq),
   qlen_calc(3),
-  iat_averager(g_conf.osd_flash_crowd_iat_alpha),
+  iat_averager(g_conf->osd_flash_crowd_iat_alpha),
   finished_lock("OSD::finished_lock"),
   op_wq(this, &op_tp),
   osdmap(NULL),
@@ -611,7 +611,7 @@ int OSD::init()
   heartbeat_thread.create();
 
   // tick
-  timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Tick(this));
+  timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
   if (false) {
     signal(SIGTERM, handle_signal);
@@ -709,10 +709,10 @@ void OSD::start_logger()
 
 int OSD::shutdown()
 {
-  g_conf.debug_osd = 100;
-  g_conf.debug_journal = 100;
-  g_conf.debug_filestore = 100;
-  g_conf.debug_ms = 100;
+  g_conf->debug_osd = 100;
+  g_conf->debug_journal = 100;
+  g_conf->debug_filestore = 100;
+  g_conf->debug_ms = 100;
   
   derr << "OSD::shutdown" << dendl;
 
@@ -1320,7 +1320,7 @@ void OSD::_refresh_my_stat(utime_t now)
   assert(peer_stat_lock.is_locked());
 
   // refresh?
-  if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval ||
+  if (now - my_stat.stamp > g_conf->osd_stat_refresh_interval ||
       pending_ops > 2*my_stat.qlen) {
 
     update_osd_stat();
@@ -1682,7 +1682,7 @@ void OSD::heartbeat_entry()
   while (!heartbeat_stop) {
     heartbeat();
 
-    double wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
+    double wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf->osd_heartbeat_interval;
     utime_t w;
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
@@ -1699,7 +1699,7 @@ void OSD::heartbeat_check()
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t grace = g_clock.now();
-  grace -= g_conf.osd_heartbeat_grace;
+  grace -= g_conf->osd_heartbeat_grace;
   for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
        p++) {
@@ -1792,7 +1792,7 @@ void OSD::heartbeat()
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
   if (heartbeat_from.empty() || heartbeat_to.empty()) {
-    if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
+    if (now - last_mon_heartbeat > g_conf->osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
       monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
@@ -1841,11 +1841,11 @@ void OSD::tick()
 
   // mon report?
   utime_t now = g_clock.now();
-  if (now - last_pg_stats_sent > g_conf.osd_mon_report_interval_max) {
+  if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
     osd_stat_updated = true;
     do_mon_report();
   }
-  else if (now - last_mon_report > g_conf.osd_mon_report_interval_min) {
+  else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
     do_mon_report();
   }
 
@@ -2242,7 +2242,7 @@ void OSD::handle_command(MMonCommand *m)
 
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
-    g_conf.injectargs(m->cmd[1]);
+    g_conf->injectargs(m->cmd[1]);
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
     shutdown();
@@ -2367,12 +2367,12 @@ void OSD::handle_command(MMonCommand *m)
       fout.close();
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "kick_recovery_wq") {
-      g_conf.osd_recovery_delay_start = atoi(m->cmd[2].c_str());
+      g_conf->osd_recovery_delay_start = atoi(m->cmd[2].c_str());
       clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
-		    << "to " << g_conf.osd_recovery_delay_start << "\n";
+		    << "to " << g_conf->osd_recovery_delay_start << "\n";
 
       defer_recovery_until = g_clock.now();
-      defer_recovery_until += g_conf.osd_recovery_delay_start;
+      defer_recovery_until += g_conf->osd_recovery_delay_start;
       recovery_wq.kick();
     }
   }
@@ -2833,9 +2833,9 @@ bool OSD::scrub_should_schedule()
     return false;
   }
 
-  if (loadavgs[0] >= g_conf.osd_scrub_load_threshold) {
+  if (loadavgs[0] >= g_conf->osd_scrub_load_threshold) {
     dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
-	     << " >= max " << g_conf.osd_scrub_load_threshold
+	     << " >= max " << g_conf->osd_scrub_load_threshold
 	     << " = no, load too high" << dendl;
     return false;
   }
@@ -2843,16 +2843,16 @@ bool OSD::scrub_should_schedule()
   bool coin_flip = (rand() % 3) == whoami % 3;
   if (!coin_flip) {
     dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
-	     << " < max " << g_conf.osd_scrub_load_threshold
+	     << " < max " << g_conf->osd_scrub_load_threshold
 	     << " = no, randomly backing off"
 	     << dendl;
     return false;
   }
   
   dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
-	   << " < max " << g_conf.osd_scrub_load_threshold
+	   << " < max " << g_conf->osd_scrub_load_threshold
 	   << " = yes" << dendl;
-  return loadavgs[0] < g_conf.osd_scrub_load_threshold;
+  return loadavgs[0] < g_conf->osd_scrub_load_threshold;
 }
 
 void OSD::sched_scrub()
@@ -2863,7 +2863,7 @@ void OSD::sched_scrub()
 
   pair<utime_t,pg_t> pos;
   utime_t max = g_clock.now();
-  max -= g_conf.osd_scrub_max_interval;
+  max -= g_conf->osd_scrub_max_interval;
   
   sched_scrub_lock.Lock();
 
@@ -2878,7 +2878,7 @@ void OSD::sched_scrub()
 
     if (t > max) {
       dout(10) << " " << pgid << " at " << t
-	       << " > " << max << " (" << g_conf.osd_scrub_max_interval << " seconds ago)" << dendl;
+	       << " > " << max << " (" << g_conf->osd_scrub_max_interval << " seconds ago)" << dendl;
       break;
     }
 
@@ -2911,13 +2911,13 @@ bool OSD::inc_scrubs_pending()
   bool result = false;
 
   sched_scrub_lock.Lock();
-  if (scrubs_pending + scrubs_active < g_conf.osd_max_scrubs) {
+  if (scrubs_pending + scrubs_active < g_conf->osd_max_scrubs) {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << g_conf.osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+	     << " (max " << g_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;
     ++scrubs_pending;
   } else {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << g_conf.osd_max_scrubs << dendl;
+    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << g_conf->osd_max_scrubs << dendl;
   }
   sched_scrub_lock.Unlock();
 
@@ -2928,7 +2928,7 @@ void OSD::dec_scrubs_pending()
 {
   sched_scrub_lock.Lock();
   dout(20) << "dec_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending-1)
-	   << " (max " << g_conf.osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+	   << " (max " << g_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
   --scrubs_pending;
   assert(scrubs_pending >= 0);
   sched_scrub_lock.Unlock();
@@ -2938,7 +2938,7 @@ void OSD::dec_scrubs_active()
 {
   sched_scrub_lock.Lock();
   dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
-	   << " (max " << g_conf.osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
+	   << " (max " << g_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
   --scrubs_active;
   sched_scrub_lock.Unlock();
 }
@@ -4759,9 +4759,9 @@ bool OSD::queue_for_recovery(PG *pg)
 
 bool OSD::_recover_now()
 {
-  if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
+  if (recovery_ops_active >= g_conf->osd_recovery_max_active) {
     dout(15) << "_recover_now active " << recovery_ops_active
-	     << " >= max " << g_conf.osd_recovery_max_active << dendl;
+	     << " >= max " << g_conf->osd_recovery_max_active << dendl;
     return false;
   }
   if (g_clock.now() < defer_recovery_until) {
@@ -4776,7 +4776,7 @@ void OSD::do_recovery(PG *pg)
 {
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
-  int max = g_conf.osd_recovery_max_active - recovery_ops_active;
+  int max = g_conf->osd_recovery_max_active - recovery_ops_active;
   recovery_wq.unlock();
   if (max == 0) {
     dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
@@ -4786,7 +4786,7 @@ void OSD::do_recovery(PG *pg)
     pg->lock();
     
     dout(10) << "do_recovery starting " << max
-	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
+	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
@@ -4795,7 +4795,7 @@ void OSD::do_recovery(PG *pg)
     int started = pg->start_recovery_ops(max);
     
     dout(10) << "do_recovery started " << started
-	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
+	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
 
     /*
@@ -4832,7 +4832,7 @@ void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
 {
   recovery_wq.lock();
   dout(10) << "start_recovery_op " << *pg << " " << soid
-	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
+	   << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops)"
 	   << dendl;
   assert(recovery_ops_active >= 0);
   recovery_ops_active++;
@@ -4850,7 +4850,7 @@ void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
 {
   dout(10) << "finish_recovery_op " << *pg << " " << soid
 	   << " dequeue=" << dequeue
-	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
+	   << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops)"
 	   << dendl;
   recovery_wq.lock();
 
@@ -5073,8 +5073,8 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
     
-    if (g_conf.osd_max_write_size &&
-        op->get_data_len() > g_conf.osd_max_write_size << 20) {
+    if (g_conf->osd_max_write_size &&
+        op->get_data_len() > g_conf->osd_max_write_size << 20) {
       // journal can't hold commit!
       reply_op_error(op, -OSD_WRITETOOBIG);
       pg->unlock();
@@ -5115,7 +5115,7 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   pg->get();
-  if (g_conf.osd_op_threads < 1) {
+  if (g_conf->osd_op_threads < 1) {
     // do it now.
     if (op->get_type() == CEPH_MSG_OSD_OP)
       pg->do_op((MOSDOp*)op);
@@ -5180,7 +5180,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   }
 
-  if (g_conf.osd_op_threads < 1) {
+  if (g_conf->osd_op_threads < 1) {
     pg->do_sub_op(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
@@ -5217,7 +5217,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   } 
 
   PG *pg = _lookup_lock_pg(pgid);
-  if (g_conf.osd_op_threads < 1) {
+  if (g_conf->osd_op_threads < 1) {
     pg->do_sub_op_reply(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
@@ -5291,7 +5291,7 @@ void OSD::dequeue_op(PG *pg)
     dout(10) << "dequeue_op " << op << " finish" << dendl;
     assert(pending_ops > 0);
     
-    if (pending_ops > g_conf.osd_max_opq) 
+    if (pending_ops > g_conf->osd_max_opq) 
       op_queue_cond.Signal();
     
     pending_ops--;
@@ -5308,9 +5308,9 @@ void OSD::dequeue_op(PG *pg)
 void OSD::throttle_op_queue()
 {
   // throttle?  FIXME PROBABLY!
-  while (pending_ops > g_conf.osd_max_opq) {
+  while (pending_ops > g_conf->osd_max_opq) {
     dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
-	     << " to drop to " << g_conf.osd_max_opq << dendl;
+	     << " to drop to " << g_conf->osd_max_opq << dendl;
     op_queue_cond.Wait(osd_lock);
   }
 }

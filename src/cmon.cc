@@ -75,7 +75,7 @@ int main(int argc, const char **argv)
       usage();
   }
 
-  if (g_conf.mon_data.empty()) {
+  if (g_conf->mon_data.empty()) {
     cerr << "must specify '--mon-data=foo' data path" << std::endl;
     usage();
   }
@@ -83,21 +83,21 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     common_init_finish(&g_ceph_context);
-    if (g_conf.monmap.empty() || !osdmapfn)
+    if (g_conf->monmap.empty() || !osdmapfn)
       usage();
 
     // make sure it doesn't already exist
         /*
     struct stat st;
-    if (::lstat(g_conf.mon_data.c_str(), &st) == 0) {
-      cerr << "monfs dir " << g_conf.mon_data << " already exists; remove it first" << std::endl;
+    if (::lstat(g_conf->mon_data.c_str(), &st) == 0) {
+      cerr << "monfs dir " << g_conf->mon_data << " already exists; remove it first" << std::endl;
       usage();
     }
 	*/
 
     // load monmap
     bufferlist monmapbl, osdmapbl;
-    int err = monmapbl.read_file(g_conf.monmap.c_str());
+    int err = monmapbl.read_file(g_conf->monmap.c_str());
     if (err < 0)
       exit(1);
     MonMap monmap;
@@ -108,11 +108,11 @@ int main(int argc, const char **argv)
       exit(1);
 
     // go
-    MonitorStore store(g_conf.mon_data);
-    Monitor mon(g_conf.name.get_id(), &store, 0, &monmap);
+    MonitorStore store(g_conf->mon_data);
+    Monitor mon(g_conf->name.get_id(), &store, 0, &monmap);
     mon.mkfs(osdmapbl);
-    cout << argv[0] << ": created monfs at " << g_conf.mon_data 
-	 << " for " << g_conf.name << std::endl;
+    cout << argv[0] << ": created monfs at " << g_conf->mon_data 
+	 << " for " << g_conf->name << std::endl;
     return 0;
   }
 
@@ -121,11 +121,11 @@ int main(int argc, const char **argv)
 			 ceph_mon_feature_incompat);
   CompatSet ondisk_features;
 
-  MonitorStore store(g_conf.mon_data);
+  MonitorStore store(g_conf->mon_data);
   err = store.mount();
   if (err < 0) {
     char buf[80];
-    cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+    cerr << "problem opening monitor store in " << g_conf->mon_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
     exit(1);
   }
 
@@ -221,17 +221,17 @@ int main(int argc, const char **argv)
     assert(v == monmap.get_epoch());
   }
 
-  if (!monmap.contains(g_conf.name.get_id())) {
-    cerr << g_conf.name << " does not exist in monmap" << std::endl;
+  if (!monmap.contains(g_conf->name.get_id())) {
+    cerr << g_conf->name << " does not exist in monmap" << std::endl;
     exit(1);
   }
 
-  entity_addr_t ipaddr = monmap.get_addr(g_conf.name.get_id());
+  entity_addr_t ipaddr = monmap.get_addr(g_conf->name.get_id());
   entity_addr_t conf_addr;
   std::vector <std::string> my_sections;
-  g_conf.get_my_sections(my_sections);
+  g_conf->get_my_sections(my_sections);
   std::string mon_addr_str;
-  if (g_conf.get_val_from_conf_file(my_sections, "mon addr",
+  if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
 				    mon_addr_str, true) == 0)
   {
     if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
@@ -243,21 +243,21 @@ int main(int argc, const char **argv)
 
   // bind
   SimpleMessenger *messenger = new SimpleMessenger();
-  int rank = monmap.get_rank(g_conf.name.get_id());
+  int rank = monmap.get_rank(g_conf->name.get_id());
 
-  cout << "starting " << g_conf.name << " rank " << rank
-       << " at " << monmap.get_addr(g_conf.name.get_id())
-       << " mon_data " << g_conf.mon_data
+  cout << "starting " << g_conf->name << " rank " << rank
+       << " at " << monmap.get_addr(g_conf->name.get_id())
+       << " mon_data " << g_conf->mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  err = messenger->bind(monmap.get_addr(g_conf.name.get_id()), 0);
+  err = messenger->bind(monmap.get_addr(g_conf->name.get_id()), 0);
   if (err < 0)
     return 1;
 
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(g_conf.name.get_id(), &store, messenger, &monmap);
+  Monitor *mon = new Monitor(g_conf->name.get_id(), &store, messenger, &monmap);
 
   common_init_daemonize(&g_ceph_context, 0);
   common_init_finish(&g_ceph_context);

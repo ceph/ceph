@@ -737,7 +737,7 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
 void ObjectCacher::flush(loff_t amount)
 {
   utime_t cutoff = g_clock.now();
-  //cutoff.sec_ref() -= g_conf.client_oc_max_dirty_age;
+  //cutoff.sec_ref() -= g_conf->client_oc_max_dirty_age;
 
   dout(10) << "flush " << amount << dendl;
   
@@ -761,7 +761,7 @@ void ObjectCacher::flush(loff_t amount)
 void ObjectCacher::trim(loff_t max)
 {
   if (max < 0) 
-    max = g_conf.client_oc_size;
+    max = g_conf->client_oc_size;
   
   dout(10) << "trim  start: max " << max 
            << "  clean " << get_stat_clean()
@@ -1023,10 +1023,10 @@ bool ObjectCacher::wait_for_write(uint64_t len, Mutex& lock)
   int blocked = 0;
 
   // wait for writeback?
-  while (get_stat_dirty() + get_stat_tx() >= g_conf.client_oc_max_dirty) {
+  while (get_stat_dirty() + get_stat_tx() >= g_conf->client_oc_max_dirty) {
     dout(10) << "wait_for_write waiting on " << len << ", dirty|tx " 
 	     << (get_stat_dirty() + get_stat_tx()) 
-	     << " >= " << g_conf.client_oc_max_dirty 
+	     << " >= " << g_conf->client_oc_max_dirty 
 	     << dendl;
     flusher_cond.Signal();
     stat_waiter++;
@@ -1037,9 +1037,9 @@ bool ObjectCacher::wait_for_write(uint64_t len, Mutex& lock)
   }
 
   // start writeback anyway?
-  if (get_stat_dirty() > g_conf.client_oc_target_dirty) {
+  if (get_stat_dirty() > g_conf->client_oc_target_dirty) {
     dout(10) << "wait_for_write " << get_stat_dirty() << " > target "
-	     << g_conf.client_oc_target_dirty << ", nudging flusher" << dendl;
+	     << g_conf->client_oc_target_dirty << ", nudging flusher" << dendl;
     flusher_cond.Signal();
   }
   return blocked;
@@ -1053,21 +1053,21 @@ void ObjectCacher::flusher_entry()
     while (!flusher_stop) {
       loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() + get_stat_dirty();
       dout(11) << "flusher "
-               << all << " / " << g_conf.client_oc_size << ":  "
+               << all << " / " << g_conf->client_oc_size << ":  "
                << get_stat_tx() << " tx, "
                << get_stat_rx() << " rx, "
                << get_stat_clean() << " clean, "
                << get_stat_dirty() << " dirty ("
-	       << g_conf.client_oc_target_dirty << " target, "
-	       << g_conf.client_oc_max_dirty << " max)"
+	       << g_conf->client_oc_target_dirty << " target, "
+	       << g_conf->client_oc_max_dirty << " max)"
                << dendl;
-      if (get_stat_dirty() > g_conf.client_oc_target_dirty) {
+      if (get_stat_dirty() > g_conf->client_oc_target_dirty) {
         // flush some dirty pages
         dout(10) << "flusher " 
                  << get_stat_dirty() << " dirty > target "
-		 << g_conf.client_oc_target_dirty
+		 << g_conf->client_oc_target_dirty
                  << ", flushing some dirty bhs" << dendl;
-        flush(get_stat_dirty() - g_conf.client_oc_target_dirty);
+        flush(get_stat_dirty() - g_conf->client_oc_target_dirty);
       }
       else {
         // check tail of lru for old dirty items
@@ -1165,7 +1165,7 @@ int ObjectCacher::atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock)
            << dendl;
 
   if (wr->extents.size() == 1 &&
-      wr->extents.front().length <= g_conf.client_oc_max_sync_write) {
+      wr->extents.front().length <= g_conf->client_oc_max_sync_write) {
     // single object.
     
     // make sure we aren't already locking/locked...

@@ -58,7 +58,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
   
-  int family = g_conf.ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  int family = g_conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
   switch (bind_addr.get_family()) {
   case AF_INET:
   case AF_INET6:
@@ -216,7 +216,7 @@ void *SimpleMessenger::Accepter::entry()
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
       // disable Nagle algorithm?
-      if (g_conf.ms_tcp_nodelay) {
+      if (g_conf->ms_tcp_nodelay) {
 	int flag = 1;
 	int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
 	if (r < 0)
@@ -1022,7 +1022,7 @@ int SimpleMessenger::Pipe::connect()
   }
 
   // disable Nagle algorithm?
-  if (g_conf.ms_tcp_nodelay) {
+  if (g_conf->ms_tcp_nodelay) {
     int flag = 1;
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) 
@@ -1454,13 +1454,13 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   } else if (backoff == utime_t()) {
     if (!onconnect)
       dout(0) << "fault first fault" << dendl;
-    backoff.set_from_double(g_conf.ms_initial_backoff);
+    backoff.set_from_double(g_conf->ms_initial_backoff);
   } else {
     dout(10) << "fault waiting " << backoff << dendl;
     cond.WaitInterval(pipe_lock, backoff);
     backoff += backoff;
-    if (backoff > g_conf.ms_max_backoff)
-      backoff.set_from_double(g_conf.ms_max_backoff);
+    if (backoff > g_conf->ms_max_backoff)
+      backoff.set_from_double(g_conf->ms_max_backoff);
     dout(10) << "fault done waiting or woke up" << dendl;
   }
 }

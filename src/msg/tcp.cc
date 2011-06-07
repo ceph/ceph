@@ -15,8 +15,8 @@ int tcp_read(int sd, char *buf, int len, int timeout)
 
   while (len > 0) {
 
-    if (g_conf.ms_inject_socket_failures && sd >= 0) {
-      if (rand() % g_conf.ms_inject_socket_failures == 0) {
+    if (g_conf->ms_inject_socket_failures && sd >= 0) {
+      if (rand() % g_conf->ms_inject_socket_failures == 0) {
 	generic_dout(0) << "injecting socket failure" << dendl;
 	::shutdown(sd, SHUT_RDWR);
       }
@@ -92,8 +92,8 @@ int tcp_write(int sd, const char *buf, int len)
   pfd.fd = sd;
   pfd.events = POLLOUT | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
 
-  if (g_conf.ms_inject_socket_failures && sd >= 0) {
-    if (rand() % g_conf.ms_inject_socket_failures == 0) {
+  if (g_conf->ms_inject_socket_failures && sd >= 0) {
+    if (rand() % g_conf->ms_inject_socket_failures == 0) {
       generic_dout(0) << "injecting socket failure" << dendl;
       ::shutdown(sd, SHUT_RDWR);
     }

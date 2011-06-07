@@ -489,8 +489,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
                << " is adding failure report on osd" << target_osd << dendl;
     }
 
-    if ((reporters >= g_conf.osd_min_down_reporters) &&
-        (reports >= g_conf.osd_min_down_reports)) {
+    if ((reporters >= g_conf->osd_min_down_reporters) &&
+        (reports >= g_conf->osd_min_down_reports)) {
       dout(1) << "have enough reports/reporters to mark osd" << target_osd
               << " as down" << dendl;
       pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -999,10 +999,10 @@ void OSDMonitor::tick()
     i++;
 
     if (osdmap.is_down(o) && osdmap.is_in(o)) {
-      if (g_conf.mon_osd_down_out_interval > 0 &&
-	  down.sec() >= g_conf.mon_osd_down_out_interval) {
+      if (g_conf->mon_osd_down_out_interval > 0 &&
+	  down.sec() >= g_conf->mon_osd_down_out_interval) {
 	dout(10) << "tick marking osd" << o << " OUT after " << down
-		 << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
+		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;
 	do_propose = true;
 	
@@ -1073,7 +1073,7 @@ void OSDMonitor::tick()
 void OSDMonitor::handle_osd_timeouts(const utime_t &now,
 			 const std::map<int,utime_t> &last_osd_report)
 {
-  utime_t timeo(g_conf.mon_osd_report_timeout, 0);
+  utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   int max_osd = osdmap.get_max_osd();
   bool new_down = false;
 
@@ -1351,14 +1351,14 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
   int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
 
-  pending_inc.new_pools[pool].v.size = g_conf.osd_pool_default_size;
+  pending_inc.new_pools[pool].v.size = g_conf->osd_pool_default_size;
   if (crush_rule >= 0)
     pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
   else
-    pending_inc.new_pools[pool].v.crush_ruleset = g_conf.osd_pool_default_crush_rule;
+    pending_inc.new_pools[pool].v.crush_ruleset = g_conf->osd_pool_default_crush_rule;
   pending_inc.new_pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].v.pg_num = g_conf.osd_pool_default_pg_num;
-  pending_inc.new_pools[pool].v.pgp_num = g_conf.osd_pool_default_pgp_num;
+  pending_inc.new_pools[pool].v.pg_num = g_conf->osd_pool_default_pg_num;
+  pending_inc.new_pools[pool].v.pgp_num = g_conf->osd_pool_default_pgp_num;
   pending_inc.new_pools[pool].v.lpg_num = 0;
   pending_inc.new_pools[pool].v.lpgp_num = 0;
   pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;

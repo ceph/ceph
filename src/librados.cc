@@ -98,7 +98,7 @@ struct librados::IoCtxImpl {
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s) :
     ref_cnt(0), client(c), poolid(pid),
     pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf.client_notify_timeout), oloc(pid),
+    notify_timeout(g_conf->client_notify_timeout), oloc(pid),
     aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"), aio_write_seq(0) {}
 
   void dup(const IoCtxImpl& rhs) {

@@ -251,7 +251,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
     for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++) {
       ObjectStore::Transaction *t = *p;
       if (t->get_data_length() > data_len &&
-	  (int)t->get_data_length() >= g_conf.journal_align_min_size) {
+	  (int)t->get_data_length() >= g_conf->journal_align_min_size) {
 	data_len = t->get_data_length();
 	data_align = (t->get_data_alignment() - tbl.length()) & ~PAGE_MASK;
       }

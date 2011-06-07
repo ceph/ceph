@@ -135,9 +135,9 @@ MDCache::MDCache(MDS *m)
   num_inodes_with_caps = 0;
   num_caps = 0;
 
-  max_dir_commit_size = g_conf.mds_dir_max_commit_size ?
-                        (g_conf.mds_dir_max_commit_size << 20) :
-                        (0.9 *(g_conf.osd_max_write_size << 20));
+  max_dir_commit_size = g_conf->mds_dir_max_commit_size ?
+                        (g_conf->mds_dir_max_commit_size << 20) :
+                        (0.9 *(g_conf->osd_max_write_size << 20));
 
   discover_last_tid = 0;
   find_ino_peer_last_tid = 0;
@@ -149,10 +149,10 @@ MDCache::MDCache(MDS *m)
   client_lease_durations[2] = 300.0;
 
   opening_root = open = false;
-  lru.lru_set_max(g_conf.mds_cache_size);
-  lru.lru_set_midpoint(g_conf.mds_cache_mid);
+  lru.lru_set_max(g_conf->mds_cache_size);
+  lru.lru_set_midpoint(g_conf->mds_cache_mid);
 
-  decayrate.set_halflife(g_conf.mds_decay_halflife);
+  decayrate.set_halflife(g_conf->mds_decay_halflife);
 
   did_shutdown_log_cap = false;
 }
@@ -167,7 +167,7 @@ MDCache::~MDCache()
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_imax, g_conf.mds_cache_size);
+  mds->logger->set(l_mds_imax, g_conf->mds_cache_size);
   mds->logger->set(l_mds_i, lru.lru_get_size());
   mds->logger->set(l_mds_ipin, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_itop, lru.lru_get_top());
@@ -285,7 +285,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     memset(&in->inode.layout, 0, sizeof(in->inode.layout));
-    in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
     ++in->inode.rstat.rsubdirs;
   } else {
     in->inode.layout = default_file_layout;
@@ -1759,7 +1759,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
 
     if (pi->rstat.rbytes < 0)
-      assert(!"negative rstat rbytes" == g_conf.mds_verify_scatter);
+      assert(!"negative rstat rbytes" == g_conf->mds_verify_scatter);
 
     last = first-1;
   }
@@ -1931,12 +1931,12 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // delay propagating until later?
     if (!stop && !first &&
-	g_conf.mds_dirstat_min_interval > 0) {
+	g_conf->mds_dirstat_min_interval > 0) {
       if (pin->last_dirstat_prop.sec() > 0) {
 	double since_last_prop = mut->now - pin->last_dirstat_prop;
-	if (since_last_prop < g_conf.mds_dirstat_min_interval) {
+	if (since_last_prop < g_conf->mds_dirstat_min_interval) {
 	  dout(10) << "predirty_journal_parents last prop " << since_last_prop
-		   << " < " << g_conf.mds_dirstat_min_interval
+		   << " < " << g_conf->mds_dirstat_min_interval
 		   << ", stopping" << dendl;
 	  stop = true;
 	} else {
@@ -1996,7 +1996,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
       if (pi->dirstat.size() < 0)
-	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
+	assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->dirstat.size() != pf->fragstat.size()) {
 	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
@@ -2006,7 +2006,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
 
-	  assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	  assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	}
       }
     }
@@ -2053,7 +2053,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  // trust the dirfrag for now
 	  pi->rstat = pf->rstat;
 
-	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	  assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
 	}
       }
     }
@@ -5202,7 +5202,7 @@ bool MDCache::trim(int max)
 {
   // trim LRU
   if (max < 0) {
-    max = g_conf.mds_cache_size;
+    max = g_conf->mds_cache_size;
     if (!max) return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
@@ -5942,7 +5942,7 @@ void MDCache::check_memory_usage()
 	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
 	   << ", buffers " << (buffer::get_total_alloc() >> 10)
-	   << ", max " << g_conf.mds_mem_max
+	   << ", max " << g_conf->mds_mem_max
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
@@ -5952,14 +5952,14 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_malloc, last.malloc);
 
   /*int size = last.get_total();
-  if (size > g_conf.mds_mem_max * .9) {
-    float ratio = (float)g_conf.mds_mem_max * .9 / (float)size;
+  if (size > g_conf->mds_mem_max * .9) {
+    float ratio = (float)g_conf->mds_mem_max * .9 / (float)size;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   } else 
     */
-  if (num_inodes_with_caps > g_conf.mds_cache_size) {
-    float ratio = (float)g_conf.mds_cache_size * .9 / (float)num_inodes_with_caps;
+  if (num_inodes_with_caps > g_conf->mds_cache_size) {
+    float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   }
@@ -5985,11 +5985,11 @@ void MDCache::shutdown_check()
   dout(0) << "shutdown_check at " << g_clock.now() << dendl;
 
   // cache
-  int o = g_conf.debug_mds;
-  g_conf.debug_mds = 10;
+  int o = g_conf->debug_mds;
+  g_conf->debug_mds = 10;
   show_cache();
-  g_conf.debug_mds = o;
-  mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  g_conf->debug_mds = o;
+  mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
   // this
   dout(0) << "lru size now " << lru.lru_get_size() << dendl;
@@ -6007,10 +6007,10 @@ void MDCache::shutdown_start()
 {
   dout(2) << "shutdown_start" << dendl;
 
-  if (g_conf.mds_shutdown_check)
-    mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  if (g_conf->mds_shutdown_check)
+    mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
-  //  g_conf.debug_mds = 10;
+  //  g_conf->debug_mds = 10;
 }
 
 
@@ -9598,7 +9598,7 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   list<CDir*> resultfrags;
   list<Context*> waiters;
   adjust_dir_fragments(diri, dirs, basefrag, bits, resultfrags, waiters, false);
-  if (g_conf.mds_debug_frag)
+  if (g_conf->mds_debug_frag)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
@@ -9739,7 +9739,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, base, bits, 
 			 resultfrags, waiters, false);
-    if (g_conf.mds_debug_frag)
+    if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
     
     /*
@@ -9768,7 +9768,7 @@ void MDCache::rollback_uncommitted_fragments()
     list<CDir*> resultfrags;
     list<Context*> waiters;
     adjust_dir_fragments(diri, p->first.frag, -p->second, resultfrags, waiters, true);
-    if (g_conf.mds_debug_frag)
+    if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
 
     EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, p->second);
@@ -9786,7 +9786,7 @@ void MDCache::show_subtrees(int dbl)
 {
   //dout(10) << "show_subtrees" << dendl;
 
-  if (dbl > g_conf.debug && dbl > g_conf.debug_mds) 
+  if (dbl > g_conf->debug && dbl > g_conf->debug_mds) 
     return;  // i won't print anything.
 
   if (subtrees.empty()) {

@@ -48,7 +48,7 @@ int main(int argc, const char **argv)
       changed.insert(*t);
     }
     DoutLocker _dout_locker;
-    dos->handle_conf_change(&g_conf, changed);
+    dos->handle_conf_change(g_conf, changed);
   }
   derr << "using configuration: " << dos->config_to_str() << dendl;
 

@@ -55,7 +55,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 
 void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 {
-  m.max_mds = g_conf.max_mds;
+  m.max_mds = g_conf->max_mds;
   m.created = g_clock.now();
   m.data_pg_pools.push_back(data_pool);
   m.metadata_pg_pool = metadata_pool;
@@ -624,7 +624,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     uint64_t gid = pending_mdsmap.up[w];
     if (pending_mdsmap.mds_info.count(gid)) {
       utime_t until = g_clock.now();
-      until += g_conf.mds_blacklist_interval;
+      until += g_conf->mds_blacklist_interval;
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
       pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
       mon->osdmon()->propose_pending();
@@ -655,7 +655,7 @@ int MDSMonitor::cluster_fail(std::ostream &ss)
   if (pending_mdsmap.mds_info.size()) {
     // blacklist all old mds's
     utime_t until = g_clock.now();
-    until += g_conf.mds_blacklist_interval;
+    until += g_conf->mds_blacklist_interval;
     for (map<int32_t,uint64_t>::iterator p = pending_mdsmap.up.begin();
 	 p != pending_mdsmap.up.end();
 	 ++p) {
@@ -899,7 +899,7 @@ void MDSMonitor::tick()
   // check beacon timestamps
   utime_t now = g_clock.now();
   utime_t cutoff = now;
-  cutoff -= g_conf.mds_beacon_grace;
+  cutoff -= g_conf->mds_beacon_grace;
 
   // make sure last_beacon is fully populated
   for (map<uint64_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
@@ -981,7 +981,7 @@ void MDSMonitor::tick()
 	    si.state == MDSMap::STATE_STARTING) {
 	  // blacklist laggy mds
 	  utime_t until = now;
-	  until += g_conf.mds_blacklist_interval;
+	  until += g_conf->mds_blacklist_interval;
 	  pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
@@ -1155,7 +1155,7 @@ void MDSMonitor::do_stop()
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
       {
 	utime_t until = g_clock.now();
-	until += g_conf.mds_blacklist_interval;
+	until += g_conf->mds_blacklist_interval;
 	pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 	propose_osdmap = true;
       }

@@ -91,7 +91,7 @@ int MonitorStore::mount()
     return -errno;
   }
 
-  if ((!g_conf.chdir.empty()) && (dir[0] != '/')) {
+  if ((!g_conf->chdir.empty()) && (dir[0] != '/')) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
     char cwd[PATH_MAX];
@@ -126,7 +126,7 @@ int MonitorStore::mkfs()
   }
 
   dout(0) << "created monfs at " << dir.c_str() << " for "
-	  << g_conf.name.get_id() << dendl;
+	  << g_conf->name.get_id() << dendl;
   return 0;
 }
 

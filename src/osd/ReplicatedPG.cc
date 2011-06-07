@@ -616,7 +616,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 	
     /*
     if (is_primary() &&
-	g_conf.osd_balance_reads)
+	g_conf->osd_balance_reads)
       stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
     */
   } else {
@@ -1342,8 +1342,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	if (!timeout || timeout > (uint32_t)g_conf.osd_max_notify_timeout)
-	  timeout = g_conf.osd_max_notify_timeout;
+	if (!timeout || timeout > (uint32_t)g_conf->osd_max_notify_timeout)
+	  timeout = g_conf->osd_max_notify_timeout;
 
 	notify_info_t n;
 	n.timeout = timeout;
@@ -3428,7 +3428,7 @@ int ReplicatedPG::pull(const sobject_t& soid)
 
   // only pull so much at a time
   interval_set<uint64_t> pullsub;
-  pullsub.span_of(data_subset, 0, g_conf.osd_recovery_max_chunk);
+  pullsub.span_of(data_subset, 0, g_conf->osd_recovery_max_chunk);
 
   // take note
   assert(pulling.count(soid) == 0);
@@ -3563,7 +3563,7 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
   pi->data_subset = data_subset;
   pi->clone_subsets = clone_subsets;
 
-  pi->data_subset_pushing.span_of(pi->data_subset, 0, g_conf.osd_recovery_max_chunk);
+  pi->data_subset_pushing.span_of(pi->data_subset, 0, g_conf->osd_recovery_max_chunk);
   bool complete = pi->data_subset_pushing == pi->data_subset;
 
   dout(10) << "push_start " << soid << " size " << size << " data " << data_subset
@@ -3681,7 +3681,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
     if (!complete) {
       // push more
       uint64_t from = pi->data_subset_pushing.range_end();
-      pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf.osd_recovery_max_chunk);
+      pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf->osd_recovery_max_chunk);
       dout(10) << " pushing more, " << pi->data_subset_pushing << " of " << pi->data_subset << dendl;
       complete = pi->data_subset.range_end() == pi->data_subset_pushing.range_end();
       send_push_op(soid, pi->version, peer, pi->size, false, complete,
@@ -4081,7 +4081,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       update_stats();
     } else {
       // pull more
-      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf.osd_recovery_max_chunk);
+      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf->osd_recovery_max_chunk);
       dout(10) << " pulling more, " << pi->data_subset_pulling << " of " << pi->data_subset << dendl;
       send_pull_op(soid, v, false, pi->data_subset_pulling, pi->from);
     }

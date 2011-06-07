@@ -331,7 +331,7 @@ void Monitor::handle_command(MMonCommand *m)
 
     if (m->cmd[0] == "_injectargs") {
       dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-      g_conf.injectargs(m->cmd[1]);
+      g_conf->injectargs(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "class") {
@@ -655,7 +655,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
 	s->until = g_clock.now();
-	s->until += g_conf.mon_subscribe_interval;
+	s->until += g_conf->mon_subscribe_interval;
       } else {
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
@@ -814,7 +814,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   }
 
   s->until = g_clock.now();
-  s->until += g_conf.mon_subscribe_interval;
+  s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
@@ -841,7 +841,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   // ???
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf.mon_subscribe_interval),
+    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval),
 			    m->get_source_inst());
 
   s->put();
@@ -935,7 +935,7 @@ public:
 void Monitor::new_tick()
 {
   C_Mon_Tick *ctx = new C_Mon_Tick(this);
-  timer.add_event_after(g_conf.mon_tick_interval, ctx);
+  timer.add_event_after(g_conf->mon_tick_interval, ctx);
 }
 
 void Monitor::tick()

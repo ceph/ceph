@@ -74,7 +74,7 @@ private:
 
 /* Globals (FIXME: remove) */ 
 extern CephContext g_ceph_context;
-extern md_config_t &g_conf;
+extern md_config_t *g_conf;
 extern std::ostream *_dout;
 extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
 

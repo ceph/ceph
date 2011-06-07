@@ -60,7 +60,7 @@ void Journaler::set_layout(ceph_file_layout *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  uint64_t periods = g_conf.journaler_prefetch_periods;
+  uint64_t periods = g_conf->journaler_prefetch_periods;
   if (periods < 2)
     periods = 2;  // we need at least 2 periods to make progress.
   fetch_len = layout.fl_stripe_count * layout.fl_object_size * periods;
@@ -419,7 +419,7 @@ uint64_t Journaler::append_entry(bufferlist& bl)
   assert(!readonly);
   uint32_t s = bl.length();
 
-  if (!g_conf.journaler_allow_split_entries) {
+  if (!g_conf->journaler_allow_split_entries) {
     // will we span a stripe boundary?
     int p = layout.fl_stripe_unit;
     if (write_pos / p != (write_pos + (int64_t)(bl.length() + sizeof(s))) / p) {
@@ -567,13 +567,13 @@ void Journaler::flush(Context *onsafe)
   } else {
     if (1) {
       // maybe buffer
-      if (write_buf.length() < g_conf.journaler_batch_max) {
+      if (write_buf.length() < g_conf->journaler_batch_max) {
 	// delay!  schedule an event.
 	dout(20) << "flush delaying flush" << dendl;
 	if (delay_flush_event)
 	  timer->cancel_event(delay_flush_event);
 	delay_flush_event = new C_DelayFlush(this);
-	timer->add_event_after(g_conf.journaler_batch_interval, delay_flush_event);	
+	timer->add_event_after(g_conf->journaler_batch_interval, delay_flush_event);	
       } else {
 	dout(20) << "flush not delaying flush" << dendl;
 	_do_flush();
@@ -586,7 +586,7 @@ void Journaler::flush(Context *onsafe)
   }
 
   // write head?
-  if (last_wrote_head.sec() + g_conf.journaler_write_head_interval < g_clock.now().sec()) {
+  if (last_wrote_head.sec() + g_conf->journaler_write_head_interval < g_clock.now().sec()) {
     write_head();
   }
 }
@@ -609,7 +609,7 @@ void Journaler::_issue_prezero()
 
   // we need to zero at least two periods, minimum, to ensure that we have a full
   // empty object/period in front of us.
-  uint64_t num_periods = MAX(2, g_conf.journaler_prezero_periods);
+  uint64_t num_periods = MAX(2, g_conf->journaler_prezero_periods);
 
   /*
    * issue zero requests based on write_pos, even though the invariant

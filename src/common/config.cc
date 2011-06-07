@@ -75,39 +75,39 @@ struct ceph_file_layout g_default_file_layout = {
 #define TYCHECK(x, ty) STATIC_ASSERT(sizeof(x) == sizeof(ty))
 
 #define OPTION_OPT_STR(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, std::string), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, std::string), \
 	  OPT_STR, offsetof(struct md_config_t, name), def_val, 0, 0 }
 
 #define OPTION_OPT_ADDR(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, entity_addr_t), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, entity_addr_t), \
 	 OPT_ADDR, offsetof(struct md_config_t, name), def_val, 0, 0 }
 
 #define OPTION_OPT_LONGLONG(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, long long), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, long long), \
          OPT_LONGLONG, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_INT(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, int), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, int), \
          OPT_INT, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_BOOL(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, bool), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, bool), \
          OPT_BOOL, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_U32(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, uint32_t), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, uint32_t), \
          OPT_U32, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_U64(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, uint64_t), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, uint64_t), \
          OPT_U64, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_DOUBLE(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, double), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, double), \
 	 OPT_DOUBLE, offsetof(struct md_config_t, name), 0, 0, def_val }
 
 #define OPTION_OPT_FLOAT(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf.name, float), \
+       { STRINGIFY(name) + TYCHECK(g_conf->name, float), \
 	 OPT_FLOAT, offsetof(struct md_config_t, name), 0, 0, def_val }
 
 #define OPTION(name, type, def_val) OPTION_##type(name, def_val)

@@ -68,7 +68,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 // generic macros
 #define debug_DOUT_SUBSYS debug
 #define dout_prefix *_dout
-#define DOUT_CONDVAR(x) g_conf.debug_ ## x
+#define DOUT_CONDVAR(x) g_conf->debug_ ## x
 #define XDOUT_CONDVAR(x) DOUT_CONDVAR(x)
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
@@ -98,7 +98,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
     *_dout
 
 #define generic_dout(v) \
-  pdout(v, g_conf.debug)
+  pdout(v, g_conf->debug)
 
 #define dendl std::endl; } } while (0)
 

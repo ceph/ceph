@@ -55,25 +55,25 @@ MonClient::~MonClient()
 int MonClient::build_initial_monmap(MonMap &monmap)
 {
   // file?
-  if (!g_conf.monmap.empty()) {
+  if (!g_conf->monmap.empty()) {
     int r;
     try {
-      r = monmap.read(g_conf.monmap.c_str());
+      r = monmap.read(g_conf->monmap.c_str());
     }
     catch (const buffer::error &e) {
       r = -EINVAL;
     }
     if (r >= 0)
       return 0;
-    cerr << "unable to read/decode monmap from " << g_conf.monmap
+    cerr << "unable to read/decode monmap from " << g_conf->monmap
 	 << ": " << cpp_strerror(-r) << std::endl;
     return r;
   }
 
   // -m foo?
-  if (!g_conf.mon_host.empty()) {
+  if (!g_conf->mon_host.empty()) {
     vector<entity_addr_t> addrs;
-    if (parse_ip_port_vec(g_conf.mon_host.c_str(), addrs)) {
+    if (parse_ip_port_vec(g_conf->mon_host.c_str(), addrs)) {
       for (unsigned i=0; i<addrs.size(); i++) {
 	char n[2];
 	n[0] = 'a' + i;
@@ -85,7 +85,7 @@ int MonClient::build_initial_monmap(MonMap &monmap)
       return 0;
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
-      char *old_addrs = new char[g_conf.mon_host.size() + 1];
+      char *old_addrs = new char[g_conf->mon_host.size() + 1];
       hosts = resolve_addrs(old_addrs);
       delete [] old_addrs;
       if (!hosts)
@@ -104,12 +104,12 @@ int MonClient::build_initial_monmap(MonMap &monmap)
         return 0;
       } else cerr << "couldn't parse_ip_port_vec on " << hosts << std::endl;
     }
-    cerr << "unable to parse addrs in '" << g_conf.mon_host << "'" << std::endl;
+    cerr << "unable to parse addrs in '" << g_conf->mon_host << "'" << std::endl;
   }
 
   // What monitors are in the config file?
   std::vector <std::string> sections;
-  int ret = g_conf.get_all_sections(sections);
+  int ret = g_conf->get_all_sections(sections);
   if (ret) {
     cerr << "Unable to find any monitors in the configuration "
          << "file, because there was an error listing the sections. error "
@@ -135,7 +135,7 @@ int MonClient::build_initial_monmap(MonMap &monmap)
     sections.push_back("mon");
     sections.push_back("global");
     std::string val;
-    int res = g_conf.get_val_from_conf_file(sections, "mon addr", val, true);
+    int res = g_conf->get_val_from_conf_file(sections, "mon addr", val, true);
     if (res) {
       cerr << "failed to get an address for mon." << *m << ": error "
 	   << res << std::endl;
@@ -332,7 +332,7 @@ int MonClient::init()
   }
   rotating_secrets = new RotatingKeyRing(cct->module_type, keyring);
 
-  entity_name = g_conf.name;
+  entity_name = g_conf->name;
   
   Mutex::Locker l(monc_lock);
   timer.init();
@@ -342,7 +342,7 @@ int MonClient::init()
   srand(getpid());
 
   auth_supported.clear();
-  string str = g_conf.auth_supported;
+  string str = g_conf->auth_supported;
   list<string> sup_list;
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
@@ -600,9 +600,9 @@ void MonClient::tick()
 void MonClient::schedule_tick()
 {
   if (hunting)
-    timer.add_event_after(g_conf.mon_client_hunt_interval, new C_Tick(this));
+    timer.add_event_after(g_conf->mon_client_hunt_interval, new C_Tick(this));
   else
-    timer.add_event_after(g_conf.mon_client_ping_interval, new C_Tick(this));
+    timer.add_event_after(g_conf->mon_client_ping_interval, new C_Tick(this));
 }
 
 
@@ -679,7 +679,7 @@ int MonClient::_check_auth_rotating()
   }
 
   utime_t cutoff = g_clock.now();
-  cutoff -= MIN(30.0, g_conf.auth_service_ticket_ttl / 4.0);
+  cutoff -= MIN(30.0, g_conf->auth_service_ticket_ttl / 4.0);
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     dout(10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();

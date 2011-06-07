@@ -54,7 +54,7 @@ public:
     return true;
   }
   void get_master(CryptoKey& dest) const {
-    get_secret(g_conf.name, dest);
+    get_secret(g_conf->name, dest);
   }
 
   // modifiers

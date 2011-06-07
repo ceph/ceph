@@ -298,7 +298,7 @@ handle_conf_change(const md_config_t *conf, const std::set <std::string> &change
     if ((changed.count("log_to_syslog") || changed.count("name")) &&
         (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
       closelog();
-      openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
+      openlog(g_conf->name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
     }
     flags |= DOUTSB_FLAG_SYSLOG;
   }

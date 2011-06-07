@@ -70,7 +70,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   vec_to_argv(nargs, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf.chdir = "/";
+  g_conf->chdir = "/";
 
   // check for 32-bit arch
   if (sizeof(long) == 4) {
@@ -100,7 +100,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // we need to handle the forking ourselves.
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
-  if (g_conf.daemonize) {
+  if (g_conf->daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
@@ -124,7 +124,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    int r = client->mount(g_conf.client_mountpoint.c_str());
+    int r = client->mount(g_conf->client_mountpoint.c_str());
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
       goto out_shutdown;
@@ -144,7 +144,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     // wait for messenger to finish
     messenger->wait();
 
-    if (g_conf.daemonize) {
+    if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
       ::write(fd[1], &r, sizeof(r));
     }
