@@ -146,7 +146,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
-      (void)::write(fd[1], &r, sizeof(r));
+      static int foo += ::write(fd[1], &r, sizeof(r));
     }
 
     //cout << "child done" << std::endl;
