@@ -916,6 +916,7 @@ void RGWCompleteMultipart::execute()
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
   string obj = s->object_str;
+  string meta_obj;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
@@ -956,6 +957,7 @@ void RGWCompleteMultipart::execute()
 
   obj.append(".");
   obj.append(upload_id);
+  meta_obj = obj;
   prefix = obj;
   prefix.append(".");
 
@@ -1007,8 +1009,19 @@ void RGWCompleteMultipart::execute()
     obj.append(buf);
     rgwstore->clone_range(s->bucket_str, s->object_str, ofs, obj, 0, obj_iter->second.size, s->object_str);
     ofs += obj_iter->second.size;
-
   }
+
+  // now erase all parts
+  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+    obj = prefix;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
+    obj.append(buf);
+    rgwstore->delete_obj(s->user.user_id, s->bucket_str, obj);
+  }
+  // and also remove the metadata obj
+  rgwstore->delete_obj(s->user.user_id, s->bucket_str, meta_obj);
+
 
 done:
   send_response();
