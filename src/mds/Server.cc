@@ -5364,8 +5364,11 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
       // in
+      if (in->is_auth())
+	in->pop_and_dirty_projected_inode(mdr->ls);
     } else {
       dout(10) << "merging remote onto primary link" << dendl;
+      oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
   } else { // primary
     if (linkmerge) {
