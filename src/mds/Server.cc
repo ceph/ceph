@@ -4456,7 +4456,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(20) << " straydn is " << *straydn << dendl;
     straydnl = straydn->pop_projected_linkage();
     
-    snap_is_new = straydnl->get_inode()->snaprealm ? false : true;
+    snap_is_new = straydnl->get_inode()->snaprealm ? true : false;
     mdcache->touch_dentry_bottom(straydn);
   }
 
@@ -4464,7 +4464,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   mdr->apply();
 
   if (snap_is_new) //only new if straydnl exists
-      mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
+    mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
   
   mds->mdcache->send_dentry_unlink(dn, straydn);
   
