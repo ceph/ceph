@@ -6110,15 +6110,17 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
-  req->inode = dir;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
     return res;
-  res = _lookup(dir, name, &req->inode);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  res = _lookup(dir, name, &req->other_inode);
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  req->inode = dir;
 
   res = make_request(req, uid, gid);
   if (res == 0) {
