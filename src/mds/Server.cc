@@ -5338,6 +5338,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       }
     } else if (destdnl->is_remote()) {
       destdn->get_dir()->unlink_inode(destdn);
+      if (oldin->is_auth())
+  	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
   }
 
@@ -5358,8 +5360,6 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       dout(10) << "merging remote onto primary link" << dendl;
       srcdn->get_dir()->unlink_inode(srcdn);
     }
-    if (destdnl->get_inode()->is_auth())
-      destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
   } else {
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
