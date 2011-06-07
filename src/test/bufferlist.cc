@@ -53,3 +53,21 @@ TEST(BufferList, TestDirectAppend) {
   }
   ASSERT_EQ(memcmp(bl.c_str(), correct, curpos), 0);
 }
+
+TEST(BufferList, TestCopyAll) {
+  const static size_t BIG_SZ = 10737414;
+  unsigned char big[BIG_SZ];
+  unsigned char c = 0;
+  for (size_t i = 0; i < BIG_SZ; ++i) {
+    big[i] = c++;
+  }
+  bufferlist bl;
+  bl.append((const char*)big, BIG_SZ);
+  bufferlist::iterator i = bl.begin();
+  bufferlist bl2;
+  i.copy_all(bl2);
+  ASSERT_EQ(bl2.length(), BIG_SZ);
+  unsigned char big2[BIG_SZ];
+  bl2.copy(0, BIG_SZ, (char*)big2);
+  ASSERT_EQ(memcmp(big, big2, BIG_SZ), 0);
+}
