@@ -63,6 +63,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
+  cct->module_type = iparams.module_type;
   return cct;
 }
 
@@ -93,8 +94,6 @@ void common_init(std::vector < const char* >& args,
     ceph_argparse_early_args(args, module_type, flags);
   CephContext *cct = common_preinit(iparams, code_env, flags);
   md_config_t *conf = cct->_conf;
-
-  cct->module_type = module_type;
 
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);

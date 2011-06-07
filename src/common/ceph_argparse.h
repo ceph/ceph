@@ -74,9 +74,10 @@ extern bool ceph_argparse_cmd_equals(const char *cmd, const char *opt,
 class CephInitParameters
 {
 public:
-  CephInitParameters(uint32_t module_type, const char *conf_file_);
+  CephInitParameters(uint32_t module_type_, const char *conf_file_);
   std::list<std::string> get_conf_files() const;
 
+  uint32_t module_type;
   std::string conf_file;
   EntityName name;
 };
