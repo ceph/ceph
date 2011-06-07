@@ -358,7 +358,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
                     '--mkfs',
                     '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf'
+                    '-c', '/tmp/cephtest/ceph.conf',
                     ],
                 )
 
@@ -372,7 +372,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
                     '-f',
                     '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf'
+                    '-c', '/tmp/cephtest/ceph.conf',
                     ],
                 logger=log.getChild('osd.{id}'.format(id=id_)),
                 stdin=run.PIPE,
@@ -390,7 +390,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/cmds',
                     '-f',
                     '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf'
+                    '-c', '/tmp/cephtest/ceph.conf',
                     ],
                 logger=log.getChild('mds.{id}'.format(id=id_)),
                 stdin=run.PIPE,

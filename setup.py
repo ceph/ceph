@@ -17,7 +17,7 @@ setup(
         'configobj',
         'PyYAML',
         'bunch >=1.0.0',
-        'argparse >=1.2.1'
+        'argparse >=1.2.1',
         ],
 
     entry_points={
