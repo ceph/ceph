@@ -845,7 +845,7 @@ int Client::choose_target_mds(MetaRequest *req)
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
     req->resend_mds = -1;
-    dout(10) << "target resend_mds specified as mds" << mds << dendl;
+    dout(10) << "choose_target_mds resend_mds specified as mds" << mds << dendl;
     goto out;
   }
 
@@ -854,24 +854,27 @@ int Client::choose_target_mds(MetaRequest *req)
 
   if (req->inode) {
     in = req->inode;
+    dout(20) << "choose_target_mds starting with req->inode " << *in << dendl;
     if (req->path.depth()) {
       hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
 			   req->path[0].data(),
 			   req->path[0].length());
-      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->path[0]
+      dout(20) << "choose_target_mds inode dir hash is " << (int)in->dir_layout.dl_dir_hash
+	       << " on " << req->path[0]
 	       << " => " << hash << dendl;
       is_hash = true;
-
     }
   } else if (req->dentry) {
     if (req->dentry->inode) {
       in = req->dentry->inode;
+      dout(20) << "choose_target_mds starting with req->dentry inode " << *in << dendl;
     } else {
       in = req->dentry->dir->parent_inode;
       hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
 			   req->dentry->name.data(),
 			   req->dentry->name.length());
-      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->dentry->name
+      dout(20) << "choose_target_mds dentry dir hash is " << (int)in->dir_layout.dl_dir_hash
+	       << " on " << req->dentry->name
 	       << " => " << hash << dendl;
       is_hash = true;
     }
@@ -894,10 +897,11 @@ int Client::choose_target_mds(MetaRequest *req)
     is_hash = false;
   }
   
-  dout(20) << "choose_target_mds " << in << " is_hash=" << is_hash
-           << " hash=" << hash << dendl;
+  if (!in)
+    goto random_mds;
 
-  if (!in) goto random_mds;
+  dout(20) << "choose_target_mds " << *in << " is_hash=" << is_hash
+           << " hash=" << hash << dendl;
 
   if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
     frag_t fg = in->dirfragtree[hash];
@@ -915,7 +919,7 @@ int Client::choose_target_mds(MetaRequest *req)
   if (!cap)
     goto random_mds;
   mds = cap->session->mds_num;
-  dout(10) << "choose_target_mds from caps" << dendl;
+  dout(10) << "choose_target_mds from caps on inode " << *in << dendl;
 
   goto out;
 
