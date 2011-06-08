@@ -323,8 +323,8 @@ bin_PROGRAMS += radosgw radosgw_admin
 endif
 
 testcrypto_SOURCES = testcrypto.cc
-testcrypto_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
+testcrypto_LDADD = libcommon.a $(CRYPTO_LIBS) -lpthread -lm $(EXTRALIBS)
+testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
@@ -411,7 +411,7 @@ unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
 
 unittest_bufferlist_SOURCES = test/bufferlist.cc
-unittest_bufferlist_LDADD = ${UNITTEST_LDADD} libcommon.a
+unittest_bufferlist_LDADD = ${UNITTEST_LDADD} libcommon.a $(CRYPTO_LIBS)
 unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
@@ -431,25 +431,25 @@ check_PROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
 unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_utf8_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_utf8_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
 
 unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
 unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_rgw_escape_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_rgw_escape_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_rgw_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_strtol_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_strtol_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_strtol
 
 unittest_confutils_SOURCES = test/confutils.cc
 unittest_confutils_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_confutils_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_confutils_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_confutils
 
