@@ -19,3 +19,10 @@ mkdir -p mnt/a/dir4/child/foo
 ./ceph mds tell 0 export_dir /a/dir4/child 2
 sleep 5
 mv mnt/a/dir4 mnt/b/dir4
+
+# dir: witness subtree adjustment
+mkdir -p mnt/a/dir5/1/2/3/4
+./ceph mds tell 0 export_dir /a/dir5/1/2/3 2
+sleep 5
+mv mnt/a/dir5 mnt/b
+
