@@ -259,13 +259,17 @@ rwx_t MonCaps::get_caps(int service) const
  */
 bool MonCaps::check_privileges(int service, int req_perms, uint64_t req_auid)
 {
-  if (allow_all) return true; //you're an admin, do anything!
+  if (allow_all)
+    return true; // you're an admin, do anything!
   if (req_auid != CEPH_AUTH_UID_DEFAULT && req_auid != auid) {
-    if (!pool_auid_map.count(req_auid)) return false;
+    if (!pool_auid_map.count(req_auid))
+      return false;
     MonCap& auid_cap = pool_auid_map[req_auid];
-    if ((auid_cap.allow & req_perms) != req_perms) return false;
+    if ((auid_cap.allow & req_perms) != req_perms)
+      return false;
   }
   int service_caps = get_caps(service);
-  if ((service_caps & req_perms) != req_perms) return false;
+  if ((service_caps & req_perms) != req_perms)
+    return false;
   return true;
 }
