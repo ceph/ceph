@@ -5075,7 +5075,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 			     bool not_journaling)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
-  if (straydn) dout(10) << " straydn " << *straydn << dendl;
+  if (straydn)
+    dout(10) << " straydn " << *straydn << dendl;
 
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
@@ -5087,13 +5088,51 @@ void Server::_rename_prepare(MDRequest *mdr,
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
 
+  // we need to force journaling of this event if we (will) have any subtrees
+  // nested beneath.
+  bool force_journal = false;
+  while (srci->is_dir()) {
+    // if we are auth for srci and exporting it, have any _any_ open dirfrags, we
+    // will (soon) have auth subtrees here.
+    if (srci->is_auth() && !destdn->is_auth() && srci->has_dirfrags()) {
+      dout(10) << " we are exporting srci, and have open dirfrags, will force journal" << dendl;
+      force_journal = true;
+      break;
+    }
+
+    // see if any children of our frags are auth subtrees.
+    list<CDir*> subtrees;
+    mds->mdcache->list_subtrees(subtrees);
+    list<CDir*> ls;
+    srci->get_dirfrags(ls);
+    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      CDir *dir = *p;
+      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
+	if (dir->contains(*q)) {
+	  if ((*q)->get_dir_auth().first == mds->whoami) {
+	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
+		     << **q << dendl;
+	    force_journal = true;
+	    break;
+	  } else
+	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
+	} else
+	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
+      }
+    }
+    break;
+  }
+
   if (linkmerge)
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
+  if (force_journal)
+    dout(10) << " forcing journal of rename because we (will) have auth subtrees nested beneath it" << dendl;
 
   if (srci->is_dir() &&
-      (srcdn->is_auth() || destdn->is_auth())) {
+      (srcdn->is_auth() || destdn->is_auth() || force_journal)) {
     dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
     metablob->renamed_dirino = srci->ino();
   }
@@ -5263,12 +5302,21 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     if (destdn->is_auth())
       ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+    else if (force_journal) {
+      dout(10) << " forced journaling destdn " << *destdn << dendl;
+      metablob->add_dir_context(destdn->get_dir());
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+    }
   }
     
   // src
   if (srcdn->is_auth()) {
     dout(10) << " journaling srcdn " << *srcdn << dendl;
     mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
+    metablob->add_null_dentry(srcdn, true);
+  } else if (force_journal) {
+    dout(10) << " forced journaling srcdn " << *srcdn << dendl;
+    metablob->add_dir_context(srcdn->get_dir());
     metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
@@ -5610,32 +5658,18 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   ::encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
-  // journal it?
-  if (srcdn->is_auth() ||
-      srci->is_auth() ||
-      (destdnl->get_inode() && destdnl->get_inode()->is_auth())) {
-    // journal.
-    mdr->ls = mdlog->get_current_segment();
-    ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
-					ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
-    mdlog->start_entry(le);
-    le->rollback = mdr->more()->rollback_bl;
-
-    bufferlist blah;  // inode import data... obviously not used if we're the slave
-    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
-
-    mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
-    mdlog->flush();
-  } else {
-    // don't journal.
-    dout(10) << "not journaling: i'm not auth for anything, and srci has no caps" << dendl;
-
-    // prepare anyway; this may twiddle dir_auth
-    EMetaBlob blob;
-    bufferlist blah;
-    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn, true);
-    _logged_slave_rename(mdr, srcdn, destdn, straydn);
-  }
+  // journal.
+  mdr->ls = mdlog->get_current_segment();
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
+				      ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
+  mdlog->start_entry(le);
+  le->rollback = mdr->more()->rollback_bl;
+  
+  bufferlist blah;  // inode import data... obviously not used if we're the slave
+  _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
+  
+  mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+  mdlog->flush();
 }
 
 void Server::_logged_slave_rename(MDRequest *mdr, 
