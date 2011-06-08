@@ -1,7 +1,3 @@
-#
-# note: the old Makefile is at Makefile.old
-#
-
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS =
 DIST_SUBDIRS = gtest
