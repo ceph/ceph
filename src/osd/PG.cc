@@ -2507,6 +2507,25 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
+void PG::update_snap_collections(vector<Log::Entry> &log_entries)
+{
+  for (vector<Log::Entry>::iterator i = log_entries.begin();
+       i != log_entries.end();
+       ++i) {
+    if (i->is_clone()) {
+      vector<snapid_t> snaps;
+      bufferlist::iterator p = i->snaps.begin();
+      ::decode(snaps, p);
+      if (!snap_collections.contains(*snaps.begin())) {
+	snap_collections.insert(*snaps.begin());
+      }
+      if (snaps.size() > 1 && !snap_collections.contains(*(snaps.end() - 1))) {
+	snap_collections.insert(*(snaps.end() - 1));
+      }
+    }
+  }
+}
+
 void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check)
 {
   interval_set<snapid_t> to_remove;

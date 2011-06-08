@@ -3148,6 +3148,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ::decode(log, p);
       
       info.stats = op->pg_stats;
+      update_snap_collections(log);
       log_op(log, op->pg_trim_to, rm->localt);
 
       rm->tls.push_back(&rm->opt);
