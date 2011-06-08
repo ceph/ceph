@@ -5186,8 +5186,21 @@ void Server::_rename_prepare(MDRequest *mdr,
       version_t oldpv;
       if (srcdn->is_auth())
 	oldpv = srci->get_projected_version();
-      else
+      else {
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
+
+	// note which dirfrags have child subtrees in the journal
+	// event, so that we can open those (as bounds) during replay.
+	if (srci->is_dir()) {
+	  list<CDir*> ls;
+	  srci->get_dirfrags(ls);
+	  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	    CDir *dir = *p;
+	    metablob->renamed_dir_frags.push_back(dir->get_frag());
+	  }
+	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
+	}
+      }
       pi = srci->project_inode(); // project snaprealm if srcdnl->is_primary
                                                  // & srcdnl->snaprealm
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);

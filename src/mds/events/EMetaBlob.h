@@ -354,6 +354,7 @@ private:
   inodeno_t opened_ino;
 public:
   inodeno_t renamed_dirino;
+  list<frag_t> renamed_dir_frags;
 private:
   
   // ino (pre)allocation.  may involve both inotable AND session state.
@@ -395,6 +396,7 @@ private:
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
     ::encode(renamed_dirino, bl);
+    ::encode(renamed_dir_frags, bl);
   } 
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -428,8 +430,10 @@ private:
 	r.pop_front();
       }
     }
-    if (struct_v >= 3)
+    if (struct_v >= 3) {
       ::decode(renamed_dirino, bl);
+      ::decode(renamed_dir_frags, bl);
+    }
   }
 
 
