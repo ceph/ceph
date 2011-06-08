@@ -5071,8 +5071,7 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
-			     CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-			     bool not_journaling)
+			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
   if (straydn)
@@ -5277,9 +5276,6 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // dest
   if (srcdnl->is_remote()) {
-    assert(not_journaling || srcdn->is_auth() ||destdn->is_auth() ||
-           (srci && srci->is_auth()) ||
-           (destdnl->get_inode() && destdnl->get_inode()->is_auth()));
     if (!linkmerge) {
       if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
