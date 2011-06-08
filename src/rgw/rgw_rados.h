@@ -42,12 +42,12 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
               map<std::string, bufferlist>& attrs, bool exclusive);
-  virtual int put_obj_data(std::string& id, rgw_obj& obj, std::string& loc, const char *data,
+  virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, time_t *mtime);
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, size_t size, std::string& loc);
+                          rgw_obj& src_obj, off_t src_ofs, size_t size);
   /** Copy an object, with many extra options */
   virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,
@@ -65,14 +65,13 @@ public:
   virtual int delete_obj(std::string& id, rgw_obj& src_obj);
 
   /** Get the attributes for an object.*/
-  virtual int get_attr(rgw_obj& obj, std::string& loc,
-               const char *name, bufferlist& dest);
+  virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
   virtual int set_attr(rgw_obj& obj, const char *name, bufferlist& bl);
 
   /** Get data about an object out of RADOS and into memory. */
-  virtual int prepare_get_obj(rgw_obj& obj, std::string& loc,  
+  virtual int prepare_get_obj(rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -84,7 +83,7 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  virtual int get_obj(void **handle, rgw_obj& obj, std::string& loc,
+  virtual int get_obj(void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);

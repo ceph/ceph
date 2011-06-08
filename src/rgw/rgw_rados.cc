@@ -256,7 +256,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc,
+int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj,
                   time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   std::string& bucket = obj.bucket;
@@ -267,7 +267,7 @@ int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc,
   if (r < 0)
     return r;
 
-  io_ctx.locator_set_key(loc);
+  io_ctx.locator_set_key(obj.key);
 
   if (exclusive) {
     r = io_ctx.create(oid, true);
@@ -309,7 +309,7 @@ int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc,
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_data(std::string& id, rgw_obj& obj, std::string& loc,
+int RGWRados::put_obj_data(std::string& id, rgw_obj& obj,
 			   const char *data, off_t ofs, size_t len, time_t *mtime)
 {
   std::string& bucket = obj.bucket;
@@ -320,7 +320,7 @@ int RGWRados::put_obj_data(std::string& id, rgw_obj& obj, std::string& loc,
   if (r < 0)
     return r;
 
-  io_ctx.locator_set_key(loc);
+  io_ctx.locator_set_key(obj.key);
 
   bufferlist bl;
   bl.append(data, len);
@@ -367,10 +367,6 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
                map<string, bufferlist>& attrs,  /* in/out */
                struct rgw_err *err)
 {
-  string& dest_bucket = dest_obj.bucket;
-  string& dest_oid = dest_obj.object;
-  string& src_bucket = src_obj.bucket;
-  string& src_oid = src_obj.object;
   int ret, r;
   char *data;
   off_t end = -1;
@@ -378,12 +374,12 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
 
-  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_oid << " => " << dest_bucket << ":" << dest_oid << dendl;
+  RGW_LOG(5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
   void *handle = NULL;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_obj, src_oid, 0, &end, &attrset,
+  ret = prepare_get_obj(src_obj, 0, &end, &attrset,
                 mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, err);
 
   if (ret < 0)
@@ -391,13 +387,13 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
   off_t ofs = 0;
   do {
-    ret = get_obj(&handle, src_obj, src_oid, &data, ofs, end);
+    ret = get_obj(&handle, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(id, dest_obj, dest_oid, data,
+    r = put_obj_data(id, dest_obj, data,
 		     ((ofs == 0) ? -1 : ofs), ret, NULL);
     free(data);
     if (r < 0)
@@ -411,7 +407,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj_meta(id, dest_obj, dest_oid, mtime, attrs, false);
+  ret = put_obj_meta(id, dest_obj, mtime, attrs, false);
 
   finish_get_obj(&handle);
 
@@ -486,8 +482,7 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(rgw_obj& obj, std::string& loc,
-                       const char *name, bufferlist& dest)
+int RGWRados::get_attr(rgw_obj& obj, const char *name, bufferlist& dest)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -504,7 +499,7 @@ int RGWRados::get_attr(rgw_obj& obj, std::string& loc,
   if (r < 0)
     return r;
 
-  io_ctx.locator_set_key(loc);
+  io_ctx.locator_set_key(obj.key);
 
   r = io_ctx.getxattr(actual_obj, name, dest);
   if (r < 0)
@@ -568,7 +563,7 @@ int RGWRados::set_attr(rgw_obj& obj, const char *name, bufferlist& bl)
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-int RGWRados::prepare_get_obj(rgw_obj& obj, std::string& loc,
+int RGWRados::prepare_get_obj(rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -602,7 +597,7 @@ int RGWRados::prepare_get_obj(rgw_obj& obj, std::string& loc,
   if (r < 0)
     goto done_err;
 
-  state->io_ctx.locator_set_key(loc);
+  state->io_ctx.locator_set_key(obj.key);
 
   if (total_size || end) {
     r = state->io_ctx.stat(oid, &size, &mtime);
@@ -644,7 +639,7 @@ int RGWRados::prepare_get_obj(rgw_obj& obj, std::string& loc,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(obj, loc, RGW_ATTR_ETAG, etag);
+    r = get_attr(obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
@@ -685,7 +680,7 @@ done_err:
 }
 
 int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, size_t size, std::string& loc)
+                          rgw_obj& src_obj, off_t src_ofs, size_t size)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;
@@ -696,17 +691,15 @@ int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
   if (r < 0)
     return r;
 
-  io_ctx.locator_set_key(loc);
+  io_ctx.locator_set_key(dst_obj.key);
 
   return io_ctx.clone_range(dst_oid, dst_ofs, src_oid, src_ofs, size);
 }
 
 
-int RGWRados::get_obj(void **handle,
-            rgw_obj& obj, string& loc,
+int RGWRados::get_obj(void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end)
 {
-  std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
   uint64_t len;
   bufferlist bl;
@@ -721,7 +714,7 @@ int RGWRados::get_obj(void **handle,
   if (len > RGW_MAX_CHUNK_SIZE)
     len = RGW_MAX_CHUNK_SIZE;
 
-  state->io_ctx.locator_set_key(loc);
+  state->io_ctx.locator_set_key(obj.key);
 
   RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   int r = state->io_ctx.read(oid, bl, len, ofs);

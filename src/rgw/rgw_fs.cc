@@ -185,7 +185,7 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
   return 0;
 }
 
-int RGWFS::put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc,
+int RGWFS::put_obj_meta(std::string& id, rgw_obj& obj,
                   time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   std::string& bucket = obj.bucket;
@@ -232,7 +232,7 @@ done_err:
   return -errno;
 }
 
-int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, std::string& loc, const char *data,
+int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
                   off_t ofs, size_t size, time_t *mtime)
 {
   std::string& bucket = obj.bucket;
@@ -291,10 +291,6 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
                map<string, bufferlist>& attrs,
                struct rgw_err *err)
 {
-  std::string& dest_bucket = dest_obj.bucket;
-  std::string& dest_oid = dest_obj.object;
-  std::string& src_bucket = src_obj.bucket;
-  std::string& src_oid = src_obj.object;
   int ret;
   char *data;
   void *handle;
@@ -303,13 +299,13 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
   time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_obj, src_oid, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
+  ret = prepare_get_obj(src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &handle, err);
   if (ret < 0)
     return ret;
  
   do { 
-    ret = get_obj(&handle, src_obj, src_oid, &data, ofs, end);
+    ret = get_obj(&handle, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
     ofs += ret;
@@ -321,7 +317,7 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj(id, dest_obj, dest_oid, data, ret, mtime, attrs);
+  ret = put_obj(id, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -407,8 +403,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
   return attr_len;
 }
 
-int RGWFS::get_attr(rgw_obj& obj, std::string& loc,
-                       const char *name, bufferlist& dest)
+int RGWFS::get_attr(rgw_obj& obj, const char *name, bufferlist& dest)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -448,7 +443,7 @@ int RGWFS::set_attr(rgw_obj& obj,
   return ret;
 }
 
-int RGWFS::prepare_get_obj(rgw_obj& obj, std::string& loc,
+int RGWFS::prepare_get_obj(rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -552,8 +547,7 @@ done_err:
   return r;
 }
 
-int RGWFS::get_obj(void **handle, rgw_obj& obj, std::string& loc,
-            char **data, off_t ofs, off_t end)
+int RGWFS::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
   uint64_t len;
   bufferlist bl;

@@ -46,16 +46,16 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
                       map<std::string, bufferlist>& attrs, bool exclusive) = 0;
-  virtual int put_obj_data(std::string& id, rgw_obj& obj, std::string& loc, const char *data,
+  virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, time_t *mtime) = 0;
 
-  int put_obj(std::string& id, rgw_obj& obj, std::string& loc, const char *data, size_t len,
+  int put_obj(std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_meta(id, obj, loc, NULL, attrs, false);
+    int ret = put_obj_meta(id, obj, NULL, attrs, false);
     if (ret >= 0) {
-      ret = put_obj_data(id, obj, loc, data, -1, len, mtime);
+      ret = put_obj_data(id, obj, data, -1, len, mtime);
     }
     return ret;
   }
@@ -121,7 +121,7 @@ public:
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-  virtual int prepare_get_obj(rgw_obj& obj, std::string& loc,
+  virtual int prepare_get_obj(rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -133,14 +133,14 @@ public:
             void **handle,
             struct rgw_err *err) = 0;
 
-  virtual int get_obj(void **handle, rgw_obj& obj, std::string& loc,
+  virtual int get_obj(void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end) = 0;
 
   virtual void finish_get_obj(void **handle) = 0;
 
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
-                          size_t size, std::string& loc) = 0;
+                          size_t size) = 0;
  /**
    * a simple object read without keeping state
    */
@@ -154,7 +154,7 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(rgw_obj& obj, std::string& loc, const char *name, bufferlist& dest) = 0;
+  virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest) = 0;
 
   /**
    * Set an attr on an object.

@@ -452,12 +452,23 @@ class rgw_obj {
 public:
   std::string bucket;
   std::string object;
+  std::string key;
 
   rgw_obj() {}
-  rgw_obj(std::string& b, std::string& o) : bucket(b), object(o) {}
+  rgw_obj(std::string& b, std::string& o) {
+    init(b, o);
+  }
+  rgw_obj(std::string& b, std::string& o, std::string& k) {
+    init(b, o, k);
+  }
+  void init(std::string& b, std::string& o, std::string& k) {
+    bucket = b;
+    object = o;
+  }
   void init(std::string& b, std::string& o) {
     bucket = b;
     object = o;
+    key = o;
   }
 };
 

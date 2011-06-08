@@ -84,14 +84,13 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, string& object, string& loc)
+static int get_policy_from_attr(RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
 
-  if (bucket.size()) {
-    rgw_obj obj(bucket, object);
-    ret = rgwstore->get_attr(obj, loc, RGW_ATTR_ACL, bl);
+  if (obj.bucket.size()) {
+    ret = rgwstore->get_attr(obj, RGW_ATTR_ACL, bl);
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
@@ -110,21 +109,22 @@ static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, 
 int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
   string upload_id = s->args.get("uploadId");
-  string obj = object;
-  string loc = object;
+  string oid = object;
 
-  if (!obj.empty() && !upload_id.empty()) {
-    obj.append(".");
-    obj.append(upload_id);
+  if (!oid.empty() && !upload_id.empty()) {
+    oid.append(".");
+    oid.append(upload_id);
   }
+  rgw_obj obj(bucket, oid, object);
 
-  int ret = get_policy_from_attr(policy, bucket, obj, loc);
+  int ret = get_policy_from_attr(policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy;
     string no_object;
-    ret = get_policy_from_attr(&bucket_policy, bucket, no_object, no_object);
+    rgw_obj no_obj(bucket, no_object);
+    ret = get_policy_from_attr(&bucket_policy, no_obj);
     if (ret < 0)
       return ret;
 
@@ -183,7 +183,7 @@ void RGWGetObj::execute()
   init_common();
 
   obj.init(s->bucket_str, s->object_str);
-  ret = rgwstore->prepare_get_obj(obj, s->object_str, ofs, &end, &attrs, mod_ptr,
+  ret = rgwstore->prepare_get_obj(obj, ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &s->err);
   if (ret < 0)
     goto done;
@@ -194,7 +194,7 @@ void RGWGetObj::execute()
     goto done;
 
   while (ofs <= end) {
-    ret = rgwstore->get_obj(&handle, obj, s->object_str, &data, ofs, end);
+    ret = rgwstore->get_obj(&handle, obj, &data, ofs, end);
     if (ret < 0) {
       goto done;
     }
@@ -322,7 +322,9 @@ void RGWCreateBucket::execute()
   bool existed;
   bool pol_ret;
 
-  int r = get_policy_from_attr(&old_policy, rgw_root_bucket, s->bucket_str, s->bucket_str);
+  rgw_obj obj(rgw_root_bucket, s->bucket_str);
+
+  int r = get_policy_from_attr(&old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
@@ -443,7 +445,7 @@ void RGWPutObj::execute()
       oid.append(".");
       oid.append(part_num);
     }
-    rgw_obj obj(s->bucket_str, oid);
+    rgw_obj obj(s->bucket_str, oid, s->object_str);
     do {
       get_data();
       if (len > 0) {
@@ -451,7 +453,7 @@ void RGWPutObj::execute()
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
         ret = rgwstore->put_obj_data(s->user.user_id, obj,
-				     s->object_str, data,
+				     data,
 				     ((ofs == 0) ? -1 : ofs), len, NULL);
         free(data);
         if (ret < 0)
@@ -488,7 +490,7 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, obj, s->object_str, NULL, attrs, false);
+    ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, false);
     if (ret < 0)
       goto done;
 
@@ -506,9 +508,9 @@ void RGWPutObj::execute()
       RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
 
-      rgw_obj meta_obj(s->bucket_str, multipart_meta_obj);
+      rgw_obj meta_obj(s->bucket_str, multipart_meta_obj, s->object_str);
       
-      ret  = rgwstore->put_obj_meta(s->user.user_id, meta_obj, s->object_str, NULL, meta_attrs, false);
+      ret  = rgwstore->put_obj_meta(s->user.user_id, meta_obj, NULL, meta_attrs, false);
     }
   }
 done:
@@ -879,8 +881,8 @@ void RGWInitMultipart::execute()
     tmp_obj_name.append(".");
     tmp_obj_name.append(upload_id);
 
-    obj.init(s->bucket_str, tmp_obj_name);
-    ret = rgwstore->put_obj_meta(s->user.user_id, obj, s->object_str, NULL, attrs, true);
+    obj.init(s->bucket_str, tmp_obj_name, s->object_str);
+    ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, true);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -893,9 +895,9 @@ static int get_multiparts_info(struct req_state *s, string& oid, map<uint32_t, R
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
 
-  rgw_obj obj(s->bucket_str, oid);
+  rgw_obj obj(s->bucket_str, oid, s->object_str);
 
-  int ret = rgwstore->prepare_get_obj(obj, s->object_str, 0, NULL, &attrs, NULL,
+  int ret = rgwstore->prepare_get_obj(obj, 0, NULL, &attrs, NULL,
                                       NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
   rgwstore->finish_get_obj(&handle);
 
@@ -1015,7 +1017,7 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket_str, s->object_str);
-  ret = rgwstore->put_obj_meta(s->user.user_id, target_obj, s->object_str, NULL, attrs, false);
+  ret = rgwstore->put_obj_meta(s->user.user_id, target_obj, NULL, attrs, false);
   if (ret < 0)
     goto done;
 
@@ -1024,9 +1026,9 @@ void RGWCompleteMultipart::execute()
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
     oid.append(buf);
-    rgw_obj src_obj(s->bucket_str, oid);
+    rgw_obj src_obj(s->bucket_str, oid, s->object_str);
     rgw_obj dst_obj(s->bucket_str, s->object_str);
-    rgwstore->clone_range(dst_obj, ofs, src_obj, 0, obj_iter->second.size, s->object_str);
+    rgwstore->clone_range(dst_obj, ofs, src_obj, 0, obj_iter->second.size);
     ofs += obj_iter->second.size;
   }
 
@@ -1036,11 +1038,11 @@ void RGWCompleteMultipart::execute()
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
     oid.append(buf);
-    rgw_obj obj(s->bucket_str, oid);
+    rgw_obj obj(s->bucket_str, oid, s->object_str);
     rgwstore->delete_obj(s->user.user_id, obj);
   }
   // and also remove the metadata obj
-  meta_obj.init(s->bucket_str, meta_oid);
+  meta_obj.init(s->bucket_str, meta_oid, s->object_str);
   rgwstore->delete_obj(s->user.user_id, meta_obj);
 
 

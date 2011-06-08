@@ -550,7 +550,7 @@ int main(int argc, char **argv)
     string bucket_str(bucket);
     string object_str(object);
     rgw_obj obj(bucket_str, object_str);
-    int ret = store->get_attr(obj, object_str, RGW_ATTR_ACL, bl);
+    int ret = store->get_attr(obj, RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;
     if (ret >= 0) {

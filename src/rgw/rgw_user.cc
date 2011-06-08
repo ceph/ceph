@@ -35,16 +35,14 @@ static int put_obj(string& uid, string& bucket, string& oid, const char *data, s
 {
   map<string,bufferlist> attrs;
 
-  rgw_obj obj;
-  obj.bucket = bucket;
-  obj.object = oid;
+  rgw_obj obj(bucket, oid);
 
-  int ret = rgwstore->put_obj(uid, obj, oid, data, size, NULL, attrs);
+  int ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_bucket(uid, bucket, attrs);
     if (ret >= 0)
-      ret = rgwstore->put_obj(uid, obj, oid, data, size, NULL, attrs);
+      ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
   }
 
   return ret;
@@ -129,13 +127,13 @@ int rgw_get_user_info_from_index(string& key, string& bucket, RGWUserInfo& info)
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(obj, key, 0, NULL, NULL, NULL,
+  ret = rgwstore->prepare_get_obj(obj, 0, NULL, NULL, NULL,
                                   NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 
   do {
-    ret = rgwstore->get_obj(&handle, obj, key, &data, 0, request_len - 1);
+    ret = rgwstore->get_obj(&handle, obj, &data, 0, request_len - 1);
     if (ret < 0)
       goto done;
     if (ret < request_len)
@@ -204,7 +202,7 @@ static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
 {
   bufferlist bl;
   rgw_obj obj(ui_uid_bucket, user_id);
-  int ret = rgwstore->get_attr(obj, user_id, RGW_ATTR_BUCKETS, bl);
+  int ret = rgwstore->get_attr(obj, RGW_ATTR_BUCKETS, bl);
   if (ret)
     return ret;
 
