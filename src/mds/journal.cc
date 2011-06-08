@@ -677,7 +677,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       }
       dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
       dout(10) << " creating new rename import bound " << *dir << dendl;
-      mds->mdcache->adjust_subtree_auth(dir, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN), false);
+      mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
     }
   }
 
@@ -1222,7 +1222,7 @@ void EExport::replay(MDS *mds)
   }
 
   // adjust auth away
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, CDIR_AUTH_UNDEF);
 
   mds->mdcache->try_trim_non_auth_subtree(dir);
 }
@@ -1280,7 +1280,7 @@ void EImportFinish::replay(MDS *mds)
       CDir *dir = mds->mdcache->get_dirfrag(base);
       vector<dirfrag_t> bounds;
       mds->mdcache->get_ambiguous_import_bounds(base, bounds);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
       mds->mdcache->cancel_ambiguous_import(dir);
       mds->mdcache->try_trim_non_auth_subtree(dir);
    }
