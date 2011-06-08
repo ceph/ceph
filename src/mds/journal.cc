@@ -310,7 +310,7 @@ void EString::replay(MDS *mds)
 // EMetaBlob
 
 EMetaBlob::EMetaBlob(MDLog *mdlog) : root(NULL),
-				     opened_ino(0),
+				     opened_ino(0), renamed_dirino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
@@ -463,6 +463,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
   }
 
+  CInode *renamed_diri = 0;
+  CDir *olddir = 0;
+  if (renamed_dirino) {
+    renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+    if (renamed_diri)
+      dout(10) << "EMetaBlob.replay renamed inode is " << *renamed_diri << dendl;
+    else
+      dout(10) << "EMetaBlob.replay don't have renamed ino " << renamed_dirino << dendl;
+  }
+
+  // keep track of any inodes we unlink and don't relink elsewhere
+  set<CInode*> unlinked;
+
   // walk through my dirs (in order!)
   for (list<dirfrag_t>::iterator lp = lump_order.begin();
        lp != lump_order.end();
@@ -558,12 +571,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	    //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
 	  }
 	}
+	unlinked.erase(in);
 	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
+	  if (in == renamed_diri)
+	    olddir = dir;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
@@ -573,6 +589,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
 	    dir->unlink_inode(dn);
+	  unlinked.erase(in);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
@@ -595,6 +612,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       } else {
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->is_primary())
+	    unlinked.insert(dn->get_linkage()->get_inode());
+	  if (dn->get_linkage()->get_inode() == renamed_diri)
+	    olddir = dir;
 	  dir->unlink_inode(dn);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
@@ -620,6 +641,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->is_primary())
+	    unlinked.insert(dn->get_linkage()->get_inode());
+	  if (dn->get_linkage()->get_inode() == renamed_diri)
+	    olddir = dir;
 	  dir->unlink_inode(dn);
 	}
 	dn->set_version(p->dnv);
@@ -628,6 +653,44 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	assert(dn->last == p->dnlast);
       }
     }
+  }
+
+  if (renamed_dirino) {
+    if (olddir) {
+      assert(renamed_diri);
+      mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
+      
+      // see if we can discard the subtree we renamed out of
+      CDir *root = mds->mdcache->get_subtree_root(olddir);
+      if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
+	mds->mdcache->try_trim_non_auth_subtree(root);
+
+    } else {
+      // we imported a diri we haven't seen before
+      assert(!renamed_diri);
+      renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+      assert(renamed_diri);  // it was in the metablob
+    }
+
+    // if we are the srci importer, we'll also have some dirfrags we have to open up...
+    for (list<frag_t>::iterator p = renamed_dir_frags.begin(); p != renamed_dir_frags.end(); ++p) {
+      CDir *dir = renamed_diri->get_dirfrag(*p);
+      if (dir) {
+	// we already had the inode before, and we already adjusted this subtree accordingly.
+	dout(10) << " already had+adjusted rename import bound " << *dir << dendl;
+	assert(olddir); 
+	continue;
+      }
+      dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+      dout(10) << " creating new rename import bound " << *dir << dendl;
+      mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
+    }
+  }
+
+  if (!unlinked.empty()) {
+    dout(10) << " unlinked set contains " << unlinked << dendl;
+    for (set<CInode*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p)
+      mds->mdcache->remove_inode_recursive(*p);
   }
 
   // table client transactions
@@ -1165,7 +1228,7 @@ void EExport::replay(MDS *mds)
   }
 
   // adjust auth away
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, CDIR_AUTH_UNDEF);
 
   mds->mdcache->try_trim_non_auth_subtree(dir);
 }
@@ -1223,7 +1286,7 @@ void EImportFinish::replay(MDS *mds)
       CDir *dir = mds->mdcache->get_dirfrag(base);
       vector<dirfrag_t> bounds;
       mds->mdcache->get_ambiguous_import_bounds(base, bounds);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
       mds->mdcache->cancel_ambiguous_import(dir);
       mds->mdcache->try_trim_non_auth_subtree(dir);
    }

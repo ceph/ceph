@@ -2201,9 +2201,11 @@ bool CDir::is_subtree_root()
 bool CDir::contains(CDir *x)
 {
   while (1) {
-    if (x == this) return true;
-    x = x->get_parent_dir();
-    if (x == 0) return false;    
+    if (x == this)
+      return true;
+    x = x->get_inode()->get_projected_parent_dir();
+    if (x == 0)
+      return false;    
   }
 }
 
