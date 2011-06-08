@@ -579,7 +579,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  if (in == renamed_diri)
-	    olddir = dir;
+	    olddir = in->get_parent_dn()->get_dir();
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
