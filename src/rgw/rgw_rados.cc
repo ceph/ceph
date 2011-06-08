@@ -467,6 +467,8 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
   if (r < 0)
     return r;
 
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.remove(oid);
   if (r < 0)
     return r;
@@ -532,6 +534,8 @@ int RGWRados::set_attr(rgw_obj& obj, const char *name, bufferlist& bl)
   int r = open_bucket_ctx(actual_bucket, io_ctx);
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
 
   r = io_ctx.setxattr(actual_obj, name, bl);
   if (r < 0)
@@ -751,6 +755,9 @@ int RGWRados::read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.read(oid, bl, size, ofs);
   return r;
 }
@@ -765,6 +772,9 @@ int RGWRados::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
     return r;
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.stat(oid, psize, pmtime);
   return r;
 }
@@ -786,6 +796,9 @@ int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.tmap_update(oid, cmdbl);
 
   return r;
@@ -806,6 +819,9 @@ int RGWRados::tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.tmap_update(oid, cmdbl);
   return r;
 }
@@ -824,6 +840,9 @@ int RGWRados::tmap_del(rgw_obj& obj, std::string& key)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.tmap_update(oid, cmdbl);
   return r;
 }
@@ -868,6 +887,9 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
   if (r < 0)
     return r;
   librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+
+  io_ctx.locator_set_key(obj.key);
+
   r = io_ctx.aio_append(oid, completion, bl, size);
   completion->release();
   return r;
