@@ -343,7 +343,7 @@ int main(int argc, char **argv)
   const char *subuser = 0;
   const char *access = 0;
   uint32_t perm_mask = 0;
-  uint64_t auid = 0;
+  uint64_t auid = -1;
   RGWUserInfo info;
   RGWAccess *store;
   const char *prev_cmd = NULL;
@@ -573,7 +573,7 @@ int main(int argc, char **argv)
       info.display_name = display_name;
     if (user_email)
       info.user_email = user_email;
-    if (auid)
+    if (auid >= 0)
       info.auid = auid;
     if (openstack_user)
       info.openstack_name = openstack_user;
