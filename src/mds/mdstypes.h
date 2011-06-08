@@ -817,22 +817,9 @@ struct cap_reconnect_t {
     ::encode_nohead(flockbl, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    decode_path(path, bl);
+    ::decode(path, bl);
     ::decode(capinfo, bl);
     ::decode_nohead(capinfo.flock_len, flockbl, bl);
-  }
-private:
-  void decode_path(std::string &path, bufferlist::iterator& p) {
-    // Bypass the check for embedded NULLs by decoding into a raw byte buffer.
-    // We sometimes get paths with embedded NULLs from old kernel clients.
-    __u32 len;
-    ::decode(len, p);
-    if (len > PATH_MAX)
-      throw buffer::malformed_input("cap_reconnect_t::decode_path: PATH too long!");
-    char str[len + 1];
-    memset(str, 0, sizeof(str));
-    p.copy(len, str);
-    path = str;
   }
 };
 WRITE_CLASS_ENCODER(cap_reconnect_t)
