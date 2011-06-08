@@ -549,8 +549,8 @@ int main(int argc, char **argv)
       object = "";
     string bucket_str(bucket);
     string object_str(object);
-    int ret = store->get_attr(bucket_str, object_str, object_str,
-                       RGW_ATTR_ACL, bl);
+    rgw_obj obj(bucket_str, object_str);
+    int ret = store->get_attr(obj, object_str, RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;
     if (ret >= 0) {
@@ -620,14 +620,15 @@ int main(int argc, char **argv)
     }
 
     uint64_t size;
-    int r = store->obj_stat(log_bucket, oid, &size, NULL);
+    rgw_obj obj(log_bucket, oid);
+    int r = store->obj_stat(obj, &size, NULL);
     if (r < 0) {
       cerr << "error while doing stat on " <<  log_bucket << ":" << oid
 	   << " " << cpp_strerror(-r) << std::endl;
       return -r;
     }
     bufferlist bl;
-    r = store->read(log_bucket, oid, 0, size, bl);
+    r = store->read(obj, 0, size, bl);
     if (r < 0) {
       cerr << "error while reading from " <<  log_bucket << ":" << oid
 	   << " " << cpp_strerror(-r) << std::endl;

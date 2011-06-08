@@ -42,15 +42,15 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, std::string& loc, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc, time_t *mtime,
               map<std::string, bufferlist>& attrs, bool exclusive);
-  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, std::string& loc, const char *data,
+  virtual int put_obj_data(std::string& id, rgw_obj& obj, std::string& loc, const char *data,
               off_t ofs, size_t len, time_t *mtime);
-  virtual int clone_range(std::string& bucket, std::string& dst_oid, off_t dst_ofs,
-                          std::string& src_oid, off_t src_ofs, size_t size, std::string& loc);
+  virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
+                          rgw_obj& src_obj, off_t src_ofs, size_t size, std::string& loc);
   /** Copy an object, with many extra options */
-  virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
-               std::string& src_bucket, std::string& src_obj,
+  virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
+               rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -62,18 +62,17 @@ public:
   virtual int delete_bucket(std::string& id, std::string& bucket);
 
   /** Delete an object.*/
-  virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj);
+  virtual int delete_obj(std::string& id, rgw_obj& src_obj);
 
   /** Get the attributes for an object.*/
-  virtual int get_attr(std::string& bucket, std::string& obj, std::string& loc,
+  virtual int get_attr(rgw_obj& obj, std::string& loc,
                const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
-  virtual int set_attr(std::string& bucket, std::string& obj,
-                       const char *name, bufferlist& bl);
+  virtual int set_attr(rgw_obj& obj, const char *name, bufferlist& bl);
 
   /** Get data about an object out of RADOS and into memory. */
-  virtual int prepare_get_obj(std::string& bucket, std::string& obj, std::string& loc,  
+  virtual int prepare_get_obj(rgw_obj& obj, std::string& loc,  
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -85,21 +84,21 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, std::string& loc,
+  virtual int get_obj(void **handle, rgw_obj& obj, std::string& loc,
             char **data, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);
 
-  virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
+  virtual int read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+  virtual int obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime);
 
   virtual bool supports_tmap() { return true; }
-  virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_create(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
-  virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key);
+  virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
-  virtual int append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl);
+  virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 };
 
 #endif

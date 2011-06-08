@@ -256,9 +256,11 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oid, std::string& loc,
+int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj, std::string& loc,
                   time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -307,9 +309,11 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid, std::string& loc,
+int RGWRados::put_obj_data(std::string& id, rgw_obj& obj, std::string& loc,
 			   const char *data, off_t ofs, size_t len, time_t *mtime)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -353,8 +357,8 @@ int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oi
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
-               std::string& src_bucket, std::string& src_obj,
+int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
+               rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -363,6 +367,10 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
                map<string, bufferlist>& attrs,  /* in/out */
                struct rgw_err *err)
 {
+  string& dest_bucket = dest_obj.bucket;
+  string& dest_oid = dest_obj.object;
+  string& src_bucket = src_obj.bucket;
+  string& src_oid = src_obj.object;
   int ret, r;
   char *data;
   off_t end = -1;
@@ -370,12 +378,12 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
 
-  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << dendl;
+  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_oid << " => " << dest_bucket << ":" << dest_oid << dendl;
 
   void *handle = NULL;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_bucket, src_obj, src_obj, 0, &end, &attrset,
+  ret = prepare_get_obj(src_obj, src_oid, 0, &end, &attrset,
                 mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, err);
 
   if (ret < 0)
@@ -383,13 +391,13 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
   off_t ofs = 0;
   do {
-    ret = get_obj(&handle, src_bucket, src_obj, src_obj, &data, ofs, end);
+    ret = get_obj(&handle, src_obj, src_oid, &data, ofs, end);
     if (ret < 0)
       return ret;
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(id, dest_bucket, dest_obj, dest_obj, data,
+    r = put_obj_data(id, dest_obj, dest_oid, data,
 		     ((ofs == 0) ? -1 : ofs), ret, NULL);
     free(data);
     if (r < 0)
@@ -403,7 +411,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   }
   attrs = attrset;
 
-  ret = put_obj_meta(id, dest_bucket, dest_obj, dest_obj, mtime, attrs, false);
+  ret = put_obj_meta(id, dest_obj, dest_oid, mtime, attrs, false);
 
   finish_get_obj(&handle);
 
@@ -454,8 +462,10 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
+int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -476,12 +486,14 @@ int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(std::string& bucket, std::string& obj, std::string& loc,
+int RGWRados::get_attr(rgw_obj& obj, std::string& loc,
                        const char *name, bufferlist& dest)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   string actual_bucket = bucket;
-  string actual_obj = obj;
+  string actual_obj = oid;
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket;
@@ -509,9 +521,10 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj, std::string& loc,
  * bl: the contents of the attr
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::set_attr(std::string& bucket, std::string& oid,
-                       const char *name, bufferlist& bl)
+int RGWRados::set_attr(rgw_obj& obj, const char *name, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   string actual_bucket = bucket;
   string actual_obj = oid;
@@ -555,7 +568,7 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid, std::string& loc,
+int RGWRados::prepare_get_obj(rgw_obj& obj, std::string& loc,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -567,6 +580,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid, std::string
             void **handle,
             struct rgw_err *err)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   int r = -EINVAL;
   uint64_t size;
   bufferlist etag;
@@ -629,7 +644,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid, std::string
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(bucket, oid, loc, RGW_ATTR_ETAG, etag);
+    r = get_attr(obj, loc, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
@@ -669,9 +684,12 @@ done_err:
   return r;
 }
 
-int RGWRados::clone_range(std::string& bucket, std::string& dst_oid, off_t dst_ofs,
-                          std::string& src_oid, off_t src_ofs, size_t size, std::string& loc)
+int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
+                          rgw_obj& src_obj, off_t src_ofs, size_t size, std::string& loc)
 {
+  std::string& bucket = dst_obj.bucket;
+  std::string& dst_oid = dst_obj.object;
+  std::string& src_oid = src_obj.object;
   librados::IoCtx io_ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -685,9 +703,11 @@ int RGWRados::clone_range(std::string& bucket, std::string& dst_oid, off_t dst_o
 
 
 int RGWRados::get_obj(void **handle,
-            std::string& bucket, std::string& oid, string& loc,
+            rgw_obj& obj, string& loc,
             char **data, off_t ofs, off_t end)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   uint64_t len;
   bufferlist bl;
 
@@ -730,8 +750,10 @@ void RGWRados::finish_get_obj(void **handle)
 }
 
 /* a simple object read */
-int RGWRados::read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl)
+int RGWRados::read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -740,20 +762,24 @@ int RGWRados::read(std::string& bucket, std::string& oid, off_t ofs, size_t size
   return r;
 }
 
-int RGWRados::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+int RGWRados::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
   if (r < 0)
     return r;
-  r = io_ctx.stat(obj, psize, pmtime);
+  r = io_ctx.stat(oid, psize, pmtime);
   return r;
 }
 
-int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
+int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   bufferlist cmdbl, emptybl;
   __u8 c = CEPH_OSD_TMAP_SET;
 
@@ -761,19 +787,21 @@ int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, 
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
 
-  RGW_LOG(15) << "tmap_set bucket=" << bucket << " obj=" << obj << " key=" << key << dendl;
+  RGW_LOG(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << key << dendl;
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-  r = io_ctx.tmap_update(obj, cmdbl);
+  r = io_ctx.tmap_update(oid, cmdbl);
 
   return r;
 }
 
-int RGWRados::tmap_create(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
+int RGWRados::tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   bufferlist cmdbl, emptybl;
   __u8 c = CEPH_OSD_TMAP_CREATE;
 
@@ -785,12 +813,14 @@ int RGWRados::tmap_create(std::string& bucket, std::string& obj, std::string& ke
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-  r = io_ctx.tmap_update(obj, cmdbl);
+  r = io_ctx.tmap_update(oid, cmdbl);
   return r;
 }
 
-int RGWRados::tmap_del(std::string& bucket, std::string& obj, std::string& key)
+int RGWRados::tmap_del(rgw_obj& obj, std::string& key)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   bufferlist cmdbl;
   __u8 c = CEPH_OSD_TMAP_RM;
 
@@ -801,7 +831,7 @@ int RGWRados::tmap_del(std::string& bucket, std::string& obj, std::string& key)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-  r = io_ctx.tmap_update(obj, cmdbl);
+  r = io_ctx.tmap_update(oid, cmdbl);
   return r;
 }
 int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
@@ -836,8 +866,10 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   return count;
 }
 
-int RGWRados::append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl)
+int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)

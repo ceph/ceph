@@ -69,9 +69,11 @@ int rgw_log_op(struct req_state *s)
   
   char buf[entry.bucket.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, entry.bucket.c_str());
-  string oid = buf;
+  rgw_obj obj;
+  obj.bucket = log_bucket;
+  obj.object = buf;
 
-  int ret = rgwstore->append_async(log_bucket, oid, bl.length(), bl);
+  int ret = rgwstore->append_async(obj, bl.length(), bl);
 
   if (ret == -ENOENT) {
     string id;
@@ -79,7 +81,8 @@ int rgw_log_op(struct req_state *s)
     ret = rgwstore->create_bucket(id, log_bucket, attrs);
     if (ret < 0)
       goto done;
-    ret = rgwstore->append_async(log_bucket, entry.bucket, bl.length(), bl);
+    obj.object = entry.bucket;
+    ret = rgwstore->append_async(obj, bl.length(), bl);
   }
 done:
   if (ret < 0)

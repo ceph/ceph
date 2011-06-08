@@ -448,6 +448,19 @@ struct RGWUploadPartInfo {
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
+class rgw_obj {
+public:
+  std::string bucket;
+  std::string object;
+
+  rgw_obj() {}
+  rgw_obj(std::string& b, std::string& o) : bucket(b), object(o) {}
+  void init(std::string& b, std::string& o) {
+    bucket = b;
+    object = o;
+  }
+};
+
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;
