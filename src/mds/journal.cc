@@ -574,6 +574,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       } else {
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
+	  if (in == renamed_diri)
+	    olddir = dir;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
@@ -605,6 +607,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       } else {
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->get_inode() == renamed_diri)
+	    olddir = dir;
 	  dir->unlink_inode(dn);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
@@ -630,8 +634,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
-	  if (dn->get_linkage()->is_primary() &&
-	      dn->get_linkage()->get_inode() == renamed_diri)
+	  if (dn->get_linkage()->get_inode() == renamed_diri)
 	    olddir = dir;
 	  dir->unlink_inode(dn);
 	}
@@ -648,11 +651,24 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       assert(renamed_diri);
       mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
     } else {
-      if (!renamed_diri) {
-	renamed_diri = mds->mdcache->get_inode(renamed_dirino);
-	assert(renamed_diri);
+      // we imported a diri we haven't seen before
+      assert(!renamed_diri);
+      renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+      assert(renamed_diri);  // it was in the metablob
+    }
+
+    // if we are the srci importer, we'll also have some dirfrags we have to open up...
+    for (list<frag_t>::iterator p = renamed_dir_frags.begin(); p != renamed_dir_frags.end(); ++p) {
+      CDir *dir = renamed_diri->get_dirfrag(*p);
+      if (dir) {
+	// we already had the inode before, and we already adjusted this subtree accordingly.
+	dout(10) << " already had+adjusted rename import bound " << *dir << dendl;
+	assert(olddir); 
+	continue;
       }
-      // FIXME.
+      dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+      dout(10) << " creating new rename import bound " << *dir << dendl;
+      mds->mdcache->adjust_subtree_auth(dir, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN), false);
     }
   }
 
