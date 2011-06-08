@@ -18,6 +18,8 @@
 #define MON_MON_UPDATE	    (1<<3)
 #define EVERYTHING_UPDATE   0xffffffff
 
+class CephContext;
+
 enum ceph_tool_mode_t {
   CEPH_TOOL_MODE_CLI_INPUT = 0,
   CEPH_TOOL_MODE_OBSERVER = 1,
@@ -26,8 +28,10 @@ enum ceph_tool_mode_t {
 };
 
 // tool/ceph.cc
-struct ceph_tool_data
+class CephToolCtx
 {
+public:
+  CephContext *cct;
   PGMap pgmap;
   MDSMap mdsmap;
   OSDMap osdmap;
@@ -52,26 +56,33 @@ struct ceph_tool_data
 
   bool concise;
 
-  ceph_tool_data() :
+  Dispatcher *dispatcher;
+
+  CephToolCtx(CephContext *cct_, bool concise_) :
+    cct(cct_),
     mc(&g_ceph_context),
     updates(EVERYTHING_UPDATE),
     log(&std::cout),
     slog(NULL),
     lock("ceph.cc lock"), timer(lock),
-    concise(false)
+    concise(concise_),
+    dispatcher(NULL)
   {
+  }
+
+  ~CephToolCtx() {
+    delete dispatcher;
   }
 };
 
 // tool/ceph.cc
-extern struct ceph_tool_data g;
-int ceph_tool_do_cli();
-int run_command(const char *line);
-void send_observe_requests();
-int ceph_tool_common_init(ceph_tool_mode_t mode);
-int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
-			bufferlist &indata);
+int ceph_tool_do_cli(CephToolCtx *data);
+int run_command(CephToolCtx *data, const char *line);
+void send_observe_requests(CephToolCtx *ctx);
+CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise);
+int ceph_tool_cli_input(CephToolCtx *ctx, std::vector<std::string> &cmd, 
+			const char *outfile, bufferlist &indata);
 int ceph_tool_messenger_shutdown();
-int ceph_tool_common_shutdown();
+int ceph_tool_common_shutdown(CephToolCtx *ctx);
 
 #endif

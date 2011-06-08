@@ -23,7 +23,7 @@
 #include <vector>
 
 // tool/gui.cc
-int run_gui(int argc, char **argv);
+int run_gui(CephToolCtx *ctx, int argc, char **argv);
 
 using std::vector;
 
@@ -47,23 +47,26 @@ static void parse_gceph_args(const vector<const char*> &args)
   }
 }
 
-static int cephtool_run_gui(int argc, const char **argv)
+static int cephtool_run_gui(CephToolCtx *ctx, int argc,
+			    const char **argv)
 {
-  g.log = &gss;
-  g.slog = &gss;
+  ctx->log = &gss;
+  ctx->slog = &gss;
 
   // TODO: make sure that we capture the log this generates in the GUI
-  g.lock.Lock();
-  send_observe_requests();
-  g.lock.Unlock();
+  ctx->lock.Lock();
+  send_observe_requests(ctx);
+  ctx->lock.Unlock();
 
-  return run_gui(argc, (char **)argv);
+  return run_gui(ctx, argc, (char **)argv);
 }
+
+static CephToolCtx *ctx = NULL;
 
 void ceph_tool_common_shutdown_wrapper()
 {
   ceph_tool_messenger_shutdown();
-  ceph_tool_common_shutdown();
+  ceph_tool_common_shutdown(ctx);
 }
 
 int main(int argc, const char **argv)
@@ -82,14 +85,15 @@ int main(int argc, const char **argv)
 
   parse_gceph_args(args);
 
-  if (ceph_tool_common_init(CEPH_TOOL_MODE_GUI)) {
+  ctx = ceph_tool_common_init(CEPH_TOOL_MODE_GUI, false);
+  if (!ctx) {
     derr << "cephtool_common_init failed." << dendl;
     return 1;
   }
 
   atexit(ceph_tool_common_shutdown_wrapper);
 
-  if (cephtool_run_gui(argc, argv))
+  if (cephtool_run_gui(ctx, argc, argv))
     ret = 1;
 
   if (ceph_tool_messenger_shutdown())

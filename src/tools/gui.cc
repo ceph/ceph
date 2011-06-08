@@ -130,13 +130,14 @@ public:
 
   void *entry()
   {
-    g.lock.Lock();
+    CephToolCtx *ctx = gui->ctx;
+    ctx->lock.Lock();
     while (true) {
       utime_t t(g_clock.now());
       t += 3.0;
-      g.gui_cond.WaitUntil(g.lock, t);
+      ctx->gui_cond.WaitUntil(ctx->lock, t);
       if (shutting_down) {
-	g.lock.Unlock();
+	ctx->lock.Unlock();
 	return NULL;
       }
       gui->check_status();
@@ -146,7 +147,7 @@ public:
   void shutdown()
   {
     shutting_down = true;
-    g.gui_cond.Signal();
+    gui->ctx->gui_cond.Signal();
     this->join();
   }
 
@@ -155,13 +156,14 @@ private:
   bool shutting_down;
 };
 
-GuiMonitor::GuiMonitor(Glib::RefPtr<Gtk::Builder> builder)
+GuiMonitor::GuiMonitor(Glib::RefPtr<Gtk::Builder> builder, CephToolCtx * ctx_)
   : pg_cluster_zoom(0),
     osd_cluster_zoom(0),
     mds_cluster_zoom(0),
     send_command_success(false),
     view_node_success(false),
-    thread(NULL)
+    thread(NULL),
+    ctx(ctx_)
 {
   MY_GET_WIDGET(guiMonitorWindow);
   MY_GET_WIDGET(guiMonitorQuitImageMenuItem);
@@ -506,7 +508,7 @@ void GuiMonitor::link_elements()
  */
 void GuiMonitor::update_osd_cluster_view()
 {
-  int num_osds = g.osdmap.get_max_osd();
+  int num_osds = ctx->osdmap.get_max_osd();
 
   // Do not update the OSD cluster view if the zoom level is not zero.
   if (!osd_cluster_zoom)
@@ -514,8 +516,8 @@ void GuiMonitor::update_osd_cluster_view()
 
   ostringstream oss;
   oss << num_osds << " OSD" << ((num_osds == 1) ? "" : "s")
-      << " Total: " << g.osdmap.get_num_up_osds() << " Up, "
-      << g.osdmap.get_num_in_osds() << " In";
+      << " Total: " << ctx->osdmap.get_num_up_osds() << " Up, "
+      << ctx->osdmap.get_num_in_osds() << " In";
   guiMonitorOSDClusterStatsLabel->set_label(oss.str());
 }
 
@@ -526,10 +528,10 @@ void GuiMonitor::update_mds_cluster_view()
     view_mds_nodes();
 
   ostringstream oss;
-  oss << g.mdsmap.get_num_mds() << " In, "
-      << g.mdsmap.get_num_failed() << " Failed, "
-      << g.mdsmap.get_num_mds(MDSMap::STATE_STOPPED) << " Stopped, "
-      << g.mdsmap.get_max_mds() << " Max";
+  oss << ctx->mdsmap.get_num_mds() << " In, "
+      << ctx->mdsmap.get_num_failed() << " Failed, "
+      << ctx->mdsmap.get_num_mds(MDSMap::STATE_STOPPED) << " Stopped, "
+      << ctx->mdsmap.get_max_mds() << " Max";
   guiMonitorMDSClusterStatsLabel->set_label(oss.str());
 }
 
@@ -540,11 +542,11 @@ void GuiMonitor::update_pg_cluster_view()
     view_pg_nodes(0, 0, true);
 
   ostringstream oss;
-  oss << g.pgmap.pg_stat.size() << " Placement Groups\n"
-      << kb_t(g.pgmap.pg_sum.num_kb) << " Data, "
-      << kb_t(g.pgmap.osd_sum.kb_used) << " Used, "
-      << kb_t(g.pgmap.osd_sum.kb_avail) << " / "
-      << kb_t(g.pgmap.osd_sum.kb) << " Available";
+  oss << ctx->pgmap.pg_stat.size() << " Placement Groups\n"
+      << kb_t(ctx->pgmap.pg_sum.num_kb) << " Data, "
+      << kb_t(ctx->pgmap.osd_sum.kb_used) << " Used, "
+      << kb_t(ctx->pgmap.osd_sum.kb_avail) << " / "
+      << kb_t(ctx->pgmap.osd_sum.kb) << " Available";
   guiMonitorPGClusterStatsLabel->set_label(oss.str());
 }
 
@@ -554,7 +556,7 @@ void GuiMonitor::update_mon_cluster_view()
   Gtk::TreeModel::Row current_row;
   entity_inst_t currentMonitor;
   string currentAddress;
-  unsigned int monitors = g.mc.monmap.size();
+  unsigned int monitors = ctx->mc.monmap.size();
 
   // Clear current contents of the monitor cluster area of the GUI.
   guiMonitorMonitorClusterEntries->clear();
@@ -565,7 +567,7 @@ void GuiMonitor::update_mon_cluster_view()
 
   // For each monitor in the monitor map, output its ID and its address.
   for (unsigned int i = 0; i < monitors; i++) {
-    currentMonitor = g.mc.monmap.get_inst(i);
+    currentMonitor = ctx->mc.monmap.get_inst(i);
 
     input << currentMonitor.addr;
     currentAddress = input.str();
@@ -627,11 +629,11 @@ void GuiMonitor::view_osd_nodes(unsigned int begin, unsigned int end, bool
          caption = gen_osd_icon_caption(begin_range, end_range);
 
          for (j = begin_range; j <= end_range; j++) {
-            if (g.osdmap.is_out(j)) {
+            if (ctx->osdmap.is_out(j)) {
                icon_status = CEPH_OSD_OUT;
                break;
             }
-            else if (g.osdmap.is_down(j))
+            else if (ctx->osdmap.is_down(j))
                icon_status = ~CEPH_OSD_UP;
          }
 
@@ -691,13 +693,13 @@ void GuiMonitor::view_mds_nodes(unsigned int begin, unsigned int end, bool
   if (viewAll) {
       // Gather all of the names of the up MDSes
       set<int> up_mds;
-      g.mdsmap.get_up_mds_set(up_mds);
+      ctx->mdsmap.get_up_mds_set(up_mds);
       current_up_mds.clear();
       for (set<int>::const_iterator mds_id = up_mds.begin();
 	   mds_id != up_mds.end();
 	   ++mds_id)
       {
-         const MDSMap::mds_info_t& info = g.mdsmap.get_mds_info(*mds_id);
+         const MDSMap::mds_info_t& info = ctx->mdsmap.get_mds_info(*mds_id);
 
          current_up_mds.push_back(info.name);
       }
@@ -768,12 +770,12 @@ view_pg_nodes(unsigned int begin, unsigned int end, bool view_all)
     while (!old_pg_cluster_zoom_states.empty())
       old_pg_cluster_zoom_states.pop();
 
-    size = g.pgmap.pg_stat.size();
+    size = ctx->pgmap.pg_stat.size();
     pg_cluster_zoom = 0;
 
     current_pgs.clear();
-    for (hash_map<pg_t,pg_stat_t>::const_iterator p = g.pgmap.pg_stat.begin();
-	 p != g.pgmap.pg_stat.end(); ++p) {
+    for (hash_map<pg_t,pg_stat_t>::const_iterator p = ctx->pgmap.pg_stat.begin();
+	 p != ctx->pgmap.pg_stat.end(); ++p) {
       current_pgs.push_back(p->first);
     }
   }
@@ -822,20 +824,20 @@ void GuiMonitor::check_status()
   // servers, and the monitors have been updated.  If any of these have been
   // updated, then update the GUI accordingly.
 
-  assert(g.lock.is_locked());
-  if (g.updates & OSD_MON_UPDATE)
+  assert(ctx->lock.is_locked());
+  if (ctx->updates & OSD_MON_UPDATE)
     update_osd_cluster_view();
-  if (g.updates & MDS_MON_UPDATE)
+  if (ctx->updates & MDS_MON_UPDATE)
     update_mds_cluster_view();
-  if (g.updates & PG_MON_UPDATE)
+  if (ctx->updates & PG_MON_UPDATE)
     update_pg_cluster_view();
-  if (g.updates & MON_MON_UPDATE)
+  if (ctx->updates & MON_MON_UPDATE)
     update_mon_cluster_view();
-  g.updates = 0;
+  ctx->updates = 0;
 
   // See if the log has been updated. If it has, then
   // update the log text box in the GUI and then clear the log stream.
-  string log(g.slog->str());
+  string log(ctx->slog->str());
   if (!log.empty()) {
     if (!guiMonitorCopyImageMenuItem->is_sensitive())
       guiMonitorCopyImageMenuItem->set_sensitive(true);
@@ -844,8 +846,8 @@ void GuiMonitor::check_status()
     end.backward_line();
     guiMonitorLogTextView->scroll_to(
 		    guiMonitorLogTextBuffer->create_mark(end));
-    g.slog->str("");
-    g.slog->flush();
+    ctx->slog->str("");
+    ctx->slog->flush();
   }
 }
 
@@ -918,7 +920,7 @@ void GuiMonitor::handle_send_command_response(int response)
     return;
   }
 
-  run_command(command_str.c_str());
+  run_command(ctx, command_str.c_str());
 
   send_command_success = true;
 }
@@ -1053,11 +1055,11 @@ void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
   int end_range = row[icon_columns.end_range];
 
   if (end_range == begin_range) {
-    if (begin_range >= g.osdmap.get_max_osd()) {
+    if (begin_range >= ctx->osdmap.get_max_osd()) {
       dialog_error("OSD map has changed and the node no longer exists.",
 		    Gtk::MESSAGE_ERROR);
 
-      view_osd_nodes(0, g.osdmap.get_max_osd());
+      view_osd_nodes(0, ctx->osdmap.get_max_osd());
     }
     else {
       open_stats(OSD_NODE, false, begin_range);
@@ -1104,7 +1106,7 @@ void GuiMonitor::osdc_cluster_back()
 // Displays all OSDs, with recent updates.
 void GuiMonitor::osdc_cluster_view_all()
 {
-  view_osd_nodes(0, g.osdmap.get_max_osd());
+  view_osd_nodes(0, ctx->osdmap.get_max_osd());
 }
 
 // Allows user to obtain the statistics of the OSD cluster.  Called by
@@ -1143,7 +1145,7 @@ void GuiMonitor::mds_cluster_zoom_in(const Gtk::TreeModel::Path& path)
   }
   else {
     set<int> up_mds;
-    g.mdsmap.get_up_mds_set(up_mds);
+    ctx->mdsmap.get_up_mds_set(up_mds);
 
     if (begin_range >= up_mds.size()) {
       dialog_error("Metadata server map has changed and the node no "
@@ -1216,7 +1218,7 @@ void GuiMonitor::pg_cluster_zoom_in(const Gtk::TreeModel::Path& path)
     view_pg_nodes(begin_range, end_range + 1, false);
   }
   else {
-    if (begin_range >= g.pgmap.pg_stat.size()) {
+    if (begin_range >= ctx->pgmap.pg_stat.size()) {
       dialog_error("Placement group map has changed and the node no "
 		    "longer exists.", Gtk::MESSAGE_ERROR);
 
@@ -1279,13 +1281,13 @@ void GuiMonitor::dialog_error(const std::string &msg, Gtk::MessageType type)
 int GuiMonitor::find_mds_id(const std::string &name)
 {
   set<int> upMDSes;
-  g.mdsmap.get_up_mds_set(upMDSes);
+  ctx->mdsmap.get_up_mds_set(upMDSes);
 
   for (set<int>::const_iterator MDSId = upMDSes.begin();
 	MDSId != upMDSes.end(); MDSId++)
   {
       const MDSMap::mds_info_t& current_mds_info =
-	  g.mdsmap.get_mds_info(*MDSId);
+	  ctx->mdsmap.get_mds_info(*MDSId);
       if (current_mds_info.name == name)
 	return *MDSId;
   }
@@ -1330,7 +1332,7 @@ void GuiMonitor::handle_view_node_response(int response)
 	dialog_error("Node ID must be a number.", Gtk::MESSAGE_ERROR);
 	return;
       }
-      unsigned int max_osd = g.osdmap.get_max_osd();
+      unsigned int max_osd = ctx->osdmap.get_max_osd();
       if (id >= max_osd) {
 	dialog_error("OSD does not exist.", Gtk::MESSAGE_ERROR);
 	return;
@@ -1361,7 +1363,7 @@ void GuiMonitor::handle_view_node_response(int response)
 	dialog_error("Node ID must be a number.", Gtk::MESSAGE_ERROR);
 	return;
       }
-      if (id >= g.pgmap.pg_stat.size()) {
+      if (id >= ctx->pgmap.pg_stat.size()) {
 	dialog_error("PG does not exist.", Gtk::MESSAGE_ERROR);
 	return;
       }
@@ -1411,7 +1413,8 @@ GuiMonitor::StatsWindowInfo::StatsWindowInfo(GuiMonitor *gui_,
   : gui(gui_),
     is_cluster(is_cluster_),
     type(type_),
-    id(id_)
+    id(id_),
+    ctx(gui_->ctx)
 {
   builder->get_widget("statsWindow", stats_window);
   builder->get_widget("statsInfoLabel", stats_info_label);
@@ -1475,22 +1478,22 @@ void GuiMonitor::StatsWindowInfo::gen_osd_cluster_columns()
 
   {
     ostringstream oss;
-    oss << g.osdmap.get_epoch();
+    oss << ctx->osdmap.get_epoch();
     insert_stats("Epoch", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.osdmap.get_max_osd();
+    oss << ctx->osdmap.get_max_osd();
     insert_stats("Maximum Amount of OSDs", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.osdmap.get_num_up_osds();
+    oss << ctx->osdmap.get_num_up_osds();
     insert_stats("Amount of Up OSDs", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.osdmap.get_num_in_osds();
+    oss << ctx->osdmap.get_num_in_osds();
     insert_stats("Amount of In OSDs", oss.str());
   }
 }
@@ -1505,17 +1508,17 @@ void GuiMonitor::StatsWindowInfo::gen_mds_cluster_columns()
   set<int> up_mds;
   set<int> stopped_mds;
 
-  g.mdsmap.get_up_mds_set(up_mds);
-  g.mdsmap.get_stopped_mds_set(stopped_mds);
+  ctx->mdsmap.get_up_mds_set(up_mds);
+  ctx->mdsmap.get_stopped_mds_set(stopped_mds);
 
-  insert_stats("Epoch", str(boost::format("%llu") % g.mdsmap.get_epoch()));
+  insert_stats("Epoch", str(boost::format("%llu") % ctx->mdsmap.get_epoch()));
   insert_stats("Maximum Amount of MDSes", str(boost::format("%u") %
-    g.mdsmap.get_max_mds()));
+    ctx->mdsmap.get_max_mds()));
   insert_stats("Amount of Up MDSes", str(boost::format("%d") % up_mds.size()));
   insert_stats("Amount of In MDSes", str(boost::format("%u") %
-    g.mdsmap.get_num_mds()));
+    ctx->mdsmap.get_num_mds()));
   insert_stats("Amount of Failed MDSes", str(boost::format("%d") %
-    g.mdsmap.get_num_failed()));
+    ctx->mdsmap.get_num_failed()));
   insert_stats("Amount of Stopped MDSes", str(boost::format("%d") %
     stopped_mds.size()));
 }
@@ -1529,37 +1532,37 @@ void GuiMonitor::StatsWindowInfo::gen_pg_cluster_columns()
 
   {
     ostringstream oss;
-    oss << g.pgmap.version;
+    oss << ctx->pgmap.version;
     insert_stats("Version", oss.str());
   }
 
   {
     ostringstream oss;
-    oss << g.pgmap.pg_stat.size();
+    oss << ctx->pgmap.pg_stat.size();
     insert_stats("Amount of PGs", oss.str());
   }
 
   {
     ostringstream oss;
-    oss << kb_t(g.pgmap.pg_sum.num_kb);
+    oss << kb_t(ctx->pgmap.pg_sum.num_kb);
     insert_stats("Data ", oss.str());
   }
 
   {
     ostringstream oss;
-    oss << kb_t(g.pgmap.osd_sum.kb_used);
+    oss << kb_t(ctx->pgmap.osd_sum.kb_used);
     insert_stats("Amount of Storage Used", oss.str());
   }
 
   {
     ostringstream oss;
-    oss << kb_t(g.pgmap.osd_sum.kb_avail);
+    oss << kb_t(ctx->pgmap.osd_sum.kb_avail);
     insert_stats("Amount of Storage Available", oss.str());
   }
 
   {
     ostringstream oss;
-    oss << kb_t(g.pgmap.osd_sum.kb);
+    oss << kb_t(ctx->pgmap.osd_sum.kb);
     insert_stats("Total Storage", oss.str());
   }
 }
@@ -1571,36 +1574,36 @@ void GuiMonitor::StatsWindowInfo::gen_monitor_cluster_columns()
   stats_info_label->set_label(label);
   {
     ostringstream oss;
-    oss << g.mc.monmap.size();
+    oss << ctx->mc.monmap.size();
     insert_stats("Amount of Monitors", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.mc.monmap.epoch;
+    oss << ctx->mc.monmap.epoch;
     insert_stats("Epoch", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.mc.monmap.fsid;
+    oss << ctx->mc.monmap.fsid;
     insert_stats("File System ID", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.mc.monmap.last_changed;
+    oss << ctx->mc.monmap.last_changed;
     insert_stats("Last Changed", oss.str());
   }
   {
     ostringstream oss;
-    oss << g.mc.monmap.created;
+    oss << ctx->mc.monmap.created;
     insert_stats("Created", oss.str());
   }
 }
 
 void GuiMonitor::StatsWindowInfo::gen_osd_node_columns()
 {
-  bool isIn = g.osdmap.is_in(id);
-  const entity_addr_t& addr = g.osdmap.get_addr(id);
-  const osd_info_t& osdInfo = g.osdmap.get_info(id);
+  bool isIn = ctx->osdmap.is_in(id);
+  const entity_addr_t& addr = ctx->osdmap.get_addr(id);
+  const osd_info_t& osdInfo = ctx->osdmap.get_info(id);
 
   string label(str(boost::format("OSD %lu Statistics:") % id));
 
@@ -1609,10 +1612,10 @@ void GuiMonitor::StatsWindowInfo::gen_osd_node_columns()
 
   insert_stats("OSD ID", str(boost::format("%lu") % id));
   insert_stats("Address", isIn ? addr_to_str(addr) : "None");
-  insert_stats("Up?", g.osdmap.is_up(id) ? "Up" : "Down");
+  insert_stats("Up?", ctx->osdmap.is_up(id) ? "Up" : "Down");
   insert_stats("In?", isIn ? "In" : "Out");
   insert_stats("Weight", isIn ? str(boost::format("%f") %
-      g.osdmap.get_weightf(id)) : "None");
+      ctx->osdmap.get_weightf(id)) : "None");
   insert_stats("Up From", str(boost::format("%lu") % osdInfo.up_from));
   insert_stats("Up Through", str(boost::format("%lu") % osdInfo.up_thru));
   insert_stats("Down At", str(boost::format("%lu") % osdInfo.down_at));
@@ -1622,7 +1625,7 @@ void GuiMonitor::StatsWindowInfo::gen_osd_node_columns()
 
 void GuiMonitor::StatsWindowInfo::gen_mds_node_columns()
 {
-  const MDSMap::mds_info_t &mdsInfo = g.mdsmap.get_mds_info(id);
+  const MDSMap::mds_info_t &mdsInfo = ctx->mdsmap.get_mds_info(id);
 
   string label(str(boost::format("MDS %s Statistics:") % mdsInfo.name));
 
@@ -1640,8 +1643,8 @@ void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
 {
   pg_t pg(gui->current_pgs.at(id));
 
-  hash_map<pg_t,pg_stat_t>::const_iterator s = g.pgmap.pg_stat.find(pg);
-  assert(s != g.pgmap.pg_stat.end());
+  hash_map<pg_t,pg_stat_t>::const_iterator s = ctx->pgmap.pg_stat.find(pg);
+  assert(s != ctx->pgmap.pg_stat.end());
 
   const pg_stat_t &stat(s->second);
   std::stringstream converter;
@@ -1744,7 +1747,7 @@ void GuiMonitor::StatsWindowInfo::insert_stats(const std::string &key,
   currentRow[columns.value] = value;
 }
 
-int run_gui(int argc, char **argv)
+int run_gui(CephToolCtx *ctx, int argc, char **argv)
 {
   int ret = EXIT_SUCCESS;
   GuiMonitor *gui = NULL;
@@ -1768,7 +1771,7 @@ int run_gui(int argc, char **argv)
 	  Gtk::Builder::create_from_file(resource_path(GUI_MONITOR_BUILDER_FILE));
 
     // stores pointers to all GUI elements
-    gui = new GuiMonitor(builder);
+    gui = new GuiMonitor(builder, ctx);
 
     if (!gui->init()) {
       derr << "There was a problem with initializing the GUI." << dendl;

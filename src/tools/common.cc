@@ -43,11 +43,9 @@ extern "C" {
 #include <histedit.h>
 }
 
+// TODO: should move these into CephToolCtx for consistency
 static enum ceph_tool_mode_t
   ceph_tool_mode(CEPH_TOOL_MODE_CLI_INPUT);
-
-struct ceph_tool_data g;
-
 static Cond cmd_cond;
 static SimpleMessenger *messenger = 0;
 static Tokenizer *tok;
@@ -80,17 +78,17 @@ static set<int> registered, seen;
 
 version_t map_ver[PAXOS_NUM];
 
-static void handle_observe(MMonObserve *observe)
+static void handle_observe(CephToolCtx *ctx, MMonObserve *observe)
 {
   dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
 	  << " registered" << dendl;
-  g.lock.Lock();
+  ctx->lock.Lock();
   registered.insert(observe->machine_id);  
-  g.lock.Unlock();
+  ctx->lock.Unlock();
   observe->put();
 }
 
-static void handle_notify(MMonObserveNotify *notify)
+static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
 {
   utime_t now = g_clock.now();
 
@@ -99,8 +97,9 @@ static void handle_notify(MMonObserveNotify *notify)
 	  << (notify->is_latest ? " (latest)" : "")
 	  << dendl;
   
-  if (ceph_fsid_compare(&notify->fsid, &g.mc.monmap.fsid)) {
-    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << g.mc.monmap.fsid << dendl;
+  if (ceph_fsid_compare(&notify->fsid, &ctx->mc.monmap.fsid)) {
+    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != "
+	    << ctx->mc.monmap.fsid << dendl;
     notify->put();
     return;
   }
@@ -113,34 +112,34 @@ static void handle_notify(MMonObserveNotify *notify)
     {
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	g.pgmap.decode(p);
+	ctx->pgmap.decode(p);
       } else {
 	PGMap::Incremental inc;
 	inc.decode(p);
-	g.pgmap.apply_incremental(inc);
+	ctx->pgmap.apply_incremental(inc);
       }
-      *g.log << now << "    pg " << g.pgmap << std::endl;
-      g.updates |= PG_MON_UPDATE;
+      *ctx->log << now << "    pg " << ctx->pgmap << std::endl;
+      ctx->updates |= PG_MON_UPDATE;
       break;
     }
 
   case PAXOS_MDSMAP:
-    g.mdsmap.decode(notify->bl);
-    *g.log << now << "   mds " << g.mdsmap << std::endl;
-    g.updates |= MDS_MON_UPDATE;
+    ctx->mdsmap.decode(notify->bl);
+    *ctx->log << now << "   mds " << ctx->mdsmap << std::endl;
+    ctx->updates |= MDS_MON_UPDATE;
     break;
 
   case PAXOS_OSDMAP:
     {
       if (notify->is_latest) {
-	g.osdmap.decode(notify->bl);
+	ctx->osdmap.decode(notify->bl);
       } else {
 	OSDMap::Incremental inc(notify->bl);
-	g.osdmap.apply_incremental(inc);
+	ctx->osdmap.apply_incremental(inc);
       }
-      *g.log << now << "   osd " << g.osdmap << std::endl;
+      *ctx->log << now << "   osd " << ctx->osdmap << std::endl;
     }
-    g.updates |= OSD_MON_UPDATE;
+    ctx->updates |= OSD_MON_UPDATE;
     break;
 
   case PAXOS_LOG:
@@ -151,14 +150,14 @@ static void handle_notify(MMonObserveNotify *notify)
 	::decode(summary, p);
 	// show last log message
 	if (!summary.tail.empty())
-	  *g.log << now << "   log " << summary.tail.back() << std::endl;
+	  *ctx->log << now << "   log " << summary.tail.back() << std::endl;
       } else {
 	LogEntry le;
 	__u8 v;
 	::decode(v, p);
 	while (!p.end()) {
 	  le.decode(p);
-	  *g.log << now << "   log " << le << std::endl;
+	  *ctx->log << now << "   log " << le << std::endl;
 	}
       }
       break;
@@ -169,14 +168,14 @@ static void handle_notify(MMonObserveNotify *notify)
 #if 0
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	KeyServerData data;
-	::decode(data, p);
-	*g.log << now << "   auth " << std::endl;
+	KeyServerData ctx;
+	::decode(ctx, p);
+	*ctx->log << now << "   auth " << std::endl;
       } else {
 	while (!p.end()) {
 	  AuthMonitor::Incremental inc;
           inc.decode(p);
-	  *g.log << now << "   auth " << inc.name.to_str() << std::endl;
+	  *ctx->log << now << "   auth " << inc.name.to_str() << std::endl;
 	}
       }
 #endif
@@ -186,13 +185,13 @@ static void handle_notify(MMonObserveNotify *notify)
 
   case PAXOS_MONMAP:
     {
-      g.mc.monmap.decode(notify->bl);
-      *g.log << now << "   mon " << g.mc.monmap << std::endl;
+      ctx->mc.monmap.decode(notify->bl);
+      *ctx->log << now << "   mon " << ctx->mc.monmap << std::endl;
     }
     break;
 
   default:
-    *g.log << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
+    *ctx->log << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
   }
 
   map_ver[notify->machine_id] = notify->ver;
@@ -206,7 +205,7 @@ static void handle_notify(MMonObserveNotify *notify)
       }
       break;
     case CEPH_TOOL_MODE_GUI:
-      g.gui_cond.Signal();
+      ctx->gui_cond.Signal();
       break;
     default:
       // do nothing
@@ -219,33 +218,39 @@ static void handle_notify(MMonObserveNotify *notify)
 class C_ObserverRefresh : public Context {
 public:
   bool newmon;
-  C_ObserverRefresh(bool n) : newmon(n) {}
-  void finish(int r) {
-    send_observe_requests();
+  C_ObserverRefresh(bool n, CephToolCtx *ctx_) 
+    : newmon(n),
+      ctx(ctx_)
+  {
   }
+  void finish(int r) {
+    send_observe_requests(ctx);
+  }
+private:
+  CephToolCtx *ctx;
 };
 
-void send_observe_requests()
+void send_observe_requests(CephToolCtx *ctx)
 {
   dout(1) << "send_observe_requests " << dendl;
 
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
-    MMonObserve *m = new MMonObserve(g.mc.monmap.fsid, i, map_ver[i]);
+    MMonObserve *m = new MMonObserve(ctx->mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
-    g.mc.send_mon_message(m);
+    ctx->mc.send_mon_message(m);
     sent = true;
   }
 
   registered.clear();
   float seconds = g_conf->paxos_observer_timeout/2;
   dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-  g.timer.add_event_after(seconds, new C_ObserverRefresh(false));
+  ctx->timer.add_event_after(seconds, new C_ObserverRefresh(ctx, false));
 }
 
-static void handle_ack(MMonCommandAck *ack)
+static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
 {
-  g.lock.Lock();
+  ctx->lock.Lock();
   reply = true;
   reply_from = ack->get_source_inst();
   reply_rs = ack->rs;
@@ -253,36 +258,42 @@ static void handle_ack(MMonCommandAck *ack)
   reply_bl = ack->get_data();
   cmd_cond.Signal();
   if (resend_event) {
-    g.timer.cancel_event(resend_event);
+    ctx->timer.cancel_event(resend_event);
     resend_event = 0;
   }
-  g.lock.Unlock();
+  ctx->lock.Unlock();
   ack->put();
 }
 
-static void send_command()
+static void send_command(CephToolCtx *ctx)
 {
   version_t last_seen_version = 0;
-  MMonCommand *m = new MMonCommand(g.mc.monmap.fsid, last_seen_version);
+  MMonCommand *m = new MMonCommand(ctx->mc.monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
 
-  if (!g.concise)
-    *g.log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
-  g.mc.send_mon_message(m);
+  if (!ctx->concise)
+    *ctx->log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
+  ctx->mc.send_mon_message(m);
 }
 
 class Admin : public Dispatcher {
+public:
+  Admin(CephToolCtx *ctx_)
+    : ctx(ctx_)
+  {
+  }
+
   bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
-      handle_ack((MMonCommandAck*)m);
+      handle_ack(ctx, (MMonCommandAck*)m);
       break;
     case MSG_MON_OBSERVE_NOTIFY:
-      handle_notify((MMonObserveNotify *)m);
+      handle_notify(ctx, (MMonObserveNotify *)m);
       break;
     case MSG_MON_OBSERVE:
-      handle_observe((MMonObserve *)m);
+      handle_observe(ctx, (MMonObserve *)m);
       break;
     case CEPH_MSG_MON_MAP:
       m->put();
@@ -295,37 +306,40 @@ class Admin : public Dispatcher {
 
   void ms_handle_connect(Connection *con) {
     if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      g.lock.Lock();
+      ctx->lock.Lock();
       if (ceph_tool_mode != CEPH_TOOL_MODE_CLI_INPUT) {
-	send_observe_requests();
+	send_observe_requests(ctx);
       }
       if (pending_cmd.size())
-	send_command();
-      g.lock.Unlock();
+	send_command(ctx);
+      ctx->lock.Unlock();
     }
   }
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
 
-} dispatcher;
+private:
+  CephToolCtx *ctx;
+};
 
-int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
+static int do_command(CephToolCtx *ctx,
+	       vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 {
-  Mutex::Locker l(g.lock);
+  Mutex::Locker l(ctx->lock);
 
   pending_cmd = cmd;
   pending_bl = bl;
   reply = false;
   
-  send_command();
+  send_command(ctx);
 
   while (!reply)
-    cmd_cond.Wait(g.lock);
+    cmd_cond.Wait(ctx->lock);
 
   rs = rs;
   rbl = reply_bl;
-  if (!g.concise)
-    *g.log << g_clock.now() << " "
+  if (!ctx->concise)
+    *ctx->log << g_clock.now() << " "
 	   << reply_from.name << " -> '"
 	   << reply_rs << "' (" << reply_rc << ")"
 	   << std::endl;
@@ -340,7 +354,7 @@ static const char *cli_prompt(EditLine *e)
   return "ceph> ";
 }
 
-int ceph_tool_do_cli()
+int ceph_tool_do_cli(CephToolCtx *ctx)
 {
   /* emacs style */
   EditLine *el = el_init("ceph", stdin, stdout, stderr);
@@ -365,16 +379,16 @@ int ceph_tool_do_cli()
     int chars_read;
     const char *line = el_gets(el, &chars_read);
 
-    //*g.log << "typed '" << line << "'" << std::endl;
+    //*ctx->log << "typed '" << line << "'" << std::endl;
 
     if (chars_read == 0) {
-      *g.log << "quit" << std::endl;
+      *ctx->log << "quit" << std::endl;
       break;
     }
 
     history(myhistory, &ev, H_ENTER, line);
 
-    if (run_command(line))
+    if (run_command(ctx, line))
       break;
   }
 
@@ -384,7 +398,7 @@ int ceph_tool_do_cli()
   return 0;
 }
 
-int run_command(const char *line)
+int run_command(CephToolCtx *ctx, const char *line)
 {
   if (strcmp(line, "quit\n") == 0)
     return 1;
@@ -423,11 +437,11 @@ int run_command(const char *line)
 
   bufferlist in;
   if (cmd.size() == 1 && cmd[0] == "print") {
-    if (!g.concise)
-      *g.log << "----" << std::endl;
+    if (!ctx->concise)
+      *ctx->log << "----" << std::endl;
     fwrite(in.c_str(), in.length(), 1, stdout);
-    if (!g.concise)
-      *g.log << "---- (" << in.length() << " bytes)" << std::endl;
+    if (!ctx->concise)
+      *ctx->log << "---- (" << in.length() << " bytes)" << std::endl;
     return 0;
   }
 
@@ -436,51 +450,51 @@ int run_command(const char *line)
   bufferlist out;
   if (infile) {
     if (out.read_file(infile) == 0) {
-      if (!g.concise)
-	*g.log << "read " << out.length() << " from " << infile << std::endl;
+      if (!ctx->concise)
+	*ctx->log << "read " << out.length() << " from " << infile << std::endl;
     } else {
       char buf[80];
-      *g.log << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      *ctx->log << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return 0;
     }
   }
 
   in.clear();
   string rs;
-  do_command(cmd, out, rs, in);
+  do_command(ctx, cmd, out, rs, in);
 
   if (in.length() == 0)
     return 0;
 
   if (outfile) {
     if (strcmp(outfile, "-") == 0) {
-      if (!g.concise)
-	*g.log << "----" << std::endl;
+      if (!ctx->concise)
+	*ctx->log << "----" << std::endl;
       fwrite(in.c_str(), in.length(), 1, stdout);
-      if (!g.concise)
-	*g.log << "---- (" << in.length() << " bytes)" << std::endl;
+      if (!ctx->concise)
+	*ctx->log << "---- (" << in.length() << " bytes)" << std::endl;
     }
     else {
       in.write_file(outfile);
-      if (!g.concise)
-	*g.log << "wrote " << in.length() << " to "
+      if (!ctx->concise)
+	*ctx->log << "wrote " << in.length() << " to "
 	       << outfile << std::endl;
     }
   }
   else {
-    if (!g.concise)
-      *g.log << "got " << in.length() << " byte payload; 'print' "
+    if (!ctx->concise)
+      *ctx->log << "got " << in.length() << " byte payload; 'print' "
 	     << "to dump to terminal, or add '>-' to command." << std::endl;
   }
   return 0;
 }
 
-int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
-			bufferlist &indata)
+int ceph_tool_cli_input(CephToolCtx *ctx, std::vector<std::string> &cmd, 
+			const char *outfile, bufferlist &indata)
 {
   string rs;
   bufferlist odata;
-  int ret = do_command(cmd, indata, rs, odata);
+  int ret = do_command(ctx, cmd, indata, rs, odata);
   if (ret)
     return ret;
 
@@ -509,13 +523,16 @@ int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
   return 0;
 }
 
-int ceph_tool_common_init(ceph_tool_mode_t mode)
+CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
 {
   ceph_tool_mode = mode;
 
+  std::auto_ptr <CephToolCtx> ctx;
+  ctx.reset(new CephToolCtx(&g_ceph_context, concise));
+
   // get monmap
-  if (g.mc.build_initial_monmap() < 0)
-    return -1;
+  if (ctx->mc.build_initial_monmap() < 0)
+    return NULL;
   
   // initialize tokenizer
   tok = tok_init(NULL);
@@ -524,28 +541,29 @@ int ceph_tool_common_init(ceph_tool_mode_t mode)
   messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->start_with_nonce(getpid());
-  messenger->add_dispatcher_head(&dispatcher);
+  ctx->dispatcher = new Admin(ctx.get());
+  messenger->add_dispatcher_head(ctx->dispatcher);
 
-  g.lock.Lock();
-  g.timer.init();
-  g.lock.Unlock();
+  ctx->lock.Lock();
+  ctx->timer.init();
+  ctx->lock.Unlock();
 
-  g.mc.set_messenger(messenger);
-  g.mc.init();
+  ctx->mc.set_messenger(messenger);
+  ctx->mc.init();
 
-  if (g.mc.authenticate() < 0) {
+  if (ctx->mc.authenticate() < 0) {
     derr << "unable to authenticate as " << g_conf->name << dendl;
     ceph_tool_messenger_shutdown();
-    ceph_tool_common_shutdown();
-    return 1;
+    ceph_tool_common_shutdown(ctx.get());
+    return NULL;
   }
-  if (g.mc.get_monmap() < 0) {
+  if (ctx->mc.get_monmap() < 0) {
     derr << "unable to get monmap" << dendl;
     ceph_tool_messenger_shutdown();
-    ceph_tool_common_shutdown();
-    return 1;
+    ceph_tool_common_shutdown(ctx.get());
+    return NULL;
   }
-  return 0;
+  return ctx.release();
 }
 
 int ceph_tool_messenger_shutdown()
@@ -553,16 +571,16 @@ int ceph_tool_messenger_shutdown()
   return messenger->shutdown();
 }
 
-int ceph_tool_common_shutdown()
+int ceph_tool_common_shutdown(CephToolCtx *ctx)
 {
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
   tok_end(tok);
   
-  g.lock.Lock();
-  g.mc.shutdown();
-  g.timer.shutdown();
-  g.lock.Unlock();
+  ctx->lock.Lock();
+  ctx->mc.shutdown();
+  ctx->timer.shutdown();
+  ctx->lock.Unlock();
   return 0;
 }
