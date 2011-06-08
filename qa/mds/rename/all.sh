@@ -18,3 +18,10 @@ rm mnt/?/* || true
 
 $dir/rem_rem.sh
 rm mnt/?/* || true
+
+$dir/pri_nul.sh
+rm -r mnt/?/* || true
+
+$dir/pri_pri.sh
+rm -r mnt/?/* || true
+
