@@ -264,6 +264,7 @@ static void show_user_info( RGWUserInfo& info)
   map<string, RGWSubUser>::iterator uiter;
 
   cout << "User ID: " << info.user_id << std::endl;
+  cout << "RADOS UID: " << info.auid << std::endl;
   cout << "Keys:" << std::endl;
   for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
     RGWAccessKey& k = kiter->second;
@@ -296,9 +297,7 @@ static int create_bucket(string& bucket, string& user_id, string& display_name, 
   // defaule policy (private)
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
-cout << __FILE__ << __LINE__ << std::endl;
 
-cout << __FILE__ << __LINE__ << std::endl;
   ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
   if (ret && ret != -EEXIST)   
     goto done;
@@ -307,7 +306,6 @@ cout << __FILE__ << __LINE__ << std::endl;
   if (ret < 0) {
     cerr << "couldn't set acl on bucket" << std::endl;
   }
-cout << __FILE__ << __LINE__ << std::endl;
 
   ret = rgw_add_bucket(user_id, bucket);
 
@@ -315,7 +313,6 @@ cout << __FILE__ << __LINE__ << std::endl;
 
   if (ret == -EEXIST)
     ret = 0;
-cout << __FILE__ << __LINE__ << std::endl;
 done:
   return ret;
 }
@@ -573,7 +570,7 @@ int main(int argc, char **argv)
       info.display_name = display_name;
     if (user_email)
       info.user_email = user_email;
-    if (auid >= 0)
+    if (auid != (uint64_t)-1)
       info.auid = auid;
     if (openstack_user)
       info.openstack_name = openstack_user;
