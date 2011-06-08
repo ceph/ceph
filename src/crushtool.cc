@@ -755,7 +755,7 @@ void usage()
   cout << "   --compile|-c map.txt  compile a map from source\n";
   cout << "   [-o outfile [--clobber]]\n";
   cout << "                         specify output for for (de)compilation\n";
-  cout << "   --build --num_osd N layer1 ...\n";
+  cout << "   --build --num_osds N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
   cout << "                           'name (uniform|straw|list|tree) size'\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
