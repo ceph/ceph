@@ -473,6 +473,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay don't have renamed ino " << renamed_dirino << dendl;
   }
 
+  // keep track of any inodes we unlink and don't relink elsewhere
+  set<CInode*> unlinked;
+
   // walk through my dirs (in order!)
   for (list<dirfrag_t>::iterator lp = lump_order.begin();
        lp != lump_order.end();
@@ -568,6 +571,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	    //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
 	  }
 	}
+	unlinked.erase(in);
 	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
@@ -585,6 +589,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
 	    dir->unlink_inode(dn);
+	  unlinked.erase(in);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
@@ -607,6 +612,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       } else {
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->is_primary())
+	    unlinked.insert(dn->get_linkage()->get_inode());
 	  if (dn->get_linkage()->get_inode() == renamed_diri)
 	    olddir = dir;
 	  dir->unlink_inode(dn);
@@ -634,6 +641,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
+	  if (dn->get_linkage()->is_primary())
+	    unlinked.insert(dn->get_linkage()->get_inode());
 	  if (dn->get_linkage()->get_inode() == renamed_diri)
 	    olddir = dir;
 	  dir->unlink_inode(dn);
@@ -670,6 +679,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << " creating new rename import bound " << *dir << dendl;
       mds->mdcache->adjust_subtree_auth(dir, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN), false);
     }
+  }
+
+  if (!unlinked.empty()) {
+    dout(10) << " unlinked set contains " << unlinked << dendl;
+    for (set<CInode*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p)
+      mds->mdcache->remove_inode_recursive(*p);
   }
 
   // table client transactions
