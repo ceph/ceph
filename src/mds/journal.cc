@@ -659,6 +659,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (olddir) {
       assert(renamed_diri);
       mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
+      
+      // see if we can discard the subtree we renamed out of
+      CDir *root = mds->mdcache->get_subtree_root(olddir);
+      if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
+	mds->mdcache->try_trim_non_auth_subtree(root);
+
     } else {
       // we imported a diri we haven't seen before
       assert(!renamed_diri);
