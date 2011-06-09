@@ -9,7 +9,7 @@ import urlparse
 
 log = logging.getLogger(__name__)
 
-def get_ceph_binary_url(branch=None, tag=None):
+def get_ceph_binary_url(branch=None, tag=None, flavor=None):
     # gitbuilder uses remote-style ref names for branches, mangled to
     # have underscores instead of slashes; e.g. origin_master
     if tag is not None:
@@ -19,11 +19,24 @@ def get_ceph_binary_url(branch=None, tag=None):
         if branch is None:
             branch = 'master'
         ref = 'origin_{branch}'.format(branch=branch)
-    BASE = 'http://ceph.newdream.net/gitbuilder/output/'
+
+    if flavor is None:
+        flavor = ''
+    else:
+        # TODO hardcoding amd64 here for simplicity; clients will try
+        # to fetch the tarball matching their arch, non-x86_64 just
+        # won't find anything and the test will fail. trying to
+        # support cross-arch clusters is messy because nothing
+        # guarantees the same sha1 of "master" has been built for all
+        # of them. hoping for yagni.
+        flavor = '-{flavor}-amd64'.format(flavor=flavor)
+    BASE = 'http://ceph.newdream.net/gitbuilder{flavor}/output/'.format(flavor=flavor)
     sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
+    log.debug('Translating ref to sha1 using url %s', sha1_url)
     sha1_fp = urllib2.urlopen(sha1_url)
     sha1 = sha1_fp.read().rstrip('\n')
     sha1_fp.close()
+    log.debug('Using ceph sha1 %s', sha1)
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
     return bindir_url
 

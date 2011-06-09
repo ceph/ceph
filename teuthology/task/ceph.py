@@ -35,9 +35,20 @@ def task(ctx, config):
         - ceph:
             tag: v0.42.13
 
+    To capture code coverage data, use::
+
+        tasks:
+        - ceph:
+            coverage: true
+
     """
     if config is None:
         config = {}
+
+    flavor = None
+    if config.get('coverage'):
+        log.info('Recording coverage for this run.')
+        flavor = 'gcov'
 
     log.info('Checking for old test directory...')
     processes = ctx.cluster.run(
@@ -97,6 +108,7 @@ def task(ctx, config):
     ceph_bindir_url = teuthology.get_ceph_binary_url(
         branch=config.get('branch'),
         tag=config.get('tag'),
+        flavor=flavor,
         )
     ctx.cluster.run(
         args=[
