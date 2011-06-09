@@ -474,6 +474,7 @@ def task(ctx, config):
     finally:
         if config.get('coverage'):
             # need to exit cleanly to trigger atexit coverage data writing
+            log.info('Shutting down everything, gcov style...')
             mon0_remote.run(
                 args=[
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
