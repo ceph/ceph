@@ -38,7 +38,7 @@ def get_ceph_binary_url(branch=None, tag=None, flavor=None):
     sha1_fp.close()
     log.debug('Using ceph sha1 %s', sha1)
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
-    return bindir_url
+    return (sha1, bindir_url)
 
 def feed_many_stdins(fp, processes):
     while True:

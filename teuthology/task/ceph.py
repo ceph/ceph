@@ -109,7 +109,7 @@ def task(ctx, config):
                     )
 
     log.info('Untarring ceph binaries...')
-    ceph_bindir_url = teuthology.get_ceph_binary_url(
+    sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
         branch=config.get('branch'),
         tag=config.get('tag'),
         flavor=flavor,
@@ -151,6 +151,21 @@ def task(ctx, config):
         )
     teuthology.feed_many_stdins_and_close(conf_fp, writes)
     run.wait(writes)
+
+    version_fp = StringIO()
+    version_fp.write(sha1 + '\n')
+    version_fp.seek(0)
+    writes = ctx.cluster.run(
+        args=[
+            'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            '/tmp/cephtest/coverage/ceph_version',
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        )
+    teuthology.feed_many_stdins_and_close(version_fp, writes)
 
     log.info('Setting up mon.0...')
     ctx.cluster.only('mon.0').run(
