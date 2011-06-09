@@ -785,7 +785,9 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
 	//else
 	simple_sync(lock);
       } else if (lock->get_sm() == &sm_filelock) {
-	if (lock->get_state() == LOCK_EXCL)
+	CInode *in = (CInode*)lock->get_parent();
+	if (lock->get_state() == LOCK_EXCL &&
+	    in->get_target_loner() >= 0)
 	  file_xsyn(lock);
 	else
 	  simple_sync(lock);
