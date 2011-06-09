@@ -151,7 +151,7 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
  */
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-			   bool get_content_type)
+			   bool get_content_type, string& ns)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -162,9 +162,14 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
   {
     librados::ObjectIterator i_end = io_ctx.objects_end();
     for (librados::ObjectIterator i = io_ctx.objects_begin(); i != i_end; ++i) {
+        string obj = *i;
+
+        if (!rgw_obj::translate_raw_obj(obj, ns))
+          continue;
+
 	if (prefix.empty() ||
-	    ((*i).compare(0, prefix.size(), prefix) == 0)) {
-	  dir_set.insert(*i);
+	    ((obj).compare(0, prefix.size(), prefix) == 0)) {
+	  dir_set.insert(obj);
 	}
     }
   }

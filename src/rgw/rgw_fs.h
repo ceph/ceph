@@ -16,7 +16,7 @@ public:
 
   int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-                   bool get_content_type);
+                   bool get_content_type, string& ns);
 
   int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0);
   int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,

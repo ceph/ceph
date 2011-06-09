@@ -18,6 +18,8 @@
 using namespace std;
 using ceph::crypto::MD5;
 
+static string mp_ns = "multipart";
+
 static int parse_range(const char *range, off_t& ofs, off_t& end)
 {
   int r = -ERANGE;
@@ -110,12 +112,14 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
 {
   string upload_id = s->args.get("uploadId");
   string oid = object;
+  rgw_obj obj;
 
   if (!oid.empty() && !upload_id.empty()) {
     oid.append(".");
     oid.append(upload_id);
+    obj.set_ns(mp_ns);
   }
-  rgw_obj obj(bucket, oid, object);
+  obj.init(bucket, oid, object);
 
   int ret = get_policy_from_attr(policy, obj);
   if (ret == -ENOENT && object.size()) {
@@ -281,6 +285,8 @@ void RGWStatBucket::execute()
 
 void RGWListBucket::execute()
 {
+  string no_ns;
+
   if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
@@ -309,7 +315,7 @@ void RGWListBucket::execute()
   }
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK));
+                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns);
 done:
   send_response();
 }
@@ -430,6 +436,7 @@ void RGWPutObj::execute()
     MD5 hash;
     string oid;
     multipart = s->args.exists("uploadId");
+    rgw_obj obj;
     if (!multipart) {
       oid = s->object_str;
     } else {
@@ -444,8 +451,10 @@ void RGWPutObj::execute()
       }
       oid.append(".");
       oid.append(part_num);
+
+      obj.set_ns(mp_ns);
     }
-    rgw_obj obj(s->bucket_str, oid, s->object_str);
+    obj.init(s->bucket_str, oid, s->object_str);
     do {
       get_data();
       if (len > 0) {
@@ -508,7 +517,7 @@ void RGWPutObj::execute()
       RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
 
-      rgw_obj meta_obj(s->bucket_str, multipart_meta_obj, s->object_str);
+      rgw_obj meta_obj(s->bucket_str, multipart_meta_obj, s->object_str, mp_ns);
       
       ret  = rgwstore->put_obj_meta(s->user.user_id, meta_obj, NULL, meta_attrs, false);
     }
@@ -881,7 +890,7 @@ void RGWInitMultipart::execute()
     tmp_obj_name.append(".");
     tmp_obj_name.append(upload_id);
 
-    obj.init(s->bucket_str, tmp_obj_name, s->object_str);
+    obj.init(s->bucket_str, tmp_obj_name, s->object_str, mp_ns);
     ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, true);
   } while (ret == -EEXIST);
 done:
@@ -895,7 +904,7 @@ static int get_multiparts_info(struct req_state *s, string& oid, map<uint32_t, R
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
 
-  rgw_obj obj(s->bucket_str, oid, s->object_str);
+  rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
 
   int ret = rgwstore->prepare_get_obj(obj, 0, NULL, &attrs, NULL,
                                       NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
@@ -1026,9 +1035,10 @@ void RGWCompleteMultipart::execute()
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
     oid.append(buf);
-    rgw_obj src_obj(s->bucket_str, oid, s->object_str);
-    rgw_obj dst_obj(s->bucket_str, s->object_str);
-    rgwstore->clone_range(dst_obj, ofs, src_obj, 0, obj_iter->second.size);
+    rgw_obj src_obj(s->bucket_str, oid, s->object_str, mp_ns);
+    ret = rgwstore->clone_range(target_obj, ofs, src_obj, 0, obj_iter->second.size);
+    if (ret < 0)
+      goto done;
     ofs += obj_iter->second.size;
   }
 
@@ -1038,13 +1048,12 @@ void RGWCompleteMultipart::execute()
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
     oid.append(buf);
-    rgw_obj obj(s->bucket_str, oid, s->object_str);
+    rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
     rgwstore->delete_obj(s->user.user_id, obj);
   }
   // and also remove the metadata obj
-  meta_obj.init(s->bucket_str, meta_oid, s->object_str);
+  meta_obj.init(s->bucket_str, meta_oid, s->object_str, mp_ns);
   rgwstore->delete_obj(s->user.user_id, meta_obj);
-
 
 done:
   send_response();

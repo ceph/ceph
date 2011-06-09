@@ -449,10 +449,13 @@ struct RGWUploadPartInfo {
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
 class rgw_obj {
+  std::string orig_obj;
+  std::string orig_key;
 public:
   std::string bucket;
-  std::string object;
   std::string key;
+  std::string ns;
+  std::string object;
 
   rgw_obj() {}
   rgw_obj(std::string& b, std::string& o) {
@@ -461,14 +464,93 @@ public:
   rgw_obj(std::string& b, std::string& o, std::string& k) {
     init(b, o, k);
   }
+  rgw_obj(std::string& b, std::string& o, std::string& k, std::string& n) {
+    init(b, o, k, n);
+  }
+  void init(std::string& b, std::string& o, std::string& k, std::string& n) {
+    bucket = b;
+    set_ns(n);
+    set_obj(o);
+    set_key(k);
+  }
   void init(std::string& b, std::string& o, std::string& k) {
     bucket = b;
-    object = o;
+    set_obj(o);
+    set_key(k);
   }
   void init(std::string& b, std::string& o) {
     bucket = b;
-    object = o;
-    key = o;
+    set_obj(o);
+    orig_key = key = "";
+  }
+  int set_ns(const char *n) {
+    if (!n)
+      return -EINVAL;
+    string ns_str(n);
+    return set_ns(ns_str);
+  }
+  int set_ns(string& n) {
+    if (n[0] == '_')
+      return -EINVAL;
+    ns = n;
+    set_obj(orig_obj);
+    return 0;
+  }
+
+  void set_key(string& k) {
+    orig_key = k;
+    if (k.compare(object) == 0)
+      key = "";
+    else
+      key = k;
+  }
+
+  void set_obj(string& o) {
+    orig_obj = o;
+    if (ns.empty()) {
+      if (o.empty())
+        return;
+      if (o.size() < 1 || o[0] != '_') {
+        object = o;
+        return;
+      }
+      object = "__";
+      object.append(o);
+    } else {
+      object = "_";
+      object.append(ns);
+      object.append("_");
+      object.append(o);
+    }
+    set_key(orig_key);
+  }
+
+  static bool translate_raw_obj(string& obj, string& ns) {
+    if (ns.empty()) {
+      if (obj[0] != '_')
+        return true;
+
+      if (obj.size() >= 2 && obj[1] == '_') {
+        obj = obj.substr(1);
+        return true;
+      }
+
+      return false;
+    }
+
+    if (obj[0] != '_' || obj.size() < 3) // for namespace, min size would be 3: _x_
+      return false;
+
+    int pos = obj.find('_', 1);
+    if (pos <= 1) // if it starts with __, it's not in our namespace
+      return false;
+
+    string obj_ns = obj.substr(1, pos - 1);
+    if (obj_ns.compare(ns) != 0)
+        return false;
+
+    obj = obj.substr(pos + 1);
+    return true;
   }
 };
 

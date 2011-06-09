@@ -96,7 +96,7 @@ int RGWFS::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 
 int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
                        string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-                       bool get_content_type)
+                       bool get_content_type, string& ns)
 {
   map<string, bool> dir_map;
   char path[BUF_SIZE];
@@ -117,7 +117,13 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
 
     if (prefix.empty() ||
         (prefix.compare(0, prefix.size(), prefix) == 0)) {
-      dir_map[dirent->d_name] = true;
+
+    string obj = dirent->d_name;
+
+    if (!rgw_obj::translate_raw_obj(obj, ns))
+        continue;
+
+     dir_map[obj] = true;
     }
   }
 
