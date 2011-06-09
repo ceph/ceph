@@ -2388,11 +2388,6 @@ void OSD::handle_command(MMonCommand *m)
     dout(0) << "reset pg recovery stats" << dendl;
     pg_recovery_stats.reset();
   }
-  else if (m->cmd[0] == "exit") {
-    dout(0) << "exiting cleanly" << dendl;
-    exit(0);
-  }
-
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
 done:
