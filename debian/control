@@ -12,7 +12,7 @@ Standards-Version: 3.9.1
 Package: ceph
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
-Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, btrfs-tools
+Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, btrfs-tools, gceph
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
@@ -30,6 +30,30 @@ Description: debugging symbols for ceph
  excellent performance, reliability, and scalability.
  .
  This package contains the debugging symbols for ceph.
+
+Package: gceph
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: 
+Suggests: ceph
+Description: Graphical ceph cluster status utility
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a
+ gtk-based gui to monitor cluster status, similar to the 'ceph'
+ command.
+
+Package: gceph-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: gceph (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for gceph
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a
+ gtk-based gui to monitor cluster status, similar to the 'ceph'
+ command.
+ .
+ This package contains the debugging symbols for gceph.
 
 Package: ceph-fuse
 Architecture: linux-any
