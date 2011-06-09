@@ -1225,7 +1225,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 	lock->set_state(LOCK_EXCL);
       else
 	lock->set_state(LOCK_LOCK);
-      if (lock->get_type() != CEPH_LOCK_DN)
+      if (lock->get_cap_shift())
 	do_issue = true;
     }
 
