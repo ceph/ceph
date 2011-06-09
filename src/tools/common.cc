@@ -245,7 +245,7 @@ void send_observe_requests(CephToolCtx *ctx)
   registered.clear();
   float seconds = g_conf->paxos_observer_timeout/2;
   dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-  ctx->timer.add_event_after(seconds, new C_ObserverRefresh(ctx, false));
+  ctx->timer.add_event_after(seconds, new C_ObserverRefresh(false, ctx));
 }
 
 static void handle_ack(CephToolCtx *ctx, MMonCommandAck *ack)
