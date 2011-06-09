@@ -3666,7 +3666,8 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   if (lock->is_xlocked())
     gather++;
 
-  if (in->issued_caps_need_gather(lock)) {
+  if (lock->get_cap_shift() &&
+      in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
     else
@@ -3910,14 +3911,13 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       revoke_client_leases(lock);
       gather++;
     }
-    if (lock->get_cap_shift()) {
-      if (in->issued_caps_need_gather(lock)) {
-	if (need_issue)
-	  *need_issue = true;
-	else
-	  issue_caps(in);
-	gather++;
-      }
+    if (lock->get_cap_shift() &&
+	in->issued_caps_need_gather(lock)) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+      gather++;
     }
     if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
