@@ -29,7 +29,7 @@ library. To make the dependencies easier to get right, we use a
 `virtualenv` to manage them. To get started, ensure you have the
 ``virtualenv`` and ``pip`` programs installed; e.g. on Debian/Ubuntu::
 
-	sudo apt-get install python-virtualenv python-pip
+	sudo apt-get install python-virtualenv python-pip libevent-dev
 
 and then run::
 
