@@ -9683,9 +9683,10 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
   delete mut;
 
   // drop dft wrlock
-  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL);
-  mds->locker->wrlock_finish(&diri->nestlock, NULL);
-  mds->locker->wrlock_finish(&diri->filelock, NULL);
+  bool need_issue = false;
+  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->nestlock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->filelock, NULL, &need_issue);
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = resultfrags.begin();
@@ -9708,6 +9709,9 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 
     dir->unfreeze_dir();
   }
+
+  if (need_issue)
+    mds->locker->issue_caps(diri);
 }
 
 
