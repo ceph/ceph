@@ -4,9 +4,13 @@ import logging
 log = logging.getLogger(__name__)
 
 def _run_one_task(taskname, **kwargs):
-    parent = __import__('teuthology.task', globals(), locals(), [taskname], 0)
-    mod = getattr(parent, taskname)
-    fn = getattr(mod, 'task')
+    submod = taskname
+    subtask = 'task'
+    if '.' in taskname:
+        (submod, subtask) = taskname.rsplit('.', 1)
+    parent = __import__('teuthology.task', globals(), locals(), [submod], 0)
+    mod = getattr(parent, submod)
+    fn = getattr(mod, subtask)
     return fn(**kwargs)
 
 def run_tasks(tasks, ctx, summary):
