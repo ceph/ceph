@@ -152,21 +152,6 @@ def task(ctx, config):
     teuthology.feed_many_stdins_and_close(conf_fp, writes)
     run.wait(writes)
 
-    version_fp = StringIO()
-    version_fp.write(sha1 + '\n')
-    version_fp.seek(0)
-    writes = ctx.cluster.run(
-        args=[
-            'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            '/tmp/cephtest/coverage/ceph_version',
-            ],
-        stdin=run.PIPE,
-        wait=False,
-        )
-    teuthology.feed_many_stdins_and_close(version_fp, writes)
-
     log.info('Setting up mon.0...')
     ctx.cluster.only('mon.0').run(
         args=[
@@ -536,6 +521,9 @@ def task(ctx, config):
 
         if ctx.archive is not None:
             os.mkdir(ctx.archive)
+
+            with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
+                f.write(sha1 + '\n')
 
             log.info('Compressing logs...')
             run.wait(
