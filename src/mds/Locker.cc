@@ -1225,7 +1225,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 	lock->set_state(LOCK_EXCL);
       else
 	lock->set_state(LOCK_LOCK);
-      do_issue = true;
+      if (lock->get_type() != CEPH_LOCK_DN)
+	do_issue = true;
     }
 
     // others waiting?
@@ -1236,16 +1237,15 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     
   // eval?
   if (!lock->is_stable())
-    eval_gather(lock, pneed_issue);
-  else {
-    if (lock->get_parent()->is_auth())
-      eval(lock, pneed_issue);
-    if (do_issue && lock->get_type() != CEPH_LOCK_DN) {
-      if (pneed_issue)
-	*pneed_issue = true;
-      else
-	issue_caps((CInode*)lock->get_parent());
-    }
+    eval_gather(lock, &do_issue);
+  else if (lock->get_parent()->is_auth())
+    eval(lock, &do_issue);
+  
+  if (do_issue) {
+    if (pneed_issue)
+      *pneed_issue = true;
+    else
+      issue_caps((CInode*)lock->get_parent());
   }
 }
 
