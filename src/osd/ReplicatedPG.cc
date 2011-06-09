@@ -2104,7 +2104,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_objects++;
     info.stats.num_object_clones++;
     ssc->snapset.clones.push_back(coid.snap);
-    ssc->snapset.clone_size[coid.snap] = obs.oi.size;
+    ssc->snapset.clone_size[coid.snap] = ctx->obc->obs.oi.size;
 
     // clone_overlap should contain an entry for each clone 
     // (an empty interval_set if there is no overlap)
