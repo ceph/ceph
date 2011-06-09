@@ -73,5 +73,41 @@ def create_image(ctx, config):
                 )
 
 @contextlib.contextmanager
+def modprobe(ctx, config):
+    """
+    Load the rbd kernel module..
+
+    For example::
+
+        tasks:
+        - ceph:
+        - rbd.create_image: [client.0]
+        - rbd.modprobe: [client.0]
+    """
+    for role in config:
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remote.run(
+            args=[
+                'sudo',
+                'modprobe',
+                'rbd',
+                ],
+            )
+    try:
+        yield
+    finally:
+        log.info('Unloading rbd kernel module...')
+        for role in config:
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            remote.run(
+                args=[
+                    'sudo',
+                    'modprobe',
+                    '-r',
+                    'rbd',
+                    ],
+                )
+
+@contextlib.contextmanager
 def task(ctx, config):
     create_image(ctx, config)
