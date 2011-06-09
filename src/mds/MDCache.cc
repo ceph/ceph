@@ -6700,6 +6700,13 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
   return 0;
 }
 
+/**
+ * Find out if the MDS is auth for a given path.
+ *
+ * Returns true if:
+ * 1) The full path DNE and we are auth for the deepest existing piece
+ * 2) We are auth for the inode linked to by the last dentry.
+ */
 bool MDCache::path_is_mine(filepath& path)
 {
   dout(15) << "path_is_mine " << path.get_ino() << " " << path << dendl;
@@ -6718,7 +6725,8 @@ bool MDCache::path_is_mine(filepath& path)
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (!dn || dnl->is_null())
       return dir->is_auth();
-    assert(dnl->is_primary());
+    if (!dnl->is_primary())
+      return false;
     cur = dnl->get_inode();
   }
 
