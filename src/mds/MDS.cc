@@ -725,11 +725,7 @@ void MDS::handle_command(MMonCommand *m)
       mdcache->dump_cache();
   }
   else if (m->cmd[0] == "exit") {
-    if (m->cmd.size() > 1 && m->cmd[1] == "immediately") {
-      exit(0);
-    } else {
-      suicide();
-    }
+    suicide();
   }
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
     Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
