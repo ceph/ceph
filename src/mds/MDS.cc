@@ -804,7 +804,7 @@ void MDS::handle_command(MMonCommand *m)
     cpu_profiler_handle_command(m->cmd, clog);
   }
  else if (m->cmd[0] == "heap") {
-   if (!ceph_heap_profiler_running())
+   if (!ceph_using_tcmalloc())
      clog.info() << "tcmalloc not enabled, can't use heap profiler commands\n";
    else
      ceph_heap_profiler_handle_command(m->cmd, clog);
