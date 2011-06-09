@@ -5008,9 +5008,12 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       in->state_clear(CInode::STATE_NEEDSRECOVER);
       in->auth_unpin(this);
-      if (in->filelock.is_stable())
-	mds->locker->eval(&in->filelock);
-      else
+      if (in->filelock.is_stable()) {
+	bool need_issue = false;
+	mds->locker->eval(&in->filelock, &need_issue);
+	if (need_issue)
+	  mds->locker->issue_caps(in);
+      } else
 	mds->locker->eval_gather(&in->filelock);
     }
   }
