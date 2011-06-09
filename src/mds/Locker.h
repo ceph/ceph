@@ -93,7 +93,7 @@ public:
   void drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
-  void eval(SimpleLock *lock, bool *need_issue=0);
+  void eval(SimpleLock *lock, bool *need_issue);
   void eval_any(SimpleLock *lock, bool *need_issue) {
     if (!lock->is_stable())
       eval_gather(lock, false, need_issue);
