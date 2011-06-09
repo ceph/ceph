@@ -327,6 +327,10 @@ bool Locker::acquire_locks(MDRequest *mdr,
     return false;
   }
 
+  // caps i'll need to issue
+  set<CInode*> issue_set;
+  bool result = false;
+
   // acquire locks.
   // make sure they match currently acquired locks.
   set<SimpleLock*, SimpleLock::ptr_lt>::iterator existing = mdr->locks.begin();
@@ -339,16 +343,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
       // right kind?
       SimpleLock *have = *existing;
       existing++;
-      if (xlocks.count(*p) && mdr->xlocks.count(*p)) {
+      if (xlocks.count(*p) && mdr->xlocks.count(*p))
 	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p)) {
+      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p))
 	dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p)) {
+      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p))
 	dout(10) << " already rdlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else assert(0);
+      else
+	assert(0);
       continue;
     }
     
@@ -357,26 +359,29 @@ bool Locker::acquire_locks(MDRequest *mdr,
       SimpleLock *stray = *existing;
       existing++;
       dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << dendl;
+      bool need_issue = false;
       if (mdr->xlocks.count(stray)) 
-	xlock_finish(stray, mdr);
+	xlock_finish(stray, mdr, &need_issue);
       else if (mdr->wrlocks.count(stray))
-	wrlock_finish(stray, mdr);
+	wrlock_finish(stray, mdr, &need_issue);
       else
-	rdlock_finish(stray, mdr);
+	rdlock_finish(stray, mdr, &need_issue);
+      if (need_issue)
+	issue_set.insert((CInode*)stray->get_parent());
     }
       
     // lock
     if (xlocks.count(*p)) {
       if (!xlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else if (wrlocks.count(*p)) {
       if (!wrlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else {
       if (!rdlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << dendl;
     }
   }
@@ -386,16 +391,23 @@ bool Locker::acquire_locks(MDRequest *mdr,
     SimpleLock *stray = *existing;
     existing++;
     dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << dendl;
+    bool need_issue = false;
     if (mdr->xlocks.count(stray))
-      xlock_finish(stray, mdr);
+      xlock_finish(stray, mdr, &need_issue);
     else if (mdr->wrlocks.count(stray))
-      wrlock_finish(stray, mdr);
+      wrlock_finish(stray, mdr, &need_issue);
     else
-      rdlock_finish(stray, mdr);
+      rdlock_finish(stray, mdr, &need_issue);
+    if (need_issue)
+      issue_set.insert((CInode*)stray->get_parent());
   }
 
   mdr->done_locking = true;
-  return true;
+  result = true;
+
+ out:
+  issue_caps_set(issue_set);
+  return result;
 }
 
 
