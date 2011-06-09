@@ -87,7 +87,7 @@ public:
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks);
 
-  void drop_locks(Mutation *mut);
+  void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(Mutation *mut);
   void drop_non_rdlocks(Mutation *mut);
   void drop_rdlocks(Mutation *mut);
@@ -115,7 +115,7 @@ public:
   };
   void eval_scatter_gathers(CInode *in);
 
-  void eval_cap_gather(CInode *in);
+  void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
 
   bool eval(CInode *in, int mask);
   void try_eval(CInode *in, int mask);
@@ -248,6 +248,7 @@ public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
+  void issue_caps_set(set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);

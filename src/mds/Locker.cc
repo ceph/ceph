@@ -409,15 +409,37 @@ void Locker::set_xlocks_done(Mutation *mut)
   }
 }
 
-void Locker::drop_locks(Mutation *mut)
+void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
 {
   // leftover locks
-  while (!mut->xlocks.empty()) 
-    xlock_finish(*mut->xlocks.begin(), mut);
-  while (!mut->rdlocks.empty()) 
-    rdlock_finish(*mut->rdlocks.begin(), mut);
-  while (!mut->wrlocks.empty()) 
-    wrlock_finish(*mut->wrlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->xlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
+    xlock_finish(*mut->xlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+  while (!mut->rdlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
+    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }	 
+  while (!mut->wrlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
+    wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
   mut->done_locking = false;
 }
 
@@ -714,7 +736,7 @@ void Locker::try_eval(CInode *in, int mask)
   eval(in, mask);
 }
 
-void Locker::eval_cap_gather(CInode *in)
+void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 {
   bool need_issue = false;
   list<Context*> finishers;
@@ -729,8 +751,12 @@ void Locker::eval_cap_gather(CInode *in)
   if (!in->xattrlock.is_stable())
     eval_gather(&in->xattrlock, false, &need_issue, &finishers);
 
-  if (need_issue && in->is_head())
-    issue_caps(in);
+  if (need_issue && in->is_head()) {
+    if (issue_set)
+      issue_set->insert(in);
+    else
+      issue_caps(in);
+  }
 
   finish_contexts(finishers);
 }
@@ -1346,6 +1372,11 @@ Capability* Locker::issue_new_caps(CInode *in,
 }
 
 
+void Locker::issue_caps_set(set<CInode*>& inset)
+{
+  for (set<CInode*>::iterator p = inset.begin(); p != inset.end(); ++p)
+    issue_caps(*p);
+}
 
 bool Locker::issue_caps(CInode *in, Capability *only_cap)
 {
