@@ -118,6 +118,12 @@ public:
   int get_params();
 };
 
+class RGWListBucketMultiparts_REST : public RGWListBucketMultiparts {
+public:
+  RGWListBucketMultiparts_REST() {}
+  ~RGWListBucketMultiparts_REST() {}
+};
+
 class RGWHandler_REST : public RGWHandler {
 protected:
   bool is_acl_op(struct req_state *s) {

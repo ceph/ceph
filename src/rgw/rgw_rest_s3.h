@@ -121,6 +121,17 @@ public:
   void send_response();
 };
 
+class RGWListBucketMultiparts_REST_S3 : public RGWListBucketMultiparts_REST {
+public:
+  RGWListBucketMultiparts_REST_S3() {
+    limit_opt_name ="max-keys";
+    default_max = 1000;
+  }
+  ~RGWListBucketMultiparts_REST_S3() {}
+
+  void send_response();
+};
+
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWGetObj_REST_S3 get_obj_op;
   RGWListBuckets_REST_S3 list_buckets_op;
@@ -136,6 +147,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWCompleteMultipart_REST_S3 complete_multipart;
   RGWCompleteMultipart_REST_S3 abort_multipart;
   RGWListMultipart_REST_S3 list_multipart;
+  RGWListBucketMultiparts_REST_S3 list_bucket_multiparts;
 
 protected:
 

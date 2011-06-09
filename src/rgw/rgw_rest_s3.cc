@@ -343,6 +343,54 @@ void RGWListMultipart_REST_S3::send_response()
   }
 }
 
+void RGWListBucketMultiparts_REST_S3::send_response()
+{
+  if (ret < 0)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+
+  end_header(s, "application/xml");
+  dump_start(s);
+  if (ret < 0)
+    return;
+
+  s->formatter->open_obj_section("ListMultipartUploadsResult");
+  s->formatter->dump_value_str("Bucket", s->bucket);
+  if (!prefix.empty())
+    s->formatter->dump_value_str("Prefix", prefix.c_str());
+  if (!marker.empty())
+    s->formatter->dump_value_str("KeyMarker", marker.c_str());
+  if (!max_keys.empty()) {
+    s->formatter->dump_value_str("MaxKeys", max_keys.c_str());
+  }
+  if (!delimiter.empty())
+    s->formatter->dump_value_str("Delimiter", delimiter.c_str());
+
+  if (ret >= 0) {
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      s->formatter->open_array_section("Upload");
+      s->formatter->dump_value_str("Key", iter->name.c_str());
+      dump_time(s, "LastModified", &iter->mtime);
+      s->formatter->dump_value_str("ETag", "\"%s\"", iter->etag);
+      s->formatter->dump_value_int("Size", "%lld", iter->size);
+      s->formatter->dump_value_str("StorageClass", "STANDARD");
+      dump_owner(s, s->user.user_id, s->user.display_name);
+      s->formatter->close_section("Upload");
+    }
+    if (common_prefixes.size() > 0) {
+      s->formatter->open_array_section("CommonPrefixes");
+      map<string, bool>::iterator pref_iter;
+      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        s->formatter->dump_value_str("Prefix", pref_iter->first.c_str());
+      }
+      s->formatter->close_section("CommonPrefixes");
+    }
+  }
+  s->formatter->close_section("ListBucketResult");
+  s->formatter->flush();
+}
+
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
@@ -354,6 +402,9 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_dat
   } else if (!s->bucket) {
     return NULL;
   }
+
+  if (s->args.exists("uploads"))
+    return &list_bucket_multiparts;
 
   return &list_bucket_op;
 }

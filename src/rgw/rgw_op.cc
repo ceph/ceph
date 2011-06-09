@@ -1098,6 +1098,9 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init(s->bucket_str, meta_oid, s->object_str, mp_ns);
   ret = rgwstore->delete_obj(s->user.user_id, meta_obj);
+  if (ret == -ENOENT) {
+    ret = -ERR_NO_SUCH_BUCKET;
+  }
 done:
 
   send_response();
@@ -1116,6 +1119,41 @@ void RGWListMultipart::execute()
   obj.append(upload_id);
   ret = get_multiparts_info(s, obj, parts, policy, xattrs);
 
+done:
+  send_response();
+}
+
+void RGWListBucketMultiparts::execute()
+{
+  if (!verify_permission(s, RGW_PERM_READ)) {
+    ret = -EACCES;
+    goto done;
+  }
+
+  url_decode(s->args.get("prefix"), prefix);
+  marker = s->args.get("marker");
+  max_keys = s->args.get(limit_opt_name);
+  if (!max_keys.empty()) {
+    max = atoi(max_keys.c_str());
+  } else {
+    max = default_max;
+  }
+  url_decode(s->args.get("delimiter"), delimiter);
+
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
+    string path_args = s->args.get("path");
+    if (!path_args.empty()) {
+      if (!delimiter.empty() || !prefix.empty()) {
+        ret = -EINVAL;
+        goto done;
+      }
+      url_decode(path_args, prefix);
+      delimiter="/";
+    }
+  }
+
+  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
+                               !!(s->prot_flags & RGW_REST_OPENSTACK), mp_ns);
 done:
   send_response();
 }

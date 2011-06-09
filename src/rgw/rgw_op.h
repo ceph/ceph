@@ -416,6 +416,39 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWListBucketMultiparts : public RGWOp {
+protected:
+  string prefix;
+  string marker; 
+  string max_keys;
+  string delimiter;
+  int max;
+  int ret;
+  vector<RGWObjEnt> objs;
+  map<string, bool> common_prefixes;
+
+  string limit_opt_name;
+  int default_max;
+
+public:
+  RGWListBucketMultiparts() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    prefix.clear();
+    marker.clear();
+    max_keys.clear();
+    delimiter.clear();
+    max = 0;
+    ret = 0;
+    objs.clear();
+    common_prefixes.clear();
+  }
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
 class RGWHandler {
 protected:
   struct req_state *s;
