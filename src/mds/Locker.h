@@ -89,8 +89,8 @@ public:
 
   void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(Mutation *mut);
-  void drop_non_rdlocks(Mutation *mut);
-  void drop_rdlocks(Mutation *mut);
+  void drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
+  void drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue=0);

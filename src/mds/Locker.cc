@@ -443,18 +443,47 @@ void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
   mut->done_locking = false;
 }
 
-void Locker::drop_non_rdlocks(Mutation *mut)
+void Locker::drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
-  while (!mut->xlocks.empty()) 
-    xlock_finish(*mut->xlocks.begin(), mut);
-  while (!mut->wrlocks.empty()) 
-    wrlock_finish(*mut->wrlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->xlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
+    xlock_finish(*mut->xlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+  while (!mut->wrlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
+    wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks(Mutation *mut)
+void Locker::drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
-  while (!mut->rdlocks.empty()) 
-    rdlock_finish(*mut->rdlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->rdlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
+    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
 }
 
 
