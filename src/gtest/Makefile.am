@@ -1,5 +1,7 @@
 # Automake file
 
+AM_LDFLAGS = -lpthread
+
 # Nonstandard package files for distribution
 EXTRA_DIST = \
   CHANGES \
