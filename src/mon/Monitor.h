@@ -220,7 +220,6 @@ public:
   void tick();
 
   void stop_cluster();
-  void send_exit_to_all();
 
   int mkfs(bufferlist& osdmapbl);
 

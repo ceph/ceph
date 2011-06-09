@@ -178,8 +178,6 @@ private:
   void check_subs();
   void check_sub(Subscription *sub);
 
-  void send_exits();
-
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {
       if (pending_inc.new_flags < 0)
