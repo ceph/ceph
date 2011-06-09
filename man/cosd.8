@@ -47,6 +47,12 @@ as it is more convenient than generating a key by hand with \fIcauthtool\fR.
 Create a new journal file to match an existing object repository.  This is useful if the journal
 device or file is wiped out due to a disk or file system failure.
 .TP
+\fB\-\-flush-journal
+Flush the journal to permanent store. This runs in the foreground so you
+know when it's completed.
+This can be useful if you want to resize the journal or need to otherwise
+destroy it: this guarantees you won't lose data.
+.TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
 Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
 for runtime configuration options.
