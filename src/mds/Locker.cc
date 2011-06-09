@@ -970,7 +970,7 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
   // last one?
   if (!lock->is_rdlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock, pneed_issue);
+      eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
       eval(lock, pneed_issue);
   }
@@ -1110,7 +1110,7 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 
   if (!lock->is_wrlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock, pneed_issue);
+      eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
       eval(lock, pneed_issue);
   }
@@ -1237,7 +1237,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     
   // eval?
   if (!lock->is_stable())
-    eval_gather(lock, &do_issue);
+    eval_gather(lock, false, &do_issue);
   else if (lock->get_parent()->is_auth())
     eval(lock, &do_issue);
   
