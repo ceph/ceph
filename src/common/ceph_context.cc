@@ -52,6 +52,7 @@ public:
       }
       if (_reopen_logs) {
 	_cct->_doss->reopen_logs(_cct->_conf);
+	_cct->_prof_logger_collection->logger_reopen_all();
 	_reopen_logs = false;
       }
     }
@@ -79,16 +80,19 @@ private:
 
 CephContext::
 CephContext(uint32_t module_type_)
-  : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
+  : _conf(new md_config_t()),
+    _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
     _dout(_doss),
-    module_type(module_type_),
-    _prof_logger_conf_obs(new ProfLoggerConfObs()),
-    _service_thread(NULL)
+    _module_type(module_type_),
+    _service_thread(NULL),
+    _prof_logger_collection(NULL),
+    _prof_logger_conf_obs(NULL)
 {
-  _conf = new md_config_t();
+  pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
+  _prof_logger_collection = new ProfLoggerCollection(this);
+  _prof_logger_conf_obs = new ProfLoggerConfObs(_prof_logger_collection);
   _conf->add_observer(_doss);
   _conf->add_observer(_prof_logger_conf_obs);
-  pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
 }
 
 CephContext::
@@ -99,13 +103,18 @@ CephContext::
   _conf->remove_observer(_prof_logger_conf_obs);
   _conf->remove_observer(_doss);
 
-  delete _doss;
-  _doss = NULL;
+  delete _prof_logger_collection;
+  _prof_logger_collection = NULL;
+
   delete _prof_logger_conf_obs;
   _prof_logger_conf_obs = NULL;
 
+  delete _doss;
+  _doss = NULL;
+
   delete _conf;
   pthread_spin_destroy(&_service_thread_lock);
+
 }
 
 void CephContext::
@@ -166,11 +175,17 @@ join_service_thread()
 uint32_t CephContext::
 get_module_type() const
 {
-  return module_type;
+  return _module_type;
 }
 
 void CephContext::
 set_module_type(uint32_t module_type_)
 {
-  module_type = module_type_;
+  _module_type = module_type_;
+}
+
+ProfLoggerCollection *CephContext::
+GetProfLoggerCollection()
+{
+  return _prof_logger_collection;
 }

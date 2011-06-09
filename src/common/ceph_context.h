@@ -26,6 +26,7 @@ class md_config_t;
 class md_config_obs_t;
 class CephContextServiceThread;
 class DoutLocker;
+class ProfLoggerCollection;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -60,13 +61,14 @@ public:
   /* Set module type (TODO: remove) */
   void set_module_type(uint32_t module_type_);
 
+  /* Get the ProfLoggerCollection of this CephContext */
+  ProfLoggerCollection *GetProfLoggerCollection();
+
 private:
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
 
-  uint32_t module_type;
-
-  md_config_obs_t *_prof_logger_conf_obs;
+  uint32_t _module_type;
 
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
@@ -75,6 +77,11 @@ private:
 
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;
+
+  /* The collection of profiling loggers associated with this context */
+  ProfLoggerCollection *_prof_logger_collection;
+
+  md_config_obs_t *_prof_logger_conf_obs;
 };
 
 /* Globals (FIXME: remove) */ 

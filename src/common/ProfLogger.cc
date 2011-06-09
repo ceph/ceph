@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -30,79 +30,71 @@
 
 #include "common/Timer.h"
 
-// per-process lock.  lame, but this way I protect ProfLogType too!
-Mutex prof_logger_lock("prof_logger_lock");
-SafeTimer logger_timer(prof_logger_lock);
-Context *logger_event = 0;
-list<ProfLogger*> logger_list;
-utime_t start;
-int last_flush = 0; // in seconds since start
-
-bool logger_need_reopen = true;
-bool logger_need_reset = false;
-
-static void flush_all_loggers();
-static void stop();
-
-struct FlusherStopper {
-  ~FlusherStopper() {
-    stop();
-  }
-} stopper;
-
-class C_FlushProfLoggers : public Context {
+//////////////// C_FlushProfLoggers ////////////////
+class C_FlushProfLoggers : public Context
+{
 public:
-  void finish(int r) {
-    if (logger_event == this) {
-      logger_event = 0;
-      flush_all_loggers();
-    }
+  C_FlushProfLoggers(ProfLoggerCollection *coll_)
+    : coll(coll_)
+  {
   }
+
+  void finish(int r) {
+    coll->flush_all_loggers();
+  }
+
+private:
+  ProfLoggerCollection *coll;
 };
 
-ProfLoggerConfObs::~ProfLoggerConfObs()
+//////////////// ProfLoggerCollection ////////////////
+ProfLoggerCollection::
+ProfLoggerCollection(CephContext *ctx_)
+  : lock("ProfLoggerCollection::lock"),
+    logger_timer(lock), logger_event(NULL),
+    last_flush(0), need_reopen(true), need_reset(false), ctx(ctx_)
 {
 }
 
-const char **ProfLoggerConfObs::get_tracked_conf_keys() const
+ProfLoggerCollection::
+~ProfLoggerCollection()
 {
-  static const char *KEYS[] = {
-    "profiling_logger", "profiling_logger_interval", "profiling_logger_calc_variance",
-    "profiling_logger_subdir", "profiling_logger_dir", NULL
-  };
-  return KEYS;
+  try {
+    lock.Lock();
+    logger_timer.shutdown();
+    lock.Unlock();
+  }
+  catch (...) {
+  }
 }
 
-void ProfLoggerConfObs::handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed)
+void ProfLoggerCollection::
+logger_reopen_all()
 {
-  // This could be done a *lot* smarter, if anyone cares to spend time
-  // fixing this up.
-  // We could probably just take the mutex and call _open_log from here.
-  logger_reopen_all();
+  Mutex::Locker l(lock);
+  need_reopen = true;
 }
 
-void logger_reopen_all()
+void ProfLoggerCollection::
+logger_reset_all()
 {
-  logger_need_reopen = true;
+  Mutex::Locker l(lock);
+  need_reopen = true;
+  need_reset = true;
 }
 
-void logger_reset_all()
+void ProfLoggerCollection::
+logger_start()
 {
-  logger_need_reopen = true;
-  logger_need_reset = true;
-}
-
-void logger_start()
-{
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(lock);
   logger_timer.init();
   flush_all_loggers();
 }
 
-void logger_tare(utime_t s)
+void ProfLoggerCollection::
+logger_tare(utime_t s)
 {
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(lock);
 
   generic_dout(10) << "logger_tare " << s << dendl;
 
@@ -118,9 +110,10 @@ void logger_tare(utime_t s)
   last_flush = fromstart.sec();
 }
 
-void logger_add(ProfLogger *logger)
+void ProfLoggerCollection::
+logger_add(ProfLogger *logger)
 {
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(lock);
 
   if (logger_list.empty()) {
     if (start == utime_t())
@@ -128,24 +121,34 @@ void logger_add(ProfLogger *logger)
     last_flush = 0;
   }
   logger_list.push_back(logger);
+  logger->lock = &lock;
 }
 
-void logger_remove(ProfLogger *logger)
+void ProfLoggerCollection::
+logger_remove(ProfLogger *logger)
 {
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(lock);
 
   for (list<ProfLogger*>::iterator p = logger_list.begin();
        p != logger_list.end();
        p++) {
     if (*p == logger) {
       logger_list.erase(p);
-      break;
+      delete logger;
+      if (logger_list.empty() && logger_event) {
+	// If there are no timers, stop the timer events.
+	logger_timer.cancel_event(logger_event);
+	logger_event = 0;
+      }
+      return;
     }
   }
 }
 
-static void flush_all_loggers()
+void ProfLoggerCollection::
+flush_all_loggers()
 {
+  // ProfLoggerCollection lock must be held here.
   generic_dout(20) << "flush_all_loggers" << dendl;
 
   if (!g_conf->profiling_logger)
@@ -166,20 +169,23 @@ static void flush_all_loggers()
   bool twice = now_sec - last_flush >= 2 * g_conf->profiling_logger_interval;
  again:
   generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
-  
-  bool reopen = logger_need_reopen;
-  bool reset = logger_need_reset;
+
+  // This logic seems unecessary. We're holding the mutex the whole time here,
+  // so need_reopen and need_reset can't change unless we change them.
+  // TODO: clean this up slightly
+  bool reopen = need_reopen;
+  bool reset = need_reset;
 
   for (list<ProfLogger*>::iterator p = logger_list.begin();
        p != logger_list.end();
-       ++p) 
-    (*p)->_flush();
-  
+       ++p)
+    (*p)->_flush(need_reopen, need_reset, last_flush);
+
   // did full pass while true?
-  if (reopen && logger_need_reopen)
-    logger_need_reopen = false;
-  if (reset && logger_need_reset)
-    logger_need_reset = false;
+  if (reopen && need_reopen)
+    need_reopen = false;
+  if (reset && need_reset)
+    need_reset = false;
 
   last_flush = now_sec - (now_sec % g_conf->profiling_logger_interval);
   if (twice) {
@@ -192,24 +198,42 @@ static void flush_all_loggers()
   next.sec_ref() = start.sec() + last_flush + g_conf->profiling_logger_interval;
   next.nsec_ref() = start.nsec();
   generic_dout(20) << "logger now=" << now
-		   << "  start=" << start 
-		   << "  next=" << next 
+		   << "  start=" << start
+		   << "  next=" << next
 		   << dendl;
-  logger_event = new C_FlushProfLoggers;
+  logger_event = new C_FlushProfLoggers(this);
   logger_timer.add_event_at(next, logger_event);
 }
 
-static void stop()
+//////////////// ProfLoggerConfObs ////////////////
+ProfLoggerConfObs::ProfLoggerConfObs(ProfLoggerCollection *coll_)
+  : coll(coll_)
 {
-  prof_logger_lock.Lock();
-  logger_timer.shutdown();
-  prof_logger_lock.Unlock();
 }
 
+ProfLoggerConfObs::~ProfLoggerConfObs()
+{
+}
 
+const char **ProfLoggerConfObs::get_tracked_conf_keys() const
+{
+  static const char *KEYS[] = {
+    "profiling_logger", "profiling_logger_interval", "profiling_logger_calc_variance",
+    "profiling_logger_subdir", "profiling_logger_dir", NULL
+  };
+  return KEYS;
+}
 
-// ---------
+void ProfLoggerConfObs::handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed)
+{
+  // This could be done a *lot* smarter, if anyone cares to spend time
+  // fixing this up.
+  // We could probably just take the mutex and call _open_log from here.
+  coll->logger_reopen_all();
+}
 
+//////////////// ProfLogger ////////////////
 void ProfLogger::_open_log()
 {
   struct stat st;
@@ -223,7 +247,7 @@ void ProfLogger::_open_log()
     filename = c;
     filename += "/";
   }
-  
+
   filename = g_conf->profiling_logger_dir;
 
   // make (feeble) attempt to create logger_dir
@@ -242,7 +266,7 @@ void ProfLogger::_open_log()
   if (out.is_open())
     out.close();
   out.open(filename.c_str(),
-	   (need_reset || logger_need_reset) ? ofstream::out : ofstream::out|ofstream::app);
+	   (need_reset || need_reset) ? ofstream::out : ofstream::out|ofstream::app);
   if (!out.is_open()) {
     generic_dout(10) << "failed to open '" << filename << "'" << dendl;
     return; // we fail
@@ -252,37 +276,30 @@ void ProfLogger::_open_log()
   need_open = false;
 }
 
-
 ProfLogger::~ProfLogger()
 {
-  Mutex::Locker l(prof_logger_lock);
-  
-  _flush();
   out.close();
-  logger_list.remove(this); // slow, but rare.
-  if (logger_list.empty()) 
-    logger_event = 0;       // stop the timer events.
 }
 
 void ProfLogger::reopen()
 {
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(*lock);
   need_open = true;
 }
 
 void ProfLogger::reset()
 {
-  Mutex::Locker l(prof_logger_lock);
+  Mutex::Locker l(*lock);
   need_open = true;
   need_reset = true;
 }
 
 
-void ProfLogger::_flush()
+void ProfLogger::_flush(bool need_reopen, bool need_reset, int last_flush)
 {
-  if (need_open || logger_need_reopen)
+  if (need_reopen)
     _open_log();
-  if (need_reset || logger_need_reset) {
+  if (need_reset) {
     // reset the counters
     for (int i=0; i<type->num_keys; i++) {
       this->vals[i] = 0;
@@ -299,7 +316,7 @@ void ProfLogger::_flush()
     out << "#" << type->num_keys;
     for (int i=0; i<type->num_keys; i++) {
       out << "\t" << (type->key_name[i] ? type->key_name[i] : "???");
-      if (type->avg_keys[i]) 
+      if (type->avg_keys[i])
 	out << "\t(n)\t(var)";
     }
     out << std::endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
@@ -315,7 +332,7 @@ void ProfLogger::_flush()
 	double var = 0.0;
 	if (g_conf->profiling_logger_calc_variance &&
 	    (unsigned)vals[i] == vals_to_avg[i].size()) {
-	  for (vector<double>::iterator p = vals_to_avg[i].begin(); p != vals_to_avg[i].end(); ++p) 
+	  for (vector<double>::iterator p = vals_to_avg[i].begin(); p != vals_to_avg[i].end(); ++p)
 	    var += (avg - *p) * (avg - *p);
 	}
 	char s[256];
@@ -350,11 +367,11 @@ int64_t ProfLogger::inc(int key, int64_t v)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   vals[i] += v;
   int64_t r = vals[i];
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 
@@ -362,11 +379,11 @@ double ProfLogger::finc(int key, double v)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   fvals[i] += v;
   double r = fvals[i];
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 
@@ -374,11 +391,11 @@ int64_t ProfLogger::set(int key, int64_t v)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   //cout << this << " set " << i << " to " << v << std::endl;
   int64_t r = vals[i] = v;
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 
@@ -387,11 +404,11 @@ double ProfLogger::fset(int key, double v)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   //cout << this << " fset " << i << " to " << v << std::endl;
   double r = fvals[i] = v;
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 
@@ -399,13 +416,13 @@ double ProfLogger::favg(int key, double v)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   vals[i]++;
   double r = fvals[i] += v;
   if (g_conf->profiling_logger_calc_variance)
     vals_to_avg[i].push_back(v);
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 
@@ -413,12 +430,12 @@ int64_t ProfLogger::get(int key)
 {
   if (!g_conf->profiling_logger)
     return 0;
-  prof_logger_lock.Lock();
+  lock->Lock();
   int i = type->lookup_key(key);
   int64_t r = 0;
   if (i >= 0 && i < (int)vals.size())
     r = vals[i];
-  prof_logger_lock.Unlock();
+  lock->Unlock();
   return r;
 }
 

@@ -480,7 +480,7 @@ OSD::~OSD()
 {
   delete map_in_progress_cond;
   delete class_handler;
-  logger_remove(logger);
+  g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
   delete logger;
   delete store;
 }
@@ -696,7 +696,7 @@ void OSD::open_logger()
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
   logger = new ProfLogger(name, (ProfLogType*)&osd_logtype);
-  logger_add(logger);  
+  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 
   if (osdmap->get_epoch() > 0)
     start_logger();
@@ -704,8 +704,9 @@ void OSD::open_logger()
 
 void OSD::start_logger()
 {
-  logger_tare(osdmap->get_created());
-  logger_start();
+  ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+  coll->logger_tare(osdmap->get_created());
+  coll->logger_start();
   logger_started = true;
 
   // start the objectstore logger too
@@ -2326,9 +2327,9 @@ void OSD::handle_command(MMonCommand *m)
 
     }
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
-    logger_reset_all();
+    g_ceph_context.GetProfLoggerCollection()->logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
-    logger_reopen_all();
+    g_ceph_context.reopen_logs();
   } else if (m->cmd[0] == "heap") {
     if (ceph_using_tcmalloc())
       ceph_heap_profiler_handle_command(m->cmd, clog);
@@ -3180,7 +3181,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	note_down_osd(*p);
     
     if (!logger_started)
-      start_logger();
+      g_ceph_context.GetProfLoggerCollection()->logger_start();
 
     osdmap = newmap;
 

@@ -173,13 +173,14 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) {
-    logger_remove(logger);
+    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = 0;
   }
   if (mlogger) {
-    logger_remove(mlogger);
+    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
     delete mlogger;
+    mlogger = 0;
   }
   
   if (messenger)
@@ -286,19 +287,22 @@ void MDS::open_logger()
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   logger = new ProfLogger(name, (ProfLogType*)&mds_logtype);
-  logger_add(logger);
+  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 
   snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   mlogger = new ProfLogger(name, (ProfLogType*)&mdm_logtype);
-  logger_add(mlogger);
+  g_ceph_context.GetProfLoggerCollection()->logger_add(mlogger);
 
   mdlog->open_logger();
   server->open_logger();
 
-  logger_tare(mdsmap->get_created());
-  logger_start();
+  {
+    ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+    coll->logger_tare(mdsmap->get_created());
+    coll->logger_start();
+  }
 }
 
 

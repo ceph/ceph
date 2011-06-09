@@ -1905,9 +1905,12 @@ void FileStore::start_logger(int whoami, utime_t tare)
   logger = new ProfLogger(name, (ProfLogType*)&fs_logtype);
   if (journal)
     journal->logger = logger;
-  logger_add(logger);  
-  logger_tare(tare);
-  logger_start();
+  {
+    ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+    coll->logger_add(logger);
+    coll->logger_tare(tare);
+    coll->logger_start();
+  }
 }
 
 void FileStore::stop_logger()
@@ -1916,7 +1919,7 @@ void FileStore::stop_logger()
   if (logger) {
     if (journal)
       journal->logger = NULL;
-    logger_remove(logger);
+    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = NULL;
   }

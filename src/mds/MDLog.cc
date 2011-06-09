@@ -42,7 +42,7 @@ MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
   if (logger) {
-    logger_remove(logger);
+    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = 0;
   }
@@ -79,7 +79,7 @@ void MDLog::open_logger()
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
   logger = new ProfLogger(name, &mdlog_logtype);
-  logger_add(logger);
+  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 }
 
 void MDLog::init_journaler()

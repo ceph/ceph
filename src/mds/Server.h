@@ -57,7 +57,7 @@ public:
     terminating_sessions(false) {
   }
   ~Server() {
-    logger_remove(logger);
+    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
   }
 
