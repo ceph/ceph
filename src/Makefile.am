@@ -367,7 +367,8 @@ UNITTEST_CXXFLAGS = \
 	-I$(top_builddir)/src/gtest/include
 UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
-	$(top_builddir)/src/gtest/lib/libgtest_main.la
+	$(top_builddir)/src/gtest/lib/libgtest_main.la \
+	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la -lpthread -lm \
@@ -378,8 +379,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_base64_LDADD = libceph.la -lpthread -lm \
-			${UNITTEST_LDADD}
+unittest_base64_LDADD = libceph.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
@@ -405,8 +405,7 @@ check_PROGRAMS += unittest_simple_spin
 
 unittest_librados_SOURCES = test/librados.cc
 unittest_librados_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_librados_LDADD = librados.la \
-			${UNITTEST_LDADD}
+unittest_librados_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
 
@@ -417,15 +416,13 @@ check_PROGRAMS += unittest_bufferlist
 
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDFLAGS = -lrt ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} \
-			${UNITTEST_LDADD}
+unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} \
-			${UNITTEST_LDADD}
+unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} ${UNITTEST_LDADD}
 unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
 
