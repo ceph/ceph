@@ -487,17 +487,18 @@ def task(ctx, config):
             log.info('Shutting down mds daemons...')
             for id_, proc in mds_daemons.iteritems():
                 proc.stdin.close()
-            run.wait(mds_daemons.itervalues())
 
             log.info('Shutting down osd daemons...')
             for id_, proc in osd_daemons.iteritems():
                 proc.stdin.close()
-            run.wait(osd_daemons.itervalues())
 
             log.info('Shutting down mon daemons...')
             for id_, proc in mon_daemons.iteritems():
                 proc.stdin.close()
-            run.wait(mon_daemons.itervalues())
+
+        run.wait(mds_daemons.itervalues())
+        run.wait(osd_daemons.itervalues())
+        run.wait(mon_daemons.itervalues())
 
         log.info('Removing uninteresting files...')
         run.wait(
