@@ -49,8 +49,9 @@ def task(ctx, config):
             args=[
                 'install', '-d', '-m0755', '--',
                 '/tmp/cephtest/binary',
-                '/tmp/cephtest/log',
-                '/tmp/cephtest/profiling-logger',
+                '/tmp/cephtest/archive',
+                '/tmp/cephtest/archive/log',
+                '/tmp/cephtest/archive/profiling-logger',
                 '/tmp/cephtest/data',
                 ],
             wait=False,
@@ -449,7 +450,7 @@ def task(ctx, config):
                 ctx.cluster.run(
                     args=[
                         'find',
-                        '/tmp/cephtest/log',
+                        '/tmp/cephtest/archive/log',
                         '-name',
                         '*.log',
                         '-print0',
@@ -466,62 +467,59 @@ def task(ctx, config):
                     ),
                 )
 
-            log.info('Transferring logs...')
-            for logtype in ['log', 'profiling-logger']:
-                logdir = os.path.join(ctx.archive, logtype)
-                os.mkdir(logdir)
-                for remote in ctx.cluster.remotes.iterkeys():
-                    path = os.path.join(logdir, remote.shortname)
-                    os.mkdir(path)
-                    log.debug('Transferring logs for %s from %s to %s', remote.shortname, logtype, path)
-                    proc = remote.run(
-                        args=[
-                            'tar',
-                            'c',
-                            '-f', '-',
-                            '-C', '/tmp/cephtest',
-                            '-C', logtype,
-                            '--',
-                            '.',
-                            ],
-                        stdout=run.PIPE,
-                        wait=False,
-                        )
-                    tar = tarfile.open(mode='r|', fileobj=proc.stdout)
-                    while True:
-                        ti = tar.next()
-                        if ti is None:
-                            break
+            log.info('Transferring archived files...')
+            logdir = os.path.join(ctx.archive, 'remote')
+            os.mkdir(logdir)
+            for remote in ctx.cluster.remotes.iterkeys():
+                path = os.path.join(logdir, remote.shortname)
+                os.mkdir(path)
+                log.debug('Transferring archived files from %s to %s', remote.shortname, path)
+                proc = remote.run(
+                    args=[
+                        'tar',
+                        'c',
+                        '-f', '-',
+                        '-C', '/tmp/cephtest/archive',
+                        '--',
+                        '.',
+                        ],
+                    stdout=run.PIPE,
+                    wait=False,
+                    )
+                tar = tarfile.open(mode='r|', fileobj=proc.stdout)
+                while True:
+                    ti = tar.next()
+                    if ti is None:
+                        break
 
-                        if ti.isdir():
-                            # ignore silently; easier to just create leading dirs below
-                            pass
-                        elif ti.isfile():
-                            sub = safepath.munge(ti.name)
-                            safepath.makedirs(root=path, path=os.path.dirname(sub))
-                            tar.makefile(ti, targetpath=os.path.join(path, sub))
+                    if ti.isdir():
+                        # ignore silently; easier to just create leading dirs below
+                        pass
+                    elif ti.isfile():
+                        sub = safepath.munge(ti.name)
+                        safepath.makedirs(root=path, path=os.path.dirname(sub))
+                        tar.makefile(ti, targetpath=os.path.join(path, sub))
+                    else:
+                        if ti.isdev():
+                            type_ = 'device'
+                        elif ti.issym():
+                            type_ = 'symlink'
+                        elif ti.islnk():
+                            type_ = 'hard link'
                         else:
-                            if ti.isdev():
-                                type_ = 'device'
-                            elif ti.issym():
-                                type_ = 'symlink'
-                            elif ti.islnk():
-                                type_ = 'hard link'
-                            else:
-                                type_ = 'unknown'
-                            log.info('Ignoring tar entry: %r type %r', ti.name, type_)
-                            continue
-                    proc.exitstatus.get()
+                            type_ = 'unknown'
+                        log.info('Ignoring tar entry: %r type %r', ti.name, type_)
+                        continue
+                proc.exitstatus.get()
 
-        log.info('Removing log files...')
+        log.info('Removing archived files...')
         run.wait(
             ctx.cluster.run(
                 args=[
                     'rm',
                     '-rf',
                     '--',
-                    '/tmp/cephtest/log',
-                    '/tmp/cephtest/profiling-logger',
+                    '/tmp/cephtest/archive',
                     ],
                 wait=False,
                 ),
