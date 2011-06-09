@@ -22,8 +22,22 @@ def task(ctx, config):
         tasks:
         - ceph:
         - interactive:
+
+    You can also specify what branch to run::
+
+        tasks:
+        - ceph:
+            branch: foo
+
+    Or a tag::
+
+        tasks:
+        - ceph:
+            tag: v0.42.13
+
     """
-    assert config is None
+    if config is None:
+        config = {}
 
     log.info('Checking for old test directory...')
     processes = ctx.cluster.run(
@@ -80,7 +94,10 @@ def task(ctx, config):
                     )
 
     log.info('Untarring ceph binaries...')
-    ceph_bindir_url = teuthology.get_ceph_binary_url()
+    ceph_bindir_url = teuthology.get_ceph_binary_url(
+        branch=config.get('branch'),
+        tag=config.get('tag'),
+        )
     ctx.cluster.run(
         args=[
             'uname', '-m',

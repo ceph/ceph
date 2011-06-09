@@ -9,10 +9,18 @@ import urlparse
 
 log = logging.getLogger(__name__)
 
-def get_ceph_binary_url():
-    BRANCH = 'master' #TODO
+def get_ceph_binary_url(branch=None, tag=None):
+    # gitbuilder uses remote-style ref names for branches, mangled to
+    # have underscores instead of slashes; e.g. origin_master
+    if tag is not None:
+        ref = tag
+        assert branch is None, "cannot set both branch and tag"
+    else:
+        if branch is None:
+            branch = 'master'
+        ref = 'origin_{branch}'.format(branch=branch)
     BASE = 'http://ceph.newdream.net/gitbuilder/output/'
-    sha1_url = urlparse.urljoin(BASE, 'ref/origin_{branch}/sha1'.format(branch=BRANCH))
+    sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
     sha1_fp = urllib2.urlopen(sha1_url)
     sha1 = sha1_fp.read().rstrip('\n')
     sha1_fp.close()
