@@ -997,8 +997,12 @@ void Locker::rdlock_take_set(set<SimpleLock*>& locks)
 void Locker::rdlock_finish_set(set<SimpleLock*>& locks)
 {
   dout(10) << "rdlock_finish_set " << locks << dendl;
-  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
-    rdlock_finish(*p, 0);
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p) {
+    bool need_issue = false;
+    rdlock_finish(*p, 0, &need_issue);
+    if (need_issue)
+      issue_caps((CInode*)(*p)->get_parent());
+  }
 }
 
 
