@@ -1059,6 +1059,50 @@ done:
   send_response();
 }
 
+void RGWAbortMultipart::execute()
+{
+  ret = -EINVAL;
+  string upload_id = s->args.get("uploadId");
+  string oid, meta_oid;
+  string prefix;
+  map<uint32_t, RGWUploadPartInfo> obj_parts;
+  map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
+  RGWAccessControlPolicy policy;
+  map<string, bufferlist> attrs;
+  rgw_obj meta_obj;
+
+  if (upload_id.empty() || s->object_str.empty())
+    goto done;
+
+  ret = get_multiparts_info(s, oid, obj_parts, policy, attrs);
+  if (ret < 0)
+    goto done;
+
+  oid = s->object;
+  oid.append(".");
+  oid.append(upload_id);
+  meta_oid = oid;
+  prefix = oid;
+  prefix.append(".");
+
+  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+    oid = prefix;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
+    oid.append(buf);
+    rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
+    ret = rgwstore->delete_obj(s->user.user_id, obj);
+    if (ret < 0 && ret != -ENOENT)
+      goto done;
+  }
+  // and also remove the metadata obj
+  meta_obj.init(s->bucket_str, meta_oid, s->object_str, mp_ns);
+  ret = rgwstore->delete_obj(s->user.user_id, meta_obj);
+done:
+
+  send_response();
+}
+
 void RGWListMultipart::execute()
 {
   map<string, bufferlist> xattrs;

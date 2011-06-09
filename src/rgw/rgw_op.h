@@ -373,6 +373,22 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWAbortMultipart : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWAbortMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+  }
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
 class RGWListMultipart : public RGWOp {
 protected:
   int ret;

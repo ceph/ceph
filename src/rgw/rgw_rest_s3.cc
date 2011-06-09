@@ -281,6 +281,17 @@ void RGWCompleteMultipart_REST_S3::send_response()
   }
 }
 
+void RGWAbortMultipart_REST_S3::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWListMultipart_REST_S3::send_response()
 {
   if (ret)
@@ -379,9 +390,14 @@ RGWOp *RGWHandler_REST_S3::get_create_op(struct req_state *s)
 
 RGWOp *RGWHandler_REST_S3::get_delete_op(struct req_state *s)
 {
-  if (s->object)
-    return &delete_obj_op;
-  else if (s->bucket)
+  string upload_id = s->args.get("uploadId");
+
+  if (s->object) {
+    if (upload_id.empty())
+      return &delete_obj_op;
+    else
+      return &abort_multipart;
+  } else if (s->bucket)
     return &delete_bucket_op;
 
   return NULL;

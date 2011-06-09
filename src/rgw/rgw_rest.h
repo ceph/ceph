@@ -104,6 +104,12 @@ public:
   int get_params();
 };
 
+class RGWAbortMultipart_REST : public RGWAbortMultipart {
+public:
+  RGWAbortMultipart_REST() {}
+  ~RGWAbortMultipart_REST() {}
+};
+
 class RGWListMultipart_REST : public RGWListMultipart {
 public:
   RGWListMultipart_REST() {}
