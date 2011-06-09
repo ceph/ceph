@@ -1,8 +1,13 @@
 #+FILETAGS: :newdream:teuthology:todo:
 
 * TODO results gathering
+* TODO archive logs even if osd exited non-zero
 * TODO osd etc killing while test is running
 * TODO automatic host locking
+* TODO add task for ceph qa workload running
+parametrized task or move every shell script into a separate task?
+do the workloads live in ceph.git or teuthology.git?
+what about workloads written in C -- compile on node? binary tarball has .h etc
 * TODO add task for kclient mount/umount task
 - kclient: [client.0]
 * TODO add task for rbd image creation
