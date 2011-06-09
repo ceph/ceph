@@ -8528,7 +8528,7 @@ void MDCache::handle_discover(MDiscover *dis)
       // don't have wanted ino in this dir?
       if (dis->get_want_ino()) {
 	// set error flag in reply
-	dout(7) << "ino " << dis->get_want_ino() << " in this dir, flagging error in "
+	dout(7) << "no ino " << dis->get_want_ino() << " in this dir, flagging error in "
 		<< *curdir << dendl;
 	reply->set_flag_error_ino();
 	break;
