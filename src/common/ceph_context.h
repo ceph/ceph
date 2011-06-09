@@ -66,10 +66,8 @@ private:
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
 
-  char foo[512];
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;
-  char bar[512];
 };
 
 /* Globals (FIXME: remove) */ 
