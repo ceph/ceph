@@ -25,7 +25,7 @@
 
 // FIXME
 // These variables are here temporarily to make the transition easier.
-CephContext g_ceph_context __attribute__((init_priority(103)));
+CephContext g_ceph_context __attribute__((init_priority(103))) (0);
 md_config_t *g_conf(g_ceph_context._conf);
 std::ostream *_dout(&g_ceph_context._dout);
 DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context._doss);
@@ -79,10 +79,10 @@ private:
 };
 
 CephContext::
-CephContext()
+CephContext(uint32_t module_type_)
   : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
     _dout(_doss),
-    module_type(0),
+    module_type(module_type_),
     _prof_logger_conf_obs(new ProfLoggerConfObs()),
     _service_thread(NULL)
 {
@@ -162,4 +162,16 @@ join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+}
+
+uint32_t CephContext::
+get_module_type() const
+{
+  return module_type;
+}
+
+void CephContext::
+set_module_type(uint32_t module_type_)
+{
+  module_type = module_type_;
 }

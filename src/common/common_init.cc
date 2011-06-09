@@ -63,7 +63,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
-  cct->module_type = iparams.module_type;
+  cct->set_module_type(iparams.module_type);
   return cct;
 }
 

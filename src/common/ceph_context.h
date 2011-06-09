@@ -16,6 +16,7 @@
 #define CEPH_CEPHCONTEXT_H
 
 #include <iostream>
+#include <stdint.h>
 
 /* Forward declarations */ 
 template <typename T, typename U>
@@ -35,13 +36,11 @@ class DoutLocker;
  */
 class CephContext {
 public:
-  CephContext();
+  CephContext(uint32_t module_type_);
   ~CephContext();
   md_config_t *_conf;
   DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
   std::ostream _dout;
-
-  unsigned module_type;
 
   /* Start the Ceph Context's service thread */
   void start_service_thread();
@@ -55,9 +54,17 @@ public:
   /* Try to lock the dout lock. */
   void dout_trylock(DoutLocker *locker);
 
+  /* Get the module type (client, mon, osd, mds, etc.) */
+  uint32_t get_module_type() const;
+
+  /* Set module type (TODO: remove) */
+  void set_module_type(uint32_t module_type_);
+
 private:
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
+
+  uint32_t module_type;
 
   md_config_obs_t *_prof_logger_conf_obs;
 
