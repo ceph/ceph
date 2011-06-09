@@ -1269,7 +1269,8 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   if (ack)
     mds->send_message_client_counted(ack, client);
 
-  drop_locks(mut);
+  set<CInode*> need_issue;
+  drop_locks(mut, &need_issue);
   mut->cleanup();
   delete mut;
 
@@ -1293,15 +1294,17 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 	p++;
     }
     if (gather)
-      eval_cap_gather(in);
+      eval_cap_gather(in, &need_issue);
   } else {
-    if (cap && (cap->wanted() & ~cap->pending())) {
+    if (cap && (cap->wanted() & ~cap->pending()) &&
+	need_issue.count(in) == 0) {  // if we won't issue below anyway
       issue_caps(in, cap);
     }
   
     if (share && in->is_auth() && in->filelock.is_stable())
       share_inode_max_size(in);
   }
+  issue_caps_set(need_issue);
 
   // unlinked stray?  may need to purge (e.g., after all caps are released)
   mdcache->maybe_eval_stray(in);
