@@ -41,6 +41,25 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (hunting ? "(hunting)":"") << ": "
 
+MonClient::MonClient(CephContext *cct_) :
+  Dispatcher(cct_),
+  cct(cct_),
+  state(MC_STATE_NONE),
+  messenger(NULL),
+  cur_con(NULL),
+  monc_lock("MonClient::monc_lock"),
+  timer(monc_lock),
+  log_client(NULL),
+  hunting(true),
+  want_monmap(true),
+  want_keys(0), global_id(0),
+  authenticate_err(0),
+  auth(NULL),
+  keyring(NULL),
+  rotating_secrets(NULL)
+{
+}
+
 MonClient::~MonClient()
 {
   delete auth;
@@ -190,7 +209,7 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = new SimpleMessenger();
+    messenger = smessenger = new SimpleMessenger(cct);
     smessenger->register_entity(entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
     smessenger->start_with_nonce(getpid());

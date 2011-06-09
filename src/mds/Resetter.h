@@ -47,6 +47,7 @@ public:
    * build_initial_monmap().
    */
   Resetter(SimpleMessenger *messenger_, MonClient *monc_) :
+    Dispatcher(messenger_->cct),
     messenger(messenger_),
     monc(monc_),
     lock("Resetter::lock"), timer(lock)

@@ -242,7 +242,7 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
   int rank = monmap.get_rank(g_conf->name.get_id());
 
   cout << "starting " << g_conf->name << " rank " << rank

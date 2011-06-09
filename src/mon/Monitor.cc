@@ -86,6 +86,7 @@ const CompatSet::Feature ceph_mon_feature_incompat[] =
   { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
 
 Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
+  Dispatcher(m->cct),
   name(nm),
   rank(-1), 
   messenger(m),

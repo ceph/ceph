@@ -45,6 +45,12 @@ Cond cond;
 uint64_t received = 0;
 
 class Admin : public Dispatcher {
+public:
+  Admin() 
+    : Dispatcher(&g_ceph_context)
+  {
+  }
+private:
   bool ms_dispatch(Message *m) {
 
     //cerr << "got ping from " << m->get_source() << std::endl;
@@ -86,7 +92,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   int whoami = mc.monmap.get_rank(args[0]);
   assert(whoami >= 0);
   g_conf->public_addr = mc.monmap.get_addr(whoami);
-  SimpleMessenger *rank = new SimpleMessenger();
+  SimpleMessenger *rank = new SimpleMessenger(&g_ceph_context);
   int err = rank->bind(getpid());
   if (err < 0)
     return 1;

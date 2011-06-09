@@ -166,24 +166,7 @@ public:
   RotatingKeyRing *rotating_secrets;
 
  public:
-  MonClient(CephContext *cct_) :
-    cct(cct_),
-    state(MC_STATE_NONE),
-    messenger(NULL),
-    cur_con(NULL),
-    monc_lock("MonClient::monc_lock"),
-    timer(monc_lock),
-    log_client(NULL),
-    hunting(true),
-    want_monmap(true),
-    want_keys(0), global_id(0),
-    authenticate_err(0),
-    auth(NULL),
-    keyring(NULL),
-    rotating_secrets(NULL)
-  {
-  }
-
+  MonClient(CephContext *cct_);
   ~MonClient();
 
   int init();

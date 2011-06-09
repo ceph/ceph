@@ -225,9 +225,9 @@ int main(int argc, const char **argv)
     cluster_addr_set = false;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger();
-  SimpleMessenger *cluster_messenger = new SimpleMessenger();
-  SimpleMessenger *messenger_hb = new SimpleMessenger();
+  SimpleMessenger *client_messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *cluster_messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *messenger_hb = new SimpleMessenger(&g_ceph_context);
 
   client_messenger->bind(g_conf->public_addr, getpid());
   cluster_messenger->bind(g_conf->cluster_addr, getpid());

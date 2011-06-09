@@ -85,6 +85,7 @@
 
 // cons/des
 MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
+  Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
   name(n),

@@ -24,8 +24,11 @@ class Messenger;
 
 class Dispatcher {
 public:
+  Dispatcher(CephContext *cct_)
+    : cct(cct_)
+  {
+  }
   virtual ~Dispatcher() { }
-  Dispatcher() { }
 
   // how i receive messages
   virtual bool ms_dispatch(Message *m) = 0;
@@ -51,6 +54,8 @@ public:
   virtual bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 				    bool& isvalid) { return false; };
+private:
+  CephContext *cct;
 };
 
 #endif

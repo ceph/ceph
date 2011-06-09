@@ -44,8 +44,10 @@ protected:
   atomic_t nref;
 
  public:
-  Messenger(entity_name_t w) : default_send_priority(CEPH_MSG_PRIO_DEFAULT),
-			       nref(1) {
+  CephContext *cct;
+  Messenger(CephContext *cct_, entity_name_t w)
+    : default_send_priority(CEPH_MSG_PRIO_DEFAULT), nref(1), cct(cct_)
+  {
     _my_name = w;
   }
 

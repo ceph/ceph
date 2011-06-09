@@ -51,6 +51,12 @@ SafeTimer *obj_timer = 0;
 SafeTimer *jnl_timer = 0;
 
 class Dumper : public Dispatcher {
+public:
+  Dumper()
+    : Dispatcher(&g_ceph_context)
+  {
+  }
+private:
   bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
@@ -67,7 +73,7 @@ class Dumper : public Dispatcher {
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
 
-} dispatcher;
+};
 
 
 void usage() 
@@ -94,10 +100,11 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
-  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
   messenger->bind(getpid());
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->start();
+  Dumper dispatcher;
   messenger->add_dispatcher_head(&dispatcher);
 
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;

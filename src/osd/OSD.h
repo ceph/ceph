@@ -269,7 +269,10 @@ public:
     void ms_handle_remote_reset(Connection *con) {}
   public:
     OSD *osd;
-    HeartbeatDispatcher(OSD *o) : osd(o) {}
+    HeartbeatDispatcher(OSD *o) 
+      : Dispatcher(&g_ceph_context), osd(o)
+    {
+    }
   } heartbeat_dispatcher;
 
 

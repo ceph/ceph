@@ -62,7 +62,7 @@ void usage()
 static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
-  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
   messenger->bind(getpid());
   MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
@@ -197,7 +197,7 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
   messenger->bind(getpid());
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;

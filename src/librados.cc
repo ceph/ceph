@@ -403,7 +403,8 @@ private:
   SafeTimer timer;
 
 public:
-  RadosClient(CephContext *cct_) : cct(cct_), conf(cct_->_conf),
+  RadosClient(CephContext *cct_) : Dispatcher(cct_),
+		  cct(cct_), conf(cct_->_conf),
 		  state(DISCONNECTED), monclient(cct_),
 		  messenger(NULL), objecter(NULL),
 		  lock("radosclient"), timer(lock), max_watch_cookie(0)
@@ -701,7 +702,7 @@ connect()
     goto out;
 
   err = -ENOMEM;
-  messenger = new SimpleMessenger();
+  messenger = new SimpleMessenger(cct);
   if (!messenger)
     goto out;
 

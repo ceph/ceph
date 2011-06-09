@@ -80,7 +80,7 @@ public:
     }
 
     //network connection
-    messenger = new SimpleMessenger();
+    messenger = new SimpleMessenger(cct);
     if (!messenger->register_entity(entity_name_t::CLIENT())) {
       messenger->destroy();
       messenger = NULL;

@@ -56,9 +56,7 @@ public:
     FLAG_MON = 0x1,
   };
 
-  LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
-    messenger(m), monmap(mm), monc(mc), is_mon(flags & FLAG_MON),
-    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0) { }
+  LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags);
 
   void handle_log_ack(MLogAck *m);
 

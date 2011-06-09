@@ -280,7 +280,8 @@ static void send_command(CephToolCtx *ctx)
 class Admin : public Dispatcher {
 public:
   Admin(CephToolCtx *ctx_)
-    : ctx(ctx_)
+    : Dispatcher(&g_ceph_context),
+      ctx(ctx_)
   {
   }
 
@@ -538,7 +539,7 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   tok = tok_init(NULL);
 
   // start up network
-  messenger = new SimpleMessenger();
+  messenger = new SimpleMessenger(&g_ceph_context);
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->start_with_nonce(getpid());
   ctx->dispatcher = new Admin(ctx.get());

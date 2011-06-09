@@ -109,7 +109,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : timer(client_lock), client_lock("Client::client_lock"),
+  : Dispatcher(m->cct), timer(client_lock), client_lock("Client::client_lock"),
   filer_flags(0)
 {
   // which client am i?

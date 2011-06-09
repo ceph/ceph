@@ -553,8 +553,8 @@ private:
   int timeout;
 
 public:
-  SimpleMessenger() :
-    Messenger(entity_name_t()),
+  SimpleMessenger(CephContext *cct) :
+    Messenger(cct, entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
     dispatch_throttler(g_conf->ms_dispatch_throttle_bytes), need_addr(true),

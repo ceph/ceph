@@ -60,6 +60,13 @@ static inline int clog_type_to_syslog_prio(clog_type t)
   }
 }
 
+LogClient::LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
+    Dispatcher(m->cct),
+    messenger(m), monmap(mm), monc(mc), is_mon(flags & FLAG_MON),
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0)
+{
+}
+
 LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
   : type(type_), parent(parent_)
 {

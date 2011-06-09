@@ -400,6 +400,7 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
 OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 Messenger *hbm, MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
+  Dispatcher(hbm->cct),
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   cluster_messenger(internal_messenger),
