@@ -3126,6 +3126,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
   }
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+  if (in) {
+    if (need_issue)
+      *need_issue = true;
+    else
+      issue_caps(in);
+  }
   return true;
 }
 
@@ -3174,6 +3180,12 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   } else {
     lock->set_state(LOCK_EXCL);
     lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
+    if (in) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   }
 }
 
@@ -3630,6 +3642,12 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     // do tempsync
     lock->set_state(LOCK_TSYN);
     lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+    if (lock->get_cap_shift()) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   }
 }
 
@@ -3820,10 +3838,12 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     // change lock
     lock->set_state(LOCK_MIX);
     lock->clear_scatter_wanted();
-    if (need_issue)
-      *need_issue = true;
-    else
-      issue_caps(in);
+    if (lock->get_cap_shift()) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   } else {
     // gather?
     switch (lock->get_state()) {
