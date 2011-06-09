@@ -123,7 +123,7 @@ public:
   bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
-  void rdlock_finish(SimpleLock *lock, Mutation *mut);
+  void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue=0);
   bool can_rdlock_set(set<SimpleLock*>& locks);
   bool rdlock_try_set(set<SimpleLock*>& locks);
   void rdlock_take_set(set<SimpleLock*>& locks);
@@ -131,10 +131,10 @@ public:
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
   bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
-  void wrlock_finish(SimpleLock *lock, Mutation *mut);
+  void wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue=0);
 
   bool xlock_start(SimpleLock *lock, MDRequest *mut);
-  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
+  void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue=0);
 
   void xlock_export(SimpleLock *lock, Mutation *mut);
   void xlock_import(SimpleLock *lock, Mutation *mut);

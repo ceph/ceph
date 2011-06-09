@@ -889,7 +889,7 @@ void Locker::nudge_log(SimpleLock *lock)
     mds->mdlog->flush();
 }
 
-void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   // drop ref
   lock->put_rdlock();
@@ -903,9 +903,9 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
   // last one?
   if (!lock->is_rdlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock);
+      eval_gather(lock, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock);
+      eval(lock, pneed_issue);
   }
 }
 
@@ -1024,7 +1024,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   return false;
 }
 
-void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1039,9 +1039,9 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 
   if (!lock->is_wrlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock);
+      eval_gather(lock, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock);
+      eval(lock, pneed_issue);
   }
 }
 
@@ -1110,7 +1110,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   }
 }
 
-void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1165,12 +1165,16 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
     
   // eval?
   if (!lock->is_stable())
-    eval_gather(lock);
+    eval_gather(lock, pneed_issue);
   else {
     if (lock->get_parent()->is_auth())
-      eval(lock);
-    if (do_issue && lock->get_type() != CEPH_LOCK_DN)
-      issue_caps((CInode*)lock->get_parent());
+      eval(lock, pneed_issue);
+    if (do_issue && lock->get_type() != CEPH_LOCK_DN) {
+      if (pneed_issue)
+	*pneed_issue = true;
+      else
+	issue_caps((CInode*)lock->get_parent());
+    }
   }
 }
 
