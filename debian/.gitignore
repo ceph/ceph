@@ -21,4 +21,5 @@
 /librbd1
 /radosgw-dbg
 /radosgw
+/python-ceph
 /tmp
