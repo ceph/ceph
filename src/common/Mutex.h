@@ -15,11 +15,10 @@
 #ifndef CEPH_MUTEX_H
 #define CEPH_MUTEX_H
 
-#include <pthread.h>
 #include "include/assert.h"
 #include "lockdep.h"
 
-#define LOCKDEP
+#include <pthread.h>
 
 using namespace ceph;
 
@@ -38,7 +37,6 @@ private:
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
 
-#ifdef LOCKDEP
   void _register() {
     id = lockdep_register(name);
   }
@@ -51,12 +49,6 @@ private:
   void _will_unlock() {  // about to unlock
     id = lockdep_will_unlock(name, id);
   }
-#else
-  void _register() {}
-  void _will_lock() {} // about to lock
-  void _locked() {}    // just locked
-  void _will_unlock() {}  // about to unlock
-#endif
 
 public:
   Mutex(const char *n, bool r = false, bool ld=true, bool bt=false) :
