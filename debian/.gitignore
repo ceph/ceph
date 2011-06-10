@@ -11,13 +11,13 @@
 /ceph
 /files
 /libceph1-dbg
-/libceph1-dev
+/libceph-dev
 /libceph1
 /librados2-dbg
-/librados2-dev
+/librados-dev
 /librados2
 /librbd1-dbg
-/librbd1-dev
+/librbd-dev
 /librbd1
 /radosgw-dbg
 /radosgw
