@@ -291,7 +291,7 @@ Description: debugging symbols for radosgw
 
 Package: obsync
 Architecture: linux-any
-Depends: ${misc:Depends}, python, python-boto
+Depends: ${misc:Depends}, python, python-boto, python-ceph
 Description: synchronize data between cloud object storage providers or a local directory
  obsync is a tool to synchronize objects between cloud object
  storage providers, such as Amazon S3 (or compatible services), a
