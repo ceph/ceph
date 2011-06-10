@@ -380,13 +380,17 @@ void Monitor::handle_command(MMonCommand *m)
       rs = ss.str();
       r = 0;
     } else if (m->cmd[0] == "mon" && m->cmd.size() >= 3 && m->cmd[1] == "tell") {
+      dout(20) << "got tell: " << m->cmd << dendl;
       if (m->cmd[2] == "*") { // send to all mons and do myself
         char *num = new char[8];
         for (unsigned i = 0; i < monmap->size(); ++i) {
           if (monmap->get_inst(i) != messenger->get_myinst()) {
+            MMonCommand *newm = new MMonCommand(m->fsid, m->version);
+	    newm->cmd = m->cmd;
             sprintf(num, "%d", i);
-            m->cmd[2] = num;
-            messenger->send_message(m, monmap->get_inst(i));
+	    dout(20) << "sending to mon " << i << " with tell command filled in for " << num << dendl;
+            newm->cmd[2] = num;
+            messenger->send_message(newm, monmap->get_inst(i));
           }
         }
         handle_mon_tell(m);
@@ -406,6 +410,7 @@ void Monitor::handle_command(MMonCommand *m)
             ss << "forwarded to target mon" << m->cmd[2];
             rs = ss.str();
             r = 0;
+	    dout(20) << "sent to target mon" << dendl;
           }
           else {
             handle_mon_tell(m);
@@ -433,7 +438,7 @@ void Monitor::handle_command(MMonCommand *m)
  */
 void Monitor::handle_mon_tell(MMonCommand *m)
 {
-  dout(0) << "handle_command " << *m << dendl;
+  dout(10) << "handle_tell " << *m << dendl;
   stringstream ss;
 
   // remove monitor direction instructions
