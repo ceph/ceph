@@ -603,20 +603,27 @@ void RGWGetACLs::execute()
   send_response();
 }
 
-static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
+static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
 {
-  ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
   if (!owner)
     return -EINVAL;
+
+  ACLOwner *requested_owner = (ACLOwner *)src.find_first("Owner");
+  if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
+    return -EPERM;
+  }
 
   RGWUserInfo owner_info;
   if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
     RGW_LOG(10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
-  ACLOwner& new_owner = dest.get_owner();
-  new_owner.set_id(owner->get_id());
-  new_owner.set_name(owner_info.display_name);
+  ACLOwner& dest_owner = dest.get_owner();
+  dest_owner.set_id(owner->get_id());
+  dest_owner.set_name(owner_info.display_name);
+
+  RGW_LOG(0) << "owner id=" << owner->get_id() << dendl;
+  RGW_LOG(0) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& src_acl = src.get_acl();
   RGWAccessControlList& acl = dest.get_acl();
@@ -752,7 +759,7 @@ void RGWPutACLs::execute()
     RGW_LOG(15) << dendl;
   }
 
-  ret = rebuild_policy(*policy, new_policy);
+  ret = rebuild_policy(&owner, *policy, new_policy);
   if (ret < 0)
     goto done;
 
