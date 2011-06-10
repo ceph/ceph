@@ -384,10 +384,24 @@ int rgw_remove_bucket(string user_id, string bucket_name)
   return ret;
 }
 
-int rgw_remove_key_storage(RGWAccessKey& access_key)
+int rgw_remove_key_index(RGWAccessKey& access_key)
 {
-  rgwstore->delete_obj(access_key.id, ui_key_bucket, access_key.id);
-  return 0;
+  return rgwstore->delete_obj(access_key.id, ui_key_bucket, access_key.id);
+}
+
+int rgw_remove_uid_index(string& uid)
+{
+  return rgwstore->delete_obj(uid, ui_uid_bucket, uid);
+}
+
+int rgw_remove_email_index(string& uid, string& email)
+{
+  return rgwstore->delete_obj(uid, ui_email_bucket, email);
+}
+
+int rgw_remove_openstack_name_index(string& uid, string& openstack_name)
+{
+  return rgwstore->delete_obj(uid, ui_openstack_bucket, openstack_name);
 }
 
 /**
@@ -408,7 +422,7 @@ int rgw_delete_user(RGWUserInfo& info) {
   }
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter)
-    rgw_remove_key_storage(kiter->second);
+    rgw_remove_key_index(kiter->second);
 
   rgwstore->delete_obj(info.user_id, ui_uid_bucket, info.user_id);
   rgwstore->delete_obj(info.user_id, ui_email_bucket, info.user_email);
