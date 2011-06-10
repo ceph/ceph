@@ -5006,7 +5006,7 @@ void MDCache::do_file_recover()
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
-      in->state_clear(CInode::STATE_NEEDSRECOVER);
+      in->state_clear(CInode::STATE_RECOVERING);
       in->auth_unpin(this);
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
