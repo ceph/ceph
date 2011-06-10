@@ -46,6 +46,16 @@ int verify_pattern(char *buf, size_t len, uint64_t off)
 	return 0;
 }
 
+void generate_pattern(void *buf, size_t len, uint64_t offset)
+{
+	uint64_t *v = buf;
+	size_t i;
+
+	for (i=0; i<len / sizeof(v); i++)
+		v[i] = i * sizeof(v) + offset;
+	verify_pattern(buf, len, offset);
+}
+
 int read_direct(int buf_align, uint64_t offset, int len)
 {
 	printf("read_direct buf_align %d offset %llu len %d\n", buf_align, offset, len);
@@ -75,6 +85,53 @@ int read_sync(int buf_align, uint64_t offset, int len)
 	return r;
 }
 
+int write_direct(int buf_align, uint64_t offset, int len)
+{
+	printf("write_direct buf_align %d offset %llu len %d\n", buf_align, offset, len);
+	int fd = open("foo", O_WRONLY|O_DIRECT|O_CREAT, 0644);
+	void *rawbuf;
+	posix_memalign(&rawbuf, 4096, len + buf_align);
+	void *buf = (char *)rawbuf + buf_align;
+
+	generate_pattern(buf, len, offset);
+
+	pwrite(fd, buf, len, offset);
+	close(fd);
+
+	fd = open("foo", O_RDONLY);
+	pread(fd, buf, len, offset);
+	close(fd);
+	unlink("foo");
+
+	int r = verify_pattern(buf, len, offset);
+	free(rawbuf);
+	return r;
+}
+
+int write_sync(int buf_align, uint64_t offset, int len)
+{
+	printf("write_sync buf_align %d offset %llu len %d\n", buf_align, offset, len);
+	int fd = open("foo", O_WRONLY|O_CREAT);
+	ioctl(fd, CEPH_IOC_SYNCIO);
+	void *rawbuf;
+	posix_memalign(&rawbuf, 4096, len + buf_align);
+	void *buf = (char *)rawbuf + buf_align;
+
+	generate_pattern(buf, len, offset);
+
+	pwrite(fd, buf, len, offset);
+	close(fd);
+
+	fd = open("foo", O_RDONLY);
+	pread(fd, buf, len, offset);
+	close(fd);
+	unlink("foo");
+
+	int r = verify_pattern(buf, len, offset);
+	free(rawbuf);
+	return r;
+}
+
 int main(int argc, char **argv)
 {
 	char *buf;
@@ -89,6 +146,17 @@ int main(int argc, char **argv)
 				read_direct(i, j, k);
 				read_sync(i, j, k);
 			}
+
+	unlink("foo");
+
+	for (i = 0; i < 4096; i += 512)
+		for (j = 4*1024*1024 - 4096; j < 4*1024*1024 + 4096; j += 512)
+			for (k = 1024; k <= 16384; k *= 2) {
+				write_direct(i, j, k);
+				write_sync(i, j, k);
+			}
+
+	
 
 	return 0;
 }
