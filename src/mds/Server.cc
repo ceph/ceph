@@ -4933,7 +4933,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       vector<Anchor> trace;
       destdn->make_anchor_trace(trace, srcdnl->get_inode());
       
-      anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
+      anchorgather = new C_Gather(&g_ceph_context, new C_MDS_RetryRequest(mdcache, mdr));
       mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(), trace, &mdr->more()->src_reanchor_atid, 
 					anchorgather->new_sub());
     }
@@ -4947,7 +4947,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       straydn->make_anchor_trace(trace, destdnl->get_inode());
       
       if (!anchorgather)
-	anchorgather = new C_Gather(new C_MDS_RetryRequest(mdcache, mdr));
+	anchorgather = new C_Gather(&g_ceph_context, new C_MDS_RetryRequest(mdcache, mdr));
       mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace, &mdr->more()->dst_reanchor_atid, 
 					anchorgather->new_sub());
     }

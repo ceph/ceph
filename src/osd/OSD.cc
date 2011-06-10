@@ -1169,7 +1169,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
 
     // ok, create PG locally using provided Info and History
     *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts;
+    *pfin = new C_Contexts(&g_ceph_context);
     if (create) {
       pg = _create_lock_new_pg(info.pgid, acting, **pt);
     } else {
@@ -1201,7 +1201,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
       return NULL;
     }
     *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts;
+    *pfin = new C_Contexts(&g_ceph_context);
   }
   return pg;
 }
@@ -3189,7 +3189,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     had_map_since = g_clock.now();
   }
 
-  C_Contexts *fin = new C_Contexts;
+  C_Contexts *fin = new C_Contexts(&g_ceph_context);
   if (osdmap->is_up(whoami) &&
       osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
 
@@ -3802,7 +3802,7 @@ void OSD::kick_pg_split_queue()
 
     // create and lock children
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts;
+    C_Contexts *fin = new C_Contexts(&g_ceph_context);
     map<pg_t,PG*> children;
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
@@ -4042,7 +4042,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      C_Contexts *fin = new C_Contexts;
+      C_Contexts *fin = new C_Contexts(&g_ceph_context);
 
       PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
       creating_pgs.erase(pgid);
@@ -4673,7 +4673,7 @@ void OSD::generate_backlog(PG *pg)
   map< int, map<pg_t,PG::Query> > query_map;
   map< int, MOSDPGInfo* > info_map;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts;
+  C_Contexts *fin = new C_Contexts(&g_ceph_context);
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
 
   if (!pg->generate_backlog_epoch) {

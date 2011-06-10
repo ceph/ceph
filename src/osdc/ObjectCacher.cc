@@ -520,7 +520,7 @@ void ObjectCacher::bh_read_finish(int poolid, sobject_t oid, loff_t start, uint6
            p++)
         ls.splice(ls.end(), p->second);
       bh->waitfor_read.clear();
-      finish_contexts(ls);
+      finish_contexts(&g_ceph_context, ls);
 
       // clean up?
       ob->try_merge_bh(bh);
@@ -617,7 +617,7 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
                << " tid " << tid << " obsolete" << dendl;
     }
 
-    finish_contexts(ls);
+    finish_contexts(&g_ceph_context, ls);
 
   }
 }
@@ -678,7 +678,7 @@ void ObjectCacher::bh_write_ack(int poolid, sobject_t oid, loff_t start, uint64_
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_ack[tid]);
       ob->waitfor_ack.erase(tid);
-      finish_contexts(ls);
+      finish_contexts(&g_ceph_context, ls);
     }
 
     // is the entire object set now clean?
@@ -713,7 +713,7 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_commit[tid]);
       ob->waitfor_commit.erase(tid);
-      finish_contexts(ls);
+      finish_contexts(&g_ceph_context, ls);
     }
 
     // is the entire object set now clean and fully committed?
@@ -1488,7 +1488,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     if (!flush(ob)) {
       // we'll need to gather...
       if (!gather && onfinish) 
-        gather = new C_Gather(onfinish);
+        gather = new C_Gather(&g_ceph_context, onfinish);
       safe = false;
 
       dout(10) << "flush_set " << oset << " will wait for ack tid " 
@@ -1535,7 +1535,7 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
       dout(10) << "commit_set " << oset << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
                << dendl;
-      if (!gather && onfinish) gather = new C_Gather(onfinish);
+      if (!gather && onfinish) gather = new C_Gather(&g_ceph_context, onfinish);
       safe = false;
       if (gather)
         ob->waitfor_commit[ob->last_write_tid].push_back( gather->new_sub() );
@@ -1735,7 +1735,7 @@ void ObjectCacher::kick_sync_writers(ObjectSet *oset)
     ls.splice(ls.begin(), ob->waitfor_wr);
   }
 
-  finish_contexts(ls);
+  finish_contexts(&g_ceph_context, ls);
 }
 
 void ObjectCacher::kick_sync_readers(ObjectSet *oset)
@@ -1756,7 +1756,7 @@ void ObjectCacher::kick_sync_readers(ObjectSet *oset)
     ls.splice(ls.begin(), ob->waitfor_rd);
   }
 
-  finish_contexts(ls);
+  finish_contexts(&g_ceph_context, ls);
 }
 
 

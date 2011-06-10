@@ -1040,7 +1040,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   Cond cond;
   bool ack;
   bool safe;
-  C_Gather *safeg = new C_Gather(new C_SafeCond(&lock, &cond, &safe));
+  C_Gather *safeg = new C_Gather(&g_ceph_context, new C_SafeCond(&lock, &cond, &safe));
   Context *safegref = safeg->new_sub();  // take a ref
 
   while (!t.end()) {

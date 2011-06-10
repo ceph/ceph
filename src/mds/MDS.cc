@@ -1112,7 +1112,7 @@ void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
+  C_Gather *fin = new C_Gather(&g_ceph_context, new C_MDS_CreateFinish(this));
 
   mdcache->init_layouts();
 
@@ -1188,7 +1188,7 @@ void MDS::boot_start(int step, int r)
 
   case 1:
     {
-      C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 2));
+      C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDS_BootStart(this, 2));
       dout(2) << "boot_start " << step << ": opening inotable" << dendl;
       inotable->load(gather->new_sub());
 
@@ -1212,7 +1212,7 @@ void MDS::boot_start(int step, int r)
     {
       dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
 
-      C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 3));
+      C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDS_BootStart(this, 3));
 
       mdcache->open_mydir_inode(gather->new_sub());
 
@@ -1429,7 +1429,7 @@ void MDS::reconnect_start()
     reopen_log();
 
   server->reconnect_clients();
-  finish_contexts(waiting_for_reconnect);
+  finish_contexts(&g_ceph_context, waiting_for_reconnect);
 }
 void MDS::reconnect_done()
 {
@@ -1464,7 +1464,7 @@ void MDS::rejoin_done()
 void MDS::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
-  finish_contexts(waiting_for_replay);  // kick waiters
+  finish_contexts(&g_ceph_context, waiting_for_replay);  // kick waiters
   queue_one_replay();
 }
 
@@ -1483,8 +1483,8 @@ void MDS::active_start()
 
   mdcache->clean_open_file_lists();
   mdcache->scan_stray_dir();
-  finish_contexts(waiting_for_replay);  // kick waiters
-  finish_contexts(waiting_for_active);  // kick waiters
+  finish_contexts(&g_ceph_context, waiting_for_replay);  // kick waiters
+  finish_contexts(&g_ceph_context, waiting_for_active);  // kick waiters
 }
 
 

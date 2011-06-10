@@ -39,7 +39,7 @@ class Context {
 /*
  * finish and destroy a list of Contexts
  */
-inline void finish_contexts(std::list<Context*>& finished, 
+inline void finish_contexts(CephContext *cct, std::list<Context*>& finished, 
                             int result = 0)
 {
   if (finished.empty())
@@ -48,18 +48,18 @@ inline void finish_contexts(std::list<Context*>& finished,
   list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  dout(10) << ls.size() << " contexts to finish with " << result << dendl;
+  ldout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    dout(10) << "---- " << c << dendl;
+    ldout(cct,10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
 }
 
-inline void finish_contexts(std::vector<Context*>& finished, 
+inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished, 
                             int result = 0)
 {
   if (finished.empty())
@@ -68,12 +68,12 @@ inline void finish_contexts(std::vector<Context*>& finished,
   vector<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  dout(10) << ls.size() << " contexts to finish with " << result << dendl;
+  ldout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::vector<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    dout(10) << "---- " << c << dendl;
+    ldout(cct,10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
@@ -90,7 +90,13 @@ public:
  */
 class C_Contexts : public Context {
 public:
+  CephContext *cct;
   std::list<Context*> contexts;
+
+  C_Contexts(CephContext *cct_)
+    : cct(cct_)
+  {
+  }
 
   void add(Context* c) {
     contexts.push_back(c);
@@ -99,7 +105,7 @@ public:
     contexts.splice(contexts.end(), ls);
   }
   void finish(int r) {
-    finish_contexts(contexts, r);
+    finish_contexts(cct, contexts, r);
   }
 };
 
@@ -113,6 +119,7 @@ public:
  */
 class C_Gather : public Context {
 private:
+  CephContext *cct;
   int result;
   Context *onfinish;
 #ifdef DEBUG_GATHER
@@ -132,7 +139,7 @@ private:
 #endif
     --sub_existing_count;
 
-    dout(10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
+    ldout(cct,10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
 #ifdef DEBUG_GATHER
 		    << " (remaining " << waitfor << ")"
 #endif
@@ -182,15 +189,16 @@ private:
   };
 
 public:
-  C_Gather(Context *f=0, bool an=false) : result(0), onfinish(f), sub_created_count(0),
-                                          sub_existing_count(0),
-                                          lock("C_Gather::lock", true, false), //disable lockdep
-                                          any(an),
-					  activated(onfinish ? true : false) {
-    dout(10) << "C_Gather " << this << ".new" << dendl;
+  C_Gather(CephContext *cct_, Context *f=0, bool an=false) 
+    : cct(cct_), result(0), onfinish(f), sub_created_count(0),
+      sub_existing_count(0),
+      lock("C_Gather::lock", true, false), //disable lockdep
+      any(an), activated(onfinish ? true : false)
+  {
+    ldout(cct,10) << "C_Gather " << this << ".new" << dendl;
   }
   ~C_Gather() {
-    dout(10) << "C_Gather " << this << ".delete" << dendl;
+    ldout(cct,10) << "C_Gather " << this << ".delete" << dendl;
     assert(sub_existing_count == 0);
 #ifdef DEBUG_GATHER
     assert(waitfor.empty());
@@ -212,7 +220,7 @@ public:
 #ifdef DEBUG_GATHER
     waitfor.insert(s);
 #endif
-    dout(10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
+    ldout(cct,10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
   void rm_sub(Context *s) {

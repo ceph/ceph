@@ -573,7 +573,7 @@ void MDLog::_replay_thread()
   }
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
-  finish_contexts(waitfor_replay, 0);  
+  finish_contexts(&g_ceph_context, waitfor_replay, 0);  
 
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();

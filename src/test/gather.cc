@@ -25,7 +25,7 @@ public:
 };
 
 TEST(ContextGather, Constructor) {
-  C_Gather *gather = new C_Gather();
+  C_Gather *gather = new C_Gather(&g_ceph_context );
   EXPECT_TRUE(gather->empty());
   EXPECT_EQ(0, gather->get_num());
   EXPECT_EQ(0, gather->get_num_remaining());
@@ -33,7 +33,7 @@ TEST(ContextGather, Constructor) {
 }
 
 TEST(ContextGather, OneSub) {
-  C_Gather *gather = new C_Gather();
+  C_Gather *gather = new C_Gather(&g_ceph_context);
   Context *sub = gather->new_sub();
   EXPECT_EQ(1, gather->get_num());
   EXPECT_EQ(1, gather->get_num_remaining());
@@ -50,7 +50,7 @@ TEST(ContextGather, OneSub) {
 }
 
 TEST(ContextGather, ManySubs) {
-  C_Gather *gather = new C_Gather();
+  C_Gather *gather = new C_Gather(&g_ceph_context);
   int sub_count = 8;
   bool finish_called = false;
   int result = 0;
@@ -81,7 +81,7 @@ TEST(ContextGather, ManySubs) {
 }
 
 TEST(ContextGather, AlternatingSubCreateFinish) {
-  C_Gather *gather = new C_Gather();
+  C_Gather *gather = new C_Gather(&g_ceph_context);
   int sub_count = 8;
   bool finish_called = false;
   int result = 0;

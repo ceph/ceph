@@ -1169,7 +1169,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
   list<Context*> finished;
   take_waiting(mask, finished);
   if (result < 0)
-    finish_contexts(finished, result);
+    finish_contexts(&g_ceph_context, finished, result);
   else
     cache->mds->queue_waiters(finished);
 }
@@ -1956,7 +1956,7 @@ void CDir::_commit(version_t want)
                                  new C_Dir_Committed(this, get_version(),
                                        inode->inode.last_renamed_version));
   else { // send in a different Context
-    C_Gather *gather = new C_Gather(new C_Dir_Committed(this, get_version(),
+    C_Gather *gather = new C_Gather(&g_ceph_context, new C_Dir_Committed(this, get_version(),
                                          inode->inode.last_renamed_version));
     while (committed_dn != items.end()) {
       ObjectOperation n = ObjectOperation();

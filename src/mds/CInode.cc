@@ -995,7 +995,7 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
-  C_Gather *gather = new C_Gather(c);
+  C_Gather *gather = new C_Gather(&g_ceph_context, c);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());

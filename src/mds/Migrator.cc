@@ -1481,7 +1481,7 @@ void Migrator::export_finish(CDir *dir)
   assert(g_conf->mds_kill_export_at != 13);
   
   // finish export (adjust local cache state)
-  C_Contexts *fin = new C_Contexts;
+  C_Contexts *fin = new C_Contexts(&g_ceph_context);
   finish_export_dir(dir, fin->contexts, g_clock.now());
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 

@@ -3153,7 +3153,7 @@ void FileStore::sync_entry()
     }
     
     lock.Lock();
-    finish_contexts(fin, 0);
+    finish_contexts(&g_ceph_context, fin, 0);
     fin.clear();
     if (!sync_waiters.empty()) {
       dout(10) << "sync_entry more waiters, committing again" << dendl;

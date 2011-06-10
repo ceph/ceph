@@ -294,9 +294,9 @@ void Paxos::handle_last(MMonPaxos *last)
 	extend_lease();
 
 	// wake people up
-	finish_contexts(waiting_for_active);
-	finish_contexts(waiting_for_readable);
-	finish_contexts(waiting_for_writeable);
+	finish_contexts(&g_ceph_context, waiting_for_active);
+	finish_contexts(&g_ceph_context, waiting_for_readable);
+	finish_contexts(&g_ceph_context, waiting_for_writeable);
       }
     }
   } else {
@@ -344,10 +344,10 @@ void Paxos::begin(bufferlist& v)
     // we're alone, take it easy
     commit();
     state = STATE_ACTIVE;
-    finish_contexts(waiting_for_active);
-    finish_contexts(waiting_for_commit);
-    finish_contexts(waiting_for_readable);
-    finish_contexts(waiting_for_writeable);
+    finish_contexts(&g_ceph_context, waiting_for_active);
+    finish_contexts(&g_ceph_context, waiting_for_commit);
+    finish_contexts(&g_ceph_context, waiting_for_readable);
+    finish_contexts(&g_ceph_context, waiting_for_writeable);
     update_observers();
     return;
   }
@@ -450,10 +450,10 @@ void Paxos::handle_accept(MMonPaxos *accept)
     extend_lease();
   
     // wake people up
-    finish_contexts(waiting_for_active);
-    finish_contexts(waiting_for_commit);
-    finish_contexts(waiting_for_readable);
-    finish_contexts(waiting_for_writeable);
+    finish_contexts(&g_ceph_context, waiting_for_active);
+    finish_contexts(&g_ceph_context, waiting_for_commit);
+    finish_contexts(&g_ceph_context, waiting_for_readable);
+    finish_contexts(&g_ceph_context, waiting_for_writeable);
   }
   accept->put();
 }
@@ -518,7 +518,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
   
   commit->put();
 
-  finish_contexts(waiting_for_commit);
+  finish_contexts(&g_ceph_context, waiting_for_commit);
 }
 
 void Paxos::extend_lease()
@@ -619,9 +619,9 @@ void Paxos::handle_lease(MMonPaxos *lease)
   trim_to(lease->first_committed);
   
   // kick waiters
-  finish_contexts(waiting_for_active);
+  finish_contexts(&g_ceph_context, waiting_for_active);
   if (is_readable())
-    finish_contexts(waiting_for_readable);
+    finish_contexts(&g_ceph_context, waiting_for_readable);
 
   lease->put();
 }
@@ -780,8 +780,8 @@ void Paxos::peon_init()
   dout(10) << "peon_init -- i am a peon" << dendl;
 
   // no chance to write now!
-  finish_contexts(waiting_for_writeable, -1);
-  finish_contexts(waiting_for_commit, -1);
+  finish_contexts(&g_ceph_context, waiting_for_writeable, -1);
+  finish_contexts(&g_ceph_context, waiting_for_commit, -1);
 }
 
 void Paxos::election_starting()
@@ -790,7 +790,7 @@ void Paxos::election_starting()
   cancel_events();
   new_value.clear();
 
-  finish_contexts(waiting_for_commit, -1);
+  finish_contexts(&g_ceph_context, waiting_for_commit, -1);
 }
 
 
