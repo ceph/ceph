@@ -8,6 +8,8 @@ testdir="$1"
 
 [ ${basedir:0:1} == "." ] && basedir=`pwd`/${basedir:1}
 
+PATH="$basedir/src:$PATH"
+
 [ -z "$testdir" ] || [ ! -d "$testdir" ] && echo "specify test dir" && exit 1
 cd $testdir
 
