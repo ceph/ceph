@@ -12,11 +12,10 @@
  *
  */
 
-#include "common/config.h"
-#include "common/debug.h"
 #include "common/errno.h"
 
 #include <errno.h>
+#include <sstream>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -24,11 +23,10 @@
 #include <unistd.h>
 #include <vector>
 
-#define dout_prefix *_dout
+using std::ostringstream;
 
-int run_cmd(const char *cmd, ...)
+std::string run_cmd(const char *cmd, ...)
 {
-  int ret;
   std::vector <const char *> arr;
   va_list ap;
   va_start(ap, cmd);
@@ -40,34 +38,43 @@ int run_cmd(const char *cmd, ...)
   va_end(ap);
   arr.push_back(NULL);
 
-  ret = fork();
-  if (ret == -1) {
+  int fret = fork();
+  if (fret == -1) {
     int err = errno;
-    derr << "run_cmd(" << cmd << "): unable to fork(): " << cpp_strerror(err)
-         << dendl;
-    return -1;
+    ostringstream oss;
+    oss << "run_cmd(" << cmd << "): unable to fork(): " << cpp_strerror(err);
+    return oss.str();
   }
-  else if (ret == 0) {
+  else if (fret == 0) {
     // execvp doesn't modify its arguments, so the const-cast here is safe.
     execvp(cmd, (char * const*)&arr[0]);
     _exit(127);
   }
   int status;
-  while (waitpid(ret, &status, 0) == -1) {
+  while (waitpid(fret, &status, 0) == -1) {
     int err = errno;
     if (err == EINTR)
       continue;
-    derr << "run_cmd(" << cmd << "): waitpid error: "
-	 << cpp_strerror(err) << dendl;
-    return -1;
+    ostringstream oss;
+    oss << "run_cmd(" << cmd << "): waitpid error: "
+	 << cpp_strerror(err);
+    return oss.str();
   }
   if (WIFEXITED(status)) {
-    return WEXITSTATUS(status);
+    int wexitstatus = WEXITSTATUS(status);
+    if (wexitstatus != 0) {
+      ostringstream oss;
+      oss << "run_cmd(" << cmd << "): exited with status " << wexitstatus;
+      return oss.str();
+    }
+    return "";
   }
   else if (WIFSIGNALED(status)) {
-    derr << "run_cmd(" << cmd << "): terminated by signal" << dendl;
-    return -1;
+    ostringstream oss;
+    oss << "run_cmd(" << cmd << "): terminated by signal";
+    return oss.str();
   }
-  derr << "run_cmd(" << cmd << "): terminated by unknown mechanism" << dendl;
-  return -1;
+  ostringstream oss;
+  oss << "run_cmd(" << cmd << "): terminated by unknown mechanism";
+  return oss.str();
 }

@@ -89,18 +89,18 @@ int MonitorStore::umount()
 
 int MonitorStore::mkfs()
 {
-  int ret = run_cmd("rm", "-rf", dir.c_str(), (char*)NULL);
-  if (ret) {
+  std::string ret = run_cmd("rm", "-rf", dir.c_str(), (char*)NULL);
+  if (!ret.empty()) {
     derr << "MonitorStore::mkfs: failed to remove " << dir
 	 << ": rm returned " << ret << dendl;
-    return ret;
+    return -EIO;
   }
 
   ret = run_cmd("mkdir", "-p", dir.c_str(), (char*)NULL);
-  if (ret) {
+  if (!ret.empty()) {
     derr << "MonitorStore::mkfs: failed to mkdir -p " << dir
 	 << ": mkdir returned " << ret << dendl;
-    return ret;
+    return -EIO;
   }
 
   dout(0) << "created monfs at " << dir.c_str() << " for "

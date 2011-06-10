@@ -26,8 +26,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define dout_prefix *_dout
-
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;

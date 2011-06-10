@@ -15,6 +15,8 @@
 #ifndef CEPH_COMMON_RUN_CMD_H
 #define CEPH_COMMON_RUN_CMD_H
 
+#include <string>
+
 //
 // Fork a command and run it. The shell will not be invoked and shell
 // expansions will not be done.
@@ -24,6 +26,8 @@
 // Example:
 //   run_cmd("rm", "-rf", "foo", NULL)
 //
-int run_cmd(const char *cmd, ...);
+// Returns an empty string on success, and an error string otherwise.
+//
+std::string run_cmd(const char *cmd, ...);
 
 #endif

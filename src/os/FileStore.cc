@@ -1002,12 +1002,12 @@ int FileStore::wipe_subvol(const char *s)
       continue;
     ostringstream oss;
     oss << old_dir.str().c_str() << "/" << de->d_name;
-    int ret = run_cmd("rm", "-rf", oss.str().c_str(), (char*)NULL);
-    if (ret) {
+    std::string ret = run_cmd("rm", "-rf", oss.str().c_str(), (char*)NULL);
+    if (!ret.empty()) {
       derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
 	   << "error " << ret << dendl;
       ::closedir(dir);
-      return ret;
+      return -EIO;
     }
   }
   ::closedir(dir);
@@ -1025,10 +1025,11 @@ int FileStore::mkfs()
 
   if (!g_conf->filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
-    ret = run_cmd("mount", g_conf->filestore_dev.c_str(), (char*)NULL);
-    if (ret) {
+    std::string mret = run_cmd("mount", g_conf->filestore_dev.c_str(), (char*)NULL);
+    if (!mret.empty()) {
       derr << "FileStore::mkfs: failed to mount g_conf->filestore_dev "
-	   << "'" << g_conf->filestore_dev << "'. Error code " << ret << dendl;
+	   << "'" << g_conf->filestore_dev << "'. " << mret << dendl;
+      ret = -EIO;
       goto out;
     }
   }
