@@ -65,8 +65,8 @@
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
-#define dout_prefix _prefix(this)
-static ostream& _prefix(Monitor *mon) {
+#define dout_prefix _prefix(_dout, this)
+static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" : 

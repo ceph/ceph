@@ -19,9 +19,12 @@
 #include "common/code_environment.h"
 #include "common/signal.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <sys/user.h> // for PAGE_MASK
 
 class Thread {
  private:

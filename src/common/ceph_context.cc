@@ -27,7 +27,6 @@
 // These variables are here temporarily to make the transition easier.
 CephContext g_ceph_context __attribute__((init_priority(103))) (0);
 md_config_t *g_conf(g_ceph_context._conf);
-std::ostream *_dout(&g_ceph_context._dout);
 DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context._doss);
 
 class CephContextServiceThread : public Thread

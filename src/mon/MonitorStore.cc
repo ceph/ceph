@@ -24,8 +24,8 @@
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
-#define dout_prefix _prefix(dir)
-static ostream& _prefix(const string& dir) {
+#define dout_prefix _prefix(_dout, dir)
+static ostream& _prefix(std::ostream *_dout, const string& dir) {
   return *_dout << "store(" << dir << ") ";
 }
 

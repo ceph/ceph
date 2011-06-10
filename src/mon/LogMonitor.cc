@@ -31,8 +31,8 @@
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
-#define dout_prefix _prefix(mon, paxos->get_version())
-static ostream& _prefix(Monitor *mon, version_t v) {
+#define dout_prefix _prefix(_dout, mon, paxos->get_version())
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".log v" << v << " ";

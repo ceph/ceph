@@ -102,8 +102,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
-static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
-  return out << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+static ostream& _prefix(std::ostream* _dout, int whoami, OSDMap *osdmap) {
+  return *_dout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
 const coll_t coll_t::META_COLL("meta");
@@ -393,7 +393,7 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
 }
 
 #undef dout_prefix
-#define dout_prefix _prefix(*_dout, whoami, osdmap)
+#define dout_prefix _prefix(_dout, whoami, osdmap)
 
 // cons/des
 

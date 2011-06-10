@@ -20,7 +20,7 @@
 #ifndef CEPH_DOUT_STREAMBUF_H
 #define CEPH_DOUT_STREAMBUF_H
 
-#include "common/config.h"
+#include "common/config_obs.h"
 
 #include <iosfwd>
 #include <pthread.h>

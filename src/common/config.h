@@ -23,8 +23,9 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
-#include "common/Mutex.h"
-#include "include/assert.h"
+#include "common/Mutex.h" // TODO: remove
+#include "include/assert.h" // TODO: remove
+#include "common/config_obs.h"
 #include "msg/msg_types.h"
 
 #define OSD_REP_PRIMARY 0
@@ -32,7 +33,6 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_CHAIN   2
 
 class config_option;
-class md_config_obs_t;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
@@ -529,15 +529,6 @@ struct config_option {
   const void *conf_ptr(const md_config_t *conf) const;
 };
 
-class md_config_obs_t {
-public:
-  virtual ~md_config_obs_t(); // we won't actually use this, but it's safest
-  // when you have virtual functions
-  virtual const char** get_tracked_conf_keys() const = 0;
-  virtual void handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed) = 0;
-};
-
-#include "common/debug.h"
+#include "common/debug.h" // TODO: remove
 
 #endif

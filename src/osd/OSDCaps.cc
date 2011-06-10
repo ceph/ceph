@@ -142,7 +142,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
 #define ASSERT_STATE(x) \
 do { \
   if (!(x)) { \
-       *_dout << "error parsing caps at pos=" << pos << " (" #x ")" << std::endl; \
+       derr << "error parsing caps at pos=" << pos << " (" #x ")" << dendl; \
   } \
 } while (0)
 

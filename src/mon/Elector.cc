@@ -24,8 +24,8 @@
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
-#define dout_prefix _prefix(mon, epoch)
-static ostream& _prefix(Monitor *mon, epoch_t epoch) {
+#define dout_prefix _prefix(_dout, mon, epoch)
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".elector(" << epoch << ") ";

@@ -41,8 +41,8 @@
 #define DOUT_SUBSYS osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, osd->osdmap
 #undef dout_prefix
-#define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
-static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
+#define dout_prefix _prefix(_dout, this, osd->whoami, osd->osdmap)
+static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMap *osdmap) {
   return *_dout << "osd" << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }

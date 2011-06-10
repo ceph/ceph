@@ -115,7 +115,7 @@ private:
   class Pipe : public RefCountedObject {
   public:
     SimpleMessenger *messenger;
-    ostream& _pipe_prefix();
+    ostream& _pipe_prefix(std::ostream *_dout);
 
     enum {
       STATE_ACCEPTING,

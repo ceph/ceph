@@ -34,8 +34,8 @@
 
 #define DOUT_SUBSYS osd
 #undef dout_prefix
-#define dout_prefix _prefix(this)
-static ostream& _prefix(const PG *pg) {
+#define dout_prefix _prefix(_dout, this)
+static ostream& _prefix(std::ostream *_dout, const PG *pg) {
   return *_dout << pg->gen_prefix();
 }
 

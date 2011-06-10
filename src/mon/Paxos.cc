@@ -23,8 +23,9 @@
 
 #define DOUT_SUBSYS paxos
 #undef dout_prefix
-#define dout_prefix _prefix(mon, mon->name, mon->rank, machine_name, state, last_committed)
-static ostream& _prefix(Monitor *mon, const string& name, int rank, const char *machine_name, int state, version_t last_committed) {
+#define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, machine_name, state, last_committed)
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, int rank,
+			const char *machine_name, int state, version_t last_committed) {
   return *_dout << "mon." << name << "@" << rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" :

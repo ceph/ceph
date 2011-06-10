@@ -57,8 +57,8 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix _prefix(mds)
-static ostream& _prefix(MDS *mds) {
+#define dout_prefix _prefix(_dout, mds)
+static ostream& _prefix(std::ostream *_dout, MDS *mds) {
   return *_dout << "mds" << mds->get_nodeid() << ".locker ";
 }
 

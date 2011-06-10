@@ -25,6 +25,7 @@
 #include "include/color.h"
 
 #include "common/Timer.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"

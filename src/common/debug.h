@@ -3,8 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2010 Sage Weil <sage@newdream.net>
- * Copyright (C) 2010 Dreamhost
+ * Copyright (C) 2004-2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,89 +15,19 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
-#include "common/ceph_context.h"
-#include "common/likely.h"
-#include "common/config.h"		    // need for g_conf
-#include "include/assert.h"
+#include "common/dout.h"
 
-#include <iostream>
-#include <pthread.h>
-#include <streambuf>
+/* Global version of the stuff in common/dout.h
+ */
 
-extern void dout_emergency(const char * const str);
+#define dout(v) ldout((&g_ceph_context), v)
 
-extern void dout_emergency(const std::string &str);
+#define pdout(v, p) lpdout((&g_ceph_context), v, p)
 
-class DoutLocker
-{
-public:
-  DoutLocker(pthread_mutex_t *lock_)
-    : lock(lock_)
-  {
-    pthread_mutex_lock(lock);
-  }
-  DoutLocker()
-    : lock(NULL)
-  {
-  }
-  ~DoutLocker() {
-    if (lock)
-      pthread_mutex_unlock(lock);
-  }
-  pthread_mutex_t *lock;
-};
+#define generic_dout(v) lgeneric_dout((&g_ceph_context), v)
 
-static inline void _dout_begin_line(signed int prio) {
-  // Put priority information into dout
-  std::streambuf *doss = (std::streambuf*)_doss;
-  doss->sputc(prio + 12);
+#define derr lderr((&g_ceph_context))
 
-  // Some information that goes in every dout message
-  *_dout << std::hex << pthread_self() << std::dec << " ";
-}
-
-// intentionally conflict with endl
-class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
-static const _bad_endl_use_dendl_t endl = 0;
-inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
-  assert(0 && "you are using the wrong endl.. use std::endl or dendl");
-  return out;
-}
-
-// generic macros
-#define debug_DOUT_SUBSYS debug
-#define dout_prefix *_dout
-#define DOUT_CONDVAR(x) g_conf->debug_ ## x
-#define XDOUT_CONDVAR(x) DOUT_CONDVAR(x)
-#define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
-
-// The array declaration will trigger a compiler error if 'l' is
-// out of range
-#define dout_impl(v) \
-  if (0) {\
-    char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
-  }\
-  DoutLocker __dout_locker; \
-  g_ceph_context.dout_lock(&__dout_locker); \
-  _dout_begin_line(v); \
-
-#define dout(v) \
-  do { if (DOUT_COND(v)) {\
-    dout_impl(v) \
-    dout_prefix
-
-#define pdout(v, p) \
-  do { if ((v) <= (p)) {\
-    dout_impl(v) \
-    *_dout
-
-#define generic_dout(v) \
-  pdout(v, g_conf->debug)
-
-#define dendl std::endl; } } while (0)
-
-#define derr dout(-1)
-
-#define generic_derr generic_dout(-1)
+#define generic_derr lgeneric_derr((&g_ceph_context))
 
 #endif
