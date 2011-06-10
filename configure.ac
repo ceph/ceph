@@ -147,6 +147,9 @@ AC_ARG_ENABLE([coverage],
             [],
             [enable_coverage=no])
 AM_CONDITIONAL(ENABLE_COVERAGE, test "x$enable_coverage" != xno)
+if test "x$enable_coverage" != xno; then
+   AC_DEFINE([ENABLE_COVERAGE], [1], [Define if enabling coverage.])
+fi
 AC_SUBST(GCOV_PREFIX_STRIP, `echo $(pwd)/src | tr -dc / | wc -c`)
 
 # radosgw?

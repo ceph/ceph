@@ -93,8 +93,6 @@ class MDSMonitor : public PaxosService {
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
-  void send_exits();
-
   // beacons
   struct beacon_info_t {
     utime_t stamp;

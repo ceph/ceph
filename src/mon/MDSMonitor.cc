@@ -1179,15 +1179,3 @@ void MDSMonitor::do_stop()
   if (propose_osdmap)
     mon->osdmon()->propose_pending();
 }
-
-void MDSMonitor::send_exits()
-{
-  vector<string> cmd;
-  cmd.push_back("exit");
-  cmd.push_back("immediately");
-  for (unsigned i = 0; i < mdsmap.get_max_mds(); ++i) {
-    if (mdsmap.is_active(i)) {
-      mon->send_command(mdsmap.get_inst(i), cmd, paxos->get_version());
-    }
-  }
-}

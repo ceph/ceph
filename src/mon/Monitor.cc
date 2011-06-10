@@ -61,6 +61,7 @@
 
 #include <sstream>
 #include <stdlib.h>
+#include <signal.h>
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
@@ -84,6 +85,13 @@ const CompatSet::Feature ceph_mon_feature_ro_compat[] =
   {END_FEATURE};
 const CompatSet::Feature ceph_mon_feature_incompat[] =
   { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
+
+#ifdef ENABLE_COVERAGE
+void handle_signal(int signal)
+{
+  exit(0);
+}
+#endif
 
 Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   Dispatcher(cct_),
@@ -176,6 +184,11 @@ void Monitor::init()
   }
   
   lock.Unlock();
+
+#ifdef ENABLE_COVERAGE
+  signal(SIGTERM, handle_signal);
+#endif
+
 }
 
 void Monitor::shutdown()
@@ -330,15 +343,6 @@ void Monitor::handle_command(MMonCommand *m)
       stop_cluster();
       reply_command(m, 0, "initiating cluster shutdown", 0);
       return;
-    }
-    if (m->cmd[0] == "all_exit") {
-      send_exit_to_all();
-      reply_command(m, 0, "exiting", 0);
-      return;
-    }
-    if (m->cmd[0] == "exit") {
-      reply_command(m, 0, "exiting", 0);
-      exit(0);
     }
 
     if (m->cmd[0] == "_injectargs") {
@@ -688,18 +692,6 @@ void Monitor::inject_args(const entity_inst_t& inst, string& args)
     v.push_back("injectargs");
     v.push_back(args);
     send_command(inst, v, 0);
-  }
-}
-
-void Monitor::send_exit_to_all()
-{
-  dout(10) << "send_exit_to_all " << dendl;
-  osdmon()->send_exits();
-  mdsmon()->send_exits();
-  vector<string> cmd;
-  cmd.push_back("exit");
-  for (unsigned i = 0; i < monmap->size(); i++) {
-    send_command(monmap->get_inst(i), cmd, 0);
   }
 }
 
