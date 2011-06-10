@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2004-2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -12,24 +12,47 @@
  *
  */
 
+#include "common/Thread.h"
+#include "common/code_environment.h"
+#include "common/debug.h"
+#include "common/signal.h"
+
+#include <assert.h>
 #include <dirent.h>
 #include <errno.h>
 #include <iostream>
+#include <pthread.h>
+#include <signal.h>
 #include <sstream>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/user.h> // for PAGE_MASK
 
-#include "common/debug.h"
-#include "common/Thread.h"
+Thread::
+Thread()
+  : thread_id(0)
+{
+}
+
+Thread::
+~Thread()
+{
+}
+
+void *Thread::
+_entry_func(void *arg) {
+  void *r = ((Thread*)arg)->entry();
+  return r;
+}
 
 /**
- * Return the number of threads in this process. The data is
- * retrieved from /proc and includes all threads, not just
- * "child" threads.
- * Behavior changed in 6fb416b083d518e5f524359cc3cacb66ccc63dca
- * to support eventual elimination of global variables.
+ * Return the number of threads in this process.
+ * So a single-threaded program would have one thread; a program with a main
+ * thread and one child thread would have two threads, etc.
  */
-int Thread::get_num_threads(void)
+int Thread::
+get_num_threads(void)
 {
   std::ostringstream oss;
   oss << "/proc/" << getpid() << "/task";
@@ -58,4 +81,85 @@ int Thread::get_num_threads(void)
     return -EINVAL;
   }
   return num_entries;
+}
+
+const pthread_t &Thread::
+get_thread_id()
+{
+  return thread_id;
+}
+
+bool Thread::
+is_started()
+{
+  return thread_id != 0;
+}
+
+bool Thread::
+am_self()
+{
+  return (pthread_self() == thread_id);
+}
+
+int Thread::
+kill(int signal)
+{
+  if (thread_id)
+    return pthread_kill(thread_id, signal);
+  else
+    return -EINVAL;
+}
+
+int Thread::
+try_create(size_t stacksize)
+{
+  pthread_attr_t *thread_attr = NULL;
+  stacksize &= PAGE_MASK;  // must be multiple of page
+  if (stacksize) {
+    thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
+    pthread_attr_init(thread_attr);
+    pthread_attr_setstacksize(thread_attr, stacksize);
+  }
+
+  int r;
+
+  // The child thread will inherit our signal mask.  Set our signal mask to
+  // the set of signals we want to block.  (It's ok to block signals more
+  // signals than usual for a little while-- they will just be delivered to
+  // another thread or delieverd to this thread later.)
+  sigset_t old_sigset;
+  if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
+    block_signals(NULL, &old_sigset);
+  }
+  else {
+    int to_block[] = { SIGPIPE , 0 };
+    block_signals(to_block, &old_sigset);
+  }
+  r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+  restore_sigset(&old_sigset);
+
+  if (thread_attr)
+    free(thread_attr);
+  return r;
+}
+
+void Thread::
+create(size_t stacksize)
+{
+  int ret = try_create(stacksize);
+  assert(ret == 0);
+}
+
+int Thread::
+join(void **prval)
+{
+  if (thread_id == 0) {
+    assert("join on thread that was never started" == 0);
+    return -EINVAL;
+  }
+
+  int status = pthread_join(thread_id, prval);
+  assert(status == 0);
+  thread_id = 0;
+  return status;
 }

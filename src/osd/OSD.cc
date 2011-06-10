@@ -88,6 +88,7 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #ifdef DARWIN
 #include <sys/param.h>
