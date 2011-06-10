@@ -120,7 +120,6 @@ extern void dump_owner(struct req_state *s, string& id, string& name);
 extern void dump_content_length(struct req_state *s, size_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_last_modified(struct req_state *s, time_t t);
-extern void dump_bucket(struct req_state *s, RGWObjEnt& obj);
 extern void abort_early(struct req_state *s, int err);
 extern void dump_range(struct req_state *s, off_t ofs, off_t end);
 extern void dump_continue(struct req_state *s);

@@ -365,6 +365,8 @@ struct req_state {
 /** Store basic data on an object */
 struct RGWObjEnt {
   std::string name;
+  std::string owner;
+  std::string owner_display_name;
   size_t size;
   time_t mtime;
   // two md5 digests and a terminator

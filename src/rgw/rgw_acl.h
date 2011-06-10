@@ -329,6 +329,11 @@ public:
     ::decode(owner, bl);
     ::decode(acl, bl);
    }
+  void decode_owner(bufferlist::iterator& bl) { // sometimes we only need that, should be faster
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(owner, bl);
+  }
   void to_xml(ostream& out) {
     out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
     owner.to_xml(out);

@@ -145,7 +145,7 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->dump_value_str("ETag", "\"%s\"", iter->etag);
       s->formatter->dump_value_int("Size", "%lld", iter->size);
       s->formatter->dump_value_str("StorageClass", "STANDARD");
-      dump_owner(s, s->user.user_id, s->user.display_name);
+      dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section("Contents");
     }
     if (common_prefixes.size() > 0) {

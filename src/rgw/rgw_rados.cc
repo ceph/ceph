@@ -3,6 +3,7 @@
 
 #include "rgw_access.h"
 #include "rgw_rados.h"
+#include "rgw_acl.h"
 
 #include "include/rados/librados.hpp"
 using namespace librados;
@@ -200,14 +201,28 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       continue;
     obj.size = s;
 
-    bufferlist bl; 
     obj.etag[0] = '\0';
-    if (io_ctx.getxattr(*p, RGW_ATTR_ETAG, bl) >= 0) {
-      strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
-      obj.etag[sizeof(obj.etag)-1] = '\0';
+    map<string, bufferlist> attrset;
+    if (io_ctx.getxattrs(*p, attrset) >= 0) {
+      map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
+      if (iter != attrset.end()) {
+        bufferlist& bl = iter->second;
+        strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
+        obj.etag[sizeof(obj.etag)-1] = '\0';
+      }
+      iter = attrset.find(RGW_ATTR_ACL);
+      if (iter != attrset.end()) {
+        bufferlist& bl = iter->second;
+        bufferlist::iterator i = bl.begin();
+        RGWAccessControlPolicy policy;
+        policy.decode_owner(i);
+        ACLOwner& owner = policy.get_owner();
+        obj.owner = owner.get_id();
+        obj.owner_display_name = owner.get_display_name();
+      }
     }
+    bufferlist bl;
     if (get_content_type) {
-      bl.clear();
       obj.content_type = "";
       if (io_ctx.getxattr(*p, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
         obj.content_type = bl.c_str();
