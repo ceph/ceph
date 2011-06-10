@@ -51,7 +51,8 @@ void ceph_heap_profiler_start()
 {
   char profile_name[PATH_MAX];
   snprintf(profile_name, sizeof(profile_name),
-	   "%s/%s", g_conf->log_dir.c_str(), g_conf->name.to_cstr());
+	   "%s/%s", g_conf->log_dir.empty() ? "." : g_conf->log_dir.c_str(),
+	                                    g_conf->name.to_cstr());
   generic_dout(0) << "turning on heap profiler with prefix "
 		  << profile_name << dendl;
   HeapProfilerStart(profile_name);
