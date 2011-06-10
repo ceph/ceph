@@ -35,6 +35,12 @@ def task(ctx, config):
         - ceph:
             tag: v0.42.13
 
+    Or a sha1::
+
+        tasks:
+        - ceph:
+            sha1: 1376a5ab0c89780eab39ffbbe436f6a6092314ed
+
     To capture code coverage data, use::
 
         tasks:
@@ -112,6 +118,7 @@ def task(ctx, config):
     sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
         branch=config.get('branch'),
         tag=config.get('tag'),
+        sha1=config.get('sha1'),
         flavor=flavor,
         )
     ctx.cluster.run(

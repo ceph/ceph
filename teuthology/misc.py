@@ -9,16 +9,26 @@ import urlparse
 
 log = logging.getLogger(__name__)
 
-def get_ceph_binary_url(branch=None, tag=None, flavor=None):
-    # gitbuilder uses remote-style ref names for branches, mangled to
-    # have underscores instead of slashes; e.g. origin_master
-    if tag is not None:
-        ref = tag
-        assert branch is None, "cannot set both branch and tag"
+def get_ceph_binary_url(branch=None, tag=None, sha1=None, flavor=None):
+    if sha1 is not None:
+        assert branch is None, "cannot set both sha1 and branch"
+        assert tag is None, "cannot set both sha1 and tag"
     else:
-        if branch is None:
-            branch = 'master'
-        ref = 'origin_{branch}'.format(branch=branch)
+        # gitbuilder uses remote-style ref names for branches, mangled to
+        # have underscores instead of slashes; e.g. origin_master
+        if tag is not None:
+            ref = tag
+            assert branch is None, "cannot set both branch and tag"
+        else:
+            if branch is None:
+                branch = 'master'
+            ref = 'origin_{branch}'.format(branch=branch)
+
+        sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
+        log.debug('Translating ref to sha1 using url %s', sha1_url)
+        sha1_fp = urllib2.urlopen(sha1_url)
+        sha1 = sha1_fp.read().rstrip('\n')
+        sha1_fp.close()
 
     if flavor is None:
         flavor = ''
@@ -31,11 +41,7 @@ def get_ceph_binary_url(branch=None, tag=None, flavor=None):
         # of them. hoping for yagni.
         flavor = '-{flavor}-amd64'.format(flavor=flavor)
     BASE = 'http://ceph.newdream.net/gitbuilder{flavor}/output/'.format(flavor=flavor)
-    sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
-    log.debug('Translating ref to sha1 using url %s', sha1_url)
-    sha1_fp = urllib2.urlopen(sha1_url)
-    sha1 = sha1_fp.read().rstrip('\n')
-    sha1_fp.close()
+
     log.debug('Using ceph sha1 %s', sha1)
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
     return (sha1, bindir_url)
