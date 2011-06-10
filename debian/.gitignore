@@ -7,7 +7,7 @@
 /ceph-fuse
 /ceph.init
 /ceph.logrotate
-/ceph.*.debhelper
+/*.debhelper
 /ceph
 /files
 /libceph1-dbg
