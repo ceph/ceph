@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
 
     // go
     MonitorStore store(g_conf->mon_data);
-    Monitor mon(g_conf->name.get_id(), &store, 0, &monmap);
+    Monitor mon(&g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
     mon.mkfs(osdmapbl);
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
@@ -257,7 +257,7 @@ int main(int argc, const char **argv)
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(g_conf->name.get_id(), &store, messenger, &monmap);
+  Monitor *mon = new Monitor(&g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
   common_init_daemonize(&g_ceph_context, 0);
   common_init_finish(&g_ceph_context);

@@ -215,7 +215,7 @@ public:
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
-  Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map);
+  Monitor(CephContext *cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
   void init();
