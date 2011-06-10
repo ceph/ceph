@@ -15,6 +15,8 @@
 #ifndef CEPH_MEMORYMODEL_H
 #define CEPH_MEMORYMODEL_H
 
+class CephContext;
+
 class MemoryModel {
 public:
   struct snap {
@@ -33,9 +35,11 @@ public:
   } last;
 
 private:
+  CephContext *cct;
   void _sample(snap *p);
 
 public:
+  MemoryModel(CephContext *cct);
   void sample(snap *p = 0) {
     _sample(&last);
     if (p)

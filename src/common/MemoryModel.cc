@@ -6,13 +6,18 @@
 
 #include <fstream>
 
+MemoryModel::MemoryModel(CephContext *cct_)
+  : cct(cct_)
+{
+}
+
 void MemoryModel::_sample(snap *psnap)
 {
   ifstream f;
 
   f.open("/proc/self/status");
   if (!f.is_open()) {
-    dout(0) << "check_memory_usage unable to open /proc/self/status" << dendl;
+    ldout(cct, 0) << "check_memory_usage unable to open /proc/self/status" << dendl;
     return;
   }
 
@@ -37,7 +42,7 @@ void MemoryModel::_sample(snap *psnap)
 
   f.open("/proc/self/maps");
   if (!f.is_open()) {
-    dout(0) << "check_memory_usage unable to open /proc/self/maps" << dendl;
+    ldout(cct, 0) << "check_memory_usage unable to open /proc/self/maps" << dendl;
     return;
   }
 
@@ -45,7 +50,7 @@ void MemoryModel::_sample(snap *psnap)
   while (f.is_open() && !f.eof()) {
     string line;
     getline(f, line);
-    //dout(0) << "line is " << line << dendl;
+    //ldout(cct, 0) << "line is " << line << dendl;
 
     const char *start = line.c_str();
     const char *dash = start;
@@ -59,7 +64,7 @@ void MemoryModel::_sample(snap *psnap)
     unsigned long long as = strtoll(start, 0, 16);
     unsigned long long ae = strtoll(dash+1, 0, 16);
 
-    //dout(0) << std::hex << as << " to " << ae << std::dec << dendl;
+    //ldout(cct, 0) << std::hex << as << " to " << ae << std::dec << dendl;
 
     end++;
     const char *mode = end;
@@ -73,7 +78,7 @@ void MemoryModel::_sample(snap *psnap)
       end++;
 
     int size = ae - as;
-    //dout(0) << "size " << size << " mode is '" << mode << "' end is '" << end << "'" << dendl;
+    //ldout(cct, 0) << "size " << size << " mode is '" << mode << "' end is '" << end << "'" << dendl;
 
     /*
      * anything 'rw' and anon is assumed to be heap.
