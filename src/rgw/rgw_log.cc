@@ -35,7 +35,14 @@ int rgw_log_op(struct req_state *s)
 
   entry.obj_size = s->obj_size;
 
-  set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
+  string remote_param;
+
+  set_param_str(s, "RGW_REMOTE_ADDR_PARAM", remote_param);
+
+  if (remote_param.empty())
+    remote_param = "REMOTE_ADDR";
+
+  set_param_str(s, remote_param.c_str(), entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
