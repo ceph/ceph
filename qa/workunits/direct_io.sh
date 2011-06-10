@@ -2,6 +2,8 @@
 
 direct_io_test
 
+test_short_dio_read
+
 # a few test cases from henry
 echo "test read from hole"
 dd if=/dev/zero of=dd3 bs=1 seek=1048576 count=0
