@@ -45,6 +45,7 @@ def task(ctx, config):
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/daemon-helper',
+                'kill',
                 '/tmp/cephtest/binary/usr/local/bin/cfuse',
                 '-f',
                 '--name', 'client.{id}'.format(id=id_),

@@ -54,9 +54,11 @@ def task(ctx, config):
         "task ceph only supports a dictionary for configuration"
 
     flavor = None
+    daemon_signal = 'kill'
     if config.get('coverage'):
         log.info('Recording coverage for this run.')
         flavor = 'gcov'
+        daemon_signal = 'term'
 
     log.info('Checking for old test directory...')
     processes = ctx.cluster.run(
@@ -283,6 +285,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
+                    daemon_signal,
                     '/tmp/cephtest/binary/usr/local/bin/cmon',
                     '-f',
                     '-i', id_,
@@ -439,6 +442,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
+                    daemon_signal,
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
                     '-f',
                     '-i', id_,
@@ -459,6 +463,7 @@ def task(ctx, config):
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
+                    daemon_signal,
                     '/tmp/cephtest/binary/usr/local/bin/cmds',
                     '-f',
                     '-i', id_,
@@ -479,30 +484,17 @@ def task(ctx, config):
     try:
         yield
     finally:
-        if config.get('coverage'):
-            # need to exit cleanly to trigger atexit coverage data writing
-            log.info('Shutting down everything, gcov style...')
-            mon0_remote.run(
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/ceph',
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    'all_exit'
-                    ]
-                )
-        else:
-            log.info('Shutting down mds daemons...')
-            for id_, proc in mds_daemons.iteritems():
-                proc.stdin.close()
+        log.info('Shutting down mds daemons...')
+        for id_, proc in mds_daemons.iteritems():
+            proc.stdin.close()
 
-            log.info('Shutting down osd daemons...')
-            for id_, proc in osd_daemons.iteritems():
-                proc.stdin.close()
+        log.info('Shutting down osd daemons...')
+        for id_, proc in osd_daemons.iteritems():
+            proc.stdin.close()
 
-            log.info('Shutting down mon daemons...')
-            for id_, proc in mon_daemons.iteritems():
-                proc.stdin.close()
+        log.info('Shutting down mon daemons...')
+        for id_, proc in mon_daemons.iteritems():
+            proc.stdin.close()
 
         run.wait(mds_daemons.itervalues())
         run.wait(osd_daemons.itervalues())

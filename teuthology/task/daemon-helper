@@ -21,9 +21,13 @@ import signal
 import subprocess
 import sys
 
+end_signal = signal.SIGKILL
+if sys.argv[1] == "term":
+    end_signal = signal.SIGTERM
+
 with file('/dev/null', 'rb') as devnull:
     proc = subprocess.Popen(
-        args=sys.argv[1:],
+        args=sys.argv[2:],
         stdin=devnull,
         )
 
@@ -37,7 +41,7 @@ while True:
         data = os.read(0, 1)
         if not data:
             saw_eof = True
-            proc.send_signal(signal.SIGKILL)
+            proc.send_signal(end_signal)
             break
 
     if proc.poll() is not None:
