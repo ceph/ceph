@@ -159,7 +159,7 @@ def create_simple_monmap(remote, conf):
 
     args = [
         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/coverage',
+        '/tmp/cephtest/archive/coverage',
         '/tmp/cephtest/binary/usr/local/bin/monmaptool',
         '--create',
         '--clobber',
@@ -206,7 +206,7 @@ def wait_until_healthy(remote):
         r = remote.run(
             args=[
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/coverage',
+                '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
                 '-c', '/tmp/cephtest/ceph.conf',
                 'health',
