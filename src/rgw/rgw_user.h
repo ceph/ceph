@@ -133,6 +133,13 @@ extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 extern int rgw_add_bucket(string user_id, string bucket_name);
 extern int rgw_remove_bucket(string user_id, string bucket_name);
 
-extern int rgw_remove_key_storage(RGWAccessKey& access_key);
+
+/*
+ * remove the different indexes
+  */
+extern int rgw_remove_key_index(RGWAccessKey& access_key);
+extern int rgw_remove_uid_index(string& uid);
+extern int rgw_remove_email_index(string& uid, string& email);
+extern int rgw_remove_openstack_name_index(string& uid, string& openstack_name);
 
 #endif

@@ -236,6 +236,44 @@ static void show_user_info( RGWUserInfo& info)
   cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
 }
 
+static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
+{
+  int ret;
+  bool success = true;
+
+  if (!old_info.user_id.empty() && old_info.user_id.compare(new_info.user_id) != 0) {
+    ret = rgw_remove_uid_index(old_info.user_id);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove index for uid " << old_info.user_id << " return code: " << ret << std::endl;
+      success = false;
+    }
+  }
+
+  if (!old_info.user_email.empty() &&
+      old_info.user_email.compare(new_info.user_email) != 0) {
+    ret = rgw_remove_email_index(new_info.user_id, old_info.user_email);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove index for email " << old_info.user_email << " return code: " << ret << std::endl;
+      success = false;
+    }
+  }
+
+  if (!old_info.openstack_name.empty() &&
+      old_info.openstack_name.compare(new_info.openstack_name) != 0) {
+    ret = rgw_remove_openstack_name_index(new_info.user_id, old_info.openstack_name);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove index for openstack_name " << old_info.openstack_name << " return code: " << ret << std::endl;
+      success = false;
+    }
+  }
+
+  /* we're not removing access keys here.. keys are removed explicitly using the key rm command and removing the old key
+     index is handled there */
+
+  if (!success)
+    cerr << "ERROR: this should be fixed manually!" << std::endl;
+}
+
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -465,6 +503,8 @@ int main(int argc, char **argv)
 
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
+  RGWUserInfo old_info = info;
+
   int err;
   switch (opt_cmd) {
   case OPT_USER_CREATE:
@@ -507,6 +547,8 @@ int main(int argc, char **argv)
       break;
     }
 
+    remove_old_indexes(old_info, info);
+
     show_user_info(info);
     break;
 
@@ -526,7 +568,7 @@ int main(int argc, char **argv)
     if (kiter == info.access_keys.end()) {
       cerr << "key not found" << std::endl;
     } else {
-      rgw_remove_key_storage(kiter->second);
+      rgw_remove_key_index(kiter->second);
       info.access_keys.erase(kiter);
       if ((err = rgw_store_user_info(info)) < 0) {
         cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
