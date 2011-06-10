@@ -310,9 +310,7 @@ void SimpleMessenger::dispatch_entry()
       dispatch_queue.lock.Unlock(); //done with the pipe queue for a while
 
       pipe->in_qlen--;
-      dispatch_queue.qlen_lock.lock();
-      dispatch_queue.qlen--;
-      dispatch_queue.qlen_lock.unlock();
+      dispatch_queue.qlen.dec();
 
       pipe->pipe_lock.Unlock(); // done with the pipe's message queue now
        {
@@ -566,9 +564,7 @@ void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
   
   // increment queue length counters
   in_qlen++;
-  messenger->dispatch_queue.qlen_lock.lock();
-  ++messenger->dispatch_queue.qlen;
-  messenger->dispatch_queue.qlen_lock.unlock();
+  messenger->dispatch_queue.qlen.inc();
   
   return;
   
@@ -1378,9 +1374,7 @@ void SimpleMessenger::Pipe::discard_queue()
   dout(20) << " dequeued pipe " << dendl;
 
   // adjust qlen
-  q.qlen_lock.lock();
-  q.qlen -= in_qlen;
-  q.qlen_lock.unlock();
+  q.qlen.sub(in_qlen);
 
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
     dout(20) << "  discard " << *p << dendl;

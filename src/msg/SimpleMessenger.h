@@ -26,7 +26,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
@@ -368,8 +368,7 @@ private:
 
     map<int, xlist<Pipe *> > queued_pipes;
     map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
-    int qlen;
-    Spinlock qlen_lock;
+    atomic_t qlen;
     
     enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
     list<Connection*> connect_q;
@@ -386,10 +385,7 @@ private:
     }
 
     int get_queue_len() {
-      qlen_lock.lock();
-      int l = qlen;
-      qlen_lock.unlock();
-      return l;
+      return qlen.read();
     }
     
     void queue_connect(Connection *con) {
@@ -415,7 +411,6 @@ private:
       lock("SimpleMessenger::DispatchQeueu::lock"), 
       stop(false),
       qlen(0),
-      qlen_lock("SimpleMessenger::DispatchQueue::qlen_lock"),
       local_pipe(NULL)
     {}
     ~DispatchQueue() {

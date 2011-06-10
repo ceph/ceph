@@ -20,10 +20,10 @@
 # include "acconfig.h"
 #endif
 
-
 #ifndef NO_ATOMIC_OPS
 //libatomic_ops implementation
 #include <atomic_ops.h>
+
 namespace ceph {
   class atomic_t {
     AO_t val;
@@ -48,49 +48,64 @@ namespace ceph {
       // at some point.  this hack can go away someday...
       return AO_load_full((AO_t *)&val);
     }
+  private:
+    // forbid copying
+    atomic_t(const atomic_t &other);
+    atomic_t &operator=(const atomic_t &rhs);
   };
 }
 #else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
  */
-#include "include/Spinlock.h"
+#include <pthread.h>
 #include "include/assert.h"
 
 namespace ceph {
   class atomic_t {
-    Spinlock lock;
-    long nref;
+    pthread_spin_lock lock;
+    signed long val;
   public:
-    atomic_t(int i=0) : lock("atomic_t::lock", false /* no lockdep */), nref(i) {}
-    atomic_t(const atomic_t& other);
+    atomic_t(int i=0)
+      : val(i) {
+      pthread_spin_init(&lock);
+    }
+    ~atomic_t() {
+      pthread_spin_destroy(&lock);
+    }
     int inc() {
-      lock.lock();
-      int r = ++nref;
-      lock.unlock();
+      pthread_spin_lock(&lock);
+      int r = ++val;
+      pthread_spin_unlock(&lock);
       return r;
     }
     int dec() {
-      lock.lock();
-      assert(nref > 0);
-      int r = --nref;
-      lock.unlock();
+      pthread_spin_lock(&lock);
+      int r = --val;
+      pthread_spin_unlock(&lock);
       return r;
     }
     void add(int d) {
-      lock.lock();
-      nref += d;
-      lock.unlock();
+      pthread_spin_lock(&lock);
+      val += d;
+      pthread_spin_unlock(&lock);
     }
     void sub(int d) {
-      lock.lock();
-      assert(nref >= d);
-      nref -= d;
-      lock.unlock();
+      pthread_spin_lock(&lock);
+      val -= d;
+      pthread_spin_unlock(&lock);
     }
     int read() const {
-      return nref;
+      signed long ret;
+      pthread_spin_lock(&lock);
+      ret = val;
+      pthread_spin_unlock(&lock);
+      return ret;
     }
+  private:
+    // forbid copying
+    atomic_t(const atomic_t &other);
+    atomic_t &operator=(const atomic_t &rhs);
   };
 }
 #endif

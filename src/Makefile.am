@@ -844,7 +844,6 @@ noinst_HEADERS = \
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
-	include/Spinlock.h\
 	include/addr_parsing.h\
 	include/assert.h\
         include/atomic.h\
