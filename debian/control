@@ -226,6 +226,45 @@ Description: Ceph distributed file system client library (development files)
  This package contains development files needed for building applications that
  link against libceph.
 
+Package: librgw1
+Conflicts: librgw, librgw1
+Replaces: librgw, librgw1
+Architecture: linux-any
+Section: libs
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: radosgw data access library
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+
+Package: librgw1-dbg
+Conflicts: librgw1-dbg
+Replaces: librgw1-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: librgw1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for librgw
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+ .
+ This package contains debugging symbols for librgw.
+
+Package: librgw-dev
+Architecture: linux-any
+Section: libdevel
+Depends: ${misc:Depends}, librgw1 (= ${binary:Version})
+Conflicts: librgw1-dev, librgw1-dev
+Replaces: librgw1-dev, librgw1-dev
+Description: RGW distributed object store client library (development files)
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+ .
+ This package contains development files needed for building applications that
+ link against librgw.
+
 Package: radosgw
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados2
