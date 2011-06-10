@@ -39,10 +39,10 @@ inline void complete(T& c, int result = 0)
   T ls;
   ls.swap(c); 
 
-  generic_dout(10) << ls.size() << " completions to complete with " << result << dendl;
+  //cout << ls.size() << " completions to complete with " << result << std::endl;
   for (typename T::iterator it = ls.begin(); it != ls.end(); it++) {
     Completion *c = *it;
-    generic_dout(10) << "---- " << c << dendl;
+    //cout << "---- " << c << std::endl;
     c->complete(result);
   }
 }
