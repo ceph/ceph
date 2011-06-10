@@ -82,6 +82,17 @@ def get_bucket_acl(conn, opts):
         finally:
             f.close()
 
+def put_bucket_acl(conn, opts):
+    bucket = conn.get_bucket(opts.bucket_name)
+    print "setting bucket acl..."
+    f = open(opts.putacl_file, "r")
+    try:
+        xml = f.read()
+    finally:
+        f.close()
+    bucket.set_xml_acl(xml)
+    return 0
+
 def bucket_exists(conn, opts):
     bucket = conn.get_bucket(opts.bucket_name)
     if (bucket == None):
@@ -242,6 +253,8 @@ elif opts.rmbucket:
 elif not opts.obj_name:
     if opts.getacl_file:
         sys.exit(get_bucket_acl(conn, opts))
+    elif opts.putacl_file:
+        sys.exit(put_bucket_acl(conn, opts))
     else:
         sys.exit(bucket_exists(conn, opts))
 elif opts.put_file:
