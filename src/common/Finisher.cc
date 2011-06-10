@@ -25,17 +25,17 @@ void Finisher::wait_for_empty()
 {
   finisher_lock.Lock();
   while (!finisher_queue.empty() || finisher_running) {
-    dout(10) << "wait_for_empty waiting" << dendl;
+    ldout(cct, 10) << "wait_for_empty waiting" << dendl;
     finisher_empty_cond.Wait(finisher_lock);
   }
-  dout(10) << "wait_for_empty empty" << dendl;
+  ldout(cct, 10) << "wait_for_empty empty" << dendl;
   finisher_lock.Unlock();
 }
 
 void *Finisher::finisher_thread_entry()
 {
   finisher_lock.Lock();
-  dout(10) << "finisher_thread start" << dendl;
+  ldout(cct, 10) << "finisher_thread start" << dendl;
 
   while (!finisher_stop) {
     while (!finisher_queue.empty()) {
@@ -45,7 +45,7 @@ void *Finisher::finisher_thread_entry()
       ls_rval.swap(finisher_queue_rval);
       finisher_running = true;
       finisher_lock.Unlock();
-      dout(10) << "finisher_thread doing " << ls << dendl;
+      ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
 
       for (vector<Context*>::iterator p = ls.begin();
 	   p != ls.end();
@@ -61,23 +61,23 @@ void *Finisher::finisher_thread_entry()
 	  ls_rval.pop_front();
 	}
       }
-      dout(10) << "finisher_thread done with " << ls << dendl;
+      ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
       ls.clear();
 
       finisher_lock.Lock();
       finisher_running = false;
     }
-    dout(10) << "finisher_thread empty" << dendl;
+    ldout(cct, 10) << "finisher_thread empty" << dendl;
     finisher_empty_cond.Signal();
     if (finisher_stop)
       break;
     
-    dout(10) << "finisher_thread sleeping" << dendl;
+    ldout(cct, 10) << "finisher_thread sleeping" << dendl;
     finisher_cond.Wait(finisher_lock);
   }
   finisher_empty_cond.Signal();
 
-  dout(10) << "finisher_thread stop" << dendl;
+  ldout(cct, 10) << "finisher_thread stop" << dendl;
   finisher_lock.Unlock();
   return 0;
 }

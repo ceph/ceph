@@ -20,7 +20,10 @@
 #include "common/Cond.h"
 #include "common/Thread.h"
 
+class CephContext;
+
 class Finisher {
+  CephContext *cct;
   Mutex          finisher_lock;
   Cond           finisher_cond, finisher_empty_cond;
   bool           finisher_stop, finisher_running;
@@ -66,7 +69,7 @@ class Finisher {
 
   void wait_for_empty();
 
-  Finisher() : finisher_lock("Finisher::finisher_lock"),
+  Finisher(CephContext *cct_) : cct(cct_), finisher_lock("Finisher::finisher_lock"),
 	       finisher_stop(false), finisher_running(false), finisher_thread(this) {}
 };
 

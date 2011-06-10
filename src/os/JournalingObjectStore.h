@@ -69,7 +69,7 @@ public:
   JournalingObjectStore() : op_seq(0), 
 			    applied_seq(0), committing_seq(0), committed_seq(0), 
 			    open_ops(0), blocked(false),
-			    journal(NULL),
+			    journal(NULL), finisher(&g_ceph_context),
 			    journal_lock("JournalingObjectStore::journal_lock"),
 			    com_lock("JournalingObjectStore::com_lock") { }
   
