@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2008-2011 New Dream Network
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 #include "BackTrace.h"
 #include "Clock.h"
 #include "common/config.h"
@@ -7,37 +20,35 @@
 
 #include <ext/hash_map>
 
+/******* Constants **********/
 #define DOUT_SUBSYS lockdep
+#define MAX_LOCKS  100   // increase me as needed
+#define BACKTRACE_SKIP 3
 
-// global
+/******* Globals **********/
 int g_lockdep = get_env_int("CEPH_LOCKDEP");
-
-// disable lockdep when this module destructs.
 struct lockdep_stopper_t {
+  // disable lockdep when this module destructs.
   ~lockdep_stopper_t() {
     g_lockdep = 0;
   }
 };
-
 static lockdep_stopper_t lockdep_stopper;
+static pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
+static hash_map<const char *, int> lock_ids;
+static map<int, const char *> lock_names;
+static int last_id = 0;
+static hash_map<pthread_t, map<int,BackTrace*> > held;
+static BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken after a
+static CephContext *g_lockdep_ceph_ctx = NULL;
 
-
-pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-
-#define MAX_LOCKS  100   // increase me as needed
-
-hash_map<const char *, int> lock_ids;
-map<int, const char *> lock_names;
-
-int last_id = 0;
-
-hash_map<pthread_t, map<int,BackTrace*> > held;
-BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken after a
-
-
-#define BACKTRACE_SKIP 3
-
+/******* Functions **********/
+void lockdep_register_ceph_context(CephContext *cct)
+{
+  pthread_mutex_lock(&lockdep_mutex);
+  g_lockdep_ceph_ctx = cct;
+  pthread_mutex_unlock(&lockdep_mutex);
+}
 
 int lockdep_dump_locks()
 {

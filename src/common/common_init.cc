@@ -144,6 +144,7 @@ void common_init(std::vector < const char* >& args,
   if (g_lockdep) {
     cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
 	 << ") ***" << TEXT_NORMAL << std::endl;
+    lockdep_register_ceph_context(cct);
   }
 }
 
