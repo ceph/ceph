@@ -93,7 +93,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   lock("Monitor::lock"),
   timer(lock),
   monmap(map),
-  clog(messenger, monmap, NULL, LogClient::FLAG_MON),
+  clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
   store(s),
   
   state(STATE_STARTING), stopping(false),

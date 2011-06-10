@@ -95,7 +95,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   standby_replaying(false),
   messenger(m),
   monc(mc),
-  clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
+  clog(m->cct, messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
   sessionmap(this) {
 
   orig_argc = 0;

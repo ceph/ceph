@@ -56,7 +56,8 @@ public:
     FLAG_MON = 0x1,
   };
 
-  LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags);
+  LogClient(CephContext *cct, Messenger *m, MonMap *mm,
+	    MonClient *mc, enum logclient_flag_t flags);
 
   void handle_log_ack(MLogAck *m);
 
