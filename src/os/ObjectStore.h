@@ -16,16 +16,14 @@
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
-#include "include/types.h"
 #include "include/Context.h"
 #include "include/buffer.h"
-
-#include "include/Distribution.h"
-
+#include "include/types.h"
 #include "osd/osd_types.h"
 
-#include <sys/stat.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <vector>
 
 #ifdef DARWIN
 #include <sys/statvfs.h>
@@ -33,13 +31,8 @@
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
 
-#include <vector>
 using std::vector;
 using std::string;
-
-#ifndef MIN
-# define MIN(a,b) ((a) < (b) ? (a):(b))
-#endif
 
 typedef uint64_t collection_list_handle_t;
 
