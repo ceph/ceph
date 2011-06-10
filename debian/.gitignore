@@ -1,5 +1,5 @@
-*.substvars
-*.debhelper.log
+/*.substvars
+/*.debhelper.log
 /ceph-client-tools-dbg
 /ceph-client-tools
 /ceph-dbg
