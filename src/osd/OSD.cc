@@ -490,7 +490,11 @@ void handle_signal(int signal)
   switch (signal) {
   case SIGTERM:
   case SIGINT:
+#ifdef ENABLE_COVERAGE
+    exit(0);
+#else
     got_sigterm = true;
+#endif
     break;
   }
 }
@@ -613,10 +617,9 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
-  if (false) {
-    signal(SIGTERM, handle_signal);
-    signal(SIGINT, handle_signal);
-  }
+#ifdef ENABLE_COVERAGE
+  signal(SIGTERM, handle_signal);
+#endif
 #if 0
   int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
   if (ret < 0) {

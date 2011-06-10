@@ -61,6 +61,7 @@
 
 #include <sstream>
 #include <stdlib.h>
+#include <signal.h>
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
@@ -84,6 +85,13 @@ const CompatSet::Feature ceph_mon_feature_ro_compat[] =
   {END_FEATURE};
 const CompatSet::Feature ceph_mon_feature_incompat[] =
   { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
+
+#ifdef ENABLE_COVERAGE
+void handle_signal(int signal)
+{
+  exit(0);
+}
+#endif
 
 Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   name(nm),
@@ -175,6 +183,11 @@ void Monitor::init()
   }
   
   lock.Unlock();
+
+#ifdef ENABLE_COVERAGE
+  signal(SIGTERM, handle_signal);
+#endif
+
 }
 
 void Monitor::shutdown()
