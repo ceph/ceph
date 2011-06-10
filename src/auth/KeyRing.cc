@@ -194,9 +194,10 @@ int KeyRing::load(const std::string &filename)
     return -EINVAL;
 
   bufferlist bl;
-  int ret = bl.read_file(filename.c_str(), true);
+  std::string err;
+  int ret = bl.read_file(filename.c_str(), &err);
   if (ret < 0) {
-    derr << "error reading file: " << filename << dendl;
+    derr << "error reading file: " << filename << ": " << err << dendl;
     return ret;
   }
 

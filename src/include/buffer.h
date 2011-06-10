@@ -61,23 +61,7 @@ void	*valloc(size_t);
 # include <assert.h>
 #endif
 
-//#define BUFFER_DEBUG
-
-#ifdef BUFFER_DEBUG
-# include "Spinlock.h"
-#endif
-
 namespace ceph {
-
-#ifdef BUFFER_DEBUG
-extern Spinlock buffer_lock;
-# define bdout { buffer_lock.lock(); std::cout
-# define bendl std::endl; buffer_lock.unlock(); }
-#else
-# define bdout if (0) { std::cout
-# define bendl std::endl; }
-#endif
-
 
 class buffer {
   /*
@@ -916,7 +900,7 @@ public:
     void decode_base64(list& o);
 
     void hexdump(std::ostream &out) const;
-    int read_file(const char *fn, bool silent=false);
+    int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;

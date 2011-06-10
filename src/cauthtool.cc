@@ -145,7 +145,8 @@ int main(int argc, const char **argv)
     cout << "creating " << fn << std::endl;
     modified = true;
   } else {
-    r = bl.read_file(fn, true);
+    std::string err;
+    r = bl.read_file(fn, &err);
     if (r >= 0) {
       try {
 	bufferlist::iterator iter = bl.begin();
@@ -155,7 +156,7 @@ int main(int argc, const char **argv)
 	exit(1);
       }
     } else {
-      cerr << "can't open " << fn << ": " << strerror(-r) << std::endl;
+      cerr << "can't open " << fn << ": " << err << std::endl;
       exit(1);
     }
   }
@@ -164,7 +165,8 @@ int main(int argc, const char **argv)
   if (import_keyring) {
     KeyRing other;
     bufferlist obl;
-    int r = obl.read_file(import_keyring);
+    std::string err;
+    int r = obl.read_file(import_keyring, &err);
     if (r >= 0) {
       try {
 	bufferlist::iterator iter = obl.begin();
@@ -179,7 +181,7 @@ int main(int argc, const char **argv)
       keyring.import(other);
       modified = true;
     } else {
-      cerr << "can't open " << import_keyring << ": " << strerror(-r) << std::endl;
+      cerr << "can't open " << import_keyring << ": " << err << std::endl;
       exit(1);
     }
   }

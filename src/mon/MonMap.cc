@@ -20,7 +20,8 @@ int MonMap::read(const char *fn)
 {
   // read
   bufferlist bl;
-  int r = bl.read_file(fn);
+  std::string error;
+  int r = bl.read_file(fn, &error);
   if (r < 0)
     return r;
   decode(bl);

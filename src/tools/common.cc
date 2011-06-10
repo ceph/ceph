@@ -450,12 +450,13 @@ int run_command(CephToolCtx *ctx, const char *line)
 
   bufferlist out;
   if (infile) {
-    if (out.read_file(infile) == 0) {
+    std::string error;
+    if (out.read_file(infile, &error) == 0) {
       if (!ctx->concise)
 	*ctx->log << "read " << out.length() << " from " << infile << std::endl;
     } else {
-      char buf[80];
-      *ctx->log << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      *ctx->log << "couldn't read from " << infile << ": "
+	        << error <<  std::endl;
       return 0;
     }
   }

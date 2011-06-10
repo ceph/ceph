@@ -97,15 +97,22 @@ int main(int argc, const char **argv)
 
     // load monmap
     bufferlist monmapbl, osdmapbl;
-    int err = monmapbl.read_file(g_conf->monmap.c_str());
-    if (err < 0)
+    std::string error;
+    int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
+    if (err < 0) {
+      cout << argv[0] << ": error reading " << g_conf->monmap.c_str() << ": "
+	   << error << std::endl;
       exit(1);
+    }
     MonMap monmap;
     monmap.decode(monmapbl);
     
-    err = osdmapbl.read_file(osdmapfn);
-    if (err < 0)
+    err = osdmapbl.read_file(osdmapfn, &error);
+    if (err < 0) {
+      cout << argv[0] << ": error reading " << osdmapfn << ": "
+	   << error << std::endl;
       exit(1);
+    }
 
     // go
     MonitorStore store(g_conf->mon_data);
@@ -169,9 +176,11 @@ int main(int argc, const char **argv)
   // inject new monmap?
   if (inject_monmap) {
     bufferlist bl;
-    int r = bl.read_file(inject_monmap);
+    std::string error;
+    int r = bl.read_file(inject_monmap, &error);
     if (r) {
-      cerr << "unable to read monmap from " << inject_monmap << std::endl;
+      cerr << "unable to read monmap from " << inject_monmap << ": "
+	   << error << std::endl;
       exit(1);
     }
 

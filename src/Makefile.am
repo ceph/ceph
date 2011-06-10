@@ -824,6 +824,7 @@ noinst_HEADERS = \
         common/run_cmd.h\
 	common/safe_io.h\
         common/config.h\
+        common/config_obs.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
 	common/secret.h\

@@ -85,7 +85,8 @@ int main(int argc, const char **argv)
   if (dump_pg_log) {
     common_init_finish(&g_ceph_context);
     bufferlist bl;
-    int r = bl.read_file(dump_pg_log);
+    std::string error;
+    int r = bl.read_file(dump_pg_log, &error);
     if (r >= 0) {
       PG::Log::Entry e;
       bufferlist::iterator p = bl.begin();
@@ -101,7 +102,7 @@ int main(int argc, const char **argv)
 	derr << pos << ":\t" << e << dendl;
       }
     } else {
-      derr << "unable to open " << dump_pg_log << ": " << cpp_strerror(r) << dendl;
+      derr << "unable to open " << dump_pg_log << ": " << error << dendl;
     }
     return 0;
   }

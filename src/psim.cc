@@ -13,7 +13,11 @@ int main(int argc, char **argv)
    * $ ./osdmaptool --createsimple .ceph_monmap 40 --clobber .ceph_osdmap 
    */
   bufferlist bl;
-  bl.read_file(".ceph_osdmap");
+  std::string error;
+  if (bl.read_file(".ceph_osdmap", &error)) {
+    cout << argv[0] << ": error reading .ceph_osdmap: " << error << std::endl;
+    return 1;
+  }
   OSDMap osdmap;
   osdmap.decode(bl);
 

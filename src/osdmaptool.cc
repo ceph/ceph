@@ -120,7 +120,8 @@ int main(int argc, const char **argv)
   int r = 0;
   struct stat st;
   if (!createsimple && !clobber) {
-    r = bl.read_file(fn);
+    std::string error;
+    r = bl.read_file(fn, &error);
     if (r == 0) {
       try {
 	osdmap.decode(bl);
@@ -131,8 +132,7 @@ int main(int argc, const char **argv)
       }
     }
     else {
-      cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(-r)
-	   << std::endl;
+      cerr << me << ": couldn't open " << fn << ": " << error << std::endl;
       return -1;
     }
   }
@@ -154,9 +154,11 @@ int main(int argc, const char **argv)
 
   if (import_crush) {
     bufferlist cbl;
-    r = cbl.read_file(import_crush);
+    std::string error;
+    r = cbl.read_file(import_crush, &error);
     if (r) {
-      cerr << me << ": error reading crush map from " << import_crush << std::endl;
+      cerr << me << ": error reading crush map from " << import_crush
+	   << ": " << error << std::endl;
       exit(1);
     }
 

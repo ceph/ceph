@@ -936,10 +936,11 @@ int main(int argc, const char **argv)
 
   if (infn) {
     bufferlist bl;
-    int r = bl.read_file(infn);
+    std::string error;
+    int r = bl.read_file(infn, &error);
     if (r < 0) {
-      char buf[80];
-      cerr << me << ": error reading '" << infn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+      cerr << me << ": error reading '" << infn << "': " 
+	   << error << std::endl;
       exit(1);
     }
     bufferlist::iterator p = bl.begin();

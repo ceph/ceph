@@ -393,7 +393,8 @@ public:
 
   int read_from_file(const char *fn) {
     bufferlist bl;
-    int r = bl.read_file(fn);
+    std::string error;
+    int r = bl.read_file(fn, &error);
     if (r < 0) return r;
     bufferlist::iterator blp = bl.begin();
     decode(blp);

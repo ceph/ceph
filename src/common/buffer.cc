@@ -14,14 +14,12 @@
 
 
 #include "armor.h"
-#include "common/debug.h"
-#include "common/errno.h"
 #include "common/environment.h"
+#include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/config.h"
-#include "include/Spinlock.h"
-#include "include/types.h"
+#include "common/simple_spin.h"
 #include "include/atomic.h"
+#include "include/types.h"
 
 #include <errno.h>
 #include <fstream>
@@ -31,7 +29,15 @@
 
 namespace ceph {
 
-Spinlock buffer_lock("buffer_lock");
+#ifdef BUFFER_DEBUG
+static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
+# define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
+# define bendl std::endl; simple_spin_unlock(&buffer_debug_lock); }
+#else
+# define bdout if (0) { std::cout
+# define bendl std::endl; }
+#endif
+
 atomic_t buffer_total_alloc;
 bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
@@ -373,10 +379,10 @@ void buffer::list::rebuild_page_aligned()
   while (p != _buffers.end()) {
     // keep anything that's already page sized+aligned
     if (p->is_page_aligned() && p->is_n_page_sized()) {
-      /*generic_dout(0) << " segment " << (void*)p->c_str()
-		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
-		      << " length " << p->length()
-		      << " " << (p->length() & ~PAGE_MASK) << " ok" << dendl;
+      /*cout << " segment " << (void*)p->c_str()
+	     << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
+	     << " length " << p->length()
+	     << " " << (p->length() & ~PAGE_MASK) << " ok" << std::endl;
       */
       p++;
       continue;
@@ -386,11 +392,11 @@ void buffer::list::rebuild_page_aligned()
     list unaligned;
     unsigned offset = 0;
     do {
-      /*generic_dout(0) << " segment " << (void*)p->c_str()
-		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
-		      << " length " << p->length() << " " << (p->length() & ~PAGE_MASK)
-		      << " overall offset " << offset << " " << (offset & ~PAGE_MASK)
-		      << " not ok" << dendl;
+      /*cout << " segment " << (void*)p->c_str()
+	     << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
+	     << " length " << p->length() << " " << (p->length() & ~PAGE_MASK)
+	     << " overall offset " << offset << " " << (offset & ~PAGE_MASK)
+	     << " not ok" << std::endl;
       */
       offset += p->length();
       unaligned.push_back(*p);
@@ -405,14 +411,14 @@ void buffer::list::rebuild_page_aligned()
 }
   
 
-int buffer::list::read_file(const char *fn, bool silent)
+int buffer::list::read_file(const char *fn, std::string *error)
 {
   int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY));
   if (fd < 0) {
     int err = errno;
-    if (!silent) {
-      derr << "can't open " << fn << ": " << cpp_strerror(err) << dendl;
-    }
+    std::ostringstream oss;
+    oss << "can't open " << fn << ": " << cpp_strerror(err);
+    *error = oss.str();
     return -err;
   }
 
@@ -422,20 +428,20 @@ int buffer::list::read_file(const char *fn, bool silent)
 
   ssize_t ret = read_fd(fd, st.st_size);
   if (ret < 0) {
-    if (!silent) {
-      derr << "bufferlist::read_file(" << fn << "): read error:"
-	   << cpp_strerror(ret) << dendl;
-    }
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): read error:"
+	<< cpp_strerror(ret);
+    *error = oss.str();
     TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
   else if (ret != st.st_size) {
     // Premature EOF.
     // Perhaps the file changed between stat() and read()?
-    if (!silent) {
-      derr << "bufferlist::read_file(" << fn << "): warning: got premature "
-	   << "EOF:" << dendl;
-    }
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): warning: got premature EOF.";
+    *error = oss.str();
+    // not actually an error, but weird
   }
   TEMP_FAILURE_RETRY(::close(fd));
   return 0;
