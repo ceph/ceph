@@ -579,6 +579,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
     } else {
       /* anonymous access */
       rgw_get_anon_user(s->user);
+      s->perm_mask = RGW_PERM_FULL_CONTROL;
       return true;
     }
   } else {

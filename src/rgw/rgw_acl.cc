@@ -404,7 +404,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
     }
   }
 
-  RGW_LOG(5) << "Getting permissions id=" << id << " owner=" << owner << dendl;
+  RGW_LOG(5) << "Getting permissions id=" << id << " owner=" << owner << " perm=" << perm << dendl;
 
   return perm;
 }
