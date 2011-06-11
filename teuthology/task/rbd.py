@@ -205,5 +205,44 @@ def dev_create(ctx, config):
                 )
 
 @contextlib.contextmanager
+def mkfs(ctx, config):
+    """
+    Create a filesystem on a block device.
+
+    For example::
+
+        tasks:
+        - ceph:
+        - rbd.create_image: [client.0]
+        - rbd.modprobe: [client.0]
+        - rbd.dev_create: [client.0]
+        - rbd.mkfs:
+            client.0:
+                fs_type: xfs
+    """
+    assert isinstance(config, list) or isinstance(config, dict), \
+        "task mkfs must be configured with a list or dictionary"
+    if isinstance(config, dict):
+        images = config.items()
+    else:
+        images = [(role, None) for role in config]
+
+    for role, properties in images:
+        if properties is None:
+            properties = {}
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        image = properties.get('image_name', default_image_name(role))
+        fs = properties.get('fs_type', 'ext3')
+        remote.run(
+            args=[
+                'sudo',
+                'mkfs',
+                '-t', fs,
+                '/dev/rbd/rbd/{image}'.format(image=image),
+                ],
+            )
+    yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     create_image(ctx, config)
