@@ -1257,7 +1257,9 @@ int SimpleMessenger::Pipe::connect()
 
       // hooray!
       peer_global_seq = reply.global_seq;
-      policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
+      if (!disposable) {
+	policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
+      }
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
@@ -1746,6 +1748,7 @@ void SimpleMessenger::Pipe::writer()
     if (sent.empty() && close_on_empty) {
       // this is slightly hacky
       dout(10) << "writer out and sent queues empty, closing" << dendl;
+      policy.lossy = true;
       fault();
       continue;
     }
@@ -2726,6 +2729,7 @@ void SimpleMessenger::mark_disposable(Connection *con)
     dout(1) << "mark_disposable " << con << " -- " << p << dendl;
     p->pipe_lock.Lock();
     p->policy.lossy = true;
+    p->disposable = true;
     p->pipe_lock.Unlock();
     p->put();
   } else {

@@ -1,7 +1,3 @@
-#
-# note: the old Makefile is at Makefile.old
-#
-
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS =
 DIST_SUBDIRS = gtest
@@ -165,13 +161,11 @@ bin_DEBUGPROGRAMS += testmsgr
 test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
-dumpjournal_SOURCES = dumpjournal.cc
-dumpjournal_LDADD = libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += dumpjournal dupstore streamtest
+bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -1118,7 +1112,7 @@ noinst_HEADERS = \
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
+	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_a_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_a_SOURCES) $(libosd_a_SOURCES) \

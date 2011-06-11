@@ -153,6 +153,7 @@ private:
     bool keepalive;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
     bool close_on_empty;
+    bool disposable;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
@@ -222,7 +223,8 @@ private:
       state(st), 
       connection_state(new Connection),
       reader_running(false), reader_joining(false), writer_running(false),
-      in_qlen(0), keepalive(false), halt_delivery(false), close_on_empty(false),
+      in_qlen(0), keepalive(false), halt_delivery(false), 
+      close_on_empty(false), disposable(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {

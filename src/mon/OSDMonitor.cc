@@ -1880,8 +1880,8 @@ bool OSDMonitor::preprocess_pool_op_create ( MPoolOp *m)
     _pool_op(m, -EPERM, pending_inc.epoch);
     return true;
   }
-  if ((m->auid && !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) ||
-      (!m->auid && !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W))) {
+  if ((m->auid && !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) &&
+      !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
     if (session)
       dout(5) << "attempt to create new pool without sufficient auid privileges!"
 	      << "message: " << *m  << std::endl

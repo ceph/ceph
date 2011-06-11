@@ -2825,6 +2825,9 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
     return -errno;
   }
 
+  ::lseek64(from, off, SEEK_SET);
+  ::lseek64(to, off, SEEK_SET);
+
   loff_t pos = off;
   loff_t end = off + len;
   int buflen = 4096*32;
@@ -3634,17 +3637,37 @@ int FileStore::list_collections(vector<coll_t>& ls)
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/current", basedir.c_str());
 
+  int r = 0;
   DIR *dir = ::opendir(fn);
-  if (!dir)
-    return -errno;
+  if (!dir) {
+    r = -errno;
+    derr << "tried opening directory " << fn << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
 
   struct dirent sde, *de;
   char new_name[PATH_MAX];
-  while (::readdir_r(dir, &sde, &de) == 0) {
+  while ((r = ::readdir_r(dir, &sde, &de)) == 0) {
     if (!de)
       break;
-    if (!S_ISDIR(de->d_type << 12))
+    if (de->d_type == DT_UNKNOWN) {
+      // d_type not supported (non-ext[234], btrfs), must stat
+      struct stat sb;
+      char filename[PATH_MAX];
+      snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
+
+      r = ::stat(filename, &sb);
+      if (r == -1) {
+	r = -errno;
+	derr << "stat on " << filename << ": " << cpp_strerror(-r) << dendl;
+	break;
+      }
+      if (!S_ISDIR(sb.st_mode)) {
+	continue;
+      }
+    } else if (de->d_type != DT_DIR) {
       continue;
+    }
     if (de->d_name[0] == '.' &&
 	(de->d_name[1] == '\0' ||
 	 (de->d_name[1] == '.' &&
@@ -3653,9 +3676,14 @@ int FileStore::list_collections(vector<coll_t>& ls)
     lfn_translate(fn, de->d_name, new_name, sizeof(new_name));
     ls.push_back(coll_t(new_name));
   }
-  
+
+  if (r > 0) {
+    derr << "trying readdir_r " << fn << ": " << cpp_strerror(r) << dendl;
+    r = -r;
+  }
+
   ::closedir(dir);
-  return 0;
+  return r;
 }
 
 int FileStore::collection_stat(coll_t c, struct stat *st) 

@@ -55,6 +55,8 @@ map<string, int> type_id;
 
 map<string, int> rule_id;
 
+void usage();
+
 string string_node(node_t &node)
 {
   string s = string(node.value.begin(), node.value.end());
@@ -142,8 +144,8 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
       else if (a == "straw")
 	alg = CRUSH_BUCKET_STRAW;
       else {
-	cerr << "unknown bucket alg '" << a << "'" << std::endl;
-	exit(1);
+	cerr << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
+	usage();
       }
     }
     else if (tag == "hash") {
@@ -770,7 +772,7 @@ void usage()
   cout << "   --compile|-c map.txt  compile a map from source\n";
   cout << "   [-o outfile [--clobber]]\n";
   cout << "                         specify output for for (de)compilation\n";
-  cout << "   --build --num_osd N layer1 ...\n";
+  cout << "   --build --num_osds N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
   cout << "                           'name (uniform|straw|list|tree) size'\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
@@ -997,14 +999,14 @@ int main(int argc, const char **argv)
       crush.set_type_name(type, l.name);
 
       int buckettype = -1;
-      for (int i = 0; i < (int)(sizeof(bucket_types)/sizeof(bucket_types[0])); i++)
-	if (strcmp(l.buckettype, bucket_types[i].name) == 0) {
+      for (int i = 0; bucket_types[i].name; i++)
+	if (l.buckettype && strcmp(l.buckettype, bucket_types[i].name) == 0) {
 	  buckettype = bucket_types[i].type;
 	  break;
 	}
       if (buckettype < 0) {
-	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl;
-	exit(1);
+	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl << std::endl;
+	usage();
       }
 
       // build items
