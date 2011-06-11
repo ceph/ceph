@@ -109,10 +109,12 @@ binary-arch: build install
 	dh_strip -plibceph1 --dbg-package=libceph1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pgceph --dbg-package=gceph-dbg
+	dh_strip -plibrgw1 --dbg-package=librgw1-dbg
 
 	dh_compress
 	dh_fixperms
 	dh_makeshlibs -n  # we do the postinst/postrm scripts manually
+	dh_pysupport
 	dh_installdeb
 	dh_shlibdeps
 	dh_gencontrol

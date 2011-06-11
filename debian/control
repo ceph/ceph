@@ -6,7 +6,7 @@ Vcs-Git: git://ceph.newdream.net/git/ceph.git
 Vcs-Browser: http://ceph.newdream.net/git/?p=ceph.git;a=summary
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
 Uploaders: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse-dev, libboost-dev (>= 1.34), libedit-dev, libcrypto++-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libgtkmm-2.4-dev, python, python-dev, libcurl4-gnutls-dev, libkeyutils-dev
+Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse-dev, libboost-dev (>= 1.34), libedit-dev, libcrypto++-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libgtkmm-2.4-dev, python, python-support (>= 0.90), libcurl4-gnutls-dev, libkeyutils-dev
 Standards-Version: 3.9.1
 
 Package: ceph
@@ -226,6 +226,43 @@ Description: Ceph distributed file system client library (development files)
  This package contains development files needed for building applications that
  link against libceph.
 
+Package: librgw1
+Conflicts: librgw, librgw1
+Replaces: librgw, librgw1
+Architecture: linux-any
+Section: libs
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: radosgw data access library
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+
+Package: librgw1-dbg
+Conflicts: librgw1-dbg
+Replaces: librgw1-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: librgw1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for librgw
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+ .
+ This package contains debugging symbols for librgw.
+
+Package: librgw-dev
+Architecture: linux-any
+Section: libdevel
+Depends: ${misc:Depends}, librgw1 (= ${binary:Version})
+Description: RGW distributed object store client library (development files)
+ radosgw is a REST gateway for RADOS distributed object store.
+ librgw contains support for reading and writing objects in the
+ format expected by radosgw.
+ .
+ This package contains development files needed for building applications that
+ link against librgw.
+
 Package: radosgw
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados2
@@ -252,8 +289,19 @@ Description: debugging symbols for radosgw
 
 Package: obsync
 Architecture: linux-any
-Depends: ${misc:Depends}, python, python-boto
+Depends: ${misc:Depends}, python, python-boto, python-ceph
 Description: synchronize data between cloud object storage providers or a local directory
  obsync is a tool to synchronize objects between cloud object
  storage providers, such as Amazon S3 (or compatible services), a
  Ceph RADOS cluster, or a local directory.
+
+Package: python-ceph
+Architecture: linux-any
+Section: python
+Depends: ${python:Depends}, librados2, librgw1
+Description: Python libraries for the Ceph distributed filesystem
+ Ceph is a distributed storage and network file system designed to provide
+ excellent performance, reliability, and scalability.
+ .
+ This package contains Python libraries for interacting with Ceph's
+ RADOS object storage.

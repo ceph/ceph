@@ -12,7 +12,7 @@ import time
 class Rgw(object):
     """librgw python wrapper"""
     def __init__(self):
-        self.lib = CDLL('librgw.so')
+        self.lib = CDLL('librgw.so.1')
         self.rgw = c_void_p(0)
         ret = self.lib.librgw_create(byref(self.rgw), 0)
         if (ret != 0):
