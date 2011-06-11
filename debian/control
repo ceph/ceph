@@ -255,8 +255,6 @@ Package: librgw-dev
 Architecture: linux-any
 Section: libdevel
 Depends: ${misc:Depends}, librgw1 (= ${binary:Version})
-Conflicts: librgw1-dev, librgw1-dev
-Replaces: librgw1-dev, librgw1-dev
 Description: RGW distributed object store client library (development files)
  radosgw is a REST gateway for RADOS distributed object store.
  librgw contains support for reading and writing objects in the
