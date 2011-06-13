@@ -40,6 +40,7 @@ int verify_pattern(char *buf, size_t len, uint64_t off)
 		uint64_t actual = *(uint64_t*)(buf + i);
 		if (expected != actual) {
 			printf("error: offset %llu had %llu\n", expected, actual);
+			exit(1);
 			return -1;
 		}
 	}
@@ -99,12 +100,15 @@ int write_direct(int buf_align, uint64_t offset, int len)
 	close(fd);
 
 	fd = open("foo", O_RDONLY);
-	pread(fd, buf, len, offset);
+	void *buf2 = malloc(len);
+	pread(fd, buf2, len, offset);
 	close(fd);
-	unlink("foo");
 
-	int r = verify_pattern(buf, len, offset);
+	int r = verify_pattern(buf2, len, offset);
+
+	unlink("foo");
 	free(rawbuf);
+	free(buf2);
 	return r;
 }
 
@@ -123,11 +127,14 @@ int write_sync(int buf_align, uint64_t offset, int len)
 	close(fd);
 
 	fd = open("foo", O_RDONLY);
-	pread(fd, buf, len, offset);
+	void *buf2 = malloc(len);
+	pread(fd, buf2, len, offset);
 	close(fd);
-	unlink("foo");
 
-	int r = verify_pattern(buf, len, offset);
+	int r = verify_pattern(buf2, len, offset);
+
+	unlink("foo");
+	free(buf2);
 	free(rawbuf);
 	return r;
 }
@@ -137,25 +144,34 @@ int main(int argc, char **argv)
 	char *buf;
 	int fd;
 	uint64_t i, j, k;
+	int read = 1;
+	int write = 1;
 
-	write_pattern();
+	if (argc >= 2 && strcmp(argv[1], "read") == 0)
+		write = 0;
+	if (argc >= 2 && strcmp(argv[1], "write") == 0)
+		read = 0;
 
-	for (i = 0; i < 4096; i += 512)
-		for (j = 4*1024*1024 - 4096; j < 4*1024*1024 + 4096; j += 512)
-			for (k = 1024; k <= 16384; k *= 2) {
-				read_direct(i, j, k);
-				read_sync(i, j, k);
-			}
-
+	if (read) {
+		write_pattern();
+		
+		for (i = 0; i < 4096; i += 512)
+			for (j = 4*1024*1024 - 4096; j < 4*1024*1024 + 4096; j += 512)
+				for (k = 1024; k <= 16384; k *= 2) {
+					read_direct(i, j, k);
+					read_sync(i, j, k);
+				}
+		
+	}
 	unlink("foo");
-
-	for (i = 0; i < 4096; i += 512)
-		for (j = 4*1024*1024 - 4096; j < 4*1024*1024 + 4096; j += 512)
-			for (k = 1024; k <= 16384; k *= 2) {
-				write_direct(i, j, k);
-				write_sync(i, j, k);
-			}
-
+	if (write) {
+		for (i = 0; i < 4096; i += 512)
+			for (j = 4*1024*1024 - 4096 + 512; j < 4*1024*1024 + 4096; j += 512)
+				for (k = 1024; k <= 16384; k *= 2) {
+					write_direct(i, j, k);
+					write_sync(i, j, k);
+				}
+	}
 	
 
 	return 0;
