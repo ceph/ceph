@@ -1027,7 +1027,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
 
-  bool exists = obs.exists;
+  bool maybe_created = false;
 
   const sobject_t& soid = oi.soid;
 
@@ -1420,7 +1420,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	exists = true;
+	maybe_created = true;
       }
       break;
       
@@ -1431,7 +1431,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (obs.exists)
 	  t.truncate(coll, soid, 0);
 	else
-	  exists = true;
+	  maybe_created = true;
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1484,7 +1484,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           result = -EEXIST; /* this is an exclusive create */
         else {
           t.touch(coll, soid);
-          exists = true;
+          maybe_created = true;
         }
       }
       break;
@@ -1594,7 +1594,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	if (!obs.exists) {
 	  t.touch(coll, soid);
-	  exists = true;
+	  maybe_created = true;
 	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -1906,7 +1906,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       result = -EOPNOTSUPP;
     }
 
-    if (!obs.exists && exists) {
+    if (!obs.exists && maybe_created) {
       dout(20) << " num_objects " << info.stats.num_objects << " -> " << (info.stats.num_objects+1) << dendl;
       info.stats.num_objects++;
       obs.exists = true;
