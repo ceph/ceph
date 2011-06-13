@@ -110,7 +110,7 @@ void RGWListBuckets_REST_S3::send_response()
   list_all_buckets_end(s);
   dump_content_length(s, s->formatter->get_len());
   end_header(s, "application/xml");
-  s->formatter->flush();
+  s->formatter->flush(s);
 }
 
 void RGWListBucket_REST_S3::send_response()
@@ -158,7 +158,7 @@ void RGWListBucket_REST_S3::send_response()
     }
   }
   s->formatter->close_section("ListBucketResult");
-  s->formatter->flush();
+  s->formatter->flush(s);
 }
 
 void RGWCreateBucket_REST_S3::send_response()
@@ -221,7 +221,7 @@ void RGWCopyObj_REST_S3::send_response()
       }
     }
     s->formatter->close_section("CopyObjectResult");
-    s->formatter->flush();
+    s->formatter->flush(s);
   }
 }
 

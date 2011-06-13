@@ -164,6 +164,8 @@ public:
   virtual int set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl) = 0;
 
+  virtual int get_bucket_id(std::string& bucket) { return -ENOTSUP; }
+
  /**
   * stat an object
   */

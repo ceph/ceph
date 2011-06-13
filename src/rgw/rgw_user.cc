@@ -17,6 +17,8 @@ static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
 static string ui_openstack_bucket = USER_INFO_OPENSTACK_BUCKET_NAME;
 static string ui_uid_bucket = USER_INFO_UID_BUCKET_NAME;
 
+static string pi_pool_bucket = POOL_INFO_BUCKET_NAME;
+
 string rgw_root_bucket = RGW_ROOT_BUCKET;
 
 #define READ_CHUNK_LEN (16 * 1024)
@@ -43,6 +45,39 @@ static int put_obj(string& uid, string& bucket, string& oid, const char *data, s
       ret = rgwstore->put_obj(uid, bucket, oid, data, size, NULL, attrs);
   }
 
+  return ret;
+}
+
+static int get_obj(string& bucket, string& key, bufferlist& bl)
+{
+  int ret;
+  char *data = NULL;
+  struct rgw_err err;
+  RGWUID uid;
+  void *handle = NULL;
+  bufferlist::iterator iter;
+  int request_len = READ_CHUNK_LEN;
+  ret = rgwstore->prepare_get_obj(bucket, key, 0, NULL, NULL, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, &handle, &err);
+  if (ret < 0)
+    return ret;
+
+  do {
+    ret = rgwstore->get_obj(&handle, bucket, key, &data, 0, request_len - 1);
+    if (ret < 0)
+      goto done;
+    if (ret < request_len)
+      break;
+    free(data);
+    request_len *= 2;
+  } while (true);
+
+  bl.append(data, ret);
+  free(data);
+
+  ret = 0;
+done:
+  rgwstore->finish_get_obj(&handle);
   return ret;
 }
 
@@ -117,40 +152,18 @@ int rgw_store_user_info(RGWUserInfo& info)
 int rgw_get_user_info_from_index(string& key, string& bucket, RGWUserInfo& info)
 {
   bufferlist bl;
-  int ret;
-  char *data = NULL;
-  struct rgw_err err;
   RGWUID uid;
-  void *handle = NULL;
-  bufferlist::iterator iter;
-  int request_len = READ_CHUNK_LEN;
-  ret = rgwstore->prepare_get_obj(bucket, key, 0, NULL, NULL, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &handle, &err);
+
+  int ret = get_obj(bucket, key, bl);
   if (ret < 0)
     return ret;
 
-  do {
-    ret = rgwstore->get_obj(&handle, bucket, key, &data, 0, request_len - 1);
-    if (ret < 0)
-      goto done;
-    if (ret < request_len)
-      break;
-    free(data);
-    request_len *= 2;
-  } while (true);
-
-  bl.append(data, ret);
-  free(data);
-
-  iter = bl.begin();
+  bufferlist::iterator iter = bl.begin();
   ::decode(uid, iter);
-  if (!iter.end()) {
+  if (!iter.end())
     info.decode(iter);
-  }
-  ret = 0;
-done:
-  rgwstore->finish_get_obj(&handle);
-  return ret;
+
+  return 0;
 }
 
 /**
@@ -429,3 +442,41 @@ int rgw_delete_user(RGWUserInfo& info) {
   return 0;
 }
 
+
+int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
+{
+  bufferlist bl;
+
+  ::encode(pool_info, bl);
+
+  string uid;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", pool_id);
+  string pool_id_str(buf);
+
+  int ret = put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
+  if (ret < 0) {
+    RGW_LOG(0) << "ERROR: could not write to pool=" << pi_pool_bucket << " obj=" << pool_id_str << " ret=" << ret << dendl;
+  }
+  return ret;
+}
+
+int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info)
+{
+  bufferlist bl;
+
+  string uid;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", pool_id);
+  string pool_id_str(buf);
+
+  int ret = get_obj(pi_pool_bucket, pool_id_str, bl);
+  if (ret < 0) {
+    RGW_LOG(0) << "ERROR: could not read from pool=" << pi_pool_bucket << " obj=" << pool_id_str << " ret=" << ret << dendl;
+    return ret;
+  }
+  bufferlist::iterator iter = bl.begin();
+  ::decode(pool_info, iter);
+
+  return 0;
+}

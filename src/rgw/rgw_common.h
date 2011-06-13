@@ -275,11 +275,30 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+struct RGWPoolInfo
+{
+  string bucket;
+  string owner;
+
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+     ::encode(ver, bl);
+     ::encode(bucket, bl);
+     ::encode(owner, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+    ::decode(ver, bl);
+    ::decode(bucket, bl);
+    ::decode(owner, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWPoolInfo)
+
 struct req_state;
 
 class RGWFormatter {
 protected:
-  struct req_state *s;
   char *buf;
   int len;
   int max_len;
@@ -288,8 +307,7 @@ protected:
 public:
   RGWFormatter() : buf(NULL), len(0), max_len(0) {}
   virtual ~RGWFormatter() {}
-  void init(struct req_state *_s) {
-    s = _s;
+  void init() {
     if (buf)
       free(buf);
     buf = NULL;
@@ -297,8 +315,10 @@ public:
     max_len = 0;
     formatter_init();
   }
+  void reset();
   void write_data(const char *fmt, ...);
-  virtual void flush();
+  virtual void flush(struct req_state *s);
+  virtual void flush(ostream& os);
   virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
   virtual void open_array_section(const char *name) = 0;
   virtual void open_obj_section(const char *name) = 0;
@@ -358,6 +378,8 @@ struct req_state {
    char *os_groups;
 
    utime_t time;
+
+   int pool_id;
 
    req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL) {}
 };

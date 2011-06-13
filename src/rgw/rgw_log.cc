@@ -57,6 +57,7 @@ int rgw_log_op(struct req_state *s)
     entry.http_status = "200"; // default
 
   entry.error_code = s->err.s3_code;
+  entry.pool_id = s->pool_id;
 
   bufferlist bl;
   ::encode(entry, bl);
@@ -68,7 +69,7 @@ int rgw_log_op(struct req_state *s)
   localtime_r(&t, &bdt);
   
   char buf[entry.bucket.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, entry.bucket.c_str());
+  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, entry.bucket.c_str());
   string oid = buf;
 
   int ret = rgwstore->append_async(log_bucket, oid, bl.length(), bl);

@@ -309,6 +309,7 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   bool pol_ret;
+  int pool_id;
 
   int r = get_policy_from_attr(&old_policy, rgw_root_bucket, s->bucket_str);
   if (r >= 0)  {
@@ -342,6 +343,15 @@ void RGWCreateBucket::execute()
 
   if (ret == -EEXIST)
     ret = 0;
+
+  pool_id = rgwstore->get_bucket_id(s->bucket_str);
+  if (pool_id >= 0) {
+    s->pool_id = pool_id;
+    RGWPoolInfo info;
+    info.owner = s->user.user_id;
+    info.bucket = s->bucket_str;
+    rgw_store_pool_info(pool_id, info);
+  }
 
 done:
   send_response();
@@ -833,6 +843,8 @@ int RGWHandler::do_read_permissions(bool only_bucket)
       ret = -EACCES;
   }
 
+  if (!s->bucket_str.empty())
+    s->pool_id = rgwstore->get_bucket_id(s->bucket_str);
 
   return ret;
 }

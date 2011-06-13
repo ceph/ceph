@@ -92,6 +92,8 @@ public:
 
   virtual int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 
+  virtual int get_bucket_id(std::string& bucket);
+
   virtual bool supports_tmap() { return true; }
   virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
   virtual int tmap_create(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);

@@ -178,7 +178,7 @@ void end_header(struct req_state *s, const char *content_type)
     dump_content_length(s, s->formatter->get_len());
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
-  s->formatter->flush();
+  s->formatter->flush(s);
   s->header_ended = true;
 }
 
@@ -187,7 +187,7 @@ void abort_early(struct req_state *s, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   end_header(s);
-  s->formatter->flush();
+  s->formatter->flush(s);
 }
 
 void dump_continue(struct req_state *s)
@@ -437,7 +437,7 @@ void init_entities_from_header(struct req_state *s)
     }
   }
 done:
-  s->formatter->init(s);
+  s->formatter->init();
 }
 
 static void line_unfold(const char *line, string& sdest)

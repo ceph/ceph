@@ -15,11 +15,16 @@ using namespace std;
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
+#include "rgw_formats.h"
 #include "auth/Crypto.h"
 
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
+
+static RGWFormatter_Plain formatter_plain;
+static RGWFormatter_XML formatter_xml;
+static RGWFormatter_JSON formatter_json;
 
 void usage() 
 {
@@ -37,6 +42,7 @@ void usage()
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
+  cerr << "  pool info                  show pool information\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
   cerr << "options:\n";
@@ -56,6 +62,9 @@ void usage()
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
+  cerr << "   --pool-id=<pool-id>\n";
+  cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
+  cerr << "                             json, plain\n";
   generic_client_usage();
   exit(1);
 }
@@ -75,6 +84,7 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
+  OPT_POOL_INFO,
   OPT_LOG_SHOW,
 };
 
@@ -143,6 +153,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "log") == 0) {
     *need_more = true;
     return 0;
@@ -186,6 +197,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
+  } else if (strcmp(prev_cmd, "pool") == 0) {
+    if (strcmp(cmd, "info") == 0)
+      return OPT_POOL_INFO;
   }
 
   return -EINVAL;
@@ -389,6 +403,9 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
+  int pool_id = 0;
+  const char *format = 0;
+  RGWFormatter *formatter = &formatter_xml;
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
@@ -422,6 +439,10 @@ int main(int argc, char **argv)
     } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
       perm_mask = str_to_perm(access);
+    } else if (CEPH_ARGPARSE_EQ("pool-id", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
     } else {
       if (!opt_cmd) {
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
@@ -442,6 +463,19 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_NO_CMD)
     usage();
+
+  if (format) {
+    if (strcmp(format, "xml") == 0)
+      formatter = &formatter_xml;
+    else if (strcmp(format, "json") == 0)
+      formatter = &formatter_json;
+    else if (strcmp(format, "plain") == 0)
+      formatter = &formatter_plain;
+    else {
+      cerr << "unrecognized format: " << format << std::endl;
+      usage();
+    }
+  }
 
   if (subuser) {
     char *suser = strdup(subuser);
@@ -823,6 +857,22 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_USER_RM) {
     rgw_delete_user(info);
+  }
+
+  if (opt_cmd == OPT_POOL_INFO) {
+    RGWPoolInfo info;
+    int ret = rgw_retrieve_pool_info(pool_id, info);
+    if (ret < 0) {
+      cerr << "could not retrieve pool info for pool_id=" << pool_id << std::endl;
+      return ret;
+    }
+    formatter->init();
+    formatter->open_obj_section("Pool");
+    formatter->dump_value_int("ID", "%d", pool_id);
+    formatter->dump_value_str("Bucket", "%s", info.bucket.c_str());
+    formatter->dump_value_str("Owner", "%s", info.owner.c_str());
+    formatter->close_section("Pool");
+    formatter->flush(cout);
   }
 
   return 0;

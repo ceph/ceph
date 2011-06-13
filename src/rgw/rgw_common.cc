@@ -269,15 +269,30 @@ done_free:
     free(p);
 }
 
-void RGWFormatter::flush()
+void RGWFormatter::reset()
+{
+  free(buf);
+  buf = NULL;
+  len = 0;
+  max_len = 0;
+}
+
+void RGWFormatter::flush(struct req_state *s)
 {
   if (!buf)
     return;
 
   RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
   CGI_PutStr(s, buf, len - 1);
-  free(buf);
-  buf = NULL;
-  len = 0;
-  max_len = 0;
+  reset();
+}
+
+void RGWFormatter::flush(ostream& os)
+{
+  if (!buf)
+    return;
+
+  RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
+  os << buf << std::endl;
+  reset();
 }

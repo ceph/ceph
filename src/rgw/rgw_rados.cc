@@ -735,6 +735,15 @@ int RGWRados::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, t
   return r;
 }
 
+int RGWRados::get_bucket_id(std::string& bucket)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+  return io_ctx.get_id();
+}
+
 int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
 {
   bufferlist cmdbl, emptybl;
