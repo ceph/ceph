@@ -13,7 +13,7 @@ PATH="$basedir/src:$PATH"
 [ -z "$testdir" ] || [ ! -d "$testdir" ] && echo "specify test dir" && exit 1
 cd $testdir
 
-for test in `cd $basedir/workunits && ls | grep .sh | $basedir/../src/script/permute`
+for test in `cd $basedir/workunits && find . -executable -type f | $basedir/../src/script/permute`
 do
   echo "------ running test $test ------"
   pwd
