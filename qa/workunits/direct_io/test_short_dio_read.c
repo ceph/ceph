@@ -8,7 +8,7 @@
 int main(int argc, char **argv)
 {
         char buf[409600];
-        int fd = open(argv[1], O_WRONLY|O_CREAT);
+        int fd = open("shortfile", O_WRONLY|O_CREAT);
         ssize_t r;
 
 	printf("writing first 3 bytes of 10k file\n");
@@ -18,7 +18,7 @@ int main(int argc, char **argv)
         close(fd);
 
 	printf("reading O_DIRECT\n");
-        fd = open(argv[1], O_RDONLY|O_DIRECT);
+        fd = open("shortfile", O_RDONLY|O_DIRECT);
         r = read(fd, buf, sizeof(buf));
         close(fd);
 
