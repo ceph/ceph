@@ -327,6 +327,10 @@ bool Locker::acquire_locks(MDRequest *mdr,
     return false;
   }
 
+  // caps i'll need to issue
+  set<CInode*> issue_set;
+  bool result = false;
+
   // acquire locks.
   // make sure they match currently acquired locks.
   set<SimpleLock*, SimpleLock::ptr_lt>::iterator existing = mdr->locks.begin();
@@ -339,16 +343,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
       // right kind?
       SimpleLock *have = *existing;
       existing++;
-      if (xlocks.count(*p) && mdr->xlocks.count(*p)) {
+      if (xlocks.count(*p) && mdr->xlocks.count(*p))
 	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p)) {
+      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p))
 	dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p)) {
+      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p))
 	dout(10) << " already rdlocked " << *have << " " << *have->get_parent() << dendl;
-      }
-      else assert(0);
+      else
+	assert(0);
       continue;
     }
     
@@ -357,26 +359,29 @@ bool Locker::acquire_locks(MDRequest *mdr,
       SimpleLock *stray = *existing;
       existing++;
       dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << dendl;
+      bool need_issue = false;
       if (mdr->xlocks.count(stray)) 
-	xlock_finish(stray, mdr);
+	xlock_finish(stray, mdr, &need_issue);
       else if (mdr->wrlocks.count(stray))
-	wrlock_finish(stray, mdr);
+	wrlock_finish(stray, mdr, &need_issue);
       else
-	rdlock_finish(stray, mdr);
+	rdlock_finish(stray, mdr, &need_issue);
+      if (need_issue)
+	issue_set.insert((CInode*)stray->get_parent());
     }
       
     // lock
     if (xlocks.count(*p)) {
       if (!xlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else if (wrlocks.count(*p)) {
       if (!wrlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else {
       if (!rdlock_start(*p, mdr)) 
-	return false;
+	goto out;
       dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << dendl;
     }
   }
@@ -386,16 +391,23 @@ bool Locker::acquire_locks(MDRequest *mdr,
     SimpleLock *stray = *existing;
     existing++;
     dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << dendl;
+    bool need_issue = false;
     if (mdr->xlocks.count(stray))
-      xlock_finish(stray, mdr);
+      xlock_finish(stray, mdr, &need_issue);
     else if (mdr->wrlocks.count(stray))
-      wrlock_finish(stray, mdr);
+      wrlock_finish(stray, mdr, &need_issue);
     else
-      rdlock_finish(stray, mdr);
+      rdlock_finish(stray, mdr, &need_issue);
+    if (need_issue)
+      issue_set.insert((CInode*)stray->get_parent());
   }
 
   mdr->done_locking = true;
-  return true;
+  result = true;
+
+ out:
+  issue_caps_set(issue_set);
+  return result;
 }
 
 
@@ -409,30 +421,81 @@ void Locker::set_xlocks_done(Mutation *mut)
   }
 }
 
-void Locker::drop_locks(Mutation *mut)
+void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
 {
   // leftover locks
-  while (!mut->xlocks.empty()) 
-    xlock_finish(*mut->xlocks.begin(), mut);
-  while (!mut->rdlocks.empty()) 
-    rdlock_finish(*mut->rdlocks.begin(), mut);
-  while (!mut->wrlocks.empty()) 
-    wrlock_finish(*mut->wrlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->xlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
+    xlock_finish(*mut->xlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+  while (!mut->rdlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
+    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }	 
+  while (!mut->wrlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
+    wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
   mut->done_locking = false;
 }
 
-void Locker::drop_non_rdlocks(Mutation *mut)
+void Locker::drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
-  while (!mut->xlocks.empty()) 
-    xlock_finish(*mut->xlocks.begin(), mut);
-  while (!mut->wrlocks.empty()) 
-    wrlock_finish(*mut->wrlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->xlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
+    xlock_finish(*mut->xlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+  while (!mut->wrlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
+    wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks(Mutation *mut)
+void Locker::drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
-  while (!mut->rdlocks.empty()) 
-    rdlock_finish(*mut->rdlocks.begin(), mut);
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  while (!mut->rdlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
+    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+
+  if (pneed_issue == &my_need_issue)
+    issue_caps_set(*pneed_issue);
 }
 
 
@@ -714,7 +777,7 @@ void Locker::try_eval(CInode *in, int mask)
   eval(in, mask);
 }
 
-void Locker::eval_cap_gather(CInode *in)
+void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 {
   bool need_issue = false;
   list<Context*> finishers;
@@ -729,8 +792,12 @@ void Locker::eval_cap_gather(CInode *in)
   if (!in->xattrlock.is_stable())
     eval_gather(&in->xattrlock, false, &need_issue, &finishers);
 
-  if (need_issue && in->is_head())
-    issue_caps(in);
+  if (need_issue && in->is_head()) {
+    if (issue_set)
+      issue_set->insert(in);
+    else
+      issue_caps(in);
+  }
 
   finish_contexts(finishers);
 }
@@ -889,7 +956,7 @@ void Locker::nudge_log(SimpleLock *lock)
     mds->mdlog->flush();
 }
 
-void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   // drop ref
   lock->put_rdlock();
@@ -903,9 +970,9 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
   // last one?
   if (!lock->is_rdlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock);
+      eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock);
+      eval(lock, pneed_issue);
   }
 }
 
@@ -942,8 +1009,12 @@ void Locker::rdlock_take_set(set<SimpleLock*>& locks)
 void Locker::rdlock_finish_set(set<SimpleLock*>& locks)
 {
   dout(10) << "rdlock_finish_set " << locks << dendl;
-  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
-    rdlock_finish(*p, 0);
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p) {
+    bool need_issue = false;
+    rdlock_finish(*p, 0, &need_issue);
+    if (need_issue)
+      issue_caps((CInode*)(*p)->get_parent());
+  }
 }
 
 
@@ -1024,7 +1095,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   return false;
 }
 
-void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1039,9 +1110,9 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 
   if (!lock->is_wrlocked()) {
     if (!lock->is_stable())
-      eval_gather(lock);
+      eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock);
+      eval(lock, pneed_issue);
   }
 }
 
@@ -1110,7 +1181,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   }
 }
 
-void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
+void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1154,7 +1225,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 	lock->set_state(LOCK_EXCL);
       else
 	lock->set_state(LOCK_LOCK);
-      do_issue = true;
+      if (lock->get_cap_shift())
+	do_issue = true;
     }
 
     // others waiting?
@@ -1165,11 +1237,14 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
     
   // eval?
   if (!lock->is_stable())
-    eval_gather(lock);
-  else {
-    if (lock->get_parent()->is_auth())
-      eval(lock);
-    if (do_issue && lock->get_type() != CEPH_LOCK_DN)
+    eval_gather(lock, false, &do_issue);
+  else if (lock->get_parent()->is_auth())
+    eval(lock, &do_issue);
+  
+  if (do_issue) {
+    if (pneed_issue)
+      *pneed_issue = true;
+    else
       issue_caps((CInode*)lock->get_parent());
   }
 }
@@ -1239,7 +1314,8 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   if (ack)
     mds->send_message_client_counted(ack, client);
 
-  drop_locks(mut);
+  set<CInode*> need_issue;
+  drop_locks(mut, &need_issue);
   mut->cleanup();
   delete mut;
 
@@ -1263,15 +1339,17 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 	p++;
     }
     if (gather)
-      eval_cap_gather(in);
+      eval_cap_gather(in, &need_issue);
   } else {
-    if (cap && (cap->wanted() & ~cap->pending())) {
+    if (cap && (cap->wanted() & ~cap->pending()) &&
+	need_issue.count(in) == 0) {  // if we won't issue below anyway
       issue_caps(in, cap);
     }
   
     if (share && in->is_auth() && in->filelock.is_stable())
       share_inode_max_size(in);
   }
+  issue_caps_set(need_issue);
 
   // unlinked stray?  may need to purge (e.g., after all caps are released)
   mdcache->maybe_eval_stray(in);
@@ -1342,6 +1420,11 @@ Capability* Locker::issue_new_caps(CInode *in,
 }
 
 
+void Locker::issue_caps_set(set<CInode*>& inset)
+{
+  for (set<CInode*>::iterator p = inset.begin(); p != inset.end(); ++p)
+    issue_caps(*p);
+}
 
 bool Locker::issue_caps(CInode *in, Capability *only_cap)
 {
@@ -3088,6 +3171,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
   }
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+  if (in) {
+    if (need_issue)
+      *need_issue = true;
+    else
+      issue_caps(in);
+  }
   return true;
 }
 
@@ -3136,6 +3225,12 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   } else {
     lock->set_state(LOCK_EXCL);
     lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
+    if (in) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   }
 }
 
@@ -3571,7 +3666,8 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   if (lock->is_xlocked())
     gather++;
 
-  if (in->issued_caps_need_gather(lock)) {
+  if (lock->get_cap_shift() &&
+      in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
     else
@@ -3592,6 +3688,12 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     // do tempsync
     lock->set_state(LOCK_TSYN);
     lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+    if (lock->get_cap_shift()) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   }
 }
 
@@ -3782,10 +3884,12 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     // change lock
     lock->set_state(LOCK_MIX);
     lock->clear_scatter_wanted();
-    if (need_issue)
-      *need_issue = true;
-    else
-      issue_caps(in);
+    if (lock->get_cap_shift()) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+    }
   } else {
     // gather?
     switch (lock->get_state()) {
@@ -3807,14 +3911,13 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       revoke_client_leases(lock);
       gather++;
     }
-    if (lock->get_cap_shift()) {
-      if (in->issued_caps_need_gather(lock)) {
-	if (need_issue)
-	  *need_issue = true;
-	else
-	  issue_caps(in);
-	gather++;
-      }
+    if (lock->get_cap_shift() &&
+	in->issued_caps_need_gather(lock)) {
+      if (need_issue)
+	*need_issue = true;
+      else
+	issue_caps(in);
+      gather++;
     }
     if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);

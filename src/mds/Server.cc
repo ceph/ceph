@@ -1375,8 +1375,11 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
       assert(lock);
-      mds->locker->xlock_finish(lock, mdr);
-      
+      bool need_issue = false;
+      mds->locker->xlock_finish(lock, mdr, &need_issue);
+      if (need_issue)
+	mds->locker->issue_caps((CInode*)lock->get_parent());
+
       // done.  no ack necessary.
       mdr->slave_request->put();
       mdr->slave_request = 0;

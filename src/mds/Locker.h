@@ -87,13 +87,13 @@ public:
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks);
 
-  void drop_locks(Mutation *mut);
+  void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(Mutation *mut);
-  void drop_non_rdlocks(Mutation *mut);
-  void drop_rdlocks(Mutation *mut);
+  void drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
+  void drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
-  void eval(SimpleLock *lock, bool *need_issue=0);
+  void eval(SimpleLock *lock, bool *need_issue);
   void eval_any(SimpleLock *lock, bool *need_issue) {
     if (!lock->is_stable())
       eval_gather(lock, false, need_issue);
@@ -115,7 +115,7 @@ public:
   };
   void eval_scatter_gathers(CInode *in);
 
-  void eval_cap_gather(CInode *in);
+  void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
 
   bool eval(CInode *in, int mask);
   void try_eval(CInode *in, int mask);
@@ -123,7 +123,7 @@ public:
   bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
-  void rdlock_finish(SimpleLock *lock, Mutation *mut);
+  void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
   bool rdlock_try_set(set<SimpleLock*>& locks);
   void rdlock_take_set(set<SimpleLock*>& locks);
@@ -131,10 +131,10 @@ public:
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
   bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
-  void wrlock_finish(SimpleLock *lock, Mutation *mut);
+  void wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
   bool xlock_start(SimpleLock *lock, MDRequest *mut);
-  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
+  void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
   void xlock_export(SimpleLock *lock, Mutation *mut);
   void xlock_import(SimpleLock *lock, Mutation *mut);
@@ -248,6 +248,7 @@ public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
+  void issue_caps_set(set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);

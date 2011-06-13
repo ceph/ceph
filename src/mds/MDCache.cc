@@ -5006,11 +5006,14 @@ void MDCache::do_file_recover()
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
-      in->state_clear(CInode::STATE_NEEDSRECOVER);
+      in->state_clear(CInode::STATE_RECOVERING);
       in->auth_unpin(this);
-      if (in->filelock.is_stable())
-	mds->locker->eval(&in->filelock);
-      else
+      if (in->filelock.is_stable()) {
+	bool need_issue = false;
+	mds->locker->eval(&in->filelock, &need_issue);
+	if (need_issue)
+	  mds->locker->issue_caps(in);
+      } else
 	mds->locker->eval_gather(&in->filelock);
     }
   }
@@ -9691,9 +9694,10 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
   delete mut;
 
   // drop dft wrlock
-  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL);
-  mds->locker->wrlock_finish(&diri->nestlock, NULL);
-  mds->locker->wrlock_finish(&diri->filelock, NULL);
+  bool need_issue = false;
+  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->nestlock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->filelock, NULL, &need_issue);
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = resultfrags.begin();
@@ -9716,6 +9720,9 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 
     dir->unfreeze_dir();
   }
+
+  if (need_issue)
+    mds->locker->issue_caps(diri);
 }
 
 
