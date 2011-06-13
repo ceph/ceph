@@ -276,6 +276,8 @@ bool MonClient::ms_dispatch(Message *m)
     return false;
   }
 
+  Mutex::Locker lock(monc_lock);
+
   // ignore any messages outside our current session
   if (m->get_connection() != cur_con) {
     dout(0) << "discarding stray montior message " << *m << dendl;
@@ -299,7 +301,6 @@ bool MonClient::ms_dispatch(Message *m)
 
 void MonClient::handle_monmap(MMonMap *m)
 {
-  Mutex::Locker lock(monc_lock);
   dout(10) << "handle_monmap " << *m << dendl;
 
   assert(!cur_mon.empty());
@@ -428,8 +429,6 @@ int MonClient::authenticate(double timeout)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
-  Mutex::Locker lock(monc_lock);
-
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
@@ -650,8 +649,6 @@ void MonClient::_renew_subs()
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
-  Mutex::Locker lock(monc_lock);
-  
   _finish_hunting();
 
   if (sub_renew_sent != utime_t()) {
