@@ -818,7 +818,11 @@ int main(int argc, char **argv)
     if (object) {
       oid = object;
     } else {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d", pool_id);
       oid = date;
+      oid += "-";
+      oid += buf;
       oid += "-";
       oid += string(bucket);
     }
