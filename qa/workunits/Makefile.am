@@ -1,3 +1,2 @@
 AUTOMAKE_OPTIONS = gnu
-
-SUBDIRS = . workunits
+SUBDIRS = direct_io

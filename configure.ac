@@ -346,6 +346,7 @@ AC_CONFIG_FILES([Makefile
 	src/Makefile
 	man/Makefile
 	qa/Makefile
-	qa/src/Makefile
+	qa/workunits/Makefile
+	qa/workunits/direct_io/Makefile
 	ceph.spec])
 AC_OUTPUT
