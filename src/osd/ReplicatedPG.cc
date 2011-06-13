@@ -2062,7 +2062,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     dout(10) << " using newer snapc " << snapc << dendl;
   }
   
-  if (ssc->snapset.head_exists &&           // head exists
+  if (ctx->obc->obs.exists &&               // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       snapc.snaps[0] > ssc->snapset.seq) {  // existing object is old
     // clone
