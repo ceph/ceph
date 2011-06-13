@@ -1,6 +1,7 @@
 #include <errno.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 using namespace std;
@@ -22,7 +23,6 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static RGWFormatter_Plain formatter_plain;
 static RGWFormatter_XML formatter_xml;
 static RGWFormatter_JSON formatter_json;
 
@@ -66,7 +66,7 @@ void usage()
   cerr << "   --date=<yyyy-mm-dd>\n";
   cerr << "   --pool-id=<pool-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
-  cerr << "                             json, plain\n";
+  cerr << "                             json\n";
   generic_client_usage();
   exit(1);
 }
@@ -478,8 +478,6 @@ int main(int argc, char **argv)
       formatter = &formatter_xml;
     else if (strcmp(format, "json") == 0)
       formatter = &formatter_json;
-    else if (strcmp(format, "plain") == 0)
-      formatter = &formatter_plain;
     else {
       cerr << "unrecognized format: " << format << std::endl;
       usage();
@@ -850,21 +848,47 @@ int main(int argc, char **argv)
     while (!iter.end()) {
       ::decode(entry, iter);
 
-      cout << (entry.owner.size() ? entry.owner : "-" ) << delim
-           << entry.bucket << delim
-           << entry.time << delim
-           << entry.remote_addr << delim
-           << entry.user << delim
-           << entry.op << delim
-           << "\"" << escape_str(entry.uri, '"') << "\"" << delim
-           << entry.http_status << delim
-           << "\"" << entry.error_code << "\"" << delim
-           << entry.bytes_sent << delim
-           << entry.bytes_received << delim
-           << entry.obj_size << delim
-           << entry.total_time.usec() << delim
-           << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
-           << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
+      if (!format) { // for now, keeping backward compatibility a bit
+        cout << (entry.owner.size() ? entry.owner : "-" ) << delim
+             << entry.bucket << delim
+             << entry.time << delim
+             << entry.remote_addr << delim
+             << entry.user << delim
+             << entry.op << delim
+             << "\"" << escape_str(entry.uri, '"') << "\"" << delim
+             << entry.http_status << delim
+             << "\"" << entry.error_code << "\"" << delim
+             << entry.bytes_sent << delim
+             << entry.bytes_received << delim
+             << entry.obj_size << delim
+             << entry.total_time.usec() << delim
+             << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
+             << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
+      } else {
+        formatter->init();
+        formatter->open_obj_section("LogEntry");
+        formatter->dump_value_str("Bucket", "%s", entry.bucket.c_str());
+
+        stringstream ss;
+        ss << entry.time;
+        string s = ss.str();
+
+        formatter->dump_value_str("Time", "%s", s.c_str());
+        formatter->dump_value_str("RemoteAddr", "%s", entry.remote_addr.c_str());
+        formatter->dump_value_str("User", "%s", entry.user.c_str());
+        formatter->dump_value_str("Operation", "%s", entry.op.c_str());
+        formatter->dump_value_str("URI", "%s", entry.uri.c_str());
+        formatter->dump_value_str("HttpStatus", "%s", entry.http_status.c_str());
+        formatter->dump_value_str("ErrorCode", "%s", entry.error_code.c_str());
+        formatter->dump_value_str("BytesSent", "%lld", entry.bytes_sent);
+        formatter->dump_value_str("BytesReceived", "%lld", entry.bytes_received);
+        formatter->dump_value_str("ObjectSize", "%lld", entry.obj_size);
+        formatter->dump_value_str("TotalTime", "%lld", (uint64_t)entry.total_time.usec());
+        formatter->dump_value_str("UserAgent", "%s",  entry.user_agent.c_str());
+        formatter->dump_value_str("Referrer", "%s",  entry.referrer.c_str());
+        formatter->close_section("LogEntry");
+        formatter->flush(cout);
+      }
     }
   }
 
