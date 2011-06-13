@@ -1027,6 +1027,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
 
+  bool exists = obs.exists;
+
   const sobject_t& soid = oi.soid;
 
   ObjectStore::Transaction& t = ctx->op_t;
@@ -1418,7 +1420,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	ssc->snapset.head_exists = true;
+	exists = true;
       }
       break;
       
@@ -1428,6 +1430,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	bp.copy(op.extent.length, nbl);
 	if (obs.exists)
 	  t.truncate(coll, soid, 0);
+	else
+	  exists = true;
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1447,7 +1451,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	ssc->snapset.head_exists = true;
       }
       break;
 
@@ -1469,7 +1472,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    add_interval_usage(ch, info.stats);
 	  }
 	  info.stats.num_wr++;
-	  ssc->snapset.head_exists = true;
 	} else {
 	  // no-op
 	}
@@ -1482,7 +1484,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           result = -EEXIST; /* this is an exclusive create */
         else {
           t.touch(coll, soid);
-          ssc->snapset.head_exists = true;
+          exists = true;
         }
       }
       break;
@@ -1533,7 +1535,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  oi.size = op.extent.offset;
 	}
 	info.stats.num_wr++;
-	// do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
+	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
       }
       break;
     
@@ -1590,8 +1592,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       
     case CEPH_OSD_OP_SETXATTR:
       {
-	if (!obs.exists)
+	if (!obs.exists) {
 	  t.touch(coll, soid);
+	  exists = true;
+	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
@@ -1600,7 +1604,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (!obs.exists)  // create object if it doesn't yet exist.
 	  t.touch(coll, soid);
 	t.setattr(coll, soid, name, bl);
-	ssc->snapset.head_exists = true;
  	info.stats.num_wr++;
       }
       break;
@@ -1903,7 +1906,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       result = -EOPNOTSUPP;
     }
 
-    if (!obs.exists && ssc->snapset.head_exists) {
+    if (!obs.exists && exists) {
       dout(20) << " num_objects " << info.stats.num_objects << " -> " << (info.stats.num_objects+1) << dendl;
       info.stats.num_objects++;
       obs.exists = true;
@@ -2130,6 +2133,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ssc->snapset.seq = snapc.seq;
   ssc->snapset.snaps = snapc.snaps;
+  ssc->snapset.head_exists = obs.exists;
   dout(20) << "make_writeable " << soid << " done, snapset=" << ssc->snapset << dendl;
 }
 
