@@ -64,6 +64,7 @@ int read_direct(int buf_align, uint64_t offset, int len)
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
+	memset(buf, 0, len);
 	pread(fd, buf, len, offset);
 	close(fd);
 	int r = verify_pattern(buf, len, offset);
@@ -79,6 +80,7 @@ int read_sync(int buf_align, uint64_t offset, int len)
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
+	memset(buf, 0, len);
 	pread(fd, buf, len, offset);
 	close(fd);
 	int r = verify_pattern(buf, len, offset);
@@ -101,6 +103,7 @@ int write_direct(int buf_align, uint64_t offset, int len)
 
 	fd = open("foo", O_RDONLY);
 	void *buf2 = malloc(len);
+	memset(buf2, 0, len);
 	pread(fd, buf2, len, offset);
 	close(fd);
 
@@ -128,6 +131,7 @@ int write_sync(int buf_align, uint64_t offset, int len)
 
 	fd = open("foo", O_RDONLY);
 	void *buf2 = malloc(len);
+	memset(buf2, 0, len);
 	pread(fd, buf2, len, offset);
 	close(fd);
 
