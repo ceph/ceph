@@ -3084,6 +3084,7 @@ void PG::scrub_clear_state()
   osd->take_waiters(waiting_for_active);
 
   finalizing_scrub = false;
+  scrub_received_maps.clear();
 }
 
 bool PG::scrub_gather_replica_maps() {
