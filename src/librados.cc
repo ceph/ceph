@@ -3483,7 +3483,7 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
 
   if (h->list.empty()) {
     ret = lh->ctx->client->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
-    if (!h->list.size())
+    if (h->list.empty())
       return -ENOENT;
   }
 
