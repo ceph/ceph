@@ -43,8 +43,10 @@ void usage()
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  pool info                  show pool information\n";
+  cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
-  cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
+  cerr << "  log show                   dump a log from specific object or (bucket + date\n";
+  cerr << "                             + pool-id)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -85,6 +87,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
   OPT_POOL_INFO,
+  OPT_POOL_CREATE,
   OPT_LOG_SHOW,
 };
 
@@ -200,6 +203,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "pool") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_POOL_INFO;
+    if (strcmp(cmd, "create") == 0)
+      return OPT_POOL_CREATE;
   }
 
   return -EINVAL;
@@ -403,7 +408,7 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
-  int pool_id = 0;
+  int pool_id = -1;
   const char *format = 0;
   RGWFormatter *formatter = &formatter_xml;
 
@@ -441,6 +446,10 @@ int main(int argc, char **argv)
       perm_mask = str_to_perm(access);
     } else if (CEPH_ARGPARSE_EQ("pool-id", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
+      if (pool_id < 0) {
+        cerr << "bad pool-id: " << pool_id << std::endl;
+        usage();
+      }
     } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
     } else {
@@ -799,8 +808,8 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!object && (!date || !bucket)) {
-      cerr << "object or (both date and bucket) were not specified" << std::endl;
+    if (!object && (!date || !bucket || pool_id < 0)) {
+      cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
       usage();
     }
 
@@ -873,6 +882,35 @@ int main(int argc, char **argv)
     formatter->dump_value_str("Owner", "%s", info.owner.c_str());
     formatter->close_section("Pool");
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_POOL_CREATE) {
+    if (!bucket)
+      usage();
+    string bucket_str(bucket);
+    string no_object;
+    int ret;
+    bufferlist bl;
+
+    ret = rgwstore->get_attr(bucket_str, no_object, RGW_ATTR_ACL, bl);
+    if (ret < 0) {
+      RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
+      return ret;
+    }
+    RGWAccessControlPolicy policy;
+    bufferlist::iterator iter = bl.begin();
+    policy.decode(iter);
+
+    RGWPoolInfo info;
+    info.bucket = bucket;
+    info.owner = policy.get_owner().get_id();
+
+    int pool_id = rgwstore->get_bucket_id(bucket_str);
+    ret = rgw_store_pool_info(pool_id, info);
+    if (ret < 0) {
+      RGW_LOG(0) << "can't store pool info: pool_id=" << pool_id << " ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   return 0;
