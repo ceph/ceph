@@ -23,12 +23,14 @@
 
 #include "common/Timer.h"
 
+class CephContext;
 class MAuthReply;
 class AuthClientHandler;
 class RotatingKeyRing;
 
 class AuthClientHandler {
 protected:
+  CephContext *cct;
   EntityName name;
   uint64_t global_id;
   uint32_t want;
@@ -36,7 +38,8 @@ protected:
   uint32_t need;
 
 public:
-  AuthClientHandler() : want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
+  AuthClientHandler(CephContext *cct_) 
+    : cct(cct_), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
   virtual ~AuthClientHandler() {}
 
   void init(EntityName& n) { name = n; }
@@ -79,7 +82,8 @@ public:
 };
 
 
-extern AuthClientHandler *get_auth_client_handler(int proto, RotatingKeyRing *rkeys);
+extern AuthClientHandler *get_auth_client_handler(CephContext *cct,
+				      int proto, RotatingKeyRing *rkeys);
 
 #endif
 

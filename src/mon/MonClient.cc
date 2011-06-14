@@ -433,7 +433,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
-      auth = get_auth_client_handler(m->protocol, rotating_secrets);
+      auth = get_auth_client_handler(&g_ceph_context, m->protocol, rotating_secrets);
       if (!auth) {
 	m->put();
 	return;

@@ -18,9 +18,12 @@
 #include "../AuthClientHandler.h"
 #include "AuthNoneProtocol.h"
 
+class CephContext;
+
 class AuthNoneClientHandler : public AuthClientHandler {
 public:
-  AuthNoneClientHandler(RotatingKeyRing *rkeys) {}
+  AuthNoneClientHandler(CephContext *cct_, RotatingKeyRing *rkeys) 
+    : AuthClientHandler(cct_) {}
 
   void reset() { }
 

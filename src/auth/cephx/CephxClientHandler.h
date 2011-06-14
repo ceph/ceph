@@ -18,6 +18,8 @@
 #include "../AuthClientHandler.h"
 #include "CephxProtocol.h"
 
+class CephContext;
+
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
   
@@ -31,11 +33,14 @@ class CephxClientHandler : public AuthClientHandler {
   KeyRing *keyring;
 
 public:
-  CephxClientHandler(RotatingKeyRing *rsecrets) :
-    authorizer(0),
-    tickets(&g_ceph_context),
-    rotating_secrets(rsecrets),
-    keyring(rsecrets->get_keyring())
+  CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets) 
+    : AuthClientHandler(cct_),
+      starting(false),
+      server_challenge(0),
+      authorizer(0),
+      tickets(&g_ceph_context),
+      rotating_secrets(rsecrets),
+      keyring(rsecrets->get_keyring())
   {
     reset();
   }
