@@ -88,6 +88,8 @@
 
 #include <errno.h>
 
+class CephContext;
+
 /*
  * Authentication
  */
@@ -285,7 +287,8 @@ struct CephXTicketHandler {
   utime_t renew_after, expires;
   bool have_key_flag;
 
-  CephXTicketHandler() : service_id(0), have_key_flag(false) {}
+  CephXTicketHandler(CephContext *cct_, uint32_t service_id_)
+    : service_id(service_id_), have_key_flag(false), cct(cct_) { }
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
@@ -299,21 +302,29 @@ struct CephXTicketHandler {
   void invalidate_ticket() {
     have_key_flag = 0;
   }
+private:
+  CephContext *cct;
 };
 
 struct CephXTicketManager {
-  map<uint32_t, CephXTicketHandler> tickets_map;
+  typedef map<uint32_t, CephXTicketHandler> tickets_map_t;
+  tickets_map_t tickets_map;
   uint64_t global_id;
 
-  CephXTicketManager() : global_id(0) {}
+  CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
 
   CephXTicketHandler& get_handler(uint32_t type) {
-    CephXTicketHandler& handler = tickets_map[type];
-    handler.service_id = type;
-    return handler;
+    tickets_map_t::iterator i = tickets_map.find(type);
+    if (i != tickets_map.end())
+      return i->second;
+    CephXTicketHandler newTicketHandler(cct, type);
+    std::pair < tickets_map_t::iterator, bool > res =
+	tickets_map.insert(std::make_pair(type, newTicketHandler));
+    assert(res.second);
+    return res.first->second;
   }
   CephXAuthorizer *build_authorizer(uint32_t service_id);
   bool have_key(uint32_t service_id);
@@ -321,6 +332,9 @@ struct CephXTicketManager {
   void set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need);
   void validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need);
   void invalidate_ticket(uint32_t service_id);
+
+private:
+  CephContext *cct;
 };
 
 
@@ -382,13 +396,14 @@ WRITE_CLASS_ENCODER(CephXAuthorize);
 /*
  * Decode an extract ticket
  */
-bool cephx_decode_ticket(KeyStore *keys,
-			 uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info);
+bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
+			 uint32_t service_id, CephXTicketBlob& ticket_blob,
+			 CephXServiceTicketInfo& ticket_info);
 
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool cephx_verify_authorizer(KeyStore *keys,
+extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 				    bufferlist::iterator& indata,
 				    CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 

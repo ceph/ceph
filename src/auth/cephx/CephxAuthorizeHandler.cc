@@ -18,7 +18,7 @@ bool CephxAuthorizeHandler::verify_authorizer(KeyStore *keys,
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(keys, iter, auth_ticket_info, authorizer_reply);
+  bool isvalid = cephx_verify_authorizer(&g_ceph_context, keys, iter, auth_ticket_info, authorizer_reply);
   dout(1) << "CephxAuthorizeHandler::verify_authorizer isvalid=" << isvalid << dendl;
 
   if (isvalid) {

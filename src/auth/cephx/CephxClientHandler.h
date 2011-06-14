@@ -33,6 +33,7 @@ class CephxClientHandler : public AuthClientHandler {
 public:
   CephxClientHandler(RotatingKeyRing *rsecrets) :
     authorizer(0),
+    tickets(&g_ceph_context),
     rotating_secrets(rsecrets),
     keyring(rsecrets->get_keyring())
   {

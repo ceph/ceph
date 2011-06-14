@@ -213,11 +213,13 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
   if (iter == tickets_map.end()) {
     have &= ~service_id;
     need |= service_id;
-    dout(10) << "set_have_need_key no handler for service " << ceph_entity_type_name(service_id) << dendl;
+    ldout(cct, 10) << "set_have_need_key no handler for service "
+		   << ceph_entity_type_name(service_id) << dendl;
     return;
   }
 
-  //dout(10) << "set_have_need_key service " << ceph_entity_type_name(service_id) << " (" << service_id << ")"
+  //ldout(cct, 10) << "set_have_need_key service " << ceph_entity_type_name(service_id)
+  //<< " (" << service_id << ")"
   //<< " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
   if (iter->second.need_key())
     need |= service_id;
@@ -249,14 +251,13 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 
   uint32_t num;
   ::decode(num, indata);
-  dout(10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
+  ldout(cct, 10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
     ::decode(type, indata);
-    dout(10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
-    CephXTicketHandler& handler = tickets_map[type];
-    handler.service_id = type;
+    ldout(cct, 10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
+    CephXTicketHandler& handler = get_handler(type);
     if (!handler.verify_service_ticket_reply(secret, indata)) {
       return false;
     }
@@ -292,7 +293,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
   msg.nonce = a->nonce;
 
   if (encode_encrypt(msg, session_key, a->bl) < 0) {
-    dout(0) << "failed to encrypt authorizer" << dendl;
+    ldout(cct, 0) << "failed to encrypt authorizer" << dendl;
     delete a;
     return 0;
   }
@@ -308,7 +309,8 @@ CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end()) {
-    dout(0) << "no TicketHandler for service " << ceph_entity_type_name(service_id) << dendl;
+    ldout(cct, 0) << "no TicketHandler for service "
+		  << ceph_entity_type_name(service_id) << dendl;
     return NULL;
   }
 
@@ -325,10 +327,12 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
       set_have_need_key(i, have, need);
     }
   }
-  dout(10) << "validate_tickets want " << mask << " have " << have << " need " << need << dendl;
+  ldout(cct, 10) << "validate_tickets want " << mask << " have " << have
+		 << " need " << need << dendl;
 }
 
-bool cephx_decode_ticket(KeyStore *keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
+bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
+	      CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
   CryptoKey service_secret;
@@ -339,20 +343,20 @@ bool cephx_decode_ticket(KeyStore *keys, uint32_t service_id, CephXTicketBlob& t
 
   if (secret_id == (uint64_t)-1) {
     if (!keys->get_secret(g_conf->name, service_secret)) {
-      dout(0) << "ceph_decode_ticket could not get general service secret for service_id="
+      ldout(cct, 0) << "ceph_decode_ticket could not get general service secret for service_id="
 	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
     }
   } else {
     if (!keys->get_service_secret(service_id, secret_id, service_secret)) {
-      dout(0) << "ceph_decode_ticket could not get service secret for service_id=" 
+      ldout(cct, 0) << "ceph_decode_ticket could not get service secret for service_id=" 
 	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
     }
   }
 
   if (decode_decrypt_enc_bl(ticket_info, service_secret, ticket_blob.blob) < 0) {
-    dout(0) << "ceph_decode_ticket could not decrypt ticket info" << dendl;
+    ldout(cct, 0) << "ceph_decode_ticket could not decrypt ticket info" << dendl;
     return false;
   }
 
@@ -364,7 +368,7 @@ bool cephx_decode_ticket(KeyStore *keys, uint32_t service_id, CephXTicketBlob& t
  *
  * {timestamp + 1}^session_key
  */
-bool cephx_verify_authorizer(KeyStore *keys,
+bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 			     bufferlist::iterator& indata,
 			     CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
@@ -385,41 +389,42 @@ bool cephx_verify_authorizer(KeyStore *keys,
     // Unable to decode!
     return false;
   }
-  dout(10) << "verify_authorizer decrypted service " << ceph_entity_type_name(service_id)
+  ldout(cct, 10) << "verify_authorizer decrypted service "
+	   << ceph_entity_type_name(service_id)
 	   << " secret_id=" << ticket.secret_id << dendl;
 
   if (ticket.secret_id == (uint64_t)-1) {
     EntityName name;
     name.set_type(service_id);
     if (!keys->get_secret(name, service_secret)) {
-      dout(0) << "verify_authorizer could not get general service secret for service "
+      ldout(cct, 0) << "verify_authorizer could not get general service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   } else {
     if (!keys->get_service_secret(service_id, ticket.secret_id, service_secret)) {
-      dout(0) << "verify_authorizer could not get service secret for service "
+      ldout(cct, 0) << "verify_authorizer could not get service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   }
   if (decode_decrypt_enc_bl(ticket_info, service_secret, ticket.blob) < 0) {
-    dout(0) << "verify_authorizer could not decrypt ticket info" << dendl;
+    ldout(cct, 0) << "verify_authorizer could not decrypt ticket info" << dendl;
     return false;
   }
 
   if (ticket_info.ticket.global_id != global_id) {
-    dout(0) << "verify_authorizer global_id mismatch: declared id=" << global_id
+    ldout(cct, 0) << "verify_authorizer global_id mismatch: declared id=" << global_id
 	    << " ticket_id=" << ticket_info.ticket.global_id << dendl;
     return false;
   }
 
-  dout(10) << "verify_authorizer global_id=" << global_id << dendl;
+  ldout(cct, 10) << "verify_authorizer global_id=" << global_id << dendl;
 
   // CephXAuthorize
   CephXAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {
-    dout(0) << "verify_authorizercould not decrypt authorize request" << dendl;
+    ldout(cct, 0) << "verify_authorizercould not decrypt authorize request" << dendl;
     return false;
   }
 
@@ -433,7 +438,7 @@ bool cephx_verify_authorizer(KeyStore *keys,
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
-  dout(10) << "verify_authorizer ok nonce " << hex << auth_msg.nonce << dec
+  ldout(cct, 10) << "verify_authorizer ok nonce " << hex << auth_msg.nonce << dec
 	   << " reply_bl.length()=" << reply_bl.length() <<  dendl;
   return true;
 }

@@ -1168,10 +1168,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   ::encode(blob, ticket_data);
 
   bufferlist::iterator iter = ticket_data.begin();
-  CephXTicketHandler handler;
+  CephXTicketHandler handler(&g_ceph_context, service_id);
   ::decode(handler.ticket, iter);
 
-  handler.service_id = service_id;
   handler.session_key = info.session_key;
 
   *authorizer = handler.build_authorizer(0);
@@ -1196,7 +1195,8 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
+	int ret = cephx_verify_authorizer(&g_ceph_context, &key_server, iter,
+					  auth_ticket_info, authorizer_reply);
 	if (ret >= 0)
 	  isvalid = true;
 	else
