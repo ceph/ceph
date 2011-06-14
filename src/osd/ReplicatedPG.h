@@ -700,6 +700,17 @@ private:
   } snap_trimmer_machine;
 
   /* SnapTrimmerStates */
+  struct RepColTrim : boost::statechart::state< RepColTrim, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    interval_set<snapid_t> to_trim;
+    RepColTrim(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&);
+  };
+
   struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< SnapTrim >,

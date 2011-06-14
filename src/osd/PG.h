@@ -1567,7 +1567,7 @@ public:
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void update_snap_collections(vector<Log::Entry> &log_entries);
-  void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
+  void adjust_local_snaps();
 
   void log_weirdness();
 
