@@ -264,6 +264,9 @@ AC_CHECK_HEADER([boost/spirit/include/classic_core.hpp], [],
     AC_MSG_FAILURE(["Can't find boost spirit headers"]))])
 AM_CONDITIONAL(USE_BOOST_SPIRIT_OLD_HDR, [test "$use_bspirit_old_hdr" = "yes"])
 
+AC_CHECK_HEADER([boost/statechart/state.hpp], [],
+    AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
