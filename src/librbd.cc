@@ -1303,6 +1303,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   if (r < 0)
     return r;
 
+  c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     string oid = get_block_oid(&ictx->header, i);
@@ -1320,8 +1321,9 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     total_write += write_len;
     left -= write_len;
   }
-  return 0;
+  r = 0;
 done:
+  c->put();
   /* FIXME: cleanup all the allocated stuff */
   return r;
 }
@@ -1355,6 +1357,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   uint64_t block_size = get_block_size(&ictx->header);
   uint64_t left = len;
 
+  c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     string oid = get_block_oid(&ictx->header, i);
@@ -1384,6 +1387,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   }
   ret = total_read;
 done:
+  c->put();
   return ret;
 }
 
