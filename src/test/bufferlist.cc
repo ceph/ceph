@@ -4,6 +4,8 @@
 #include "gtest/gtest.h"
 #include "stdlib.h"
 
+#include <tr1/memory>
+
 #define MAX_TEST 1000000
 
 
@@ -56,18 +58,19 @@ TEST(BufferList, TestDirectAppend) {
 
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
-  unsigned char big[BIG_SZ];
+  std::tr1::shared_ptr <unsigned char> big(
+      (unsigned char*)malloc(BIG_SZ), free);
   unsigned char c = 0;
   for (size_t i = 0; i < BIG_SZ; ++i) {
-    big[i] = c++;
+    big.get()[i] = c++;
   }
   bufferlist bl;
-  bl.append((const char*)big, BIG_SZ);
+  bl.append((const char*)big.get(), BIG_SZ);
   bufferlist::iterator i = bl.begin();
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
   unsigned char big2[BIG_SZ];
   bl2.copy(0, BIG_SZ, (char*)big2);
-  ASSERT_EQ(memcmp(big, big2, BIG_SZ), 0);
+  ASSERT_EQ(memcmp(big.get(), big2, BIG_SZ), 0);
 }
