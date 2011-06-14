@@ -140,12 +140,13 @@ namespace librbd {
     bool released;
 
     AioCompletion() : lock("AioCompletion::lock", true), done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
-		      rbd_comp(NULL), pending_count(0), ref(1), released(false) {
+		      rbd_comp(NULL), pending_count(1), ref(1), released(false) {
       dout(20) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl;
     }
     ~AioCompletion() {
       dout(20) << "AioCompletion::~AioCompletion() this=" << (void *)this << dendl;
     }
+
     int wait_for_complete() {
       dout(20) << "AioCompletion::wait_for_complete() this=" << (void *)this << dendl;
       lock.Lock();
@@ -161,6 +162,27 @@ namespace librbd {
       pending_count++;
       lock.Unlock();
       get();
+    }
+
+    void finish_adding_completions() {
+      dout(20) << "AioCompletion::finish_adding_completions() this=" << (void *)this << dendl;
+      lock.Lock();
+      assert(pending_count);
+      int count = --pending_count;
+      if (!count) {
+	complete();
+      }
+      lock.Unlock();
+    }
+
+    void complete() {
+      dout(20) << "AioCompletion::complete() this=" << (void *)this << dendl;
+      assert(lock.is_locked());
+      if (complete_cb) {
+	complete_cb(rbd_comp, complete_arg);
+      }
+      done = true;
+      cond.Signal();
     }
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
@@ -1263,10 +1285,7 @@ void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t
   assert(pending_count);
   int count = --pending_count;
   if (!count) {
-    if (complete_cb)
-      complete_cb(rbd_comp, complete_arg);
-    done = true;
-    cond.Signal();
+    complete();
   }
   put_unlock();
 }
@@ -1328,6 +1347,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   }
   r = 0;
 done:
+  c->finish_adding_completions();
   c->put();
   /* FIXME: cleanup all the allocated stuff */
   return r;
@@ -1392,6 +1412,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   }
   ret = total_read;
 done:
+  c->finish_adding_completions();
   c->put();
   return ret;
 }
