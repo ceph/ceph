@@ -277,7 +277,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
  */
 CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 {
-  CephXAuthorizer *a = new CephXAuthorizer;
+  CephXAuthorizer *a = new CephXAuthorizer(cct);
   a->session_key = session_key;
   a->nonce = ((uint64_t)rand() << 32) + rand();
 
@@ -342,7 +342,7 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
   }
 
   if (secret_id == (uint64_t)-1) {
-    if (!keys->get_secret(g_conf->name, service_secret)) {
+    if (!keys->get_secret(cct->_conf->name, service_secret)) {
       ldout(cct, 0) << "ceph_decode_ticket could not get general service secret for service_id="
 	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
@@ -449,17 +449,17 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
 
   try {
     if (decode_decrypt(reply, session_key, indata) < 0) {
-      dout(0) << "verify_authorizer_reply coudln't decrypt with " << session_key << dendl;
+      ldout(cct, 0) << "verify_authorizer_reply coudln't decrypt with " << session_key << dendl;
       return false;
     }
   } catch (const buffer::error &e) {
-    dout(0) << "verify_authorizer_reply exception in decode_decrypt with " << session_key << dendl;
+    ldout(cct, 0) << "verify_authorizer_reply exception in decode_decrypt with " << session_key << dendl;
     return false;
   }
 
   uint64_t expect = nonce + 1;
   if (expect != reply.nonce_plus_one) {
-    dout(0) << "verify_authorizer_reply bad nonce got " << reply.nonce_plus_one << " expected " << expect
+    ldout(cct, 0) << "verify_authorizer_reply bad nonce got " << reply.nonce_plus_one << " expected " << expect
 	    << " sent " << nonce << dendl;
     return false;
   }

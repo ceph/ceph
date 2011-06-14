@@ -266,10 +266,14 @@ WRITE_CLASS_ENCODER(CephXAuthorizeReply);
 
 
 struct CephXAuthorizer : public AuthAuthorizer {
+private:
+  CephContext *cct;
+public:
   uint64_t nonce;
   CryptoKey session_key;
 
-  CephXAuthorizer() : AuthAuthorizer(CEPH_AUTH_CEPHX) {}
+  CephXAuthorizer(CephContext *cct_)
+    : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_) {}
 
   bool build_authorizer();
   bool verify_reply(bufferlist::iterator& reply);
