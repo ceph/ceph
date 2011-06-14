@@ -103,13 +103,7 @@ public:
 		      bufferlist& out) const = 0;
 };
 
-
-class CryptoManager {
-public:
-  CryptoHandler *get_crypto(int type);
-};
-
-extern CryptoManager ceph_crypto_mgr;
+extern CryptoHandler *get_crypto_handler(int type);
 
 extern int get_random_bytes(char *buf, int len);
 

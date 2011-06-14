@@ -324,7 +324,7 @@ decrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out) const
 static CryptoNone crypto_none;
 static CryptoAES crypto_aes;
 
-CryptoHandler *CryptoManager::get_crypto(int type)
+CryptoHandler *get_crypto_handler(int type)
 {
   switch (type) {
     case CEPH_CRYPTO_NONE:
@@ -336,9 +336,6 @@ CryptoHandler *CryptoManager::get_crypto(int type)
   }
 }
 
-CryptoManager ceph_crypto_mgr;
-
-
 // ---------------------------------------------------
 
 int CryptoKey::set_secret(int type, bufferptr& s)
@@ -346,7 +343,7 @@ int CryptoKey::set_secret(int type, bufferptr& s)
   this->type = type;
   created = g_clock.now();
 
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  CryptoHandler *h = get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   int ret = h->validate_secret(s);
@@ -364,7 +361,7 @@ int CryptoKey::create(int t)
   type = t;
   created = g_clock.now();
 
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  CryptoHandler *h = get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   return h->create(secret);
@@ -372,7 +369,7 @@ int CryptoKey::create(int t)
 
 int CryptoKey::encrypt(const bufferlist& in, bufferlist& out) const
 {
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  CryptoHandler *h = get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   return h->encrypt(this->secret, in, out);
@@ -380,7 +377,7 @@ int CryptoKey::encrypt(const bufferlist& in, bufferlist& out) const
 
 int CryptoKey::decrypt(const bufferlist& in, bufferlist& out) const
 {
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  CryptoHandler *h = get_crypto_handler(type);
   if (!h)
     return -EOPNOTSUPP;
   return h->decrypt(this->secret, in, out);

@@ -254,7 +254,7 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+  CryptoHandler *crypto = get_crypto_handler(CEPH_CRYPTO_AES);
   if (!crypto)
     return false;
 
