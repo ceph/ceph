@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <linux/types.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
 
 //#include "../client/ioctl.h"
 
@@ -39,7 +41,8 @@ int verify_pattern(char *buf, size_t len, uint64_t off)
 		uint64_t expected = i + off;
 		uint64_t actual = *(uint64_t*)(buf + i);
 		if (expected != actual) {
-			printf("error: offset %llu had %llu\n", expected, actual);
+			printf("error: offset %llu had %llu\n", (unsigned long long)expected,
+			       (unsigned long long)actual);
 			exit(1);
 			return -1;
 		}
@@ -59,7 +62,8 @@ void generate_pattern(void *buf, size_t len, uint64_t offset)
 
 int read_direct(int buf_align, uint64_t offset, int len)
 {
-	printf("read_direct buf_align %d offset %llu len %d\n", buf_align, offset, len);
+	printf("read_direct buf_align %d offset %llu len %d\n", buf_align,
+	       (unsigned long long)offset, len);
 	int fd = open("foo", O_RDONLY|O_DIRECT);
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
@@ -74,7 +78,8 @@ int read_direct(int buf_align, uint64_t offset, int len)
 
 int read_sync(int buf_align, uint64_t offset, int len)
 {
-	printf("read_sync buf_align %d offset %llu len %d\n", buf_align, offset, len);
+	printf("read_sync buf_align %d offset %llu len %d\n", buf_align,
+	       (unsigned long long)offset, len);
 	int fd = open("foo", O_RDONLY);
 	ioctl(fd, CEPH_IOC_SYNCIO);
 	void *rawbuf;
@@ -90,7 +95,8 @@ int read_sync(int buf_align, uint64_t offset, int len)
 
 int write_direct(int buf_align, uint64_t offset, int len)
 {
-	printf("write_direct buf_align %d offset %llu len %d\n", buf_align, offset, len);
+	printf("write_direct buf_align %d offset %llu len %d\n", buf_align,
+	       (unsigned long long)offset, len);
 	int fd = open("foo", O_WRONLY|O_DIRECT|O_CREAT, 0644);
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
@@ -117,8 +123,9 @@ int write_direct(int buf_align, uint64_t offset, int len)
 
 int write_sync(int buf_align, uint64_t offset, int len)
 {
-	printf("write_sync buf_align %d offset %llu len %d\n", buf_align, offset, len);
-	int fd = open("foo", O_WRONLY|O_CREAT);
+	printf("write_sync buf_align %d offset %llu len %d\n", buf_align,
+	       (unsigned long long)offset, len);
+	int fd = open("foo", O_WRONLY|O_CREAT, 0644);
 	ioctl(fd, CEPH_IOC_SYNCIO);
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
@@ -145,8 +152,6 @@ int write_sync(int buf_align, uint64_t offset, int len)
 
 int main(int argc, char **argv)
 {
-	char *buf;
-	int fd;
 	uint64_t i, j, k;
 	int read = 1;
 	int write = 1;
