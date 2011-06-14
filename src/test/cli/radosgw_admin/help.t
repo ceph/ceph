@@ -15,8 +15,11 @@
     buckets list               list buckets
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
+    pool info                  show pool information
+    pool create                generate pool information (requires bucket)
     policy                     read bucket/object policy
-    log show                   dump a log from specific object or (bucket + date)
+    log show                   dump a log from specific object or (bucket + date
+                               + pool-id)
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
