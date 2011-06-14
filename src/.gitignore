@@ -67,6 +67,8 @@ crush/CrushWrapper_wrap.cxx
 /psim
 /sample.fetch_config
 
+Makefile
+
 /gtest/build-aux/config.h
 /gtest/build-aux/config.h.in
 /gtest/lib/

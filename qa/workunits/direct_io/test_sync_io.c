@@ -25,9 +25,10 @@ void write_pattern()
 
 	int fd = open("foo", O_CREAT|O_WRONLY, 0644);
 	uint64_t i;
+	int r;
 
 	for (i=0; i<1048576 * sizeof(i); i += sizeof(i)) {
-		write(fd, &i, sizeof(i));
+		r = write(fd, &i, sizeof(i));
 	}
 
 	close(fd);
@@ -66,12 +67,12 @@ int read_direct(int buf_align, uint64_t offset, int len)
 	       (unsigned long long)offset, len);
 	int fd = open("foo", O_RDONLY|O_DIRECT);
 	void *rawbuf;
-	posix_memalign(&rawbuf, 4096, len + buf_align);
+	int r = posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
 	memset(buf, 0, len);
-	pread(fd, buf, len, offset);
+	r = pread(fd, buf, len, offset);
 	close(fd);
-	int r = verify_pattern(buf, len, offset);
+	r = verify_pattern(buf, len, offset);
 	free(rawbuf);
 	return r;
 }
@@ -83,12 +84,12 @@ int read_sync(int buf_align, uint64_t offset, int len)
 	int fd = open("foo", O_RDONLY);
 	ioctl(fd, CEPH_IOC_SYNCIO);
 	void *rawbuf;
-	posix_memalign(&rawbuf, 4096, len + buf_align);
+	int r = posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
 	memset(buf, 0, len);
-	pread(fd, buf, len, offset);
+	r = pread(fd, buf, len, offset);
 	close(fd);
-	int r = verify_pattern(buf, len, offset);
+	r = verify_pattern(buf, len, offset);
 	free(rawbuf);
 	return r;
 }
@@ -101,19 +102,20 @@ int write_direct(int buf_align, uint64_t offset, int len)
 	void *rawbuf;
 	posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
+	int r;
 
 	generate_pattern(buf, len, offset);
 
-	pwrite(fd, buf, len, offset);
+	r = pwrite(fd, buf, len, offset);
 	close(fd);
 
 	fd = open("foo", O_RDONLY);
 	void *buf2 = malloc(len);
 	memset(buf2, 0, len);
-	pread(fd, buf2, len, offset);
+	r = pread(fd, buf2, len, offset);
 	close(fd);
 
-	int r = verify_pattern(buf2, len, offset);
+	r = verify_pattern(buf2, len, offset);
 
 	unlink("foo");
 	free(rawbuf);
@@ -128,21 +130,21 @@ int write_sync(int buf_align, uint64_t offset, int len)
 	int fd = open("foo", O_WRONLY|O_CREAT, 0644);
 	ioctl(fd, CEPH_IOC_SYNCIO);
 	void *rawbuf;
-	posix_memalign(&rawbuf, 4096, len + buf_align);
+	int r = posix_memalign(&rawbuf, 4096, len + buf_align);
 	void *buf = (char *)rawbuf + buf_align;
 
 	generate_pattern(buf, len, offset);
 
-	pwrite(fd, buf, len, offset);
+	r = pwrite(fd, buf, len, offset);
 	close(fd);
 
 	fd = open("foo", O_RDONLY);
 	void *buf2 = malloc(len);
 	memset(buf2, 0, len);
-	pread(fd, buf2, len, offset);
+	r = pread(fd, buf2, len, offset);
 	close(fd);
 
-	int r = verify_pattern(buf2, len, offset);
+	r = verify_pattern(buf2, len, offset);
 
 	unlink("foo");
 	free(buf2);

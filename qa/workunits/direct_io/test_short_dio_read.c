@@ -5,15 +5,15 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-int main(int argc, char **argv)
+int main()
 {
         char buf[409600];
         int fd = open("shortfile", O_WRONLY|O_CREAT, 0644);
         ssize_t r;
 
 	printf("writing first 3 bytes of 10k file\n");
-        write(fd, "foo", 3);
-        ftruncate(fd, 10000);
+        r = write(fd, "foo", 3);
+        r = ftruncate(fd, 10000);
         fsync(fd);
         close(fd);
 

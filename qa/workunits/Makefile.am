@@ -1,2 +1,0 @@
-AUTOMAKE_OPTIONS = gnu
-SUBDIRS = direct_io

@@ -1,13 +1,14 @@
 AUTOMAKE_OPTIONS = gnu
 EXTRA_DIST = autogen.sh ceph.spec.in
 # the "." here makes sure check-local builds gtest before it is used
-SUBDIRS = . src qa man
+SUBDIRS = . src man
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \
 	src/test/cli \
 	src/test/downloads \
 	udev/50-rbd.rules
+
 check-local:
 #	Build gtest before we build our own tests. Doing this instead
 #	of SUBDIRS because with that, gtest's own tests would be run
