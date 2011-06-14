@@ -19,13 +19,17 @@
 #include "common/config.h"
 #include "Auth.h"
 
+class CephContext;
 class KeyServer;
 
 struct AuthServiceHandler {
+protected:
+  CephContext *cct;
+public:
   EntityName entity_name;
   uint64_t global_id;
 
-  AuthServiceHandler() : global_id(0) {}
+  AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
 
   virtual ~AuthServiceHandler() { }
 
@@ -35,6 +39,7 @@ struct AuthServiceHandler {
   EntityName& get_entity_name() { return entity_name; }
 };
 
-extern AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported);
+extern AuthServiceHandler *get_auth_service_handler(CephContext *cct,
+				KeyServer *ks, set<__u32>& supported);
 
 #endif

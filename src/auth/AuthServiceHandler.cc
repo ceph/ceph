@@ -21,12 +21,13 @@
 #define DOUT_SUBSYS auth
 
 
-AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported)
+AuthServiceHandler *get_auth_service_handler(CephContext *cct, KeyServer *ks,
+					     set<__u32>& supported)
 {
   if (is_supported_auth(CEPH_AUTH_CEPHX) && supported.count(CEPH_AUTH_CEPHX))
-    return new CephxServiceHandler(ks);
+    return new CephxServiceHandler(cct, ks);
   if (is_supported_auth(CEPH_AUTH_NONE) && supported.count(CEPH_AUTH_NONE))
-    return new AuthNoneServiceHandler();
+    return new AuthNoneServiceHandler(cct);
   return NULL;
 }
 

@@ -18,9 +18,12 @@
 #include "../AuthServiceHandler.h"
 #include "../Auth.h"
 
+class CephContext;
+
 class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:
-  AuthNoneServiceHandler()  {}
+  AuthNoneServiceHandler(CephContext *cct_) 
+    : AuthServiceHandler(cct_) {}
   ~AuthNoneServiceHandler() {}
   
   int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {

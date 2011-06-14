@@ -25,7 +25,8 @@ class CephxServiceHandler  : public AuthServiceHandler {
   uint64_t server_challenge;
 
 public:
-  CephxServiceHandler(KeyServer *ks) : key_server(ks), server_challenge(0) {}
+  CephxServiceHandler(CephContext *cct_, KeyServer *ks) 
+    : AuthServiceHandler(cct_), key_server(ks), server_challenge(0) {}
   ~CephxServiceHandler() {}
   
   int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps);
