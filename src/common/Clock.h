@@ -15,39 +15,24 @@
 #ifndef CEPH_CLOCK_H
 #define CEPH_CLOCK_H
 
-#include <iomanip>
-#include <iostream>
-#include <sys/time.h>
-#include <time.h>
-
 #include "include/utime.h"
 
-class Clock {
- protected:
-  utime_t last;
+#include <time.h>
 
+struct timespec;
+struct utime_t;
+
+extern utime_t ceph_clock_now(CephContext *cct);
+extern time_t ceph_clock_gettime(CephContext *cct);
+
+class Clock {
  public:
   Clock();
   ~Clock();
 
   utime_t now();
-
-  utime_t recent_now() {
-    return last;
-  }
-
-  void make_timespec(utime_t& t, struct timespec *ts) {
-    utime_t time = t;
-
-    memset(ts, 0, sizeof(*ts));
-    ts->tv_sec = time.sec();
-    ts->tv_nsec = time.nsec();
-  }
-
-  // absolute time
-  time_t gettime() {
-    return now().sec();
-  }
+  void make_timespec(utime_t& t, struct timespec *ts);
+  time_t gettime();
 };
 
 extern Clock g_clock;

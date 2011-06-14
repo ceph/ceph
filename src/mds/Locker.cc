@@ -1647,7 +1647,7 @@ void Locker::request_inode_file_caps(CInode *in)
   if (wanted != in->replica_caps_wanted) {
 
     if (wanted == 0) {
-      if (in->replica_caps_wanted_keep_until > g_clock.recent_now()) {
+      if (in->replica_caps_wanted_keep_until > g_clock.now()) {
         // ok, release them finally!
         in->replica_caps_wanted_keep_until.sec_ref() = 0;
         dout(7) << "request_inode_file_caps " << ccap_string(wanted)
@@ -1657,7 +1657,7 @@ void Locker::request_inode_file_caps(CInode *in)
                  << dendl;
       }
       else if (in->replica_caps_wanted_keep_until.sec() == 0) {
-        in->replica_caps_wanted_keep_until = g_clock.recent_now();
+        in->replica_caps_wanted_keep_until = g_clock.now();
         in->replica_caps_wanted_keep_until.sec_ref() += 2;
         
         dout(7) << "request_inode_file_caps " << ccap_string(wanted)

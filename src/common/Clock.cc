@@ -14,9 +14,28 @@
 
 
 #include "common/config.h"
-#include "Clock.h"
+#include "common/Clock.h"
 
-// public
+#include <time.h>
+
+utime_t ceph_clock_now(CephContext *cct)
+{
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  utime_t n(&tv);
+  n += cct->_conf->clock_offset;
+  return n;
+}
+
+time_t ceph_clock_gettime(CephContext *cct)
+{
+  time_t ret = time(NULL);
+  ret += ((time_t)cct->_conf->clock_offset);
+  return ret;
+}
+
+// old global clock stuff
+// TODO: remove
 Clock g_clock;
 
 Clock::Clock() {
@@ -25,15 +44,22 @@ Clock::Clock() {
 Clock::~Clock() {
 }
 
+void Clock::make_timespec(utime_t& t, struct timespec *ts) {
+  utime_t time = t;
+
+  memset(ts, 0, sizeof(*ts));
+  ts->tv_sec = time.sec();
+  ts->tv_nsec = time.nsec();
+}
+
 utime_t Clock::now() {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   utime_t n(&tv);
   n += g_conf->clock_offset;
-  if (n < last) {
-    //derr << "WARNING: clock jumped backwards from " << last << " to " << n << dendl;
-    n = last;    // clock jumped backwards!
-  } else
-    last = n;
   return n;
+}
+
+time_t Clock::gettime() {
+  return now().sec();
 }
