@@ -53,7 +53,9 @@ int main(int argc, const char **argv)
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(&g_ceph_context);
   FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("print", '\0')) {
+    if (CEPH_ARGPARSE_EQ("help", '\0')) {
+      usage();
+    } else if (CEPH_ARGPARSE_EQ("print", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("create", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&create, OPT_BOOL);
