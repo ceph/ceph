@@ -37,6 +37,9 @@
      --bucket=<bucket>
      --object=<object>
      --date=<yyyy-mm-dd>
+     --pool-id=<pool-id>
+     --format=<format>         specify output format for certain operations: xml,
+                               json
   --conf/-c        Read configuration from the given configuration file
   -D               Run in the foreground.
   -f               Run in foreground. Show all log messages on stderr.
