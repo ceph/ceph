@@ -341,7 +341,7 @@ CryptoHandler *get_crypto_handler(int type)
 int CryptoKey::set_secret(int type, bufferptr& s)
 {
   this->type = type;
-  created = g_clock.now();
+  created = ceph_clock_now(&g_ceph_context);
 
   CryptoHandler *h = get_crypto_handler(type);
   if (!h)
@@ -359,7 +359,7 @@ int CryptoKey::set_secret(int type, bufferptr& s)
 int CryptoKey::create(int t)
 {
   type = t;
-  created = g_clock.now();
+  created = ceph_clock_now(&g_ceph_context);
 
   CryptoHandler *h = get_crypto_handler(type);
   if (!h)

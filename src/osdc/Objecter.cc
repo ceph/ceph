@@ -409,7 +409,7 @@ void Objecter::tick()
   set<OSDSession*> toping;
 
   // look for laggy requests
-  utime_t cutoff = g_clock.now();
+  utime_t cutoff = ceph_clock_now(&g_ceph_context);
   cutoff -= g_conf->objecter_timeout;  // timeout
 
   for (hash_map<tid_t,Op*>::iterator p = ops.begin();
@@ -440,7 +440,7 @@ void Objecter::tick()
 
 void Objecter::resend_mon_ops()
 {
-  utime_t cutoff = g_clock.now();
+  utime_t cutoff = ceph_clock_now(&g_ceph_context);
   cutoff -= g_conf->objecter_mon_retry_interval;
 
 
@@ -651,7 +651,7 @@ void Objecter::send_op(Op *op)
 
   op->paused = false;
   op->incarnation = op->session->incarnation;
-  op->stamp = g_clock.now();
+  op->stamp = ceph_clock_now(&g_ceph_context);
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
 			 op->oid, op->oloc, op->pgid, osdmap->get_epoch(),
@@ -1081,7 +1081,7 @@ void Objecter::pool_op_submit(PoolOp *op) {
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
-  op->last_submit = g_clock.now();
+  op->last_submit = ceph_clock_now(&g_ceph_context);
 }
 
 /**
@@ -1142,7 +1142,7 @@ void Objecter::poolstat_submit(PoolStatOp *op)
 {
   dout(10) << "poolstat_submit " << op->tid << dendl;
   monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid, op->pools, last_seen_pgmap_version));
-  op->last_submit = g_clock.now();
+  op->last_submit = ceph_clock_now(&g_ceph_context);
 }
 
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
@@ -1184,7 +1184,7 @@ void Objecter::fs_stats_submit(StatfsOp *op)
 {
   dout(10) << "fs_stats_submit" << op->tid << dendl;
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_pgmap_version));
-  op->last_submit = g_clock.now();
+  op->last_submit = ceph_clock_now(&g_ceph_context);
 }
 
 void Objecter::handle_fs_stats_reply(MStatfsReply *m) {

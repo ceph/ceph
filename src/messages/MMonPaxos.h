@@ -66,7 +66,7 @@ class MMonPaxos : public Message {
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
     latest_version(0) {
-    sent_timestamp = g_clock.now();
+    sent_timestamp = ceph_clock_now(&g_ceph_context);
   }
 
 private:

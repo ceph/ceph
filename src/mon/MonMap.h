@@ -46,7 +46,7 @@ class MonMap {
 
   MonMap() : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
-    last_changed = created = g_clock.now();
+    last_changed = created = ceph_clock_now(&g_ceph_context);
   }
 
   ceph_fsid_t& get_fsid() { return fsid; }

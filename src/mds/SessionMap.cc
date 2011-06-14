@@ -123,7 +123,7 @@ void SessionMap::save(Context *onsave, version_t needv)
 
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, g_clock.now(), 0,
+			    bl, ceph_clock_now(&g_ceph_context), 0,
 			    NULL, new C_SM_Save(this, version));
 }
 
@@ -163,7 +163,7 @@ void SessionMap::encode(bufferlist& bl)
 
 void SessionMap::decode(bufferlist::iterator& p)
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   uint64_t pre;
   ::decode(pre, p);
   if (pre == (uint64_t)-1) {

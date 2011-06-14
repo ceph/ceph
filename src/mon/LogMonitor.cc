@@ -81,7 +81,7 @@ void LogMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
-  e.stamp = g_clock.now();
+  e.stamp = ceph_clock_now(&g_ceph_context);
   e.type = CLOG_INFO;
   std::stringstream ss;
   ss << "mkfs " << mon->monmap->get_fsid();

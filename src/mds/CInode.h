@@ -913,7 +913,7 @@ public:
       cap->reset_seq();
     }
     cap->set_cap_id(icr.cap_id);
-    cap->set_last_issue_stamp(g_clock.now());
+    cap->set_last_issue_stamp(ceph_clock_now(&g_ceph_context));
     return cap;
   }
   void clear_client_caps_after_export() {

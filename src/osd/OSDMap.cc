@@ -184,7 +184,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
 	   << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
-  created = modified = g_clock.now();
+  created = modified = ceph_clock_now(&g_ceph_context);
 
   set_max_osd(nosd);
 

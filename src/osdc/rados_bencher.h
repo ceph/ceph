@@ -167,10 +167,10 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
 
   pthread_create(&print_thread, NULL, status_printer, (void *)data);
   dataLock.Lock();
-  data->start_time = g_clock.now();
+  data->start_time = ceph_clock_now(&g_ceph_context);
   dataLock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
-    start_times[i] = g_clock.now();
+    start_times[i] = ceph_clock_now(&g_ceph_context);
     completions[i] = rados.aio_create_completion((void *) &cond, 0,
 						 &_aio_cb);
     r = io_ctx.aio_write(name[i], completions[i], *contents[i], data->object_size, 0);
@@ -192,7 +192,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
 
   runtime.set_from_double(secondsToRun);
   stopTime = data->start_time + runtime;
-  while( g_clock.now() < stopTime ) {
+  while( ceph_clock_now(&g_ceph_context) < stopTime ) {
     dataLock.Lock();
     while (1) {
       for (slot = 0; slot < concurrentios; ++slot) {
@@ -219,7 +219,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
       dataLock.Unlock();
       goto ERR;
     }
-    data->cur_latency = g_clock.now() - start_times[slot];
+    data->cur_latency = ceph_clock_now(&g_ceph_context) - start_times[slot];
     total_latency += data->cur_latency;
     if( data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
@@ -229,11 +229,11 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
     dataLock.Unlock();
     completions[slot]->release();
     completions[slot] = 0;
-    timePassed = g_clock.now() - data->start_time;
+    timePassed = ceph_clock_now(&g_ceph_context) - data->start_time;
 
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
-    start_times[slot] = g_clock.now();
+    start_times[slot] = ceph_clock_now(&g_ceph_context);
     completions[slot] = rados.aio_create_completion((void *) &cond, 0, &_aio_cb);
     r = io_ctx.aio_write(newName, completions[slot], *newContents, data->object_size, 0);
     if (r < 0) {//naughty; doesn't clean up heap space.
@@ -258,7 +258,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
       dataLock.Unlock();
       goto ERR;
     }
-    data->cur_latency = g_clock.now() - start_times[slot];
+    data->cur_latency = ceph_clock_now(&g_ceph_context) - start_times[slot];
     total_latency += data->cur_latency;
     if (data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
@@ -272,7 +272,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
     delete contents[slot];
   }
 
-  timePassed = g_clock.now() - data->start_time;
+  timePassed = ceph_clock_now(&g_ceph_context) - data->start_time;
   dataLock.Lock();
   data->done = true;
   dataLock.Unlock();
@@ -352,13 +352,13 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
   pthread_create(&print_thread, NULL, status_printer, (void *)data);
 
   dataLock.Lock();
-  data->start_time = g_clock.now();
+  data->start_time = ceph_clock_now(&g_ceph_context);
   dataLock.Unlock();
   utime_t finish_time = data->start_time + time_to_run;
   //start initial reads
   for (int i = 0; i < concurrentios; ++i) {
     index[i] = i;
-    start_times[i] = g_clock.now();
+    start_times[i] = ceph_clock_now(&g_ceph_context);
     completions[i] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
     r = io_ctx.aio_read(name[i], completions[i], contents[i], data->object_size, 0);
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
@@ -376,7 +376,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
   char* newName;
   bufferlist *cur_contents;
 
-  while (seconds_to_run && (g_clock.now() < finish_time) &&
+  while (seconds_to_run && (ceph_clock_now(&g_ceph_context) < finish_time) &&
       write_data->finished > data->started) {
     dataLock.Lock();
     while (1) {
@@ -403,7 +403,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
       dataLock.Unlock();
       goto ERR;
     }
-    data->cur_latency = g_clock.now() - start_times[slot];
+    data->cur_latency = ceph_clock_now(&g_ceph_context) - start_times[slot];
     total_latency += data->cur_latency;
     if( data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
@@ -416,7 +416,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
     cur_contents = contents[slot];
 
     //start new read and check data if requested
-    start_times[slot] = g_clock.now();
+    start_times[slot] = ceph_clock_now(&g_ceph_context);
     contents[slot] = new bufferlist();
     completions[slot] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
     r = io_ctx.aio_read(newName, completions[slot], contents[slot], data->object_size, 0);
@@ -448,7 +448,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
       dataLock.Unlock();
       goto ERR;
     }
-    data->cur_latency = g_clock.now() - start_times[slot];
+    data->cur_latency = ceph_clock_now(&g_ceph_context) - start_times[slot];
     total_latency += data->cur_latency;
     if (data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
@@ -467,7 +467,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_
     delete contents[slot];
   }
 
-  runtime = g_clock.now() - data->start_time;
+  runtime = ceph_clock_now(&g_ceph_context) - data->start_time;
   dataLock.Lock();
   data->done = true;
   dataLock.Unlock();
@@ -534,7 +534,7 @@ void *status_printer(void * data_store) {
       / (1024*1024)
       / cycleSinceChange;
     avg_bandwidth = (double) (data->trans_size) * (data->finished)
-      / (double)(g_clock.now() - data->start_time) / (1024*1024);
+      / (double)(ceph_clock_now(&g_ceph_context) - data->start_time) / (1024*1024);
     if (previous_writes != data->finished) {
       previous_writes = data->finished;
       cycleSinceChange = 0;
@@ -561,7 +561,7 @@ void *status_printer(void * data_store) {
     }
     ++i;
     ++cycleSinceChange;
-    cond.WaitInterval(dataLock, ONE_SECOND);
+    cond.WaitInterval(&g_ceph_context, dataLock, ONE_SECOND);
   }
   dataLock.Unlock();
   return NULL;

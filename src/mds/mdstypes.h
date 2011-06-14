@@ -1022,7 +1022,7 @@ WRITE_CLASS_ENCODER(dirfrag_load_vec_t)
 inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
   // ugliness!
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   DecayRate rate(g_conf->mds_decay_halflife);
   return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
 	     << " " << dl.meta_load(now, rate)

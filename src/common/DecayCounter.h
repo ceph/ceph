@@ -128,10 +128,10 @@ public:
    */
 
   void reset() {
-    reset(g_clock.now());
+    reset(ceph_clock_now(&g_ceph_context));
   }
   void reset(utime_t now) {
-    last_decay = g_clock.now();
+    last_decay = ceph_clock_now(&g_ceph_context);
     val = delta = 0;
   }
   

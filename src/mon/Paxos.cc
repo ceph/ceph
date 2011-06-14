@@ -478,7 +478,7 @@ void Paxos::commit()
 
   // commit locally
   last_committed++;
-  last_commit_time = g_clock.now();
+  last_commit_time = ceph_clock_now(&g_ceph_context);
   mon->store->put_int(last_committed, machine_name, "last_committed");
 
   // tell everyone
@@ -526,7 +526,7 @@ void Paxos::extend_lease()
   assert(mon->is_leader());
   assert(is_active());
 
-  lease_expire = g_clock.now();
+  lease_expire = ceph_clock_now(&g_ceph_context);
   lease_expire += g_conf->mon_lease;
   acked_lease.clear();
   acked_lease.insert(mon->rank);
@@ -562,7 +562,7 @@ void Paxos::extend_lease()
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   if (t > now) {
     utime_t diff = t - now;
     if (diff > g_conf->mon_clock_drift_allowed) {
@@ -571,7 +571,7 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
 	mon->clog.warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
-	last_clock_drift_warn = g_clock.now();
+	last_clock_drift_warn = ceph_clock_now(&g_ceph_context);
 	++clock_drift_warned;
       }
     }
@@ -606,7 +606,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
-  ack->lease_timestamp = g_clock.now();
+  ack->lease_timestamp = ceph_clock_now(&g_ceph_context);
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
@@ -862,7 +862,7 @@ void Paxos::register_observer(entity_inst_t inst, version_t v)
     observers[inst] = observer = new Observer(inst, v);
   }  
 
-  utime_t timeout = g_clock.now();
+  utime_t timeout = ceph_clock_now(&g_ceph_context);
   timeout += g_conf->paxos_observer_timeout;
   observer->timeout = timeout;
 
@@ -883,7 +883,7 @@ void Paxos::update_observers()
     Observer *observer = iter->second;
 
     // timed out?
-    if (g_clock.now() > observer->timeout) {
+    if (ceph_clock_now(&g_ceph_context) > observer->timeout) {
       delete observer;
       observers.erase(iter++);
       continue;
@@ -920,7 +920,7 @@ void Paxos::update_observers()
 
 bool Paxos::is_readable(version_t v)
 {
-  dout(1) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire
+  dout(1) << "is_readable now=" << ceph_clock_now(&g_ceph_context) << " lease_expire=" << lease_expire
 	  << " has v" << v << " lc " << last_committed << dendl;
   if (v > last_committed)
     return false;
@@ -929,7 +929,7 @@ bool Paxos::is_readable(version_t v)
     (is_active() || is_updating()) &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
-     g_clock.now() < lease_expire);    // have lease
+     ceph_clock_now(&g_ceph_context) < lease_expire);    // have lease
 }
 
 bool Paxos::read(version_t v, bufferlist &bl)
@@ -957,7 +957,7 @@ bool Paxos::is_writeable()
   return
     mon->is_leader() &&
     is_active() &&
-    g_clock.now() < lease_expire;
+    ceph_clock_now(&g_ceph_context) < lease_expire;
 }
 
 bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)

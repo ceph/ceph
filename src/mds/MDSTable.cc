@@ -67,7 +67,7 @@ void MDSTable::save(Context *onfinish, version_t v)
   object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, g_clock.now(), 0,
+			    bl, ceph_clock_now(&g_ceph_context), 0,
 			    NULL, new C_MT_Save(this, version));
 }
 

@@ -3008,10 +3008,10 @@ void FileStore::sync_entry()
     utime_t min_interval;
     min_interval.set_from_double(g_conf->filestore_min_sync_interval);
 
-    utime_t startwait = g_clock.now();
+    utime_t startwait = ceph_clock_now(&g_ceph_context);
     if (!force_sync) {
       dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(lock, max_interval);
+      sync_cond.WaitInterval(&g_ceph_context, lock, max_interval);
     } else {
       dout(20) << "sync_entry not waiting, force_sync set" << dendl;
     }
@@ -3021,7 +3021,7 @@ void FileStore::sync_entry()
       force_sync = false;
     } else {
       // wait for at least the min interval
-      utime_t woke = g_clock.now();
+      utime_t woke = ceph_clock_now(&g_ceph_context);
       woke -= startwait;
       dout(20) << "sync_entry woke after " << woke << dendl;
       if (woke < min_interval) {
@@ -3029,7 +3029,7 @@ void FileStore::sync_entry()
 	t -= woke;
 	dout(20) << "sync_entry waiting for another " << t 
 		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(lock, t);
+	sync_cond.WaitInterval(&g_ceph_context, lock, t);
       }
     }
 
@@ -3039,7 +3039,7 @@ void FileStore::sync_entry()
     lock.Unlock();
     
     if (commit_start()) {
-      utime_t start = g_clock.now();
+      utime_t start = ceph_clock_now(&g_ceph_context);
       uint64_t cp = committing_seq;
 
       SyncEntryTimeout *sync_entry_timeo = new SyncEntryTimeout();
@@ -3119,7 +3119,7 @@ void FileStore::sync_entry()
 	}
       }
       
-      utime_t done = g_clock.now();
+      utime_t done = ceph_clock_now(&g_ceph_context);
       done -= start;
       dout(10) << "sync_entry commit took " << done << dendl;
       commit_finish();

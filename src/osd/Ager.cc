@@ -58,7 +58,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
   bl.push_back(bp);
   uint64_t wrote = 0;
   while (1) {
-    if (g_clock.now() > until) break;
+    if (ceph_clock_now(&g_ceph_context) > until) break;
     
     struct statfs st;
     store->statfs(&st);
@@ -199,7 +199,7 @@ void Ager::age(int time,
   store->_fake_writes(true);
   srand(0);
 
-  utime_t start = g_clock.now();
+  utime_t start = ceph_clock_now(&g_ceph_context);
   utime_t until = start;
   until.sec_ref() += time;
   
@@ -248,7 +248,7 @@ void Ager::age(int time,
   uint64_t wrote = 0;
 
   for (int c=1; c<=count; c++) {
-    if (g_clock.now() > until) break;
+    if (ceph_clock_now(&g_ceph_context) > until) break;
     
     //if (c == 7) start_debug = true;
     
@@ -278,7 +278,7 @@ void Ager::age(int time,
 
     // dump freelist?
     /*
-    if (g_clock.now() > nextfl) {
+    if (ceph_clock_now(&g_ceph_context) > nextfl) {
       elapsed += freelist_inc;
       save_freelist(elapsed);
       nextfl.sec_ref() += freelist_inc;

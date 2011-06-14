@@ -571,7 +571,7 @@ void MDS::tick()
   }
 
   // log
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   mds_load_t load = balancer->get_load(now);
   
   if (logger) {
@@ -623,7 +623,7 @@ void MDS::beacon_send()
 	   << " (currently " << ceph_mds_state_name(state) << ")"
 	   << dendl;
 
-  beacon_seq_stamp[beacon_last_seq] = g_clock.now();
+  beacon_seq_stamp[beacon_last_seq] = ceph_clock_now(&g_ceph_context);
   
   MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), monc->get_global_id(), name, mdsmap->get_epoch(), 
 				      want_state, beacon_last_seq);
@@ -647,7 +647,7 @@ bool MDS::is_laggy()
   if (beacon_last_acked_stamp == utime_t())
     return false;
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   utime_t since = now - beacon_last_acked_stamp;
   if (since > g_conf->mds_beacon_grace) {
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
@@ -668,7 +668,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   if (beacon_seq_stamp.count(seq)) {
     assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
     beacon_last_acked_stamp = beacon_seq_stamp[seq];
-    utime_t now = g_clock.now();
+    utime_t now = ceph_clock_now(&g_ceph_context);
     utime_t rtt = now - beacon_last_acked_stamp;
 
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
@@ -1860,7 +1860,7 @@ bool MDS::_dispatch(Message *m)
 
   // hack: thrash exports
   static utime_t start;
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   if (start == utime_t()) 
     start = now;
   /*double el = now - start;

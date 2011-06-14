@@ -129,7 +129,7 @@ bool PGMonitor::update_from_paxos()
   } 
 
   // walk through incrementals
-  utime_t now(g_clock.now());
+  utime_t now(ceph_clock_now(&g_ceph_context));
   while (paxosv > pg_map.version) {
     bufferlist bl;
     bool success = paxos->read(pg_map.version+1, bl);
@@ -185,7 +185,7 @@ void PGMonitor::handle_osd_timeouts()
 {
   if (!mon->is_leader())
     return;
-  utime_t now(g_clock.now());
+  utime_t now(ceph_clock_now(&g_ceph_context));
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   if (now - mon->get_leader_since() < timeo) {
     // We haven't been the leader for long enough to consider OSD timeouts
@@ -392,7 +392,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     return false;
   }
 
-  last_osd_report[from] = g_clock.now();
+  last_osd_report[from] = ceph_clock_now(&g_ceph_context);
 
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
@@ -695,7 +695,7 @@ void PGMonitor::send_pg_creates()
   dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
 
   map<int, MOSDPGCreate*> msg;
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   
   OSDMap *osdmap = &mon->osdmon()->osdmap;
   int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
@@ -739,7 +739,7 @@ void PGMonitor::send_pg_creates()
        p++) {
     dout(10) << "sending pg_create to osd" << p->first << dendl;
     mon->messenger->send_message(p->second, mon->osdmon()->osdmap.get_inst(p->first));
-    last_sent_pg_create[p->first] = g_clock.now();
+    last_sent_pg_create[p->first] = ceph_clock_now(&g_ceph_context);
   }
 }
 

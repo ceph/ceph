@@ -101,7 +101,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
   dout(0) << "log " << type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
-  e.stamp = g_clock.now();
+  e.stamp = ceph_clock_now(cct);
   e.seq = ++last_log;
   e.type = type;
   e.msg = s;

@@ -1647,7 +1647,7 @@ void Locker::request_inode_file_caps(CInode *in)
   if (wanted != in->replica_caps_wanted) {
 
     if (wanted == 0) {
-      if (in->replica_caps_wanted_keep_until > g_clock.now()) {
+      if (in->replica_caps_wanted_keep_until > ceph_clock_now(&g_ceph_context)) {
         // ok, release them finally!
         in->replica_caps_wanted_keep_until.sec_ref() = 0;
         dout(7) << "request_inode_file_caps " << ccap_string(wanted)
@@ -1657,7 +1657,7 @@ void Locker::request_inode_file_caps(CInode *in)
                  << dendl;
       }
       else if (in->replica_caps_wanted_keep_until.sec() == 0) {
-        in->replica_caps_wanted_keep_until = g_clock.now();
+        in->replica_caps_wanted_keep_until = ceph_clock_now(&g_ceph_context);
         in->replica_caps_wanted_keep_until.sec_ref() += 2;
         
         dout(7) << "request_inode_file_caps " << ccap_string(wanted)
@@ -2739,7 +2739,7 @@ void Locker::handle_client_lease(MClientLease *m)
       m->h.seq = ++l->seq;
       m->clear_payload();
       
-      utime_t now = g_clock.now();
+      utime_t now = ceph_clock_now(&g_ceph_context);
       now += mdcache->client_lease_durations[pool];
       mdcache->touch_client_lease(l, pool, now);
       
@@ -3518,7 +3518,7 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
 	     << " - already on list since " << lock->get_update_stamp() << dendl;
   } else {
     updated_scatterlocks.push_back(lock->get_updated_item());
-    utime_t now = g_clock.now();
+    utime_t now = ceph_clock_now(&g_ceph_context);
     lock->set_update_stamp(now);
     dout(10) << "mark_updated_scatterlock " << *lock
 	     << " - added at " << now << dendl;
@@ -3639,7 +3639,7 @@ void Locker::scatter_tick()
   dout(10) << "scatter_tick" << dendl;
   
   // updated
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   int n = updated_scatterlocks.size();
   while (!updated_scatterlocks.empty()) {
     ScatterLock *lock = updated_scatterlocks.front();

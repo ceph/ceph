@@ -67,7 +67,7 @@ void Elector::start()
   // start by trying to elect me
   if (epoch % 2 == 0) 
     bump_epoch(epoch+1);  // odd == election cycle
-  start_stamp = g_clock.now();
+  start_stamp = ceph_clock_now(&g_ceph_context);
   electing_me = true;
   acked_me.insert(mon->rank);
 
@@ -95,7 +95,7 @@ void Elector::defer(int who)
 
   // ack them
   leader_acked = who;
-  ack_stamp = g_clock.now();
+  ack_stamp = ceph_clock_now(&g_ceph_context);
   mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
 			       mon->monmap->get_inst(who));
   

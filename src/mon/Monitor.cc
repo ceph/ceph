@@ -262,7 +262,7 @@ epoch_t Monitor::get_epoch()
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
-  leader_since = g_clock.now();
+  leader_since = ceph_clock_now(&g_ceph_context);
   leader = rank;
   quorum = active;
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
@@ -743,7 +743,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	dout(10) << "setting timeout on session" << dendl;
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
-	s->until = g_clock.now();
+	s->until = ceph_clock_now(&g_ceph_context);
 	s->until += g_conf->mon_subscribe_interval;
       } else {
 	//give it monitor caps; the peer type has been authenticated
@@ -902,7 +902,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     return;
   }
 
-  s->until = g_clock.now();
+  s->until = ceph_clock_now(&g_ceph_context);
   s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
@@ -1036,7 +1036,7 @@ void Monitor::tick()
     (*p)->tick();
   
   // trim sessions
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
   while (!p.end()) {
     MonSession *s = *p;

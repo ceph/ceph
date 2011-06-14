@@ -1098,7 +1098,7 @@ selfmanaged_snap_rollback_object(rados_ioctx_t io,
 
   lock.Lock();
   objecter->rollback_object(oid, ctx->oloc, snapc, snapid,
-		     g_clock.now(), onack, NULL);
+		     ceph_clock_now(cct), onack, NULL);
   lock.Unlock();
 
   mylock.Lock();
@@ -1331,7 +1331,7 @@ list(Objecter::ListContext *context, int max_entries)
 int librados::RadosClient::
 create(IoCtxImpl& io, const object_t& oid, bool exclusive)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1364,7 +1364,7 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
 int librados::RadosClient::
 write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1407,7 +1407,7 @@ write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t o
 int librados::RadosClient::
 append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1450,7 +1450,7 @@ append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len)
 int librados::RadosClient::
 write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1490,7 +1490,7 @@ write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 int librados::RadosClient::
 clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const object_t& src_oid, uint64_t src_offset, uint64_t len)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1529,7 +1529,7 @@ clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const o
 int librados::RadosClient::
 operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1563,7 +1563,7 @@ int librados::RadosClient::
 aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c,
 	    bufferlist *pbl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
   Context *onack = new C_aio_Ack(c);
   Context *oncommit = new C_aio_Safe(c);
 
@@ -1635,7 +1635,7 @@ int librados::RadosClient::
 aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
           const bufferlist& bl, size_t len, uint64_t off)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1658,7 +1658,7 @@ int librados::RadosClient::
 aio_append(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
           const bufferlist& bl, size_t len)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1681,7 +1681,7 @@ int librados::RadosClient::
 aio_write_full(IoCtxImpl& io, const object_t &oid,
 		AioCompletionImpl *c, const bufferlist& bl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1704,7 +1704,7 @@ int librados::RadosClient::
 remove(IoCtxImpl& io, const object_t& oid)
 {
   ::SnapContext snapc;
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1743,7 +1743,7 @@ remove(IoCtxImpl& io, const object_t& oid)
 int librados::RadosClient::
 trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1784,7 +1784,7 @@ trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
 int librados::RadosClient::
 tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -1825,7 +1825,7 @@ int librados::RadosClient::
 exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method,
      bufferlist& inbl, bufferlist& outbl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   Mutex mylock("RadosClient::exec::mylock");
   Cond cond;
@@ -2044,7 +2044,7 @@ getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 int librados::RadosClient::
 rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -2086,7 +2086,7 @@ rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
 int librados::RadosClient::
 setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
@@ -2186,7 +2186,7 @@ int librados::RadosClient::
 watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
       uint64_t *cookie, librados::WatchCtx *ctx)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   ::ObjectOperation rd;
   Mutex mylock("RadosClient::watch::mylock");
@@ -2231,7 +2231,7 @@ watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
 int librados::RadosClient::
 _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
 
   Mutex mylock("RadosClient::watch::mylock");
   Cond cond;
@@ -2251,7 +2251,7 @@ _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver
 int librados::RadosClient::
 unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
   bufferlist inbl, outbl;
 
   Mutex mylock("RadosClient::watch::mylock");
@@ -2286,7 +2286,7 @@ unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 int librados::RadosClient::
 notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
 {
-  utime_t ut = g_clock.now();
+  utime_t ut = ceph_clock_now(cct);
   bufferlist inbl, outbl;
 
   Mutex mylock("RadosClient::notify::mylock");

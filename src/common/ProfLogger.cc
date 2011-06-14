@@ -108,7 +108,7 @@ void logger_tare(utime_t s)
 
   start = s;
 
-  utime_t fromstart = g_clock.now();
+  utime_t fromstart = ceph_clock_now(&g_ceph_context);
   if (fromstart < start) {
     derr << "logger_tare time jumped backwards from "
 	 << start << " to " << fromstart << dendl;
@@ -124,7 +124,7 @@ void logger_add(ProfLogger *logger)
 
   if (logger_list.empty()) {
     if (start == utime_t())
-      start = g_clock.now();
+      start = ceph_clock_now(&g_ceph_context);
     last_flush = 0;
   }
   logger_list.push_back(logger);
@@ -151,7 +151,7 @@ static void flush_all_loggers()
   if (!g_conf->profiling_logger)
     return;
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   utime_t fromstart = now;
   if (fromstart < start) {
     derr << "logger time jumped backwards from " << start << " to "

@@ -1120,7 +1120,7 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   log.print(*_dout);
   *_dout << dendl;
 
-  utime_t mtime = g_clock.now();
+  utime_t mtime = ceph_clock_now(&g_ceph_context);
   eversion_t old_last_update = info.last_update;
   info.last_update.epoch = osd->osdmap->get_epoch();
   map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
@@ -1479,7 +1479,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   assert(!is_active());
   // -- crash recovery?
   if (is_crashed()) {
-    replay_until = g_clock.now();
+    replay_until = ceph_clock_now(&g_ceph_context);
     replay_until += g_conf->osd_replay_window;
     dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
 	     << " until " << replay_until << dendl;
@@ -2565,7 +2565,7 @@ bool PG::sched_scrub()
   }
 
   // just scrubbed?
-  if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > g_clock.now()) {
+  if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > ceph_clock_now(&g_ceph_context)) {
     dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
     return true;
   }
@@ -3319,7 +3319,7 @@ void PG::scrub_finalize() {
   // finish up
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   info.history.last_scrub = info.last_update;
-  info.history.last_scrub_stamp = g_clock.now();
+  info.history.last_scrub_stamp = ceph_clock_now(&g_ceph_context);
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
   {
@@ -4683,9 +4683,9 @@ void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
 
 void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_t enter_time)
 {
-  utime_t dur = g_clock.now() - enter_time;
+  utime_t dur = ceph_clock_now(&g_ceph_context) - enter_time;
   dout(20) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
-  pg->osd->pg_recovery_stats.log_exit(state_name, g_clock.now() - enter_time,
+  pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now(&g_ceph_context) - enter_time,
 				      event_count, event_time);
   event_count = 0;
   event_time = utime_t();

@@ -403,7 +403,7 @@ void Server::find_idle_sessions()
   
   // timeout/stale
   //  (caps go stale, lease die)
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   utime_t cutoff = now;
   cutoff -= g_conf->mds_session_timeout;  
   while (1) {
@@ -514,7 +514,7 @@ void Server::reconnect_clients()
 
   // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  reconnect_start = g_clock.now();
+  reconnect_start = ceph_clock_now(&g_ceph_context);
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
   mds->sessionmap.dump();
 }
@@ -533,7 +533,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
-  utime_t delay = g_clock.now();
+  utime_t delay = ceph_clock_now(&g_ceph_context);
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
@@ -657,7 +657,7 @@ void Server::reconnect_tick()
 {
   utime_t reconnect_end = reconnect_start;
   reconnect_end += g_conf->mds_reconnect_timeout;
-  if (g_clock.now() >= reconnect_end &&
+  if (ceph_clock_now(&g_ceph_context) >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
     for (set<client_t>::iterator p = client_reconnect_gather.begin();
@@ -830,7 +830,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   mdr->did_early_reply = true;
 
   mds->logger->inc(l_mds_reply);
-  double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+  double lat = ceph_clock_now(&g_ceph_context) - mdr->client_request->get_recv_stamp();
   mds->logger->favg(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
 }
@@ -872,7 +872,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   if (!did_early_reply && !is_replay) {
 
     mds->logger->inc(l_mds_reply);
-    double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+    double lat = ceph_clock_now(&g_ceph_context) - mdr->client_request->get_recv_stamp();
     mds->logger->favg(l_mds_replyl, lat);
     dout(20) << "lat " << lat << dendl;
     
@@ -965,7 +965,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   bufferlist bl;
   int whoami = mds->get_nodeid();
   client_t client = session->get_client();
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
 
@@ -2035,7 +2035,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mds->balancer->hit_inode(g_clock.now(), ref, META_POP_IRD,
+  mds->balancer->hit_inode(ceph_clock_now(&g_ceph_context), ref, META_POP_IRD,
 			   mdr->client_request->get_source().num());
 
   // reply
@@ -2400,7 +2400,7 @@ void Server::handle_client_open(MDRequest *mdr)
   }
   
   // hit pop
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
   if (cmode == CEPH_FILE_MODE_RDWR ||
       cmode == CEPH_FILE_MODE_WR) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
@@ -2512,7 +2512,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 
     
   // create inode.
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
 
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
@@ -2614,7 +2614,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   dir->verify_fragstat();
 #endif
 
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
 
   snapid_t snapid = mdr->snapid;
 
@@ -2763,7 +2763,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
+  mds->balancer->hit_dir(ceph_clock_now(&g_ceph_context), dir, META_POP_IRD, -1, numfiles);
   
   // reply
   reply_request(mdr, reply, diri);
@@ -3008,7 +3008,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   pi = cur->project_inode();
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
@@ -3074,7 +3074,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 
   // prepare
   inode_t *pi = in->project_inode();
-  pi->mtime = pi->ctime = g_clock.now();
+  pi->mtime = pi->ctime = ceph_clock_now(&g_ceph_context);
   pi->version = in->pre_dirty();
 
   pi->truncate_from = pi->size;
@@ -3163,7 +3163,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->layout = layout;
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.now();
+  pi->ctime = ceph_clock_now(&g_ceph_context);
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -3310,7 +3310,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.now();
+  pi->ctime = ceph_clock_now(&g_ceph_context);
   pi->xattr_version++;
   px->erase(name);
   (*px)[name] = buffer::create(len);
@@ -3362,7 +3362,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.now();
+  pi->ctime = ceph_clock_now(&g_ceph_context);
   pi->xattr_version++;
   px->erase(name);
 
@@ -3465,7 +3465,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				   req->head.args.mknod.mode, &layout);
@@ -3545,7 +3545,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // new inode
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
 
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
@@ -3619,7 +3619,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mdr->now = g_clock.now();
+  mdr->now = ceph_clock_now(&g_ceph_context);
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
 
   unsigned mode = S_IFLNK | 0777;
@@ -3695,7 +3695,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   // pick mtime
   if (mdr->now == utime_t())
-    mdr->now = g_clock.now();
+    mdr->now = ceph_clock_now(&g_ceph_context);
 
   // does the target need an anchor?
   if (targeti->is_auth()) {
@@ -4331,7 +4331,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // yay!
   if (mdr->now == utime_t())
-    mdr->now = g_clock.now();
+    mdr->now = ceph_clock_now(&g_ceph_context);
 
   // NOTE: this is non-optimal.  we create an anchor at the old
   // location, and then change it.  we can do better, but it's more
@@ -4881,7 +4881,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- declare now --
   if (mdr->now == utime_t())
-    mdr->now = g_clock.now();
+    mdr->now = ceph_clock_now(&g_ceph_context);
 
   // -- prepare witnesses --
 
@@ -6108,7 +6108,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   map<snapid_t,SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   __u32 num = 0;
   bufferlist dnbl;
   for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
@@ -6209,7 +6209,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   }
 
   if (mdr->now == utime_t())
-    mdr->now = g_clock.now();
+    mdr->now = ceph_clock_now(&g_ceph_context);
 
   // anchor
   if (!diri->is_anchored()) {
@@ -6360,7 +6360,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
 
   // journal
   inode_t *pi = diri->project_inode();
-  pi->ctime = g_clock.now();
+  pi->ctime = ceph_clock_now(&g_ceph_context);
   pi->version = diri->pre_dirty();
   
   mdr->ls = mdlog->get_current_segment();

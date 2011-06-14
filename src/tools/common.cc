@@ -90,7 +90,7 @@ static void handle_observe(CephToolCtx *ctx, MMonObserve *observe)
 
 static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
 	  << " v" << notify->ver
@@ -273,7 +273,7 @@ static void send_command(CephToolCtx *ctx)
   m->set_data(pending_bl);
 
   if (!ctx->concise)
-    *ctx->log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
+    *ctx->log << ceph_clock_now(&g_ceph_context) << " mon" << " <- " << pending_cmd << std::endl;
   ctx->mc.send_mon_message(m);
 }
 
@@ -340,7 +340,7 @@ static int do_command(CephToolCtx *ctx,
   rs = rs;
   rbl = reply_bl;
   if (!ctx->concise)
-    *ctx->log << g_clock.now() << " "
+    *ctx->log << ceph_clock_now(&g_ceph_context) << " "
 	   << reply_from.name << " -> '"
 	   << reply_rs << "' (" << reply_rc << ")"
 	   << std::endl;

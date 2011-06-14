@@ -160,7 +160,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
            << " validity=" << msg_a.validity << dendl;
   session_key = msg_a.session_key;
   if (!msg_a.validity.is_zero()) {
-    expires = g_clock.now();
+    expires = ceph_clock_now(cct);
     expires += msg_a.validity;
     renew_after = expires;
     renew_after -= ((double)msg_a.validity.sec() / 4);
@@ -174,8 +174,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 bool CephXTicketHandler::have_key()
 {
   if (have_key_flag) {
-    //dout(20) << "have_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
-    have_key_flag = g_clock.now() < expires;
+    have_key_flag = ceph_clock_now(cct) < expires;
   }
 
   return have_key_flag;
@@ -184,8 +183,7 @@ bool CephXTicketHandler::have_key()
 bool CephXTicketHandler::need_key()
 {
   if (have_key_flag) {
-    //dout(20) << "need_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
-    return (!expires.is_zero()) && (g_clock.now() >= renew_after);
+    return (!expires.is_zero()) && (ceph_clock_now(cct) >= renew_after);
   }
 
   return true;

@@ -736,7 +736,7 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
 
 void ObjectCacher::flush(loff_t amount)
 {
-  utime_t cutoff = g_clock.now();
+  utime_t cutoff = ceph_clock_now(&g_ceph_context);
   //cutoff.sec_ref() -= g_conf->client_oc_max_dirty_age;
 
   dout(10) << "flush " << amount << dendl;
@@ -960,7 +960,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
@@ -1071,7 +1071,7 @@ void ObjectCacher::flusher_entry()
       }
       else {
         // check tail of lru for old dirty items
-        utime_t cutoff = g_clock.now();
+        utime_t cutoff = ceph_clock_now(&g_ceph_context);
         cutoff.sec_ref()--;
         BufferHead *bh = 0;
         while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
@@ -1083,7 +1083,7 @@ void ObjectCacher::flusher_entry()
       }
     }
     if (flusher_stop) break;
-    flusher_cond.WaitInterval(lock, utime_t(1,0));
+    flusher_cond.WaitInterval(&g_ceph_context, lock, utime_t(1,0));
   }
   lock.Unlock();
   dout(10) << "flusher finish" << dendl;

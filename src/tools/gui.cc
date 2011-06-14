@@ -133,7 +133,7 @@ public:
     CephToolCtx *ctx = gui->ctx;
     ctx->lock.Lock();
     while (true) {
-      utime_t t(g_clock.now());
+      utime_t t(ceph_clock_now(&g_ceph_context));
       t += 3.0;
       ctx->gui_cond.WaitUntil(ctx->lock, t);
       if (shutting_down) {

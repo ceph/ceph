@@ -95,14 +95,14 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }
       CephXServiceTicketInfo old_ticket_info;
 
-      if (cephx_decode_ticket(&g_ceph_context, key_server, CEPH_ENTITY_TYPE_AUTH,
+      if (cephx_decode_ticket(cct, key_server, CEPH_ENTITY_TYPE_AUTH,
 			      req.old_ticket, old_ticket_info)) {
         global_id = old_ticket_info.ticket.global_id;
         ldout(cct, 10) << "decoded old_ticket with global_id=" << global_id << dendl;
         should_enc_ticket = true;
       }
 
-      info.ticket.init_timestamps(g_clock.now(), cct->_conf->auth_mon_ticket_ttl);
+      info.ticket.init_timestamps(ceph_clock_now(cct), cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
       info.ticket.auid = eauth.auid;
@@ -141,7 +141,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
-      if (!cephx_verify_authorizer(&g_ceph_context, key_server, indata, auth_ticket_info, tmp_bl)) {
+      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
 	break;
       }

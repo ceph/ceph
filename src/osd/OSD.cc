@@ -195,7 +195,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       bp.zero();
       bl.push_back(bp);
       dout(0) << "testing disk bandwidth..." << dendl;
-      utime_t start = g_clock.now();
+      utime_t start = ceph_clock_now(&g_ceph_context);
       object_t oid("disk_bw_test");
       for (int i=0; i<1000; i++) {
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -203,7 +203,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
 	store->queue_transaction(NULL, t);
       }
       store->sync();
-      utime_t end = g_clock.now();
+      utime_t end = ceph_clock_now(&g_ceph_context);
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       ObjectStore::Transaction tr;
@@ -1424,7 +1424,7 @@ void OSD::update_heartbeat_peers()
   old_from.swap(heartbeat_from);
   old_con.swap(heartbeat_con);
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   heartbeat_epoch = osdmap->get_epoch();
 
@@ -1657,7 +1657,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (locked && !is_booting())
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
-      heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
+      heartbeat_from_stamp[from] = ceph_clock_now(&g_ceph_context);  // don't let _my_ lag interfere.
       
       // remove from failure lists if needed
       if (failure_pending.count(from)) {
@@ -1697,7 +1697,7 @@ void OSD::heartbeat_entry()
     utime_t w;
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
-    heartbeat_cond.WaitInterval(heartbeat_lock, w);
+    heartbeat_cond.WaitInterval(&g_ceph_context, heartbeat_lock, w);
     dout(30) << "heartbeat_entry woke up" << dendl;
   }
   heartbeat_lock.Unlock();
@@ -1709,7 +1709,7 @@ void OSD::heartbeat_check()
   // we should also have map_lock rdlocked.
 
   // check for incoming heartbeats (move me elsewhere?)
-  utime_t grace = g_clock.now();
+  utime_t grace = ceph_clock_now(&g_ceph_context);
   grace -= g_conf->osd_heartbeat_grace;
   for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
@@ -1727,7 +1727,7 @@ void OSD::heartbeat_check()
 
 void OSD::heartbeat()
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   dout(30) << "heartbeat" << dendl;
 
@@ -1851,7 +1851,7 @@ void OSD::tick()
   check_replay_queue();
 
   // mon report?
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
     osd_stat_updated = true;
     do_mon_report();
@@ -1897,7 +1897,7 @@ void OSD::do_mon_report()
 {
   dout(7) << "do_mon_report" << dendl;
 
-  utime_t now(g_clock.now());
+  utime_t now(ceph_clock_now(&g_ceph_context));
   last_mon_report = now;
 
   // do any pending reports
@@ -1917,7 +1917,7 @@ void OSD::ms_handle_connect(Connection *con)
     send_alive();
     send_pg_temp();
     send_failures();
-    send_pg_stats(g_clock.now());
+    send_pg_stats(ceph_clock_now(&g_ceph_context));
   }
 }
 
@@ -1988,7 +1988,7 @@ bool OSD::ms_handle_reset(Connection *con)
 		<< " from " << obc->obs.oi << dendl;
 	entity_name_t entity = witer->first;
 	watch_info_t& w = obc->obs.oi.watchers[entity];
-	utime_t expire = g_clock.now();
+	utime_t expire = ceph_clock_now(&g_ceph_context);
 	expire += w.timeout_seconds;
 	obc->unconnected_watchers[entity] = expire;
 	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
@@ -2046,7 +2046,7 @@ void OSD::handle_notify_timeout(void *_notif)
     if (witer != obc->watchers.end()) {
       watch_info_t& w = obc->obs.oi.watchers[notif_iter->first];
       obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
-      utime_t expire = g_clock.now();
+      utime_t expire = ceph_clock_now(&g_ceph_context);
       expire += w.timeout_seconds;
       obc->unconnected_watchers[notif_iter->first] = expire;
     }
@@ -2099,7 +2099,7 @@ void OSD::queue_want_up_thru(epoch_t want)
     up_thru_wanted = want;
 
     // expedite, a bit.  WARNING this will somewhat delay other mon queries.
-    last_mon_report = g_clock.now();
+    last_mon_report = ceph_clock_now(&g_ceph_context);
     send_alive();
   } else {
     dout(10) << "queue_want_up_thru want " << want << " <= queued " << up_thru_wanted 
@@ -2273,7 +2273,7 @@ void OSD::handle_command(MMonCommand *m)
     ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
 
     store->sync_and_flush();
-    utime_t start = g_clock.now();
+    utime_t start = ceph_clock_now(&g_ceph_context);
     for (uint64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
       snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
@@ -2285,7 +2285,7 @@ void OSD::handle_command(MMonCommand *m)
       cleanupt->remove(coll_t::META_COLL, soid);
     }
     store->sync_and_flush();
-    utime_t end = g_clock.now();
+    utime_t end = ceph_clock_now(&g_ceph_context);
 
     // clean up
     store->queue_transaction(NULL, cleanupt);
@@ -2382,7 +2382,7 @@ void OSD::handle_command(MMonCommand *m)
       clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
 		    << "to " << g_conf->osd_recovery_delay_start << "\n";
 
-      defer_recovery_until = g_clock.now();
+      defer_recovery_until = ceph_clock_now(&g_ceph_context);
       defer_recovery_until += g_conf->osd_recovery_delay_start;
       recovery_wq.kick();
     }
@@ -2873,7 +2873,7 @@ void OSD::sched_scrub()
   dout(20) << "sched_scrub" << dendl;
 
   pair<utime_t,pg_t> pos;
-  utime_t max = g_clock.now();
+  utime_t max = ceph_clock_now(&g_ceph_context);
   max -= g_conf->osd_scrub_max_interval;
   
   sched_scrub_lock.Lock();
@@ -3186,7 +3186,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     superblock.current_epoch = cur;
     advance_map(t);
-    had_map_since = g_clock.now();
+    had_map_since = ceph_clock_now(&g_ceph_context);
   }
 
   C_Contexts *fin = new C_Contexts(&g_ceph_context);
@@ -4718,7 +4718,7 @@ void OSD::generate_backlog(PG *pg)
 
 void OSD::check_replay_queue()
 {
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
   list< pair<pg_t,utime_t> > pgids;
   replay_queue_lock.Lock();
   while (!replay_queue.empty() &&
@@ -4775,7 +4775,7 @@ bool OSD::_recover_now()
 	     << " >= max " << g_conf->osd_recovery_max_active << dendl;
     return false;
   }
-  if (g_clock.now() < defer_recovery_until) {
+  if (ceph_clock_now(&g_ceph_context) < defer_recovery_until) {
     dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
     return false;
   }
@@ -4975,7 +4975,7 @@ void OSD::handle_op(MOSDOp *op)
   // ...
   throttle_op_queue();
 
-  utime_t now = g_clock.now();
+  utime_t now = ceph_clock_now(&g_ceph_context);
 
   int r = init_op_flags(op);
   if (r) {

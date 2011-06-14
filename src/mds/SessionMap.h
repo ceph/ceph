@@ -268,7 +268,7 @@ public:
     else
       s = session_map[i.name] = new Session;
     s->inst = i;
-    s->last_cap_renew = g_clock.now();
+    s->last_cap_renew = ceph_clock_now(&g_ceph_context);
     return s;
   }
   void add_session(Session *s) {
@@ -286,7 +286,7 @@ public:
   void touch_session(Session *session) {
     if (session->item_session_list.is_on_list()) {
       by_state[session->state].push_back(&session->item_session_list);
-      session->last_cap_renew = g_clock.now();
+      session->last_cap_renew = ceph_clock_now(&g_ceph_context);
     } else {
       assert(0);  // hrm, should happen?
     }

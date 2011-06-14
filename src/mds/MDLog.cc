@@ -172,7 +172,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   le->_segment->num_events++;
   le->update_segment();
 
-  le->set_stamp(g_clock.now());
+  le->set_stamp(ceph_clock_now(&g_ceph_context));
   
   num_events++;
   assert(!capped);
@@ -304,7 +304,7 @@ void MDLog::trim(int m)
   if (segments.empty()) return;
 
   // hack: only trim for a few seconds at a time
-  utime_t stop = g_clock.now();
+  utime_t stop = ceph_clock_now(&g_ceph_context);
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -313,7 +313,7 @@ void MDLog::trim(int m)
 	 ((max_events >= 0 && left-expiring_events-expired_events > max_events) ||
 	  (max_segments >= 0 && (int)(segments.size()-expiring_segments.size()-expired_segments.size()) > max_segments))) {
 
-    if (stop < g_clock.now())
+    if (stop < ceph_clock_now(&g_ceph_context))
       break;
 
     if ((int)expiring_segments.size() >= g_conf->mds_log_max_expiring)

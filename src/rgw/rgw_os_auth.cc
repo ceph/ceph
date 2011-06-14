@@ -44,7 +44,7 @@ static int encode_token(string& os_user, string& key, bufferlist& bl)
   if (ret < 0)
     return ret;
 
-  utime_t expiration = g_clock.now();
+  utime_t expiration = ceph_clock_now(&g_ceph_context);
   expiration += RGW_OS_TOKEN_EXPIRATION; // 15 minutes
 
   ret = build_token(os_user, key, nonce, expiration, bl);
@@ -87,8 +87,8 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     RGW_LOG(0) << "failed to decode token" << dendl;
     return -EINVAL;
   }
-  if (expiration < g_clock.now()) {
-    RGW_LOG(0) << "old timed out token was used now=" << g_clock.now() << " token.expiration=" << expiration << dendl;
+  if (expiration < ceph_clock_now(&g_ceph_context)) {
+    RGW_LOG(0) << "old timed out token was used now=" << ceph_clock_now(&g_ceph_context) << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 

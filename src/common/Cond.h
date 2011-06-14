@@ -55,13 +55,12 @@ class Cond {
 
   int WaitUntil(Mutex &mutex, utime_t when) {
     struct timespec ts;
-    g_clock.make_timespec(when, &ts);
-    //cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
+    when.to_timespec(&ts);
     int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
     return r;
   }
-  int WaitInterval(Mutex &mutex, utime_t interval) {
-    utime_t when = g_clock.now();
+  int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {
+    utime_t when = ceph_clock_now(cct);
     when += interval;
     return WaitUntil(mutex, when);
   }

@@ -230,7 +230,7 @@ int MonClient::get_monmap_privately()
       break;
     
     utime_t interval(1, 0);
-    map_cond.WaitInterval(monc_lock, interval);
+    map_cond.WaitInterval(cct, monc_lock, interval);
 
     if (monmap.epoch == 0) {
       messenger->mark_down(cur_con);  // nope, clean that connection up
@@ -405,7 +405,7 @@ int MonClient::authenticate(double timeout)
   if (cur_mon.empty())
     _reopen_session();
 
-  utime_t until = g_clock.now();
+  utime_t until = ceph_clock_now(cct);
   until += timeout;
   if (timeout > 0.0)
     dout(10) << "authenticate will time out at " << until << dendl;
@@ -433,7 +433,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
-      auth = get_auth_client_handler(&g_ceph_context, m->protocol, rotating_secrets);
+      auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
       if (!auth) {
 	m->put();
 	return;
@@ -595,7 +595,7 @@ void MonClient::tick()
     _reopen_session();
   } else if (!cur_mon.empty()) {
     // just renew as needed
-    utime_t now = g_clock.now();
+    utime_t now = ceph_clock_now(cct);
     if (now > sub_renew_after)
       _renew_subs();
 
@@ -639,7 +639,7 @@ void MonClient::_renew_subs()
     _reopen_session();
   else {
     if (sub_renew_sent == utime_t())
-      sub_renew_sent = g_clock.now();
+      sub_renew_sent = ceph_clock_now(cct);
 
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub_have;
@@ -694,7 +694,7 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t cutoff = g_clock.now();
+  utime_t cutoff = ceph_clock_now(cct);
   cutoff -= MIN(30.0, g_conf->auth_service_ticket_ttl / 4.0);
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     dout(10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
@@ -716,7 +716,7 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t until = g_clock.now();
+  utime_t until = ceph_clock_now(cct);
   until += timeout;
 
   if (auth->get_protocol() == CEPH_AUTH_NONE)
@@ -727,7 +727,7 @@ int MonClient::wait_auth_rotating(double timeout)
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
 	 rotating_secrets->need_new_secrets()) {
-    utime_t now = g_clock.now();
+    utime_t now = ceph_clock_now(cct);
     if (now >= until) {
       dout(0) << "wait_auth_rotating timed out after " << timeout << dendl;
       return -ETIMEDOUT;

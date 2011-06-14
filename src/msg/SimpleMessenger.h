@@ -281,7 +281,7 @@ private:
     void queue_received(Message *m, int priority);
     
     void queue_received(Message *m) {
-      m->set_recv_stamp(g_clock.now());
+      m->set_recv_stamp(ceph_clock_now(&g_ceph_context));
 
       // this is just to make sure that a changeset is working
       // properly; if you start using the refcounting more and have

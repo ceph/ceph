@@ -19,22 +19,9 @@
 
 #include <time.h>
 
-struct timespec;
-struct utime_t;
+class CephContext;
 
 extern utime_t ceph_clock_now(CephContext *cct);
 extern time_t ceph_clock_gettime(CephContext *cct);
-
-class Clock {
- public:
-  Clock();
-  ~Clock();
-
-  utime_t now();
-  void make_timespec(utime_t& t, struct timespec *ts);
-  time_t gettime();
-};
-
-extern Clock g_clock;
 
 #endif

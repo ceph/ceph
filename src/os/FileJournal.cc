@@ -765,7 +765,7 @@ void FileJournal::do_write(bufferlist& bl)
 	   << (hbp.length() ? " + header":"")
 	   << dendl;
   
-  utime_t from = g_clock.now();
+  utime_t from = ceph_clock_now(&g_ceph_context);
 
   // entry
   off64_t pos = write_pos;
@@ -839,7 +839,7 @@ void FileJournal::do_write(bufferlist& bl)
 #endif
   }
 
-  utime_t lat = g_clock.now() - from;    
+  utime_t lat = ceph_clock_now(&g_ceph_context) - from;    
   dout(20) << "do_write latency " << lat << dendl;
 
   write_lock.Lock();    
