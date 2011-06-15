@@ -333,8 +333,13 @@ public:
     vector<OSDOp>& ops;
     bufferlist outdata;
 
-    ObjectState *obs;
+    const ObjectState *obs; // Old objectstate
+    const SnapSet *snapset; // Old snapset
+
     ObjectState new_obs;  // resulting ObjectState
+    SnapSet new_snapset;  // resulting SnapSet (in case of a write)
+    pg_stat_t new_stats;  // resulting Stats
+
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
 
@@ -354,7 +359,7 @@ public:
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
-    ObjectContext *obc;
+    ObjectContext *obc;          // For ref counting purposes
     map<sobject_t,ObjectContext*> src_obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
@@ -369,12 +374,20 @@ public:
     const OpContext& operator=(const OpContext& other);
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
-	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),
+	      ObjectState *_obs, SnapSetContext *_ssc,
+	      ReplicatedPG *_pg) :
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      new_obs(_obs->oi, _obs->exists),
+      new_stats(_pg->info.stats),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
       bytes_written(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { }
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
+      if (_ssc) {
+	new_snapset = _ssc->snapset;
+	snapset = &_ssc->snapset;
+      }
+    }
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
