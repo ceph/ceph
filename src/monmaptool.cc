@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
   if (!fn)
     usage();
   
-  MonMap monmap;
+  MonMap monmap(ceph_clock_now(&g_ceph_context));
 
   cout << me << ": monmap file " << fn << std::endl;
 

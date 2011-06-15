@@ -104,7 +104,7 @@ int main(int argc, const char **argv)
 	   << error << std::endl;
       exit(1);
     }
-    MonMap monmap;
+    MonMap monmap(ceph_clock_now(&g_ceph_context));
     monmap.decode(monmapbl);
     
     err = osdmapbl.read_file(osdmapfn, &error);
@@ -190,7 +190,7 @@ int main(int argc, const char **argv)
     v++;
 
     // set the version
-    MonMap tmp;
+    MonMap tmp(ceph_clock_now(&g_ceph_context));
     tmp.decode(bl);
     if (tmp.get_epoch() != v) {
       cout << "changing monmap epoch from " << tmp.get_epoch() << " to " << v << std::endl;
@@ -213,7 +213,7 @@ int main(int argc, const char **argv)
 
 
   // monmap?
-  MonMap monmap;
+  MonMap monmap(ceph_clock_now(&g_ceph_context));
   {
     bufferlist latest;
     store.get_bl_ss(latest, "monmap/latest", 0);

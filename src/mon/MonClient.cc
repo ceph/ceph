@@ -43,6 +43,7 @@
 
 MonClient::MonClient(CephContext *cct_) :
   Dispatcher(cct_),
+  monmap(ceph_clock_now(cct_)),
   cct(cct_),
   state(MC_STATE_NONE),
   messenger(NULL),

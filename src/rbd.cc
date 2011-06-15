@@ -507,7 +507,7 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
 
 static int do_kernel_add(const char *poolname, const char *imgname, const char *secretfile, const char *user)
 {
-  MonMap monmap;
+  MonMap monmap(ceph_clock_now(&g_ceph_context));
   int r = MonClient::build_initial_monmap(monmap);
   if (r < 0)
     return r;

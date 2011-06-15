@@ -36,7 +36,10 @@ class MMonCommand;
 
 class MonmapMonitor : public PaxosService {
  public:
-  MonmapMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) {}
+  MonmapMonitor(Monitor *mn, Paxos *p) 
+    : PaxosService(mn, p), pending_map(ceph_clock_now(&g_ceph_context))
+  {
+  }
   MonMap pending_map; //the pending map awaiting passage
 
   void create_initial(bufferlist& bl);
