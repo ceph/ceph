@@ -1,14 +1,20 @@
 #include "auth/cephx/CephxKeyServer.h"
-
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "common/config.h"
-
 
 #define AES_KEY_LEN	16
 
-int main(int argc, char *argv[])
+int main(int argc, const char **argv)
 {
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
 
-  KeyServer server;
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(&g_ceph_context);
+
+  KeyServer server(&g_ceph_context);
 
   dout(0) << "server created" << dendl;
 

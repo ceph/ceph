@@ -22,6 +22,8 @@
 
 #include "common/Timer.h"
 
+class CephContext;
+
 struct KeyServerData {
   version_t version;
 
@@ -80,15 +82,16 @@ struct KeyServerData {
     secrets.erase(iter);
   }
 
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret,
-			  uint64_t& secret_id) const;
-  bool get_service_secret(uint32_t service_id, CryptoKey& secret,
-			  uint64_t& secret_id) const;
-  bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const;
+  bool get_service_secret(CephContext *cct, uint32_t service_id,
+			  ExpiringCryptoKey& secret, uint64_t& secret_id) const;
+  bool get_service_secret(CephContext *cct, uint32_t service_id,
+			  CryptoKey& secret, uint64_t& secret_id) const;
+  bool get_service_secret(CephContext *cct, uint32_t service_id,
+			  uint64_t secret_id, CryptoKey& secret) const;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_secret(const EntityName& name, CryptoKey& secret) const;
-  bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
+  bool get_caps(CephContext *cct, const EntityName& name,
+		const std::string& type, AuthCapsInfo& caps) const;
 
   map<EntityName, EntityAuth>::iterator secrets_begin()
   { return secrets.begin(); }
@@ -176,8 +179,8 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental);
 
 
 class KeyServer : public KeyStore {
+  CephContext *cct;
   KeyServerData data;
-
   mutable Mutex lock;
 
   int _rotate_secret(uint32_t service_id);
@@ -188,8 +191,7 @@ class KeyServer : public KeyStore {
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
-  KeyServer();
-
+  KeyServer(CephContext *cct_);
   bool generate_secret(CryptoKey& secret);
 
   bool get_secret(const EntityName& name, CryptoKey& secret) const;
