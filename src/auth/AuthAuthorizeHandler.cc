@@ -17,7 +17,6 @@
 #include "cephx/CephxAuthorizeHandler.h"
 #include "none/AuthNoneAuthorizeHandler.h"
 #include "AuthSupported.h"
-#include "common/debug.h"
 #include "common/Mutex.h"
 
 static bool _initialized = false;
@@ -45,8 +44,5 @@ AuthAuthorizeHandler *get_authorize_handler(int protocol)
   map<int, AuthAuthorizeHandler *>::iterator iter = authorizers.find(protocol);
   if (iter != authorizers.end())
     return iter->second;
-
-  dout(0) << "get_authorize_handler protocol " << protocol << " not supported" << dendl;
-
   return NULL;
 }

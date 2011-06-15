@@ -2015,6 +2015,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 
   AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
   if (!authorize_handler) {
+    dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;
     return true;
   }
