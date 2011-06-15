@@ -90,5 +90,11 @@ def main():
     for rem, roles in zip(remotes, ctx.config['roles']):
         ctx.cluster.add(rem, roles)
 
-    from teuthology.run_tasks import run_tasks
-    run_tasks(tasks=ctx.config['tasks'], ctx=ctx)
+    try:
+        summary = {}
+        from teuthology.run_tasks import run_tasks
+        run_tasks(tasks=ctx.config['tasks'], ctx=ctx, summary=summary)
+    finally:
+        if ctx.archive is not None:
+            with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
+                yaml.safe_dump(summary, f, default_flow_style=False)
