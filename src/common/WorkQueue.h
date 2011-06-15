@@ -19,7 +19,10 @@
 #include "Cond.h"
 #include "Thread.h"
 
+class CephContext;
+
 class ThreadPool {
+  CephContext *cct;
   string name;
   Mutex _lock;
   Cond _cond;
@@ -121,8 +124,8 @@ private:
   void worker();
 
 public:
-  ThreadPool(string nm, int n=1) :
-    name(nm),
+  ThreadPool(CephContext *cct_, string nm, int n=1) :
+    cct(cct_), name(nm),
     _lock((new string(name + "::lock"))->c_str()),  // deliberately leak this
     _stop(false),
     _pause(false),
