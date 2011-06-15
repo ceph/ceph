@@ -1071,19 +1071,20 @@ void RGWAbortMultipart::execute()
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
 
+
   if (upload_id.empty() || s->object_str.empty())
     goto done;
 
-  ret = get_multiparts_info(s, oid, obj_parts, policy, attrs);
-  if (ret < 0)
-    goto done;
-
-  oid = s->object;
+  oid = s->object_str;
   oid.append(".");
   oid.append(upload_id);
   meta_oid = oid;
   prefix = oid;
   prefix.append(".");
+
+  ret = get_multiparts_info(s, oid, obj_parts, policy, attrs);
+  if (ret < 0)
+    goto done;
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     oid = prefix;

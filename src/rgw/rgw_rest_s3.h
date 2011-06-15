@@ -145,7 +145,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWPutACLs_REST_S3 put_acls_op;
   RGWInitMultipart_REST_S3 init_multipart;
   RGWCompleteMultipart_REST_S3 complete_multipart;
-  RGWCompleteMultipart_REST_S3 abort_multipart;
+  RGWAbortMultipart_REST_S3 abort_multipart;
   RGWListMultipart_REST_S3 list_multipart;
   RGWListBucketMultiparts_REST_S3 list_bucket_multiparts;
 
