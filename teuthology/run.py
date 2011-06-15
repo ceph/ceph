@@ -1,4 +1,5 @@
 import argparse
+import os
 import yaml
 
 def config_file(string):
@@ -59,6 +60,12 @@ def main():
     logging.basicConfig(
         level=loglevel,
         )
+
+    if ctx.archive is not None:
+        os.mkdir(ctx.archive)
+
+        with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
+            yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
     log.info('Opening connections...')

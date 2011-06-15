@@ -520,13 +520,8 @@ def task(ctx, config):
             )
 
         if ctx.archive is not None:
-            os.mkdir(ctx.archive)
-
             with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
                 f.write(sha1 + '\n')
-
-            with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
-                yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
             log.info('Compressing logs...')
             run.wait(
