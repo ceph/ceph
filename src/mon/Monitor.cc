@@ -1160,7 +1160,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   }
 
   CephXTicketBlob blob;
-  if (!cephx_build_service_ticket_blob(info, blob)) {
+  if (!cephx_build_service_ticket_blob(cct, info, blob)) {
     dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
     return false;
   }

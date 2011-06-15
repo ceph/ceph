@@ -73,7 +73,14 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }      
 
       uint64_t expected_key;
-      cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &expected_key);
+      std::string error;
+      cephx_calc_client_server_challenge(secret, server_challenge,
+					 req.client_challenge, &expected_key, error);
+      if (!error.empty()) {
+	ldout(cct, 0) << " cephx_calc_client_server_challenge error: " << error << dendl;
+	ret = -EPERM;
+	break;
+      }
 
       ldout(cct, 20) << " checking key: req.key=" << hex << req.key
 	       << " expected_key=" << expected_key << dec << dendl;
@@ -124,9 +131,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info_vec.push_back(info);
 
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!cephx_build_service_ticket_reply(eauth.key, info_vec, should_enc_ticket, old_ticket_info.session_key, result_bl)) {
-        ret = -EIO;
-        break;
+      if (!cephx_build_service_ticket_reply(cct, eauth.key, info_vec, should_enc_ticket,
+					    old_ticket_info.session_key, result_bl)) {
+	ret = -EIO;
       }
 
       if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
@@ -167,7 +174,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }
       CryptoKey no_key;
       build_cephx_response_header(cephx_header.request_type, ret, result_bl);
-      cephx_build_service_ticket_reply(auth_ticket_info.session_key, info_vec, false, no_key, result_bl);
+      cephx_build_service_ticket_reply(cct, auth_ticket_info.session_key, info_vec, false, no_key, result_bl);
     }
     break;
 

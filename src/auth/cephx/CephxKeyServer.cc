@@ -354,7 +354,10 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
 
   RotatingSecrets secrets = rotate_iter->second;
 
-  encode_encrypt(secrets, specific_key, enc_bl);
+  std::string error;
+  encode_encrypt(secrets, specific_key, enc_bl, error);
+  if (!error.empty())
+    return false;
 
   return true;
 }

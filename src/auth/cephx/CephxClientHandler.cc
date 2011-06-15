@@ -49,7 +49,13 @@ int CephxClientHandler::build_request(bufferlist& bl)
 
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
-    cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &req.key);
+    std::string error;
+    cephx_calc_client_server_challenge(secret, server_challenge,
+				       req.client_challenge, &req.key, error);
+    if (!error.empty()) {
+      ldout(cct, 20) << "cephx_calc_client_server_challenge error: " << error << dendl;
+      return -EIO;
+    }
 
     req.old_ticket = ticket_handler.ticket;
 
@@ -148,10 +154,14 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	RotatingSecrets secrets;
 	CryptoKey secret_key;
 	keyring->get_master(secret_key);
-	if (decode_decrypt(secrets, secret_key, indata) == 0) {
+	std::string error;
+	decode_decrypt(secrets, secret_key, indata, error);
+	if (error.empty()) {
 	  rotating_secrets->set_secrets(secrets);
 	} else {
-	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed" << dendl;
+	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
+	    << error << dendl;
+	  error.clear();
 	}
       }
     }

@@ -16,6 +16,10 @@
 
 #include "include/types.h"
 
+#include <string>
+
+class CephContext;
+
 /*
  * match encoding of struct ceph_secret
  */
@@ -71,9 +75,9 @@ public:
   }
 
   // --
-  int create(int type);
-  int encrypt(const bufferlist& in, bufferlist& out) const;
-  int decrypt(const bufferlist& in, bufferlist& out) const;
+  int create(CephContext *cct, int type);
+  void encrypt(const bufferlist& in, bufferlist& out, std::string &error) const;
+  void decrypt(const bufferlist& in, bufferlist& out, std::string &error) const;
 
   void to_str(std::string& s) const;
 };
@@ -97,10 +101,10 @@ public:
   virtual ~CryptoHandler() {}
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(bufferptr& secret) = 0;
-  virtual int encrypt(const bufferptr& secret, const bufferlist& in,
-		      bufferlist& out) const = 0;
-  virtual int decrypt(const bufferptr& secret, const bufferlist& in,
-		      bufferlist& out) const = 0;
+  virtual void encrypt(const bufferptr& secret, const bufferlist& in,
+		      bufferlist& out, std::string &error) const = 0;
+  virtual void decrypt(const bufferptr& secret, const bufferlist& in,
+		      bufferlist& out, std::string &error) const = 0;
 };
 
 extern CryptoHandler *get_crypto_handler(int type);

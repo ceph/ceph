@@ -51,13 +51,9 @@ TEST(AES, Encrypt) {
   plaintext.append(plaintext_s, sizeof(plaintext_s));
 
   bufferlist cipher;
-  int success;
-  success = h->encrypt(secret, plaintext, cipher);
-  ASSERT_NE(false, success);
-  // C defines booleans as non-zero, so the above is sort of enough
-  // and more correct, but let's be strict to avoid confusion in
-  // callers
-  ASSERT_EQ(true, success);
+  std::string error;
+  h->encrypt(secret, plaintext, cipher, error);
+  ASSERT_EQ(error, "");
 
   char want_cipher[] = {
     0xb3, 0x8f, 0x5b, 0xc9, 0x35, 0x4c, 0xf8, 0xc6,
@@ -98,14 +94,15 @@ TEST(AES, Decrypt) {
   };
   char plaintext_s[sizeof(want_plaintext)];
 
+  std::string error;
   bufferlist plaintext;
-  int err;
-  err = h->decrypt(secret, cipher, plaintext);
-  ASSERT_EQ((int)sizeof(want_plaintext), err);
+  h->decrypt(secret, cipher, plaintext, error);
+  ASSERT_EQ(error, "");
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
   plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
 
+  int err;
   err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));
   ASSERT_EQ(0, err);
 }
@@ -130,17 +127,17 @@ TEST(AES, Loop) {
     {
       CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
 
-      int success;
-      success = h->encrypt(secret, plaintext, cipher);
-      ASSERT_NE(false, success);
+      std::string error;
+      h->encrypt(secret, plaintext, cipher, error);
+      ASSERT_EQ(error, "");
     }
     plaintext.clear();
 
     {
       CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
-      int err;
-      err = h->decrypt(secret, cipher, plaintext);
-      ASSERT_EQ((int)sizeof(orig_plaintext_s), err);
+      std::string error;
+      h->decrypt(secret, cipher, plaintext, error);
+      ASSERT_EQ(error, "");
     }
   }
 

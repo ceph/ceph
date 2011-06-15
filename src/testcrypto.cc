@@ -22,8 +22,10 @@ int main(int argc, char *argv[])
   enc_in.append(msg, strlen(msg));
 
   bufferlist enc_out;
-  if (key.encrypt(enc_in, enc_out) < 0) {
-    dout(0) << "couldn't encode!" << dendl;
+  std::string error;
+  key.encrypt(enc_in, enc_out, error);
+  if (!error.empty()) {
+    dout(0) << "couldn't encode! error " << error << dendl;
     exit(1);
   }
 
@@ -38,8 +40,10 @@ int main(int argc, char *argv[])
 
   dec_in = enc_out;
 
-  if (key.decrypt(dec_in, dec_out) < 0) {
-    dout(0) << "couldn't decode!" << dendl;
+  key.decrypt(dec_in, dec_out, error);
+  if (!error.empty()) {
+    dout(0) << "couldn't decode! error " << error << dendl;
+    exit(1);
   }
 
   dout(0) << "decoded len: " << dec_out.length() << dendl;

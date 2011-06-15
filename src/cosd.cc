@@ -149,7 +149,7 @@ int main(int argc, const char **argv)
     }
     EntityName ename(g_conf->name);
     EntityAuth eauth;
-    eauth.key.create(CEPH_CRYPTO_AES);
+    eauth.key.create(&g_ceph_context, CEPH_CRYPTO_AES);
     keyring->add(ename, eauth);
     bufferlist bl;
     keyring->encode_plaintext(bl);
