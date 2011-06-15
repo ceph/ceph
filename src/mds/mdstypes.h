@@ -15,6 +15,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/Clock.h"
 #include "common/DecayCounter.h"
 #include "include/Context.h"
 
@@ -931,8 +932,12 @@ namespace __gnu_cxx {
 
 class inode_load_vec_t {
   static const int NUM = 2;
-  DecayCounter vec[NUM];
+  std::vector < DecayCounter > vec;
 public:
+  inode_load_vec_t()
+     : vec(NUM, DecayCounter(ceph_clock_now(&g_ceph_context)))
+  {
+  }
   DecayCounter &get(int t) { 
     assert(t < NUM);
     return vec[t]; 
@@ -959,8 +964,11 @@ WRITE_CLASS_ENCODER(inode_load_vec_t)
 class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
-  DecayCounter vec[NUM];
-
+  std::vector < DecayCounter > vec;
+  dirfrag_load_vec_t()
+     : vec(NUM, DecayCounter(ceph_clock_now(&g_ceph_context)))
+  {
+  }
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -1115,7 +1123,8 @@ public:
   DecayCounter count;
 
 public:
-  load_spread_t() : p(0), n(0) { 
+  load_spread_t() : p(0), n(0), count(ceph_clock_now(&g_ceph_context))
+  {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
   } 

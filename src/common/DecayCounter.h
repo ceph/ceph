@@ -15,10 +15,9 @@
 #ifndef CEPH_DECAYCOUNTER_H
 #define CEPH_DECAYCOUNTER_H
 
-#include <math.h>
-#include "Clock.h"
+#include "include/utime.h"
 
-#include "common/config.h"
+#include <math.h>
 
 /**
  *
@@ -75,8 +74,9 @@ public:
     ::decode(vel, p);
   }
 
-  DecayCounter() : val(0), delta(0), vel(0) {
-    reset();
+  DecayCounter(const utime_t &now)
+    : val(0), delta(0), vel(0), last_decay(now)
+  {
   }
 
   /**
@@ -127,11 +127,8 @@ public:
    * decay etc.
    */
 
-  void reset() {
-    reset(ceph_clock_now(&g_ceph_context));
-  }
   void reset(utime_t now) {
-    last_decay = ceph_clock_now(&g_ceph_context);
+    last_decay = now;
     val = delta = 0;
   }
   
