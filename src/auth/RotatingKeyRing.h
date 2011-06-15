@@ -28,13 +28,15 @@
 class KeyRing;
 
 class RotatingKeyRing : public KeyStore {
+  CephContext *cct;
   uint32_t service_id;
   RotatingSecrets secrets;
   KeyRing *keyring;
   mutable Mutex lock;
 
 public:
-  RotatingKeyRing(uint32_t s, KeyRing *kr) :
+  RotatingKeyRing(CephContext *cct_, uint32_t s, KeyRing *kr) :
+    cct(cct_),
     service_id(s),
     keyring(kr),
     lock("RotatingKeyRing::lock") {}

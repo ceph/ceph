@@ -345,12 +345,12 @@ int MonClient::init()
 
   messenger->add_dispatcher_head(this);
 
-  keyring = KeyRing::from_ceph_conf(cct->_conf);
+  keyring = KeyRing::from_ceph_context(cct);
   if (!keyring) {
     derr << "MonClient::init(): Failed to create keyring" << dendl;
     return -EDOM;
   }
-  rotating_secrets = new RotatingKeyRing(cct->get_module_type(), keyring);
+  rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
 
   entity_name = g_conf->name;
   

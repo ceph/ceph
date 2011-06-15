@@ -94,7 +94,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
 
   KeyRing keyring;
-  if (keyring.load(g_conf->keyring) == 0) {
+  if (keyring.load(&g_ceph_context, g_conf->keyring) == 0) {
     import_keyring(keyring);
   }
 

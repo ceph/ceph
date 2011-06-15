@@ -178,7 +178,7 @@ int main(int argc, const char **argv)
       
       cout << "importing contents of " << import_keyring << " into " << fn << std::endl;
       //other.print(cout);
-      keyring.import(other);
+      keyring.import(&g_ceph_context, other);
       modified = true;
     } else {
       cerr << "can't open " << import_keyring << ": " << err << std::endl;

@@ -34,11 +34,11 @@ void RotatingKeyRing::set_secrets(RotatingSecrets& s)
 
 void RotatingKeyRing::dump_rotating() const
 {
-  dout(10) << "dump_rotating:" << dendl;
+  ldout(cct, 10) << "dump_rotating:" << dendl;
   for (map<uint64_t, ExpiringCryptoKey>::const_iterator iter = secrets.secrets.begin();
        iter != secrets.secrets.end();
        ++iter)
-    dout(10) << " id " << iter->first << " " << iter->second << dendl;
+    ldout(cct, 10) << " id " << iter->first << " " << iter->second << dendl;
 }
 
 bool RotatingKeyRing::get_secret(const EntityName& name, CryptoKey& secret) const
@@ -53,7 +53,7 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_i
   Mutex::Locker l(lock);
 
   if (service_id_ != this->service_id) {
-    dout(0) << "do not have service " << ceph_entity_type_name(service_id_)
+    ldout(cct, 0) << "do not have service " << ceph_entity_type_name(service_id_)
 	    << ", i am " << ceph_entity_type_name(this->service_id) << dendl;
     return false;
   }
@@ -61,7 +61,7 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_i
   map<uint64_t, ExpiringCryptoKey>::const_iterator iter =
     secrets.secrets.find(secret_id);
   if (iter == secrets.secrets.end()) {
-    dout(0) << "could not find secret_id=" << secret_id << dendl;
+    ldout(cct, 0) << "could not find secret_id=" << secret_id << dendl;
     dump_rotating();
     return false;
   }

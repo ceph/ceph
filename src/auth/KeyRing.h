@@ -28,14 +28,15 @@ class KeyRing {
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
   void decode_plaintext(bufferlist::iterator& bl);
 public:
-  /* Create a KeyRing from a Ceph configuration */
-  static KeyRing *from_ceph_conf(const md_config_t *conf);
+  /* Create a KeyRing from a Ceph context.
+   * We will use the configuration stored inside the context. */
+  static KeyRing *from_ceph_context(CephContext *cct);
   /* Create an empty KeyRing */
   static KeyRing *create_empty();
 
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
-  int load(const std::string &filename);
+  int load(CephContext *cct, const std::string &filename);
   void print(ostream& out);
 
   // accessors
@@ -70,7 +71,7 @@ public:
   void set_key(EntityName& ename, CryptoKey& key) {
     keys[ename].key = key;
   }
-  void import(KeyRing& other);
+  void import(CephContext *cct, KeyRing& other);
 
   // encoders
   void encode(bufferlist& bl) const {
