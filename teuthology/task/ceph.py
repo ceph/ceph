@@ -526,8 +526,7 @@ def task(ctx, config):
                 f.write(sha1 + '\n')
 
             with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
-                config = yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()
-                f.write('\n'.join(config) + '\n')
+                yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
             log.info('Compressing logs...')
             run.wait(
