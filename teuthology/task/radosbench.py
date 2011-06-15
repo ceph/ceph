@@ -1,8 +1,6 @@
 import contextlib
 import logging
-import os
 
-from teuthology import misc as teuthology
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -33,7 +31,6 @@ def task(ctx, config):
     radosbench = {}
 
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
-    remotes = []
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'

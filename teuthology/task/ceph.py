@@ -5,7 +5,6 @@ import logging
 import os
 import gevent
 import tarfile
-import yaml
 
 from teuthology import misc as teuthology
 from teuthology import safepath
