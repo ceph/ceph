@@ -292,7 +292,7 @@ static int parse_arguments(int argc, char *const *const argv,
    returns void */
 static void modprobe(void) {
 	int status;
-	status = system("modprobe ceph");
+	status = system("/sbin/modprobe ceph");
 	if (status < 0) {
 		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n", strerror(errno));
 	} else if (WIFEXITED(status)) {
