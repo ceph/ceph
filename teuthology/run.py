@@ -64,6 +64,17 @@ def main():
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 
+        handler = logging.FileHandler(
+            filename=os.path.join(ctx.archive, 'teuthology.log'),
+            )
+        formatter = logging.Formatter(
+            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S',
+            )
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+
+
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
