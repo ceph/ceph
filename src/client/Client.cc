@@ -3382,7 +3382,11 @@ int Client::get_or_create(Inode *dir, const char* name,
 int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 {
   filepath path = origpath;
-  Inode *cur = cwd;
+  Inode *cur;
+  if (origpath.absolute())
+    cur = root;
+  else
+    cur = cwd;
   assert(cur);
 
   dout(10) << "path_walk " << path << dendl;
