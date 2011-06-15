@@ -53,7 +53,7 @@ public:
   utime_t get_created() const { return created; }
   void print(std::ostream& out) const;
 
-  int set_secret(int type, bufferptr& s);
+  int set_secret(CephContext *cct, int type, bufferptr& s);
   bufferptr& get_secret() { return secret; }
   const bufferptr& get_secret() const { return secret; }
 

@@ -38,7 +38,7 @@ public:
       starting(false),
       server_challenge(0),
       authorizer(0),
-      tickets(&g_ceph_context),
+      tickets(cct_),
       rotating_secrets(rsecrets),
       keyring(rsecrets->get_keyring())
   {

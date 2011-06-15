@@ -15,16 +15,16 @@
 #ifndef CEPH_AUTHAUTHORIZEHANDLER_H
 #define CEPH_AUTHAUTHORIZEHANDLER_H
 
-#include "include/types.h"
-#include "common/config.h"
 #include "Auth.h"
+#include "include/types.h"
 
+class CephContext;
 class KeyRing;
 class RotatingKeyRing;
 
 struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}
-  virtual bool verify_authorizer(KeyStore *keys,
+  virtual bool verify_authorizer(CephContext *cct, KeyStore *keys,
 				 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                  EntityName& entity_name, uint64_t& global_id,
 				 AuthCapsInfo& caps_info, uint64_t *auid = NULL) = 0;

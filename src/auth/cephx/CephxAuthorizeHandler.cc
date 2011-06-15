@@ -5,21 +5,21 @@
 #include "CephxAuthorizeHandler.h"
 
 
-bool CephxAuthorizeHandler::verify_authorizer(KeyStore *keys,
+bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 					      bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                               EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info, uint64_t *auid)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
   if (!authorizer_data.length()) {
-    dout(1) << "verify authorizer, authorizer_data.length()=0" << dendl;
+    ldout(cct, 1) << "verify authorizer, authorizer_data.length()=0" << dendl;
     return false;
   }
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(&g_ceph_context, keys, iter, auth_ticket_info, authorizer_reply);
-  dout(1) << "CephxAuthorizeHandler::verify_authorizer isvalid=" << isvalid << dendl;
+  bool isvalid = cephx_verify_authorizer(cct, keys, iter, auth_ticket_info, authorizer_reply);
+  ldout(cct, 1) << "CephxAuthorizeHandler::verify_authorizer isvalid=" << isvalid << dendl;
 
   if (isvalid) {
     caps_info = auth_ticket_info.ticket.caps;

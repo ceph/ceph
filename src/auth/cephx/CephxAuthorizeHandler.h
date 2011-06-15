@@ -17,8 +17,10 @@
 
 #include "../AuthAuthorizeHandler.h"
 
+class CephContext;
+
 struct CephxAuthorizeHandler : public AuthAuthorizeHandler {
-  bool verify_authorizer(KeyStore *keys,
+  bool verify_authorizer(CephContext *cct, KeyStore *keys,
 			 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                          EntityName& entity_name, uint64_t& global_id,
 			 AuthCapsInfo& caps_info, uint64_t *auid = NULL);

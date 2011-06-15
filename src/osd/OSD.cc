@@ -2612,7 +2612,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   uint64_t global_id;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
 
-  isvalid = authorize_handler->verify_authorizer(monc->rotating_secrets,
+  isvalid = authorize_handler->verify_authorizer(&g_ceph_context, monc->rotating_secrets,
 						 authorizer_data, authorizer_reply, name, global_id, caps_info, &auid);
 
   dout(10) << "OSD::ms_verify_authorizer name=" << name << " auid=" << auid << dendl;

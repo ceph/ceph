@@ -261,7 +261,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   if (crypto->create(bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES, bp);
+  secret.set_secret(cct, CEPH_CRYPTO_AES, bp);
 
   return true;
 }

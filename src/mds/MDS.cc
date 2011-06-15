@@ -2024,7 +2024,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(monc->rotating_secrets,
+  is_valid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
 						  authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   if (is_valid) {
