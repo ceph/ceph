@@ -524,6 +524,11 @@ def task(ctx, config):
             with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
                 f.write(sha1 + '\n')
 
+            import yaml
+            with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
+                config = yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()
+                f.write('\n'.join(config) + '\n')
+
             log.info('Compressing logs...')
             run.wait(
                 ctx.cluster.run(
