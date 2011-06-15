@@ -47,7 +47,6 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  CephContext *cct;
   MonClientState state;
 
   Messenger *messenger;
