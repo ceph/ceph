@@ -49,10 +49,10 @@ private:
 
 //////////////// ProfLoggerCollection ////////////////
 ProfLoggerCollection::
-ProfLoggerCollection(CephContext *ctx_)
+ProfLoggerCollection(CephContext *cct_)
   : lock("ProfLoggerCollection::lock"),
-    logger_timer(lock), logger_event(NULL),
-    last_flush(0), need_reopen(true), need_reset(false), ctx(ctx_)
+    logger_timer(cct_, lock), logger_event(NULL),
+    last_flush(0), need_reopen(true), need_reset(false), cct(cct_)
 {
 }
 
@@ -96,13 +96,13 @@ logger_tare(utime_t s)
 {
   Mutex::Locker l(lock);
 
-  generic_dout(10) << "logger_tare " << s << dendl;
+  ldout(cct, 10) << "logger_tare " << s << dendl;
 
   start = s;
 
-  utime_t fromstart = ceph_clock_now(&g_ceph_context);
+  utime_t fromstart = ceph_clock_now(cct);
   if (fromstart < start) {
-    derr << "logger_tare time jumped backwards from "
+    lderr(cct) << "logger_tare time jumped backwards from "
 	 << start << " to " << fromstart << dendl;
     fromstart = start;
   }
@@ -117,7 +117,7 @@ logger_add(ProfLogger *logger)
 
   if (logger_list.empty()) {
     if (start == utime_t())
-      start = ceph_clock_now(&g_ceph_context);
+      start = ceph_clock_now(cct);
     last_flush = 0;
   }
   logger_list.push_back(logger);
@@ -149,15 +149,15 @@ void ProfLoggerCollection::
 flush_all_loggers()
 {
   // ProfLoggerCollection lock must be held here.
-  generic_dout(20) << "flush_all_loggers" << dendl;
+  ldout(cct, 20) << "flush_all_loggers" << dendl;
 
   if (!g_conf->profiling_logger)
     return;
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   utime_t fromstart = now;
   if (fromstart < start) {
-    derr << "logger time jumped backwards from " << start << " to "
+    lderr(cct) << "logger time jumped backwards from " << start << " to "
 	 << fromstart << dendl;
     //assert(0);
     start = fromstart;
@@ -168,7 +168,7 @@ flush_all_loggers()
   // do any catching up we need to
   bool twice = now_sec - last_flush >= 2 * g_conf->profiling_logger_interval;
  again:
-  generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
+  ldout(cct, 20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
 
   // This logic seems unecessary. We're holding the mutex the whole time here,
   // so need_reopen and need_reset can't change unless we change them.
@@ -197,7 +197,7 @@ flush_all_loggers()
   utime_t next;
   next.sec_ref() = start.sec() + last_flush + g_conf->profiling_logger_interval;
   next.nsec_ref() = start.nsec();
-  generic_dout(20) << "logger now=" << now
+  ldout(cct, 20) << "logger now=" << now
 		   << "  start=" << start
 		   << "  next=" << next
 		   << dendl;
@@ -262,13 +262,13 @@ void ProfLogger::_open_log()
   }
   filename += name;
 
-  generic_dout(10) << "ProfLogger::_open " << filename << dendl;
+  ldout(cct, 10) << "ProfLogger::_open " << filename << dendl;
   if (out.is_open())
     out.close();
   out.open(filename.c_str(),
 	   (need_reset || need_reset) ? ofstream::out : ofstream::out|ofstream::app);
   if (!out.is_open()) {
-    generic_dout(10) << "failed to open '" << filename << "'" << dendl;
+    ldout(cct, 10) << "failed to open '" << filename << "'" << dendl;
     return; // we fail
   }
 
@@ -308,7 +308,7 @@ void ProfLogger::_flush(bool need_reopen, bool need_reset, int last_flush)
     need_reset = false;
   }
 
-  generic_dout(20) << "ProfLogger::_flush on " << this << dendl;
+  ldout(cct, 20) << "ProfLogger::_flush on " << this << dendl;
 
   // header?
   wrote_header_last++;

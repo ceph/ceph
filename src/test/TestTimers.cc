@@ -260,7 +260,7 @@ int main(int argc, const char **argv)
 
   int ret;
   Mutex safe_timer_lock("safe_timer_lock");
-  SafeTimer safe_timer(safe_timer_lock);
+  SafeTimer safe_timer(&g_ceph_context, safe_timer_lock);
 
   ret = basic_timer_test <SafeTimer>(safe_timer, &safe_timer_lock);
   if (ret)

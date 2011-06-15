@@ -48,7 +48,7 @@ MonClient::MonClient(CephContext *cct_) :
   messenger(NULL),
   cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
-  timer(monc_lock),
+  timer(cct, monc_lock),
   log_client(NULL),
   hunting(true),
   want_monmap(true),

@@ -403,7 +403,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(hbm->cct),
   osd_lock("OSD::osd_lock"),
-  timer(osd_lock),
+  timer(hbm->cct, osd_lock),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
@@ -457,7 +457,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp),
   watch_lock("OSD::watch_lock"),
-  watch_timer(watch_lock)
+  watch_timer(hbm->cct, watch_lock)
 {
   monc->set_messenger(client_messenger);
 
@@ -695,7 +695,7 @@ void OSD::open_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  logger = new ProfLogger(name, (ProfLogType*)&osd_logtype);
+  logger = new ProfLogger(&g_ceph_context, name, (ProfLogType*)&osd_logtype);
   g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 
   if (osdmap->get_epoch() > 0)

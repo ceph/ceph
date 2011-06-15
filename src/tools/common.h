@@ -64,7 +64,7 @@ public:
     updates(EVERYTHING_UPDATE),
     log(&std::cout),
     slog(NULL),
-    lock("ceph.cc lock"), timer(lock),
+    lock("ceph.cc lock"), timer(cct_, lock),
     concise(concise_),
     dispatcher(NULL)
   {

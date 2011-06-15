@@ -45,8 +45,8 @@ public:
 typedef std::multimap < utime_t, Context *> scheduled_map_t;
 typedef std::map < Context*, scheduled_map_t::iterator > event_lookup_map_t;
 
-SafeTimer::SafeTimer(Mutex &l)
-  : lock(l),
+SafeTimer::SafeTimer(CephContext *cct_, Mutex &l)
+  : cct(cct_), lock(l),
     thread(NULL),
     stopping(false) 
 {
@@ -59,14 +59,14 @@ SafeTimer::~SafeTimer()
 
 void SafeTimer::init()
 {
-  dout(10) << "init" << dendl;
+  ldout(cct,10) << "init" << dendl;
   thread = new SafeTimerThread(this);
   thread->create();
 }
 
 void SafeTimer::shutdown()
 {
-  dout(10) << "shutdown" << dendl;
+  ldout(cct,10) << "shutdown" << dendl;
   if (thread) {
     assert(lock.is_locked());
     cancel_all_events();
@@ -83,9 +83,9 @@ void SafeTimer::shutdown()
 void SafeTimer::timer_thread()
 {
   lock.Lock();
-  dout(10) << "timer_thread starting" << dendl;
+  ldout(cct,10) << "timer_thread starting" << dendl;
   while (!stopping) {
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(cct);
     
     while (!schedule.empty()) {
       scheduled_map_t::iterator p = schedule.begin();
@@ -97,20 +97,20 @@ void SafeTimer::timer_thread()
       Context *callback = p->second;
       events.erase(callback);
       schedule.erase(p);
-      dout(10) << "timer_thread executing " << callback << dendl;
+      ldout(cct,10) << "timer_thread executing " << callback << dendl;
       
       callback->finish(0);
       delete callback;
     }
 
-    dout(20) << "timer_thread going to sleep" << dendl;
+    ldout(cct,20) << "timer_thread going to sleep" << dendl;
     if (schedule.empty())
       cond.Wait(lock);
     else
       cond.WaitUntil(lock, schedule.begin()->first);
-    dout(20) << "timer_thread awake" << dendl;
+    ldout(cct,20) << "timer_thread awake" << dendl;
   }
-  dout(10) << "timer_thread exiting" << dendl;
+  ldout(cct,10) << "timer_thread exiting" << dendl;
   lock.Unlock();
 }
 
@@ -118,7 +118,7 @@ void SafeTimer::add_event_after(double seconds, Context *callback)
 {
   assert(lock.is_locked());
 
-  utime_t when = ceph_clock_now(&g_ceph_context);
+  utime_t when = ceph_clock_now(cct);
   when += seconds;
   add_event_at(when, callback);
 }
@@ -126,7 +126,7 @@ void SafeTimer::add_event_after(double seconds, Context *callback)
 void SafeTimer::add_event_at(utime_t when, Context *callback)
 {
   assert(lock.is_locked());
-  dout(10) << "add_event_at " << when << " -> " << callback << dendl;
+  ldout(cct,10) << "add_event_at " << when << " -> " << callback << dendl;
 
   scheduled_map_t::value_type s_val(when, callback);
   scheduled_map_t::iterator i = schedule.insert(s_val);
@@ -150,11 +150,11 @@ bool SafeTimer::cancel_event(Context *callback)
   
   std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.find(callback);
   if (p == events.end()) {
-    dout(10) << "cancel_event " << callback << " not found" << dendl;
+    ldout(cct,10) << "cancel_event " << callback << " not found" << dendl;
     return false;
   }
 
-  dout(10) << "cancel_event " << p->second->first << " -> " << callback << dendl;
+  ldout(cct,10) << "cancel_event " << p->second->first << " -> " << callback << dendl;
   delete p->first;
 
   schedule.erase(p->second);
@@ -164,12 +164,12 @@ bool SafeTimer::cancel_event(Context *callback)
 
 void SafeTimer::cancel_all_events()
 {
-  dout(10) << "cancel_all_events" << dendl;
+  ldout(cct,10) << "cancel_all_events" << dendl;
   assert(lock.is_locked());
   
   while (!events.empty()) {
     std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.begin();
-    dout(10) << " cancelled " << p->second->first << " -> " << p->first << dendl;
+    ldout(cct,10) << " cancelled " << p->second->first << " -> " << p->first << dendl;
     delete p->first;
     schedule.erase(p->second);
     events.erase(p);
@@ -180,10 +180,10 @@ void SafeTimer::dump(const char *caller) const
 {
   if (!caller)
     caller = "";
-  dout(10) << "dump " << caller << dendl;
+  ldout(cct,10) << "dump " << caller << dendl;
 
   for (scheduled_map_t::const_iterator s = schedule.begin();
        s != schedule.end();
        ++s)
-    dout(10) << " " << s->first << "->" << s->second << dendl;
+    ldout(cct,10) << " " << s->first << "->" << s->second << dendl;
 }

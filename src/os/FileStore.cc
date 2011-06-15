@@ -868,7 +868,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   lock("FileStore::lock"),
   force_sync(false), sync_epoch(0),
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
-  timer(sync_entry_timeo_lock),
+  timer(&g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
   op_queue_len(0), op_queue_bytes(0), op_finisher(&g_ceph_context), next_finish(0),
   op_tp("FileStore::op_tp", g_conf->filestore_op_threads), op_wq(this, &op_tp),
@@ -1902,7 +1902,7 @@ void FileStore::start_logger(int whoami, utime_t tare)
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  logger = new ProfLogger(name, (ProfLogType*)&fs_logtype);
+  logger = new ProfLogger(&g_ceph_context, name, (ProfLogType*)&fs_logtype);
   if (journal)
     journal->logger = logger;
   {

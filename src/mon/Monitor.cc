@@ -99,7 +99,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   rank(-1), 
   messenger(m),
   lock("Monitor::lock"),
-  timer(lock),
+  timer(cct_, lock),
   monmap(map),
   clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
   key_server(cct),

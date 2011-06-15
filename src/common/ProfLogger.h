@@ -31,7 +31,7 @@ class ProfLogger;
 class ProfLoggerCollection
 {
 public:
-  ProfLoggerCollection(CephContext *ctx_);
+  ProfLoggerCollection(CephContext *cct_);
   ~ProfLoggerCollection();
   void logger_reopen_all();
   void logger_reset_all();
@@ -49,7 +49,7 @@ private:
   int last_flush; // in seconds since start
   bool need_reopen;
   bool need_reset;
-  CephContext *ctx;
+  CephContext *cct;
 };
 
 class ProfLoggerConfObs : public md_config_obs_t {
@@ -65,6 +65,7 @@ private:
 
 class ProfLogger {
  protected:
+   CephContext *cct;
   // my type
   std::string name, filename;
   ProfLogType *type;
@@ -90,8 +91,8 @@ class ProfLogger {
   Mutex *lock;
 
  public:
-  ProfLogger(const std::string &n, ProfLogType *t) :
-    name(n), type(t),
+  ProfLogger(CephContext *cct_, const std::string &n, ProfLogType *t) :
+    cct(cct_), name(n), type(t),
     need_open(true), need_reset(false), need_close(false),
     vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
     wrote_header_last(10000), lock(NULL) { }

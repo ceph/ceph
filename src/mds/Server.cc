@@ -81,7 +81,7 @@ void Server::open_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
-  logger = new ProfLogger(name, &mdserver_logtype);
+  logger = new ProfLogger(&g_ceph_context, name, &mdserver_logtype);
   g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 }
 

@@ -52,7 +52,7 @@ public:
     Dispatcher(messenger_->cct),
     messenger(messenger_),
     monc(monc_),
-    lock("Dumper::lock"), timer(lock)
+    lock("Dumper::lock"), timer(&g_ceph_context, lock)
   {}
 
   virtual ~Dumper();

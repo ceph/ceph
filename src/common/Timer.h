@@ -20,6 +20,7 @@
 
 #include <map>
 
+class CephContext;
 class Context;
 class SafeTimerThread;
 
@@ -29,6 +30,7 @@ class SafeTimer
   SafeTimer(const SafeTimer &rhs);
   SafeTimer& operator=(const SafeTimer &rhs);
 
+  CephContext *cct;
   Mutex& lock;
   Cond cond;
 
@@ -45,7 +47,7 @@ class SafeTimer
   void dump(const char *caller = 0) const;
 
 public:
-  SafeTimer(Mutex &l);
+  SafeTimer(CephContext *cct, Mutex &l);
   ~SafeTimer();
 
   /* Call with the event_lock UNLOCKED.

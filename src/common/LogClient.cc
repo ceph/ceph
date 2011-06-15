@@ -98,7 +98,7 @@ void LogClient::do_log(clog_type type, std::stringstream& ss)
 void LogClient::do_log(clog_type type, const std::string& s)
 {
   Mutex::Locker l(log_lock);
-  dout(0) << "log " << type << " : " << s << dendl;
+  ldout(cct,0) << "log " << type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = ceph_clock_now(cct);
@@ -121,7 +121,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
     // if we are a monitor, queue for ourselves, synchronously
     if (is_mon) {
       assert(messenger->get_myname().is_mon());
-      dout(10) << "send_log to self" << dendl;
+      ldout(cct,10) << "send_log to self" << dendl;
       Message *log = _get_mon_log_message();
       messenger->send_message(log, messenger->get_myinst());
     }
@@ -153,14 +153,14 @@ Message *LogClient::_get_mon_log_message()
     return NULL;
 
   unsigned i = last_log - last_log_sent;
-  dout(10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
+  ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
 	   << " i " << i << dendl;
   std::deque<LogEntry> o(i);
   std::deque<LogEntry>::reverse_iterator p = log_queue.rbegin();
   while (i > 0) {
     i--;
     o[i] = *p++;
-    dout(10) << " will send " << o[i] << dendl;
+    ldout(cct,10) << " will send " << o[i] << dendl;
   }
 
   last_log_sent = last_log;
@@ -174,7 +174,7 @@ Message *LogClient::_get_mon_log_message()
 void LogClient::handle_log_ack(MLogAck *m)
 {
   Mutex::Locker l(log_lock);
-  dout(10) << "handle_log_ack " << *m << dendl;
+  ldout(cct,10) << "handle_log_ack " << *m << dendl;
 
   version_t last = m->last;
 
@@ -183,7 +183,7 @@ void LogClient::handle_log_ack(MLogAck *m)
     const LogEntry &entry(*q);
     if (entry.seq > last)
       break;
-    dout(10) << " logged " << entry << dendl;
+    ldout(cct,10) << " logged " << entry << dendl;
     q = log_queue.erase(q);
   }
   m->put();
@@ -191,7 +191,7 @@ void LogClient::handle_log_ack(MLogAck *m)
 
 bool LogClient::ms_dispatch(Message *m)
 {
-  dout(20) << "dispatch " << m << dendl;
+  ldout(cct,20) << "dispatch " << m << dendl;
 
   switch (m->get_type()) {
   case MSG_LOGACK:

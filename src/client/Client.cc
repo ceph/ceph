@@ -109,7 +109,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : Dispatcher(m->cct), timer(client_lock), client_lock("Client::client_lock"),
+  : Dispatcher(m->cct), timer(m->cct, client_lock), client_lock("Client::client_lock"),
   filer_flags(0)
 {
   // which client am i?
@@ -294,7 +294,7 @@ void Client::init()
     char hostname[80];
     gethostname(hostname, 79);
     snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-    client_logger = new ProfLogger(s, &client_logtype);
+    client_logger = new ProfLogger(&g_ceph_context, s, &client_logtype);
   }
   client_logger_lock.Unlock();
 }

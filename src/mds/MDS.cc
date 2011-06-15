@@ -93,7 +93,7 @@ void handle_signal(int signal)
 MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
-  timer(mds_lock),
+  timer(m->cct, mds_lock),
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
@@ -286,13 +286,13 @@ void MDS::open_logger()
   snprintf(name, sizeof(name), "mds.%s.%llu.log",
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
-  logger = new ProfLogger(name, (ProfLogType*)&mds_logtype);
+  logger = new ProfLogger(cct, name, (ProfLogType*)&mds_logtype);
   g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
 
   snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
-  mlogger = new ProfLogger(name, (ProfLogType*)&mdm_logtype);
+  mlogger = new ProfLogger(cct, name, (ProfLogType*)&mdm_logtype);
   g_ceph_context.GetProfLoggerCollection()->logger_add(mlogger);
 
   mdlog->open_logger();
