@@ -28,9 +28,8 @@ void complain_about_parse_errors(std::deque<std::string> *parse_errors);
 void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
 void output_ceph_version();
-int common_init_shutdown_stderr();
-void common_init_daemonize(const CephContext *cct, int flags);
-int common_init_shutdown_stderr(void);
+int common_init_shutdown_stderr(CephContext *cct);
+void common_init_daemonize(CephContext *cct, int flags);
 void common_init_finish(CephContext *cct);
 void common_init_chdir(const CephContext *cct);
 

@@ -293,7 +293,7 @@ int main(int argc, const char **argv)
   }
 
   // Now close the standard file descriptors
-  common_init_shutdown_stderr();
+  common_init_shutdown_stderr(&g_ceph_context);
 
   client_messenger->start();
   messenger_hb->start();

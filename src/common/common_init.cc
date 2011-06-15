@@ -157,7 +157,7 @@ static void pidfile_remove_void(void)
  * behavior that the file descriptor that gets assigned is the lowest
  * available one.
  */
-int common_init_shutdown_stderr(void)
+int common_init_shutdown_stderr(CephContext *cct)
 {
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
@@ -166,11 +166,11 @@ int common_init_shutdown_stderr(void)
 	 << err << dendl;
     return 1;
   }
-  g_ceph_context._doss->handle_stderr_shutdown();
+  cct->_doss->handle_stderr_shutdown();
   return 0;
 }
 
-void common_init_daemonize(const CephContext *cct, int flags)
+void common_init_daemonize(CephContext *cct, int flags)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return;
@@ -220,7 +220,7 @@ void common_init_daemonize(const CephContext *cct, int flags)
     exit(1);
   }
   if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
-    ret = common_init_shutdown_stderr();
+    ret = common_init_shutdown_stderr(cct);
     if (ret) {
       derr << "common_init_daemonize: common_init_shutdown_stderr failed with "
 	   << "error code " << ret << dendl;
@@ -228,13 +228,13 @@ void common_init_daemonize(const CephContext *cct, int flags)
     }
   }
   pidfile_write(g_conf);
-  ret = g_ceph_context._doss->handle_pid_change(g_conf);
+  ret = cct->_doss->handle_pid_change(g_conf);
   if (ret) {
     derr << "common_init_daemonize: _doss->handle_pid_change failed with "
 	 << "error code " << ret << dendl;
     exit(1);
   }
-  dout(1) << "finished common_init_daemonize" << dendl;
+  ldout(cct, 1) << "finished common_init_daemonize" << dendl;
 }
 
 void common_init_chdir(const CephContext *cct)
