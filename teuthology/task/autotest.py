@@ -114,3 +114,9 @@ def task(ctx, config):
                     run.Raw('3>&1'),
                     ],
                 )
+
+            remote.run(
+                args=[
+                    'rm', '-rf', '--', control, '/tmp/cephtest/autotest',
+                    ],
+                )
