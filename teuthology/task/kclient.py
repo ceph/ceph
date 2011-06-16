@@ -26,6 +26,15 @@ def task(ctx, config):
     this operation on. This lets you e.g. set up one client with
     ``cfuse`` and another with ``kclient``.
 
+    Example that mounts all clients::
+
+        tasks:
+        - ceph:
+        - kclient:
+        - interactive:
+
+    Example that uses both ``kclient` and ``cfuse``::
+
         tasks:
         - ceph:
         - cfuse: [client.0]
