@@ -89,6 +89,48 @@ public:
 };
 
 
+class RGWInitMultipart_REST_S3 : public RGWInitMultipart_REST {
+public:
+  RGWInitMultipart_REST_S3() {}
+  ~RGWInitMultipart_REST_S3() {}
+
+  void send_response();
+};
+
+class RGWCompleteMultipart_REST_S3 : public RGWCompleteMultipart_REST {
+public:
+  RGWCompleteMultipart_REST_S3() {}
+  ~RGWCompleteMultipart_REST_S3() {}
+
+  void send_response();
+};
+
+class RGWAbortMultipart_REST_S3 : public RGWAbortMultipart_REST {
+public:
+  RGWAbortMultipart_REST_S3() {}
+  ~RGWAbortMultipart_REST_S3() {}
+
+  void send_response();
+};
+
+class RGWListMultipart_REST_S3 : public RGWListMultipart_REST {
+public:
+  RGWListMultipart_REST_S3() {}
+  ~RGWListMultipart_REST_S3() {}
+
+  void send_response();
+};
+
+class RGWListBucketMultiparts_REST_S3 : public RGWListBucketMultiparts_REST {
+public:
+  RGWListBucketMultiparts_REST_S3() {
+    default_max = 1000;
+  }
+  ~RGWListBucketMultiparts_REST_S3() {}
+
+  void send_response();
+};
+
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWGetObj_REST_S3 get_obj_op;
   RGWListBuckets_REST_S3 list_buckets_op;
@@ -100,6 +142,11 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
   RGWCopyObj_REST_S3 copy_obj_op;
   RGWGetACLs_REST_S3 get_acls_op;
   RGWPutACLs_REST_S3 put_acls_op;
+  RGWInitMultipart_REST_S3 init_multipart;
+  RGWCompleteMultipart_REST_S3 complete_multipart;
+  RGWAbortMultipart_REST_S3 abort_multipart;
+  RGWListMultipart_REST_S3 list_multipart;
+  RGWListBucketMultiparts_REST_S3 list_bucket_multiparts;
 
 protected:
 
@@ -107,6 +154,7 @@ protected:
   RGWOp *get_retrieve_op(struct req_state *s, bool get_data);
   RGWOp *get_create_op(struct req_state *s);
   RGWOp *get_delete_op(struct req_state *s);
+  RGWOp *get_post_op(struct req_state *s);
 
   bool expect100cont;
 

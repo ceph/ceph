@@ -44,6 +44,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_TMAPGET: return "tmapget";
 	case CEPH_OSD_OP_TMAPPUT: return "tmapput";
 	case CEPH_OSD_OP_WATCH: return "watch";
+	case CEPH_OSD_OP_CLONERANGE: return "clonerange";
 
 	case CEPH_OSD_OP_GETXATTR: return "getxattr";
 	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";

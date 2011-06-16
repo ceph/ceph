@@ -19,6 +19,7 @@
 #include "common/debug.h"
 #include "fcgiapp.h"
 
+#include <errno.h>
 #include <string.h>
 #include <string>
 #include <map>
@@ -81,8 +82,16 @@ extern string rgw_root_bucket;
 #define ERR_INVALID_DIGEST      2004
 #define ERR_BAD_DIGEST          2005
 #define ERR_UNRESOLVABLE_EMAIL  2006
+#define ERR_INVALID_PART        2007
+#define ERR_INVALID_PART_ORDER  2008
+#define ERR_NO_SUCH_UPLOAD      2009
 
 typedef void *RGWAccessHandle;
+
+ /* size should be the required string size + 1 */
+extern int gen_rand_base64(char *dest, int size);
+extern int gen_rand_alphanumeric(char *dest, int size);
+extern int gen_rand_alphanumeric_upper(char *dest, int size);
 
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
@@ -119,12 +128,12 @@ class XMLArgs
 {
   string str, empty_str;
   map<string, string> val_map;
-  string sub_resource;
+  map<string, string> sub_resources;
  public:
    XMLArgs() {}
    XMLArgs(string s) : str(s) {}
    /** Set the arguments; as received */
-   void set(string s) { val_map.clear(); sub_resource.clear(); str = s; }
+   void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
    /** parse the received arguments */
    int parse();
    /** Get the value for a specific argument parameter */
@@ -135,7 +144,7 @@ class XMLArgs
      map<string, string>::iterator iter = val_map.find(name);
      return (iter != val_map.end());
    }
-   string& get_sub_resource() { return sub_resource; }
+   map<string, string>& get_sub_resources() { return sub_resources; }
 };
 
 enum http_op {
@@ -143,6 +152,7 @@ enum http_op {
   OP_PUT,
   OP_DELETE,
   OP_HEAD,
+  OP_POST,
   OP_UNKNOWN,
 };
 
@@ -394,6 +404,13 @@ struct RGWObjEnt {
   // two md5 digests and a terminator
   char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   string content_type;
+
+  void clear() { // not clearing etag
+    name="";
+    size = 0;
+    mtime = 0;
+    content_type="";
+  }
 };
 
 /** Store basic data on an object */
@@ -437,6 +454,137 @@ struct RGWBucketEnt {
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
+struct RGWUploadPartInfo {
+  uint32_t num;
+  uint64_t size;
+  string etag;
+  utime_t modified;
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(num, bl);
+    ::encode(size, bl);
+    ::encode(etag, bl);
+    ::encode(modified, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(num, bl);
+    ::decode(size, bl);
+    ::decode(etag, bl);
+    ::decode(modified, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWUploadPartInfo)
+
+class rgw_obj {
+  std::string orig_obj;
+  std::string orig_key;
+public:
+  std::string bucket;
+  std::string key;
+  std::string ns;
+  std::string object;
+
+  rgw_obj() {}
+  rgw_obj(std::string& b, std::string& o) {
+    init(b, o);
+  }
+  rgw_obj(std::string& b, std::string& o, std::string& k) {
+    init(b, o, k);
+  }
+  rgw_obj(std::string& b, std::string& o, std::string& k, std::string& n) {
+    init(b, o, k, n);
+  }
+  void init(std::string& b, std::string& o, std::string& k, std::string& n) {
+    bucket = b;
+    set_ns(n);
+    set_obj(o);
+    set_key(k);
+  }
+  void init(std::string& b, std::string& o, std::string& k) {
+    bucket = b;
+    set_obj(o);
+    set_key(k);
+  }
+  void init(std::string& b, std::string& o) {
+    bucket = b;
+    set_obj(o);
+    orig_key = key = "";
+  }
+  int set_ns(const char *n) {
+    if (!n)
+      return -EINVAL;
+    string ns_str(n);
+    return set_ns(ns_str);
+  }
+  int set_ns(string& n) {
+    if (n[0] == '_')
+      return -EINVAL;
+    ns = n;
+    set_obj(orig_obj);
+    return 0;
+  }
+
+  void set_key(string& k) {
+    orig_key = k;
+    if (k.compare(object) == 0)
+      key = "";
+    else
+      key = k;
+  }
+
+  void set_obj(string& o) {
+    orig_obj = o;
+    if (ns.empty()) {
+      if (o.empty())
+        return;
+      if (o.size() < 1 || o[0] != '_') {
+        object = o;
+        return;
+      }
+      object = "__";
+      object.append(o);
+    } else {
+      object = "_";
+      object.append(ns);
+      object.append("_");
+      object.append(o);
+    }
+    set_key(orig_key);
+  }
+
+  static bool translate_raw_obj(string& obj, string& ns) {
+    if (ns.empty()) {
+      if (obj[0] != '_')
+        return true;
+
+      if (obj.size() >= 2 && obj[1] == '_') {
+        obj = obj.substr(1);
+        return true;
+      }
+
+      return false;
+    }
+
+    if (obj[0] != '_' || obj.size() < 3) // for namespace, min size would be 3: _x_
+      return false;
+
+    int pos = obj.find('_', 1);
+    if (pos <= 1) // if it starts with __, it's not in our namespace
+      return false;
+
+    string obj_ns = obj.substr(1, pos - 1);
+    if (obj_ns.compare(ns) != 0)
+        return false;
+
+    obj = obj.substr(pos + 1);
+    return true;
+  }
+};
+
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;
@@ -444,6 +592,41 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
   for (i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
+}
+
+static inline int hexdigit(char c)
+{
+  if (c >= '0' && c <= '9')
+    return (c - '0');
+  c = toupper(c);
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 0xa;
+  return -EINVAL;
+}
+
+static inline int hex_to_buf(const char *hex, char *buf, int len)
+{
+  int i = 0;
+  const char *p = hex;
+  while (*p) {
+    if (i >= len)
+      return -EINVAL;
+    buf[i] = 0;
+    int d = hexdigit(*p);
+    if (d < 0)
+      return d;
+    buf[i] = d << 4;
+    p++;
+    if (!*p)
+      return -EINVAL;
+    d = hexdigit(*p);
+    if (d < 0)
+      return -d;
+    buf[i] += d;
+    i++;
+    p++;
+  }
+  return i;
 }
 
 static inline int rgw_str_to_bool(const char *s, int def_val)

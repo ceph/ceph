@@ -88,6 +88,44 @@ public:
   int get_params();
 };
 
+class RGWInitMultipart_REST : public RGWInitMultipart {
+public:
+  RGWInitMultipart_REST() {}
+  ~RGWInitMultipart_REST() {}
+
+  int get_params();
+};
+
+class RGWCompleteMultipart_REST : public RGWCompleteMultipart {
+public:
+  RGWCompleteMultipart_REST() {}
+  ~RGWCompleteMultipart_REST() {}
+
+  int get_params();
+};
+
+class RGWAbortMultipart_REST : public RGWAbortMultipart {
+public:
+  RGWAbortMultipart_REST() {}
+  ~RGWAbortMultipart_REST() {}
+};
+
+class RGWListMultipart_REST : public RGWListMultipart {
+public:
+  RGWListMultipart_REST() {}
+  ~RGWListMultipart_REST() {}
+
+  int get_params();
+};
+
+class RGWListBucketMultiparts_REST : public RGWListBucketMultiparts {
+public:
+  RGWListBucketMultiparts_REST() {}
+  ~RGWListBucketMultiparts_REST() {}
+
+  int get_params();
+};
+
 class RGWHandler_REST : public RGWHandler {
 protected:
   bool is_acl_op(struct req_state *s) {
@@ -98,6 +136,7 @@ protected:
   virtual RGWOp *get_retrieve_op(struct req_state *s, bool get_data) = 0;
   virtual RGWOp *get_create_op(struct req_state *s) = 0;
   virtual RGWOp *get_delete_op(struct req_state *s) = 0;
+  virtual RGWOp *get_post_op(struct req_state *s) = 0;
 
   static int init_rest(struct req_state *s, struct fcgx_state *fcgx);
 public:
@@ -116,7 +155,7 @@ extern void dump_errno(struct req_state *s, int ret);
 extern void end_header(struct req_state *s, const char *content_type = NULL);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
-extern void dump_owner(struct req_state *s, string& id, string& name);
+extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
 extern void dump_content_length(struct req_state *s, size_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_last_modified(struct req_state *s, time_t t);

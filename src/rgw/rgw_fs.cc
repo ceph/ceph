@@ -89,16 +89,16 @@ int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle
   }
 }
 
-int RGWFS::obj_stat(string& bucket, string& obj, uint64_t *psize, time_t *pmtime)
+int RGWFS::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 {
   return -ENOTSUP;
 }
 
 int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
                        string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-                       bool get_content_type)
+                       bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
-  map<string, bool> dir_map;
+  map<string, string> dir_map;
   char path[BUF_SIZE];
 
   snprintf(path, BUF_SIZE, "%s/%s", DIR_NAME, bucket.c_str());
@@ -117,14 +117,25 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
 
     if (prefix.empty() ||
         (prefix.compare(0, prefix.size(), prefix) == 0)) {
-      dir_map[dirent->d_name] = true;
+
+    string obj = dirent->d_name;
+
+    if (!rgw_obj::translate_raw_obj(obj, ns))
+        continue;
+
+    string key = obj;
+
+    if (filter && !filter->filter(obj, key))
+      continue;
+
+     dir_map[obj] = key;
     }
   }
 
   closedir(dir);
 
 
-  map<string, bool>::iterator iter;
+  map<string, string>::iterator iter;
   if (!marker.empty())
     iter = dir_map.lower_bound(marker);
   else
@@ -153,8 +164,10 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
     }
     result.push_back(obj);
   }
+  if (is_truncated)
+    *is_truncated = (iter != dir_map.end());
 
-  return i;
+  return result.size();
 }
 
 
@@ -190,15 +203,17 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
   return 0;
 }
 
-int RGWFS::put_obj_meta(std::string& id, std::string& bucket, std::string& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs)
+int RGWFS::put_obj_meta(std::string& id, rgw_obj& obj,
+                  time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
   int fd;
 
-  fd = open(buf, O_CREAT | O_WRONLY, 0755);
+  fd = open(buf, O_CREAT | O_WRONLY | (exclusive ? O_EXCL : 0), 0755);
   if (fd < 0)
     return -errno;
 
@@ -235,12 +250,14 @@ done_err:
   return -errno;
 }
 
-int RGWFS::put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
                   off_t ofs, size_t size, time_t *mtime)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
   int fd;
 
   int open_flags = O_CREAT | O_WRONLY;
@@ -282,8 +299,8 @@ done_err:
   return r;
 }
 
-int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
-               std::string& src_bucket, std::string& src_obj,
+int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
+               rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -300,13 +317,13 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
+  ret = prepare_get_obj(src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &handle, err);
   if (ret < 0)
     return ret;
  
   do { 
-    ret = get_obj(&handle, src_bucket, src_obj, &data, ofs, end);
+    ret = get_obj(&handle, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
     ofs += ret;
@@ -318,7 +335,7 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   }
   attrs = attrset;
 
-  ret = put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(id, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -336,11 +353,13 @@ int RGWFS::delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int RGWFS::delete_obj(std::string& id, std::string& bucket, std::string& obj)
+int RGWFS::delete_obj(std::string& id, rgw_obj& obj)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
 
   if (unlink(buf) < 0)
     return -errno;
@@ -402,15 +421,16 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
   return attr_len;
 }
 
-int RGWFS::get_attr(std::string& bucket, std::string& obj,
-                       const char *name, bufferlist& dest)
+int RGWFS::get_attr(rgw_obj& obj, const char *name, bufferlist& dest)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
   int r = -EINVAL;
   char *data = NULL;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
 
   r = get_attr(name, buf, &data);
   if (r < 0)
@@ -422,14 +442,16 @@ done:
   return r;
 }
 
-int RGWFS::set_attr(std::string& bucket, std::string& obj,
+int RGWFS::set_attr(rgw_obj& obj,
                        const char *name, bufferlist& bl)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
   int r;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
 
   r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
 
@@ -439,7 +461,7 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
   return ret;
 }
 
-int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj, 
+int RGWFS::prepare_get_obj(rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -451,7 +473,9 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
             void **handle,
             struct rgw_err *err)
 {
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
   int fd;
   struct stat st;
@@ -465,7 +489,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
   if (!state)
     return -ENOMEM;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
 
   fd = open(buf, O_RDONLY, 0755);
 
@@ -541,8 +565,7 @@ done_err:
   return r;
 }
 
-int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj, 
-            char **data, off_t ofs, off_t end)
+int RGWFS::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
   uint64_t len;
   bufferlist bl;
@@ -597,8 +620,10 @@ void RGWFS::finish_get_obj(void **handle)
   }
 }
 
-int RGWFS::read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl)
+int RGWFS::read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
 {
+  std::string& bucket = obj.bucket;
+  std::string& oid = obj.object;
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
   char buf[len];
   int fd;

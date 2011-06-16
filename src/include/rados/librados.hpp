@@ -156,6 +156,9 @@ namespace librados
     int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int append(const std::string& oid, bufferlist& bl, size_t len);
     int write_full(const std::string& oid, bufferlist& bl);
+    int clone_range(const std::string& dst_oid, uint64_t dst_off,
+                   const std::string& src_oid, uint64_t src_off,
+                   size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
     int trunc(const std::string& oid, uint64_t size);

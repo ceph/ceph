@@ -181,6 +181,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
+#define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
 
 enum {
 	/** data **/
@@ -220,6 +221,9 @@ enum {
 	CEPH_OSD_OP_ROLLBACK= CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 14,
 
 	CEPH_OSD_OP_WATCH   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 15,
+
+	/** multi **/
+	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_MULTI | 1,
 
 	/** attrs **/
 	/* read */
@@ -279,6 +283,10 @@ static inline int ceph_osd_op_type_exec(int op)
 static inline int ceph_osd_op_type_pg(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_PG;
+}
+static inline int ceph_osd_op_type_multi(int op)
+{
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MULTI;
 }
 
 static inline int ceph_osd_op_mode_subop(int op)
@@ -389,6 +397,10 @@ struct ceph_osd_op {
 			__le64 ver;
 			__u8 flag;	/* 0 = unwatch, 1 = watch */
 		} __attribute__ ((packed)) watch;
+		struct {
+			__le64 offset, length;
+			__le64 src_offset;
+		} __attribute__ ((packed)) clonerange;
 };
 	__le32 payload_len;
 } __attribute__ ((packed));

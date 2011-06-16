@@ -116,6 +116,7 @@ protected:
   RGWOp *get_retrieve_op(struct req_state *s, bool get_data);
   RGWOp *get_create_op(struct req_state *s);
   RGWOp *get_delete_op(struct req_state *s);
+  RGWOp *get_post_op(struct req_state *s) { return NULL; }
 
 public:
   RGWHandler_REST_OS() : RGWHandler_REST() {}

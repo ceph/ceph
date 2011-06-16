@@ -37,12 +37,14 @@ static int put_obj(string& uid, string& bucket, string& oid, const char *data, s
 {
   map<string,bufferlist> attrs;
 
-  int ret = rgwstore->put_obj(uid, bucket, oid, data, size, NULL, attrs);
+  rgw_obj obj(bucket, oid);
+
+  int ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_bucket(uid, bucket, attrs);
     if (ret >= 0)
-      ret = rgwstore->put_obj(uid, bucket, oid, data, size, NULL, attrs);
+      ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
   }
 
   return ret;
@@ -57,13 +59,14 @@ static int get_obj(string& bucket, string& key, bufferlist& bl)
   void *handle = NULL;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
-  ret = rgwstore->prepare_get_obj(bucket, key, 0, NULL, NULL, NULL,
+  rgw_obj obj(bucket, key);
+  ret = rgwstore->prepare_get_obj(obj, 0, NULL, NULL, NULL,
                                   NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 
   do {
-    ret = rgwstore->get_obj(&handle, bucket, key, &data, 0, request_len - 1);
+    ret = rgwstore->get_obj(&handle, obj, &data, 0, request_len - 1);
     if (ret < 0)
       goto done;
     if (ret < request_len)
@@ -211,7 +214,8 @@ static void get_buckets_obj(string& user_id, string& buckets_obj_id)
 static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
 {
   bufferlist bl;
-  int ret = rgwstore->get_attr(ui_uid_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+  rgw_obj obj(ui_uid_bucket, user_id);
+  int ret = rgwstore->get_attr(obj, RGW_ATTR_BUCKETS, bl);
   if (ret)
     return ret;
 
@@ -246,9 +250,10 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     bufferlist bl;
 #define LARGE_ENOUGH_LEN (4096 * 1024)
     size_t len = LARGE_ENOUGH_LEN;
+    rgw_obj obj(ui_uid_bucket, buckets_obj_id);
 
     do {
-      ret = rgwstore->read(ui_uid_bucket, buckets_obj_id, 0, len, bl);
+      ret = rgwstore->read(obj, 0, len, bl);
       if (ret == -ENOENT) {
         /* try to read the old format */
         ret = rgw_read_buckets_from_attr(user_id, buckets);
@@ -317,7 +322,9 @@ int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets)
   bufferlist bl;
   buckets.encode(bl);
 
-  int ret = rgwstore->set_attr(ui_uid_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+  rgw_obj obj(ui_uid_bucket, user_id);
+
+  int ret = rgwstore->set_attr(obj, RGW_ATTR_BUCKETS, bl);
 
   return ret;
 }
@@ -338,7 +345,8 @@ int rgw_add_bucket(string user_id, string bucket_name)
     string buckets_obj_id;
     get_buckets_obj(user_id, buckets_obj_id);
 
-    ret = rgwstore->tmap_create(ui_uid_bucket, buckets_obj_id, bucket_name, bl);
+    rgw_obj obj(ui_uid_bucket, buckets_obj_id);
+    ret = rgwstore->tmap_create(obj, bucket_name, bl);
     if (ret < 0) {
       RGW_LOG(0) << "error adding bucket to directory: "
 		 << cpp_strerror(-ret)<< dendl;
@@ -378,7 +386,8 @@ int rgw_remove_bucket(string user_id, string bucket_name)
     string buckets_obj_id;
     get_buckets_obj(user_id, buckets_obj_id);
 
-    ret = rgwstore->tmap_del(ui_uid_bucket, buckets_obj_id, bucket_name);
+    rgw_obj obj(ui_uid_bucket, buckets_obj_id);
+    ret = rgwstore->tmap_del(obj, bucket_name);
     if (ret < 0) {
       RGW_LOG(0) << "error removing bucket from directory: "
 		 << cpp_strerror(-ret)<< dendl;
@@ -399,22 +408,30 @@ int rgw_remove_bucket(string user_id, string bucket_name)
 
 int rgw_remove_key_index(RGWAccessKey& access_key)
 {
-  return rgwstore->delete_obj(access_key.id, ui_key_bucket, access_key.id);
+  rgw_obj obj(ui_key_bucket, access_key.id);
+  int ret = rgwstore->delete_obj(access_key.id, obj);
+  return ret;
 }
 
 int rgw_remove_uid_index(string& uid)
 {
-  return rgwstore->delete_obj(uid, ui_uid_bucket, uid);
+  rgw_obj obj(ui_uid_bucket, uid);
+  int ret = rgwstore->delete_obj(uid, obj);
+  return ret;
 }
 
 int rgw_remove_email_index(string& uid, string& email)
 {
-  return rgwstore->delete_obj(uid, ui_email_bucket, email);
+  rgw_obj obj(ui_email_bucket, email);
+  int ret = rgwstore->delete_obj(uid, obj);
+  return ret;
 }
 
 int rgw_remove_openstack_name_index(string& uid, string& openstack_name)
 {
-  return rgwstore->delete_obj(uid, ui_openstack_bucket, openstack_name);
+  rgw_obj obj(ui_openstack_bucket, openstack_name);
+  int ret = rgwstore->delete_obj(uid, obj);
+  return ret;
 }
 
 /**
@@ -431,14 +448,17 @@ int rgw_delete_user(RGWUserInfo& info) {
        i != buckets.end();
        ++i) {
     string bucket_name = i->first;
-    rgwstore->delete_obj(info.user_id, rgw_root_bucket, bucket_name);
+    rgw_obj obj(rgw_root_bucket, bucket_name);
+    rgwstore->delete_obj(info.user_id, obj);
   }
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter)
     rgw_remove_key_index(kiter->second);
 
-  rgwstore->delete_obj(info.user_id, ui_uid_bucket, info.user_id);
-  rgwstore->delete_obj(info.user_id, ui_email_bucket, info.user_email);
+  rgw_obj uid_obj(ui_uid_bucket, info.user_id);
+  rgwstore->delete_obj(info.user_id, uid_obj);
+  rgw_obj email_obj(ui_email_bucket, info.user_email);
+  rgwstore->delete_obj(info.user_id, email_obj);
   return 0;
 }
 

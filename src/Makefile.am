@@ -284,7 +284,8 @@ bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
 if WITH_RADOSGW
 my_libradosgw_src = \
 	rgw/librgw.cc \
-	rgw/rgw_acl.cc
+	rgw/rgw_acl.cc \
+	rgw/rgw_xml.cc
 
 my_radosgw_src = \
 	rgw/rgw_fs.cc \
@@ -301,6 +302,7 @@ my_radosgw_src = \
 	rgw/rgw_os_auth.cc \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
+	rgw/rgw_multi.cc \
 	rgw/rgw_escape.c
 
 my_radosgw_ldadd = \
@@ -314,6 +316,11 @@ radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
 bin_PROGRAMS += radosgw radosgw_admin
+
+rgw_multiparser_SOURCES = $(my_radosgw_src) rgw/rgw_multiparser.cc
+rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_multiparser_LDADD = $(my_radosgw_ldadd)
+bin_DEBUGPROGRAMS += rgw_multiparser
 endif
 
 testcrypto_SOURCES = testcrypto.cc
@@ -1088,11 +1095,13 @@ noinst_HEADERS = \
         perfglue/heap_profiler.h\
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
+	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_fs.h\
 	rgw/rgw_log.h\
+	rgw/rgw_multi.h\
 	rgw/rgw_op.h\
 	rgw/rgw_os.h\
 	rgw/rgw_os_auth.h\

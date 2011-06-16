@@ -22,6 +22,7 @@
 /radosgw
 /radosgw_admin
 /rbdtool
+/rgw_multiparser
 /streamtest
 /test_ioctls
 /test_trans

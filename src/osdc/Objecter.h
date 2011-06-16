@@ -65,6 +65,15 @@ struct ObjectOperation {
     ops[s].op.extent.length = len;
     ops[s].data.claim_append(bl);
   }
+  void add_clone_range(int op, uint64_t off, uint64_t len, const object_t& srcoid, uint64_t srcoff, snapid_t srcsnapid) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+    ops[s].op.clonerange.offset = off;
+    ops[s].op.clonerange.length = len;
+    ops[s].op.clonerange.src_offset = srcoff;
+    ops[s].soid = sobject_t(srcoid, srcsnapid);
+  }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     int s = ops.size();
     ops.resize(s+1);
@@ -166,6 +175,10 @@ struct ObjectOperation {
   void sparse_read(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+  }
+
+  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len, uint64_t dst_offset) {
+    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid, src_offset, CEPH_NOSNAP);
   }
 
   // object attrs

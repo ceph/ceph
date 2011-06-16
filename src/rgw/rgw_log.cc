@@ -35,7 +35,14 @@ int rgw_log_op(struct req_state *s)
 
   entry.obj_size = s->obj_size;
 
-  set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
+  string remote_param;
+
+  set_param_str(s, "RGW_REMOTE_ADDR_PARAM", remote_param);
+
+  if (remote_param.empty())
+    remote_param = "REMOTE_ADDR";
+
+  set_param_str(s, remote_param.c_str(), entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
@@ -70,9 +77,10 @@ int rgw_log_op(struct req_state *s)
   
   char buf[entry.bucket.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, entry.bucket.c_str());
-  string oid = buf;
+  string oid(buf);
+  rgw_obj obj(log_bucket, oid);
 
-  int ret = rgwstore->append_async(log_bucket, oid, bl.length(), bl);
+  int ret = rgwstore->append_async(obj, bl.length(), bl);
 
   if (ret == -ENOENT) {
     string id;
@@ -80,7 +88,8 @@ int rgw_log_op(struct req_state *s)
     ret = rgwstore->create_bucket(id, log_bucket, attrs);
     if (ret < 0)
       goto done;
-    ret = rgwstore->append_async(log_bucket, entry.bucket, bl.length(), bl);
+    obj.object = entry.bucket;
+    ret = rgwstore->append_async(obj, bl.length(), bl);
   }
 done:
   if (ret < 0)

@@ -44,10 +44,13 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_BUCKET_NAME, 400, "InvalidBucketName" },
     { ERR_INVALID_OBJECT_NAME, 400, "InvalidObjectName" },
     { ERR_UNRESOLVABLE_EMAIL, 400, "UnresolvableGrantByEmailAddress" },
+    { ERR_INVALID_PART, 400, "InvalidPart" },
+    { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
     { ENOENT, 404, "NoSuchKey" },
     { ERR_NO_SUCH_BUCKET, 404, "NoSuchBucket" },
+    { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },
     { ERR_METHOD_NOT_ALLOWED, 405, "MethodNotAllowed" },
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
@@ -135,12 +138,14 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   s->formatter->dump_value_str(name, buf); 
 }
 
-void dump_owner(struct req_state *s, string& id, string& name)
+void dump_owner(struct req_state *s, string& id, string& name, const char *section)
 {
-  s->formatter->open_obj_section("Owner");
+  if (!section)
+    section = "Owner";
+  s->formatter->open_obj_section(section);
   s->formatter->dump_value_str("ID", id.c_str());
   s->formatter->dump_value_str("DisplayName", name.c_str());
-  s->formatter->close_section("Owner");
+  s->formatter->close_section(section);
 }
 
 void dump_start(struct req_state *s)
@@ -274,6 +279,79 @@ int RGWPutACLs_REST::get_params()
   }
 
   return ret;
+}
+
+int RGWInitMultipart_REST::get_params()
+{
+  if (!s->args.exists("uploads")) {
+    ret = -ENOTSUP;
+  }
+
+  return ret;
+}
+
+int RGWCompleteMultipart_REST::get_params()
+{
+  upload_id = s->args.get("uploadId");
+
+  if (upload_id.empty()) {
+    ret = -ENOTSUP;
+    return ret;
+  }
+
+  size_t cl = 0;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       ret = -ENOMEM;
+       return ret;
+    }
+    CGI_GetStr(s, data, cl, len);
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  return ret;
+}
+
+int RGWListMultipart_REST::get_params()
+{
+  upload_id = s->args.get("uploadId");
+
+  if (upload_id.empty()) {
+    ret = -ENOTSUP;
+  }
+  string str = s->args.get("part-number-marker");
+  if (!str.empty())
+    marker = atoi(str.c_str());
+  
+  str = s->args.get("max-parts");
+  if (!str.empty())
+    max_parts = atoi(str.c_str());
+
+  return ret;
+}
+
+int RGWListBucketMultiparts_REST::get_params()
+{
+  url_decode(s->args.get("delimiter"), delimiter);
+  url_decode(s->args.get("prefix"), prefix);
+  string str = s->args.get("max-parts");
+  if (!str.empty())
+    max_uploads = atoi(str.c_str());
+  else
+    max_uploads = default_max;
+
+  string key_marker = s->args.get("key-marker");
+  string upload_id_marker = s->args.get("upload-id-marker");
+  if (!key_marker.empty())
+    marker.init(key_marker, upload_id_marker);
+
+  return 0;
 }
 
 static void next_tok(string& str, string& tok, char delim)
@@ -627,6 +705,8 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_DELETE;
   else if (strcmp(s->method, "HEAD") == 0)
     s->op = OP_HEAD;
+  else if (strcmp(s->method, "POST") == 0)
+    s->op = OP_POST;
   else
     s->op = OP_UNKNOWN;
 
@@ -666,6 +746,7 @@ int RGWHandler_REST::read_permissions()
     only_bucket = false;
     break;
   case OP_PUT:
+  case OP_POST:
     /* is it a 'create bucket' request? */
     if (is_acl_op(s)) {
       only_bucket = false;
@@ -698,6 +779,9 @@ RGWOp *RGWHandler_REST::get_op()
      break;
    case OP_HEAD:
      op = get_retrieve_op(s, false);
+     break;
+   case OP_POST:
+     op = get_post_op(s);
      break;
    default:
      return NULL;

@@ -210,51 +210,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   return -EINVAL;
 }
 
-int gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
-{
-  char buf[size];
-  char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
-  int ret;
-
-  ret = get_random_bytes(buf, sizeof(buf));
-  if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
-    return -1;
-  }
-
-  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
-		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
-  if (ret < 0) {
-    cerr << "ceph_armor failed" << std::endl;
-    return -1;
-  }
-  tmp_dest[ret] = '\0';
-  memcpy(dest, tmp_dest, size);
-  dest[size] = '\0';
-
-  return 0;
-}
-
-static const char alphanum_table[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
-{
-  int ret = get_random_bytes(dest, size);
-  if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
-    return -1;
-  }
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_table[pos % (sizeof(alphanum_table) - 1)];
-  }
-  dest[i] = '\0';
-
-  return 0;
-}
-
 string escape_str(string& src, char c)
 {
   int pos = 0;
@@ -310,7 +265,9 @@ static int create_bucket(string& bucket, string& user_id, string& display_name, 
   RGWAccessControlPolicy policy, old_policy;
   map<string, bufferlist> attrs;
   bufferlist aclbl;
-  string empty_obj;
+  string no_oid;
+  rgw_obj obj(bucket, no_oid);
+
   int ret;
 
   // defaule policy (private)
@@ -321,7 +278,7 @@ static int create_bucket(string& bucket, string& user_id, string& display_name, 
   if (ret && ret != -EEXIST)   
     goto done;
 
-  ret = rgwstore->set_attr(bucket, empty_obj, RGW_ATTR_ACL, aclbl);
+  ret = rgwstore->set_attr(obj, RGW_ATTR_ACL, aclbl);
   if (ret < 0) {
     cerr << "couldn't set acl on bucket" << std::endl;
   }
@@ -612,7 +569,7 @@ int main(int argc, char **argv)
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
-	ret = gen_rand_alphanumeric(public_id_buf, sizeof(public_id_buf));
+	ret = gen_rand_alphanumeric_upper(public_id_buf, sizeof(public_id_buf));
 	if (ret < 0) {
 	  cerr << "aborting" << std::endl;
 	  exit(1);
@@ -713,8 +670,8 @@ int main(int argc, char **argv)
       object = "";
     string bucket_str(bucket);
     string object_str(object);
-    int ret = store->get_attr(bucket_str, object_str,
-                       RGW_ATTR_ACL, bl);
+    rgw_obj obj(bucket_str, object_str);
+    int ret = store->get_attr(obj, RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;
     if (ret >= 0) {
@@ -763,10 +720,11 @@ int main(int argc, char **argv)
     string bucket_str(bucket);
     string uid_str(user_id);
     
-    string empty_obj;
+    string no_oid;
     bufferlist aclbl;
+    rgw_obj obj(bucket_str, no_oid);
 
-    int r = rgwstore->get_attr(bucket_str, empty_obj, RGW_ATTR_ACL, aclbl);
+    int r = rgwstore->get_attr(obj, RGW_ATTR_ACL, aclbl);
     if (r >= 0) {
       RGWAccessControlPolicy policy;
       ACLOwner owner;
@@ -826,14 +784,15 @@ int main(int argc, char **argv)
     }
 
     uint64_t size;
-    int r = store->obj_stat(log_bucket, oid, &size, NULL);
+    rgw_obj obj(log_bucket, oid);
+    int r = store->obj_stat(obj, &size, NULL);
     if (r < 0) {
       cerr << "error while doing stat on " <<  log_bucket << ":" << oid
 	   << " " << cpp_strerror(-r) << std::endl;
       return -r;
     }
     bufferlist bl;
-    r = store->read(log_bucket, oid, 0, size, bl);
+    r = store->read(obj, 0, size, bl);
     if (r < 0) {
       cerr << "error while reading from " <<  log_bucket << ":" << oid
 	   << " " << cpp_strerror(-r) << std::endl;
@@ -919,8 +878,9 @@ int main(int argc, char **argv)
     string no_object;
     int ret;
     bufferlist bl;
+    rgw_obj obj(bucket_str, no_object);
 
-    ret = rgwstore->get_attr(bucket_str, no_object, RGW_ATTR_ACL, bl);
+    ret = rgwstore->get_attr(obj, RGW_ATTR_ACL, bl);
     if (ret < 0) {
       RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
       return ret;

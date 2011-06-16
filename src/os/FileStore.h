@@ -293,8 +293,8 @@ public:
   int _zero(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const sobject_t& oid, uint64_t size);
   int _clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid);
-  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t off, uint64_t len);
-  int _do_clone_range(int from, int to, uint64_t off, uint64_t len);
+  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const sobject_t& oid);
 
   void _start_sync();

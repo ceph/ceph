@@ -244,18 +244,177 @@ void RGWPutACLs_REST_S3::send_response()
   dump_start(s);
 }
 
+void RGWInitMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+  if (ret == 0) { 
+    dump_start(s);
+    s->formatter->open_obj_section("InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->dump_value_str("Bucket", s->bucket);
+    s->formatter->dump_value_str("Key", s->object);
+    s->formatter->dump_value_str("UploadId", upload_id.c_str());
+    s->formatter->close_section("InitiateMultipartUploadResult");
+    s->formatter->flush(s);
+  }
+}
+
+void RGWCompleteMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+  if (ret == 0) { 
+    dump_start(s);
+    s->formatter->open_obj_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    const char *gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
+    if (gateway_dns_name)
+      s->formatter->dump_value_str("Location", "%s.%s", s->bucket, gateway_dns_name);
+    s->formatter->dump_value_str("Bucket", s->bucket);
+    s->formatter->dump_value_str("Key", s->object);
+    s->formatter->dump_value_str("ETag", etag.c_str());
+    s->formatter->close_section("CompleteMultipartUploadResult");
+    s->formatter->flush(s);
+  }
+}
+
+void RGWAbortMultipart_REST_S3::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWListMultipart_REST_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, "application/xml");
+
+  if (ret == 0) { 
+    dump_start(s);
+    s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
+    int i, cur_max = 0;
+
+    iter = parts.upper_bound(marker);
+    for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
+      cur_max = test_iter->first;
+    }
+    s->formatter->dump_value_str("Bucket", s->bucket);
+    s->formatter->dump_value_str("Key", s->object);
+    s->formatter->dump_value_str("UploadId", upload_id.c_str());
+    s->formatter->dump_value_str("StorageClass", "STANDARD");
+    s->formatter->dump_value_str("PartNumberMarker", "%d", marker);
+    s->formatter->dump_value_str("NextPartNumberMarker", "%d", cur_max + 1);
+    s->formatter->dump_value_str("MaxParts", "%d", max_parts);
+    s->formatter->dump_value_str("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
+
+    ACLOwner& owner = policy.get_owner();
+    dump_owner(s, owner.get_id(), owner.get_display_name());
+
+    for (; iter != parts.end(); ++iter) {
+      RGWUploadPartInfo& info = iter->second;
+
+      time_t sec = info.modified.sec();
+      struct tm tmp;
+      localtime_r(&sec, &tmp);
+      char buf[TIME_BUF_SIZE];
+      if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
+        s->formatter->dump_value_str("LastModified", buf);
+      }
+
+      s->formatter->open_obj_section("Part");
+      s->formatter->dump_value_int("PartNumber", "%u", info.num);
+      s->formatter->dump_value_str("ETag", "%s", info.etag.c_str());
+      s->formatter->dump_value_int("Size", "%llu", info.size);
+      s->formatter->close_section("Part");
+    }
+    s->formatter->close_section("ListMultipartUploadResult");
+    s->formatter->flush(s);
+  }
+}
+
+void RGWListBucketMultiparts_REST_S3::send_response()
+{
+  if (ret < 0)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+
+  end_header(s, "application/xml");
+  dump_start(s);
+  if (ret < 0)
+    return;
+
+  s->formatter->open_obj_section("ListMultipartUploadsResult");
+  s->formatter->dump_value_str("Bucket", s->bucket);
+  if (!prefix.empty())
+    s->formatter->dump_value_str("ListMultipartUploadsResult.Prefix", prefix.c_str());
+  string& key_marker = marker.get_key();
+  if (!key_marker.empty())
+    s->formatter->dump_value_str("KeyMarker", key_marker.c_str());
+  string& upload_id_marker = marker.get_upload_id();
+  if (!upload_id_marker.empty())
+    s->formatter->dump_value_str("UploadIdMarker", upload_id_marker.c_str());
+  string next_key = next_marker.mp.get_key();
+  if (!next_key.empty());
+    s->formatter->dump_value_str("NextKeyMarker", next_key.c_str());
+  string next_upload_id = next_marker.mp.get_upload_id();
+  if (!next_upload_id.empty())
+    s->formatter->dump_value_str("NextUploadIdMarker", next_upload_id.c_str());
+  s->formatter->dump_value_str("MaxUploads", "%d", max_uploads);
+  if (!delimiter.empty())
+    s->formatter->dump_value_str("Delimiter", delimiter.c_str());
+  s->formatter->dump_value_str("IsTruncated", (is_truncated ? "true" : "false"));
+
+  if (ret >= 0) {
+    vector<RGWMultipartUploadEntry>::iterator iter;
+    for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
+      RGWMPObj& mp = iter->mp;
+      s->formatter->open_array_section("Upload");
+      s->formatter->dump_value_str("Key", mp.get_key().c_str());
+      s->formatter->dump_value_str("UploadId", mp.get_upload_id().c_str());
+      dump_owner(s, s->user.user_id, s->user.display_name, "Initiator");
+      dump_owner(s, s->user.user_id, s->user.display_name);
+      s->formatter->dump_value_str("StorageClass", "STANDARD");
+      dump_time(s, "Initiated", &iter->obj.mtime);
+      s->formatter->close_section("Upload");
+    }
+    if (common_prefixes.size() > 0) {
+      s->formatter->open_array_section("CommonPrefixes");
+      map<string, bool>::iterator pref_iter;
+      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        s->formatter->dump_value_str("CommonPrefixes.Prefix", pref_iter->first.c_str());
+      }
+      s->formatter->close_section("CommonPrefixes");
+    }
+  }
+  s->formatter->close_section("ListMultipartUploadsResult");
+  s->formatter->flush(s);
+}
+
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
     return &get_acls_op;
   }
-
   if (s->object) {
     get_obj_op.set_get_data(get_data);
     return &get_obj_op;
   } else if (!s->bucket) {
     return NULL;
   }
+
+  if (s->args.exists("uploads"))
+    return &list_bucket_multiparts;
 
   return &list_bucket_op;
 }
@@ -265,6 +424,8 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_op(struct req_state *s, bool get_data)
   if (s->bucket) {
     if (is_acl_op(s)) {
       return &get_acls_op;
+    } else if (s->args.exists("uploadId")) {
+      return &list_multipart;
     }
     return get_retrieve_obj_op(s, get_data);
   }
@@ -290,10 +451,27 @@ RGWOp *RGWHandler_REST_S3::get_create_op(struct req_state *s)
 
 RGWOp *RGWHandler_REST_S3::get_delete_op(struct req_state *s)
 {
-  if (s->object)
-    return &delete_obj_op;
-  else if (s->bucket)
+  string upload_id = s->args.get("uploadId");
+
+  if (s->object) {
+    if (upload_id.empty())
+      return &delete_obj_op;
+    else
+      return &abort_multipart;
+  } else if (s->bucket)
     return &delete_bucket_op;
+
+  return NULL;
+}
+
+RGWOp *RGWHandler_REST_S3::get_post_op(struct req_state *s)
+{
+  if (s->object) {
+    if (s->args.exists("uploadId"))
+      return &complete_multipart;
+    else
+      return &init_multipart;
+  }
 
   return NULL;
 }
@@ -326,11 +504,20 @@ static void get_canon_resource(struct req_state *s, string& dest)
 
   dest.append(s->path_name_url.c_str());
 
-  string& sub = s->args.get_sub_resource();
-  if (sub.size() > 0) {
-    dest.append("?");
-    dest.append(sub);
+  map<string, string>& sub = s->args.get_sub_resources();
+  map<string, string>::iterator iter;
+  for (iter = sub.begin(); iter != sub.end(); ++iter) {
+    if (iter == sub.begin())
+      dest.append("?");
+    else
+      dest.append("&");     
+    dest.append(iter->first);
+    if (!iter->second.empty()) {
+      dest.append("=");
+      dest.append(iter->second);
+    }
   }
+  RGW_LOG(0) << "dest=" << dest << dendl;
 }
 
 /*
@@ -402,6 +589,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
     } else {
       /* anonymous access */
       rgw_get_anon_user(s->user);
+      s->perm_mask = RGW_PERM_FULL_CONTROL;
       return true;
     }
   } else {

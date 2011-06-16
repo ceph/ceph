@@ -11,8 +11,10 @@
 
 #include <string>
 
+#include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_user.h"
+#include "rgw_acl.h"
 
 using namespace std;
 
@@ -320,6 +322,204 @@ public:
     ret = 0;
     len = 0;
     data = NULL;
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
+class RGWInitMultipart : public RGWOp {
+protected:
+  int ret;
+  string upload_id;
+
+public:
+  RGWInitMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    upload_id = "";
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
+class RGWCompleteMultipart : public RGWOp {
+protected:
+  int ret;
+  string upload_id;
+  string etag;
+  char *data;
+  int len;
+
+public:
+  RGWCompleteMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    upload_id = "";
+    etag="";
+    data = NULL;
+    len = 0;
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
+class RGWAbortMultipart : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWAbortMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+  }
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
+class RGWListMultipart : public RGWOp {
+protected:
+  int ret;
+  string upload_id;
+  map<uint32_t, RGWUploadPartInfo> parts;
+  int max_parts;
+  int marker;
+  RGWAccessControlPolicy policy;
+
+public:
+  RGWListMultipart() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    upload_id = "";
+    parts.clear();
+    max_parts = 1000;
+    marker = 0;
+    policy = RGWAccessControlPolicy();
+  }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+};
+
+#define MP_META_SUFFIX ".meta"
+
+class RGWMPObj {
+  string oid;
+  string prefix;
+  string meta;
+  string upload_id;
+public:
+  RGWMPObj() {}
+  RGWMPObj(string& _oid, string& _upload_id) {
+    init(_oid, _upload_id);
+  }
+  void init(string& _oid, string& _upload_id) {
+    if (_oid.empty()) {
+      clear();
+      return;
+    }
+    oid = _oid;
+    upload_id = _upload_id;
+    prefix = oid;
+    prefix.append(".");
+    prefix.append(upload_id);
+    meta = prefix;
+    meta.append(MP_META_SUFFIX);
+  }
+  string& get_meta() { return meta; }
+  string get_part(int num) {
+    char buf[16];
+    snprintf(buf, 16, ".%d", num);
+    string s = prefix;
+    s.append(buf);
+    return s;
+  }
+  string get_part(string& part) {
+    string s = prefix;
+    s.append(".");
+    s.append(part);
+    return s;
+  }
+  string& get_upload_id() {
+    return upload_id;
+  }
+  string& get_key() {
+    return oid;
+  }
+  bool from_meta(string& meta) {
+    int end_pos = meta.rfind('.'); // search for ".meta"
+    if (end_pos < 0)
+      return false;
+    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+    if (mid_pos < 0)
+      return false;
+    oid = meta.substr(0, mid_pos);
+    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    init(oid, upload_id);
+    return true;
+  }
+  void clear() {
+    oid = "";
+    prefix = "";
+    meta = "";
+    upload_id = "";
+  }
+};
+
+struct RGWMultipartUploadEntry {
+  RGWObjEnt obj;
+  RGWMPObj mp;
+
+  void clear() {
+    obj.clear();
+    string empty;
+    mp.init(empty, empty);
+  }
+};
+
+class RGWListBucketMultiparts : public RGWOp {
+protected:
+  string prefix;
+  RGWMPObj marker; 
+  RGWMultipartUploadEntry next_marker; 
+  int max_uploads;
+  string delimiter;
+  int ret;
+  vector<RGWMultipartUploadEntry> uploads;
+  map<string, bool> common_prefixes;
+  bool is_truncated;
+  int default_max;
+
+public:
+  RGWListBucketMultiparts() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    prefix.clear();
+    marker.clear();
+    next_marker.clear();
+    max_uploads = default_max;
+    delimiter.clear();
+    max_uploads = default_max;
+    ret = 0;
+    uploads.clear();
+    is_truncated = false;
+    common_prefixes.clear();
   }
   void execute();
 
