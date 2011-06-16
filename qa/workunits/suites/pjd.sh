@@ -9,7 +9,8 @@ make
 cd ..
 mkdir tmp
 cd tmp
-prove -r ../pjd*/tests
+# must be root!
+sudo prove -r ../pjd*/tests
 cd ..
 rm -r tmp pjd*
 
