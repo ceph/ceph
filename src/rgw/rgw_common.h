@@ -380,6 +380,13 @@ struct RGWObjEnt {
   // two md5 digests and a terminator
   char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   string content_type;
+
+  void clear() { // not clearing etag
+    name="";
+    size = 0;
+    mtime = 0;
+    content_type="";
+  }
 };
 
 /** Store basic data on an object */

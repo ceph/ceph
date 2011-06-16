@@ -335,6 +335,25 @@ int RGWListMultipart_REST::get_params()
 
   return ret;
 }
+
+int RGWListBucketMultiparts_REST::get_params()
+{
+  url_decode(s->args.get("delimiter"), delimiter);
+  url_decode(s->args.get("prefix"), prefix);
+  string str = s->args.get("max-parts");
+  if (!str.empty())
+    max_uploads = atoi(str.c_str());
+  else
+    max_uploads = default_max;
+
+  string key_marker = s->args.get("key-marker");
+  string upload_id_marker = s->args.get("upload-id-marker");
+  if (!key_marker.empty())
+    marker.init(key_marker, upload_id_marker);
+
+  return 0;
+}
+
 static void next_tok(string& str, string& tok, char delim)
 {
   if (str.size() == 0) {

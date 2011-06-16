@@ -122,6 +122,8 @@ class RGWListBucketMultiparts_REST : public RGWListBucketMultiparts {
 public:
   RGWListBucketMultiparts_REST() {}
   ~RGWListBucketMultiparts_REST() {}
+
+  int get_params();
 };
 
 class RGWHandler_REST : public RGWHandler {

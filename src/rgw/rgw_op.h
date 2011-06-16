@@ -416,33 +416,94 @@ public:
   virtual void send_response() = 0;
 };
 
-struct RGWMultipartUploadEntry {
-  string key;
+#define MP_META_SUFFIX ".meta"
+
+class RGWMPObj {
+  string oid;
+  string prefix;
+  string meta;
   string upload_id;
+public:
+  RGWMPObj() {}
+  RGWMPObj(string& _oid, string& _upload_id) {
+    init(_oid, _upload_id);
+  }
+  void init(string& _oid, string& _upload_id) {
+    if (_oid.empty()) {
+      clear();
+      return;
+    }
+    oid = _oid;
+    upload_id = _upload_id;
+    prefix = oid;
+    prefix.append(".");
+    prefix.append(upload_id);
+    meta = prefix;
+    meta.append(MP_META_SUFFIX);
+  }
+  string& get_meta() { return meta; }
+  string get_part(int num) {
+    char buf[16];
+    snprintf(buf, 16, ".%d", num);
+    string s = prefix;
+    s.append(buf);
+    return s;
+  }
+  string get_part(string& part) {
+    string s = prefix;
+    s.append(".");
+    s.append(part);
+    return s;
+  }
+  string& get_upload_id() {
+    return upload_id;
+  }
+  string& get_key() {
+    return oid;
+  }
+  bool from_meta(string& meta) {
+    int end_pos = meta.rfind('.'); // search for ".meta"
+    if (end_pos < 0)
+      return false;
+    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+    if (mid_pos < 0)
+      return false;
+    oid = meta.substr(0, mid_pos);
+    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    init(oid, upload_id);
+    return true;
+  }
+  void clear() {
+    oid = "";
+    prefix = "";
+    meta = "";
+    upload_id = "";
+  }
+};
+
+struct RGWMultipartUploadEntry {
   RGWObjEnt obj;
+  RGWMPObj mp;
 
   void clear() {
-    key = "";
-    upload_id = "";
+    obj.clear();
+    string empty;
+    mp.init(empty, empty);
   }
 };
 
 class RGWListBucketMultiparts : public RGWOp {
 protected:
   string prefix;
-  string key_marker; 
-  string uploadid_marker; 
+  RGWMPObj marker; 
   RGWMultipartUploadEntry next_marker; 
-  string max_keys;
+  int max_uploads;
   string delimiter;
-  int max;
   int ret;
   vector<RGWMultipartUploadEntry> uploads;
   map<string, bool> common_prefixes;
-
-  string limit_opt_name;
-  int default_max;
   bool is_truncated;
+  int default_max;
 
 public:
   RGWListBucketMultiparts() {}
@@ -450,12 +511,11 @@ public:
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
     prefix.clear();
-    key_marker.clear();
-    uploadid_marker.clear();
+    marker.clear();
     next_marker.clear();
-    max_keys.clear();
+    max_uploads = default_max;
     delimiter.clear();
-    max = 0;
+    max_uploads = default_max;
     ret = 0;
     uploads.clear();
     is_truncated = false;
@@ -463,6 +523,7 @@ public:
   }
   void execute();
 
+  virtual int get_params() = 0;
   virtual void send_response() = 0;
 };
 

@@ -20,44 +20,6 @@ using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
 
-#define MP_META_SUFFIX ".meta"
-
-class RGWMPObj {
-  string oid;
-  string prefix;
-  string meta;
-  string upload_id;
-public:
-  RGWMPObj() {}
-  RGWMPObj(string& _oid, string& _upload_id) {
-    init(_oid, _upload_id);
-  }
-  void init(string& _oid, string& _upload_id) {
-    oid = _oid;
-    upload_id = _upload_id;
-    prefix = oid;
-    prefix.append(".");
-    prefix.append(upload_id);
-    meta = prefix;
-    meta.append(MP_META_SUFFIX);
-  }
-  string& get_meta() { return meta; }
-  string get_part(int num) {
-    char buf[16];
-    snprintf(buf, 16, ".%d", num);
-    string s = prefix;
-    s.append(buf);
-    return s;
-  }
-  string get_part(string& part) {
-    string s = prefix;
-    s.append(".");
-    s.append(part);
-    return s;
-  }
-};
-
-
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
@@ -1175,26 +1137,16 @@ done:
 void RGWListBucketMultiparts::execute()
 {
   vector<RGWObjEnt> objs;
-  string marker;
+  string marker_meta;
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
 
   if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
   }
-
-  url_decode(s->args.get("prefix"), prefix);
-  key_marker = s->args.get("key-marker");
-  uploadid_marker = s->args.get("upload-id-marker-marker");
-  marker = key_marker;
-  marker.append(".");
-  marker.append(uploadid_marker);
-  max_keys = s->args.get(limit_opt_name);
-  if (!max_keys.empty()) {
-    max = atoi(max_keys.c_str());
-  } else {
-    max = default_max;
-  }
-  url_decode(s->args.get("delimiter"), delimiter);
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     string path_args = s->args.get("path");
@@ -1207,22 +1159,16 @@ void RGWListBucketMultiparts::execute()
       delimiter="/";
     }
   }
-
-  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
+  marker_meta = marker.get_meta();
+  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_OPENSTACK), mp_ns, &is_truncated, &mp_filter);
   if (objs.size()) {
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       string name = iter->name;
-      int pos = name.rfind('.'); // search for ".meta"
-      if (pos < 0)
+      if (!entry.mp.from_meta(name))
         continue;
-      pos = name.rfind('.', pos - 1); // <key>.<upload_id>
-      if (pos < 0)
-        continue;
-      entry.key = name.substr(0, pos);
-      entry.upload_id = name.substr(pos + 1);
       entry.obj = *iter;
       uploads.push_back(entry);
     }

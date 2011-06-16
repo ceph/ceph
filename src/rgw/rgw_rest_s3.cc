@@ -358,17 +358,19 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   s->formatter->dump_value_str("Bucket", s->bucket);
   if (!prefix.empty())
     s->formatter->dump_value_str("ListMultipartUploadsResult.Prefix", prefix.c_str());
+  string& key_marker = marker.get_key();
   if (!key_marker.empty())
     s->formatter->dump_value_str("KeyMarker", key_marker.c_str());
-  if (!uploadid_marker.empty())
-    s->formatter->dump_value_str("UploadIdMarker", uploadid_marker.c_str());
-  if (!next_marker.key.empty())
-    s->formatter->dump_value_str("NextKeyMarker", next_marker.key.c_str());
-  if (!next_marker.upload_id.empty())
-    s->formatter->dump_value_str("NextUploadIdMarker", next_marker.upload_id.c_str());
-  if (!max_keys.empty()) {
-    s->formatter->dump_value_str("MaxUploads", max_keys.c_str());
-  }
+  string& upload_id_marker = marker.get_upload_id();
+  if (!upload_id_marker.empty())
+    s->formatter->dump_value_str("UploadIdMarker", upload_id_marker.c_str());
+  string next_key = next_marker.mp.get_key();
+  if (!next_key.empty());
+    s->formatter->dump_value_str("NextKeyMarker", next_key.c_str());
+  string next_upload_id = next_marker.mp.get_upload_id();
+  if (!next_upload_id.empty())
+    s->formatter->dump_value_str("NextUploadIdMarker", next_upload_id.c_str());
+  s->formatter->dump_value_str("MaxUploads", "%d", max_uploads);
   if (!delimiter.empty())
     s->formatter->dump_value_str("Delimiter", delimiter.c_str());
   s->formatter->dump_value_str("IsTruncated", (is_truncated ? "true" : "false"));
@@ -376,9 +378,10 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   if (ret >= 0) {
     vector<RGWMultipartUploadEntry>::iterator iter;
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
+      RGWMPObj& mp = iter->mp;
       s->formatter->open_array_section("Upload");
-      s->formatter->dump_value_str("Key", iter->key.c_str());
-      s->formatter->dump_value_str("UploadId", iter->upload_id.c_str());
+      s->formatter->dump_value_str("Key", mp.get_key().c_str());
+      s->formatter->dump_value_str("UploadId", mp.get_upload_id().c_str());
       dump_owner(s, s->user.user_id, s->user.display_name, "Initiator");
       dump_owner(s, s->user.user_id, s->user.display_name);
       s->formatter->dump_value_str("StorageClass", "STANDARD");

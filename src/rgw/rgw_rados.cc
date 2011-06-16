@@ -180,7 +180,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 
   std::map<string, string>::iterator p;
   if (!marker.empty())
-    p = dir_map.lower_bound(marker);
+    p = dir_map.upper_bound(marker);
   else
     p = dir_map.begin();
 

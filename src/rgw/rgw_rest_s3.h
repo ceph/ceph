@@ -124,7 +124,6 @@ public:
 class RGWListBucketMultiparts_REST_S3 : public RGWListBucketMultiparts_REST {
 public:
   RGWListBucketMultiparts_REST_S3() {
-    limit_opt_name ="max-keys";
     default_max = 1000;
   }
   ~RGWListBucketMultiparts_REST_S3() {}
