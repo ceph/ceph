@@ -32,6 +32,10 @@ def task(ctx, config):
         # TODO parallelize
         ctx.cluster.only(role).run(
             args=[
+                # explicitly does not support multiple autotest tasks
+                # in a single run; the result archival would conflict
+                'mkdir', '/tmp/cephtest/archive/autotest',
+                run.Raw('&&'),
                 'mkdir', '/tmp/cephtest/autotest',
                 run.Raw('&&'),
                 'wget',
@@ -81,10 +85,11 @@ def task(ctx, config):
         scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
 
         assert isinstance(tests, list)
-        for testname in tests:
-            log.info('Running autotest client test %s...', testname)
+        for idx, testname in enumerate(tests):
+            log.info('Running autotest client test #%d: %s...', idx, testname)
 
-            tag = '{testname}.client.{id}'.format(
+            tag = 'client.{id}.num{idx}.{testname}'.format(
+                idx=idx,
                 testname=testname,
                 id=id_,
                 )
@@ -117,6 +122,11 @@ def task(ctx, config):
 
             remote.run(
                 args=[
-                    'rm', '-rf', '--', control, '/tmp/cephtest/autotest',
+                    'rm', '-rf', '--', control,
                     ],
                 )
+        remote.run(
+            args=[
+                'rm', '-rf', '--', '/tmp/cephtest/autotest',
+                ],
+            )
