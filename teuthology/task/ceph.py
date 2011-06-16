@@ -383,6 +383,47 @@ def cluster(ctx, config):
 
 
 @contextlib.contextmanager
+def mon(ctx, config):
+    log.info('Starting mon daemons...')
+    mon_daemons = {}
+    mons = ctx.cluster.only(teuthology.is_type('mon'))
+    coverage_dir = '/tmp/cephtest/archive/coverage'
+
+    daemon_signal = 'kill'
+    if config.get('coverage'):
+        log.info('Recording coverage for this run.')
+        daemon_signal = 'term'
+
+    for remote, roles_for_host in mons.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
+            proc = remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/daemon-helper',
+                    daemon_signal,
+                    '/tmp/cephtest/binary/usr/local/bin/cmon',
+                    '-f',
+                    '-i', id_,
+                    '-c', '/tmp/cephtest/ceph.conf',
+                    ],
+                logger=log.getChild('mon.{id}'.format(id=id_)),
+                stdin=run.PIPE,
+                wait=False,
+                )
+            mon_daemons[id_] = proc
+
+    try:
+        yield
+    finally:
+        log.info('Shutting down mon daemons...')
+        for id_, proc in mon_daemons.iteritems():
+            proc.stdin.close()
+
+        run.wait(mon_daemons.itervalues())
+
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Set up and tear down a Ceph cluster.
@@ -473,29 +514,11 @@ def task(ctx, config):
                 flavor=flavor,
                 )),
         lambda: cluster(ctx=ctx, config=None),
+        lambda: mon(ctx=ctx, config=dict(
+                coverage=config.get('coverage'),
+                )),
         ):
 
-        mon_daemons = {}
-        log.info('Starting mon daemons...')
-        mons = ctx.cluster.only(teuthology.is_type('mon'))
-        for remote, roles_for_host in mons.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-                proc = remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/daemon-helper',
-                        daemon_signal,
-                        '/tmp/cephtest/binary/usr/local/bin/cmon',
-                        '-f',
-                        '-i', id_,
-                        '-c', '/tmp/cephtest/ceph.conf',
-                        ],
-                    logger=log.getChild('mon.{id}'.format(id=id_)),
-                    stdin=run.PIPE,
-                    wait=False,
-                    )
-                mon_daemons[id_] = proc
 
         osd_daemons = {}
         log.info('Starting osd daemons...')
@@ -559,13 +582,8 @@ def task(ctx, config):
             for id_, proc in osd_daemons.iteritems():
                 proc.stdin.close()
 
-            log.info('Shutting down mon daemons...')
-            for id_, proc in mon_daemons.iteritems():
-                proc.stdin.close()
-
             run.wait(mds_daemons.itervalues())
             run.wait(osd_daemons.itervalues())
-            run.wait(mon_daemons.itervalues())
 
     if ctx.archive is not None:
         log.info('Compressing logs...')
