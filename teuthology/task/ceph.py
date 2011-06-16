@@ -152,6 +152,15 @@ def binaries(ctx, config):
 @contextlib.contextmanager
 def cluster(ctx, config):
     log.info('Creating ceph cluster...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'install', '-d', '-m0755', '--',
+                '/tmp/cephtest/data',
+                ],
+            wait=False,
+            )
+        )
 
     log.info('Writing configs...')
     remotes_and_roles = ctx.cluster.remotes.items()
@@ -628,7 +637,6 @@ def task(ctx, config):
             args=[
                 'install', '-d', '-m0755', '--',
                 '/tmp/cephtest/archive',
-                '/tmp/cephtest/data',
                 coverage_dir,
                 ],
             wait=False,
