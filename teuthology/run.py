@@ -92,7 +92,11 @@ def main():
 
     ctx.summary = {}
 
-    ctx.config['tasks'].insert(0, {'internal.check_conflict': None})
+    ctx.config['tasks'][:0] = [
+        {'internal.check_conflict': None},
+        {'internal.base': None},
+        {'internal.archive': None},
+        ]
 
     from teuthology.run_tasks import run_tasks
     try:
