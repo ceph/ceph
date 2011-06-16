@@ -497,24 +497,6 @@ def task(ctx, config):
                     )
                 mon_daemons[id_] = proc
 
-        log.info('Setting max_mds...')
-        (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
-        # TODO where does this belong?
-        mon0_remote.run(
-            args=[
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                coverage_dir,
-                '/tmp/cephtest/binary/usr/local/bin/ceph',
-                '-c', '/tmp/cephtest/ceph.conf',
-                '-k', '/tmp/cephtest/ceph.keyring',
-                'mds',
-                'set_max_mds',
-                '{num_mds:d}'.format(
-                    num_mds=teuthology.num_instances_of_type(ctx.cluster, 'mds'),
-                    ),
-                ],
-            )
-
         osd_daemons = {}
         log.info('Starting osd daemons...')
         osds = ctx.cluster.only(teuthology.is_type('osd'))
@@ -561,6 +543,7 @@ def task(ctx, config):
 
 
         log.info('Waiting until ceph is healthy...')
+        (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
         teuthology.wait_until_healthy(
             remote=mon0_remote,
             )
