@@ -1,15 +1,7 @@
 #+FILETAGS: :newdream:teuthology:todo:
 
-* TODO results gathering
-* TODO archive logs even if osd exited non-zero
 * TODO osd etc killing while test is running
 * TODO automatic host locking
-* TODO add task for ceph qa workload running
-parametrized task or move every shell script into a separate task?
-do the workloads live in ceph.git or teuthology.git?
-what about workloads written in C -- compile on node? binary tarball has .h etc
-* TODO add task for kclient mount/umount task
-- kclient: [client.0]
 * TODO add task for rbd image creation
 - rbd.create_image: [client.0]
 - rbd.create_image:
@@ -27,17 +19,6 @@ what about workloads written in C -- compile on node? binary tarball has .h etc
 - rbd:
     client.0:
       image_size: 8192
-* TODO make cfuse task default to all clients
-- cfuse: [client.0]
-- cfuse:
-* TODO make kclient task default to all clients
-- kclient: [client.0]
-- kclient:
-* TODO more than one autotest task call
-- autotest:
-    client.0: [dbench, bonnie]
-- autotest:
-    client.0: [dbench, bonnie]
 * TODO force cleanup on errors
 for now, you can run something like this:
 dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
