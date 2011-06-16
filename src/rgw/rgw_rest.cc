@@ -138,12 +138,14 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   s->formatter->dump_value_str(name, buf); 
 }
 
-void dump_owner(struct req_state *s, string& id, string& name)
+void dump_owner(struct req_state *s, string& id, string& name, const char *section)
 {
-  s->formatter->open_obj_section("Owner");
+  if (!section)
+    section = "Owner";
+  s->formatter->open_obj_section(section);
   s->formatter->dump_value_str("ID", id.c_str());
   s->formatter->dump_value_str("DisplayName", name.c_str());
-  s->formatter->close_section("Owner");
+  s->formatter->close_section(section);
 }
 
 void dump_start(struct req_state *s)

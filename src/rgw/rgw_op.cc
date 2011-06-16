@@ -20,6 +20,30 @@ using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
 
+class MultipartMetaFilter : public RGWAccessListFilter {
+public:
+  MultipartMetaFilter() {}
+  bool filter(string& name, string& key) {
+    int len = name.size();
+    if (len < 6)
+      return false;
+
+    int pos = name.find(".meta", len - 5);
+    if (pos <= 0)
+      return false;
+
+    pos = name.rfind('.', pos - 1);
+    if (pos < 0)
+      return false;
+
+    key = name.substr(0, pos);
+
+    return true;
+  }
+};
+
+static MultipartMetaFilter mp_filter;
+
 static int parse_range(const char *range, off_t& ofs, off_t& end)
 {
   int r = -ERANGE;
@@ -117,6 +141,7 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
   if (!oid.empty() && !upload_id.empty()) {
     oid.append(".");
     oid.append(upload_id);
+    oid.append(".meta");
     obj.set_ns(mp_ns);
   }
   obj.init(bucket, oid, object);
@@ -315,7 +340,8 @@ void RGWListBucket::execute()
   }
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns);
+                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns, NULL, NULL);
+
 done:
   send_response();
 }
@@ -444,6 +470,7 @@ void RGWPutObj::execute()
       oid.append(".");
       oid.append(s->args.get("uploadId"));
       multipart_meta_obj = oid;
+      multipart_meta_obj.append(".meta");
       part_num = s->args.get("partNumber");
       if (part_num.empty()) {
         ret = -EINVAL;
@@ -889,6 +916,7 @@ void RGWInitMultipart::execute()
     string tmp_obj_name = s->object_str;
     tmp_obj_name.append(".");
     tmp_obj_name.append(upload_id);
+    tmp_obj_name.append(".meta");
 
     obj.init(s->bucket_str, tmp_obj_name, s->object_str, mp_ns);
     ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, true);
@@ -985,6 +1013,7 @@ void RGWCompleteMultipart::execute()
   oid.append(".");
   oid.append(upload_id);
   meta_oid = oid;
+  meta_oid.append(".meta");
   prefix = oid;
   prefix.append(".");
 
@@ -1079,6 +1108,7 @@ void RGWAbortMultipart::execute()
   oid.append(".");
   oid.append(upload_id);
   meta_oid = oid;
+  meta_oid.append(".meta");
   prefix = oid;
   prefix.append(".");
 
@@ -1118,6 +1148,7 @@ void RGWListMultipart::execute()
 
   obj.append(".");
   obj.append(upload_id);
+  obj.append(".meta");
   ret = get_multiparts_info(s, obj, parts, policy, xattrs);
 
 done:
@@ -1126,13 +1157,20 @@ done:
 
 void RGWListBucketMultiparts::execute()
 {
+  vector<RGWObjEnt> objs;
+  string marker;
+
   if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
   }
 
   url_decode(s->args.get("prefix"), prefix);
-  marker = s->args.get("marker");
+  key_marker = s->args.get("key-marker");
+  uploadid_marker = s->args.get("upload-id-marker-marker");
+  marker = key_marker;
+  marker.append(".");
+  marker.append(uploadid_marker);
   max_keys = s->args.get(limit_opt_name);
   if (!max_keys.empty()) {
     max = atoi(max_keys.c_str());
@@ -1154,7 +1192,25 @@ void RGWListBucketMultiparts::execute()
   }
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK), mp_ns);
+                               !!(s->prot_flags & RGW_REST_OPENSTACK), mp_ns, &is_truncated, &mp_filter);
+  if (objs.size()) {
+    vector<RGWObjEnt>::iterator iter;
+    RGWMultipartUploadEntry entry;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      string name = iter->name;
+      int pos = name.rfind('.'); // search for '.meta'
+      if (pos < 0)
+        continue;
+      pos = name.rfind('.', pos - 1); // <key>.<upload_id>
+      if (pos < 0)
+        continue;
+      entry.key = name.substr(0, pos);
+      entry.upload_id = name.substr(pos + 1);
+      entry.obj = *iter;
+      uploads.push_back(entry);
+    }
+    next_marker = entry;
+  }
 done:
   send_response();
 }

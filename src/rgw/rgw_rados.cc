@@ -151,77 +151,92 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
  */
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-			   bool get_content_type, string& ns)
+			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
 
-  set<string> dir_set;
+  std::map<string, string> dir_map;
   {
     librados::ObjectIterator i_end = io_ctx.objects_end();
     for (librados::ObjectIterator i = io_ctx.objects_begin(); i != i_end; ++i) {
         string obj = *i;
+        string key = obj;
 
         if (!rgw_obj::translate_raw_obj(obj, ns))
           continue;
 
+        if (filter && !filter->filter(obj, key))
+          continue;
+
 	if (prefix.empty() ||
 	    ((obj).compare(0, prefix.size(), prefix) == 0)) {
-	  dir_set.insert(obj);
+	  dir_map[obj] = key;
 	}
     }
   }
 
-  set<string>::iterator p;
+  std::map<string, string>::iterator p;
   if (!marker.empty())
-    p = dir_set.lower_bound(marker);
+    p = dir_map.lower_bound(marker);
   else
-    p = dir_set.begin();
+    p = dir_map.begin();
 
   if (max < 0) {
-    max = dir_set.size();
+    max = dir_map.size();
   }
 
   result.clear();
-  int i, count = 0;
-  for (i=0; i<max && p != dir_set.end(); i++, ++p) {
+  int i;
+  for (i=0; i<max && p != dir_map.end(); i++, ++p) {
     RGWObjEnt obj;
-    obj.name = *p;
+    string name = p->first;
+    string key = p->second;
+    obj.name = name;
 
     if (!delim.empty()) {
-      int delim_pos = obj.name.find(delim, prefix.size());
+      int delim_pos = name.find(delim, prefix.size());
 
       if (delim_pos >= 0) {
-        common_prefixes[obj.name.substr(0, delim_pos + 1)] = true;
+        common_prefixes[name.substr(0, delim_pos + 1)] = true;
         continue;
       }
     }
+    string oid = name;
+    if (!ns.empty()) {
+      oid = "_";
+      oid.append(ns);
+      oid.append("_");
+      oid.append(name);
+    }
 
     uint64_t s;
-    string p_str = *p;
-    if (io_ctx.stat(*p, &s, &obj.mtime) < 0)
+    io_ctx.locator_set_key(key);
+    if (io_ctx.stat(oid, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
 
     bufferlist bl; 
     obj.etag[0] = '\0';
-    if (io_ctx.getxattr(*p, RGW_ATTR_ETAG, bl) >= 0) {
+    if (io_ctx.getxattr(oid, RGW_ATTR_ETAG, bl) >= 0) {
       strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
     }
     if (get_content_type) {
       bl.clear();
       obj.content_type = "";
-      if (io_ctx.getxattr(*p, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
+      if (io_ctx.getxattr(oid, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
         obj.content_type = bl.c_str();
       }
     }
     result.push_back(obj);
   }
+  if (is_truncated)
+    *is_truncated = (p != dir_map.end());
 
-  return count;
+  return 0;
 }
 
 /**

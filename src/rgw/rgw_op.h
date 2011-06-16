@@ -416,19 +416,33 @@ public:
   virtual void send_response() = 0;
 };
 
+struct RGWMultipartUploadEntry {
+  string key;
+  string upload_id;
+  RGWObjEnt obj;
+
+  void clear() {
+    key = "";
+    upload_id = "";
+  }
+};
+
 class RGWListBucketMultiparts : public RGWOp {
 protected:
   string prefix;
-  string marker; 
+  string key_marker; 
+  string uploadid_marker; 
+  RGWMultipartUploadEntry next_marker; 
   string max_keys;
   string delimiter;
   int max;
   int ret;
-  vector<RGWObjEnt> objs;
+  vector<RGWMultipartUploadEntry> uploads;
   map<string, bool> common_prefixes;
 
   string limit_opt_name;
   int default_max;
+  bool is_truncated;
 
 public:
   RGWListBucketMultiparts() {}
@@ -436,12 +450,15 @@ public:
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
     prefix.clear();
-    marker.clear();
+    key_marker.clear();
+    uploadid_marker.clear();
+    next_marker.clear();
     max_keys.clear();
     delimiter.clear();
     max = 0;
     ret = 0;
-    objs.clear();
+    uploads.clear();
+    is_truncated = false;
     common_prefixes.clear();
   }
   void execute();

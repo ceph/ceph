@@ -33,7 +33,7 @@ public:
   /** get listing of the objects in a bucket */
   virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-		   bool get_content_type, string& ns);
+		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
   /**
    * create a bucket with name bucket and the given list of attrs

@@ -96,9 +96,9 @@ int RGWFS::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 
 int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
                        string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-                       bool get_content_type, string& ns)
+                       bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
-  map<string, bool> dir_map;
+  map<string, string> dir_map;
   char path[BUF_SIZE];
 
   snprintf(path, BUF_SIZE, "%s/%s", DIR_NAME, bucket.c_str());
@@ -123,14 +123,19 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
     if (!rgw_obj::translate_raw_obj(obj, ns))
         continue;
 
-     dir_map[obj] = true;
+    string key = obj;
+
+    if (filter && !filter->filter(obj, key))
+      continue;
+
+     dir_map[obj] = key;
     }
   }
 
   closedir(dir);
 
 
-  map<string, bool>::iterator iter;
+  map<string, string>::iterator iter;
   if (!marker.empty())
     iter = dir_map.lower_bound(marker);
   else
@@ -159,8 +164,10 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
     }
     result.push_back(obj);
   }
+  if (is_truncated)
+    *is_truncated = (iter != dir_map.end());
 
-  return i;
+  return result.size();
 }
 
 
