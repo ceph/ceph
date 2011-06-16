@@ -16,7 +16,7 @@ def task(ctx, config):
         - ceph:
         - cfuse: [client.0]
         - workunit:
-            client.0: [direct_io, xattrs]
+            client.0: [direct_io, xattrs.sh]
             client.1: [snaps]
     """
     assert isinstance(config, dict)
