@@ -7,31 +7,52 @@ from orchestra import run
 
 log = logging.getLogger(__name__)
 
-@contextlib.contextmanager
-def task(ctx, config):
-    """
-    Mount/unmount a ``cfuse`` client.
-
-    The config is expected to be a list of clients to do this
-    operation on. This lets you e.g. set up one client with ``cfuse``
-    and another with ``kclient``.
-
-        tasks:
-        - ceph:
-        - cfuse: [client.0]
-        - interactive:
-    """
-    log.info('Mounting cfuse clients...')
-    assert isinstance(config, list), \
-        "task fuse automatic configuration not supported yet, list all clients"
-    cfuse_daemons = {}
-
-    for role in config:
+def get_clients(ctx, roles):
+    for role in roles:
         assert isinstance(role, basestring)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        yield (id_, remote)
+
+
+@contextlib.contextmanager
+def task(ctx, config):
+    """
+    Mount/unmount a ``cfuse`` client.
+
+    The config is optional and defaults to mounting on all clients. If
+    a config is given, it is expected to be a list of clients to do
+    this operation on. This lets you e.g. set up one client with
+    ``cfuse`` and another with ``kclient``.
+
+    Example that mounts all clients::
+
+        tasks:
+        - ceph:
+        - cfuse:
+        - interactive:
+
+    Example that uses both ``kclient` and ``cfuse``::
+
+        tasks:
+        - ceph:
+        - cfuse: [client.0]
+        - kclient: [client.1]
+        - interactive:
+    """
+    log.info('Mounting cfuse clients...')
+    assert config is None or isinstance(config, list), \
+        "task cfuse got invalid config"
+    cfuse_daemons = {}
+
+    if config is None:
+        config = ['client.{id}'.format(id=id_)
+                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
+    clients = list(get_clients(ctx=ctx, roles=config))
+
+    for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         remote.run(
             args=[
@@ -59,12 +80,7 @@ def task(ctx, config):
             )
         cfuse_daemons[id_] = proc
 
-    for role in config:
-        assert isinstance(role, basestring)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         teuthology.wait_until_fuse_mounted(
             remote=remote,
@@ -76,12 +92,7 @@ def task(ctx, config):
         yield
     finally:
         log.info('Unmounting cfuse clients...')
-        for role in config:
-            assert isinstance(role, basestring)
-            PREFIX = 'client.'
-            assert role.startswith(PREFIX)
-            id_ = role[len(PREFIX):]
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        for id_, remote in clients:
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[
@@ -92,12 +103,7 @@ def task(ctx, config):
                 )
         run.wait(cfuse_daemons.itervalues())
 
-        for role in config:
-            assert isinstance(role, basestring)
-            PREFIX = 'client.'
-            assert role.startswith(PREFIX)
-            id_ = role[len(PREFIX):]
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        for id_, remote in clients:
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[

@@ -122,6 +122,15 @@ def roles_of_type(roles_for_host, type_):
         id_ = name[len(prefix):]
         yield id_
 
+def all_roles_of_type(cluster, type_):
+    prefix = '{type}.'.format(type=type_)
+    for _, roles_for_host in cluster.remotes.iteritems():
+        for name in roles_for_host:
+            if not name.startswith(prefix):
+                continue
+            id_ = name[len(prefix):]
+            yield id_
+
 def is_type(type_):
     """
     Returns a matcher function for whether role is of type given.
