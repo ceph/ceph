@@ -107,7 +107,7 @@ librados_config_LDADD = librados.la $(EXTRALIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
-csyn_SOURCES = csyn.cc
+csyn_SOURCES = csyn.cc client/SyntheticClient.cc
 csyn_LDADD = libclient.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += csyn
 
@@ -743,7 +743,6 @@ libosdc_a_SOURCES = \
 
 libclient_a_SOURCES = \
 	client/Client.cc \
-	client/SyntheticClient.cc \
 	client/Trace.cc
 
 dist-hook:
