@@ -97,7 +97,7 @@ class Rados(object):
 Rados object in state %s." % (self.state))
 
     def __init__(self, rados_id = None):
-        self.librados = CDLL('librados.so')
+        self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
         ret = self.librados.rados_create(byref(self.cluster), c_char_p(rados_id))
         if ret != 0:

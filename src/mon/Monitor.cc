@@ -43,6 +43,7 @@
 #include "common/Timer.h"
 #include "common/Clock.h"
 #include "common/DoutStreambuf.h"
+#include "common/errno.h"
 #include "include/color.h"
 
 #include "OSDMonitor.h"
@@ -60,6 +61,7 @@
 
 #include <sstream>
 #include <stdlib.h>
+#include <signal.h>
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix
@@ -84,14 +86,22 @@ const CompatSet::Feature ceph_mon_feature_ro_compat[] =
 const CompatSet::Feature ceph_mon_feature_incompat[] =
   { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
 
-Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
+#ifdef ENABLE_COVERAGE
+void handle_signal(int signal)
+{
+  exit(0);
+}
+#endif
+
+Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map) :
+  Dispatcher(cct_),
   name(nm),
   rank(-1), 
   messenger(m),
   lock("Monitor::lock"),
   timer(lock),
   monmap(map),
-  clog(messenger, monmap, NULL, LogClient::FLAG_MON),
+  clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -174,6 +184,11 @@ void Monitor::init()
   }
   
   lock.Unlock();
+
+#ifdef ENABLE_COVERAGE
+  signal(SIGTERM, handle_signal);
+#endif
+
 }
 
 void Monitor::shutdown()
@@ -314,7 +329,8 @@ void Monitor::handle_command(MMonCommand *m)
       pgmon()->dispatch(m);
       return;
     }
-    if (m->cmd[0] == "mon") {
+    if (m->cmd[0] == "mon" &&
+        ((m->cmd.size() < 3 ) || m->cmd[1] != "tell")) {
       monmon()->dispatch(m);
       return;
     }
@@ -331,7 +347,7 @@ void Monitor::handle_command(MMonCommand *m)
 
     if (m->cmd[0] == "_injectargs") {
       dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-      g_conf.injectargs(m->cmd[1]);
+      g_conf->injectargs(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "class") {
@@ -367,11 +383,84 @@ void Monitor::handle_command(MMonCommand *m)
 	ss << " " << combined;
       rs = ss.str();
       r = 0;
+    } else if (m->cmd[0] == "mon" && m->cmd.size() >= 3 && m->cmd[1] == "tell") {
+      dout(20) << "got tell: " << m->cmd << dendl;
+      if (m->cmd[2] == "*") { // send to all mons and do myself
+        char *num = new char[8];
+        for (unsigned i = 0; i < monmap->size(); ++i) {
+          if (monmap->get_inst(i) != messenger->get_myinst()) {
+            MMonCommand *newm = new MMonCommand(m->fsid, m->version);
+	    newm->cmd = m->cmd;
+            sprintf(num, "%d", i);
+	    dout(20) << "sending to mon " << i << " with tell command filled in for " << num << dendl;
+            newm->cmd[2] = num;
+            messenger->send_message(newm, monmap->get_inst(i));
+          }
+        }
+        handle_mon_tell(m);
+        rs = "delivered command to all mons";
+        r = 0;
+      } else {
+        // find target
+        int target = atoi(m->cmd[2].c_str());
+        stringstream ss;
+        if (target == 0 && m->cmd[2] != "0") {
+          ss << "could not parse target " << m->cmd[2];
+          rs = ss.str();
+        } else {
+          // send to target, or handle if it's me
+          if (monmap->get_inst(target) != messenger->get_myinst()) {
+            messenger->send_message(m, monmap->get_inst(target));
+            ss << "forwarded to target mon" << m->cmd[2];
+            rs = ss.str();
+            r = 0;
+	    dout(20) << "sent to target mon" << dendl;
+          }
+          else {
+            handle_mon_tell(m);
+            rs = "interpreting...(see clog for more information)";
+            r = 0;
+          }
+        }
+        if (m->get_source().is_mon()) {
+          // don't respond directly to sender, just put in log and back out
+          m->put();
+          return;
+        }
+      }
     }
   } else 
     rs = "no command";
 
   reply_command(m, r, rs, rdata, 0);
+}
+
+/**
+ * Handle commands of the format "ceph mon tell x", where x
+ * is a mon number. This function presumes it's supposed
+ * to execute the actual command; delivery is handled by
+ */
+void Monitor::handle_mon_tell(MMonCommand *m)
+{
+  dout(10) << "handle_tell " << *m << dendl;
+  stringstream ss;
+
+  // remove monitor direction instructions
+  m->cmd.erase(m->cmd.begin());
+  m->cmd.erase(m->cmd.begin());
+  m->cmd.erase(m->cmd.begin());
+
+  if ((m->cmd.size()) && (m->cmd[0] == "heap")) {
+    if (!ceph_using_tcmalloc())
+      ss << "tcmalloc not enabled, can't use heap profiler commands\n";
+    else
+      ceph_heap_profiler_handle_command(m->cmd, clog);
+  } else {
+    ss << "unrecognized command " << m->cmd;
+  }
+
+  if (!ss.eof())
+    clog.error(ss);
 }
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)
@@ -655,7 +744,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
 	s->until = g_clock.now();
-	s->until += g_conf.mon_subscribe_interval;
+	s->until += g_conf->mon_subscribe_interval;
       } else {
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
@@ -814,7 +903,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   }
 
   s->until = g_clock.now();
-  s->until += g_conf.mon_subscribe_interval;
+  s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
@@ -841,7 +930,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   // ???
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf.mon_subscribe_interval),
+    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval),
 			    m->get_source_inst());
 
   s->put();
@@ -935,7 +1024,7 @@ public:
 void Monitor::new_tick()
 {
   C_Mon_Tick *ctx = new C_Mon_Tick(this);
-  timer.add_event_after(g_conf.mon_tick_interval, ctx);
+  timer.add_event_after(g_conf->mon_tick_interval, ctx);
 }
 
 void Monitor::tick()
@@ -985,13 +1074,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  try {
-    store->put_bl_ss(magicbl, "magic", 0);
-  }
-  catch (const MonitorStore::Error &e) {
+  int r = store->put_bl_ss(magicbl, "magic", 0);
+  if (r < 0) {
     dout(0) << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
-              << "initialize the monitor state machine: "
-	      << e.what() << TEXT_NORMAL << dendl;
+	    << "initialize the monitor state machine: " << cpp_strerror(r)
+	    << TEXT_NORMAL << dendl;
     exit(1);
   }
 

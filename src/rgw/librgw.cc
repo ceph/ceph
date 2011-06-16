@@ -24,7 +24,7 @@
 #include <sstream>
 #include <string.h>
 
-#define RGW_LOG(x) pdout(x, g_conf.rgw_log)
+#define RGW_LOG(x) pdout(x, g_conf->rgw_log)
 
 static Mutex librgw_init_mutex("librgw_init");
 static int librgw_initialized = 0;

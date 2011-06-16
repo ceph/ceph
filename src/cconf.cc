@@ -69,7 +69,7 @@ Return code will be 0 on success; error code otherwise.\n\
 static int list_sections(const std::string &prefix)
 {
   std::vector <std::string> sections;
-  int ret = g_conf.get_all_sections(sections);
+  int ret = g_conf->get_all_sections(sections);
   if (ret)
     return 2;
   for (std::vector<std::string>::const_iterator p = sections.begin();
@@ -88,9 +88,9 @@ static int lookup(const std::deque<std::string> &sections,
   for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
     my_sections.push_back(*s);
   }
-  g_conf.get_my_sections(my_sections);
+  g_conf->get_my_sections(my_sections);
   std::string val;
-  int ret = g_conf.get_val_from_conf_file(my_sections, key.c_str(), val, true);
+  int ret = g_conf->get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
     return 1;
   else if (ret == 0) {

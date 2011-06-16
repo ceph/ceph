@@ -3,6 +3,7 @@
 
 #include "rgw_access.h"
 #include "rgw_rados.h"
+#include "rgw_acl.h"
 
 #include "include/rados/librados.hpp"
 using namespace librados;
@@ -218,14 +219,28 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       continue;
     obj.size = s;
 
-    bufferlist bl; 
     obj.etag[0] = '\0';
-    if (io_ctx.getxattr(oid, RGW_ATTR_ETAG, bl) >= 0) {
-      strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
-      obj.etag[sizeof(obj.etag)-1] = '\0';
+    map<string, bufferlist> attrset;
+    if (io_ctx.getxattrs(oid, attrset) >= 0) {
+      map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
+      if (iter != attrset.end()) {
+        bufferlist& bl = iter->second;
+        strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
+        obj.etag[sizeof(obj.etag)-1] = '\0';
+      }
+      iter = attrset.find(RGW_ATTR_ACL);
+      if (iter != attrset.end()) {
+        bufferlist& bl = iter->second;
+        bufferlist::iterator i = bl.begin();
+        RGWAccessControlPolicy policy;
+        policy.decode_owner(i);
+        ACLOwner& owner = policy.get_owner();
+        obj.owner = owner.get_id();
+        obj.owner_display_name = owner.get_display_name();
+      }
     }
+    bufferlist bl;
     if (get_content_type) {
-      bl.clear();
       obj.content_type = "";
       if (io_ctx.getxattr(oid, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
         obj.content_type = bl.c_str();
@@ -244,10 +259,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  * if auid is set, it sets the auid of the underlying rados io_ctx
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
   librados::ObjectOperation op;
-  op.create(true);
+  op.create(exclusive);
 
   for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
     op.setxattr(iter->first.c_str(), iter->second);
@@ -631,7 +646,7 @@ int RGWRados::prepare_get_obj(rgw_obj& obj,
 
   if (attrs) {
     r = state->io_ctx.getxattrs(oid, *attrs);
-    if (g_conf.rgw_log >= 20) {
+    if (g_conf->rgw_log >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         RGW_LOG(20) << "Read xattr: " << iter->first << dendl;
       }
@@ -797,6 +812,15 @@ int RGWRados::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 
   r = io_ctx.stat(oid, psize, pmtime);
   return r;
+}
+
+int RGWRados::get_bucket_id(std::string& bucket)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+  return io_ctx.get_id();
 }
 
 int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)

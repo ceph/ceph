@@ -48,7 +48,7 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   _prepare(req->bl, req->reqid, from);
   _note_prepare(from, req->reqid);
 
-  assert(g_conf.mds_kill_mdstable_at != 1);
+  assert(g_conf->mds_kill_mdstable_at != 1);
 
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
   mds->mdlog->start_entry(le);
@@ -61,7 +61,7 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
 
-  assert(g_conf.mds_kill_mdstable_at != 2);
+  assert(g_conf->mds_kill_mdstable_at != 2);
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
@@ -80,7 +80,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
   if (pending_for_mds.count(tid)) {
 
-    assert(g_conf.mds_kill_mdstable_at != 5);
+    assert(g_conf->mds_kill_mdstable_at != 5);
 
     _commit(tid);
     _note_commit(tid);
@@ -106,7 +106,7 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
 
-  assert(g_conf.mds_kill_mdstable_at != 6);
+  assert(g_conf->mds_kill_mdstable_at != 6);
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
   mds->send_message_mds(reply, req->get_source().num());

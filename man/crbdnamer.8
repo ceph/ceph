@@ -1,0 +1,17 @@
+.TH CRBDNAMER 8
+.SH NAME
+crbdnamer \- udev helper to name RBD devices
+.SH SYNOPSIS
+.B crbdnamer \fInum\fR
+.SH DESCRIPTION
+.B crbdnamer
+prints the pool and image name for the given RBD devices to stdout.  It is used by udev (using a rule like the one below) to set up a device symlink.
+.IP
+KERNEL=="rbd[0-9]*", PROGRAM="/usr/bin/crbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
+.SH AVAILABILITY
+.B crbdnamer
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR rbd (8)
+.BR ceph (8)

@@ -269,7 +269,10 @@ public:
     void ms_handle_remote_reset(Connection *con) {}
   public:
     OSD *osd;
-    HeartbeatDispatcher(OSD *o) : osd(o) {}
+    HeartbeatDispatcher(OSD *o) 
+      : Dispatcher(&g_ceph_context), osd(o)
+    {
+    }
   } heartbeat_dispatcher;
 
 
@@ -369,7 +372,7 @@ private:
 
     bool is_flash_crowd_candidate(const object_t& oid) const {
       Mutex::Locker locker(lock);
-      return get_average_iat(oid) <= g_conf.osd_flash_crowd_iat_threshold;
+      return get_average_iat(oid) <= g_conf->osd_flash_crowd_iat_threshold;
     }
   };
 
@@ -735,9 +738,9 @@ protected:
 	pg->get();
 	osd->recovery_queue.push_back(&pg->recovery_item);
 
-	if (g_conf.osd_recovery_delay_start > 0) {
+	if (g_conf->osd_recovery_delay_start > 0) {
 	  osd->defer_recovery_until = g_clock.now();
-	  osd->defer_recovery_until += g_conf.osd_recovery_delay_start;
+	  osd->defer_recovery_until += g_conf->osd_recovery_delay_start;
 	}
 	return true;
       }

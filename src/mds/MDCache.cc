@@ -135,9 +135,9 @@ MDCache::MDCache(MDS *m)
   num_inodes_with_caps = 0;
   num_caps = 0;
 
-  max_dir_commit_size = g_conf.mds_dir_max_commit_size ?
-                        (g_conf.mds_dir_max_commit_size << 20) :
-                        (0.9 *(g_conf.osd_max_write_size << 20));
+  max_dir_commit_size = g_conf->mds_dir_max_commit_size ?
+                        (g_conf->mds_dir_max_commit_size << 20) :
+                        (0.9 *(g_conf->osd_max_write_size << 20));
 
   discover_last_tid = 0;
   find_ino_peer_last_tid = 0;
@@ -149,10 +149,10 @@ MDCache::MDCache(MDS *m)
   client_lease_durations[2] = 300.0;
 
   opening_root = open = false;
-  lru.lru_set_max(g_conf.mds_cache_size);
-  lru.lru_set_midpoint(g_conf.mds_cache_mid);
+  lru.lru_set_max(g_conf->mds_cache_size);
+  lru.lru_set_midpoint(g_conf->mds_cache_mid);
 
-  decayrate.set_halflife(g_conf.mds_decay_halflife);
+  decayrate.set_halflife(g_conf->mds_decay_halflife);
 
   did_shutdown_log_cap = false;
 }
@@ -167,7 +167,7 @@ MDCache::~MDCache()
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_imax, g_conf.mds_cache_size);
+  mds->logger->set(l_mds_imax, g_conf->mds_cache_size);
   mds->logger->set(l_mds_i, lru.lru_get_size());
   mds->logger->set(l_mds_ipin, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_itop, lru.lru_get_top());
@@ -285,7 +285,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     memset(&in->inode.layout, 0, sizeof(in->inode.layout));
-    in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
     ++in->inode.rstat.rsubdirs;
   } else {
     in->inode.layout = default_file_layout;
@@ -1759,7 +1759,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
 
     if (pi->rstat.rbytes < 0)
-      assert(!"negative rstat rbytes" == g_conf.mds_verify_scatter);
+      assert(!"negative rstat rbytes" == g_conf->mds_verify_scatter);
 
     last = first-1;
   }
@@ -1931,12 +1931,12 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // delay propagating until later?
     if (!stop && !first &&
-	g_conf.mds_dirstat_min_interval > 0) {
+	g_conf->mds_dirstat_min_interval > 0) {
       if (pin->last_dirstat_prop.sec() > 0) {
 	double since_last_prop = mut->now - pin->last_dirstat_prop;
-	if (since_last_prop < g_conf.mds_dirstat_min_interval) {
+	if (since_last_prop < g_conf->mds_dirstat_min_interval) {
 	  dout(10) << "predirty_journal_parents last prop " << since_last_prop
-		   << " < " << g_conf.mds_dirstat_min_interval
+		   << " < " << g_conf->mds_dirstat_min_interval
 		   << ", stopping" << dendl;
 	  stop = true;
 	} else {
@@ -1996,7 +1996,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
       if (pi->dirstat.size() < 0)
-	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
+	assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->dirstat.size() != pf->fragstat.size()) {
 	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
@@ -2006,7 +2006,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
 
-	  assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	  assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	}
       }
     }
@@ -2053,7 +2053,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  // trust the dirfrag for now
 	  pi->rstat = pf->rstat;
 
-	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	  assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
 	}
       }
     }
@@ -5006,11 +5006,14 @@ void MDCache::do_file_recover()
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
-      in->state_clear(CInode::STATE_NEEDSRECOVER);
+      in->state_clear(CInode::STATE_RECOVERING);
       in->auth_unpin(this);
-      if (in->filelock.is_stable())
-	mds->locker->eval(&in->filelock);
-      else
+      if (in->filelock.is_stable()) {
+	bool need_issue = false;
+	mds->locker->eval(&in->filelock, &need_issue);
+	if (need_issue)
+	  mds->locker->issue_caps(in);
+      } else
 	mds->locker->eval_gather(&in->filelock);
     }
   }
@@ -5202,7 +5205,7 @@ bool MDCache::trim(int max)
 {
   // trim LRU
   if (max < 0) {
-    max = g_conf.mds_cache_size;
+    max = g_conf->mds_cache_size;
     if (!max) return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
@@ -5942,7 +5945,7 @@ void MDCache::check_memory_usage()
 	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
 	   << ", buffers " << (buffer::get_total_alloc() >> 10)
-	   << ", max " << g_conf.mds_mem_max
+	   << ", max " << g_conf->mds_mem_max
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
@@ -5952,14 +5955,14 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_malloc, last.malloc);
 
   /*int size = last.get_total();
-  if (size > g_conf.mds_mem_max * .9) {
-    float ratio = (float)g_conf.mds_mem_max * .9 / (float)size;
+  if (size > g_conf->mds_mem_max * .9) {
+    float ratio = (float)g_conf->mds_mem_max * .9 / (float)size;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   } else 
     */
-  if (num_inodes_with_caps > g_conf.mds_cache_size) {
-    float ratio = (float)g_conf.mds_cache_size * .9 / (float)num_inodes_with_caps;
+  if (num_inodes_with_caps > g_conf->mds_cache_size) {
+    float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   }
@@ -5985,11 +5988,11 @@ void MDCache::shutdown_check()
   dout(0) << "shutdown_check at " << g_clock.now() << dendl;
 
   // cache
-  int o = g_conf.debug_mds;
-  g_conf.debug_mds = 10;
+  int o = g_conf->debug_mds;
+  g_conf->debug_mds = 10;
   show_cache();
-  g_conf.debug_mds = o;
-  mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  g_conf->debug_mds = o;
+  mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
   // this
   dout(0) << "lru size now " << lru.lru_get_size() << dendl;
@@ -6007,10 +6010,10 @@ void MDCache::shutdown_start()
 {
   dout(2) << "shutdown_start" << dendl;
 
-  if (g_conf.mds_shutdown_check)
-    mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  if (g_conf->mds_shutdown_check)
+    mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
-  //  g_conf.debug_mds = 10;
+  //  g_conf->debug_mds = 10;
 }
 
 
@@ -6521,71 +6524,77 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       return 1;
     }
     
-    if (dnl && !dnl->is_null()) {
-      CInode *in = dnl->get_inode();
-      
-      // do we have inode?
-      if (!in) {
-        assert(dnl->is_remote());
-        // do i have it?
-        in = get_inode(dnl->get_remote_ino());
-        if (in) {
-	  dout(7) << "linking in remote in " << *in << dendl;
-	  dn->link_remote(dnl, in);
-	} else {
-          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
-	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
-	  if (mds->logger) mds->logger->inc(l_mds_trino);
-          return 1;
-        }        
-      }
+    if (dnl) {
+      if (dnl->is_null()) {
+        dout(12) << "traverse: miss on null dentry " << path[depth] << " in "
+                 << *curdir << dendl;
+        return -ENOENT;
+      } else {
+        CInode *in = dnl->get_inode();
 
-      // forwarder wants replicas?
+        // do we have inode?
+        if (!in) {
+          assert(dnl->is_remote());
+          // do i have it?
+          in = get_inode(dnl->get_remote_ino());
+          if (in) {
+            dout(7) << "linking in remote in " << *in << dendl;
+            dn->link_remote(dnl, in);
+          } else {
+            dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
+            assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
+            open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
+            if (mds->logger) mds->logger->inc(l_mds_trino);
+            return 1;
+          }
+        }
+
+        // forwarder wants replicas?
 #if 0
-      if (mdr && mdr->client_request && 
-	  mdr->client_request->get_mds_wants_replica_in_dirino()) {
-	dout(30) << "traverse: REP is here, " 
-		 << mdr->client_request->get_mds_wants_replica_in_dirino() 
-		 << " vs " << curdir->dirfrag() << dendl;
-	
-	if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
-	    curdir->is_auth() && 
-	    curdir->is_rep() &&
-	    curdir->is_replica(req->get_source().num()) &&
-	    dn->is_auth()
-	    ) {
-	  assert(req->get_source().is_mds());
-	  int from = req->get_source().num();
-	  
-	  if (dn->is_replica(from)) {
-	    dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
-		     << req->get_source() << " dn " << *dn << dendl; 
-	  } else {
-	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
-	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
-	    reply->mark_unsolicited();
-	    reply->starts_with = MDiscoverReply::DENTRY;
-	    replicate_dentry(dn, from, reply->trace);
-	    if (dnl->is_primary())
-	      replicate_inode(in, from, reply->trace);
-	    if (req->get_source() != req->get_orig_source())
-	      mds->send_message_mds(reply, req->get_source().num());
-	    else mds->send_message(reply->req->get_connnection());
-	  }
-	}
-      }
+        if (mdr && mdr->client_request &&
+            mdr->client_request->get_mds_wants_replica_in_dirino()) {
+          dout(30) << "traverse: REP is here, "
+              << mdr->client_request->get_mds_wants_replica_in_dirino()
+              << " vs " << curdir->dirfrag() << dendl;
+
+          if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
+              curdir->is_auth() &&
+              curdir->is_rep() &&
+              curdir->is_replica(req->get_source().num()) &&
+              dn->is_auth()
+          ) {
+            assert(req->get_source().is_mds());
+            int from = req->get_source().num();
+
+            if (dn->is_replica(from)) {
+              dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by "
+                  << req->get_source() << " dn " << *dn << dendl;
+            } else {
+              dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
+              MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
+              reply->mark_unsolicited();
+              reply->starts_with = MDiscoverReply::DENTRY;
+              replicate_dentry(dn, from, reply->trace);
+              if (dnl->is_primary())
+                replicate_inode(in, from, reply->trace);
+              if (req->get_source() != req->get_orig_source())
+                mds->send_message_mds(reply, req->get_source().num());
+              else mds->send_message(reply->req->get_connnection());
+            }
+          }
+        }
 #endif
-      
-      // add to trace, continue.
-      cur = in;
-      touch_inode(cur);
-      if (pdnvec)
-	pdnvec->push_back(dn);
-      if (pin)
-	*pin = cur;
-      depth++;
-      continue;
+
+        // add to trace, continue.
+        cur = in;
+        touch_inode(cur);
+        if (pdnvec)
+          pdnvec->push_back(dn);
+        if (pin)
+          *pin = cur;
+        depth++;
+        continue;
+      }
     }
     
 
@@ -6603,8 +6612,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
 	    dn = NULL;
 	  } else if (dn) {
-	    dout(20) << " had null " << *dn << dendl;
-	    assert(dnl->is_null());
+	    assert(0); // should have fallen out in ->is_null() check above
 	  } else if (curdir->is_frozen()) {
 	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
@@ -6695,6 +6703,13 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
   return 0;
 }
 
+/**
+ * Find out if the MDS is auth for a given path.
+ *
+ * Returns true if:
+ * 1) The full path DNE and we are auth for the deepest existing piece
+ * 2) We are auth for the inode linked to by the last dentry.
+ */
 bool MDCache::path_is_mine(filepath& path)
 {
   dout(15) << "path_is_mine " << path.get_ino() << " " << path << dendl;
@@ -6713,7 +6728,8 @@ bool MDCache::path_is_mine(filepath& path)
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (!dn || dnl->is_null())
       return dir->is_auth();
-    assert(dnl->is_primary());
+    if (!dnl->is_primary())
+      return false;
     cur = dnl->get_inode();
   }
 
@@ -8523,7 +8539,7 @@ void MDCache::handle_discover(MDiscover *dis)
       // don't have wanted ino in this dir?
       if (dis->get_want_ino()) {
 	// set error flag in reply
-	dout(7) << "ino " << dis->get_want_ino() << " in this dir, flagging error in "
+	dout(7) << "no ino " << dis->get_want_ino() << " in this dir, flagging error in "
 		<< *curdir << dendl;
 	reply->set_flag_error_ino();
 	break;
@@ -9593,7 +9609,7 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   list<CDir*> resultfrags;
   list<Context*> waiters;
   adjust_dir_fragments(diri, dirs, basefrag, bits, resultfrags, waiters, false);
-  if (g_conf.mds_debug_frag)
+  if (g_conf->mds_debug_frag)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
@@ -9678,9 +9694,10 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
   delete mut;
 
   // drop dft wrlock
-  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL);
-  mds->locker->wrlock_finish(&diri->nestlock, NULL);
-  mds->locker->wrlock_finish(&diri->filelock, NULL);
+  bool need_issue = false;
+  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->nestlock, NULL, &need_issue);
+  mds->locker->wrlock_finish(&diri->filelock, NULL, &need_issue);
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = resultfrags.begin();
@@ -9703,6 +9720,9 @@ void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags
 
     dir->unfreeze_dir();
   }
+
+  if (need_issue)
+    mds->locker->issue_caps(diri);
 }
 
 
@@ -9734,7 +9754,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, base, bits, 
 			 resultfrags, waiters, false);
-    if (g_conf.mds_debug_frag)
+    if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
     
     /*
@@ -9763,7 +9783,7 @@ void MDCache::rollback_uncommitted_fragments()
     list<CDir*> resultfrags;
     list<Context*> waiters;
     adjust_dir_fragments(diri, p->first.frag, -p->second, resultfrags, waiters, true);
-    if (g_conf.mds_debug_frag)
+    if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
 
     EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, p->second);
@@ -9781,7 +9801,7 @@ void MDCache::show_subtrees(int dbl)
 {
   //dout(10) << "show_subtrees" << dendl;
 
-  if (dbl > g_conf.debug && dbl > g_conf.debug_mds) 
+  if (dbl > g_conf->debug && dbl > g_conf->debug_mds) 
     return;  // i won't print anything.
 
   if (subtrees.empty()) {

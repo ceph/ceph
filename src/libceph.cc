@@ -73,14 +73,14 @@ public:
     common_init_finish(cct);
 
     //monmap
-    monclient = new MonClient();
+    monclient = new MonClient(cct);
     if (monclient->build_initial_monmap() < 0) {
       shutdown();
       return -1000;
     }
 
     //network connection
-    messenger = new SimpleMessenger();
+    messenger = new SimpleMessenger(cct);
     if (!messenger->register_entity(entity_name_t::CLIENT())) {
       messenger->destroy();
       messenger = NULL;

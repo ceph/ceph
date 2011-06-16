@@ -59,6 +59,7 @@ crush/CrushWrapper_wrap.cxx
 /cconf
 /cdebugpack
 /cephfs
+/ceph-coverage
 /dumpjournal
 /gceph
 /init-ceph
@@ -66,6 +67,8 @@ crush/CrushWrapper_wrap.cxx
 /rbd
 /psim
 /sample.fetch_config
+
+Makefile
 
 /gtest/build-aux/config.h
 /gtest/build-aux/config.h.in

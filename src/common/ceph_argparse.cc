@@ -220,8 +220,9 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 }
 
 // The defaults for CephInitParameters
-CephInitParameters::CephInitParameters(uint32_t module_type, const char *conf_file_)
-  : conf_file(conf_file_)
+CephInitParameters::CephInitParameters(uint32_t module_type_, const char *conf_file_)
+  : module_type(module_type_),
+    conf_file(conf_file_)
 {
   const char *c = getenv("CEPH_CONF");
   if (c)

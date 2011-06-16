@@ -18,8 +18,6 @@
 
 #include "common/code_environment.h"
 #include "common/signal.h"
-#include "common/config.h"
-#include "include/atomic.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -55,8 +53,7 @@ class Thread {
     else
       return -EINVAL;
   }
-  int create(size_t stacksize = 0) {
-
+  int try_create(size_t stacksize) {
     pthread_attr_t *thread_attr = NULL;
     stacksize &= PAGE_MASK;  // must be multiple of page
     if (stacksize) {
@@ -84,41 +81,22 @@ class Thread {
 
     if (thread_attr) 
       free(thread_attr);
-
-    if (r) {
-      char buf[80];
-      generic_dout(0) << "pthread_create failed with message: " << strerror_r(r, buf, sizeof(buf)) << dendl;
-    } else {
-      generic_dout(10) << "thread " << thread_id << " start" << dendl;
-    }
     return r;
   }
+
+  void create(size_t stacksize = 0) {
+    int ret = try_create(stacksize);
+    assert(ret == 0);
+  }
+
   int join(void **prval = 0) {
     if (thread_id == 0) {
-      generic_dout(0) << "WARNING: join on thread that was never started" << dendl;
-      assert(0);
-      return -EINVAL;   // never started.
+      assert("join on thread that was never started" == 0);
+      return -EINVAL;
     }
 
     int status = pthread_join(thread_id, prval);
-    if (status != 0) {
-      switch (status) {
-      case -EINVAL:
-	generic_dout(0) << "thread " << thread_id << " join status = EINVAL" << dendl;
-	break;
-      case -ESRCH:
-	generic_dout(0) << "thread " << thread_id << " join status = ESRCH" << dendl;
-	assert(0);
-	break;
-      case -EDEADLK:
-	generic_dout(0) << "thread " << thread_id << " join status = EDEADLK" << dendl;
-	break;
-      default:
-	generic_dout(0) << "thread " << thread_id << " join status = " << status << dendl;
-      }
-      assert(0); // none of these should happen.
-    }
-    generic_dout(10) << "thread " << thread_id << " stop" << dendl;
+    assert(status == 0);
     thread_id = 0;
     return status;
   }

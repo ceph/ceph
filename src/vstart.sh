@@ -161,7 +161,7 @@ else
         debug ms = 1'
     COSDDEBUG='
         lockdep = 1
-        debug ms = 20
+        debug ms = 1
         debug osd = 25
         debug monc = 20
         debug journal = 20
@@ -359,7 +359,7 @@ if [ "$start_osd" -eq 1 ]; then
 		    cat <<EOF >> $conf
 [osd.$osd]
         osd data = dev/osd$osd
-        osd journal = dev/osd$osd/journal
+        osd journal = dev/osd$osd.journal
         osd journal size = 100
 EOF
 		    [ "$cephx" -eq 1 ] && cat <<EOF >> $conf

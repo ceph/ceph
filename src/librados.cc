@@ -98,7 +98,7 @@ struct librados::IoCtxImpl {
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s) :
     ref_cnt(0), client(c), poolid(pid),
     pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf.client_notify_timeout), oloc(pid),
+    notify_timeout(g_conf->client_notify_timeout), oloc(pid),
     aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"), aio_write_seq(0) {}
 
   void dup(const IoCtxImpl& rhs) {
@@ -144,6 +144,10 @@ struct librados::IoCtxImpl {
   void queue_aio_write(struct AioCompletionImpl *c);
   void complete_aio_write(struct AioCompletionImpl *c);
   void flush_aio_writes();
+
+  int get_id() {
+    return poolid;
+  }
 };
 
 
@@ -403,8 +407,10 @@ private:
   SafeTimer timer;
 
 public:
-  RadosClient(CephContext *cct_) : cct(cct_), conf(cct_->_conf),
-		  state(DISCONNECTED), messenger(NULL), objecter(NULL),
+  RadosClient(CephContext *cct_) : Dispatcher(cct_),
+		  cct(cct_), conf(cct_->_conf),
+		  state(DISCONNECTED), monclient(cct_),
+		  messenger(NULL), objecter(NULL),
 		  lock("radosclient"), timer(lock), max_watch_cookie(0)
   {
   }
@@ -702,7 +708,7 @@ connect()
     goto out;
 
   err = -ENOMEM;
-  messenger = new SimpleMessenger();
+  messenger = new SimpleMessenger(cct);
   if (!messenger)
     goto out;
 
@@ -2717,6 +2723,12 @@ locator_set_key(const string& key)
   io_ctx_impl->oloc.key = key;
 }
 
+int librados::IoCtx::
+get_id()
+{
+  return io_ctx_impl->get_id();
+}
+
 librados::IoCtx::
 IoCtx(IoCtxImpl *io_ctx_impl_)
   : io_ctx_impl(io_ctx_impl_)
@@ -3265,6 +3277,12 @@ extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
   else
     ctx->oloc.key = "";
 }
+
+extern "C" int rados_ioctx_get_id(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->get_id();
+}
 // snaps
 
 extern "C" int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname)
@@ -3521,7 +3539,7 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
 
   if (h->list.empty()) {
     ret = lh->ctx->client->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
-    if (!h->list.size())
+    if (h->list.empty())
       return -ENOENT;
   }
 

@@ -100,7 +100,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
-  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
+  if (g_conf->mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->fragstat;
     if (!(pf->fragstat == pf->accounted_fragstat))
@@ -111,7 +111,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.rstat;
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
-  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
+  if (g_conf->mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->rstat;
     if (!(pf->rstat == pf->accounted_rstat))
@@ -221,7 +221,7 @@ bool CDir::check_rstats()
       //if (i->second->get_linkage()->is_primary())
         dout(1) << *(i->second) << dendl;
     }
-    assert(!g_conf.mds_debug_scatterstat ||
+    assert(!g_conf->mds_debug_scatterstat ||
            (get_num_head_items() ==
             (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs)));
   } else {
@@ -257,9 +257,9 @@ bool CDir::check_rstats()
     dout(25) << "my rstats:              " << fnode.rstat << dendl;
   }
 
-  assert(!g_conf.mds_debug_scatterstat || sub_info.rbytes == fnode.rstat.rbytes);
-  assert(!g_conf.mds_debug_scatterstat || sub_info.rfiles == fnode.rstat.rfiles);
-  assert(!g_conf.mds_debug_scatterstat || sub_info.rsubdirs == fnode.rstat.rsubdirs);
+  assert(!g_conf->mds_debug_scatterstat || sub_info.rbytes == fnode.rstat.rbytes);
+  assert(!g_conf->mds_debug_scatterstat || sub_info.rfiles == fnode.rstat.rfiles);
+  assert(!g_conf->mds_debug_scatterstat || sub_info.rsubdirs == fnode.rstat.rsubdirs);
   dout(10) << "check_rstats complete on " << this << dendl;
   return true;
 }
@@ -1896,7 +1896,7 @@ void CDir::_commit(version_t want)
   }
   
   // complete first?  (only if we're not using TMAPUP osd op)
-  if (!g_conf.mds_use_tmap && !is_complete()) {
+  if (!g_conf->mds_use_tmap && !is_complete()) {
     dout(7) << "commit not complete, fetching first" << dendl;
     if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_ffc);
     fetch(new C_Dir_RetryCommit(this, want));
@@ -1937,7 +1937,7 @@ void CDir::_commit(version_t want)
   max_write_size -= inode->encode_parent_mutation(m);
 
   if (is_complete() &&
-      (num_dirty > (num_head_items*g_conf.mds_dir_commit_ratio))) {
+      (num_dirty > (num_head_items*g_conf->mds_dir_commit_ratio))) {
     fnode.snap_purged_thru = realm->get_last_destroyed();
     committed_dn = _commit_full(m, snaps, max_write_size);
   } else {
@@ -1997,6 +1997,7 @@ void CDir::_committed(version_t v, version_t lrv)
       lrv == inode->inode.last_renamed_version) {
     inode->item_renamed_file.remove_myself();
     inode->state_clear(CInode::STATE_DIRTYPARENT);
+    inode->put(CInode::PIN_DIRTYPARENT);
     dout(10) << "_committed  stored parent pointer, removed from renamed_files list " << *inode << dendl;
   }
   
@@ -2200,9 +2201,11 @@ bool CDir::is_subtree_root()
 bool CDir::contains(CDir *x)
 {
   while (1) {
-    if (x == this) return true;
-    x = x->get_parent_dir();
-    if (x == 0) return false;    
+    if (x == this)
+      return true;
+    x = x->get_inode()->get_projected_parent_dir();
+    if (x == 0)
+      return false;    
   }
 }
 

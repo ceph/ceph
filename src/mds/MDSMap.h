@@ -199,9 +199,9 @@ public:
   MDSMap() : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
 	     cas_pg_pool(-1), metadata_pg_pool(0) {
     // hack.. this doesn't really belong here
-    session_timeout = (int)g_conf.mds_session_timeout;
-    session_autoclose = (int)g_conf.mds_session_autoclose;
-    max_file_size = g_conf.mds_max_file_size;
+    session_timeout = (int)g_conf->mds_session_timeout;
+    session_autoclose = (int)g_conf->mds_session_autoclose;
+    max_file_size = g_conf->mds_max_file_size;
   }
 
   utime_t get_session_timeout() {
@@ -348,7 +348,7 @@ public:
 	continue;
       if ((p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
 	   p->second.standby_for_rank == MDS_MATCHED_ACTIVE ||
-	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf.mon_force_standby_active))) {
+	   (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf->mon_force_standby_active))) {
 	return p->first;
       }
     }

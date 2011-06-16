@@ -17,6 +17,7 @@
 #include "common/Thread.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/debug.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -24,16 +25,10 @@
 
 // FIXME
 // These variables are here temporarily to make the transition easier.
-CephContext g_ceph_context __attribute__((init_priority(103)));
-md_config_t &g_conf(*g_ceph_context._conf);
+CephContext g_ceph_context __attribute__((init_priority(103))) (0);
+md_config_t *g_conf(g_ceph_context._conf);
 std::ostream *_dout(&g_ceph_context._dout);
 DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context._doss);
-
-/*
- * The dout lock protects calls to dout()
- * TODO: needs to become part of CephContext
- */
-pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
 
 class CephContextServiceThread : public Thread
 {
@@ -84,9 +79,10 @@ private:
 };
 
 CephContext::
-CephContext()
+CephContext(uint32_t module_type_)
   : _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
     _dout(_doss),
+    module_type(module_type_),
     _prof_logger_conf_obs(new ProfLoggerConfObs()),
     _service_thread(NULL)
 {
@@ -136,6 +132,22 @@ reopen_logs()
 }
 
 void CephContext::
+dout_lock(DoutLocker *locker)
+{
+  pthread_mutex_t *lock = &_doss->lock;
+  pthread_mutex_lock(lock);
+  locker->lock = lock;
+}
+
+void CephContext::
+dout_trylock(DoutLocker *locker)
+{
+  pthread_mutex_t *lock = &_doss->lock;
+  if (pthread_mutex_trylock(lock) == 0)
+    locker->lock = lock;
+}
+
+void CephContext::
 join_service_thread()
 {
   pthread_spin_lock(&_service_thread_lock);
@@ -150,4 +162,16 @@ join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+}
+
+uint32_t CephContext::
+get_module_type() const
+{
+  return module_type;
+}
+
+void CephContext::
+set_module_type(uint32_t module_type_)
+{
+  module_type = module_type_;
 }

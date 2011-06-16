@@ -1,7 +1,3 @@
-#
-# note: the old Makefile is at Makefile.old
-#
-
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS =
 DIST_SUBDIRS = gtest
@@ -165,13 +161,11 @@ bin_DEBUGPROGRAMS += testmsgr
 test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
-dumpjournal_SOURCES = dumpjournal.cc
-dumpjournal_LDADD = libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += dumpjournal dupstore streamtest
+bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -330,8 +324,8 @@ bin_DEBUGPROGRAMS += rgw_multiparser
 endif
 
 testcrypto_SOURCES = testcrypto.cc
-testcrypto_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
+testcrypto_LDADD = libcommon.a $(CRYPTO_LIBS) -lpthread -lm $(EXTRALIBS)
+testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
@@ -374,7 +368,8 @@ UNITTEST_CXXFLAGS = \
 	-I$(top_builddir)/src/gtest/include
 UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
-	$(top_builddir)/src/gtest/lib/libgtest_main.la
+	$(top_builddir)/src/gtest/lib/libgtest_main.la \
+	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la -lpthread -lm \
@@ -385,8 +380,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_base64_LDADD = libceph.la -lpthread -lm \
-			${UNITTEST_LDADD}
+unittest_base64_LDADD = libceph.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
@@ -405,53 +399,55 @@ unittest_signals_LDADD = libceph.la ${UNITTEST_LDADD}
 unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_signals
 
+unittest_simple_spin_SOURCES = test/simple_spin.cc
+unittest_simple_spin_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_simple_spin
+
 unittest_librados_SOURCES = test/librados.cc
 unittest_librados_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_librados_LDADD = librados.la \
-			${UNITTEST_LDADD}
+unittest_librados_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
 
 unittest_bufferlist_SOURCES = test/bufferlist.cc
-unittest_bufferlist_LDADD = ${UNITTEST_LDADD} libcommon.a
+unittest_bufferlist_LDADD = ${UNITTEST_LDADD} libcommon.a $(CRYPTO_LIBS)
 unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDFLAGS = -lrt ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} \
-			${UNITTEST_LDADD}
+unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} \
-			${UNITTEST_LDADD}
+unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} ${UNITTEST_LDADD}
 unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
 unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_utf8_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_utf8_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
 
 unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
 unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_rgw_escape_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_rgw_escape_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_rgw_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_strtol_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_strtol_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_strtol
 
 unittest_confutils_SOURCES = test/confutils.cc
 unittest_confutils_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_confutils_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_confutils_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
 unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_confutils
 
@@ -469,9 +465,10 @@ editpaths = sed \
 	-e 's|@libdir[@]|$(libdir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
-	-e 's|@prefix[@]|$(prefix)|g'
+	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs cdebugpack: init-ceph.in mkcephfs.in Makefile cdebugpack.in
+init-ceph mkcephfs cdebugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile cdebugpack.in ceph-coverage.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -483,13 +480,15 @@ sbin_SCRIPTS += mkcephfs
 
 bin_SCRIPTS += obsync/obsync
 bin_SCRIPTS += obsync/boto_tool
+bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += \
 	cdebugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
-	sample.fetch_config
+	sample.fetch_config \
+	ceph-coverage
 
 ##
 
@@ -510,6 +509,11 @@ if WITH_LIBATOMIC
 AM_LDFLAGS += -latomic_ops
 endif
 
+if ENABLE_COVERAGE
+AM_CFLAGS += -fprofile-arcs -ftest-coverage
+AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
+EXTRALIBS += -lgcov
+endif
 
 noinst_LIBRARIES = \
 	libcommon.a \
@@ -526,6 +530,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
 	$(srcdir)/cdebugpack.in \
+	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/crbdnamer \
@@ -582,7 +587,7 @@ common/version.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
-	-rm *.so
+	-rm *.so *.gcno *.gcda
 
 # libs
 libcommon_a_SOURCES = \
@@ -642,6 +647,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
+	common/simple_spin.cc \
 	common/Thread.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
@@ -813,6 +819,7 @@ noinst_HEADERS = \
         common/common_init.h\
 	common/code_environment.h \
         common/signal.h\
+        common/simple_spin.h\
         common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
@@ -1114,7 +1121,7 @@ noinst_HEADERS = \
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
+	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_a_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_a_SOURCES) $(libosd_a_SOURCES) \
@@ -1124,12 +1131,34 @@ if WITH_RADOSGW
 all_sources += $(librgw_SOURCES)
 endif
 
-install-data-local:
+if ENABLE_COVERAGE
+COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
+COV_FILES = $(srcdir)/*.gcno
+endif
+
+install-coverage:
+if ENABLE_COVERAGE
+	-mkdir -p $(COV_DIR)
+	-$(INSTALL_DATA) $(COV_FILES) $(COV_DIR)
+endif
+
+uninstall-coverage:
+if ENABLE_COVERAGE
+	-rm $(COV_DIR)/*.gcno
+	-rmdir -p $(COV_DIR)
+endif
+
+check-coverage:
+if ENABLE_COVERAGE
+	-test/coverage.sh -d $(srcdir) -o check-coverage make check
+endif
+
+install-data-local: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
-uninstall-local:
+uninstall-local: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp

@@ -2,8 +2,6 @@
 #include "common/environment.h"
 #include "Mutex.h"
 
-int g_lockdep = get_env_int("CEPH_LOCKDEP");
-
 #ifdef LOCKDEP
 
 #include "include/types.h"
@@ -16,8 +14,8 @@ int g_lockdep = get_env_int("CEPH_LOCKDEP");
 
 #undef dout
 #undef derr
-#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
-#define  derr(l)    if (l<=g_conf.debug_lockdep) *_derr << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
+#define  dout(l)    if (l<=g_conf->debug_lockdep) *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
+#define  derr(l)    if (l<=g_conf->debug_lockdep) *_derr << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
 
 
 pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;

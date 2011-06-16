@@ -12,13 +12,15 @@
  *
  */
 
+#include "common/DoutStreambuf.h"
+#include "common/Mutex.h"
 #include "common/code_environment.h"
 #include "common/config.h"
-#include "common/DoutStreambuf.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
-#include "common/Mutex.h"
 #include "common/safe_io.h"
+#include "common/simple_spin.h"
+#include "common/debug.h"
 
 #include <values.h>
 #include <assert.h>
@@ -41,6 +43,20 @@ extern DoutStreambuf <char> *_doss;
 
 // TODO: get rid of this lock using thread-local storage
 extern pthread_mutex_t _dout_lock;
+
+static simple_spinlock_t dout_emergency_lock = SIMPLE_SPINLOCK_INITIALIZER;
+
+/* Streams that we will write to in dout_emergency.
+ * Protected by dout_emergency_lock. */
+EmergencyLogger *dout_emerg_streams[] =
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+#define NUM_DOUT_EMERG_STREAMS \
+  (sizeof(dout_emerg_streams)/sizeof(dout_emerg_streams[0]))
+
+EmergencyLogger::~EmergencyLogger()
+{
+}
 
 //////////////////////// Helper functions //////////////////////////
 // Try a 0-byte write to a file descriptor to see if it open.
@@ -144,15 +160,43 @@ DoutStreambuf<charT, traits>::DoutStreambuf()
 
   // Initialize output_buffer
   _clear_output_buffer();
+
+  int ret;
+  pthread_mutexattr_t attr;
+  ret = pthread_mutexattr_init(&attr);
+  assert(ret == 0);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  ret = pthread_mutex_init(&lock, &attr);
+  assert(ret == 0);
+  ret = pthread_mutexattr_destroy(&attr);
+  assert(ret == 0);
+
+  simple_spin_lock(&dout_emergency_lock);
+  for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
+    if (dout_emerg_streams[i] == 0) {
+      dout_emerg_streams[i] = this;
+      break;
+    }
+  }
+  simple_spin_unlock(&dout_emergency_lock);
 }
 
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::~DoutStreambuf()
 {
+  simple_spin_lock(&dout_emergency_lock);
+  for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
+    if (dout_emerg_streams[i] == this) {
+      dout_emerg_streams[i] = 0;
+      break;
+    }
+  }
+  simple_spin_unlock(&dout_emergency_lock);
   if (ofd != -1) {
     TEMP_FAILURE_RETRY(::close(ofd));
     ofd = -1;
   }
+  pthread_mutex_destroy(&lock);
 }
 
 // This function is called when the output buffer is filled.
@@ -221,7 +265,7 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::handle_stderr_shutdown()
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   flags &= ~DOUTSB_FLAG_STDERR;
 }
 
@@ -240,7 +284,7 @@ template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::
 handle_conf_change(const md_config_t *conf, const std::set <std::string> &changed)
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   type_name = conf->name.get_type_name();
 
   flags = 0;
@@ -254,7 +298,7 @@ handle_conf_change(const md_config_t *conf, const std::set <std::string> &change
     if ((changed.count("log_to_syslog") || changed.count("name")) &&
         (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
       closelog();
-      openlog(g_conf.name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
+      openlog(g_conf->name.to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
     }
     flags |= DOUTSB_FLAG_SYSLOG;
   }
@@ -299,7 +343,7 @@ template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::
 handle_pid_change(const md_config_t *conf)
 {
-  DoutLocker _dout_locker;
+  DoutLocker _dout_locker(&lock);
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
@@ -345,9 +389,13 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   return oss.str();
 }
 
+/* This function doesn't take the dout lock, so some interleaving or weirdness
+ * may happen if concurrent writes are going on. But this is for emergencies,
+ * so we don't care.
+ */
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::
-dout_emergency_to_file_and_syslog(const char * const str) const
+emergency_log_to_file_and_syslog(const char * const str) const
 {
   int len = strlen(str);
   if (ofd >= 0) {
@@ -598,16 +646,23 @@ _rotate_files(const md_config_t *conf, const std::string &base)
  */
 void dout_emergency(const char * const str)
 {
+  // Write to stderr. It may or may not be open, but if it is, there's a good
+  // chance the user will see this.
   int len = strlen(str);
   if (safe_write(STDERR_FILENO, str, len)) {
     // ignore errors
     ;
   }
-  /* Normally we would take the lock before even checking _doss, but since
-   * this is an emergency, we can't do that. */
-  if (_doss) {
-    _doss->dout_emergency_to_file_and_syslog(str);
+
+  // Write to all the file descriptors we know about.
+  // If we are logging to syslog, send logs to that too.
+  simple_spin_lock(&dout_emergency_lock);
+  for (size_t i = 0; i < NUM_DOUT_EMERG_STREAMS; ++i) {
+    if (dout_emerg_streams[i]) {
+      dout_emerg_streams[i]->emergency_log_to_file_and_syslog(str);
+    }
   }
+  simple_spin_unlock(&dout_emergency_lock);
 }
 
 void dout_emergency(const std::string &str)

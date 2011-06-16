@@ -13,9 +13,13 @@
     key create                 create access key
     key rm                     remove access key
     buckets list               list buckets
+    bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
+    pool info                  show pool information
+    pool create                generate pool information (requires bucket)
     policy                     read bucket/object policy
-    log show                   dump a log from specific object or (bucket + date)
+    log show                   dump a log from specific object or (bucket + date
+                               + pool-id)
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
@@ -33,6 +37,9 @@
      --bucket=<bucket>
      --object=<object>
      --date=<yyyy-mm-dd>
+     --pool-id=<pool-id>
+     --format=<format>         specify output format for certain operations: xml,
+                               json
   --conf/-c        Read configuration from the given configuration file
   -D               Run in the foreground.
   -f               Run in foreground. Show all log messages on stderr.

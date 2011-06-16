@@ -29,7 +29,7 @@
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND
-#define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log
+#define DOUT_COND(l) l<=g_conf->debug_mds || l <= g_conf->debug_mds_log
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".log "
 
@@ -77,7 +77,7 @@ void MDLog::open_logger()
 
   // logger
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.log", g_conf.name.get_id().c_str());
+  snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
   logger = new ProfLogger(name, &mdlog_logtype);
   logger_add(logger);
 }
@@ -157,7 +157,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   assert(le == cur_event);
   cur_event = NULL;
 
-  if (!g_conf.mds_log) {
+  if (!g_conf->mds_log) {
     // hack: log is disabled.
     if (c) {
       c->finish(0);
@@ -220,7 +220,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
 
 void MDLog::wait_for_safe(Context *c)
 {
-  if (g_conf.mds_log) {
+  if (g_conf->mds_log) {
     // wait
     journaler->wait_for_flush(c);
   } else {
@@ -288,8 +288,8 @@ void MDLog::_logged_subtree_map(uint64_t off)
 
 void MDLog::trim(int m)
 {
-  int max_segments = g_conf.mds_log_max_segments;
-  int max_events = g_conf.mds_log_max_events;
+  int max_segments = g_conf->mds_log_max_segments;
+  int max_events = g_conf->mds_log_max_events;
   if (m >= 0)
     max_events = m;
 
@@ -316,7 +316,7 @@ void MDLog::trim(int m)
     if (stop < g_clock.now())
       break;
 
-    if ((int)expiring_segments.size() >= g_conf.mds_log_max_expiring)
+    if ((int)expiring_segments.size() >= g_conf->mds_log_max_expiring)
       break;
 
     // look at first segment
@@ -529,7 +529,7 @@ void MDLog::_replay_thread()
       bl.hexdump(*_dout);
       *_dout << dendl;
 
-      assert(!!"corrupt log event" == g_conf.mds_log_skip_corrupt_events);
+      assert(!!"corrupt log event" == g_conf->mds_log_skip_corrupt_events);
       continue;
     }
 

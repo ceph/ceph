@@ -65,7 +65,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "client" << whoami << " "
 
-#define  tout       if (!g_conf.client_trace.empty()) traceout
+#define  tout       if (!g_conf->client_trace.empty()) traceout
 
 
 // static logger
@@ -109,7 +109,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : timer(client_lock), client_lock("Client::client_lock"),
+  : Dispatcher(m->cct), timer(client_lock), client_lock("Client::client_lock"),
   filer_flags(0)
 {
   // which client am i?
@@ -144,8 +144,8 @@ Client::Client(Messenger *m, MonClient *mc)
 
   num_flushing_caps = 0;
 
-  lru.lru_set_max(g_conf.client_cache_size);
-  lru.lru_set_midpoint(g_conf.client_cache_mid);
+  lru.lru_set_max(g_conf->client_cache_size);
+  lru.lru_set_midpoint(g_conf->client_cache_mid);
 
   // file handles
   free_fd_set.insert(10, 1<<30);
@@ -387,7 +387,7 @@ void Client::update_inode_file_bits(Inode *in,
 	       << truncate_size << dendl;
       in->truncate_size = truncate_size;
       in->oset.truncate_size = truncate_size;
-      if (g_conf.client_oc && prior_size > truncate_size) { //do actual in-memory truncation
+      if (g_conf->client_oc && prior_size > truncate_size) { //do actual in-memory truncation
 	vector<ObjectExtent> ls;
 	filer->file_to_extents(in->ino, &in->layout,
 			       truncate_size, prior_size - truncate_size,
@@ -845,33 +845,36 @@ int Client::choose_target_mds(MetaRequest *req)
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
     req->resend_mds = -1;
-    dout(10) << "target resend_mds specified as mds" << mds << dendl;
+    dout(10) << "choose_target_mds resend_mds specified as mds" << mds << dendl;
     goto out;
   }
 
-  if (g_conf.client_use_random_mds)
+  if (g_conf->client_use_random_mds)
     goto random_mds;
 
   if (req->inode) {
     in = req->inode;
+    dout(20) << "choose_target_mds starting with req->inode " << *in << dendl;
     if (req->path.depth()) {
       hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
 			   req->path[0].data(),
 			   req->path[0].length());
-      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->path[0]
+      dout(20) << "choose_target_mds inode dir hash is " << (int)in->dir_layout.dl_dir_hash
+	       << " on " << req->path[0]
 	       << " => " << hash << dendl;
       is_hash = true;
-
     }
   } else if (req->dentry) {
     if (req->dentry->inode) {
       in = req->dentry->inode;
+      dout(20) << "choose_target_mds starting with req->dentry inode " << *in << dendl;
     } else {
       in = req->dentry->dir->parent_inode;
       hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
 			   req->dentry->name.data(),
 			   req->dentry->name.length());
-      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->dentry->name
+      dout(20) << "choose_target_mds dentry dir hash is " << (int)in->dir_layout.dl_dir_hash
+	       << " on " << req->dentry->name
 	       << " => " << hash << dendl;
       is_hash = true;
     }
@@ -894,10 +897,11 @@ int Client::choose_target_mds(MetaRequest *req)
     is_hash = false;
   }
   
-  dout(20) << "choose_target_mds " << in << " is_hash=" << is_hash
-           << " hash=" << hash << dendl;
+  if (!in)
+    goto random_mds;
 
-  if (!in) goto random_mds;
+  dout(20) << "choose_target_mds " << *in << " is_hash=" << is_hash
+           << " hash=" << hash << dendl;
 
   if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
     frag_t fg = in->dirfragtree[hash];
@@ -915,7 +919,7 @@ int Client::choose_target_mds(MetaRequest *req)
   if (!cap)
     goto random_mds;
   mds = cap->session->mds_num;
-  dout(10) << "choose_target_mds from caps" << dendl;
+  dout(10) << "choose_target_mds from caps on inode " << *in << dendl;
 
   goto out;
 
@@ -1154,6 +1158,10 @@ void Client::encode_cap_releases(MetaRequest *req, int mds) {
     encode_inode_release(req->old_inode, req,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
+  if (req->other_inode_drop && req->other_inode)
+    encode_inode_release(req->other_inode, req,
+			 mds, req->other_inode_drop,
+			 req->other_inode_unless);
   
   if (req->dentry_drop && req->dentry)
     encode_dentry_release(req->dentry, req,
@@ -2189,7 +2197,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
 {
   dout(10) << "_flush " << *in << dendl;
 
-  if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
+  if (!in->oset.dirty_tx && in->oset.uncommitted.empty()) {
     dout(10) << " nothing to flush" << dendl;
     return true;
   }
@@ -2736,6 +2744,13 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
   
+  // clear out the flushing caps so they get resent
+  if (in->flushing_caps) {
+    in->dirty_caps |= in->flushing_caps;
+    in->flushing_caps = 0;
+    in->put();
+  }
+
   if (m->get_mseq() > in->exporting_mseq) {
     dout(5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
 	    << " IMPORT from mds" << mds
@@ -2975,7 +2990,7 @@ int Client::mount(const std::string &mount_root)
   }
 
   client_lock.Unlock();
-  int r = monclient->authenticate(g_conf.client_mount_timeout);
+  int r = monclient->authenticate(g_conf->client_mount_timeout);
   client_lock.Lock();
   if (r < 0)
     return r;
@@ -3011,12 +3026,12 @@ int Client::mount(const std::string &mount_root)
   _ll_get(root);
 
   // trace?
-  if (!g_conf.client_trace.empty()) {
-    traceout.open(g_conf.client_trace.c_str());
+  if (!g_conf->client_trace.empty()) {
+    traceout.open(g_conf->client_trace.c_str());
     if (traceout.is_open()) {
-      dout(1) << "opened trace file '" << g_conf.client_trace << "'" << dendl;
+      dout(1) << "opened trace file '" << g_conf->client_trace << "'" << dendl;
     } else {
-      dout(1) << "FAILED to open trace file '" << g_conf.client_trace << "'" << dendl;
+      dout(1) << "FAILED to open trace file '" << g_conf->client_trace << "'" << dendl;
     }
   }
 
@@ -3077,7 +3092,7 @@ void Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
-  if (g_conf.client_oc) {
+  if (g_conf->client_oc) {
     // flush/release all buffered data
     hash_map<vinodeno_t, Inode*>::iterator next;
     for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
@@ -3117,7 +3132,7 @@ void Client::unmount()
   //}
 
   // unsafe writes
-  if (!g_conf.client_oc) {
+  if (!g_conf->client_oc) {
     while (unsafe_sync_write > 0) {
       dout(0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
               << dendl;
@@ -3126,8 +3141,8 @@ void Client::unmount()
   }
 
   // stop tracing
-  if (!g_conf.client_trace.empty()) {
-    dout(1) << "closing trace file '" << g_conf.client_trace << "'" << dendl;
+  if (!g_conf->client_trace.empty()) {
+    dout(1) << "closing trace file '" << g_conf->client_trace << "'" << dendl;
     traceout.close();
   }
 
@@ -3173,7 +3188,7 @@ void Client::tick()
 {
   dout(21) << "tick" << dendl;
   tick_event = new C_C_Tick(this);
-  timer.add_event_after(g_conf.client_tick_interval, tick_event);
+  timer.add_event_after(g_conf->client_tick_interval, tick_event);
 
   utime_t now = g_clock.now();
 
@@ -3280,7 +3295,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     goto done;
   }
   
-  if (dname == g_conf.client_snapdir &&
+  if (dname == g_conf->client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
     *target = open_snapdir(dir);
     goto done;
@@ -3367,7 +3382,11 @@ int Client::get_or_create(Inode *dir, const char* name,
 int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 {
   filepath path = origpath;
-  Inode *cur = cwd;
+  Inode *cur;
+  if (origpath.absolute())
+    cur = root;
+  else
+    cur = cwd;
   assert(cur);
 
   dout(10) << "path_walk " << path << dendl;
@@ -4827,22 +4846,22 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     in->get_cap_ref(CEPH_CAP_FILE_CACHE);
   
   dout(10) << "readahead=" << readahead << " nr_consec=" << f->nr_consec_read
-	   << " max_byes=" << g_conf.client_readahead_max_bytes
-	   << " max_periods=" << g_conf.client_readahead_max_periods << dendl;
+	   << " max_byes=" << g_conf->client_readahead_max_bytes
+	   << " max_periods=" << g_conf->client_readahead_max_periods << dendl;
 
   // readahead?
   if (readahead &&
       f->nr_consec_read &&
-      (g_conf.client_readahead_max_bytes ||
-       g_conf.client_readahead_max_periods)) {
+      (g_conf->client_readahead_max_bytes ||
+       g_conf->client_readahead_max_periods)) {
     loff_t l = f->consec_read_bytes * 2;
-    if (g_conf.client_readahead_min)
-      l = MAX(l, g_conf.client_readahead_min);
-    if (g_conf.client_readahead_max_bytes)
-      l = MIN(l, g_conf.client_readahead_max_bytes);
+    if (g_conf->client_readahead_min)
+      l = MAX(l, g_conf->client_readahead_min);
+    if (g_conf->client_readahead_max_bytes)
+      l = MIN(l, g_conf->client_readahead_max_bytes);
     loff_t p = in->layout.fl_stripe_count * in->layout.fl_object_size;
-    if (g_conf.client_readahead_max_periods)
-      l = MIN(l, g_conf.client_readahead_max_periods * p);
+    if (g_conf->client_readahead_max_periods)
+      l = MIN(l, g_conf->client_readahead_max_periods * p);
 
     if (l >= 2*p)
       // align large readahead with period
@@ -5052,9 +5071,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+  if (g_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
-    if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
+    if (!in->oset.dirty_tx && in->oset.uncommitted.empty())
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -5176,7 +5195,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   dout(3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
   
-  if (g_conf.client_oc)
+  if (g_conf->client_oc)
     _flush(in);
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
@@ -6095,15 +6114,17 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
-  req->inode = dir;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
     return res;
-  res = _lookup(dir, name, &req->inode);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  res = _lookup(dir, name, &req->other_inode);
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  req->inode = dir;
 
   res = make_request(req, uid, gid);
   if (res == 0) {
@@ -6185,7 +6206,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
-  dout(3) << "_rmdir(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
+  dout(3) << "_rename(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
 	  << " uid " << uid << " gid " << gid << ")" << dendl;
 
   if (fromdir->snapid != CEPH_NOSNAP ||
@@ -6202,26 +6223,30 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   todir->make_nosnap_relative_path(to);
   to.push_dentry(toname);
   req->set_filepath(to);
-  req->inode = fromdir;
   req->set_filepath2(from);
-  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
-  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   int res = get_or_create(fromdir, fromname, &req->old_dentry);
   if (res < 0)
     return res;
+  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
+
   res = get_or_create(todir, toname, &req->dentry);
   if (res < 0)
     return res;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
   res = _lookup(fromdir, fromname, &req->old_inode);
   if (res < 0)
     return res;
-  res = _lookup(todir, toname, &req->inode);
-  
+  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+
+  res = _lookup(todir, toname, &req->other_inode);
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  req->inode = fromdir;
+
   res = make_request(req, uid, gid);
 
   dout(10) << "rename result is " << res << dendl;
@@ -6267,11 +6292,11 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
   req->set_filepath(path);
   filepath existing(in->ino);
   req->set_filepath2(existing);
-  req->inode = in;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  req->inode = in;
+  req->inode = dir;
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
   int res = get_or_create(dir, newname, &req->dentry);
   if (res < 0)
     return res;

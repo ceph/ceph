@@ -97,7 +97,7 @@ void Paxos::collect(version_t oldpn)
 
   // set timeout event
   collect_timeout_event = new C_CollectTimeout(this);
-  mon->timer.add_event_after(g_conf.mon_accept_timeout, collect_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_accept_timeout, collect_timeout_event);
 }
 
 
@@ -368,7 +368,7 @@ void Paxos::begin(bufferlist& v)
 
   // set timeout event
   accept_timeout_event = new C_AcceptTimeout(this);
-  mon->timer.add_event_after(g_conf.mon_accept_timeout, accept_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_accept_timeout, accept_timeout_event);
 }
 
 // peon
@@ -526,11 +526,11 @@ void Paxos::extend_lease()
   assert(is_active());
 
   lease_expire = g_clock.now();
-  lease_expire += g_conf.mon_lease;
+  lease_expire += g_conf->mon_lease;
   acked_lease.clear();
   acked_lease.insert(mon->rank);
 
-  dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_expire << ")" << dendl;
+  dout(7) << "extend_lease now+" << g_conf->mon_lease << " (" << lease_expire << ")" << dendl;
 
   // bcast
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -548,14 +548,14 @@ void Paxos::extend_lease()
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = new C_LeaseAckTimeout(this);
-    mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_ack_timeout_event);
+    mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_ack_timeout_event);
   }
 
   // set renew event
   lease_renew_event = new C_LeaseRenew(this);
   utime_t at = lease_expire;
-  at -= g_conf.mon_lease;
-  at += g_conf.mon_lease_renew_interval;
+  at -= g_conf->mon_lease;
+  at += g_conf->mon_lease_renew_interval;
   mon->timer.add_event_at(at, lease_renew_event);
 }
 
@@ -564,10 +564,10 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
   utime_t now = g_clock.now();
   if (t > now) {
     utime_t diff = t - now;
-    if (diff > g_conf.mon_clock_drift_allowed) {
+    if (diff > g_conf->mon_clock_drift_allowed) {
       utime_t warn_diff = now - last_clock_drift_warn;
       if (warn_diff >
-	  pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned)) {
+	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
 	mon->clog.warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
 	last_clock_drift_warn = g_clock.now();
@@ -612,7 +612,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   if (lease_timeout_event) 
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
 
   // trim?
   trim_to(lease->first_committed);
@@ -862,7 +862,7 @@ void Paxos::register_observer(entity_inst_t inst, version_t v)
   }  
 
   utime_t timeout = g_clock.now();
-  timeout += g_conf.paxos_observer_timeout;
+  timeout += g_conf->paxos_observer_timeout;
   observer->timeout = timeout;
 
   if (is_readable())

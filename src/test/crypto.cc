@@ -17,7 +17,7 @@ public:
 ::testing::Environment* const crypto_env = ::testing::AddGlobalTestEnvironment(new CryptoEnvironment);
 
 TEST(AES, ValidateSecret) {
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+  CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
   int l;
 
   for (l=0; l<16; l++) {
@@ -36,7 +36,7 @@ TEST(AES, ValidateSecret) {
 }
 
 TEST(AES, Encrypt) {
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+  CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -76,7 +76,7 @@ TEST(AES, Encrypt) {
 }
 
 TEST(AES, Decrypt) {
-  CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+  CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -128,7 +128,7 @@ TEST(AES, Loop) {
   for (int i=0; i<10000; i++) {
     bufferlist cipher;
     {
-      CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+      CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
 
       int success;
       success = h->encrypt(secret, plaintext, cipher);
@@ -137,7 +137,7 @@ TEST(AES, Loop) {
     plaintext.clear();
 
     {
-      CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+      CryptoHandler *h = get_crypto_handler(CEPH_CRYPTO_AES);
       int err;
       err = h->decrypt(secret, cipher, plaintext);
       ASSERT_EQ((int)sizeof(orig_plaintext_s), err);

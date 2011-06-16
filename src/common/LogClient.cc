@@ -60,6 +60,14 @@ static inline int clog_type_to_syslog_prio(clog_type t)
   }
 }
 
+LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
+		     MonClient *mc, enum logclient_flag_t flags) :
+    Dispatcher(cct),
+    messenger(m), monmap(mm), monc(mc), is_mon(flags & FLAG_MON),
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0)
+{
+}
+
 LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
   : type(type_), parent(parent_)
 {
@@ -99,7 +107,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
   e.msg = s;
 
   // log to syslog?
-  if (g_conf.clog_to_syslog) {
+  if (g_conf->clog_to_syslog) {
     ostringstream oss;
     oss << e;
     string str(oss.str());
@@ -107,7 +115,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
   }
 
   // log to monitor?
-  if (g_conf.clog_to_monitors) {
+  if (g_conf->clog_to_monitors) {
     log_queue.push_back(e);
 
     // if we are a monitor, queue for ourselves, synchronously

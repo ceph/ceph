@@ -3,7 +3,6 @@ usr/bin/cephfs
 usr/bin/cconf
 usr/bin/cclsinfo
 usr/bin/crushtool
-usr/bin/gceph
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/crun
@@ -31,4 +30,3 @@ usr/share/man/man8/cephfs.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/cclsinfo.8
 usr/share/man/man8/cdebugpack.8
-usr/share/ceph_tool/gui_resources/*

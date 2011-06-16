@@ -655,7 +655,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 	
     /*
     if (is_primary() &&
-	g_conf.osd_balance_reads)
+	g_conf->osd_balance_reads)
       stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
     */
   } else {
@@ -1066,6 +1066,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
 
+  bool maybe_created = false;
+
   const sobject_t& soid = oi.soid;
 
   ObjectStore::Transaction& t = ctx->op_t;
@@ -1381,8 +1383,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	if (!timeout || timeout > (uint32_t)g_conf.osd_max_notify_timeout)
-	  timeout = g_conf.osd_max_notify_timeout;
+	if (!timeout || timeout > (uint32_t)g_conf->osd_max_notify_timeout)
+	  timeout = g_conf->osd_max_notify_timeout;
 
 	notify_info_t n;
 	n.timeout = timeout;
@@ -1457,7 +1459,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	ssc->snapset.head_exists = true;
+	maybe_created = true;
       }
       break;
       
@@ -1467,6 +1469,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	bp.copy(op.extent.length, nbl);
 	if (obs.exists)
 	  t.truncate(coll, soid, 0);
+	else
+	  maybe_created = true;
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1486,7 +1490,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
-	ssc->snapset.head_exists = true;
       }
       break;
 
@@ -1508,7 +1511,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    add_interval_usage(ch, info.stats);
 	  }
 	  info.stats.num_wr++;
-	  ssc->snapset.head_exists = true;
 	} else {
 	  // no-op
 	}
@@ -1521,7 +1523,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           result = -EEXIST; /* this is an exclusive create */
         else {
           t.touch(coll, soid);
-          ssc->snapset.head_exists = true;
+          maybe_created = true;
         }
       }
       break;
@@ -1572,7 +1574,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  oi.size = op.extent.offset;
 	}
 	info.stats.num_wr++;
-	// do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
+	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
       }
       break;
     
@@ -1651,8 +1653,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       
     case CEPH_OSD_OP_SETXATTR:
       {
-	if (!obs.exists)
+	if (!obs.exists) {
 	  t.touch(coll, soid);
+	  maybe_created = true;
+	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
@@ -1661,7 +1665,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (!obs.exists)  // create object if it doesn't yet exist.
 	  t.touch(coll, soid);
 	t.setattr(coll, soid, name, bl);
-	ssc->snapset.head_exists = true;
  	info.stats.num_wr++;
       }
       break;
@@ -1964,7 +1967,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       result = -EOPNOTSUPP;
     }
 
-    if (!obs.exists && ssc->snapset.head_exists) {
+    if (!obs.exists && maybe_created) {
       dout(20) << " num_objects " << info.stats.num_objects << " -> " << (info.stats.num_objects+1) << dendl;
       info.stats.num_objects++;
       obs.exists = true;
@@ -2123,7 +2126,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     dout(10) << " using newer snapc " << snapc << dendl;
   }
   
-  if (ssc->snapset.head_exists &&           // head exists
+  if (ctx->obc->obs.exists &&               // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       snapc.snaps[0] > ssc->snapset.seq) {  // existing object is old
     // clone
@@ -2165,7 +2168,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_objects++;
     info.stats.num_object_clones++;
     ssc->snapset.clones.push_back(coid.snap);
-    ssc->snapset.clone_size[coid.snap] = obs.oi.size;
+    ssc->snapset.clone_size[coid.snap] = ctx->obc->obs.oi.size;
 
     // clone_overlap should contain an entry for each clone 
     // (an empty interval_set if there is no overlap)
@@ -2191,6 +2194,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ssc->snapset.seq = snapc.seq;
   ssc->snapset.snaps = snapc.snaps;
+  ssc->snapset.head_exists = obs.exists;
   dout(20) << "make_writeable " << soid << " done, snapset=" << ssc->snapset << dendl;
 }
 
@@ -3495,7 +3499,7 @@ int ReplicatedPG::pull(const sobject_t& soid)
 
   // only pull so much at a time
   interval_set<uint64_t> pullsub;
-  pullsub.span_of(data_subset, 0, g_conf.osd_recovery_max_chunk);
+  pullsub.span_of(data_subset, 0, g_conf->osd_recovery_max_chunk);
 
   // take note
   assert(pulling.count(soid) == 0);
@@ -3630,7 +3634,7 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
   pi->data_subset = data_subset;
   pi->clone_subsets = clone_subsets;
 
-  pi->data_subset_pushing.span_of(pi->data_subset, 0, g_conf.osd_recovery_max_chunk);
+  pi->data_subset_pushing.span_of(pi->data_subset, 0, g_conf->osd_recovery_max_chunk);
   bool complete = pi->data_subset_pushing == pi->data_subset;
 
   dout(10) << "push_start " << soid << " size " << size << " data " << data_subset
@@ -3748,7 +3752,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
     if (!complete) {
       // push more
       uint64_t from = pi->data_subset_pushing.range_end();
-      pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf.osd_recovery_max_chunk);
+      pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf->osd_recovery_max_chunk);
       dout(10) << " pushing more, " << pi->data_subset_pushing << " of " << pi->data_subset << dendl;
       complete = pi->data_subset.range_end() == pi->data_subset_pushing.range_end();
       send_push_op(soid, pi->version, peer, pi->size, false, complete,
@@ -4148,7 +4152,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       update_stats();
     } else {
       // pull more
-      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf.osd_recovery_max_chunk);
+      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf->osd_recovery_max_chunk);
       dout(10) << " pulling more, " << pi->data_subset_pulling << " of " << pi->data_subset << dendl;
       send_pull_op(soid, v, false, pi->data_subset_pulling, pi->from);
     }

@@ -39,7 +39,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
@@ -91,6 +91,8 @@ public:
   virtual int read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
   virtual int obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime);
+
+  virtual int get_bucket_id(std::string& bucket);
 
   virtual bool supports_tmap() { return true; }
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);

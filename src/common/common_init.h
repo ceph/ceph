@@ -18,7 +18,7 @@ enum common_init_flags_t {
   // By default, don't read a configuration file
   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE = 0x2,
 
-  // Don't close stderr
+  // Don't close stderr (in daemonize)
   CINIT_FLAG_NO_CLOSE_STDERR = 0x4,
 };
 
@@ -32,5 +32,6 @@ int common_init_shutdown_stderr();
 void common_init_daemonize(const CephContext *cct, int flags);
 int common_init_shutdown_stderr(void);
 void common_init_finish(CephContext *cct);
+void common_init_chdir(const CephContext *cct);
 
 #endif

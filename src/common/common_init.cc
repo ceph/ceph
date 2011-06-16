@@ -12,8 +12,6 @@
  *
  */
 
-#include "auth/AuthSupported.h"
-#include "auth/KeyRing.h"
 #include "common/DoutStreambuf.h"
 #include "common/Thread.h"
 #include "common/ceph_argparse.h"
@@ -36,59 +34,6 @@
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
-
-int keyring_init(CephContext *cct)
-{
-  md_config_t *conf = cct->_conf;
-
-  if (!is_supported_auth(CEPH_AUTH_CEPHX))
-    return 0;
-
-  int ret = 0;
-  string filename;
-  if (ceph_resolve_file_search(conf->keyring, filename)) {
-    ret = g_keyring.load(filename);
-  }
-
-  if (!conf->key.empty()) {
-    EntityAuth ea;
-    ea.key.decode_base64(conf->key);
-    g_keyring.add(conf->name, ea);
-
-    ret = 0;
-  } else if (!conf->keyfile.empty()) {
-    char buf[100];
-    int fd = ::open(conf->keyfile.c_str(), O_RDONLY);
-    if (fd < 0) {
-      int err = errno;
-      derr << "unable to open " << conf->keyfile << ": "
-	   << cpp_strerror(err) << dendl;
-      ceph_abort();
-    }
-    memset(buf, 0, sizeof(buf));
-    int len = safe_read(fd, buf, sizeof(buf) - 1);
-    if (len < 0) {
-      derr << "unable to read key from " << conf->keyfile << ": "
-	   << cpp_strerror(len) << dendl;
-      TEMP_FAILURE_RETRY(::close(fd));
-      ceph_abort();
-    }
-    TEMP_FAILURE_RETRY(::close(fd));
-
-    buf[len] = 0;
-    string k = buf;
-    EntityAuth ea;
-    ea.key.decode_base64(k);
-
-    g_keyring.add(conf->name, ea);
-
-    ret = 0;
-  }
-
-  if (ret)
-    derr << "keyring_init: failed to load " << filename << dendl;
-  return ret;
-}
 
 CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
@@ -118,6 +63,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
+  cct->set_module_type(iparams.module_type);
   return cct;
 }
 
@@ -195,6 +141,10 @@ void common_init(std::vector < const char* >& args,
 	 << TEXT_NORMAL << std::endl;
     output_ceph_version();
   }
+  if (g_lockdep) {
+    cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
+	 << ") ***" << TEXT_NORMAL << std::endl;
+  }
 }
 
 static void pidfile_remove_void(void)
@@ -241,14 +191,6 @@ void common_init_daemonize(const CephContext *cct, int flags)
     exit(1);
   }
 
-  if (!conf->chdir.empty()) {
-    if (::chdir(conf->chdir.c_str())) {
-      int err = errno;
-      derr << "common_init_daemonize: failed to chdir to directory: '"
-	   << conf->chdir << "': " << cpp_strerror(err) << dendl;
-    }
-  }
-
   if (atexit(pidfile_remove_void)) {
     derr << "common_init_daemonize: failed to set pidfile_remove function "
 	 << "to run at exit." << dendl;
@@ -284,8 +226,8 @@ void common_init_daemonize(const CephContext *cct, int flags)
       exit(1);
     }
   }
-  pidfile_write(&g_conf);
-  ret = g_ceph_context._doss->handle_pid_change(&g_conf);
+  pidfile_write(g_conf);
+  ret = g_ceph_context._doss->handle_pid_change(g_conf);
   if (ret) {
     derr << "common_init_daemonize: _doss->handle_pid_change failed with "
 	 << "error code " << ret << dendl;
@@ -294,11 +236,22 @@ void common_init_daemonize(const CephContext *cct, int flags)
   dout(1) << "finished common_init_daemonize" << dendl;
 }
 
+void common_init_chdir(const CephContext *cct)
+{
+  const md_config_t *conf = cct->_conf;
+  if (conf->chdir.empty())
+    return;
+  if (::chdir(conf->chdir.c_str())) {
+    int err = errno;
+    derr << "common_init_chdir: failed to chdir to directory: '"
+	 << conf->chdir << "': " << cpp_strerror(err) << dendl;
+  }
+}
+
 /* Please be sure that this can safely be called multiple times by the
  * same application. */
 void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
-  keyring_init(cct);
   cct->start_service_thread();
 }

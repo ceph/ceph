@@ -114,9 +114,10 @@ struct MetaRequest {
   int old_inode_drop, old_inode_unless;
   int dentry_drop, dentry_unless;
   int old_dentry_drop, old_dentry_unless;
+  int other_inode_drop, other_inode_unless;
   vector<MClientRequest::Release> cap_releases;
   Inode *inode;
-  Inode *old_inode;
+  Inode *old_inode, *other_inode;
   Dentry *dentry; //associated with path
   Dentry *old_dentry; //associated with path2
 
@@ -161,7 +162,8 @@ struct MetaRequest {
     old_inode_drop(0), old_inode_unless(0),
     dentry_drop(0), dentry_unless(0),
     old_dentry_drop(0), old_dentry_unless(0),
-    inode(NULL), old_inode(NULL),
+    other_inode_drop(0), other_inode_unless(0),
+    inode(NULL), old_inode(NULL), other_inode(NULL),
     dentry(NULL), old_dentry(NULL),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),

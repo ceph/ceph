@@ -80,7 +80,7 @@ void Server::open_logger()
   }
 
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.name.get_id().c_str());
+  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
   logger = new ProfLogger(name, &mdserver_logtype);
   logger_add(logger);
 }
@@ -405,7 +405,7 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   utime_t now = g_clock.now();
   utime_t cutoff = now;
-  cutoff -= g_conf.mds_session_timeout;  
+  cutoff -= g_conf->mds_session_timeout;  
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
@@ -425,7 +425,7 @@ void Server::find_idle_sessions()
 
   // autoclose
   cutoff = now;
-  cutoff -= g_conf.mds_session_autoclose;
+  cutoff -= g_conf->mds_session_autoclose;
 
   // don't kick clients if we've been laggy
   if (mds->laggy_until > cutoff) {
@@ -543,7 +543,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->clog.info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")\n";
+       << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
     m->put();
     return;
@@ -656,7 +656,7 @@ void Server::reconnect_gather_finish()
 void Server::reconnect_tick()
 {
   utime_t reconnect_end = reconnect_start;
-  reconnect_end += g_conf.mds_reconnect_timeout;
+  reconnect_end += g_conf->mds_reconnect_timeout;
   if (g_clock.now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
@@ -698,7 +698,7 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 
 void Server::recall_client_state(float ratio)
 {
-  int max_caps_per_client = (int)(g_conf.mds_cache_size * .8);
+  int max_caps_per_client = (int)(g_conf->mds_cache_size * .8);
   int min_caps_per_client = 100;
 
   dout(10) << "recall_client_state " << ratio
@@ -778,7 +778,7 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *trace
 
 void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 {
-  if (!g_conf.mds_early_reply)
+  if (!g_conf->mds_early_reply)
     return;
 
   if (mdr->are_slaves()) {
@@ -1375,8 +1375,11 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
       assert(lock);
-      mds->locker->xlock_finish(lock, mdr);
-      
+      bool need_issue = false;
+      mds->locker->xlock_finish(lock, mdr, &need_issue);
+      if (need_issue)
+	mds->locker->issue_caps((CInode*)lock->get_parent());
+
       // done.  no ack necessary.
       mdr->slave_request->put();
       mdr->slave_request = 0;
@@ -1644,7 +1647,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     //assert(0); // just for now.
   }
     
-  int got = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+  int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
   if (got > 0) {
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
@@ -1660,7 +1663,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir())
-    in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
 
   if (layout)
     in->inode.layout = *layout;
@@ -4456,7 +4459,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(20) << " straydn is " << *straydn << dendl;
     straydnl = straydn->pop_projected_linkage();
     
-    snap_is_new = straydnl->get_inode()->snaprealm ? false : true;
+    snap_is_new = straydnl->get_inode()->snaprealm ? true : false;
     mdcache->touch_dentry_bottom(straydn);
   }
 
@@ -4464,7 +4467,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   mdr->apply();
 
   if (snap_is_new) //only new if straydnl exists
-      mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
+    mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
   
   mds->mdcache->send_dentry_unlink(dn, straydn);
   
@@ -4662,6 +4665,10 @@ void Server::handle_client_rename(MDRequest *mdr)
       reply_request(mdr, -ENOTEMPTY);
       return;
     }
+    if (srci == oldin && !srcdn->get_dir()->inode->is_stray()) {
+      reply_request(mdr, 0);  // no-op.  POSIX makes no sense.
+      return;
+    }
   }
 
   // -- some sanity checks --
@@ -4847,7 +4854,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     return;
   }
 
-  assert(g_conf.mds_kill_rename_at != 1);
+  assert(g_conf->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
@@ -4908,9 +4915,9 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->slaves.empty() && !srci->is_dir())
-    assert(g_conf.mds_kill_rename_at != 2);
+    assert(g_conf->mds_kill_rename_at != 2);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
-    assert(g_conf.mds_kill_rename_at != 3);    
+    assert(g_conf->mds_kill_rename_at != 3);    
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdnl->is_primary()) {
@@ -4948,7 +4955,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (anchorgather) 
       return;  // waiting for anchor prepares
 
-    assert(g_conf.mds_kill_rename_at != 4);
+    assert(g_conf->mds_kill_rename_at != 4);
   }
 
   // -- prepare journal entry --
@@ -4984,9 +4991,9 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   CDentry::linkage_t *destdnl = destdn->get_linkage();
   // test hack: test slave commit
   if (!mdr->more()->slaves.empty() && !destdnl->get_inode()->is_dir())
-    assert(g_conf.mds_kill_rename_at != 5);
+    assert(g_conf->mds_kill_rename_at != 5);
   if (!mdr->more()->slaves.empty() && destdnl->get_inode()->is_dir())
-    assert(g_conf.mds_kill_rename_at != 6);
+    assert(g_conf->mds_kill_rename_at != 6);
   
   // commit anchor updates?
   if (mdr->more()->src_reanchor_atid) 
@@ -5070,23 +5077,67 @@ void Server::_rename_prepare(MDRequest *mdr,
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
-  if (straydn) dout(10) << " straydn " << *straydn << dendl;
+  if (straydn)
+    dout(10) << " straydn " << *straydn << dendl;
 
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
+  CInode *srci = srcdnl->get_inode();
+  CInode *oldin = destdnl->get_inode();
 
   // primary+remote link merge?
-  bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
+  bool linkmerge = (srci == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
-  if (linkmerge && !silent) {
-    reply_request(mdr, 0);  // no-op.  POSIX makes no sense.
-    return;
+
+  // we need to force journaling of this event if we (will) have any subtrees
+  // nested beneath.
+  bool force_journal = false;
+  while (srci->is_dir()) {
+    // if we are auth for srci and exporting it, have any _any_ open dirfrags, we
+    // will (soon) have auth subtrees here.
+    if (srci->is_auth() && !destdn->is_auth() && srci->has_dirfrags()) {
+      dout(10) << " we are exporting srci, and have open dirfrags, will force journal" << dendl;
+      force_journal = true;
+      break;
+    }
+
+    // see if any children of our frags are auth subtrees.
+    list<CDir*> subtrees;
+    mds->mdcache->list_subtrees(subtrees);
+    list<CDir*> ls;
+    srci->get_dirfrags(ls);
+    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      CDir *dir = *p;
+      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
+	if (dir->contains(*q)) {
+	  if ((*q)->get_dir_auth().first == mds->whoami) {
+	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
+		     << **q << dendl;
+	    force_journal = true;
+	    break;
+	  } else
+	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
+	} else
+	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
+      }
+    }
+    break;
   }
+
   if (linkmerge)
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
+  if (force_journal)
+    dout(10) << " forcing journal of rename because we (will) have auth subtrees nested beneath it" << dendl;
+
+  if (srci->is_dir() &&
+      (srcdn->is_auth() || destdn->is_auth() || force_journal)) {
+    dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
+    metablob->renamed_dirino = srci->ino();
+  }
 
   // prepare
   inode_t *pi = 0, *ji = 0;    // renamed inode
@@ -5098,15 +5149,16 @@ void Server::_rename_prepare(MDRequest *mdr,
       assert(straydn);  // moving to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
-	tpi = destdnl->get_inode()->project_inode(); //project_snaprealm
+	tpi = oldin->project_inode(); //project_snaprealm
 	tpi->version = straydn->pre_dirty(tpi->version);
       }
-      straydn->push_projected_linkage(destdnl->get_inode());
+      if (straydn->is_auth())
+	straydn->push_projected_linkage(oldin);
     } else if (destdnl->is_remote()) {
       // nlink-- targeti
-      if (destdnl->get_inode()->is_auth()) {
-	tpi = destdnl->get_inode()->project_inode();
-	tpi->version = destdnl->get_inode()->pre_dirty();
+      if (oldin->is_auth()) {
+	tpi = oldin->project_inode();
+	tpi->version = oldin->pre_dirty();
       }
     }
   }
@@ -5114,32 +5166,47 @@ void Server::_rename_prepare(MDRequest *mdr,
   // dest
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
+      // destdn
       if (destdn->is_auth()) {
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
         destdn->push_projected_linkage(srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       }
-      if (srcdnl->get_inode()->is_auth()) {
-	pi = srcdnl->get_inode()->project_inode();
-	pi->version = srcdnl->get_inode()->pre_dirty();
+      // srci
+      if (srci->is_auth()) {
+	pi = srci->project_inode();
+	pi->version = srci->pre_dirty();
       }
     } else {
       dout(10) << " will merge remote onto primary link" << dendl;
       if (destdn->is_auth()) {
-	pi = destdnl->get_inode()->project_inode();
-	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdnl->get_inode()->inode.version);
+	pi = oldin->project_inode();
+	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->inode.version);
       }
     }
-  } else {
+  } else { // primary
     if (destdn->is_auth()) {
       version_t oldpv;
       if (srcdn->is_auth())
-	oldpv = srcdnl->get_inode()->get_projected_version();
-      else
+	oldpv = srci->get_projected_version();
+      else {
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
-      pi = srcdnl->get_inode()->project_inode(); // project snaprealm if srcdnl->is_primary
+
+	// note which dirfrags have child subtrees in the journal
+	// event, so that we can open those (as bounds) during replay.
+	if (srci->is_dir()) {
+	  list<CDir*> ls;
+	  srci->get_dirfrags(ls);
+	  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	    CDir *dir = *p;
+	    metablob->renamed_dir_frags.push_back(dir->get_frag());
+	  }
+	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
+	}
+      }
+      pi = srci->project_inode(); // project snaprealm if srcdnl->is_primary
                                                  // & srcdnl->snaprealm
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
-      destdn->push_projected_linkage(srcdnl->get_inode());
+      destdn->push_projected_linkage(srci);
     }
   }
 
@@ -5167,18 +5234,20 @@ void Server::_rename_prepare(MDRequest *mdr,
   
   // sub off target
   if (destdn->is_auth() && !destdnl->is_null()) {
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), destdn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, metablob, oldin, destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    mdcache->predirty_journal_parents(mdr, metablob, destdnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    if (destdnl->is_primary())
+      mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
+					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   
   // move srcdn
   int predirty_primary = (srcdnl->is_primary() && srcdn->get_dir() != destdn->get_dir()) ? PREDIRTY_PRIMARY:0;
   int flags = predirty_dir | predirty_primary;
   if (srcdn->is_auth())
-    mdcache->predirty_journal_parents(mdr, metablob, srcdnl->get_inode(), srcdn->get_dir(), PREDIRTY_SHALLOW|flags, -1);
+    mdcache->predirty_journal_parents(mdr, metablob, srci, srcdn->get_dir(), PREDIRTY_SHALLOW|flags, -1);
   if (destdn->is_auth())
-    mdcache->predirty_journal_parents(mdr, metablob, srcdnl->get_inode(), destdn->get_dir(), flags, 1);
+    mdcache->predirty_journal_parents(mdr, metablob, srci, destdn->get_dir(), flags, 1);
 
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
   snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
@@ -5187,49 +5256,69 @@ void Server::_rename_prepare(MDRequest *mdr,
   // target inode
   if (!linkmerge) {
     if (destdnl->is_primary()) {
-      // project snaprealm, too
-      bufferlist snapbl;
-      if (destdn->is_auth())
-        destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-      straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
-      tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
+      if (destdn->is_auth()) {
+	// project snaprealm, too
+	bufferlist snapbl;
+	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+	straydn->first = MAX(oldin->first, next_dest_snap);
+	tji = metablob->add_primary_dentry(straydn, true, oldin, 0, &snapbl);
+      }
     } else if (destdnl->is_remote()) {
-      metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
-      mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
-      tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode());
+      if (oldin->is_auth()) {
+	// auth for targeti
+	metablob->add_dir_context(oldin->get_parent_dir());
+	mdcache->journal_cow_dentry(mdr, metablob, oldin->parent, CEPH_NOSNAP, 0, destdnl);
+	tji = metablob->add_primary_dentry(oldin->parent, true, oldin);
+      }
+      if (destdn->is_auth()) {
+	// auth for dn, not targeti
+	metablob->add_null_dentry(destdn, true);
+      }
     }
   }
 
   // dest
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
-      if (!destdnl->is_null())
+      if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
-      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      if (srcdnl->get_inode()->is_auth()) {
-	mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
+
+      if (destdn->is_auth())
+        metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
+      if (srci->get_parent_dn()->is_auth()) { // it's remote
+	metablob->add_dir_context(srci->get_parent_dir());
+        mdcache->journal_cow_dentry(mdr, metablob, srci->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+	ji = metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
       }
     } else {
-      if (!destdnl->is_null())
+      if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
-      metablob->add_primary_dentry(destdn, true, destdnl->get_inode()); 
+
+      if (destdn->is_auth())
+        metablob->add_primary_dentry(destdn, true, destdnl->get_inode());
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
     bufferlist snapbl;
-    if (destdn->is_auth() && srcdnl->get_inode()->snaprealm)
-      srcdnl->get_inode()->project_past_snaprealm_parent(dest_realm, snapbl);
+    if (destdn->is_auth() && srci->snaprealm)
+      srci->project_past_snaprealm_parent(dest_realm, snapbl);
     
-    if (!destdnl->is_null())
+    if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
       destdn->first = MAX(destdn->first, next_dest_snap);
-    ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl); 
+
+    if (destdn->is_auth())
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+    else if (force_journal) {
+      dout(10) << " forced journaling destdn " << *destdn << dendl;
+      metablob->add_dir_context(destdn->get_dir());
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+    }
   }
     
   // src
@@ -5237,12 +5326,16 @@ void Server::_rename_prepare(MDRequest *mdr,
     dout(10) << " journaling srcdn " << *srcdn << dendl;
     mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
     metablob->add_null_dentry(srcdn, true);
+  } else if (force_journal) {
+    dout(10) << " forced journaling srcdn " << *srcdn << dendl;
+    metablob->add_dir_context(srcdn->get_dir());
+    metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
 
   // make renamed inode first track the dn
   if (srcdnl->is_primary() && destdn->is_auth())
-    srcdnl->get_inode()->first = destdn->first;  
+    srci->first = destdn->first;  
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {
@@ -5283,7 +5376,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 		    (srcdnl->is_primary() || destdnl->is_primary()));
 
   // target inode
-  if (!linkmerge && oldin) {
+  if (!linkmerge) {
     if (destdnl->is_primary()) {
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
@@ -5297,7 +5390,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
 
       // nlink-- targeti
-      if (oldin->is_auth()) {
+      if (destdn->is_auth()) {
 	bool hadrealm = (oldin->snaprealm ? true : false);
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
 	if (oldin->snaprealm && !hadrealm)
@@ -5306,17 +5399,24 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	// FIXME this snaprealm is not filled out correctly
 	//oldin->open_snaprealm();  might be sufficient..	
       }
-    } else {
+    } else if (destdnl->is_remote()) {
       destdn->get_dir()->unlink_inode(destdn);
+      if (oldin->is_auth())
+  	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
   }
 
-  // dest
+  // unlink src before we relink it at dest
   CInode *in = srcdnl->get_inode();
   assert(in);
-  if (srcdnl->is_remote()) {
+
+  bool srcdn_was_remote = srcdnl->is_remote();
+  srcdn->get_dir()->unlink_inode(srcdn);
+
+  // dest
+  if (srcdn_was_remote) {
     if (!linkmerge) {
-      srcdn->get_dir()->unlink_inode(srcdn);
+      // destdn
       if (destdn->is_auth())
 	destdnl = destdn->pop_projected_linkage();
       else
@@ -5324,18 +5424,18 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->link_remote(destdnl, in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+      // in
+      if (in->is_auth())
+	in->pop_and_dirty_projected_inode(mdr->ls);
     } else {
       dout(10) << "merging remote onto primary link" << dendl;
-      srcdn->get_dir()->unlink_inode(srcdn);
+      oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
-    if (destdnl->get_inode()->is_auth())
-      destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
-  } else {
+  } else { // primary
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
       destdn->get_dir()->unlink_inode(destdn);
     }
-    srcdn->get_dir()->unlink_inode(srcdn);
     if (destdn->is_auth())
       destdnl = destdn->pop_projected_linkage();
     else
@@ -5356,24 +5456,28 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	for (set<SimpleLock *>::iterator i = mdr->xlocks.begin();
 	    i !=  mdr->xlocks.end();
 	    ++i)
-	  if (!(*i)->is_locallock() &&
-	      (*i)->get_parent() == destdnl->get_inode())
-	    destdnl->get_inode()->auth_pin(*i);
+	  if ((*i)->get_parent() == destdnl->get_inode() &&
+	      !(*i)->is_locallock())
+	    mds->locker->xlock_import(*i, mdr);
       }
       
       // hack: fix auth bit
-      destdnl->get_inode()->state_set(CInode::STATE_AUTH);
+      in->state_set(CInode::STATE_AUTH);
       imported_inode = true;
     }
 
     if (destdn->is_auth()) {
-      CInode *desti = destdnl->get_inode();
-      desti->pop_and_dirty_projected_inode(mdr->ls);
+      in->pop_and_dirty_projected_inode(mdr->ls);
 
-      if (desti->is_dir()) {
-	mdr->ls->renamed_files.push_back(&desti->item_renamed_file);
-	desti->state_set(CInode::STATE_DIRTYPARENT);
-	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+      if (in->is_dir()) {
+	mdr->ls->renamed_files.push_back(&in->item_renamed_file);
+	if (!in->state_test(CInode::STATE_DIRTYPARENT)) {
+	  in->state_set(CInode::STATE_DIRTYPARENT);
+	  in->get(CInode::PIN_DIRTYPARENT);
+	  dout(10) << "added dir to logsegment renamed_files list " << *in << dendl;
+	} else {
+	  dout(10) << "re-added dir to logsegment renamed_files list " << *in << dendl;
+	}
       }
     } else {
       // FIXME: fix up snaprealm!
@@ -5390,8 +5494,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   mdr->apply();
 
   // update subtree map?
-  if (destdnl->is_primary() && destdnl->get_inode()->is_dir()) 
-    mdcache->adjust_subtree_after_rename(destdnl->get_inode(),
+  if (destdnl->is_primary() && in->is_dir()) 
+    mdcache->adjust_subtree_after_rename(in,
                                          srcdn->get_dir(),
                                          imported_inode);
 
@@ -5566,32 +5670,18 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   ::encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
-  // journal it?
-  if (srcdn->is_auth() ||
-      srci->is_auth() ||
-      (destdnl->get_inode() && destdnl->get_inode()->is_auth())) {
-    // journal.
-    mdr->ls = mdlog->get_current_segment();
-    ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
-					ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
-    mdlog->start_entry(le);
-    le->rollback = mdr->more()->rollback_bl;
-
-    bufferlist blah;  // inode import data... obviously not used if we're the slave
-    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
-
-    mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
-    mdlog->flush();
-  } else {
-    // don't journal.
-    dout(10) << "not journaling: i'm not auth for anything, and srci has no caps" << dendl;
-
-    // prepare anyway; this may twiddle dir_auth
-    EMetaBlob blob;
-    bufferlist blah;
-    _rename_prepare(mdr, &blob, &blah, srcdn, destdn, straydn);
-    _logged_slave_rename(mdr, srcdn, destdn, straydn);
-  }
+  // journal.
+  mdr->ls = mdlog->get_current_segment();
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
+				      ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
+  mdlog->start_entry(le);
+  le->rollback = mdr->more()->rollback_bl;
+  
+  bufferlist blah;  // inode import data... obviously not used if we're the slave
+  _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
+  
+  mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+  mdlog->flush();
 }
 
 void Server::_logged_slave_rename(MDRequest *mdr, 
@@ -5661,30 +5751,18 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       list<Context*> finished;
 
+      CInode *in = destdnl->get_inode();
+
       // drop our pins
       // we exported, clear out any xlocks that we moved to another MDS
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
-      while(i != mdr->xlocks.end()) {
-        SimpleLock *lock = *i;
-        assert(lock->get_parent() == destdnl->inode ||
-               lock->get_parent() == srcdn);
-        /* if that assert fails then this unlocking code isn't
-         * intelligent enough. */
-        lock->put_xlock();
-        if((!lock->is_stable() &&
-            lock->get_sm()->states[lock->get_next_state()].next == 0) &&
-            !lock->is_locallock()) {
-          dout(20) << "removing lock " << lock << ", will be stable, unpinning" << dendl;
-          lock->get_parent()->auth_unpin(lock);
-        } else if (!lock->is_stable()) {
-          dout(5) << "erasing unstable lock " << lock << lock->get_type()
-                  << " on " << *lock->get_parent() << " without removing pins!"
-                  << dendl;
-        } else {
-          dout(20) << "removing lock " << lock << dendl;
-        }
-        mdr->xlocks.erase(i++);
-        mdr->locks.erase(lock);
+      while (i != mdr->xlocks.end()) {
+        SimpleLock *lock = *i++;
+
+	// we only care about xlocks on the exported inode
+	if (lock->get_parent() == in &&
+	    !lock->is_locallock())
+	  mds->locker->xlock_export(lock, mdr);
       }
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;

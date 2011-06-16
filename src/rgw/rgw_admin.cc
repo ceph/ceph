@@ -1,6 +1,7 @@
 #include <errno.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 using namespace std;
@@ -15,11 +16,15 @@ using namespace std;
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
+#include "rgw_formats.h"
 #include "auth/Crypto.h"
 
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
+
+static RGWFormatter_XML formatter_xml;
+static RGWFormatter_JSON formatter_json;
 
 void usage() 
 {
@@ -35,9 +40,13 @@ void usage()
   cerr << "  key create                 create access key\n";
   cerr << "  key rm                     remove access key\n";
   cerr << "  buckets list               list buckets\n";
+  cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
+  cerr << "  pool info                  show pool information\n";
+  cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
-  cerr << "  log show                   dump a log from specific object or (bucket + date)\n";
+  cerr << "  log show                   dump a log from specific object or (bucket + date\n";
+  cerr << "                             + pool-id)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -55,6 +64,9 @@ void usage()
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
+  cerr << "   --pool-id=<pool-id>\n";
+  cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
+  cerr << "                             json\n";
   generic_client_usage();
   exit(1);
 }
@@ -71,8 +83,11 @@ enum {
   OPT_KEY_CREATE,
   OPT_KEY_RM,
   OPT_BUCKETS_LIST,
+  OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_POLICY,
+  OPT_POOL_INFO,
+  OPT_POOL_CREATE,
   OPT_LOG_SHOW,
 };
 
@@ -141,6 +156,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "log") == 0) {
     *need_more = true;
     return 0;
@@ -177,11 +193,18 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
   } else if (strcmp(prev_cmd, "bucket") == 0) {
+    if (strcmp(cmd, "link") == 0)
+      return OPT_BUCKET_LINK;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_BUCKET_UNLINK;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
+  } else if (strcmp(prev_cmd, "pool") == 0) {
+    if (strcmp(cmd, "info") == 0)
+      return OPT_POOL_INFO;
+    if (strcmp(cmd, "create") == 0)
+      return OPT_POOL_CREATE;
   }
 
   return -EINVAL;
@@ -215,6 +238,7 @@ static void show_user_info( RGWUserInfo& info)
   map<string, RGWSubUser>::iterator uiter;
 
   cout << "User ID: " << info.user_id << std::endl;
+  cout << "RADOS UID: " << info.auid << std::endl;
   cout << "Keys:" << std::endl;
   for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
     RGWAccessKey& k = kiter->second;
@@ -234,6 +258,39 @@ static void show_user_info( RGWUserInfo& info)
   cout << "Email: " << info.user_email << std::endl;
   cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
   cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+}
+
+static int create_bucket(string& bucket, string& user_id, string& display_name, uint64_t auid)
+{
+  RGWAccessControlPolicy policy, old_policy;
+  map<string, bufferlist> attrs;
+  bufferlist aclbl;
+  string no_oid;
+  rgw_obj obj(bucket, no_oid);
+
+  int ret;
+
+  // defaule policy (private)
+  policy.create_default(user_id, display_name);
+  policy.encode(aclbl);
+
+  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
+  if (ret && ret != -EEXIST)   
+    goto done;
+
+  ret = rgwstore->set_attr(obj, RGW_ATTR_ACL, aclbl);
+  if (ret < 0) {
+    cerr << "couldn't set acl on bucket" << std::endl;
+  }
+
+  ret = rgw_add_bucket(user_id, bucket);
+
+  RGW_LOG(0) << "ret=" << ret << dendl;
+
+  if (ret == -EEXIST)
+    ret = 0;
+done:
+  return ret;
 }
 
 static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
@@ -297,7 +354,7 @@ int main(int argc, char **argv)
   const char *subuser = 0;
   const char *access = 0;
   uint32_t perm_mask = 0;
-  uint64_t auid = 0;
+  uint64_t auid = -1;
   RGWUserInfo info;
   RGWAccess *store;
   const char *prev_cmd = NULL;
@@ -308,6 +365,9 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
+  int pool_id = -1;
+  const char *format = 0;
+  RGWFormatter *formatter = &formatter_xml;
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("uid", 'i')) {
@@ -341,6 +401,14 @@ int main(int argc, char **argv)
     } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
       perm_mask = str_to_perm(access);
+    } else if (CEPH_ARGPARSE_EQ("pool-id", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
+      if (pool_id < 0) {
+        cerr << "bad pool-id: " << pool_id << std::endl;
+        usage();
+      }
+    } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
     } else {
       if (!opt_cmd) {
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
@@ -361,6 +429,17 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_NO_CMD)
     usage();
+
+  if (format) {
+    if (strcmp(format, "xml") == 0)
+      formatter = &formatter_xml;
+    else if (strcmp(format, "json") == 0)
+      formatter = &formatter_json;
+    else {
+      cerr << "unrecognized format: " << format << std::endl;
+      usage();
+    }
+  }
 
   if (subuser) {
     char *suser = strdup(subuser);
@@ -427,7 +506,7 @@ int main(int argc, char **argv)
 
 
   if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK) {
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       usage();
@@ -529,7 +608,7 @@ int main(int argc, char **argv)
       info.display_name = display_name;
     if (user_email)
       info.user_email = user_email;
-    if (auid)
+    if (auid != (uint64_t)-1)
       info.auid = auid;
     if (openstack_user)
       info.openstack_name = openstack_user;
@@ -633,11 +712,50 @@ int main(int argc, char **argv)
     }
   }
 
+  if (opt_cmd == OPT_BUCKET_LINK) {
+    if (!bucket) {
+      cerr << "bucket name was not specified" << std::endl;
+      usage();
+    }
+    string bucket_str(bucket);
+    string uid_str(user_id);
+    
+    string no_oid;
+    bufferlist aclbl;
+    rgw_obj obj(bucket_str, no_oid);
+
+    int r = rgwstore->get_attr(obj, RGW_ATTR_ACL, aclbl);
+    if (r >= 0) {
+      RGWAccessControlPolicy policy;
+      ACLOwner owner;
+      try {
+       bufferlist::iterator iter = aclbl.begin();
+       ::decode(policy, iter);
+       owner = policy.get_owner();
+      } catch (buffer::error& err) {
+	dout(10) << "couldn't decode policy" << dendl;
+	return -EINVAL;
+      }
+      cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
+      r = rgw_remove_bucket(owner.get_id(), bucket_str);
+      if (r < 0) {
+	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
+	return r;
+      }
+    }
+
+    r = create_bucket(bucket_str, uid_str, info.display_name, info.auid);
+    if (r < 0)
+        cerr << "error linking bucket to user: r=" << r << std::endl;
+    return -r;
+  }
+
   if (opt_cmd == OPT_BUCKET_UNLINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
       usage();
     }
+
     string bucket_str(bucket);
     int r = rgw_remove_bucket(user_id, bucket_str);
     if (r < 0)
@@ -646,8 +764,8 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!object && (!date || !bucket)) {
-      cerr << "object or (both date and bucket) were not specified" << std::endl;
+    if (!object && (!date || !bucket || pool_id < 0)) {
+      cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
       usage();
     }
 
@@ -656,7 +774,11 @@ int main(int argc, char **argv)
     if (object) {
       oid = object;
     } else {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d", pool_id);
       oid = date;
+      oid += "-";
+      oid += buf;
       oid += "-";
       oid += string(bucket);
     }
@@ -685,26 +807,98 @@ int main(int argc, char **argv)
     while (!iter.end()) {
       ::decode(entry, iter);
 
-      cout << (entry.owner.size() ? entry.owner : "-" ) << delim
-           << entry.bucket << delim
-           << entry.time << delim
-           << entry.remote_addr << delim
-           << entry.user << delim
-           << entry.op << delim
-           << "\"" << escape_str(entry.uri, '"') << "\"" << delim
-           << entry.http_status << delim
-           << "\"" << entry.error_code << "\"" << delim
-           << entry.bytes_sent << delim
-           << entry.bytes_received << delim
-           << entry.obj_size << delim
-           << entry.total_time.usec() << delim
-           << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
-           << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
+      if (!format) { // for now, keeping backward compatibility a bit
+        cout << (entry.owner.size() ? entry.owner : "-" ) << delim
+             << entry.bucket << delim
+             << entry.time << delim
+             << entry.remote_addr << delim
+             << entry.user << delim
+             << entry.op << delim
+             << "\"" << escape_str(entry.uri, '"') << "\"" << delim
+             << entry.http_status << delim
+             << "\"" << entry.error_code << "\"" << delim
+             << entry.bytes_sent << delim
+             << entry.bytes_received << delim
+             << entry.obj_size << delim
+             << entry.total_time.usec() << delim
+             << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
+             << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
+      } else {
+        formatter->init();
+        formatter->open_obj_section("LogEntry");
+        formatter->dump_value_str("Bucket", "%s", entry.bucket.c_str());
+
+        stringstream ss;
+        ss << entry.time;
+        string s = ss.str();
+
+        formatter->dump_value_str("Time", "%s", s.c_str());
+        formatter->dump_value_str("RemoteAddr", "%s", entry.remote_addr.c_str());
+        formatter->dump_value_str("User", "%s", entry.user.c_str());
+        formatter->dump_value_str("Operation", "%s", entry.op.c_str());
+        formatter->dump_value_str("URI", "%s", entry.uri.c_str());
+        formatter->dump_value_str("HttpStatus", "%s", entry.http_status.c_str());
+        formatter->dump_value_str("ErrorCode", "%s", entry.error_code.c_str());
+        formatter->dump_value_str("BytesSent", "%lld", entry.bytes_sent);
+        formatter->dump_value_str("BytesReceived", "%lld", entry.bytes_received);
+        formatter->dump_value_str("ObjectSize", "%lld", entry.obj_size);
+        formatter->dump_value_str("TotalTime", "%lld", (uint64_t)entry.total_time.usec());
+        formatter->dump_value_str("UserAgent", "%s",  entry.user_agent.c_str());
+        formatter->dump_value_str("Referrer", "%s",  entry.referrer.c_str());
+        formatter->close_section("LogEntry");
+        formatter->flush(cout);
+      }
     }
   }
 
   if (opt_cmd == OPT_USER_RM) {
     rgw_delete_user(info);
+  }
+
+  if (opt_cmd == OPT_POOL_INFO) {
+    RGWPoolInfo info;
+    int ret = rgw_retrieve_pool_info(pool_id, info);
+    if (ret < 0) {
+      cerr << "could not retrieve pool info for pool_id=" << pool_id << std::endl;
+      return ret;
+    }
+    formatter->init();
+    formatter->open_obj_section("Pool");
+    formatter->dump_value_int("ID", "%d", pool_id);
+    formatter->dump_value_str("Bucket", "%s", info.bucket.c_str());
+    formatter->dump_value_str("Owner", "%s", info.owner.c_str());
+    formatter->close_section("Pool");
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_POOL_CREATE) {
+    if (!bucket)
+      usage();
+    string bucket_str(bucket);
+    string no_object;
+    int ret;
+    bufferlist bl;
+    rgw_obj obj(bucket_str, no_object);
+
+    ret = rgwstore->get_attr(obj, RGW_ATTR_ACL, bl);
+    if (ret < 0) {
+      RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
+      return ret;
+    }
+    RGWAccessControlPolicy policy;
+    bufferlist::iterator iter = bl.begin();
+    policy.decode(iter);
+
+    RGWPoolInfo info;
+    info.bucket = bucket;
+    info.owner = policy.get_owner().get_id();
+
+    int pool_id = rgwstore->get_bucket_id(bucket_str);
+    ret = rgw_store_pool_info(pool_id, info);
+    if (ret < 0) {
+      RGW_LOG(0) << "can't store pool info: pool_id=" << pool_id << " ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   return 0;

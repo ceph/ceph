@@ -88,7 +88,11 @@ extern const struct sm_t sm_locallock;
 
 #define LOCK_SNAP_SYNC 32
 
-#define LOCK_MAX      34
+#define LOCK_XSYN  33
+#define LOCK_XSYN_EXCL  34
+#define LOCK_EXCL_XSYN  35
+
+#define LOCK_MAX      36
 
 // -------------------------
 // lock actions

@@ -25,21 +25,11 @@ class MonitorStore {
   string dir;
   int lock_fd;
 
-  int write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync=true);
-
+  int write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
+		       bool append, bool sync);
+  int write_bl_ss(bufferlist& bl, const char *a, const char *b,
+		  bool append, bool sync=true);
 public:
-  class Error : public std::exception
-  {
-  public:
-    static Error FromErrno(const char *prefix,
-				  const char *prefix2, int errno_);
-    Error(const std::string &str_);
-    virtual ~Error() throw ();
-    const char *what() const throw ();
-  private:
-    std::string str;
-  };
-
   MonitorStore(const std::string &d) : dir(d) { }
   ~MonitorStore() { }
 

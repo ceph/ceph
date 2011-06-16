@@ -196,8 +196,11 @@ public:
 
     ::decode(starts_with, p);
     ::decode(trace, p);
+    if (header.version >= 2)
+      ::decode(wanted_ino, p);
   }
   void encode_payload() {
+    header.version = 2;
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(wanted_base_dir, payload);
@@ -212,6 +215,7 @@ public:
 
     ::encode(starts_with, payload);
     ::encode(trace, payload);
+    ::encode(wanted_ino, payload);
   }
 
 };

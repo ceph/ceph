@@ -94,7 +94,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
 
   KeyRing keyring;
-  if (keyring.load(g_conf.keyring) == 0) {
+  if (keyring.load(g_conf->keyring) == 0) {
     import_keyring(keyring);
   }
 
@@ -181,7 +181,7 @@ void AuthMonitor::increase_max_global_id()
 {
   assert(mon->is_leader());
 
-  max_global_id += g_conf.mon_globalid_prealloc;
+  max_global_id += g_conf->mon_globalid_prealloc;
   dout(10) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;

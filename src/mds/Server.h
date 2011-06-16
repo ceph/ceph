@@ -211,6 +211,9 @@ public:
   void _rename_prepare(MDRequest *mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
 		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  /* set not_journaling=true if you're going to discard the results --
+   * this bypasses the asserts to make sure we're journaling the right
+   * things on the right nodes */
   void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
 
   // slaving

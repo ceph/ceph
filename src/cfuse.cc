@@ -29,7 +29,6 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "common/errno.h"
 #include "common/safe_io.h"
        
 #ifndef DARWIN
@@ -71,7 +70,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   vec_to_argv(nargs, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf.chdir = "/";
+  g_conf->chdir = "/";
 
   // check for 32-bit arch
   if (sizeof(long) == 4) {
@@ -82,7 +81,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   int ret = mc.build_initial_monmap();
   if (ret == -EINVAL)
     usage();
@@ -91,7 +90,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     return -1;
 
   // start up network
-  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
   messenger->register_entity(entity_name_t::CLIENT());
   Client *client = new Client(messenger, &mc);
   if (filer_flags) {
@@ -101,7 +100,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // we need to handle the forking ourselves.
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
-  if (g_conf.daemonize) {
+  if (g_conf->daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
@@ -125,7 +124,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    int r = client->mount(g_conf.client_mountpoint.c_str());
+    int r = client->mount(g_conf->client_mountpoint.c_str());
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
       goto out_shutdown;
@@ -145,15 +144,10 @@ int main(int argc, const char **argv, const char *envp[]) {
     // wait for messenger to finish
     messenger->wait();
 
-    if (g_conf.daemonize) {
+    if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
-      int32_t out = r;
-      int ret = safe_write(fd[1], &out, sizeof(out));
-      if (ret) {
-	derr << "cfuse[" << getpid() << "]: failed to write to fd[1]: "
-	     << cpp_strerror(ret) << dendl;
-	ceph_abort();
-      }
+      static int foo = 0;
+      foo += ::write(fd[1], &r, sizeof(r));
     }
 
     //cout << "child done" << std::endl;

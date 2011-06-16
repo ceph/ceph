@@ -20,12 +20,19 @@
 #include "auth/Crypto.h"
 #include "auth/Auth.h"
 
+class md_config_t;
+
 class KeyRing {
   map<EntityName, EntityAuth> keys;
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
   void decode_plaintext(bufferlist::iterator& bl);
 public:
+  /* Create a KeyRing from a Ceph configuration */
+  static KeyRing *from_ceph_conf(const md_config_t *conf);
+  /* Create an empty KeyRing */
+  static KeyRing *create_empty();
+
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
   int load(const std::string &filename);
@@ -47,7 +54,7 @@ public:
     return true;
   }
   void get_master(CryptoKey& dest) const {
-    get_secret(g_conf.name, dest);
+    get_secret(g_conf->name, dest);
   }
 
   // modifiers
@@ -76,7 +83,5 @@ public:
   void encode_plaintext(bufferlist& bl);
 };
 WRITE_CLASS_ENCODER(KeyRing)
-
-extern KeyRing g_keyring;
 
 #endif

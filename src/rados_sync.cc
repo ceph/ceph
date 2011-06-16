@@ -12,15 +12,18 @@
  *
  */
 
-#include <sys/xattr.h>
+#define __STDC_FORMAT_MACROS
+
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
+#include <inttypes.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -28,15 +31,22 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 #include "include/rados/librados.hpp"
 
 using std::auto_ptr;
 using namespace librados;
 
+static const char * const XATTR_RADOS_SYNC_VER = "user.rados_sync_ver";
 static const char * const XATTR_FULLNAME = "user.rados_full_name";
-static const char XATTR_PREFIX[] = "user.rados.";
-static const size_t XATTR_PREFIX_LEN =
-	sizeof(XATTR_PREFIX)/sizeof(XATTR_PREFIX[0]) - 1;
+static const char USER_XATTR_PREFIX[] = "user.rados.";
+static const size_t USER_XATTR_PREFIX_LEN =
+  sizeof(USER_XATTR_PREFIX) / sizeof(USER_XATTR_PREFIX[0]) - 1;
+/* It's important that RADOS_SYNC_TMP_SUFFIX contain at least one character
+ * that we wouldn't normally alllow in a file name-- in this case, $ */
+static const char * const RADOS_SYNC_TMP_SUFFIX = "$tmp";
+static const size_t RADOS_SYNC_TMP_SUFFIX_LEN =
+  sizeof(RADOS_SYNC_TMP_SUFFIX) / sizeof(RADOS_SYNC_TMP_SUFFIX[0]) - 1;
 
 static const char ERR_PREFIX[] = "[ERROR]        ";
 
@@ -46,69 +56,205 @@ static const char ERR_PREFIX[] = "[ERROR]        ";
 #define ENOATTR ENODATA
 #endif
 
-static int xattr_test(const char *dir_name)
+/* Given the name of an extended attribute from a file in the filesystem,
+ * returns an empty string if the extended attribute does not represent a rados
+ * user extended attribute. Otherwise, returns the name of the rados extended
+ * attribute.
+ *
+ * Rados user xattrs are prefixed with USER_XATTR_PREFIX.
+ */
+static std::string get_user_xattr_name(const char *fs_xattr_name)
 {
-  int ret;
-  int fd = -1;
-  const char file_name[] = "/xattr_test_file";
-  char path[strlen(dir_name) + strlen(file_name) + 2];
-  snprintf(path, sizeof(path), "%s/%s", dir_name, file_name);
-
-  char buf[] = "12345";
-  char buf2[sizeof(buf)];
-  memset(buf2, 0, sizeof(buf2));
-
-  fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0700);
-  if (fd < 0) {
-    ret = errno;
-    cerr << ERR_PREFIX << "xattr_test: unable to open '" << path << "': "
-	 << cpp_strerror(ret) << std::endl;
-    goto done;
-  }
-  ret = fsetxattr(fd, XATTR_FULLNAME, buf, sizeof(buf), 0);
-  if (ret) {
-    ret = errno;
-    cerr << ERR_PREFIX << "xattr_test: fsetxattr failed with error "
-	 << cpp_strerror(ret) << std::endl;
-    goto done;
-  }
-  if (close(fd) < 0) {
-    ret = errno;
-    fd = -1;
-    cerr << ERR_PREFIX << "xattr_test: close failed with error "
-	 << cpp_strerror(ret) << std::endl;
-    goto done;
-  }
-  fd = -1;
-  ret = getxattr(path, XATTR_FULLNAME, buf2, sizeof(buf2));
-  if (ret < 0) {
-    ret = errno;
-    cerr << ERR_PREFIX << "xattr_test: fgetxattr failed with error "
-	 << cpp_strerror(ret) << std::endl;
-    goto done;
-  }
-  if (memcmp(buf, buf2, sizeof(buf))) {
-    ret = ENOTSUP;
-    cerr << ERR_PREFIX << "xattr_test: failed to read back the same xattr "
-         << "value that we set." << std::endl;
-    goto done;
-  }
-  ret = 0;
-
-done:
-  if (fd >= 0) {
-    close(fd);
-    fd = -1;
-  }
-  unlink(path);
-  if (ret) {
-    cerr << ERR_PREFIX << "xattr_test: the filesystem at " << dir_name << " does "
-         << "not appear to support extended attributes. Please remount your "
-	 << "filesystem with extended attributes enabled, or pick a different "
-	 << "directory." << std::endl;
-  }
-  return ret;
+  if (strncmp(fs_xattr_name, USER_XATTR_PREFIX, USER_XATTR_PREFIX_LEN))
+    return "";
+  return fs_xattr_name + USER_XATTR_PREFIX_LEN;
 }
+
+/* Returns true if 'suffix' is a suffix of str */
+static bool is_suffix(const char *str, const char *suffix)
+{
+  size_t strlen_str = strlen(str);
+  size_t strlen_suffix = strlen(suffix);
+  if (strlen_str < strlen_suffix)
+    return false;
+  return (strcmp(str + (strlen_str - strlen_suffix), suffix) == 0);
+}
+
+/* Represents a directory in the filesystem that we export rados objects to (or
+ * import them from.)
+ */
+class ExportDir
+{
+public:
+  static ExportDir* create_for_writing(const std::string path, int version,
+				 bool create)
+  {
+    if (access(path.c_str(), R_OK | W_OK) == 0) {
+      return ExportDir::from_file_system(path);
+    }
+    if (!create) {
+      cerr << ERR_PREFIX << "ExportDir: directory '"
+	   << path << "' does not exist. Use --create to create it."
+	   << std::endl;
+      return NULL;
+    }
+    int ret = mkdir(path.c_str(), 0700);
+    if (ret < 0) {
+      int err = errno;
+      if (err != EEXIST) {
+	cerr << ERR_PREFIX << "ExportDir: mkdir error: "
+	     << cpp_strerror(err) << std::endl;
+	return NULL;
+      }
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", version);
+    ret = setxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, strlen(buf) + 1, 0);
+    if (ret < 0) {
+      int err = errno;
+      cerr << ERR_PREFIX << "ExportDir: setxattr error :"
+	   << cpp_strerror(err) << std::endl;
+      return NULL;
+    }
+    return new ExportDir(version, path);
+  }
+
+  static ExportDir* from_file_system(const std::string path)
+  {
+    if (access(path.c_str(), R_OK)) {
+	cerr << "ExportDir: source directory '" << path
+	     << "' appears to be inaccessible." << std::endl;
+	return NULL;
+    }
+    int ret;
+    char buf[32];
+    memset(buf, 0, sizeof(buf));
+    ret = getxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, sizeof(buf) - 1);
+    if (ret < 0) {
+      ret = errno;
+      if (ret == ENODATA) {
+	cerr << ERR_PREFIX << "ExportDir: directory '" << path
+	     << "' does not appear to have been created by a rados "
+	     << "export operation." << std::endl;
+	return NULL;
+      }
+      cerr << ERR_PREFIX << "ExportDir: getxattr error :"
+	   << cpp_strerror(ret) << std::endl;
+      return NULL;
+    }
+    std::string err;
+    ret = strict_strtol(buf, 10, &err);
+    if (!err.empty()) {
+      cerr << ERR_PREFIX << "ExportDir: invalid value for "
+	   << XATTR_RADOS_SYNC_VER << ": " << buf << ". parse error: "
+	   << err << std::endl;
+      return NULL;
+    }
+    if (ret != 1) {
+      cerr << ERR_PREFIX << "ExportDir: can't handle any naming "
+	   << "convention besides version 1. You must upgrade this program to "
+	   << "handle the data in the new format." << std::endl;
+      return NULL;
+    }
+    return new ExportDir(ret, path);
+  }
+
+  /* Given a rados object name, return something which looks kind of like the
+   * first part of the name.
+   *
+   * The actual file name that the backed-up object is stored in is irrelevant
+   * to rados_sync. The only reason to make it human-readable at all is to make
+   * things easier on sysadmins.  The XATTR_FULLNAME extended attribute has the
+   * real, full object name.
+  *
+   * This function turns unicode into a bunch of 'at' signs. This could be
+   * fixed. If you try, be sure to handle all the multibyte characters
+   * correctly.
+   * I guess a better hash would be nice too.
+   */
+  std::string get_fs_path(const std::string rados_name) const
+  {
+    static int HASH_LENGTH = 17;
+    size_t i;
+    size_t strlen_rados_name = strlen(rados_name.c_str());
+    size_t sz;
+    bool need_hash = false;
+    if (strlen_rados_name > 200) {
+      sz = 200;
+      need_hash = true;
+    }
+    else {
+      sz = strlen_rados_name;
+    }
+    char fs_path[sz + HASH_LENGTH + 1];
+    for (i = 0; i < sz; ++i) {
+      // Just replace anything that looks funny with an 'at' sign.
+      // Unicode also gets turned into 'at' signs.
+      signed char c = rados_name[i];
+      if (c < 0x20) {
+       // Since c is signed, this also eliminates bytes with the high bit set
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == 0x7f) {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == '/') {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == '\\') {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == '$') {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == ' ') {
+	c = '_';
+	need_hash = true;
+      }
+      else if (c == '\n') {
+	c = '@';
+	need_hash = true;
+      }
+      else if (c == '\r') {
+	c = '@';
+	need_hash = true;
+      }
+      fs_path[i] = c;
+    }
+
+    if (need_hash) {
+      uint64_t hash = 17;
+      for (i = 0; i < strlen_rados_name; ++i) {
+	hash += (rados_name[i] * 33);
+      }
+      // The extra byte of length is because snprintf always NULL-terminates.
+      snprintf(fs_path + i, HASH_LENGTH + 1, "_%016" PRIx64, hash);
+    }
+    else {
+      // NULL-terminate.
+      fs_path[i] = '\0';
+    }
+
+    ostringstream oss;
+    oss << path << "/" << fs_path;
+    return oss.str();
+  }
+
+private:
+  ExportDir(int version_, const std::string path_)
+    : version(version_),
+      path(path_)
+  {
+  }
+
+  int version;
+  std::string path;
+};
 
 class DirHolder {
 public:
@@ -203,8 +349,8 @@ public:
 	cerr << ERR_PREFIX << "BackedUpObject::from_path: found empty "
 	     << XATTR_FULLNAME << " attribute on '" << path
 	     << "'" << std::endl;
-	ret = ENOATTR;
-      } else if (ret == ENOATTR) {
+	ret = ENODATA;
+      } else if (ret == ENODATA) {
 	cerr << ERR_PREFIX << "BackedUpObject::from_path: there was no "
 	     << XATTR_FULLNAME << " attribute found on '" << path
 	     << "'" << std::endl;
@@ -282,57 +428,10 @@ public:
     free(rados_name);
   }
 
-  /* Given a rados object name, return something which looks kind of like the
-   * first part of the name.
-   *
-   * The actual file name that the backed-up object is stored in is irrelevant
-   * to rados_sync. The only reason to make it human-readable at all is to make
-   * things easier on sysadmins.  The XATTR_FULLNAME extended attribute has the
-   * real, full object name.
-   *
-   * This function turns unicode into a bunch of 'at' signs. This could be
-   * fixed. If you try, be sure to handle all the multibyte characters
-   * correctly.
-   * I guess a better hash would be nice too.
-   */
-  std::string get_fs_path(const char *dir_name) const
+  /* Get the mangled name for this rados object. */
+  std::string get_fs_path(const ExportDir *export_dir) const
   {
-    size_t i;
-    uint32_t hash = 0;
-    size_t sz = strlen(rados_name);
-    for (i = 0; i < sz; ++i) {
-      hash += (rados_name[i] * 33);
-    }
-    if (sz > 200)
-      sz = 200;
-    char fs_path[9 + sz + 1];
-    sprintf(fs_path, "%08x_", hash);
-    for (i = 0; i < sz; ++i) {
-      // Just replace anything that looks funny with an 'at' sign.
-      // Unicode also gets turned into 'at' signs.
-      char c = rados_name[i];
-      if (c < 0x20) // also eliminate bytes with the high bit set
-	c = '@';
-      else if (c == 0x7f)
-	c = '@';
-      else if (c == '/')
-	c = '@';
-      else if (c == '\\')
-	c = '@';
-      else if (c == ' ')
-	c = '_';
-      else if (c == '.')
-	c = '@';
-      else if (c == '\n')
-	c = '@';
-      else if (c == '\r')
-	c = '@';
-      fs_path[9 + i] = c;
-    }
-    fs_path[9 + i] = '\0';
-    ostringstream oss;
-    oss << dir_name << "/" << fs_path;
-    return oss.str();
+    return export_dir->get_fs_path(rados_name);
   }
 
   /* Convert the xattrs on this BackedUpObject to a kind of JSON-like string.
@@ -422,12 +521,14 @@ public:
     return rados_time;
   }
 
-  int download(IoCtx &io_ctx, const char *file_name)
+  int download(IoCtx &io_ctx, const char *path)
   {
-    FILE *fp = fopen(file_name, "w");
+    char tmp_path[strlen(path) + RADOS_SYNC_TMP_SUFFIX_LEN + 1];
+    snprintf(tmp_path, sizeof(tmp_path), "%s%s", path, RADOS_SYNC_TMP_SUFFIX);
+    FILE *fp = fopen(tmp_path, "w");
     if (!fp) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: error opening '" << file_name << "':"
+      cerr << ERR_PREFIX << "download: error opening '" << tmp_path << "':"
 	   <<  cpp_strerror(err) << std::endl;
       return err;
     }
@@ -449,7 +550,7 @@ public:
       size_t flen = fwrite(bl.c_str(), 1, rlen, fp);
       if (flen != (size_t)rlen) {
 	int err = errno;
-	cerr << ERR_PREFIX << "download: fwrite(" << file_name << ") error: "
+	cerr << ERR_PREFIX << "download: fwrite(" << tmp_path << ") error: "
 	     << cpp_strerror(err) << std::endl;
 	fclose(fp);
 	return err;
@@ -461,15 +562,21 @@ public:
     int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
     if (res) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: fsetxattr(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fsetxattr(" << tmp_path << ") error: "
 	   << cpp_strerror(err) << std::endl;
       fclose(fp);
       return err;
     }
     if (fclose(fp)) {
       int err = errno;
-      cerr << ERR_PREFIX << "download: fclose(" << file_name << ") error: "
+      cerr << ERR_PREFIX << "download: fclose(" << tmp_path << ") error: "
 	   << cpp_strerror(err) << std::endl;
+      return err;
+    }
+    if (rename(tmp_path, path)) {
+      int err = errno;
+      cerr << ERR_PREFIX << "download: rename(" << tmp_path << ", "
+	   << path << ") error: " << cpp_strerror(err) << std::endl;
       return err;
     }
     return 0;
@@ -562,20 +669,21 @@ private:
     const char *b = buf;
     while (*b) {
       size_t bs = strlen(b);
-      if (strncmp(b, XATTR_PREFIX, XATTR_PREFIX_LEN) == 0) {
+      std::string xattr_name = get_user_xattr_name(b);
+      if (!xattr_name.empty()) {
 	ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
 	if (attr_len < 0) {
 	  int err = errno;
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "fgetxattr(rados_name = '" << rados_name << "', xattr_name='"
-	       << b << "') failed: " << cpp_strerror(err) << std::endl;
+	       << xattr_name << "') failed: " << cpp_strerror(err) << std::endl;
 	  return EDOM;
 	}
 	char *attr = (char*)malloc(attr_len);
 	if (!attr) {
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "malloc(" << attr_len << ") failed for xattr_name='"
-	       << b << "'" << std::endl;
+	       << xattr_name << "'" << std::endl;
 	  return ENOBUFS;
 	}
 	ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
@@ -583,7 +691,7 @@ private:
 	  int err = errno;
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
 	       << "fgetxattr(rados_name = '" << rados_name << "', "
-	       << "xattr_name='" << b << "') failed: "
+	       << "xattr_name='" << xattr_name << "') failed: "
 	       << cpp_strerror(err) << std::endl;
 	  free(attr);
 	  return EDOM;
@@ -592,13 +700,13 @@ private:
 	  cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: xattr "
 	       << "changed while we were trying to get it? "
 	       << "fgetxattr(rados_name = '"<< rados_name
-	       << "', xattr_name='" << b << "') returned a different length "
+	       << "', xattr_name='" << xattr_name << "') returned a different length "
 	       << "than when we first called it! old_len = " << attr_len
 	       << "new_len = " << attr_len2 << std::endl;
 	  free(attr);
 	  return EDOM;
 	}
-	xattrs[b] = new Xattr(attr, attr_len);
+	xattrs[xattr_name] = new Xattr(attr, attr_len);
       }
       b += (bs + 1);
     }
@@ -644,11 +752,15 @@ private:
 };
 
 static int do_export(IoCtx& io_ctx, const char *dir_name,
-		     bool force, bool delete_after)
+		     bool create, bool force, bool delete_after)
 {
   int ret;
   librados::ObjectIterator oi = io_ctx.objects_begin();
   librados::ObjectIterator oi_end = io_ctx.objects_end();
+  auto_ptr <ExportDir> export_dir;
+  export_dir.reset(ExportDir::create_for_writing(dir_name, 1, create));
+  if (!export_dir.get())
+    return -EIO;
   for (; oi != oi_end; ++oi) {
     enum {
       CHANGED_XATTRS = 0x1,
@@ -667,7 +779,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 	   << ret << std::endl;
       return ret;
     }
-    std::string obj_path(sobj->get_fs_path(dir_name));
+    std::string obj_path(sobj->get_fs_path(export_dir.get()));
     if (force) {
       flags |= (CHANGED_CONTENTS | CHANGED_XATTRS);
     }
@@ -706,7 +818,10 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 	cerr << ERR_PREFIX << "internal error on line: " << __LINE__ << std::endl;
 	return -ENOSYS;
       }
-      ret = setxattr(obj_path.c_str(), x->c_str(), xattr->data, xattr->len, 0);
+      std::string xattr_fs_name(USER_XATTR_PREFIX);
+      xattr_fs_name += x->c_str();
+      ret = setxattr(obj_path.c_str(), xattr_fs_name.c_str(),
+		     xattr->data, xattr->len, 0);
       if (ret) {
 	ret = errno;
 	cerr << ERR_PREFIX << "setxattr error: " << cpp_strerror(ret) << std::endl;
@@ -733,6 +848,7 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
       cout << "[xattr]        " << rados_name << std::endl;
     }
   }
+
   if (delete_after) {
     DirHolder dh;
     int err = dh.opendir(dir_name);
@@ -747,6 +863,18 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 	break;
       if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
 	continue;
+      if (is_suffix(de->d_name, RADOS_SYNC_TMP_SUFFIX)) {
+	char path[strlen(dir_name) + strlen(de->d_name) + 2];
+	snprintf(path, sizeof(path), "%s/%s", dir_name, de->d_name);
+	if (unlink(path)) {
+	  ret = errno;
+	  cerr << ERR_PREFIX << "error unlinking temporary file '" << path << "': "
+	       << cpp_strerror(ret) << std::endl;
+	  return ret;
+	}
+	cout << "[deleted]      " << "removed temporary file '" << de->d_name << "'" << std::endl;
+	continue;
+      }
       auto_ptr <BackedUpObject> lobj;
       ret = BackedUpObject::from_file(de->d_name, dir_name, lobj);
       if (ret) {
@@ -782,14 +910,12 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
 static int do_import(IoCtx& io_ctx, const char *dir_name,
 		     bool force, bool delete_after)
 {
-  int ret = mkdir(dir_name, 0700);
-  if (ret < 0) {
-    int err = errno;
-    if (err != EEXIST)
-      return err;
-  }
+  auto_ptr <ExportDir> export_dir;
+  export_dir.reset(ExportDir::from_file_system(dir_name));
+  if (!export_dir.get())
+    return -EIO;
   DirHolder dh;
-  ret = dh.opendir(dir_name);
+  int ret = dh.opendir(dir_name);
   if (ret) {
     cerr << ERR_PREFIX << "opendir(" << dir_name << ") error: "
 	 << cpp_strerror(ret) << std::endl;
@@ -810,6 +936,8 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
     if (!de)
       break;
     if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
+      continue;
+    if (is_suffix(de->d_name, RADOS_SYNC_TMP_SUFFIX))
       continue;
     ret = BackedUpObject::from_file(de->d_name, dir_name, sobj);
     if (ret) {
@@ -922,7 +1050,7 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
 	     << "returned " << ret << std::endl;
 	return ret;
       }
-      std::string obj_path(robj->get_fs_path(dir_name));
+      std::string obj_path(robj->get_fs_path(export_dir.get()));
       auto_ptr <BackedUpObject> lobj;
       ret = BackedUpObject::from_path(obj_path.c_str(), lobj);
       if (ret == ENOENT) {
@@ -1021,36 +1149,9 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
   std::string dir_name = (action == "import") ? src : dst;
 
   if (action == "import") {
-    if (access(dir_name.c_str(), R_OK)) {
-	cerr << "rados" << ": source directory '" << dst
-	     << "' appears to be inaccessible." << std::endl;
-	exit(ENOENT);
-    }
-    ret = xattr_test(dir_name.c_str());
-    if (ret)
-      return ret;
     return do_import(io_ctx, src.c_str(), force, delete_after);
   }
   else {
-    if (access(dst.c_str(), W_OK)) {
-      if (create) {
-	ret = mkdir(dst.c_str(), 0700);
-	if (ret < 0) {
-	  ret = errno;
-	  cerr << "rados" << ": mkdir(" << dst << ") failed with error " << ret
-	       << std::endl;
-	  exit(ret);
-	}
-      }
-      else {
-	cerr << "rados" << ": directory '" << dst << "' is not accessible. Use "
-	     << "--create to try to create it.\n";
-	exit(ENOENT);
-      }
-    }
-    ret = xattr_test(dir_name.c_str());
-    if (ret)
-      return ret;
-    return do_export(io_ctx, dst.c_str(), force, delete_after);
+    return do_export(io_ctx, dst.c_str(), create, force, delete_after);
   }
 }

@@ -84,7 +84,7 @@ void Dumper::dump(const char *dump_file)
 {
   bool done = false;
   Cond cond;
-  int rank = strtol(g_conf.name.get_id().c_str(), 0, 0);
+  int rank = strtol(g_conf->name.get_id().c_str(), 0, 0);
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   lock.Lock();

@@ -1,0 +1,4 @@
+usr/lib/librgw.so
+usr/lib/librgw.a
+usr/lib/librgw.la
+usr/include/rados/librgw.h

@@ -24,4 +24,10 @@ do
     cd ../..
 done
 
+for v in $versions
+do
+    ver="v0.$v"
+    rmdir .snap/$ver
+done
+
 echo OK

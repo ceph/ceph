@@ -28,11 +28,14 @@ class CephxClientHandler : public AuthClientHandler {
   CephXTicketManager tickets;
   
   RotatingKeyRing *rotating_secrets;
+  KeyRing *keyring;
 
 public:
   CephxClientHandler(RotatingKeyRing *rsecrets) :
     authorizer(0),
-    rotating_secrets(rsecrets) {
+    rotating_secrets(rsecrets),
+    keyring(rsecrets->get_keyring())
+  {
     reset();
   }
 

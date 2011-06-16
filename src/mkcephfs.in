@@ -339,7 +339,7 @@ if [ $preparemon -eq 1 ]; then
 	fi
 	echo " num osd = $numosd"
 
-	$BINDIR/osdmaptool --createsimple $numosd $dir/osdmap -c ceph.conf
+	$BINDIR/osdmaptool --createsimple $numosd $dir/osdmap -c $conf
     fi
 
     # import crush map?

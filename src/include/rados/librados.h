@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 27
+#define LIBRADOS_VER_MINOR 30
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -114,6 +114,7 @@ int rados_pool_delete(rados_t cluster, const char *pool_name);
 int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
 
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
+int rados_ioctx_get_id(rados_ioctx_t io);
 
 /* objects */
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);

@@ -54,21 +54,21 @@ int main(int argc, const char **argv, char *envp[])
   vec_to_argv(args, argc, argv);
 
   // get monmap
-  MonClient mc;
+  MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
-  SimpleMessenger* messengers[g_conf.num_client];
-  MonClient* mclients[g_conf.num_client];
+  SimpleMessenger* messengers[g_conf->num_client];
+  MonClient* mclients[g_conf->num_client];
 
-  cout << "csyn: starting " << g_conf.num_client << " syn client(s)" << std::endl;
-  for (int i=0; i<g_conf.num_client; i++) {
-    messengers[i] = new SimpleMessenger();
+  cout << "csyn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
+  for (int i=0; i<g_conf->num_client; i++) {
+    messengers[i] = new SimpleMessenger(&g_ceph_context);
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
     messengers[i]->bind(i * 1000000 + getpid());
-    mclients[i] = new MonClient();
+    mclients[i] = new MonClient(&g_ceph_context);
     mclients[i]->build_initial_monmap();
     Client *client = new Client(messengers[i], mclients[i]);
     client->set_filer_flags(syn_filer_flags);
@@ -94,7 +94,7 @@ int main(int argc, const char **argv, char *envp[])
     delete client;
   }
 
-  for (int i = 0; i < g_conf.num_client; ++i) {
+  for (int i = 0; i < g_conf->num_client; ++i) {
     // wait for messenger to finish
     delete mclients[i];
     messengers[i]->wait();

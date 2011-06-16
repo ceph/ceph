@@ -143,6 +143,8 @@ private:
       enum NodeType type;
       int id;
 
+      CephToolCtx *ctx;
+
       /*
        * Private Functions
        */
@@ -179,7 +181,7 @@ private:
    friend class StatsWindowInfo;
 
 public:
-  GuiMonitor(Glib::RefPtr<Gtk::Builder> builder);
+  GuiMonitor(Glib::RefPtr<Gtk::Builder> builder, CephToolCtx *ctx_);
   ~GuiMonitor();
 
   bool init();
@@ -404,6 +406,8 @@ private:
   //Glib::RefPtr<Gdk::Pixbuf> stoppedMDSIcon;
 
   NodeIconColumns icon_columns;
+public:
+  CephToolCtx *ctx;
 };
 
 #endif

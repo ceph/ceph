@@ -2166,7 +2166,7 @@ public:
 int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
   // divy up
-  int numc = g_conf.num_client ? g_conf.num_client : 1;
+  int numc = g_conf->num_client ? g_conf->num_client : 1;
 
   int start, inc, end;
 
@@ -3267,7 +3267,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (sp < 0) dirnum++;
 
     //dout(0) << "leading dir " << filename << " " << dirnum << dendl;
-    if (dirnum % g_conf.num_client != client->get_nodeid()) {
+    if (dirnum % g_conf->num_client != client->get_nodeid()) {
       dout(20) << "skipping leading dir " << dirnum << " " << filename << dendl;
       continue;
     }

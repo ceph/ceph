@@ -121,7 +121,7 @@ static int get_policy_from_attr(RGWAccessControlPolicy *policy, rgw_obj& obj)
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       policy->decode(iter);
-      if (g_conf.rgw_log >= 15) {
+      if (g_conf->rgw_log >= 15) {
         RGW_LOG(15) << "Read AccessControlPolicy" << dendl;
         policy->to_xml(cerr);
         RGW_LOG(15) << dendl;
@@ -352,6 +352,7 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   bool pol_ret;
+  int pool_id;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_str);
 
@@ -372,7 +373,7 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs, true,
 				s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
@@ -387,6 +388,15 @@ void RGWCreateBucket::execute()
 
   if (ret == -EEXIST)
     ret = 0;
+
+  pool_id = rgwstore->get_bucket_id(s->bucket_str);
+  if (pool_id >= 0) {
+    s->pool_id = pool_id;
+    RGWPoolInfo info;
+    info.owner = s->user.user_id;
+    info.bucket = s->bucket_str;
+    rgw_store_pool_info(pool_id, info);
+  }
 
 done:
   send_response();
@@ -699,20 +709,27 @@ void RGWGetACLs::execute()
   send_response();
 }
 
-static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
+static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
 {
-  ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
   if (!owner)
     return -EINVAL;
+
+  ACLOwner *requested_owner = (ACLOwner *)src.find_first("Owner");
+  if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
+    return -EPERM;
+  }
 
   RGWUserInfo owner_info;
   if (rgw_get_user_info_by_uid(owner->get_id(), owner_info) < 0) {
     RGW_LOG(10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
-  ACLOwner& new_owner = dest.get_owner();
-  new_owner.set_id(owner->get_id());
-  new_owner.set_name(owner_info.display_name);
+  ACLOwner& dest_owner = dest.get_owner();
+  dest_owner.set_id(owner->get_id());
+  dest_owner.set_name(owner_info.display_name);
+
+  RGW_LOG(0) << "owner id=" << owner->get_id() << dendl;
+  RGW_LOG(0) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& src_acl = src.get_acl();
   RGWAccessControlList& acl = dest.get_acl();
@@ -843,17 +860,17 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (g_conf.rgw_log >= 15) {
+  if (g_conf->rgw_log >= 15) {
     RGW_LOG(15) << "Old AccessControlPolicy" << dendl;
     policy->to_xml(cout);
     RGW_LOG(15) << dendl;
   }
 
-  ret = rebuild_policy(*policy, new_policy);
+  ret = rebuild_policy(&owner, *policy, new_policy);
   if (ret < 0)
     goto done;
 
-  if (g_conf.rgw_log >= 15) {
+  if (g_conf->rgw_log >= 15) {
     RGW_LOG(15) << "New AccessControlPolicy" << dendl;
     new_policy.to_xml(cout);
     RGW_LOG(15) << dendl;
@@ -1185,14 +1202,14 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   if (cgi_env_level != NULL) {
     int level = atoi(cgi_env_level);
     if (level >= 0) {
-      g_conf.rgw_log = level;
+      g_conf->rgw_log = level;
     }
   }
 
   const char *cgi_should_log = FCGX_GetParam("RGW_SHOULD_LOG", fcgx->envp);
   s->should_log = rgw_str_to_bool(cgi_should_log, RGW_SHOULD_LOG_DEFAULT);
 
-  if (g_conf.rgw_log >= 20) {
+  if (g_conf->rgw_log >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
       RGW_LOG(20) << p << dendl;
@@ -1229,6 +1246,8 @@ int RGWHandler::do_read_permissions(bool only_bucket)
       ret = -EACCES;
   }
 
+  if (!s->bucket_str.empty())
+    s->pool_id = rgwstore->get_bucket_id(s->bucket_str);
 
   return ret;
 }

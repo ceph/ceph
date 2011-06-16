@@ -52,14 +52,15 @@ static void usage()
 
 static void parse_cmd_args(const vector<const char*> &args,
 		const char **in_file, const char ** out_file,
-		ceph_tool_mode_t *mode, vector<const char*> *nargs)
+		ceph_tool_mode_t *mode, vector<const char*> *nargs,
+		bool *concise)
 {
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("in_file", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(in_file, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("concise", '\0')) {
-      g.concise = true;
+      *concise = true;
     } else if (CEPH_ARGPARSE_EQ("out_file", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(out_file, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("status", 's')) {
@@ -126,7 +127,8 @@ int main(int argc, const char **argv)
   vector<const char*> nargs;
 
   // parse user input
-  parse_cmd_args(args, &in_file, &out_file, &mode, &nargs);
+  bool concise = false;
+  parse_cmd_args(args, &in_file, &out_file, &mode, &nargs, &concise);
 
   bufferlist indata;
 
@@ -137,7 +139,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (ceph_tool_common_init(mode)) {
+  CephToolCtx *ctx = ceph_tool_common_init(mode, concise);
+  if (!ctx) {
     derr << "ceph_tool_common_init failed." << dendl;
     return 1;
   }
@@ -148,9 +151,9 @@ int main(int argc, const char **argv)
   switch (mode) {
     case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER: // fall through
     case CEPH_TOOL_MODE_OBSERVER: {
-      g.lock.Lock();
-      send_observe_requests();
-      g.lock.Unlock();
+      ctx->lock.Lock();
+      send_observe_requests(ctx);
+      ctx->lock.Unlock();
       break;
     }
 
@@ -160,11 +163,11 @@ int main(int argc, const char **argv)
 	cmd.push_back(string(nargs[i]));
       }
       if (cmd.empty()) {
-	if (ceph_tool_do_cli())
+	if (ceph_tool_do_cli(ctx))
 	  ret = 1;
       }
       else {
-	if (ceph_tool_cli_input(cmd, out_file, indata))
+	if (ceph_tool_cli_input(ctx, cmd, out_file, indata))
 	  ret = 1;
       }
       if (ceph_tool_messenger_shutdown())
@@ -179,7 +182,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (ceph_tool_common_shutdown())
+  if (ceph_tool_common_shutdown(ctx))
     ret = 1;
   return ret;
 }

@@ -16,6 +16,7 @@
 #define CEPH_CEPHCONTEXT_H
 
 #include <iostream>
+#include <stdint.h>
 
 /* Forward declarations */ 
 template <typename T, typename U>
@@ -24,6 +25,7 @@ class DoutStreambuf;
 class md_config_t;
 class md_config_obs_t;
 class CephContextServiceThread;
+class DoutLocker;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -34,7 +36,7 @@ class CephContextServiceThread;
  */
 class CephContext {
 public:
-  CephContext();
+  CephContext(uint32_t module_type_);
   ~CephContext();
   md_config_t *_conf;
   DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
@@ -46,9 +48,23 @@ public:
   /* Reopen the log files */
   void reopen_logs();
 
+  /* Lock the dout lock. */
+  void dout_lock(DoutLocker *locker);
+
+  /* Try to lock the dout lock. */
+  void dout_trylock(DoutLocker *locker);
+
+  /* Get the module type (client, mon, osd, mds, etc.) */
+  uint32_t get_module_type() const;
+
+  /* Set module type (TODO: remove) */
+  void set_module_type(uint32_t module_type_);
+
 private:
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
+
+  uint32_t module_type;
 
   md_config_obs_t *_prof_logger_conf_obs;
 
@@ -57,15 +73,13 @@ private:
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
 
-  char foo[512];
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;
-  char bar[512];
 };
 
 /* Globals (FIXME: remove) */ 
 extern CephContext g_ceph_context;
-extern md_config_t &g_conf;
+extern md_config_t *g_conf;
 extern std::ostream *_dout;
 extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
 

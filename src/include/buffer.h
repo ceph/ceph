@@ -418,11 +418,24 @@ public:
 	  unsigned howmuch = p->length() - p_off;
 	  const char *c_str = p->c_str();
 	  if (len < howmuch) howmuch = len;
-	  if (memchr(c_str + p_off, '\0', howmuch))
-	    throw malformed_input("embedded NULL in string!");
 	  dest.append(c_str + p_off, howmuch);
 
 	  len -= howmuch;
+	  advance(howmuch);
+	}
+      }
+
+      void copy_all(list &dest) {
+	if (p == ls->end()) seek(off);
+	while (1) {
+	  if (p == ls->end())
+	    return;
+	  assert(p->length() > 0);
+
+	  unsigned howmuch = p->length() - p_off;
+	  const char *c_str = p->c_str();
+	  dest.append(c_str + p_off, howmuch);
+
 	  advance(howmuch);
 	}
       }

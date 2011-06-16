@@ -49,7 +49,7 @@ public:
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
@@ -171,6 +171,8 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   virtual int set_attr(rgw_obj& obj, const char *name, bufferlist& bl) = 0;
+
+  virtual int get_bucket_id(std::string& bucket) { return -ENOTSUP; }
 
  /**
   * stat an object

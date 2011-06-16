@@ -60,9 +60,9 @@ int main(int argc, const char **argv)
   bool tree = false;
   bool createsimple = false;
   int num_osd = 0, num_dom = 0;
-  int pg_bits = g_conf.osd_pg_bits;
-  int pgp_bits = g_conf.osd_pgp_bits;
-  int lpg_bits = g_conf.osd_lpg_bits;
+  int pg_bits = g_conf->osd_pg_bits;
+  int pgp_bits = g_conf->osd_pgp_bits;
+  int lpg_bits = g_conf->osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
   const char *export_crush = 0;

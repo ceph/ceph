@@ -363,10 +363,10 @@ public:
   void merge(list<CDir*>& subs, list<Context*>& waiters, bool replay);
 
   bool should_split() {
-    return (int)get_num_head_items() > g_conf.mds_bal_split_size;
+    return (int)get_num_head_items() > g_conf->mds_bal_split_size;
   }
   bool should_merge() {
-    return (int)get_num_head_items() < g_conf.mds_bal_merge_size;
+    return (int)get_num_head_items() < g_conf->mds_bal_merge_size;
   }
 
 private:

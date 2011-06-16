@@ -139,7 +139,7 @@ void Message::encode()
     encode_payload();
   calc_front_crc();
   
-  if (!g_conf.ms_nocrc)
+  if (!g_conf->ms_nocrc)
     calc_data_crc();
   else
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
@@ -149,7 +149,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // verify crc
-  if (!g_conf.ms_nocrc) {
+  if (!g_conf->ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
@@ -509,7 +509,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   default:
     dout(0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
-    if (g_conf.ms_die_on_bad_msg)
+    if (g_conf->ms_die_on_bad_msg)
       assert(0);
     return 0;
   }
@@ -527,7 +527,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     dout(0) << "failed to decode message of type " << type
 	    << " v" << header.version
 	    << ": " << e.what() << dendl;
-    if (g_conf.ms_die_on_bad_msg)
+    if (g_conf->ms_die_on_bad_msg)
       assert(0);
     return 0;
   }

@@ -7,7 +7,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.28.1], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.29], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 
@@ -141,6 +141,17 @@ AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
 
+# code coverage?
+AC_ARG_ENABLE([coverage],
+            [AS_HELP_STRING([--enable-coverage], [enable code coverage tracking])],
+            [],
+            [enable_coverage=no])
+AM_CONDITIONAL(ENABLE_COVERAGE, test "x$enable_coverage" != xno)
+if test "x$enable_coverage" != xno; then
+   AC_DEFINE([ENABLE_COVERAGE], [1], [Define if enabling coverage.])
+fi
+AC_SUBST(GCOV_PREFIX_STRIP, `echo $(pwd)/src | tr -dc / | wc -c`)
+
 # radosgw?
 AC_ARG_WITH([radosgw],
             [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
@@ -253,6 +264,9 @@ AC_CHECK_HEADER([boost/spirit/include/classic_core.hpp], [],
     AC_MSG_FAILURE(["Can't find boost spirit headers"]))])
 AM_CONDITIONAL(USE_BOOST_SPIRIT_OLD_HDR, [test "$use_bspirit_old_hdr" = "yes"])
 
+AC_CHECK_HEADER([boost/statechart/state.hpp], [],
+    AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
@@ -334,7 +348,5 @@ AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	man/Makefile
-	qa/Makefile
-	qa/workunits/Makefile
 	ceph.spec])
 AC_OUTPUT

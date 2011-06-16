@@ -5,7 +5,7 @@
      --compile|-c map.txt  compile a map from source
      [-o outfile [--clobber]]
                            specify output for for (de)compilation
-     --build --num_osd N layer1 ...
+     --build --num_osds N layer1 ...
                            build a new map, where each 'layer' is
                              'name (uniform|straw|list|tree) size'
      -i mapfn --test       test a range of inputs on the map
