@@ -106,6 +106,283 @@ def binaries(ctx, config):
 
 
 @contextlib.contextmanager
+def cluster(ctx, config):
+    log.info('Creating ceph cluster...')
+
+    log.info('Writing configs...')
+    remotes_and_roles = ctx.cluster.remotes.items()
+    roles = [roles for (remote, roles) in remotes_and_roles]
+    ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
+    conf = teuthology.skeleton_config(roles=roles, ips=ips)
+    conf_fp = StringIO()
+    conf.write(conf_fp)
+    conf_fp.seek(0)
+    writes = ctx.cluster.run(
+        args=[
+            'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            '/tmp/cephtest/ceph.conf',
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        )
+    teuthology.feed_many_stdins_and_close(conf_fp, writes)
+    run.wait(writes)
+
+    coverage_dir = '/tmp/cephtest/archive/coverage'
+
+    log.info('Setting up mon.0...')
+    ctx.cluster.only('mon.0').run(
+        args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
+            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '--create-keyring',
+            '/tmp/cephtest/ceph.keyring',
+            ],
+        )
+    ctx.cluster.only('mon.0').run(
+        args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
+            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '--gen-key',
+            '--name=mon.',
+            '/tmp/cephtest/ceph.keyring',
+            ],
+        )
+    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    teuthology.create_simple_monmap(
+        remote=mon0_remote,
+        conf=conf,
+        )
+
+    log.info('Creating admin key on mon.0...')
+    ctx.cluster.only('mon.0').run(
+        args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            coverage_dir,
+            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '--gen-key',
+            '--name=client.admin',
+            '--set-uid=0',
+            '--cap', 'mon', 'allow *',
+            '--cap', 'osd', 'allow *',
+            '--cap', 'mds', 'allow',
+            '/tmp/cephtest/ceph.keyring',
+            ],
+        )
+
+    log.info('Copying mon.0 info to all monitors...')
+    keyring = teuthology.get_file(
+        remote=mon0_remote,
+        path='/tmp/cephtest/ceph.keyring',
+        )
+    monmap = teuthology.get_file(
+        remote=mon0_remote,
+        path='/tmp/cephtest/monmap',
+        )
+    mons = ctx.cluster.only(teuthology.is_type('mon'))
+    mons_no_0 = mons.exclude('mon.0')
+
+    for rem in mons_no_0.remotes.iterkeys():
+        # copy mon key and initial monmap
+        log.info('Sending mon0 info to node {remote}'.format(remote=rem))
+        teuthology.write_file(
+            remote=rem,
+            path='/tmp/cephtest/ceph.keyring',
+            data=keyring,
+            )
+        teuthology.write_file(
+            remote=rem,
+            path='/tmp/cephtest/monmap',
+            data=monmap,
+            )
+
+    log.info('Setting up mon nodes...')
+    run.wait(
+        mons.run(
+            args=[
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                coverage_dir,
+                '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
+                '--clobber',
+                '--createsimple', '{num:d}'.format(
+                    num=teuthology.num_instances_of_type(ctx.cluster, 'osd'),
+                    ),
+                '/tmp/cephtest/osdmap',
+                '--pg_bits', '2',
+                '--pgp_bits', '4',
+                ],
+            wait=False,
+            ),
+        )
+
+    log.info('Setting up osd nodes...')
+    osds = ctx.cluster.only(teuthology.is_type('osd'))
+    for remote, roles_for_host in osds.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
+            remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '--create-keyring',
+                    '--gen-key',
+                    '--name=osd.{id}'.format(id=id_),
+                    '/tmp/cephtest/data/osd.{id}.keyring'.format(id=id_),
+                    ],
+                )
+
+    log.info('Setting up mds nodes...')
+    mdss = ctx.cluster.only(teuthology.is_type('mds'))
+    for remote, roles_for_host in mdss.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
+            remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '--create-keyring',
+                    '--gen-key',
+                    '--name=mds.{id}'.format(id=id_),
+                    '/tmp/cephtest/data/mds.{id}.keyring'.format(id=id_),
+                    ],
+                )
+
+    log.info('Setting up client nodes...')
+    clients = ctx.cluster.only(teuthology.is_type('client'))
+    for remote, roles_for_host in clients.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
+            remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '--create-keyring',
+                    '--gen-key',
+                    # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
+                    '--name=client.{id}'.format(id=id_),
+                    '/tmp/cephtest/data/client.{id}.keyring'.format(id=id_),
+                    ],
+                )
+
+    log.info('Reading keys from all nodes...')
+    keys_fp = StringIO()
+    keys = []
+    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+        for type_ in ['osd','mds','client']:
+            for id_ in teuthology.roles_of_type(roles_for_host, type_):
+                data = teuthology.get_file(
+                    remote=remote,
+                    path='/tmp/cephtest/data/{type}.{id}.keyring'.format(
+                        type=type_,
+                        id=id_,
+                        ),
+                    )
+                keys.append((type_, id_, data))
+                keys_fp.write(data)
+
+    log.info('Adding keys to all mons...')
+    writes = mons.run(
+        args=[
+            'cat',
+            run.Raw('>>'),
+            '/tmp/cephtest/ceph.keyring',
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        )
+    keys_fp.seek(0)
+    teuthology.feed_many_stdins_and_close(keys_fp, writes)
+    run.wait(writes)
+    for type_, id_, data in keys:
+        run.wait(
+            mons.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '/tmp/cephtest/ceph.keyring',
+                    '--name={type}.{id}'.format(
+                        type=type_,
+                        id=id_,
+                        ),
+                    ] + list(teuthology.generate_caps(type_)),
+                wait=False,
+                ),
+            )
+
+    log.info('Running mkfs on mon nodes...')
+    for remote, roles_for_host in mons.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
+            remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cmon',
+                    '--mkfs',
+                    '-i', id_,
+                    '-c', '/tmp/cephtest/ceph.conf',
+                    '--monmap=/tmp/cephtest/monmap',
+                    '--osdmap=/tmp/cephtest/osdmap',
+                    '--keyring=/tmp/cephtest/ceph.keyring',
+                    ],
+                )
+
+    log.info('Running mkfs on osd nodes...')
+    for remote, roles_for_host in osds.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
+            remote.run(
+                args=[
+                    'mkdir',
+                    os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
+                    ],
+                )
+            remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/binary/usr/local/bin/cosd',
+                    '--mkfs',
+                    '-i', id_,
+                    '-c', '/tmp/cephtest/ceph.conf',
+                    '--monmap', '/tmp/cephtest/monmap',
+                    ],
+                )
+    run.wait(
+        mons.run(
+            args=[
+                'rm',
+                '--',
+                '/tmp/cephtest/monmap',
+                '/tmp/cephtest/osdmap',
+                ],
+            wait=False,
+            ),
+        )
+
+    try:
+        yield
+    finally:
+        log.info('Cleaning ceph cluster...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '--',
+                    '/tmp/cephtest/ceph.conf',
+                    '/tmp/cephtest/ceph.keyring',
+                    '/tmp/cephtest/data',
+                    ],
+                wait=False,
+                ),
+            )
+
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Set up and tear down a Ceph cluster.
@@ -195,145 +472,12 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 flavor=flavor,
                 )),
+        lambda: cluster(ctx=ctx, config=None),
         ):
-        log.info('Writing configs...')
-        remotes_and_roles = ctx.cluster.remotes.items()
-        roles = [roles for (remote, roles) in remotes_and_roles]
-        ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
-        conf = teuthology.skeleton_config(roles=roles, ips=ips)
-        conf_fp = StringIO()
-        conf.write(conf_fp)
-        conf_fp.seek(0)
-        writes = ctx.cluster.run(
-            args=[
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                '/tmp/cephtest/ceph.conf',
-                ],
-            stdin=run.PIPE,
-            wait=False,
-            )
-        teuthology.feed_many_stdins_and_close(conf_fp, writes)
-        run.wait(writes)
-
-        log.info('Setting up mon.0...')
-        ctx.cluster.only('mon.0').run(
-            args=[
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                coverage_dir,
-                '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                '--create-keyring',
-                '/tmp/cephtest/ceph.keyring',
-                ],
-            )
-        ctx.cluster.only('mon.0').run(
-            args=[
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                coverage_dir,
-                '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                '--gen-key',
-                '--name=mon.',
-                '/tmp/cephtest/ceph.keyring',
-                ],
-            )
-        (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
-        teuthology.create_simple_monmap(
-            remote=mon0_remote,
-            conf=conf,
-            )
-
-        log.info('Creating admin key on mon.0...')
-        ctx.cluster.only('mon.0').run(
-            args=[
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                coverage_dir,
-                '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                '--gen-key',
-                '--name=client.admin',
-                '--set-uid=0',
-                '--cap', 'mon', 'allow *',
-                '--cap', 'osd', 'allow *',
-                '--cap', 'mds', 'allow',
-                '/tmp/cephtest/ceph.keyring',
-                ],
-            )
-
-        log.info('Copying mon.0 info to all monitors...')
-        keyring = teuthology.get_file(
-            remote=mon0_remote,
-            path='/tmp/cephtest/ceph.keyring',
-            )
-        monmap = teuthology.get_file(
-            remote=mon0_remote,
-            path='/tmp/cephtest/monmap',
-            )
-        mons = ctx.cluster.only(teuthology.is_type('mon'))
-        mons_no_0 = mons.exclude('mon.0')
-
-        for rem in mons_no_0.remotes.iterkeys():
-            # copy mon key and initial monmap
-            log.info('Sending mon0 info to node {remote}'.format(remote=rem))
-            teuthology.write_file(
-                remote=rem,
-                path='/tmp/cephtest/ceph.keyring',
-                data=keyring,
-                )
-            teuthology.write_file(
-                remote=rem,
-                path='/tmp/cephtest/monmap',
-                data=monmap,
-                )
-
-        log.info('Setting up mon nodes...')
-        run.wait(
-            mons.run(
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
-                    '--clobber',
-                    '--createsimple', '{num:d}'.format(
-                        num=teuthology.num_instances_of_type(ctx.cluster, 'osd'),
-                        ),
-                    '/tmp/cephtest/osdmap',
-                    '--pg_bits', '2',
-                    '--pgp_bits', '4',
-                    ],
-                wait=False,
-                ),
-            )
-
-        for remote, roles_for_host in mons.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-                remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/binary/usr/local/bin/cmon',
-                        '--mkfs',
-                        '-i', id_,
-                        '-c', '/tmp/cephtest/ceph.conf',
-                        '--monmap=/tmp/cephtest/monmap',
-                        '--osdmap=/tmp/cephtest/osdmap',
-                        '--keyring=/tmp/cephtest/ceph.keyring',
-                        ],
-                    )
-
-        run.wait(
-            mons.run(
-                args=[
-                    'rm',
-                    '--',
-                    '/tmp/cephtest/monmap',
-                    '/tmp/cephtest/osdmap',
-                    ],
-                wait=False,
-                ),
-            )
 
         mon_daemons = {}
         log.info('Starting mon daemons...')
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
         for remote, roles_for_host in mons.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
                 proc = remote.run(
@@ -353,106 +497,8 @@ def task(ctx, config):
                     )
                 mon_daemons[id_] = proc
 
-        log.info('Setting up osd nodes...')
-        osds = ctx.cluster.only(teuthology.is_type('osd'))
-        for remote, roles_for_host in osds.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-                remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                        '--create-keyring',
-                        '--gen-key',
-                        '--name=osd.{id}'.format(id=id_),
-                        '/tmp/cephtest/data/osd.{id}.keyring'.format(id=id_),
-                        ],
-                    )
-
-        log.info('Setting up mds nodes...')
-        mdss = ctx.cluster.only(teuthology.is_type('mds'))
-        for remote, roles_for_host in mdss.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
-                remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                        '--create-keyring',
-                        '--gen-key',
-                        '--name=mds.{id}'.format(id=id_),
-                        '/tmp/cephtest/data/mds.{id}.keyring'.format(id=id_),
-                        ],
-                    )
-
-        log.info('Setting up client nodes...')
-        clients = ctx.cluster.only(teuthology.is_type('client'))
-        for remote, roles_for_host in clients.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-                remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                        '--create-keyring',
-                        '--gen-key',
-                        # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
-                        '--name=client.{id}'.format(id=id_),
-                        '/tmp/cephtest/data/client.{id}.keyring'.format(id=id_),
-                        ],
-                    )
-
-        log.info('Reading keys from all nodes...')
-        keys = []
-        for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-            for type_ in ['osd','mds','client']:
-                for id_ in teuthology.roles_of_type(roles_for_host, type_):
-                    data = teuthology.get_file(
-                        remote=remote,
-                        path='/tmp/cephtest/data/{type}.{id}.keyring'.format(
-                            type=type_,
-                            id=id_,
-                            ),
-                        )
-                    keys.append((type_, id_, data))
-
-        log.info('Adding keys to mon.0...')
-        for type_, id_, data in keys:
-            teuthology.write_file(
-                remote=mon0_remote,
-                path='/tmp/cephtest/temp.keyring',
-                data=data,
-                )
-            mon0_remote.run(
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
-                    '/tmp/cephtest/temp.keyring',
-                    '--name={type}.{id}'.format(
-                        type=type_,
-                        id=id_,
-                        ),
-                    ] + list(teuthology.generate_caps(type_)),
-                )
-            mon0_remote.run(
-                args=[
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/ceph',
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    '-k', '/tmp/cephtest/ceph.keyring',
-                    '-i', '/tmp/cephtest/temp.keyring',
-                    'auth',
-                    'add',
-                    '{type}.{id}'.format(
-                        type=type_,
-                        id=id_,
-                        ),
-                    ],
-                )
-
         log.info('Setting max_mds...')
+        (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
         # TODO where does this belong?
         mon0_remote.run(
             args=[
@@ -469,28 +515,9 @@ def task(ctx, config):
                 ],
             )
 
-        log.info('Running mkfs on osd nodes...')
-        for remote, roles_for_host in osds.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-                remote.run(
-                    args=[
-                        'mkdir',
-                        os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
-                        ],
-                    )
-                remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/binary/usr/local/bin/cosd',
-                        '--mkfs',
-                        '-i', id_,
-                        '-c', '/tmp/cephtest/ceph.conf',
-                        ],
-                    )
-
         osd_daemons = {}
         log.info('Starting osd daemons...')
+        osds = ctx.cluster.only(teuthology.is_type('osd'))
         for remote, roles_for_host in osds.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
                 proc = remote.run(
@@ -512,6 +539,7 @@ def task(ctx, config):
 
         mds_daemons = {}
         log.info('Starting mds daemons...')
+        mdss = ctx.cluster.only(teuthology.is_type('mds'))
         for remote, roles_for_host in mdss.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
                 proc = remote.run(
@@ -555,22 +583,6 @@ def task(ctx, config):
             run.wait(mds_daemons.itervalues())
             run.wait(osd_daemons.itervalues())
             run.wait(mon_daemons.itervalues())
-
-    log.info('Removing uninteresting files...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'rm',
-                '-rf',
-                '--',
-                '/tmp/cephtest/ceph.conf',
-                '/tmp/cephtest/ceph.keyring',
-                '/tmp/cephtest/temp.keyring',
-                '/tmp/cephtest/data',
-                ],
-            wait=False,
-            ),
-        )
 
     if ctx.archive is not None:
         log.info('Compressing logs...')
