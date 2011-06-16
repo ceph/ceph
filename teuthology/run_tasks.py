@@ -13,7 +13,7 @@ def _run_one_task(taskname, **kwargs):
     fn = getattr(mod, subtask)
     return fn(**kwargs)
 
-def run_tasks(tasks, ctx, summary):
+def run_tasks(tasks, ctx):
     stack = []
     try:
         for taskdict in tasks:
@@ -27,7 +27,7 @@ def run_tasks(tasks, ctx, summary):
                 manager.__enter__()
                 stack.append(manager)
     except:
-        summary['success'] = False
+        ctx.summary['success'] = False
         log.exception('Saw exception from tasks')
     finally:
         try:
@@ -38,7 +38,7 @@ def run_tasks(tasks, ctx, summary):
                 try:
                     suppress = manager.__exit__(*exc_info)
                 except:
-                    summary['success'] = False
+                    ctx.summary['success'] = False
                     log.exception('Manager failed: %s', manager)
                 else:
                     if suppress:
@@ -51,5 +51,4 @@ def run_tasks(tasks, ctx, summary):
         finally:
             # be careful about cyclic references
             del exc_info
-            if 'success' not in summary:
-                summary['success'] = True
+            ctx.summary.setdefault('success', True)
