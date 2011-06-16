@@ -55,6 +55,7 @@ def task(ctx, config):
         srcdir = '/tmp/cephtest/workunit.{role}'.format(role=role)
 
         remote.run(
+            logger=log.getChild(role),
             args=[
                 'mkdir', '--', srcdir,
                 run.Raw('&&'),
@@ -93,6 +94,7 @@ def task(ctx, config):
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
                 remote.run(
+                    logger=log.getChild(role),
                     args=[
                         'mkdir', '--', scratch_tmp,
                         run.Raw('&&'),
@@ -108,6 +110,7 @@ def task(ctx, config):
                 )
 
         remote.run(
+            logger=log.getChild(role),
             args=[
                 'rm', '-rf', '--', '/tmp/cephtest/workunits.list', srcdir,
                 ],
