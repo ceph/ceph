@@ -244,5 +244,75 @@ def mkfs(ctx, config):
     yield
 
 @contextlib.contextmanager
+def mount(ctx, config):
+    """
+    Mount an rbd image.
+
+    For example::
+
+        tasks:
+        - ceph:
+        - rbd.create_image: [client.0]
+        - rbd.modprobe: [client.0]
+        - rbd.mkfs: [client.0]
+        - rbd.mount:
+            client.0: testimage.client.0
+    """
+    assert isinstance(config, list) or isinstance(config, dict), \
+        "task mount must be configured with a list or dictionary"
+    if isinstance(config, dict):
+        role_images = config.items()
+    else:
+        role_images = [(role, None) for role in config]
+
+    mnt_template = '/tmp/cephtest/mnt.{role}'
+    for role, image in role_images:
+        if image is None:
+            image = default_image_name(role)
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        mnt = mnt_template.format(role=role)
+        remote.run(
+            args=[
+                'mkdir',
+                '--',
+                mnt,
+                ]
+            )
+
+        remote.run(
+            args=[
+                'sudo',
+                'mount',
+                '/dev/rbd/rbd/{image}'.format(image=image),
+                mnt,
+                ],
+            )
+
+    try:
+        yield
+    finally:
+        log.info("Unmounting rbd images...")
+        for role, image in role_images:
+            if image is None:
+                image = default_image_name(role)
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            mnt = mnt_template.format(role=role)
+            remote.run(
+                args=[
+                    'sudo',
+                    'umount',
+                    mnt,
+                    ],
+                )
+
+            remote.run(
+                args=[
+                    'rmdir',
+                    '--',
+                    mnt,
+                    ]
+                )
+
+@contextlib.contextmanager
 def task(ctx, config):
     create_image(ctx, config)
