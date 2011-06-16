@@ -7,6 +7,8 @@ import time
 import urllib2
 import urlparse
 
+from orchestra import run
+
 log = logging.getLogger(__name__)
 
 def get_ceph_binary_url(branch=None, tag=None, sha1=None, flavor=None):
@@ -243,3 +245,17 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
 
         time.sleep(5)
     log.info('cfuse is mounted on %s', mountpoint)
+
+def write_secret_file(remote, role, filename):
+    remote.run(
+        args=[
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
+            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '--name={role}'.format(role=role),
+            '--print-key',
+            '/tmp/cephtest/data/{role}.keyring'.format(role=role),
+            run.Raw('>'),
+            filename,
+            ],
+        )
