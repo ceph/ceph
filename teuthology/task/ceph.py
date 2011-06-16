@@ -15,6 +15,50 @@ log = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
+def ceph_log(ctx, config):
+    log.info('Creating log directories...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'install', '-d', '-m0755', '--',
+                '/tmp/cephtest/archive/log',
+                '/tmp/cephtest/archive/profiling-logger',
+                ],
+            wait=False,
+            )
+        )
+
+    try:
+        yield
+    finally:
+
+        if ctx.archive is not None:
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'find',
+                        '/tmp/cephtest/archive/log',
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'bzip2',
+                        '-9',
+                        '--',
+                        ],
+                    wait=False,
+                    ),
+                )
+
+            # log file transfer is done by the generic archive data
+            # handling
+
+@contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
     FILES = ['daemon-helper']
@@ -584,8 +628,6 @@ def task(ctx, config):
             args=[
                 'install', '-d', '-m0755', '--',
                 '/tmp/cephtest/archive',
-                '/tmp/cephtest/archive/log',
-                '/tmp/cephtest/archive/profiling-logger',
                 '/tmp/cephtest/data',
                 coverage_dir,
                 ],
@@ -594,6 +636,7 @@ def task(ctx, config):
         )
 
     with contextutil.nested(
+        lambda: ceph_log(ctx=ctx, config=None),
         lambda: ship_utilities(ctx=ctx, config=None),
         lambda: binaries(ctx=ctx, config=dict(
                 branch=config.get('branch'),
@@ -616,27 +659,6 @@ def task(ctx, config):
         yield
 
     if ctx.archive is not None:
-        log.info('Compressing logs...')
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'find',
-                    '/tmp/cephtest/archive/log',
-                    '-name',
-                    '*.log',
-                    '-print0',
-                    run.Raw('|'),
-                    'xargs',
-                    '-0',
-                    '--no-run-if-empty',
-                    '--',
-                    'bzip2',
-                    '-9',
-                    '--',
-                    ],
-                wait=False,
-                ),
-            )
 
         log.info('Transferring archived files...')
         logdir = os.path.join(ctx.archive, 'remote')
