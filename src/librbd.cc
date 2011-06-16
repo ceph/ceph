@@ -147,13 +147,15 @@ namespace librbd {
     bool released;
 
     AioCompletion() : lock("AioCompletion::lock", true), done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
-		      rbd_comp(NULL), pending_count(0), ref(1), released(false) {
-      dout(10) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl;
+		      rbd_comp(NULL), pending_count(1), ref(1), released(false) {
+      dout(20) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl;
     }
     ~AioCompletion() {
-      dout(10) << "AioCompletion::~AioCompletion()" << dendl;
+      dout(20) << "AioCompletion::~AioCompletion() this=" << (void *)this << dendl;
     }
+
     int wait_for_complete() {
+      dout(20) << "AioCompletion::wait_for_complete() this=" << (void *)this << dendl;
       lock.Lock();
       while (!done)
 	cond.Wait(lock);
@@ -162,11 +164,32 @@ namespace librbd {
     }
 
     void add_block_completion(AioBlockCompletion *aio_completion) {
-      dout(10) << "add_block_completion this=" << (void *)this << dendl;
+      dout(20) << "AioCompletion::add_block_completion() this=" << (void *)this << dendl;
       lock.Lock();
       pending_count++;
       lock.Unlock();
       get();
+    }
+
+    void finish_adding_completions() {
+      dout(20) << "AioCompletion::finish_adding_completions() this=" << (void *)this << dendl;
+      lock.Lock();
+      assert(pending_count);
+      int count = --pending_count;
+      if (!count) {
+	complete();
+      }
+      lock.Unlock();
+    }
+
+    void complete() {
+      dout(20) << "AioCompletion::complete() this=" << (void *)this << dendl;
+      assert(lock.is_locked());
+      if (complete_cb) {
+	complete_cb(rbd_comp, complete_arg);
+      }
+      done = true;
+      cond.Signal();
     }
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
@@ -177,6 +200,7 @@ namespace librbd {
     void complete_block(AioBlockCompletion *block_completion, ssize_t r);
 
     ssize_t get_return_value() {
+      dout(20) << "AioCompletion::get_return_value() this=" << (void *)this << dendl;
       lock.Lock();
       ssize_t r = rval;
       lock.Unlock();
@@ -185,12 +209,14 @@ namespace librbd {
 
     void get() {
       lock.Lock();
+      dout(20) << " AioCompletion::get() this=" << (void *)this << " " << ref << " -> " << ref + 1 << dendl;
       assert(ref > 0);
       ref++;
       lock.Unlock();
     }
     void release() {
       lock.Lock();
+      dout(20) << "AioCompletion::release() this=" << (void *)this << dendl;
       assert(!released);
       released = true;
       put_unlock();
@@ -201,6 +227,7 @@ namespace librbd {
     }
     void put_unlock() {
       assert(ref > 0);
+      dout(20) << "AioCompletion::put_unlock() this=" << (void *)this << " " << ref << " -> " << ref - 1 << dendl;
       int n = --ref;
       lock.Unlock();
       if (!n)
@@ -1264,7 +1291,7 @@ void AioBlockCompletion::complete(ssize_t r)
 
 void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t r)
 {
-  dout(10) << "AioCompletion::complete_block this=" << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
+  dout(20) << "AioCompletion::complete_block() this=" << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
   lock.Lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
@@ -1275,10 +1302,7 @@ void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t
   assert(pending_count);
   int count = --pending_count;
   if (!count) {
-    if (complete_cb)
-      complete_cb(rbd_comp, complete_arg);
-    done = true;
-    cond.Signal();
+    complete();
   }
   put_unlock();
 }
@@ -1326,6 +1350,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   if (r < 0)
     return r;
 
+  c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
@@ -1345,8 +1370,10 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     total_write += write_len;
     left -= write_len;
   }
-  return 0;
+  r = 0;
 done:
+  c->finish_adding_completions();
+  c->put();
   /* FIXME: cleanup all the allocated stuff */
   return r;
 }
@@ -1382,6 +1409,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   ictx->lock.Unlock();
   uint64_t left = len;
 
+  c->get();
   for (uint64_t i = start_block; i <= end_block; i++) {
     bufferlist bl;
     ictx->lock.Lock();
@@ -1413,6 +1441,8 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   }
   ret = total_read;
 done:
+  c->finish_adding_completions();
+  c->put();
   return ret;
 }
 
