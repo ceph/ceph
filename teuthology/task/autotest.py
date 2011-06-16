@@ -125,6 +125,16 @@ def task(ctx, config):
                     'rm', '-rf', '--', control,
                     ],
                 )
+
+            remote.run(
+                args=[
+                    'mv',
+                    '--',
+                    '/tmp/cephtest/autotest/client/results/{tag}'.format(tag=tag),
+                    '/tmp/cephtest/archive/autotest/{tag}'.format(tag=tag),
+                    ],
+                )
+
         remote.run(
             args=[
                 'rm', '-rf', '--', '/tmp/cephtest/autotest',
