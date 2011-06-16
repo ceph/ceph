@@ -505,6 +505,14 @@ def mds(ctx, config):
         run.wait(mds_daemons.itervalues())
 
 
+def healthy(ctx, config):
+    log.info('Waiting until ceph is healthy...')
+    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    teuthology.wait_until_healthy(
+        remote=mon0_remote,
+        )
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -604,13 +612,7 @@ def task(ctx, config):
                 coverage=config.get('coverage'),
                 )),
         ):
-
-        log.info('Waiting until ceph is healthy...')
-        (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
-        teuthology.wait_until_healthy(
-            remote=mon0_remote,
-            )
-
+        healthy(ctx=ctx, config=None)
         yield
 
     if ctx.archive is not None:
