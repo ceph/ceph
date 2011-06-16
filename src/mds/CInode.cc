@@ -1984,7 +1984,7 @@ void CInode::auth_pin(void *by)
 	   << dendl;
   
   if (parent)
-    parent->adjust_nested_auth_pins(1, 1);
+    parent->adjust_nested_auth_pins(1, 1, this);
 }
 
 void CInode::auth_unpin(void *by) 
@@ -2006,7 +2006,7 @@ void CInode::auth_unpin(void *by)
   assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins(-1, -1);
+    parent->adjust_nested_auth_pins(-1, -1, this);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
@@ -2019,13 +2019,13 @@ void CInode::auth_unpin(void *by)
   }  
 }
 
-void CInode::adjust_nested_auth_pins(int a)
+void CInode::adjust_nested_auth_pins(int a, void *by)
 {
   assert(a);
   nested_auth_pins += a;
-  dout(35) << "adjust_nested_auth_pins by " << a
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(35) << "adjust_nested_auth_pins by " << by
+	   << " change " << a << " yields "
+	   << auth_pins << "+" << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
 
   if (g_conf->mds_debug_auth_pins) {
@@ -2042,7 +2042,7 @@ void CInode::adjust_nested_auth_pins(int a)
   } 
 
   if (parent)
-    parent->adjust_nested_auth_pins(a, 0);
+    parent->adjust_nested_auth_pins(a, 0, by);
 }
 
 void CInode::adjust_nested_anchors(int by)

@@ -1072,7 +1072,7 @@ public:
   // -- auth pins --
   int is_auth_pinned() { return auth_pins; }
   int get_num_auth_pins() { return auth_pins; }
-  void adjust_nested_auth_pins(int a);
+  void adjust_nested_auth_pins(int a, void *by);
   bool can_auth_pin();
   void auth_pin(void *by);
   void auth_unpin(void *by);

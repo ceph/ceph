@@ -259,7 +259,7 @@ public:
   bool can_auth_pin();
   void auth_pin(void *by);
   void auth_unpin(void *by);
-  void adjust_nested_auth_pins(int by, int dirby);
+  void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
   bool is_frozen();
   bool is_auth_pinned() { return auth_pins || nested_auth_pins; }
   int get_num_auth_pins() { return auth_pins; }

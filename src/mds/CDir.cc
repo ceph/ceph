@@ -523,7 +523,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
-    dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins, in->auth_pins);
+    dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins, in->auth_pins, NULL);
 
   if (in->inode.anchored + in->nested_anchors)
     dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
@@ -596,7 +596,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
-      dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins);
+      dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins, NULL);
     
     if (in->inode.anchored + in->nested_anchors)
       dn->adjust_nested_anchors(0 - (in->nested_anchors + in->inode.anchored));
@@ -740,8 +740,8 @@ void CDir::steal_dentry(CDentry *dn)
     int ap = dn->get_num_auth_pins() + dn->get_num_nested_auth_pins();
     int dap = dn->get_num_dir_auth_pins();
     assert(dap <= ap);
-    adjust_nested_auth_pins(ap, dap);
-    dn->dir->adjust_nested_auth_pins(-ap, -dap);
+    adjust_nested_auth_pins(ap, dap, NULL);
+    dn->dir->adjust_nested_auth_pins(-ap, -dap, NULL);
   }
 
   nested_anchors += dn->nested_anchors;
@@ -2237,7 +2237,7 @@ void CDir::set_dir_auth(pair<int,int> a)
     
     // adjust nested auth pins
     if (get_cum_auth_pins())
-      inode->adjust_nested_auth_pins(-1);
+      inode->adjust_nested_auth_pins(-1, NULL);
     
     // unpin parent of frozen dir/tree?
     if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
@@ -2248,7 +2248,7 @@ void CDir::set_dir_auth(pair<int,int> a)
     
     // adjust nested auth pins
     if (get_cum_auth_pins())
-      inode->adjust_nested_auth_pins(1);
+      inode->adjust_nested_auth_pins(1, NULL);
 
     // pin parent of frozen dir/tree?
     if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
@@ -2297,7 +2297,7 @@ void CDir::auth_pin(void *by)
   // nest pins?
   if (!is_subtree_root() &&
       get_cum_auth_pins() == 1)
-    inode->adjust_nested_auth_pins(1);
+    inode->adjust_nested_auth_pins(1, by);
 }
 
 void CDir::auth_unpin(void *by) 
@@ -2323,17 +2323,18 @@ void CDir::auth_unpin(void *by)
   // nest?
   if (!is_subtree_root() &&
       newcum == 0)
-    inode->adjust_nested_auth_pins(-1);
+    inode->adjust_nested_auth_pins(-1, by);
 }
 
-void CDir::adjust_nested_auth_pins(int inc, int dirinc) 
+void CDir::adjust_nested_auth_pins(int inc, int dirinc, void *by)
 {
   assert(inc);
   nested_auth_pins += inc;
   dir_auth_pins += dirinc;
   
   dout(15) << "adjust_nested_auth_pins " << inc << "/" << dirinc << " on " << *this
-	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
+	   << " by " << by << " count now "
+	   << auth_pins << " + " << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
   assert(dir_auth_pins >= 0);
 
@@ -2344,9 +2345,9 @@ void CDir::adjust_nested_auth_pins(int inc, int dirinc)
   // nest?
   if (!is_subtree_root()) {
     if (newcum == 0)
-      inode->adjust_nested_auth_pins(-1);
+      inode->adjust_nested_auth_pins(-1, by);
     else if (newcum == inc)      
-      inode->adjust_nested_auth_pins(1);
+      inode->adjust_nested_auth_pins(1, by);
   }
 }
 

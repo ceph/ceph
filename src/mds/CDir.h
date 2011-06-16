@@ -556,7 +556,7 @@ public:
   void auth_pin(void *who);
   void auth_unpin(void *who);
 
-  void adjust_nested_auth_pins(int inc, int dirinc);
+  void adjust_nested_auth_pins(int inc, int dirinc, void *by);
   void verify_fragstat();
 
   int get_nested_anchors() { return nested_anchors; }
