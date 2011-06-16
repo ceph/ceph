@@ -20,6 +20,44 @@ using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
 
+#define MP_META_SUFFIX ".meta"
+
+class RGWMPObj {
+  string oid;
+  string prefix;
+  string meta;
+  string upload_id;
+public:
+  RGWMPObj() {}
+  RGWMPObj(string& _oid, string& _upload_id) {
+    init(_oid, _upload_id);
+  }
+  void init(string& _oid, string& _upload_id) {
+    oid = _oid;
+    upload_id = _upload_id;
+    prefix = oid;
+    prefix.append(".");
+    prefix.append(upload_id);
+    meta = prefix;
+    meta.append(MP_META_SUFFIX);
+  }
+  string& get_meta() { return meta; }
+  string get_part(int num) {
+    char buf[16];
+    snprintf(buf, 16, ".%d", num);
+    string s = prefix;
+    s.append(buf);
+    return s;
+  }
+  string get_part(string& part) {
+    string s = prefix;
+    s.append(".");
+    s.append(part);
+    return s;
+  }
+};
+
+
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
@@ -28,7 +66,7 @@ public:
     if (len < 6)
       return false;
 
-    int pos = name.find(".meta", len - 5);
+    int pos = name.find(MP_META_SUFFIX, len - 5);
     if (pos <= 0)
       return false;
 
@@ -139,9 +177,8 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
   rgw_obj obj;
 
   if (!oid.empty() && !upload_id.empty()) {
-    oid.append(".");
-    oid.append(upload_id);
-    oid.append(".meta");
+    RGWMPObj mp(oid, upload_id);
+    oid = mp.get_meta();
     obj.set_ns(mp_ns);
   }
   obj.init(bucket, oid, object);
@@ -467,17 +504,16 @@ void RGWPutObj::execute()
       oid = s->object_str;
     } else {
       oid = s->object_str;
-      oid.append(".");
-      oid.append(s->args.get("uploadId"));
-      multipart_meta_obj = oid;
-      multipart_meta_obj.append(".meta");
+      string upload_id = s->args.get("uploadId");
+      RGWMPObj mp(oid, upload_id);
+      multipart_meta_obj = mp.get_meta();
+
       part_num = s->args.get("partNumber");
       if (part_num.empty()) {
         ret = -EINVAL;
         goto done;
       }
-      oid.append(".");
-      oid.append(part_num);
+      oid = mp.get_part(part_num);
 
       obj.set_ns(mp_ns);
     }
@@ -913,10 +949,9 @@ void RGWInitMultipart::execute()
     gen_rand_alphanumeric(buf, sizeof(buf) - 1);
     upload_id = buf;
 
-    string tmp_obj_name = s->object_str;
-    tmp_obj_name.append(".");
-    tmp_obj_name.append(upload_id);
-    tmp_obj_name.append(".meta");
+    string tmp_obj_name;
+    RGWMPObj mp(s->object_str, upload_id);
+    tmp_obj_name = mp.get_meta();
 
     obj.init(s->bucket_str, tmp_obj_name, s->object_str, mp_ns);
     ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, true);
@@ -925,14 +960,14 @@ done:
   send_response();
 }
 
-static int get_multiparts_info(struct req_state *s, string& oid, map<uint32_t, RGWUploadPartInfo>& parts,
+static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32_t, RGWUploadPartInfo>& parts,
                                RGWAccessControlPolicy& policy, map<string, bufferlist>& new_attrs)
 {
   void *handle;
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
 
-  rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
+  rgw_obj obj(s->bucket_str, meta_oid, s->object_str, mp_ns);
 
   int ret = rgwstore->prepare_get_obj(obj, 0, NULL, &attrs, NULL,
                                       NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
@@ -969,20 +1004,19 @@ void RGWCompleteMultipart::execute()
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
-  string oid = s->object_str;
   string meta_oid;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
   off_t ofs = 0;
-  string prefix;
   MD5 hash;
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   bufferlist etag_bl;
   rgw_obj meta_obj;
   rgw_obj target_obj;
+  RGWMPObj mp;
 
 
   ret = get_params();
@@ -1010,14 +1044,10 @@ void RGWCompleteMultipart::execute()
     goto done;
   }
 
-  oid.append(".");
-  oid.append(upload_id);
-  meta_oid = oid;
-  meta_oid.append(".meta");
-  prefix = oid;
-  prefix.append(".");
+  mp.init(s->object_str, upload_id);
+  meta_oid = mp.get_meta();
 
-  ret = get_multiparts_info(s, oid, obj_parts, policy, attrs);
+  ret = get_multiparts_info(s, meta_oid, obj_parts, policy, attrs);
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_UPLOAD;
   if (parts->parts.size() != obj_parts.size())
@@ -1060,10 +1090,7 @@ void RGWCompleteMultipart::execute()
     goto done;
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    oid = prefix;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
-    oid.append(buf);
+    string oid = mp.get_part(obj_iter->second.num);
     rgw_obj src_obj(s->bucket_str, oid, s->object_str, mp_ns);
     ret = rgwstore->clone_range(target_obj, ofs, src_obj, 0, obj_iter->second.size);
     if (ret < 0)
@@ -1073,10 +1100,7 @@ void RGWCompleteMultipart::execute()
 
   // now erase all parts
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    oid = prefix;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
-    oid.append(buf);
+    string oid = mp.get_part(obj_iter->second.num);
     rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
     rgwstore->delete_obj(s->user.user_id, obj);
   }
@@ -1092,35 +1116,27 @@ void RGWAbortMultipart::execute()
 {
   ret = -EINVAL;
   string upload_id = s->args.get("uploadId");
-  string oid, meta_oid;
+  string meta_oid;
   string prefix;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
-
+  RGWMPObj mp;
 
   if (upload_id.empty() || s->object_str.empty())
     goto done;
 
-  oid = s->object_str;
-  oid.append(".");
-  oid.append(upload_id);
-  meta_oid = oid;
-  meta_oid.append(".meta");
-  prefix = oid;
-  prefix.append(".");
+  mp.init(s->object_str, upload_id); 
+  meta_oid = mp.get_meta();
 
-  ret = get_multiparts_info(s, oid, obj_parts, policy, attrs);
+  ret = get_multiparts_info(s, meta_oid, obj_parts, policy, attrs);
   if (ret < 0)
     goto done;
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    oid = prefix;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", obj_iter->second.num);
-    oid.append(buf);
+    string oid = mp.get_part(obj_iter->second.num);
     rgw_obj obj(s->bucket_str, oid, s->object_str, mp_ns);
     ret = rgwstore->delete_obj(s->user.user_id, obj);
     if (ret < 0 && ret != -ENOENT)
@@ -1140,16 +1156,17 @@ done:
 void RGWListMultipart::execute()
 {
   map<string, bufferlist> xattrs;
-  string obj = s->object_str;
+  string meta_oid;
+  RGWMPObj mp;
 
   ret = get_params();
   if (ret < 0)
     goto done;
 
-  obj.append(".");
-  obj.append(upload_id);
-  obj.append(".meta");
-  ret = get_multiparts_info(s, obj, parts, policy, xattrs);
+  mp.init(s->object_str, upload_id);
+  meta_oid = mp.get_meta();
+
+  ret = get_multiparts_info(s, meta_oid, parts, policy, xattrs);
 
 done:
   send_response();
@@ -1198,7 +1215,7 @@ void RGWListBucketMultiparts::execute()
     RGWMultipartUploadEntry entry;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       string name = iter->name;
-      int pos = name.rfind('.'); // search for '.meta'
+      int pos = name.rfind('.'); // search for ".meta"
       if (pos < 0)
         continue;
       pos = name.rfind('.', pos - 1); // <key>.<upload_id>
