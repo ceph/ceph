@@ -1,5 +1,8 @@
 import contextlib
 import sys
+import logging
+
+log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def nested(*managers):
@@ -7,6 +10,9 @@ def nested(*managers):
     Like contextlib.nested but takes callables returning context
     managers, to avoid the major reason why contextlib.nested was
     deprecated.
+
+    This version also logs any exceptions early, much like run_tasks,
+    to ease debugging. TODO combine nested and run_tasks.
     """
     exits = []
     vars = []
@@ -20,6 +26,7 @@ def nested(*managers):
             exits.append(exit)
         yield vars
     except:
+        log.exception('Saw exception from nested tasks')
         exc = sys.exc_info()
     finally:
         while exits:
