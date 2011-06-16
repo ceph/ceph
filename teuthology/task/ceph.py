@@ -465,6 +465,47 @@ def osd(ctx, config):
 
 
 @contextlib.contextmanager
+def mds(ctx, config):
+    log.info('Starting mds daemons...')
+    mds_daemons = {}
+    mdss = ctx.cluster.only(teuthology.is_type('mds'))
+    coverage_dir = '/tmp/cephtest/archive/coverage'
+
+    daemon_signal = 'kill'
+    if config.get('coverage'):
+        log.info('Recording coverage for this run.')
+        daemon_signal = 'term'
+
+    for remote, roles_for_host in mdss.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
+            proc = remote.run(
+                args=[
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                    coverage_dir,
+                    '/tmp/cephtest/daemon-helper',
+                    daemon_signal,
+                    '/tmp/cephtest/binary/usr/local/bin/cmds',
+                    '-f',
+                    '-i', id_,
+                    '-c', '/tmp/cephtest/ceph.conf',
+                    ],
+                logger=log.getChild('mds.{id}'.format(id=id_)),
+                stdin=run.PIPE,
+                wait=False,
+                )
+            mds_daemons[id_] = proc
+
+    try:
+        yield
+    finally:
+        log.info('Shutting down mds daemons...')
+        for id_, proc in mds_daemons.iteritems():
+            proc.stdin.close()
+
+        run.wait(mds_daemons.itervalues())
+
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Set up and tear down a Ceph cluster.
@@ -506,11 +547,9 @@ def task(ctx, config):
         "task ceph only supports a dictionary for configuration"
 
     flavor = None
-    daemon_signal = 'kill'
     if config.get('coverage'):
         log.info('Recording coverage for this run.')
         flavor = 'gcov'
-        daemon_signal = 'term'
 
     log.info('Checking for old test directory...')
     processes = ctx.cluster.run(
@@ -561,31 +600,10 @@ def task(ctx, config):
         lambda: osd(ctx=ctx, config=dict(
                 coverage=config.get('coverage'),
                 )),
+        lambda: mds(ctx=ctx, config=dict(
+                coverage=config.get('coverage'),
+                )),
         ):
-
-
-        mds_daemons = {}
-        log.info('Starting mds daemons...')
-        mdss = ctx.cluster.only(teuthology.is_type('mds'))
-        for remote, roles_for_host in mdss.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
-                proc = remote.run(
-                    args=[
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        coverage_dir,
-                        '/tmp/cephtest/daemon-helper',
-                        daemon_signal,
-                        '/tmp/cephtest/binary/usr/local/bin/cmds',
-                        '-f',
-                        '-i', id_,
-                        '-c', '/tmp/cephtest/ceph.conf',
-                        ],
-                    logger=log.getChild('mds.{id}'.format(id=id_)),
-                    stdin=run.PIPE,
-                    wait=False,
-                    )
-                mds_daemons[id_] = proc
-
 
         log.info('Waiting until ceph is healthy...')
         (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
@@ -593,15 +611,7 @@ def task(ctx, config):
             remote=mon0_remote,
             )
 
-        try:
-            yield
-        finally:
-            log.info('Shutting down mds daemons...')
-            for id_, proc in mds_daemons.iteritems():
-                proc.stdin.close()
-
-
-            run.wait(mds_daemons.itervalues())
+        yield
 
     if ctx.archive is not None:
         log.info('Compressing logs...')
