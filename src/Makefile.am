@@ -22,23 +22,26 @@ if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif
 
+LIBGLOBAL_LDA = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+LIBCOMMON_LDA = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
 cmon_SOURCES = cmon.cc
-cmon_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cmon_LDFLAGS = $(AM_LDFLAGS)
+cmon_LDADD = libmon.a $(LIBGLOBAL_LDA)
 cmon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcommon.a -ldl -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cosd_LDADD = libosd.a libos.a $(LIBGLOBAL_LDA) -ldl
 bin_PROGRAMS += cosd
 cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cmds_LDADD = libmds.a libosdc.a $(LIBGLOBAL_LDA)
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -46,7 +49,7 @@ cmds_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_SOURCES = \
 	tools/ceph.cc \
 	tools/common.cc
-ceph_LDADD = libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_LDADD = $(LIBGLOBAL_LDA) -ledit
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_GTK2
@@ -73,25 +76,24 @@ gceph_SOURCES = \
 	tools/common.cc \
 	tools/gceph.cc \
 	tools/gui.cc
-gceph_LDADD = libcommon.a -ledit -lpthread -lm $(CRYPTO_LIBS) \
-	$(GTKMM_LIBS) $(EXTRALIBS)
+gceph_LDADD = $(LIBGLOBAL_LDA) -ledit $(GTKMM_LIBS)
 gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 bin_PROGRAMS += gceph
 endif
 
 cconf_SOURCES = cconf.cc
-cconf_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cconf_LDADD = $(LIBGLOBAL_LDA)
 cauthtool_SOURCES = cauthtool.cc
-cauthtool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cauthtool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph cconf cauthtool
 
 monmaptool_SOURCES = monmaptool.cc
-monmaptool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+monmaptool_LDADD = $(LIBGLOBAL_LDA)
 crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+crushtool_LDADD = $(LIBGLOBAL_LDA)
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -108,7 +110,7 @@ bin_PROGRAMS += librados-config
 
 # synthetic client
 csyn_SOURCES = csyn.cc client/SyntheticClient.cc
-csyn_LDADD = libclient.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+csyn_LDADD = libclient.a libosdc.a $(LIBGLOBAL_LDA)
 bin_PROGRAMS += csyn
 
 core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
@@ -117,7 +119,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+cfuse_LDADD = -lfuse libclient.a libosdc.a $(LIBGLOBAL_LDA)
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
 
@@ -231,9 +233,8 @@ librgw_SOURCES = \
 librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librgw_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
-librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
-	 -lexpat -lpthread -lm -lcurl
+librgw_la_LIBADD = librados.la
+librgw_la_LDFLAGS = -version-info 1:0:0 -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
 
 librgw_a_SOURCES = ${librgw_SOURCES}
