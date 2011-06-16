@@ -61,6 +61,10 @@ public:
   /** delete a bucket*/
   virtual int delete_bucket(std::string& id, std::string& bucket);
 
+  virtual int disable_bucket(std::string& bucket);
+  virtual int enable_bucket(std::string& bucket, uint64_t auid);
+  virtual int bucket_suspended(std::string& bucket, bool *suspended);
+
   /** Delete an object.*/
   virtual int delete_obj(std::string& id, rgw_obj& src_obj);
 

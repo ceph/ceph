@@ -150,6 +150,9 @@ namespace librados
     // set pool auid
     int set_auid(uint64_t auid_);
 
+    // get pool auid
+    int get_auid(uint64_t *auid_);
+
     // create an object
     int create(const std::string& oid, bool exclusive);
 

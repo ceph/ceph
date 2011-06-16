@@ -96,6 +96,13 @@ public:
    */
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
 
+  virtual int disable_bucket(std::string& bucket) { return -ENOTSUP; }
+  virtual int enable_bucket(std::string& bucket, uint64_t auid) { return -ENOTSUP; }
+  virtual int bucket_suspended(std::string& bucket, bool *suspended) {
+    *suspended = false;
+    return 0;
+  }
+
   /**
    * Delete an object.
    * id: unused in current implementations

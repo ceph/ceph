@@ -486,6 +486,44 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   return 0;
 }
 
+int RGWRados::disable_bucket(std::string& bucket)
+{
+  librados::IoCtx ctx;
+  int r = open_bucket_ctx(bucket, ctx);
+  if (r < 0)
+    return r;
+
+  ctx.set_auid(RGW_SUSPENDED_USER_AUID);
+
+  return 0;
+}
+
+int RGWRados::enable_bucket(std::string& bucket, uint64_t auid)
+{
+  librados::IoCtx ctx;
+  int r = open_bucket_ctx(bucket, ctx);
+  if (r < 0)
+    return r;
+
+  ctx.set_auid(auid);
+  return 0;
+}
+
+int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)
+{
+  librados::IoCtx ctx;
+  int r = open_bucket_ctx(bucket, ctx);
+  if (r < 0)
+    return r;
+
+  uint64_t auid;
+  int ret = ctx.get_auid(&auid);
+  if (ret < 0)
+    return ret;
+
+  *suspended = (auid == RGW_SUSPENDED_USER_AUID);
+  return 0;
+}
 /**
  * Delete an object.
  * id: unused

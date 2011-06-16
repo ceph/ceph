@@ -474,6 +474,7 @@ public:
   int pool_create(string& name, unsigned long long auid=0, __u8 crush_rule=0);
   int pool_delete(const char *name);
   int pool_change_auid(rados_ioctx_t io, unsigned long long auid);
+  int pool_get_auid(rados_ioctx_t io, unsigned long long *auid);
 
   int list(Objecter::ListContext *context, int max_entries);
 
@@ -1120,6 +1121,18 @@ pool_change_auid(rados_ioctx_t io, unsigned long long auid)
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
   return reply;
+}
+
+int librados::RadosClient::
+pool_get_auid(rados_ioctx_t io, unsigned long long *auid)
+{
+  Mutex::Locker l(lock);
+  int pool_id = ((IoCtxImpl *)io)->poolid;
+  const pg_pool_t *pg = osdmap.get_pg_pool(pool_id);
+  if (!pg)
+    return -ENOENT;
+  *auid = pg->v.auid;
+  return 0;
 }
 
 int librados::RadosClient::
@@ -2396,6 +2409,12 @@ set_auid(uint64_t auid_)
 }
 
 int librados::IoCtx::
+get_auid(uint64_t *auid_)
+{
+  return io_ctx_impl->client->pool_get_auid(io_ctx_impl, (unsigned long long *)auid_);
+}
+
+int librados::IoCtx::
 create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);
@@ -3267,6 +3286,12 @@ extern "C" int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->client->pool_change_auid(ctx, auid);
+}
+
+extern "C" int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->pool_get_auid(ctx, (unsigned long long *)auid);
 }
 
 extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)

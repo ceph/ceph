@@ -138,6 +138,15 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
   string oid = object;
   rgw_obj obj;
 
+  if (!oid.empty()) {
+    bool suspended;
+    int ret = rgwstore->bucket_suspended(bucket, &suspended);
+    if (ret < 0)
+      return ret;
+    if (suspended)
+      return -ERR_USER_SUSPENDED;
+  }
+
   if (!oid.empty() && !upload_id.empty()) {
     RGWMPObj mp(oid, upload_id);
     oid = mp.get_meta();

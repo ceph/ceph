@@ -112,6 +112,7 @@ int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t 
 				     __u8 crush_rule);
 int rados_pool_delete(rados_t cluster, const char *pool_name);
 int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
+int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
 int rados_ioctx_get_id(rados_ioctx_t io);

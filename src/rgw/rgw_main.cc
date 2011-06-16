@@ -102,6 +102,11 @@ int main(int argc, const char **argv)
       abort_early(&s, -EPERM);
       goto done;
     }
+    if (s.user.suspended) {
+      RGW_LOG(10) << "user is suspended, uid=" << s.user.user_id << dendl;
+      abort_early(&s, -ERR_USER_SUSPENDED);
+      goto done;
+    }
     ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);

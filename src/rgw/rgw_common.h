@@ -44,7 +44,7 @@ extern string rgw_root_bucket;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 6
+#define USER_INFO_VER 7
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
@@ -56,6 +56,8 @@ extern string rgw_root_bucket;
 
 #define RGW_REST_OPENSTACK      0x1
 #define RGW_REST_OPENSTACK_AUTH 0x2
+
+#define RGW_SUSPENDED_USER_AUID -2
 
 #define CGI_PRINTF(state, format, ...) do { \
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
@@ -85,6 +87,8 @@ extern string rgw_root_bucket;
 #define ERR_INVALID_PART        2007
 #define ERR_INVALID_PART_ORDER  2008
 #define ERR_NO_SUCH_UPLOAD      2009
+
+#define ERR_USER_SUSPENDED      2100
 
 typedef void *RGWAccessHandle;
 
@@ -221,6 +225,7 @@ struct RGWUserInfo
   string openstack_key;
   map<string, RGWAccessKey> access_keys;
   map<string, RGWSubUser> subusers;
+  __u8 suspended;
 
   RGWUserInfo() : auid(0) {}
 
@@ -245,6 +250,7 @@ struct RGWUserInfo
      ::encode(user_id, bl);
      ::encode(access_keys, bl);
      ::encode(subusers, bl);
+     ::encode(suspended, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -273,6 +279,10 @@ struct RGWUserInfo
       ::decode(access_keys, bl);
       ::decode(subusers, bl);
     }
+    suspended = 0;
+    if (ver >= 7) {
+      ::decode(suspended, bl);
+    }
   }
 
   void clear() {
@@ -281,6 +291,7 @@ struct RGWUserInfo
     user_email.clear();
     auid = CEPH_AUTH_UID_DEFAULT;
     access_keys.clear();
+    suspended = 0;
   }
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)

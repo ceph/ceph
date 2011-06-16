@@ -48,6 +48,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
+    { ERR_USER_SUSPENDED, 403, "UserSuspended" },
     { ENOENT, 404, "NoSuchKey" },
     { ERR_NO_SUCH_BUCKET, 404, "NoSuchBucket" },
     { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },

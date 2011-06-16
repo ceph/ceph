@@ -34,6 +34,8 @@ void usage()
   cerr << "  user modify                modify user\n";
   cerr << "  user info                  get user info\n";
   cerr << "  user rm                    remove user\n";
+  cerr << "  user suspend               suspend a user\n";
+  cerr << "  user enable                reenable user after suspension\n";
   cerr << "  subuser create             create a new subuser\n" ;
   cerr << "  subuser modify             modify subuser\n";
   cerr << "  subuser rm                 remove subuser\n";
@@ -77,6 +79,8 @@ enum {
   OPT_USER_INFO,
   OPT_USER_MODIFY,
   OPT_USER_RM,
+  OPT_USER_SUSPEND,
+  OPT_USER_ENABLE,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -177,6 +181,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_MODIFY;
     if (strcmp(cmd, "rm") == 0)
       return OPT_USER_RM;
+    if (strcmp(cmd, "suspend") == 0)
+      return OPT_USER_SUSPEND;
+    if (strcmp(cmd, "enable") == 0)
+      return OPT_USER_ENABLE;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -330,6 +338,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
   if (!success)
     cerr << "ERROR: this should be fixed manually!" << std::endl;
 }
+
 
 int main(int argc, char **argv) 
 {
@@ -506,7 +515,8 @@ int main(int argc, char **argv)
 
 
   if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK) {
+      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK ||
+      opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       usage();
@@ -900,6 +910,51 @@ int main(int argc, char **argv)
       return ret;
     }
   }
+
+ if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
+    string id;
+    __u8 disable = (opt_cmd == OPT_USER_SUSPEND ? 1 : 0);
+
+    if (!user_id) {
+      cerr << "uid was not specified" << std::endl;
+      usage();
+    }
+    RGWUserBuckets buckets;
+    if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
+      cout << "could not get buckets for uid " << user_id << std::endl;
+    }
+    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    map<string, RGWBucketEnt>::iterator iter;
+
+    int ret;
+    info.suspended = disable;
+    ret = rgw_store_user_info(info);
+    if (ret < 0) {
+      cerr << "ERROR: failed to store user info user=" << user_id << " ret=" << ret << std::endl;
+      exit(1);
+    }
+     
+    if (disable)
+      RGW_LOG(0) << "disabling user buckets" << dendl;
+    else
+      RGW_LOG(0) << "enabling user buckets" << dendl;
+
+    bool fail = false;
+
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      RGWBucketEnt obj = iter->second;
+      if (disable)
+        ret = rgwstore->disable_bucket(obj.name);
+      else
+        ret = rgwstore->enable_bucket(obj.name, info.auid);
+      if (ret < 0) {
+        cerr << "ERROR: could not disable bucket " << obj.name << " ret=" << ret << std::endl;
+        fail = true;
+      }
+    }
+    if (fail)
+      return 1;
+  } 
 
   return 0;
 }
