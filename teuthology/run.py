@@ -92,6 +92,8 @@ def main():
 
     ctx.summary = {}
 
+    ctx.config['tasks'].insert(0, {'internal.check_conflict': None})
+
     from teuthology.run_tasks import run_tasks
     try:
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)

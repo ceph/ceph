@@ -3,7 +3,6 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
-import gevent
 import tarfile
 
 from teuthology import misc as teuthology
@@ -611,24 +610,6 @@ def task(ctx, config):
     if config.get('coverage'):
         log.info('Recording coverage for this run.')
         flavor = 'gcov'
-
-    log.info('Checking for old test directory...')
-    processes = ctx.cluster.run(
-        args=[
-            'test', '!', '-e', '/tmp/cephtest',
-            ],
-        wait=False,
-        )
-    failed = False
-    for proc in processes:
-        assert isinstance(proc.exitstatus, gevent.event.AsyncResult)
-        try:
-            proc.exitstatus.get()
-        except run.CommandFailedError:
-            log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', proc.remote.shortname)
-            failed = True
-    if failed:
-        raise RuntimeError('Stale jobs detected, aborting.')
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
     log.info('Creating directories...')
