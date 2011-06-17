@@ -22,6 +22,7 @@ namespace librados
   class IoCtxImpl;
   class ObjectOperationImpl;
   class ObjListCtx;
+  class PoolAsyncCompletionImpl;
   class RadosClient;
 
   typedef void *list_ctx_t;
@@ -90,6 +91,16 @@ namespace librados
     AioCompletionImpl *pc;
   };
 
+  struct PoolAsyncCompletion {
+    PoolAsyncCompletion(PoolAsyncCompletionImpl *pc_) : pc(pc_) {}
+    int set_callback(void *cb_arg, callback_t cb);
+    int wait();
+    bool is_complete();
+    int get_return_value();
+    void release();
+    PoolAsyncCompletionImpl *pc;
+  };
+
   /*
    * ObjectOperation : compount object operation
    * Batch multiple object operations into a single request, to be applied
@@ -149,6 +160,9 @@ namespace librados
 
     // set pool auid
     int set_auid(uint64_t auid_);
+
+    // set pool auid
+    int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c);
 
     // get pool auid
     int get_auid(uint64_t *auid_);
@@ -281,7 +295,10 @@ namespace librados
 		       std::map<std::string,pool_stat_t>& stats);
     int cluster_stat(cluster_stat_t& result);
 
-    // -- aio --
+    /* pool aio */
+    static PoolAsyncCompletion *pool_async_create_completion();
+
+   // -- aio --
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
 						callback_t cb_safe);
