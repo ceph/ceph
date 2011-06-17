@@ -58,7 +58,7 @@ def ceph_log(ctx, config):
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
-    FILES = ['daemon-helper']
+    FILES = ['daemon-helper', 'enable-coredump']
     for filename in FILES:
         log.info('Shipping %r...', filename)
         src = os.path.join(os.path.dirname(__file__), filename)
@@ -185,6 +185,7 @@ def cluster(ctx, config):
     log.info('Setting up mon.0...')
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -194,6 +195,7 @@ def cluster(ctx, config):
         )
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -211,6 +213,7 @@ def cluster(ctx, config):
     log.info('Creating admin key on mon.0...')
     ctx.cluster.only('mon.0').run(
         args=[
+            '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -254,6 +257,7 @@ def cluster(ctx, config):
     run.wait(
         mons.run(
             args=[
+                '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 coverage_dir,
                 '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
@@ -275,6 +279,7 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -291,6 +296,7 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -307,6 +313,7 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -351,6 +358,7 @@ def cluster(ctx, config):
         run.wait(
             mons.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cauthtool',
@@ -369,6 +377,7 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
             remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cmon',
@@ -392,6 +401,7 @@ def cluster(ctx, config):
                 )
             remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/binary/usr/local/bin/cosd',
@@ -448,6 +458,7 @@ def mon(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
@@ -489,6 +500,7 @@ def osd(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
@@ -530,6 +542,7 @@ def mds(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             proc = remote.run(
                 args=[
+                    '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',

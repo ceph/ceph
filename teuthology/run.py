@@ -96,6 +96,7 @@ def main():
         {'internal.check_conflict': None},
         {'internal.base': None},
         {'internal.archive': None},
+        {'internal.coredump': None},
         ]
 
     from teuthology.run_tasks import run_tasks

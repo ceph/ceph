@@ -1,3 +1,4 @@
+from cStringIO import StringIO
 import contextlib
 import gevent
 import logging
@@ -134,3 +135,52 @@ def archive(ctx, config):
                     wait=False,
                     ),
                 )
+
+@contextlib.contextmanager
+def coredump(ctx, config):
+    log.info('Enabling coredump saving...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'install', '-d', '-m0755', '--',
+                '/tmp/cephtest/archive/coredump',
+                run.Raw('&&'),
+                'sudo', 'sysctl', '-w', 'kernel.core_pattern=/tmp/cephtest/archive/coredump/%t.%p.core',
+                ],
+            wait=False,
+            )
+        )
+
+    try:
+        yield
+    finally:
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'sudo', 'sysctl', '-w', 'kernel.core_pattern=core',
+                    run.Raw('&&'),
+                    # don't litter the archive dir if there were no cores dumped
+                    'rmdir',
+                    '--ignore-fail-on-non-empty',
+                    '--',
+                    '/tmp/cephtest/archive/coredump',
+                    ],
+                wait=False,
+                )
+            )
+
+        # set success=false if the dir is still there = coredumps were
+        # seen
+        processes = ctx.cluster.run(
+            args=[
+                'if', 'test', '!', '-e', '/tmp/cephtest/archive/coredump', run.Raw(';'), 'then',
+                'echo', 'OK', run.Raw(';'),
+                'fi',
+                ],
+            wait=False,
+            stdout=StringIO(),
+            )
+        run.wait(processes)
+        if any(r.stdout.getvalue() != 'OK' for r in processes):
+            log.warning('Found coredumps, flagging run as failed.')
+            ctx.summary['success'] = False

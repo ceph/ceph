@@ -63,6 +63,7 @@ def task(ctx, config):
             )
         proc = remote.run(
             args=[
+                '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/daemon-helper',

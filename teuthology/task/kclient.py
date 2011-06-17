@@ -71,6 +71,7 @@ def task(ctx, config):
         remote.run(
             args=[
                 'sudo',
+                '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/binary/usr/local/sbin/mount.ceph',

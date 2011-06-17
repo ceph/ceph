@@ -169,6 +169,7 @@ def create_simple_monmap(remote, conf):
     log.debug('Ceph mon addresses: %s', addresses)
 
     args = [
+        '/tmp/cephtest/enable-coredump',
         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
         '/tmp/cephtest/archive/coverage',
         '/tmp/cephtest/binary/usr/local/bin/monmaptool',
@@ -216,6 +217,7 @@ def wait_until_healthy(remote):
     while True:
         r = remote.run(
             args=[
+                '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 '/tmp/cephtest/archive/coverage',
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
@@ -258,6 +260,7 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
 def write_secret_file(remote, role, filename):
     remote.run(
         args=[
+            '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             '/tmp/cephtest/archive/coverage',
             '/tmp/cephtest/binary/usr/local/bin/cauthtool',
