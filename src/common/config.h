@@ -99,10 +99,10 @@ public:
   int get_val(const char *key, char **buf, int len) const;
 
   // Return a list of all the sections that the current entity is a member of.
-  void get_my_sections(std::vector <std::string> &sections);
+  void get_my_sections(std::vector <std::string> &sections) const;
 
   // Return a list of all sections
-  int get_all_sections(std::vector <std::string> &sections);
+  int get_all_sections(std::vector <std::string> &sections) const;
 
   // Get a value from the configuration file that we read earlier.
   // Metavariables will be expanded if emeta is true.

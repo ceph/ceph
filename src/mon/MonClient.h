@@ -175,7 +175,7 @@ public:
     log_client = clog;
   }
 
-  static int build_initial_monmap(MonMap &);
+  static int build_initial_monmap(CephContext *cct, MonMap &monmap);
 
   int build_initial_monmap();
   int get_monmap();

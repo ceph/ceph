@@ -779,7 +779,7 @@ get_val(const char *key, char **buf, int len) const
  * others had nothing.  This should always be the global section.
  */
 void md_config_t::
-get_my_sections(std::vector <std::string> &sections)
+get_my_sections(std::vector <std::string> &sections) const
 {
   sections.push_back(name.to_str());
 
@@ -790,7 +790,7 @@ get_my_sections(std::vector <std::string> &sections)
 
 // Return a list of all sections
 int md_config_t::
-get_all_sections(std::vector <std::string> &sections)
+get_all_sections(std::vector <std::string> &sections) const
 {
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
        s != cf.sections_end(); ++s) {
