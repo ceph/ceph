@@ -36,12 +36,12 @@ public:
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(interval, p);
     ::decode(fsid, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(interval, payload);
     ::encode(fsid, payload);
   }

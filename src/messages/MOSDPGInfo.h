@@ -39,11 +39,11 @@ public:
     out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(epoch, payload);
     ::encode(pg_info, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_info, p);

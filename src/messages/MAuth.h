@@ -33,13 +33,13 @@ public:
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes)";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(protocol, p);
     ::decode(auth_payload, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(protocol, payload);
     ::encode(auth_payload, payload);

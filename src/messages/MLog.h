@@ -41,12 +41,12 @@ public:
     out << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(entries, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

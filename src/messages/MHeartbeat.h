@@ -44,12 +44,12 @@ private:
 public:
   const char *get_type_name() { return "HB"; }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(load, payload);
     ::encode(beat, payload);
     ::encode(import_map, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(load, p);
     ::decode(beat, p);

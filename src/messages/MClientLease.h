@@ -66,12 +66,12 @@ public:
     out << ")";
   }
   
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(h, p);
     ::decode(dname, p);
   }
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     ::encode(h, payload);
     ::encode(dname, payload);
   }

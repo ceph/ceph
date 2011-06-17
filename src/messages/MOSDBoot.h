@@ -41,14 +41,14 @@ public:
     out << "osd_boot(osd" << sb.whoami << " v" << version << ")";
   }
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     header.version = 2;
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_addr, payload);
     ::encode(cluster_addr, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);

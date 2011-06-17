@@ -30,12 +30,12 @@ class PaxosServiceMessage : public Message {
     ::decode(session_mon_tid, p);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     assert(0);
     paxos_encode();
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);

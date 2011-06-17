@@ -29,12 +29,12 @@ public:
     out << "global_id  (" << old_max_id << ")";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(old_max_id, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(old_max_id, payload);
   }

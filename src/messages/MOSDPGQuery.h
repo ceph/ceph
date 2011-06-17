@@ -41,11 +41,11 @@ private:
 public:  
   const char *get_type_name() { return "PGq"; }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_list, p);

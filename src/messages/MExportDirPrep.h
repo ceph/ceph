@@ -63,7 +63,7 @@ public:
     bystanders.insert(who);
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(basedir, p);
@@ -72,7 +72,7 @@ public:
     ::decode(bystanders, p);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dirfrag, payload);
     ::encode(basedir, payload);
     ::encode(bounds, payload);

@@ -70,13 +70,13 @@ public:
   }
 
   // marshalling
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(epoch, p);
     ::decode(encoded, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
     ::encode(encoded, payload);

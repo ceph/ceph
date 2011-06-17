@@ -28,10 +28,10 @@ struct MRoute : public Message {
   MRoute() : Message(MSG_ROUTE), msg(NULL) {}
   MRoute(uint64_t t, Message *m) :
     Message(MSG_ROUTE), session_mon_tid(t), msg(m) {}
-  MRoute(bufferlist bl, entity_inst_t i) :
+  MRoute(CephContext *cct, bufferlist bl, entity_inst_t i) :
     Message(MSG_ROUTE), session_mon_tid(0), dest(i) {
     bufferlist::iterator p = bl.begin();
-    msg = decode_message(p);
+    msg = decode_message(cct, p);
   }
 private:
   ~MRoute() {
@@ -39,16 +39,16 @@ private:
   }
 
 public:
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
     ::decode(dest, p);
-    msg = decode_message(p);
+    msg = decode_message(cct, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    encode_message(msg, payload);
+    encode_message(cct, msg, payload);
   }
 
   const char *get_type_name() { return "route"; }

@@ -67,7 +67,7 @@ public:
 
   bool first, complete;
 
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -108,7 +108,7 @@ public:
       ::decode(oloc, p);
   }
 
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     header.version = 3;
 
     ::encode(map_epoch, payload);

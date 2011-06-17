@@ -45,7 +45,7 @@ public:
     o << ")";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(protocol, p);
     ::decode(result, p);
@@ -53,7 +53,7 @@ public:
     ::decode(result_bl, p);
     ::decode(result_msg, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(protocol, payload);
     ::encode(result, payload);
     ::encode(global_id, payload);

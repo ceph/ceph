@@ -36,10 +36,10 @@ public:
     o << "export_caps_ack(" << ino << ")";
   }
 
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     ::encode(ino, payload);
   }
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
   }

@@ -110,7 +110,7 @@ private:
   ~MMDSSlaveRequest() {}
 
 public:
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(reqid, payload);
     ::encode(op, payload);
     ::encode(lock_type, payload);
@@ -125,7 +125,7 @@ public:
     ::encode(srci_replica, payload);
     ::encode(stray, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
     ::decode(op, p);

@@ -38,12 +38,12 @@ public:
     out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(epoch, payload);
     ::encode(pgid, payload);
     ::encode(trim_to, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pgid, p);

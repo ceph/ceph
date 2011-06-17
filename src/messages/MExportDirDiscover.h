@@ -50,14 +50,14 @@ public:
     o << "export_discover(" << dirfrag << " " << path << ")";
   }
 
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(dirfrag, p);
     ::decode(path, p);
   }
 
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     ::encode(from, payload);
     ::encode(dirfrag, payload);
     ::encode(path, payload);

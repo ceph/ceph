@@ -40,12 +40,12 @@ private:
 public:
   const char *get_type_name() { return "Icap";}
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(from, payload);
     ::encode(ino, payload);
     ::encode(caps, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(ino, p);

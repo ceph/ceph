@@ -43,7 +43,7 @@ public:
     out << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     head.num_split_inos = split_inos.size();
     head.num_split_realms = split_realms.size();
     head.trace_len = bl.length();
@@ -52,7 +52,7 @@ public:
     ::encode_nohead(split_realms, payload);
     ::encode_nohead(bl, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.num_split_inos, split_inos, p);

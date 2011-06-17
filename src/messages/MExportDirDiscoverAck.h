@@ -45,12 +45,12 @@ public:
       o << " failure)";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(success, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dirfrag, payload);
     ::encode(success, payload);
   }

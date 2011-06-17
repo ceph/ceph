@@ -45,11 +45,11 @@ public:
     abort.push_back(r);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(commit, payload);
     ::encode(abort, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(commit, p);
     ::decode(abort, p);

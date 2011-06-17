@@ -86,7 +86,7 @@ public:
     out <<  ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
       header.version = 1;
     ::encode(epoch, payload);
@@ -104,7 +104,7 @@ public:
     ::encode(latest_value, payload);
     ::encode(values, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);

@@ -39,7 +39,7 @@ public:
     out << "pg_stats(" << pg_stat.size() << " pgs v " << version << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(osd_stat, payload);
@@ -47,7 +47,7 @@ public:
     ::encode(epoch, payload);
     ::encode(had_map_for, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

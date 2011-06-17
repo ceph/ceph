@@ -78,7 +78,7 @@ public:
     out << ")";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -88,7 +88,7 @@ public:
     ::decode(want_base_dir, p);
     ::decode(want_xlocked, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(snapid, payload);

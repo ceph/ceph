@@ -41,14 +41,14 @@ public:
     o << "mds_load_targets(" << global_id << " " << targets << ")";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(global_id, p);
     ::decode(targets, p);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(global_id, payload);
     ::encode(targets, payload);

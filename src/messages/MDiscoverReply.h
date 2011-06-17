@@ -180,7 +180,7 @@ public:
 
 
   // ...
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -199,7 +199,7 @@ public:
     if (header.version >= 2)
       ::decode(wanted_ino, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     header.version = 2;
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);

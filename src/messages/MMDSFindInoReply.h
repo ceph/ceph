@@ -30,11 +30,11 @@ struct MMDSFindInoReply : public Message {
     out << "findinoreply(" << tid << " " << path << ")";
   }
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(tid, payload);
     ::encode(path, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(path, p);

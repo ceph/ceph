@@ -46,12 +46,12 @@ public:
     out << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(map_epoch, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
     ::decode(scrub_from, p);

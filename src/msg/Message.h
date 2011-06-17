@@ -422,18 +422,19 @@ public:
   }
 
   // virtual bits
-  virtual void decode_payload() = 0;
-  virtual void encode_payload() = 0;
+  virtual void decode_payload(CephContext *cct) = 0;
+  virtual void encode_payload(CephContext *cct) = 0;
   virtual const char *get_type_name() = 0;
   virtual void print(ostream& out) {
     out << get_type_name();
   }
 
-  void encode();
+  void encode(CephContext *cct);
 };
 
-extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,
-			       bufferlist& front, bufferlist& middle, bufferlist& data);
+extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
+			       ceph_msg_footer& footer, bufferlist& front,
+			       bufferlist& middle, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   if (m.get_header().version)
@@ -441,7 +442,7 @@ inline ostream& operator<<(ostream& out, Message& m) {
   return out;
 }
 
-extern void encode_message(Message *m, bufferlist& bl);
-extern Message *decode_message(bufferlist::iterator& bl);
+extern void encode_message(CephContext *cct, Message *m, bufferlist& bl);
+extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
 
 #endif

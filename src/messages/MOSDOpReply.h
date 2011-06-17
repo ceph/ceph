@@ -82,7 +82,7 @@ private:
 
 public:
   // marshalling
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ops.resize(head.num_ops);
@@ -91,7 +91,7 @@ public:
     }
     ::decode_nohead(head.object_len, oid.name, p);
   }
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     head.num_ops = ops.size();
     head.object_len = oid.name.length();
     ::encode(head, payload);

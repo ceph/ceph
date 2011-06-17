@@ -45,13 +45,13 @@ public:
       << " " << (int)bits << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(ino, payload);
     ::encode(basefrag, payload);
     ::encode(bits, payload);
     ::encode(basebl, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(basefrag, p);

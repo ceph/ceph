@@ -55,13 +55,13 @@ public:
     out << "election(" << get_opname(op) << " " << epoch << ")";
   }
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(op, payload);
     ::encode(epoch, payload);
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(epoch, p);

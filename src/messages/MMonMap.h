@@ -31,10 +31,10 @@ private:
 public:
   const char *get_type_name() { return "mon_map"; }
 
-  void encode_payload() { 
+  void encode_payload(CephContext *cct) { 
     ::encode(monmapbl, payload);
   }
-  void decode_payload() { 
+  void decode_payload(CephContext *cct) { 
     bufferlist::iterator p = payload.begin();
     ::decode(monmapbl, p);
   }

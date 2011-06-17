@@ -229,7 +229,7 @@ public:
   }
 
   // serialization
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(trace_bl, p);
@@ -237,7 +237,7 @@ public:
     ::decode(snapbl, p);
     assert(p.end());
   }
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);

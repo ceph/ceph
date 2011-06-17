@@ -39,12 +39,12 @@ public:
     out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pools, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

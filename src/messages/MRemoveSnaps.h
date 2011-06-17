@@ -35,11 +35,11 @@ public:
     out << "remove_snaps(" << snaps << " v" << version << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(snaps, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(snaps, p);

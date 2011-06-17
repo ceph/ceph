@@ -133,7 +133,7 @@ public:
     out << ")";
   }
   
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
@@ -146,7 +146,7 @@ public:
     if (header.version >= 2)
       ::decode(flockbl, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
     ::encode(head, payload);

@@ -30,12 +30,12 @@ private:
   ~MOSDPGTemp() {}
 
 public:
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(map_epoch, p);

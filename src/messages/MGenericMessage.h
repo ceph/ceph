@@ -32,8 +32,8 @@ class MGenericMessage : public Message {
 
   const char *get_type_name() { return tname; }
 
-  void decode_payload() { }
-  void encode_payload() { }
+  void decode_payload(CephContext *cct) { }
+  void encode_payload(CephContext *cct) { }
 };
 
 #endif

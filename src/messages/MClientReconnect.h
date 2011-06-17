@@ -48,7 +48,7 @@ public:
     realms.push_back(r);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
       // new protocol
       header.version = 2;
@@ -62,7 +62,7 @@ public:
     }
     ::encode_nohead(realms, data);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = data.begin();
     if (header.version >= 2) {
       // new protocol

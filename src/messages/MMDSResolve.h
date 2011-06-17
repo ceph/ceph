@@ -53,12 +53,12 @@ public:
     slave_requests.push_back(reqid);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(subtrees, payload);
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(subtrees, p);
     ::decode(ambiguous_imports, p);

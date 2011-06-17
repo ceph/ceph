@@ -254,7 +254,7 @@ public:
   }
 
   // -- encoding --
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(op, payload);
     ::encode(strong_inodes, payload);
     ::encode(inode_base, payload);
@@ -271,7 +271,7 @@ public:
     ::encode(authpinned_dentries, payload);
     ::encode(xlocked_dentries, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);

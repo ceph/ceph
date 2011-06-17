@@ -46,19 +46,19 @@ private:
   }
 
 public:
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(tid, payload);
     ::encode(client, payload);
     ::encode(client_caps, payload);
-    encode_message(msg, payload);
+    encode_message(cct, msg, payload);
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(p);
+    msg = (PaxosServiceMessage *)decode_message(cct, p);
   }
 
   const char *get_type_name() { return "forward"; }

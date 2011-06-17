@@ -36,12 +36,12 @@ public:
     o << "export_caps(" << ino << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(ino, payload);
     ::encode(cap_bl, payload);
     ::encode(client_map, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(cap_bl, p);

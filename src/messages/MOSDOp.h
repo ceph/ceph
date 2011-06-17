@@ -170,7 +170,7 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
 
     for (unsigned i = 0; i < ops.size(); i++) {
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
@@ -262,7 +262,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
 
     if (header.version < 2) {

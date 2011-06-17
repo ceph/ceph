@@ -40,7 +40,7 @@ public:
     o << " v" << version << ")";
   }
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(machine_id, payload);
@@ -48,7 +48,7 @@ public:
     ::encode(ver, payload);
     ::encode(is_latest, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

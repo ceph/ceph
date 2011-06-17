@@ -44,14 +44,14 @@ public:
     o << "dentry_link(" << dirfrag << " " << dn << ")";
   }
   
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(dn, p);
     ::decode(is_primary, p);
     ::decode(bl, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
     ::encode(is_primary, payload);

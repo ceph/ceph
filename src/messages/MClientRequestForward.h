@@ -46,13 +46,13 @@ public:
       << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dest_mds, payload);
     ::encode(num_fwd, payload);
     ::encode(client_must_resend, payload);
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dest_mds, p);
     ::decode(num_fwd, p);

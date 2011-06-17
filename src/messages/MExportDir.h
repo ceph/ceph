@@ -44,13 +44,13 @@ public:
     bounds.push_back(df); 
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dirfrag, payload);
     ::encode(bounds, payload);
     ::encode(export_data, payload);
     ::encode(client_map, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(bounds, p);

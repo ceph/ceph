@@ -65,7 +65,7 @@ public:
 	<< " seq " << seq << " v" << version << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
@@ -77,7 +77,7 @@ public:
     ::encode(standby_for_name, payload);
     ::encode(compat, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

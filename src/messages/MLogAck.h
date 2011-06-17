@@ -31,11 +31,11 @@ public:
     out << "log(last " << last << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
     ::encode(last, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(last, p);

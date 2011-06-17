@@ -50,12 +50,12 @@ public:
     out << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
     ::encode(scrub_pgs, payload);
     ::encode(repair, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(scrub_pgs, p);

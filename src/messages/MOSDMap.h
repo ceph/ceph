@@ -57,13 +57,13 @@ private:
 
 public:
   // marshalling
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(incremental_maps, p);
     ::decode(maps, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
     ::encode(incremental_maps, payload);
     ::encode(maps, payload);

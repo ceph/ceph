@@ -132,37 +132,37 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-void Message::encode()
+void Message::encode(CephContext *cct)
 {
   // encode and copy out of *m
   if (empty_payload())
-    encode_payload();
+    encode_payload(cct);
   calc_front_crc();
   
-  if (!g_conf->ms_nocrc)
+  if (!cct->_conf->ms_nocrc)
     calc_data_crc();
   else
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
 }
 
-Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
+Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // verify crc
-  if (!g_conf->ms_nocrc) {
+  if (!cct->_conf->ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
     if (front_crc != footer.front_crc) {
-      dout(0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
-      dout(20) << " ";
+      ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+      ldout(cct, 20) << " ";
       front.hexdump(*_dout);
       *_dout << dendl;
       return 0;
     }
     if (middle_crc != footer.middle_crc) {
-      dout(0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
-      dout(20) << " ";
+      ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+      ldout(cct, 20) << " ";
       middle.hexdump(*_dout);
       *_dout << dendl;
       return 0;
@@ -171,8 +171,8 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
-	dout(0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-	dout(20) << " ";
+	ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	ldout(cct, 20) << " ";
 	data.hexdump(*_dout);
 	*_dout << dendl;
 	return 0;
@@ -508,8 +508,8 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
 
   default:
-    dout(0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
-    if (g_conf->ms_die_on_bad_msg)
+    ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
+    if (cct->_conf->ms_die_on_bad_msg)
       assert(0);
     return 0;
   }
@@ -521,13 +521,13 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   m->set_data(data);
 
   try {
-    m->decode_payload();
+    m->decode_payload(cct);
   }
   catch (const buffer::error &e) {
-    dout(0) << "failed to decode message of type " << type
+    ldout(cct, 0) << "failed to decode message of type " << type
 	    << " v" << header.version
 	    << ": " << e.what() << dendl;
-    if (g_conf->ms_die_on_bad_msg)
+    if (cct->_conf->ms_die_on_bad_msg)
       assert(0);
     return 0;
   }
@@ -537,10 +537,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 }
 
 
-void encode_message(Message *msg, bufferlist& payload)
+void encode_message(CephContext *cct, Message *msg, bufferlist& payload)
 {
   bufferlist front, middle, data;
-  msg->encode();
+  msg->encode(cct);
   ::encode(msg->get_header(), payload);
   ::encode(msg->get_footer(), payload);
   ::encode(msg->get_payload(), payload);
@@ -548,7 +548,7 @@ void encode_message(Message *msg, bufferlist& payload)
   ::encode(msg->get_data(), payload);
 }
 
-Message *decode_message(bufferlist::iterator& p)
+Message *decode_message(CephContext *cct, bufferlist::iterator& p)
 {
   ceph_msg_header h;
   ceph_msg_footer f;
@@ -558,5 +558,5 @@ Message *decode_message(bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  return decode_message(h, f, fr, mi, da);
+  return decode_message(cct, h, f, fr, mi, da);
 }

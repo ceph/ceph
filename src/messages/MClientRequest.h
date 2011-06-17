@@ -141,7 +141,7 @@ public:
 
   int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(path, p);
@@ -149,7 +149,7 @@ public:
     ::decode_nohead(head.num_releases, releases, p);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     head.num_releases = releases.size();
     ::encode(head, payload);
     ::encode(path, payload);

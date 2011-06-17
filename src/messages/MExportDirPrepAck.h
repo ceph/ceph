@@ -37,11 +37,11 @@ public:
     o << "export_prep_ack(" << dirfrag << ")";
   }
 
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(dirfrag, payload);
   }
 };

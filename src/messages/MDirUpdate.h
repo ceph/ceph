@@ -62,7 +62,7 @@ public:
     out << "dir_update(" << get_dirfrag() << ")";
   }
 
-  virtual void decode_payload() {
+  virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(from_mds, p);
     ::decode(dirfrag, p);
@@ -72,7 +72,7 @@ public:
     ::decode(path, p);
   }
 
-  virtual void encode_payload() {
+  virtual void encode_payload(CephContext *cct) {
     ::encode(from_mds, payload);
     ::encode(dirfrag, payload);
     ::encode(dir_rep, payload);

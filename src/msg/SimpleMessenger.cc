@@ -1727,7 +1727,7 @@ void SimpleMessenger::Pipe::writer()
 	m->set_connection(connection_state->get());
 
 	// encode and copy out of *m
-	m->encode();
+	m->encode(msgr->cct);
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
@@ -1956,7 +1956,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(header, footer, front, middle, data);
+  message = decode_message(msgr->cct, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;

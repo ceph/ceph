@@ -42,13 +42,13 @@ public:
     out << "pg_log(" << info.pgid << " e" << epoch << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(log, payload);
     ::encode(missing, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);

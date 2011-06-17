@@ -33,7 +33,7 @@ private:
   ~MWatchNotify() {}
 
 public:
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     uint8_t msg_ver;
     bufferlist::iterator p = payload.begin();
     ::decode(msg_ver, p);
@@ -42,7 +42,7 @@ public:
     ::decode(ver, p);
     ::decode(notify_id, p);
   }
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     uint8_t msg_ver = 0;
     ::encode(msg_ver, payload);
     ::encode(opcode, payload);

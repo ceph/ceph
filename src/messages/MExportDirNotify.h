@@ -59,14 +59,14 @@ public:
       bounds.push_back(*i);
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(base, payload);
     ::encode(ack, payload);
     ::encode(old_auth, payload);
     ::encode(new_auth, payload);
     ::encode(bounds, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(base, p);
     ::decode(ack, p);

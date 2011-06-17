@@ -54,11 +54,11 @@ private:
 public:  
   const char *get_type_name() { return "pg_create"; }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(mkpg, p);

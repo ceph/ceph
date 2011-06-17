@@ -36,13 +36,13 @@ public:
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     paxos_encode();
     ::encode(r, payload);
     ::encode(rs, payload);
     ::encode(cmd, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(r, p);

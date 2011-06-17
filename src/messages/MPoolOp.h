@@ -52,7 +52,7 @@ public:
 	<< ", tid" << get_tid() << " " << name << " v" << version << ")";
   }
 
-  void encode_payload() {
+  void encode_payload(CephContext *cct) {
     header.version = 4;
     paxos_encode();
     ::encode(fsid, payload);
@@ -65,7 +65,7 @@ public:
     ::encode(pad, payload);  /* for v3->v4 encoding change */
     ::encode(crush_rule, payload);
   }
-  void decode_payload() {
+  void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
