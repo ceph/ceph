@@ -2981,7 +2981,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
 	 ssc->snapset.clones[k] < snapid)
     k++;
   if (k == ssc->snapset.clones.size()) {
-    dout(10) << "get_object_context  no clones with last >= snapid " << snapid << " -- DNE" << dendl;
+    dout(10) << "find_object_context  no clones with last >= snapid " << snapid << " -- DNE" << dendl;
     put_snapset_context(ssc);
     return -ENOENT;
   }
@@ -2991,7 +2991,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
   ssc = 0;
 
   if (missing.is_missing(soid)) {
-    dout(20) << "get_object_context  " << soid << " missing, try again later" << dendl;
+    dout(20) << "find_object_context  " << soid << " missing, try again later" << dendl;
     if (psnapid)
       *psnapid = soid.snap;
     return -EAGAIN;
@@ -3000,16 +3000,16 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
   ObjectContext *obc = get_object_context(soid, oloc, false);
 
   // clone
-  dout(20) << "get_object_context  " << soid << " snaps " << obc->obs.oi.snaps << dendl;
+  dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps << dendl;
   snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
   snapid_t last = obc->obs.oi.snaps[0];
   if (first <= snapid) {
-    dout(20) << "get_object_context  " << soid << " [" << first << "," << last
+    dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] contains " << snapid << " -- HIT " << obc->obs << dendl;
     *pobc = obc;
     return 0;
   } else {
-    dout(20) << "get_object_context  " << soid << " [" << first << "," << last
+    dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] does not contain " << snapid << " -- DNE" << dendl;
     put_object_context(obc);
     return -ENOENT;
