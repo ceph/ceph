@@ -12,10 +12,10 @@
  *
  */
 
+#include "common/debug.h"
 #include "common/errno.h"
-#include "common/pidfile.h"
 #include "common/safe_io.h"
-#include "debug.h"
+#include "global/pidfile.h"
 
 #include <errno.h>
 #include <fcntl.h>

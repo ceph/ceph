@@ -649,6 +649,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
+	global/signal_handler.cc \
 	common/simple_spin.cc \
 	common/Thread.cc \
 	include/ceph_fs.cc \
@@ -665,7 +666,7 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	common/pidfile.cc \
+	global/pidfile.cc \
 	include/addr_parsing.c \
 	$(crush_files)
 
@@ -820,6 +821,7 @@ noinst_HEADERS = \
         common/common_init.h\
 	common/code_environment.h \
         common/signal.h\
+        global/signal_handler.h\
         common/simple_spin.h\
         common/dyn_snprintf.h\
         common/run_cmd.h\
@@ -1117,7 +1119,7 @@ noinst_HEADERS = \
 	tools/gui.h\
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
-	common/pidfile.h\
+	global/pidfile.h\
 	common/sync_filesystem.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \

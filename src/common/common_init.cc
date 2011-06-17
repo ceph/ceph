@@ -20,7 +20,6 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/signal.h"
 #include "common/version.h"
 #include "include/color.h"
 

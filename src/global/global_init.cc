@@ -19,10 +19,11 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/errno.h"
-#include "common/pidfile.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
+#include "global/pidfile.h"
+#include "global/signal_handler.h"
 #include "include/color.h"
 
 #include <errno.h>

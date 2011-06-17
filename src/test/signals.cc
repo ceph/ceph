@@ -1,5 +1,6 @@
 #include "common/config.h"
 #include "common/signal.h"
+#include "global/signal_handler.h"
 
 #include "gtest/gtest.h"
 
