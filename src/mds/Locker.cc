@@ -3125,8 +3125,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
     case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
+    case LOCK_XSYN:
+      file_excl((ScatterLock*)lock, need_issue);
+      if (lock->get_state() != LOCK_EXCL)
+	return false;
+      // fall-thru
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
-    case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME (and below!)
     default: assert(0);
     }
 
@@ -3172,8 +3176,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
   }
 
-  if (lock->get_parent()->is_replicated() &&
-      lock->get_state() != LOCK_XSYN_EXCL) {    // FIXME
+  if (lock->get_parent()->is_replicated()) {    // FIXME
     bufferlist data;
     lock->encode_locked_state(data);
     send_lock_message(lock, LOCK_AC_SYNC, data);
@@ -3261,8 +3264,12 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   switch (lock->get_state()) {
   case LOCK_SCAN: lock->set_state(LOCK_SCAN_LOCK); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
+  case LOCK_XSYN:
+    file_excl((ScatterLock*)lock, need_issue);
+    if (lock->get_state() != LOCK_EXCL)
+      return;
+    // fall-thru
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
-  case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME
   case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
   case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
   default: assert(0);
@@ -3904,8 +3911,12 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     // gather?
     switch (lock->get_state()) {
     case LOCK_SYNC: lock->set_state(LOCK_SYNC_MIX); break;
+    case LOCK_XSYN:
+      file_excl(lock, need_issue);
+      if (lock->get_state() != LOCK_EXCL)
+	return;
+      // fall-thru
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_MIX); break;
-    case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break; // FIXME (and see below!)
     case LOCK_TSYN: lock->set_state(LOCK_TSYN_MIX); break;
     default: assert(0);
     }
