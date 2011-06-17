@@ -7,6 +7,8 @@
     user modify                modify user
     user info                  get user info
     user rm                    remove user
+    user suspend               suspend a user
+    user enable                reenable user after suspension
     subuser create             create a new subuser
     subuser modify             modify subuser
     subuser rm                 remove subuser
