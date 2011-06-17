@@ -109,8 +109,6 @@ def task(ctx, config):
                 )
             remote.run(
                 args=[
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
                     '/tmp/cephtest/autotest/client/bin/autotest',
                     '--verbose',
                     '--harness=simple',
