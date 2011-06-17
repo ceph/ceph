@@ -2425,14 +2425,14 @@ void Client::flush_caps(Inode *in, int mds) {
   dout(10) << "flush_caps(inode:" << in << ", mds" << mds << ")" << dendl;
   InodeCap *cap = in->caps[mds];
   int wanted = in->caps_wanted();
-  int flush = wanted | CEPH_CAP_PIN;
+  int retain = wanted | CEPH_CAP_PIN;
   int flush_tid = ++in->last_flush_tid;
   //set up flush tid stores
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
-    if (flush & (1<<i))
+    if (in->dirty_caps & (1<<i))
       in->flushing_cap_tid[i] = flush_tid;
   }
-  send_cap(in, mds, cap, in->caps_used(), wanted, flush, in->dirty_caps, flush_tid);
+  send_cap(in, mds, cap, in->caps_used(), wanted, retain, in->dirty_caps, flush_tid);
 }
 
 void Client::wait_sync_caps(uint64_t want)
