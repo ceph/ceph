@@ -25,7 +25,7 @@
 #include <sys/user.h>
 
 #include "common/config.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 
 #include "messages/MGenericMessage.h"
 

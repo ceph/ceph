@@ -19,7 +19,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/config.h"
 #include "common/dyn_snprintf.h"
 #include "common/static_assert.h"

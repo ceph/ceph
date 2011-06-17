@@ -23,7 +23,7 @@
 #include "common/config.h"
 
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "crush/CrushWrapper.h"
 #include "crush/grammar.h"
 

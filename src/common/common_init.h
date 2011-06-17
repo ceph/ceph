@@ -1,3 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2009-2011 New Dream Network
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
 #ifndef CEPH_COMMON_INIT_H
 #define CEPH_COMMON_INIT_H
 
@@ -25,12 +39,6 @@ enum common_init_flags_t {
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
 void complain_about_parse_errors(std::deque<std::string> *parse_errors);
-void common_init(std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env, int flags);
-void output_ceph_version();
-int common_init_shutdown_stderr(CephContext *cct);
-void common_init_daemonize(CephContext *cct, int flags);
 void common_init_finish(CephContext *cct);
-void common_init_chdir(const CephContext *cct);
 
 #endif

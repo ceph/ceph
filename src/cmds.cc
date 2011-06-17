@@ -32,7 +32,7 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
 #include "mon/MonClient.h"
@@ -125,7 +125,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
 
   // mds specific args
   int shadow = 0;
@@ -217,14 +217,14 @@ int main(int argc, const char **argv)
 			SimpleMessenger::Policy::stateful_server(supported, 0));
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-    common_init_daemonize(&g_ceph_context, 0);
+    global_init_daemonize(&g_ceph_context, 0);
   common_init_finish(&g_ceph_context);
 
   // get monmap
   MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
-  common_init_chdir(&g_ceph_context);
+  global_init_chdir(&g_ceph_context);
 
   messenger->start();
 

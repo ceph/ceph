@@ -15,6 +15,7 @@
 #include "auth/Auth.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/ConfUtils.h"
 #include "common/version.h"
 #include "common/config.h"

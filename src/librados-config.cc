@@ -16,7 +16,7 @@
 #include "common/config.h"
 
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "include/rados/librados.h"
 
 void usage()
@@ -57,7 +57,7 @@ int main(int argc, const char **argv)
       ++i;
   }
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(&g_ceph_context);
 
   FOR_EACH_ARG(args) {

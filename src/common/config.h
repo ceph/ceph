@@ -57,7 +57,7 @@ public:
   // but it will only receive notifications for the changes that happen after
   // you attach it, obviously.
   //
-  // Most developers will probably attach their observers after common_init,
+  // Most developers will probably attach their observers after global_init,
   // but before anyone can call injectargs.
   //
   // The caller is responsible for allocating observers.

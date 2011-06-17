@@ -16,7 +16,7 @@
  */
 #include "include/rados/librados.hpp"
 #include "common/config.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/Cond.h"
 #include <iostream>
 #include <fstream>

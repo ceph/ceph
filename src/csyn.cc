@@ -27,7 +27,7 @@ using namespace std;
 #include "mon/MonClient.h"
 
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
 #ifndef DARWIN
@@ -46,7 +46,7 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(&g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient

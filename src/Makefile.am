@@ -643,6 +643,7 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
 	common/common_init.cc \
+	global/global_init.cc \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
@@ -660,7 +661,6 @@ libcommon_files = \
 	common/page.cc \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
-	common/debug.cc \
 	common/version.cc \
 	common/hex.cc \
 	common/entity_name.cc \
@@ -816,6 +816,7 @@ noinst_HEADERS = \
         common/Timer.h\
         common/arch.h\
         common/armor.h\
+	global/global_init.h \
         common/common_init.h\
 	common/code_environment.h \
         common/signal.h\

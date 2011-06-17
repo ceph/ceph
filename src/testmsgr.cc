@@ -25,7 +25,7 @@ using namespace std;
 #include "messages/MPing.h"
 
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
 #ifndef DARWIN
@@ -76,7 +76,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(&g_ceph_context);
 
   vec_to_argv(args, argc, argv);

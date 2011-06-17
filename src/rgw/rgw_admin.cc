@@ -8,7 +8,7 @@ using namespace std;
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/errno.h"
 
 #include "common/armor.h"
@@ -347,7 +347,7 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(&g_ceph_context);
 
   const char *user_id = 0;

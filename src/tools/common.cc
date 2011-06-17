@@ -28,7 +28,7 @@ using namespace std;
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 
 #ifndef DARWIN
 #include <envz.h>

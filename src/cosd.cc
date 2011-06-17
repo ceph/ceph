@@ -32,7 +32,7 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
 #include "include/color.h"
@@ -56,7 +56,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   vector<const char *>::iterator args_iter;
 
-  common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -276,12 +276,12 @@ int main(int argc, const char **argv)
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.
-  common_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
+  global_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
   common_init_finish(&g_ceph_context);
   MonClient mc(&g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
-  common_init_chdir(&g_ceph_context);
+  global_init_chdir(&g_ceph_context);
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
 		     g_conf->osd_data, g_conf->osd_journal);
@@ -293,7 +293,7 @@ int main(int argc, const char **argv)
   }
 
   // Now close the standard file descriptors
-  common_init_shutdown_stderr(&g_ceph_context);
+  global_init_shutdown_stderr(&g_ceph_context);
 
   client_messenger->start();
   messenger_hb->start();

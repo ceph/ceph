@@ -3133,7 +3133,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 }
 
 /* This function is intended for use by Ceph daemons. These daemons have
- * already called common_init and want to use that particular configuration for
+ * already called global_init and want to use that particular configuration for
  * their cluster.
  */
 extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct_)

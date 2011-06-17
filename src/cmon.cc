@@ -33,7 +33,7 @@ using namespace std;
 
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
-#include "common/common_init.h"
+#include "global/global_init.h"
 
 extern const CompatSet::Feature ceph_mon_feature_compat[];
 extern const CompatSet::Feature ceph_mon_feature_ro_compat[];
@@ -62,7 +62,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
@@ -268,9 +268,9 @@ int main(int argc, const char **argv)
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(&g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
-  common_init_daemonize(&g_ceph_context, 0);
+  global_init_daemonize(&g_ceph_context, 0);
   common_init_finish(&g_ceph_context);
-  common_init_chdir(&g_ceph_context);
+  global_init_chdir(&g_ceph_context);
   messenger->start();
 
   uint64_t supported =

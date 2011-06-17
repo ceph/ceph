@@ -22,7 +22,7 @@
 #ifndef CEPH_GUI_H
 #define CEPH_GUI_H
 
-#include "common/common_init.h"
+#include "global/global_init.h"
 #include "mds/MDSMap.h"
 #include "mon/MonMap.h"
 #include "mon/PGMap.h"
