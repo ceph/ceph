@@ -34,8 +34,8 @@
      --object=<object>
      --date=<yyyy-mm-dd>
   --conf/-c        Read configuration from the given configuration file
-  -D               Run in the foreground.
-  -f               Run in foreground. Show all log messages on stderr.
+  -d               Run in foreground, log to stderr.
+  -f               Run in foreground, log to usual location.
   --id             set ID
   --name           set ID.TYPE
   --version        show version and quit
