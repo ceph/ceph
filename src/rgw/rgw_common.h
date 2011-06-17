@@ -57,7 +57,7 @@ extern string rgw_root_bucket;
 #define RGW_REST_OPENSTACK      0x1
 #define RGW_REST_OPENSTACK_AUTH 0x2
 
-#define RGW_SUSPENDED_USER_AUID -2
+#define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
 #define CGI_PRINTF(state, format, ...) do { \
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
