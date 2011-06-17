@@ -808,7 +808,7 @@ bool ReplicatedPG::snap_trimmer()
       uint64_t old_size = obc->obs.oi.size;
       eversion_t old_version = obc->obs.oi.version;
 
-      RepGather *repop = new_repop(ctx, obc, rep_tid);
+      RepGather *repop = new_repop(ctx, obc, rep_tid);  // note: new_repop claims obc, ctx, ctx->op
 
       ObjectStore::Transaction *t = &ctx->op_t;
     
@@ -916,7 +916,6 @@ bool ReplicatedPG::snap_trimmer()
 
       eval_repop(repop);
       repop->put();
-      put_object_context(obc);
 
       //int tr = osd->store->queue_transaction(&osr, t);
       //assert(tr == 0);
