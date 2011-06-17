@@ -2600,7 +2600,8 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
+  AuthAuthorizeHandler *authorize_handler =
+      get_authorize_handler(protocol, &g_ceph_context);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     isvalid = false;

@@ -23,9 +23,9 @@ static bool _supported_initialized = false;
 static Mutex _supported_lock("auth_supported_init");
 static map<int, bool> auth_supported;
 
-static void _init_supported(void)
+static void _init_supported(CephContext *cct)
 {
-  string str = g_conf->auth_supported;
+  string str = cct->_conf->auth_supported;
   list<string> sup_list;
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
@@ -34,19 +34,19 @@ static void _init_supported(void)
     } else if (iter->compare("none") == 0) {
       auth_supported[CEPH_AUTH_NONE] = true;
     } else {
-      derr << "WARNING: unknown auth protocol defined: " << *iter << dendl;
+      lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
   _supported_initialized = true;
 }
 
 
-bool is_supported_auth(int auth_type)
+bool is_supported_auth(int auth_type, CephContext *cct)
 {
   {
     Mutex::Locker lock(_supported_lock);
     if (!_supported_initialized) {
-      _init_supported();
+      _init_supported(cct);
     }
   }
   return auth_supported[auth_type];

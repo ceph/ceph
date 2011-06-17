@@ -30,6 +30,6 @@ struct AuthAuthorizeHandler {
 				 AuthCapsInfo& caps_info, uint64_t *auid = NULL) = 0;
 };
 
-extern AuthAuthorizeHandler *get_authorize_handler(int protocol);
+extern AuthAuthorizeHandler *get_authorize_handler(int protocol, CephContext *cct);
 
 #endif

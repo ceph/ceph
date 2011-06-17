@@ -1131,7 +1131,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
 
-  if (!is_supported_auth(CEPH_AUTH_CEPHX))
+  if (!is_supported_auth(CEPH_AUTH_CEPHX, &g_ceph_context))
     return false;
 
   CephXServiceTicketInfo auth_ticket_info;
@@ -1188,7 +1188,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 	   << " protocol " << protocol << dendl;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
-      is_supported_auth(CEPH_AUTH_CEPHX)) {
+      is_supported_auth(CEPH_AUTH_CEPHX, &g_ceph_context)) {
     // monitor, and cephx is enabled
     isvalid = false;
     if (protocol == CEPH_AUTH_CEPHX) {

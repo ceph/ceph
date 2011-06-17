@@ -2013,7 +2013,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 {
   Mutex::Locker l(mds_lock);
 
-  AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
+  AuthAuthorizeHandler *authorize_handler =
+      get_authorize_handler(protocol, &g_ceph_context);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;

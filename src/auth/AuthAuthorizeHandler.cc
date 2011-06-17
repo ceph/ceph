@@ -23,22 +23,22 @@ static bool _initialized = false;
 static Mutex _lock("auth_service_handler_init");
 static map<int, AuthAuthorizeHandler *> authorizers;
 
-static void _init_authorizers(void)
+static void _init_authorizers(CephContext *cct)
 {
-  if (is_supported_auth(CEPH_AUTH_NONE)) {
+  if (is_supported_auth(CEPH_AUTH_NONE, cct)) {
     authorizers[CEPH_AUTH_NONE] = new AuthNoneAuthorizeHandler(); 
   }
-  if (is_supported_auth(CEPH_AUTH_CEPHX)) {
+  if (is_supported_auth(CEPH_AUTH_CEPHX, cct)) {
     authorizers[CEPH_AUTH_CEPHX] = new CephxAuthorizeHandler(); 
   }
   _initialized = true;
 }
 
-AuthAuthorizeHandler *get_authorize_handler(int protocol)
+AuthAuthorizeHandler *get_authorize_handler(int protocol, CephContext *cct)
 {
   Mutex::Locker l(_lock);
   if (!_initialized) {
-   _init_authorizers();
+   _init_authorizers(cct);
   }
 
   map<int, AuthAuthorizeHandler *>::iterator iter = authorizers.find(protocol);

@@ -17,6 +17,8 @@
 
 #include <map>
 
-extern bool is_supported_auth(int auth_type);
+class CephContext;
+
+extern bool is_supported_auth(int auth_type, CephContext *cct);
 
 #endif
