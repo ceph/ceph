@@ -3,6 +3,7 @@ import logging
 
 from orchestra import run
 from teuthology import misc as teuthology
+from teuthology import contextutil
 
 log = logging.getLogger(__name__)
 
@@ -315,4 +316,40 @@ def mount(ctx, config):
 
 @contextlib.contextmanager
 def task(ctx, config):
-    create_image(ctx, config)
+    """
+    Create and mount an rbd image.
+
+    For example::
+
+        tasks:
+        - ceph:
+        - rbd: [client.0, client.1]
+
+    Different image options::
+
+        tasks:
+        - ceph:
+        - rbd:
+            client.0: # uses defaults
+            client.1:
+                image_name: foo
+                image_size: 2048
+                fs_type: xfs
+    """
+    assert isinstance(config, list) or isinstance(config, dict), \
+        "task rbd only supports a list or dict for configuration"
+    if isinstance(config, dict):
+        role_images = {}
+        for role, properties in config.iteritems():
+            role_images[role] = properties.get('image_name')
+    else:
+        role_images = config
+
+    with contextutil.nested(
+        lambda: create_image(ctx=ctx, config=config),
+        lambda: modprobe(ctx=ctx, config=config),
+        lambda: dev_create(ctx=ctx, config=role_images),
+        lambda: mkfs(ctx=ctx, config=config),
+        lambda: mount(ctx=ctx, config=role_images),
+        ):
+        yield
