@@ -16,7 +16,7 @@
 #ifndef CEPH_DOUT_H
 #define CEPH_DOUT_H
 
-#include "common/ceph_context.h"
+#include "global/global_context.h"
 #include "common/DoutStreambuf.h"
 #include "common/likely.h"
 #include "common/config.h"		    // need for g_conf

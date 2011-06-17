@@ -644,6 +644,7 @@ libcommon_files = \
 	mds/MDSMap.cc \
 	common/common_init.cc \
 	global/global_init.cc \
+	global/global_context.cc \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
@@ -818,6 +819,7 @@ noinst_HEADERS = \
         common/arch.h\
         common/armor.h\
 	global/global_init.h \
+	global/global_context.h \
         common/common_init.h\
 	common/code_environment.h \
         common/signal.h\
