@@ -29,6 +29,8 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+CephContext *get_global_context(void);
+
 CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
 {
@@ -37,7 +39,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   // Create a configuration object
   // TODO: de-globalize
-  CephContext *cct = &g_ceph_context; //new CephContext();
+  CephContext *cct = get_global_context(); //new CephContext();
   md_config_t *conf = cct->_conf;
   // add config observers here
 

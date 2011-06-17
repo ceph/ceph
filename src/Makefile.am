@@ -22,8 +22,7 @@ if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif
 
-LIBGLOBAL_LDA = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-LIBCOMMON_LDA = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+LIBGLOBAL_LDA = libglobal.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
 cmon_SOURCES = cmon.cc
@@ -149,7 +148,7 @@ endif # WITH_TCMALLOC
 
 # debug targets
 psim_SOURCES = psim.cc
-psim_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += psim
 
 test_mutate_SOURCES = test/test_mutate.cc
@@ -157,25 +156,29 @@ test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
 
 testmsgr_SOURCES = testmsgr.cc
-testmsgr_LDADD = libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testmsgr_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+dupstore_LDADD = libos.a $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+streamtest_LDADD = libos.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_trans_LDADD = libos.a $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
-testsnaps_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
+
+test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
+test_libcommon_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_libcommon_build
 
 ##########
 BUILT_SOURCES =
@@ -185,7 +188,7 @@ lib_LTLIBRARIES =
 libceph_la_SOURCES = \
 	libceph.cc \
 	client/Client.cc \
-	${libcommon_a_SOURCES} \
+	${libglobal_a_SOURCES} \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -213,7 +216,7 @@ bin_DEBUGPROGRAMS += testsignal_handlers
 librados_SOURCES = \
 	librados.cc \
 	osdc/Objecter.cc \
-	${libcommon_a_SOURCES}
+	${libglobal_a_SOURCES}
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -229,7 +232,7 @@ librados_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 if WITH_RADOSGW
 librgw_SOURCES = \
 	$(my_libradosgw_src) \
-	${libcommon_a_SOURCES}
+	${libglobal_a_SOURCES}
 librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -325,12 +328,12 @@ bin_DEBUGPROGRAMS += rgw_multiparser
 endif
 
 testcrypto_SOURCES = testcrypto.cc
-testcrypto_LDADD = libcommon.a $(CRYPTO_LIBS) -lpthread -lm $(EXTRALIBS)
+testcrypto_LDADD =  $(LIBGLOBAL_LDA)
 testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testkeys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
@@ -412,7 +415,7 @@ unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
 
 unittest_bufferlist_SOURCES = test/bufferlist.cc
-unittest_bufferlist_LDADD = ${UNITTEST_LDADD} libcommon.a $(CRYPTO_LIBS)
+unittest_bufferlist_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA) 
 unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
@@ -424,38 +427,38 @@ check_PROGRAMS += unittest_crypto
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} ${UNITTEST_LDADD}
+unittest_ceph_crypto_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
 unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_utf8_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
+unittest_utf8_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
 
 unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
 unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_rgw_escape_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
+unittest_rgw_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_rgw_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_strtol_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
+unittest_strtol_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_strtol_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_strtol
 
 unittest_confutils_SOURCES = test/confutils.cc
 unittest_confutils_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_confutils_LDADD = libcommon.a $(CRYPTO_LIBS) ${UNITTEST_LDADD}
+unittest_confutils_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_confutils_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_confutils
 
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -pthread -lcurl ${AM_LDFLAGS}
-unittest_librgw_LDADD =  librgw.a ${CRYPTO_LIBS} libcommon.a ${UNITTEST_LDADD} -lexpat -lfcgi
+unittest_librgw_LDADD =  librgw.a ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
@@ -517,7 +520,7 @@ EXTRALIBS += -lgcov
 endif
 
 noinst_LIBRARIES = \
-	libcommon.a \
+	libglobal.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a librados.a librbd.a
 
@@ -591,12 +594,15 @@ clean-local:
 	-rm *.so *.gcno *.gcda
 
 # libs
-libcommon_a_SOURCES = \
-	./ceph_ver.c \
-	$(libcommon_files)
+libglobal_a_SOURCES = \
+	$(libcommon_files) \
+	global/global_context.cc \
+	global/global_init.cc \
+	global/pidfile.cc \
+	global/signal_handler.cc
 
-libcommon_a_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libcommon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libglobal_a_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libglobal_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 
 crush_files = \
 	crush/builder.c \
@@ -607,6 +613,7 @@ crush_files = \
 
 # this list ommits the ceph_ver.c file
 libcommon_files = \
+	./ceph_ver.c \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthSupported.cc \
@@ -643,14 +650,11 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
 	common/common_init.cc \
-	global/global_init.cc \
-	global/global_context.cc \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/signal.cc \
-	global/signal_handler.cc \
 	common/simple_spin.cc \
 	common/Thread.cc \
 	include/ceph_fs.cc \
@@ -667,7 +671,6 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
-	global/pidfile.cc \
 	include/addr_parsing.c \
 	$(crush_files)
 
