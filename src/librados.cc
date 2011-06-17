@@ -1232,6 +1232,7 @@ pool_change_auid_async(rados_ioctx_t io, unsigned long long auid, PoolAsyncCompl
   objecter->change_pool_auid(poolID,
 			     new C_PoolAsync_Safe(c),
 			     auid);
+  return 0;
 }
 
 int librados::RadosClient::
