@@ -22,6 +22,7 @@
 #include <sys/types.h>
 
 #include "common/armor.h"
+#include "common/safe_io.h"
 
 int read_secret_from_file(const char *filename, char *secret, size_t max_len)
 {
@@ -34,7 +35,7 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
     perror("unable to read secretfile");
     return -1;
   }
-  len = read(fd, secret, max_len);
+  len = safe_read(fd, secret, max_len);
   if (len <= 0) {
     perror("unable to read secret from file");
     return -1;

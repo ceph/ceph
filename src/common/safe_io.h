@@ -23,7 +23,7 @@ extern "C" {
   /*
    * Safe functions wrapping the raw read() and write() libc functions.
    * These retry on EINTR, and on error return -errno instead of returning
-   * 1 and setting errno).
+   * -1 and setting errno).
    */
   ssize_t safe_read(int fd, void *buf, size_t count)
     __attribute__ ((warn_unused_result));
