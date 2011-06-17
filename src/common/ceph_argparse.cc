@@ -371,8 +371,8 @@ static void generic_usage(bool is_server)
 --conf/-c        Read configuration from the given configuration file\n\
 -d               Run in foreground, log to stderr.\n\
 -f               Run in foreground, log to usual location.\n\
---id             set ID\n\
---name           set ID.TYPE\n\
+--id/-i          set ID portion of my name\n\
+--name/-n        set name (TYPE.ID)\n\
 --version        show version and quit\n\
 " << std::endl;
 
