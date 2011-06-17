@@ -786,8 +786,8 @@ void ESession::replay(MDS *mds)
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
       if (session->connection == NULL) {
-	mds->sessionmap.remove_session(session);
 	dout(10) << " removed session " << session->inst << dendl;
+	mds->sessionmap.remove_session(session);
       } else {
 	session->clear();    // the client has reconnected; keep the Session, but reset
 	dout(10) << " reset session " << session->inst << " (they reconnected)" << dendl;
