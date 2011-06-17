@@ -143,6 +143,7 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucke
     int ret = rgwstore->bucket_suspended(bucket, &suspended);
     if (ret < 0)
       return ret;
+
     if (suspended)
       return -ERR_USER_SUSPENDED;
   }

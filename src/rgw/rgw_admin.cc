@@ -939,21 +939,19 @@ int main(int argc, char **argv)
     else
       RGW_LOG(0) << "enabling user buckets" << dendl;
 
-    bool fail = false;
-
+    vector<string> bucket_names;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       RGWBucketEnt obj = iter->second;
-      if (disable)
-        ret = rgwstore->disable_bucket(obj.name);
-      else
-        ret = rgwstore->enable_bucket(obj.name, info.auid);
-      if (ret < 0) {
-        cerr << "ERROR: could not disable bucket " << obj.name << " ret=" << ret << std::endl;
-        fail = true;
-      }
+      bucket_names.push_back(obj.name);
     }
-    if (fail)
-      return 1;
+    if (disable)
+      ret = rgwstore->disable_buckets(bucket_names);
+    else
+      ret = rgwstore->enable_buckets(bucket_names, info.auid);
+    if (ret < 0) {
+      cerr << "ERROR: failed to change pool" << std::endl;
+      exit(1);
+    }
   } 
 
   return 0;

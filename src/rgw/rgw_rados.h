@@ -19,6 +19,8 @@ class RGWRados  : public RGWAccess
     GetObjState() : sent_data(false) {}
   };
 
+  int set_buckets_auid(vector<std::string>& buckets, uint64_t auid);
+
 public:
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize(CephContext *cct);
@@ -61,8 +63,8 @@ public:
   /** delete a bucket*/
   virtual int delete_bucket(std::string& id, std::string& bucket);
 
-  virtual int disable_bucket(std::string& bucket);
-  virtual int enable_bucket(std::string& bucket, uint64_t auid);
+  virtual int disable_buckets(std::vector<std::string>& buckets);
+  virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid);
   virtual int bucket_suspended(std::string& bucket, bool *suspended);
 
   /** Delete an object.*/

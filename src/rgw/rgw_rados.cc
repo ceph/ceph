@@ -486,27 +486,41 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   return 0;
 }
 
-int RGWRados::disable_bucket(std::string& bucket)
+int RGWRados::set_buckets_auid(vector<std::string>& buckets, uint64_t auid)
 {
   librados::IoCtx ctx;
-  int r = open_bucket_ctx(bucket, ctx);
-  if (r < 0)
-    return r;
+  vector<librados::PoolAsyncCompletion *> completions;
 
-  ctx.set_auid(RGW_SUSPENDED_USER_AUID);
+  vector<std::string>::iterator iter;
+  for (iter = buckets.begin(); iter != buckets.end(); ++iter) {
+    string& bucket = *iter;
+    int r = open_bucket_ctx(bucket, ctx);
+    if (r < 0)
+      return r;
+
+    librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
+    completions.push_back(c);
+    ctx.set_auid_async(auid, c);
+  }
+
+  vector<librados::PoolAsyncCompletion *>::iterator citer;
+  for (citer = completions.begin(); citer != completions.end(); ++citer) {
+    PoolAsyncCompletion *c = *citer;
+    c->wait();
+    c->release();
+  }
 
   return 0;
 }
 
-int RGWRados::enable_bucket(std::string& bucket, uint64_t auid)
+int RGWRados::disable_buckets(vector<std::string>& buckets)
 {
-  librados::IoCtx ctx;
-  int r = open_bucket_ctx(bucket, ctx);
-  if (r < 0)
-    return r;
+  return set_buckets_auid(buckets, RGW_SUSPENDED_USER_AUID);
+}
 
-  ctx.set_auid(auid);
-  return 0;
+int RGWRados::enable_buckets(vector<std::string>& buckets, uint64_t auid)
+{
+  return set_buckets_auid(buckets, auid);
 }
 
 int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)

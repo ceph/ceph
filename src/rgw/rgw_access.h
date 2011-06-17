@@ -96,8 +96,8 @@ public:
    */
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
 
-  virtual int disable_bucket(std::string& bucket) { return -ENOTSUP; }
-  virtual int enable_bucket(std::string& bucket, uint64_t auid) { return -ENOTSUP; }
+  virtual int disable_buckets(std::vector<std::string>& buckets) { return -ENOTSUP; }
+  virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid) { return -ENOTSUP; }
   virtual int bucket_suspended(std::string& bucket, bool *suspended) {
     *suspended = false;
     return 0;
