@@ -6,3 +6,5 @@ cp linux* foo
 mkdir foo/.snap/barsnap
 rm foo/linux*
 diff -q foo/.snap/barsnap/linux* linux* && echo "passed: files are identical"
+rmdir foo/.snap/barsnap
+echo OK
