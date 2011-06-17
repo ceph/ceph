@@ -151,7 +151,7 @@ flush_all_loggers()
   // ProfLoggerCollection lock must be held here.
   ldout(cct, 20) << "flush_all_loggers" << dendl;
 
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return;
 
   utime_t now = ceph_clock_now(cct);
@@ -166,7 +166,7 @@ flush_all_loggers()
   int now_sec = fromstart.sec();
 
   // do any catching up we need to
-  bool twice = now_sec - last_flush >= 2 * g_conf->profiling_logger_interval;
+  bool twice = now_sec - last_flush >= 2 * cct->_conf->profiling_logger_interval;
  again:
   ldout(cct, 20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
 
@@ -187,7 +187,7 @@ flush_all_loggers()
   if (reset && need_reset)
     need_reset = false;
 
-  last_flush = now_sec - (now_sec % g_conf->profiling_logger_interval);
+  last_flush = now_sec - (now_sec % cct->_conf->profiling_logger_interval);
   if (twice) {
     twice = false;
     goto again;
@@ -195,7 +195,7 @@ flush_all_loggers()
 
   // schedule next flush event
   utime_t next;
-  next.sec_ref() = start.sec() + last_flush + g_conf->profiling_logger_interval;
+  next.sec_ref() = start.sec() + last_flush + cct->_conf->profiling_logger_interval;
   next.nsec_ref() = start.nsec();
   ldout(cct, 20) << "logger now=" << now
 		   << "  start=" << start
@@ -239,8 +239,8 @@ void ProfLogger::_open_log()
   struct stat st;
 
   filename = "";
-  if ((!g_conf->chdir.empty()) &&
-      (g_conf->profiling_logger_dir.substr(0,1) != "/")) {
+  if ((!cct->_conf->chdir.empty()) &&
+      (cct->_conf->profiling_logger_dir.substr(0,1) != "/")) {
     char cwd[PATH_MAX];
     char *c = getcwd(cwd, sizeof(cwd));
     assert(c);
@@ -248,15 +248,15 @@ void ProfLogger::_open_log()
     filename += "/";
   }
 
-  filename = g_conf->profiling_logger_dir;
+  filename = cct->_conf->profiling_logger_dir;
 
   // make (feeble) attempt to create logger_dir
   if (::stat(filename.c_str(), &st))
     ::mkdir(filename.c_str(), 0750);
 
   filename += "/";
-  if (!g_conf->profiling_logger_subdir.empty()) {
-    filename += g_conf->profiling_logger_subdir;
+  if (!cct->_conf->profiling_logger_subdir.empty()) {
+    filename += cct->_conf->profiling_logger_subdir;
     ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
     filename += "/";
   }
@@ -330,7 +330,7 @@ void ProfLogger::_flush(bool need_reopen, bool need_reset, int last_flush)
       if (vals[i] > 0) {
 	double avg = (fvals[i] / (double)vals[i]);
 	double var = 0.0;
-	if (g_conf->profiling_logger_calc_variance &&
+	if (cct->_conf->profiling_logger_calc_variance &&
 	    (unsigned)vals[i] == vals_to_avg[i].size()) {
 	  for (vector<double>::iterator p = vals_to_avg[i].begin(); p != vals_to_avg[i].end(); ++p)
 	    var += (avg - *p) * (avg - *p);
@@ -365,7 +365,7 @@ void ProfLogger::_flush(bool need_reopen, bool need_reset, int last_flush)
 
 int64_t ProfLogger::inc(int key, int64_t v)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
@@ -377,7 +377,7 @@ int64_t ProfLogger::inc(int key, int64_t v)
 
 double ProfLogger::finc(int key, double v)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
@@ -389,7 +389,7 @@ double ProfLogger::finc(int key, double v)
 
 int64_t ProfLogger::set(int key, int64_t v)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
@@ -402,7 +402,7 @@ int64_t ProfLogger::set(int key, int64_t v)
 
 double ProfLogger::fset(int key, double v)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
@@ -414,13 +414,13 @@ double ProfLogger::fset(int key, double v)
 
 double ProfLogger::favg(int key, double v)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
   vals[i]++;
   double r = fvals[i] += v;
-  if (g_conf->profiling_logger_calc_variance)
+  if (cct->_conf->profiling_logger_calc_variance)
     vals_to_avg[i].push_back(v);
   lock->Unlock();
   return r;
@@ -428,7 +428,7 @@ double ProfLogger::favg(int key, double v)
 
 int64_t ProfLogger::get(int key)
 {
-  if (!g_conf->profiling_logger)
+  if (!cct->_conf->profiling_logger)
     return 0;
   lock->Lock();
   int i = type->lookup_key(key);
