@@ -3949,6 +3949,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
       interval_set<uint64_t> data_needed;
       calc_clone_subsets(ssc->snapset, soid, missing, data_needed, clone_subsets);
+      pi->data_subset = data_needed;
       put_snapset_context(ssc);
 
       interval_set<uint64_t> overlap;
@@ -3984,6 +3985,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	  off += p.get_len();
 	}
 	data.claim(result);
+	data_subset.intersection_of(data_needed);
 	dout(20) << " new data len is " << data.length() << dendl;
       }
 
