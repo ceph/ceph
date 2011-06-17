@@ -369,8 +369,8 @@ static void generic_usage(bool is_server)
 {
   cout << "\
 --conf/-c        Read configuration from the given configuration file\n\
--D               Run in the foreground.\n\
--f               Run in foreground. Show all log messages on stderr.\n\
+-d               Run in foreground, log to stderr.\n\
+-f               Run in foreground, log to usual location.\n\
 --id             set ID\n\
 --name           set ID.TYPE\n\
 --version        show version and quit\n\
