@@ -1266,6 +1266,7 @@ void CDir::log_mark_dirty()
 {
   MDLog *mdlog = inode->mdcache->mds->mdlog;
   version_t pv = pre_dirty();
+  mdlog->flush();
   mdlog->wait_for_safe(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
 }
 
