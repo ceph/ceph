@@ -199,7 +199,7 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
   std::string err;
   int ret = bl.read_file(filename.c_str(), &err);
   if (ret < 0) {
-    derr << "error reading file: " << filename << ": " << err << dendl;
+    lderr(cct) << "error reading file: " << filename << ": " << err << dendl;
     return ret;
   }
 
@@ -208,7 +208,7 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
     decode(iter);
   }
   catch (const buffer::error& err) {
-    derr << "error parsing file " << filename << dendl;
+    lderr(cct) << "error parsing file " << filename << dendl;
   }
 
   ldout(cct, 2) << "KeyRing::load: loaded key file " << filename << dendl;
