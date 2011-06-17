@@ -365,7 +365,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   if (!upload_id_marker.empty())
     s->formatter->dump_value_str("UploadIdMarker", upload_id_marker.c_str());
   string next_key = next_marker.mp.get_key();
-  if (!next_key.empty());
+  if (!next_key.empty())
     s->formatter->dump_value_str("NextKeyMarker", next_key.c_str());
   string next_upload_id = next_marker.mp.get_upload_id();
   if (!next_upload_id.empty())
