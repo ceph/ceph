@@ -840,7 +840,7 @@ void Locker::eval(SimpleLock *lock, bool *need_issue)
 // ------------------
 // rdlock
 
-bool Locker::_rdlock_kick(SimpleLock *lock)
+bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
 {
   // kick the lock
   if (lock->is_stable()) {
@@ -854,7 +854,8 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
       } else if (lock->get_sm() == &sm_filelock) {
 	CInode *in = (CInode*)lock->get_parent();
 	if (lock->get_state() == LOCK_EXCL &&
-	    in->get_target_loner() >= 0)
+	    in->get_target_loner() >= 0 &&
+	    !as_anon)   // as_anon => caller wants SYNC, not XSYN
 	  file_xsyn(lock);
 	else
 	  simple_sync(lock);
@@ -881,7 +882,7 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
   if (lock->can_rdlock(client)) 
     return true;
   
-  _rdlock_kick(lock);
+  _rdlock_kick(lock, false);
 
   if (lock->can_rdlock(client)) 
     return true;
@@ -904,6 +905,10 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
     as_anon = true;
   client_t client = as_anon ? -1 : mut->get_client();
 
+  CInode *in = 0;
+  if (lock->get_type() != CEPH_LOCK_DN)
+    in = (CInode *)lock->get_parent();
+
   /*
   if (!lock->get_parent()->is_auth() &&
       lock->fw_rdlock_to_auth()) {
@@ -921,26 +926,22 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
       return true;
     }
 
-    if (!_rdlock_kick(lock))
+    if (!_rdlock_kick(lock, as_anon))
       break;
-  }
 
-  // hmm, wait a second.
-  CInode *in = 0;
-  if (lock->get_type() != CEPH_LOCK_DN)
-    in = (CInode *)lock->get_parent();
-  
-  if (in && !in->is_head() && in->is_auth() &&
-      lock->get_state() == LOCK_SNAP_SYNC) {
-    // okay, we actually need to kick the head's lock to get ourselves synced up.
-    CInode *head = mdcache->get_inode(in->ino());
-    assert(head);
-    SimpleLock *hlock = head->get_lock(lock->get_type());
-    if (hlock->get_state() != LOCK_SYNC) {
-      dout(10) << "rdlock_start trying head inode " << *head << dendl;
-      rdlock_start(head->get_lock(lock->get_type()), mut, true); // ** as_anon, no rdlock on EXCL **
-      hlock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
-      return false;
+    // hmm, wait a second.
+    if (in && !in->is_head() && in->is_auth() &&
+	lock->get_state() == LOCK_SNAP_SYNC) {
+      // okay, we actually need to kick the head's lock to get ourselves synced up.
+      CInode *head = mdcache->get_inode(in->ino());
+      assert(head);
+      SimpleLock *hlock = head->get_lock(lock->get_type());
+      if (hlock->get_state() != LOCK_SYNC) {
+	dout(10) << "rdlock_start trying head inode " << *head << dendl;
+	if (!rdlock_start(head->get_lock(lock->get_type()), mut, true)) // ** as_anon, no rdlock on EXCL **
+	  return false;
+	// oh, check our lock again then
+      }
     }
   }
 

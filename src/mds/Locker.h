@@ -120,7 +120,7 @@ public:
   bool eval(CInode *in, int mask);
   void try_eval(CInode *in, int mask);
 
-  bool _rdlock_kick(SimpleLock *lock);
+  bool _rdlock_kick(SimpleLock *lock, bool as_anon);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
