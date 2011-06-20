@@ -15,10 +15,10 @@
      -w or --watch
           watch system status changes in real time (push)
   --conf/-c        Read configuration from the given configuration file
-  -D               Run in the foreground.
-  -f               Run in foreground. Show all log messages on stderr.
-  --id             set ID
-  --name           set ID.TYPE
+  -d               Run in foreground, log to stderr.
+  -f               Run in foreground, log to usual location.
+  --id/-i          set ID portion of my name
+  --name/-n        set name (TYPE.ID)
   --version        show version and quit
   
   [1]
