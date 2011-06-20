@@ -97,6 +97,7 @@ void global_init(std::vector < const char* >& args,
 	 << ") ***" << TEXT_NORMAL << std::endl;
     lockdep_register_ceph_context(cct);
   }
+  register_assert_context(cct);
 }
 
 static void pidfile_remove_void(void)

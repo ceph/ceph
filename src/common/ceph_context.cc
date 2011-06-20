@@ -144,9 +144,17 @@ dout_lock(DoutLocker *locker)
 void CephContext::
 dout_trylock(DoutLocker *locker)
 {
+  static const int MAX_DOUT_TRYLOCK_TRIES = 3;
+
+  /* Try a few times to get the lock. If we can't seem to get it, just give up. */
   pthread_mutex_t *lock = &_doss->lock;
-  if (pthread_mutex_trylock(lock) == 0)
-    locker->lock = lock;
+  for (int i = 0; i < MAX_DOUT_TRYLOCK_TRIES; ++i) {
+    if (pthread_mutex_trylock(lock) == 0) {
+      locker->lock = lock;
+      return;
+    }
+    usleep(50000);
+  }
 }
 
 void CephContext::

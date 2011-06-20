@@ -12,22 +12,42 @@
  *
  */
 
+#include "BackTrace.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
+#include "common/debug.h"
+#include "include/assert.h"
+
 #include <errno.h>
 #include <iostream>
 #include <pthread.h>
 #include <sstream>
 #include <time.h>
 
-#include "BackTrace.h"
-#include "common/debug.h"
-#include "common/config.h"
-#include "include/assert.h"
-
 namespace ceph {
+  static CephContext *g_assert_context = NULL;
+
+  /* If you register an assert context, assert() will try to lock the dout
+   * stream of that context before starting an assert. This is nice because the
+   * output looks better. Your assert will not be interleaved with other dout
+   * statements.
+   *
+   * However, this is strictly optional and library code currently does not
+   * register an assert context. The extra complexity of supporting this
+   * wouldn't really be worth it.
+   */
+  void register_assert_context(CephContext *cct)
+  {
+    assert(!g_assert_context);
+    g_assert_context = cct;
+  }
+
   void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
   {
     DoutLocker dout_locker;
-    g_ceph_context.dout_trylock(&dout_locker);
+    if (g_assert_context) {
+      g_assert_context->dout_trylock(&dout_locker);
+    }
 
     char buf[8096];
     BackTrace *bt = new BackTrace(1);
@@ -54,7 +74,9 @@ namespace ceph {
 			  int line, const char *func)
   {
     DoutLocker dout_locker;
-    g_ceph_context.dout_trylock(&dout_locker);
+    if (g_assert_context) {
+      g_assert_context->dout_trylock(&dout_locker);
+    }
 
     char buf[8096];
     snprintf(buf, sizeof(buf),

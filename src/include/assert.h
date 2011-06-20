@@ -17,8 +17,9 @@
 #include "atomic_ops.h"
 #endif
 
-#ifdef __cplusplus
+struct CephContext;
 
+#ifdef __cplusplus
 namespace ceph {
 
 class BackTrace;
@@ -52,6 +53,7 @@ struct FailedAssertion {
 #  endif
 # endif
 
+extern void register_assert_context(CephContext *cct);
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
