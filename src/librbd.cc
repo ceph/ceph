@@ -1167,6 +1167,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
         return r;
       bl_ofs += extent_len;
       buf_bl_pos += extent_len;
+      block_ofs += extent_len;
     }
 
     /* last hole */
