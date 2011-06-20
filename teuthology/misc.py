@@ -283,3 +283,12 @@ def write_secret_file(remote, role, filename):
             filename,
             ],
         )
+
+def get_clients(ctx, roles):
+    for role in roles:
+        assert isinstance(role, basestring)
+        PREFIX = 'client.'
+        assert role.startswith(PREFIX)
+        id_ = role[len(PREFIX):]
+        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        yield (id_, remote)

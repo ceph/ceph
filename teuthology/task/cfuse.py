@@ -7,16 +7,6 @@ from orchestra import run
 
 log = logging.getLogger(__name__)
 
-def get_clients(ctx, roles):
-    for role in roles:
-        assert isinstance(role, basestring)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        yield (id_, remote)
-
-
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -50,7 +40,7 @@ def task(ctx, config):
     if config is None:
         config = ['client.{id}'.format(id=id_)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-    clients = list(get_clients(ctx=ctx, roles=config))
+    clients = list(teuthology.get_clients(ctx=ctx, roles=config))
 
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
