@@ -56,6 +56,8 @@ public:
                       map<std::string, bufferlist>& attrs, bool exclusive) = 0;
   virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
+  virtual int aio_put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+                      off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
 
   int put_obj(std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
@@ -65,6 +67,7 @@ public:
     }
     return ret;
   }
+  virtual int aio_wait(void *handle) { return -ENOTSUP; }
 
   /**
    * Copy an object.

@@ -503,12 +503,17 @@ void RGWPutObj::execute()
     do {
       get_data();
       if (len > 0) {
-        hash.Update((unsigned char *)data, len);
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
-        ret = rgwstore->put_obj_data(s->user.user_id, obj,
+        void *handle;
+        ret = rgwstore->aio_put_obj_data(s->user.user_id, obj,
 				     data,
-				     ((ofs == 0) ? -1 : ofs), len);
+				     ((ofs == 0) ? -1 : ofs), len, &handle);
+        if (ret < 0)
+          goto done;
+
+        hash.Update((unsigned char *)data, len);
+        ret = rgwstore->aio_wait(handle);
         free(data);
         if (ret < 0)
           goto done;

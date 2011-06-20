@@ -346,6 +346,17 @@ int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj,
 int RGWRados::put_obj_data(std::string& id, rgw_obj& obj,
 			   const char *data, off_t ofs, size_t len)
 {
+  void *handle;
+  int r = aio_put_obj_data(id, obj, data, ofs, len, &handle);
+  if (r < 0)
+    return r;
+  return aio_wait(handle);
+}
+
+int RGWRados::aio_put_obj_data(std::string& id, rgw_obj& obj,
+			       const char *data, off_t ofs, size_t len,
+                               void **handle)
+{
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
   librados::IoCtx io_ctx;
@@ -358,20 +369,34 @@ int RGWRados::put_obj_data(std::string& id, rgw_obj& obj,
 
   bufferlist bl;
   bl.append(data, len);
+
+  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  
+
   if (ofs == -1) {
     // write_full wants to write the complete bufferlist, not part of it
     assert(bl.length() == len);
 
-    r = io_ctx.write_full(oid, bl);
+    r = io_ctx.aio_write_full(oid, c, bl);
   }
   else {
-    r = io_ctx.write(oid, bl, len, ofs);
+    r = io_ctx.aio_write(oid, c, bl, len, ofs);
   }
   if (r < 0)
     return r;
 
   return 0;
 }
+
+int RGWRados::aio_wait(void *handle)
+{
+  AioCompletion *c = (AioCompletion *)handle;
+  c->wait_for_complete();
+  int ret = c->get_return_value();
+  c->release();
+  return ret;
+}
+
 /**
  * Copy an object.
  * id: unused (well, it's passed to put_obj)
