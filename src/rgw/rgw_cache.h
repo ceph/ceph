@@ -37,7 +37,7 @@ public:
   RGWCache() {}
 
   int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
-              off_t ofs, size_t len, time_t *mtime);
+              off_t ofs, size_t len);
 
   int get_obj(void **handle, std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end);
@@ -74,7 +74,7 @@ int RGWCache<T>::get_obj(void **handle, std::string& bucket, std::string& oid,
 
 template <class T>
 int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
-              off_t ofs, size_t len, time_t *mtime)
+              off_t ofs, size_t len)
 {
   string name = normal_name(data_space, bucket, obj);
   if ((bucket[0] == '.') && ((ofs == 0) || (ofs == -1))) {
@@ -84,7 +84,7 @@ int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string&
     bl.append(p);
     cache.put(name, bl);
   }
-  return T::put_obj_data(id, bucket, obj, data, ofs, len, mtime);
+  return T::put_obj_data(id, bucket, obj, data, ofs, len);
 }
 
 template <class T>

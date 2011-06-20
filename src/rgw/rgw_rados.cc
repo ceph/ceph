@@ -340,12 +340,11 @@ int RGWRados::put_obj_meta(std::string& id, rgw_obj& obj,
  * offset: the offet to write to in the object
  *         If this is -1, we will overwrite the whole object.
  * size: the amount of data to write (data must be this long)
- * mtime: if non-NULL, writes the given mtime to the bucket storage
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_data(std::string& id, rgw_obj& obj,
-			   const char *data, off_t ofs, size_t len, time_t *mtime)
+			   const char *data, off_t ofs, size_t len)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -370,12 +369,6 @@ int RGWRados::put_obj_data(std::string& id, rgw_obj& obj,
   }
   if (r < 0)
     return r;
-
-  if (mtime) {
-    r = io_ctx.stat(oid, NULL, mtime);
-    if (r < 0)
-      return r;
-  }
 
   return 0;
 }
@@ -428,8 +421,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(id, dest_obj, data,
-		     ((ofs == 0) ? -1 : ofs), ret, NULL);
+    r = put_obj_data(id, dest_obj, data, ((ofs == 0) ? -1 : ofs), ret);
     free(data);
     if (r < 0)
       goto done_err;

@@ -55,13 +55,13 @@ public:
   virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
                       map<std::string, bufferlist>& attrs, bool exclusive) = 0;
   virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
-                      off_t ofs, size_t len, time_t *mtime) = 0;
+                      off_t ofs, size_t len) = 0;
 
   int put_obj(std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_meta(id, obj, NULL, attrs, false);
+    int ret = put_obj_data(id, obj, data, -1, len);
     if (ret >= 0) {
-      ret = put_obj_data(id, obj, data, -1, len, mtime);
+      ret = put_obj_meta(id, obj, mtime, attrs, false);
     }
     return ret;
   }

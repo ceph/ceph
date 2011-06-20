@@ -47,7 +47,7 @@ public:
   virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
               map<std::string, bufferlist>& attrs, bool exclusive);
   virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
-              off_t ofs, size_t len, time_t *mtime);
+              off_t ofs, size_t len);
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs, size_t size);
   /** Copy an object, with many extra options */

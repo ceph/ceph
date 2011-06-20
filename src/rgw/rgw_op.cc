@@ -508,7 +508,7 @@ void RGWPutObj::execute()
 	// do a write_full.
         ret = rgwstore->put_obj_data(s->user.user_id, obj,
 				     data,
-				     ((ofs == 0) ? -1 : ofs), len, NULL);
+				     ((ofs == 0) ? -1 : ofs), len);
         free(data);
         if (ret < 0)
           goto done;

@@ -251,7 +251,7 @@ done_err:
 }
 
 int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
-                  off_t ofs, size_t size, time_t *mtime)
+                  off_t ofs, size_t size)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -278,14 +278,6 @@ int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
   r = write(fd, data, size);
   if (r < 0)
     goto done_err;
-
-  if (mtime) {
-    struct stat st;
-    r = fstat(fd, &st);
-    if (r < 0)
-      goto done_err;
-    *mtime = st.st_mtime;
-  }
 
   r = close(fd);
   if (r < 0)
