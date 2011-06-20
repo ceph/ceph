@@ -1457,7 +1457,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
     backoff.set_from_double(conf->ms_initial_backoff);
   } else {
     ldout(msgr->cct,10) << "fault waiting " << backoff << dendl;
-    cond.WaitInterval(&g_ceph_context, pipe_lock, backoff);
+    cond.WaitInterval(msgr->cct, pipe_lock, backoff);
     backoff += backoff;
     if (backoff > conf->ms_max_backoff)
       backoff.set_from_double(conf->ms_max_backoff);

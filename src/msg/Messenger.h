@@ -28,6 +28,7 @@ using namespace std;
 #include "include/types.h"
 
 #include <errno.h>
+#include <sstream>
 
 class MDS;
 class Timer;
@@ -99,9 +100,10 @@ protected:
 	 p++)
       if ((*p)->ms_dispatch(m))
 	return;
-    generic_dout(0) << "unhandled message " << m << " " << *m
-		    << " from " << m->get_source_inst()
-		    << dendl;
+    std::ostringstream oss;
+    oss << "ms_deliver_dispatch: fatal error: unhandled message "
+	<< m << " " << *m << " from " << m->get_source_inst();
+    dout_emergency(oss.str());
     assert(0);
   }
   void ms_deliver_handle_connect(Connection *con) {
