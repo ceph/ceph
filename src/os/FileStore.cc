@@ -2660,6 +2660,7 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
         extent->fe_length = offset + len - extent->fe_logical;
       extmap[extent->fe_logical] = extent->fe_length;
       i++;
+      extent++;
     }
   }
 
