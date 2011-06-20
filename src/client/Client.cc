@@ -5316,13 +5316,17 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   client_lock.Lock();
 
   memset(stbuf, 0, sizeof(*stbuf));
-  //divide the results by 4 to give them as Posix expects
-  stbuf->f_blocks = stats.kb/4;
-  stbuf->f_bfree = stats.kb_avail/4;
-  stbuf->f_bavail = stats.kb_avail/4;
+
+  /* we're going to set a block size of 1MB so we can represent larger
+   * FSes without overflowing. Additionally convert the space measurements
+   * from KB to bytes while making them in terms of blocks.
+   */
+  const int CEPH_BLOCK_SHIFT = 20;
+  stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
+  stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+  stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_files = stats.num_objects;
-  //fill in rest to make Posix happy
-  stbuf->f_bsize = PAGE_SIZE;
   stbuf->f_frsize = PAGE_SIZE;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
