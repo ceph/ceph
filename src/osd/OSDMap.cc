@@ -176,15 +176,15 @@ void OSDMap::print_summary(ostream& out) const
 }
 
 
-void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
+void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
 			  int nosd, int ndom, int pg_bits, int pgp_bits, int lpg_bits)
 {
-  dout(10) << "build_simple on " << num_osd
+  ldout(cct, 10) << "build_simple on " << num_osd
 	   << " osds with " << pg_bits << " pg bits per osd, "
 	   << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
-  created = modified = ceph_clock_now(&g_ceph_context);
+  created = modified = ceph_clock_now(cct);
 
   set_max_osd(nosd);
 
@@ -201,7 +201,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int pool = ++pool_max;
     pools[pool].v.type = CEPH_PG_TYPE_REP;
-    pools[pool].v.size = g_conf->osd_pool_default_size;
+    pools[pool].v.size = cct->_conf->osd_pool_default_size;
     pools[pool].v.crush_ruleset = p->first;
     pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].v.pg_num = nosd << pg_bits;
@@ -212,7 +212,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
     pool_name[pool] = p->second;
   }
 
-  build_simple_crush_map(crush, rulesets, nosd, ndom);
+  build_simple_crush_map(cct, crush, rulesets, nosd, ndom);
 
   for (int i=0; i<nosd; i++) {
     set_state(i, 0);
@@ -220,8 +220,8 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   }
 }
 
-void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& rulesets, int nosd,
-				    int ndom)
+void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
+	map<int, const char*>& rulesets, int nosd, int ndom)
 {
   // new
   crush.create();
@@ -230,11 +230,12 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
 
-  int minrep = g_conf->osd_min_rep;
-  int maxrep = g_conf->osd_max_rep;
+  const md_config_t *conf = cct->_conf;
+  int minrep = conf->osd_min_rep;
+  int maxrep = conf->osd_max_rep;
   assert(maxrep >= minrep);
   if (!ndom)
-    ndom = MAX(maxrep, g_conf->osd_max_raid_width);
+    ndom = MAX(maxrep, conf->osd_max_raid_width);
   if (ndom > 1 &&
       nosd >= ndom*3 &&
       nosd > 8) {
@@ -242,7 +243,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     int rweights[ndom];
 
     int nper = ((nosd - 1) / ndom) + 1;
-    dout(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
+    ldout(cct, 0) << ndom << " failure domains, " << nper << " osds each" << dendl;
     
     int o = 0;
     for (int i=0; i<ndom; i++) {
@@ -251,7 +252,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
       rweights[i] = 0;
       for (j=0; j<nper; j++, o++) {
 	if (o == nosd) break;
-	dout(20) << "added osd" << o << dendl;
+	ldout(cct, 20) << "added osd" << o << dendl;
 	items[j] = o;
 	weights[j] = 0x10000;
 	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
@@ -261,7 +262,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
 
       crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, j, items, weights);
       ritems[i] = crush_add_bucket(crush.crush, 0, domain);
-      dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
+      ldout(cct, 20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
 
       char bname[10];
       snprintf(bname, sizeof(bname), "dom%d", i);
@@ -301,7 +302,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     // replication
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf->osd_min_rep, maxrep);
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, conf->osd_min_rep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
@@ -313,6 +314,6 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
 
   crush.finalize();
 
-  dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
+  ldout(cct, 20) << "crush max_devices " << crush.crush->max_devices << dendl;
 }
 
