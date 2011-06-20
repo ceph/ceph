@@ -171,16 +171,15 @@ def coredump(ctx, config):
 
         # set success=false if the dir is still there = coredumps were
         # seen
-        processes = ctx.cluster.run(
-            args=[
-                'if', 'test', '!', '-e', '/tmp/cephtest/archive/coredump', run.Raw(';'), 'then',
-                'echo', 'OK', run.Raw(';'),
-                'fi',
-                ],
-            wait=False,
-            stdout=StringIO(),
-            )
-        run.wait(processes)
-        if any(r.stdout.getvalue() != 'OK' for r in processes):
-            log.warning('Found coredumps, flagging run as failed.')
-            ctx.summary['success'] = False
+        for remote in ctx.cluster.remotes.iterkeys():
+            r = remote.run(
+                args=[
+                    'if', 'test', '!', '-e', '/tmp/cephtest/archive/coredump', run.Raw(';'), 'then',
+                    'echo', 'OK', run.Raw(';'),
+                    'fi',
+                    ],
+                stdout=StringIO(),
+                )
+            if r.stdout.getvalue() != 'OK\n':
+                log.warning('Found coredumps on %s, flagging run as failed', remote)
+                ctx.summary['success'] = False
