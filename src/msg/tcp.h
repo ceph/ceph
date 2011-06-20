@@ -12,6 +12,8 @@
 
 using std::ostream;
 
+class CephContext;
+
 inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
   char buf[NI_MAXHOST] = { 0 };
@@ -25,10 +27,10 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 	     << buf << ':' << serv;
 }
 
-extern int tcp_read(int sd, char *buf, int len, int timeout=-1);
+extern int tcp_read(CephContext *cct, int sd, char *buf, int len, int timeout=-1);
 extern int tcp_read_wait(int sd, int timeout);
-extern int tcp_read_nonblocking(int sd, char *buf, int len);
-extern int tcp_write(int sd, const char *buf, int len);
+extern int tcp_read_nonblocking(CephContext *cct, int sd, char *buf, int len);
+extern int tcp_write(CephContext *cct, int sd, const char *buf, int len);
 
 inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;
