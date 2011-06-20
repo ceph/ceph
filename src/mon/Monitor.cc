@@ -141,13 +141,13 @@ Monitor::~Monitor()
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
   //clean out MonSessionMap's subscriptions
-  for (map<string, xlist<Subscription*> >::iterator i
+  for (map<string, xlist<Subscription*>* >::iterator i
 	 = session_map.subs.begin();
        i != session_map.subs.end();
        ++i) {
-    while (!i->second.empty()) {
-      session_map.remove_sub(i->second.front());
-    }
+    while (!i->second->empty())
+      session_map.remove_sub(i->second->front());
+    delete i->second;
   }
   //clean out MonSessionMap's sessions
   while (!session_map.sessions.empty()) {
@@ -977,7 +977,9 @@ bool Monitor::ms_handle_reset(Connection *con)
 void Monitor::check_subs()
 {
   string type = "monmap";
-  xlist<Subscription*>::iterator p = session_map.subs[type].begin();
+  if (session_map.subs.count(type) == 0)
+    return;
+  xlist<Subscription*>::iterator p = session_map.subs[type]->begin();
   while (!p.end()) {
     Subscription *sub = *p;
     ++p;

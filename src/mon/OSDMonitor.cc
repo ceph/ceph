@@ -952,7 +952,9 @@ epoch_t OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 void OSDMonitor::check_subs()
 {
   string type = "osdmap";
-  xlist<Subscription*>::iterator p = mon->session_map.subs[type].begin();
+  if (mon->session_map.subs.count(type) == 0)
+    return;
+  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
   while (!p.end()) {
     Subscription *sub = *p;
     ++p;

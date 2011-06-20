@@ -73,7 +73,7 @@ struct MonSession : public RefCountedObject {
 
 struct MonSessionMap {
   xlist<MonSession*> sessions;
-  map<string, xlist<Subscription*> > subs;
+  map<string, xlist<Subscription*>* > subs;
   multimap<int, MonSession*> by_osd;
 
   void remove_session(MonSession *s) {
@@ -126,7 +126,10 @@ struct MonSessionMap {
     } else {
       sub = new Subscription(s, what);
       s->sub_map[what] = sub;
-      subs[what].push_back(&sub->type_item);
+      
+      if (!subs.count(what))
+	subs[what] = new xlist<Subscription*>;
+      subs[what]->push_back(&sub->type_item);
     }
     sub->next = start;
     sub->onetime = onetime;
