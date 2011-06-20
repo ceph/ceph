@@ -54,9 +54,6 @@ public:
     secret = k->second.key;
     return true;
   }
-  void get_master(CryptoKey& dest) const {
-    get_secret(g_conf->name, dest);
-  }
 
   // modifiers
   void add(const EntityName& name, EntityAuth &a) {
