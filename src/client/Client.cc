@@ -155,7 +155,7 @@ Client::Client(Messenger *m, MonClient *mc)
 
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
-  mdsmap = new MDSMap;
+  mdsmap = new MDSMap(m->cct);
   objecter = new Objecter(messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock, 
@@ -1504,7 +1504,7 @@ void Client::handle_mds_map(MMDSMap* m)
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
   MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap;
+  mdsmap = new MDSMap(&g_ceph_context);
   mdsmap->decode(m->get_encoded());
 
   // reset session

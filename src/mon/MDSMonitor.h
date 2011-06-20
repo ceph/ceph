@@ -103,7 +103,12 @@ class MDSMonitor : public PaxosService {
   bool try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo);
 
 public:
-  MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  MDSMonitor(Monitor *mn, Paxos *p)
+    : PaxosService(mn, p),
+      mdsmap(&g_ceph_context),
+      pending_mdsmap(&g_ceph_context)
+  {
+  }
 
   void tick();     // check state, take actions
   void do_stop();

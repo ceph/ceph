@@ -181,7 +181,6 @@ get_health(std::ostream &ss) const
 	ret = HEALTH_WARN;
     }
   }
-  dout(0) << "get_health: " << oss.str() << " (ret = " << ret << ")" << dendl;
   ss << oss.str();
   return ret;
 }

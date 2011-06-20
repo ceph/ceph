@@ -500,7 +500,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  p = 0;
 	  r = -ENOENT;
 	} else {
-	  p = new MDSMap;
+	  p = new MDSMap(&g_ceph_context);
 	  p->decode(b);
 	}
       }
@@ -522,7 +522,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {
-	  MDSMap m;
+	  MDSMap m(&g_ceph_context);
 	  m.decode(b);
 	  m.encode(rdata);
 	  ss << "got mdsmap epoch " << m.get_epoch();
@@ -715,7 +715,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
     else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
-      MDSMap map;
+      MDSMap map(&g_ceph_context);
       map.decode(m->get_data());
       epoch_t e = atoi(m->cmd[2].c_str());
       //if (ceph_fsid_compare(&map.get_fsid(), &mon->monmap->fsid) == 0) {
@@ -812,7 +812,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	}
       }
     } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
-      MDSMap newmap;
+      MDSMap newmap(&g_ceph_context);
       int metadata = atoi(m->cmd[2].c_str());
       int data = atoi(m->cmd[3].c_str());
       pending_mdsmap = newmap;
