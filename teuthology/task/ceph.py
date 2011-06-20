@@ -108,6 +108,7 @@ def binaries(ctx, config):
         sha1=config.get('sha1'),
         flavor=config.get('flavor'),
         )
+    ctx.summary['flavor'] = config.get('flavor', 'default')
     if ctx.archive is not None:
         with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
             f.write(sha1 + '\n')
