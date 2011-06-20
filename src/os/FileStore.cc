@@ -2530,6 +2530,14 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0);
     }
 
+    if (r == -ENOENT && 
+	(op == Transaction::OP_CLONERANGE ||
+	 op == Transaction::OP_CLONE ||
+	 op == Transaction::OP_CLONERANGE2)) {
+      // Halt before we incorrectly mark the pg clean
+      assert(0 == "ENOENT on clone suggests osd bug");
+    }
+      
     if (r == -ENOTEMPTY) {
       assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
     }
