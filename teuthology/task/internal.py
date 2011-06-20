@@ -5,6 +5,7 @@ import logging
 import os
 import tarfile
 
+from teuthology import misc as teuthology
 from teuthology import safepath
 from orchestra import run
 
@@ -183,3 +184,95 @@ def coredump(ctx, config):
             if r.stdout.getvalue() != 'OK\n':
                 log.warning('Found coredumps on %s, flagging run as failed', remote)
                 ctx.summary['success'] = False
+
+@contextlib.contextmanager
+def syslog(ctx, config):
+    if ctx.archive is None:
+        # disable this whole feature if we're not going to archive the data anyway
+        yield
+        return
+
+    log.info('Starting syslog monitoring...')
+
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'mkdir', '-m0755', '--',
+                '/tmp/cephtest/archive/syslog',
+                ],
+            wait=False,
+            )
+        )
+
+    CONF = '/etc/rsyslog.d/80-cephtest.conf'
+    conf_fp = StringIO("""
+kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
+*.*;kern.none -/tmp/cephtest/archive/syslog/misc.log;RSYSLOG_FileFormat
+""")
+    try:
+        for rem in ctx.cluster.remotes.iterkeys():
+            teuthology.sudo_write_file(
+                remote=rem,
+                path=CONF,
+                data=conf_fp,
+                )
+            conf_fp.seek(0)
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'sudo',
+                    'initctl',
+                    # a mere reload (SIGHUP) doesn't seem to make
+                    # rsyslog open the files
+                    'restart',
+                    'rsyslog',
+                    ],
+                wait=False,
+                ),
+            )
+
+        yield
+    finally:
+        log.info('Shutting down syslog monitoring...')
+
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'sudo',
+                    'rm',
+                    '-f',
+                    '--',
+                    CONF,
+                    run.Raw('&&'),
+                    'sudo',
+                    'initctl',
+                    'restart',
+                    'rsyslog',
+                    ],
+                wait=False,
+                ),
+            )
+        # race condition: nothing actually says rsyslog had time to
+        # flush the file fully. oh well.
+
+        log.info('Compressing syslogs...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'find',
+                    '/tmp/cephtest/archive/syslog',
+                    '-name',
+                    '*.log',
+                    '-print0',
+                    run.Raw('|'),
+                    'xargs',
+                    '-0',
+                    '--no-run-if-empty',
+                    '--',
+                    'bzip2',
+                    '-9',
+                    '--',
+                    ],
+                wait=False,
+                ),
+            )

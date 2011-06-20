@@ -197,6 +197,18 @@ def write_file(remote, path, data):
         stdin=data,
         )
 
+def sudo_write_file(remote, path, data):
+    remote.run(
+        args=[
+            'sudo',
+            'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            path,
+            ],
+        stdin=data,
+        )
+
 def get_file(remote, path):
     """
     Read a file from remote host into memory.

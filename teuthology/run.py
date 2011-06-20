@@ -97,6 +97,7 @@ def main():
         {'internal.base': None},
         {'internal.archive': None},
         {'internal.coredump': None},
+        {'internal.syslog': None},
         ]
 
     from teuthology.run_tasks import run_tasks
