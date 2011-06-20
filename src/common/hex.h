@@ -20,6 +20,6 @@
 
 extern void hex2str(const char *s, int len, char *buf, int dest_len);
 
-extern void hexdump(std::string msg, const char *s, int len);
+extern std::string hexdump(std::string msg, const char *s, int len);
 
 #endif
