@@ -521,9 +521,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     lump._decode_bits();
 
     // full dentry+inode pairs
-    for (list<fullbit>::iterator p = lump.get_dfull().begin();
-	 p != lump.get_dfull().end();
-	 p++) {
+    for (list<std::tr1::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
+	 pp != lump.get_dfull().end();
+	 pp++) {
+      std::tr1::shared_ptr<fullbit> p = *pp;
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
