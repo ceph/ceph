@@ -143,7 +143,8 @@ void install_standard_sighandlers(void)
   install_sighandler(SIGINT, handle_shutdown_signal, SA_RESETHAND | SA_NODEFER);
 }
 
-void block_signals(sigset_t *old_sigset, int *siglist)
+/* Block the signals in 'siglist'. If siglist == NULL, block all signals. */
+void block_signals(const int *siglist, sigset_t *old_sigset)
 {
   sigset_t sigset;
   if (!siglist) {
@@ -157,26 +158,14 @@ void block_signals(sigset_t *old_sigset, int *siglist)
       ++i;
     }
   }
-  sigdelset(&sigset, SIGKILL);
-  if (pthread_sigmask(SIG_BLOCK, &sigset, old_sigset)) {
-    derr << "block_all_signals: sigprocmask failed" << dendl;
-    if (old_sigset)
-      sigaddset(old_sigset, SIGKILL);
-    return;
-  }
-  if (old_sigset)
-    sigdelset(old_sigset, SIGKILL);
+  int ret = pthread_sigmask(SIG_BLOCK, &sigset, old_sigset);
+  assert(ret == 0);
 }
 
 void restore_sigset(const sigset_t *old_sigset)
 {
-  if (sigismember(old_sigset, SIGKILL) != 0) {
-    derr << "restore_sigset: not restoring invalid old_sigset" << dendl;
-    return;
-  }
-  if (pthread_sigmask(SIG_SETMASK, old_sigset, NULL)) {
-    derr << "restore_sigset: sigprocmask failed" << dendl;
-  }
+  int ret = pthread_sigmask(SIG_SETMASK, old_sigset, NULL);
+  assert(ret == 0);
 }
 
 void unblock_all_signals(sigset_t *old_sigset)
@@ -184,12 +173,6 @@ void unblock_all_signals(sigset_t *old_sigset)
   sigset_t sigset;
   sigfillset(&sigset);
   sigdelset(&sigset, SIGKILL);
-  if (pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset)) {
-    derr << "unblock_all_signals: sigprocmask failed" << dendl;
-    if (old_sigset)
-      sigaddset(old_sigset, SIGKILL);
-    return;
-  }
-  if (old_sigset)
-    sigdelset(old_sigset, SIGKILL);
+  int ret = pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset);
+  assert(ret == 0);
 }

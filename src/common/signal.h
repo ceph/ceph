@@ -38,7 +38,7 @@ std::string signal_mask_to_str();
 // On success, stores the old set of blocked signals in
 // old_sigset. On failure, stores an invalid set of blocked signals in
 // old_sigset.
-void block_signals(sigset_t *old_sigset, int *siglist);
+void block_signals(const int *siglist, sigset_t *old_sigset);
 
 // Restore the set of blocked signals. Will not restore an invalid set of
 // blocked signals.

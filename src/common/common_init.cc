@@ -130,7 +130,7 @@ void common_init(std::vector < const char* >& args,
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
-  block_signals(NULL, siglist);
+  block_signals(siglist, NULL);
   install_standard_sighandlers();
 
   if (code_env == CODE_ENVIRONMENT_DAEMON) {

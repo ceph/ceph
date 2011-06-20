@@ -70,11 +70,11 @@ class Thread {
     // another thread or delieverd to this thread later.)
     sigset_t old_sigset;
     if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
-      block_signals(&old_sigset, NULL);
+      block_signals(NULL, &old_sigset);
     }
     else {
       int to_block[] = { SIGPIPE , 0 };
-      block_signals(&old_sigset, to_block);
+      block_signals(to_block, &old_sigset);
     }
     r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
     restore_sigset(&old_sigset);
