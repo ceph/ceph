@@ -232,7 +232,7 @@ private:
   MDS *mds;
   hash_map<entity_name_t, Session*> session_map;
 public:
-  map<int,xlist<Session*> > by_state;
+  map<int,xlist<Session*>* > by_state;
   
 public:  // i am lazy
   version_t version, projected, committing, committed;
@@ -245,13 +245,22 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+
+  bool is_any_state(int state) {
+    map<int,xlist<Session*>* >::iterator p = by_state.find(state);
+    if (p == by_state.end())
+      return false;
+    return true;
+  }
+
   bool have_unclosed_sessions() {
     return
-      !by_state[Session::STATE_OPENING].empty() ||
-      !by_state[Session::STATE_OPEN].empty() ||
-      !by_state[Session::STATE_CLOSING].empty() ||
-      !by_state[Session::STATE_STALE].empty() ||
-      !by_state[Session::STATE_KILLING].empty();
+      is_any_state(Session::STATE_OPENING) ||
+      is_any_state(Session::STATE_OPENING) ||
+      is_any_state(Session::STATE_OPEN) ||
+      is_any_state(Session::STATE_CLOSING) ||
+      is_any_state(Session::STATE_STALE) ||
+      is_any_state(Session::STATE_KILLING);
   }
   bool have_session(entity_name_t w) {
     return session_map.count(w);
@@ -274,7 +283,9 @@ public:
   void add_session(Session *s) {
     assert(session_map.count(s->inst.name) == 0);
     session_map[s->inst.name] = s;
-    by_state[s->state].push_back(&s->item_session_list);
+    if (by_state.count(s->state) == 0)
+      by_state[s->state] = new xlist<Session*>;
+    by_state[s->state]->push_back(&s->item_session_list);
     s->get();
   }
   void remove_session(Session *s) {
@@ -285,21 +296,26 @@ public:
   }
   void touch_session(Session *session) {
     if (session->item_session_list.is_on_list()) {
-      by_state[session->state].push_back(&session->item_session_list);
+      if (by_state.count(session->state) == 0)
+	by_state[session->state] = new xlist<Session*>;
+      by_state[session->state]->push_back(&session->item_session_list);
       session->last_cap_renew = ceph_clock_now(g_ceph_context);
     } else {
       assert(0);  // hrm, should happen?
     }
   }
   Session *get_oldest_session(int state) {
-    if (by_state[state].empty()) return 0;
-    return by_state[state].front();
+    if (by_state.count(state) == 0 || by_state[state]->empty())
+      return 0;
+    return by_state[state]->front();
   }
   uint64_t set_state(Session *session, int s) {
     if (session->state != s) {
       session->state = s;
       session->state_seq++;
-      by_state[s].push_back(&session->item_session_list);
+      if (by_state.count(s) == 0)
+	by_state[s] = new xlist<Session*>;
+      by_state[s]->push_back(&session->item_session_list);
     }
     return session->state_seq;
   }
