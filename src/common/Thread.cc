@@ -59,8 +59,6 @@ get_num_threads(void)
   DIR *dir = opendir(oss.str().c_str());
   if (!dir) {
     int err = errno;
-    generic_dout(-1) << "is_multithreaded: failed to open '"
-	<< oss.str() << "'" << dendl;
     return -err;
   }
   int num_entries = 0;
@@ -76,8 +74,6 @@ get_num_threads(void)
   ::closedir(dir);
   if (num_entries == 0) {
     // Shouldn't happen.
-    generic_dout(-1) << "is_multithreaded: no entries found in '"
-	<< oss.str() << "'" << dendl;
     return -EINVAL;
   }
   return num_entries;
