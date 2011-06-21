@@ -21,6 +21,8 @@
 
 using namespace ceph;
 
+#include <tr1/memory>
+
 // --------------------------------------
 // base types
 
@@ -292,6 +294,41 @@ inline void decode(std::list<T>& ls, bufferlist::iterator& p)
   while (n--) {
     T v;
     decode(v, p);
+    ls.push_back(v);
+  }
+}
+
+template<class T>
+inline void encode(const std::list<std::tr1::shared_ptr<T> >& ls, bufferlist& bl)
+{
+  // should i pre- or post- count?
+  if (!ls.empty()) {
+    unsigned pos = bl.length();
+    unsigned n = 0;
+    encode(n, bl);
+    for (typename std::list<std::tr1::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      n++;
+      encode(**p, bl);
+    }
+    __le32 en;
+    en = n;
+    bl.copy_in(pos, sizeof(en), (char*)&en);
+  } else {
+    __u32 n = ls.size();    // FIXME: this is slow on a list.
+    encode(n, bl);
+    for (typename std::list<std::tr1::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+      encode(**p, bl);
+  }
+}
+template<class T>
+inline void decode(std::list<std::tr1::shared_ptr<T> >& ls, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  ls.clear();
+  while (n--) {
+    std::tr1::shared_ptr<T> v(new T);
+    decode(*v, p);
     ls.push_back(v);
   }
 }
