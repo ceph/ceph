@@ -38,6 +38,7 @@
 /testlibrbd
 /testlibrbdpp
 /testsnaps
+/test_libcommon_build
 /test_mutate
 dev
 mondata
