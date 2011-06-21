@@ -34,6 +34,8 @@ grep zxcv .snap/5/a
 stat .snap/5/a | grep 'Size: 5'
 stat .snap/5/a | grep -- '-rw-rw-rw-'
 
+rmdir .snap/[12345]
+
 echo "OK"
 
 
