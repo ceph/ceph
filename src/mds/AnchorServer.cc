@@ -47,7 +47,8 @@ void AnchorServer::dump()
  * basic updates
  */
 
-bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash) 
+bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash,
+                       bool replace)
 {
   //dout(17) << "add " << ino << " dirfrag " << dirfrag << dendl;
   
@@ -60,6 +61,11 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash)
     anchor_map[ino] = Anchor(ino, dirino, dn_hash, 0, version);
     dout(7) << "add added " << anchor_map[ino] << dendl;
     return true;
+  } else if (replace) {
+    anchor_map[ino].dirino = dirino;
+    anchor_map[ino].dn_hash = dn_hash;
+    dout(7) << "add had old Anchor, updated it to "
+            << anchor_map[ino] << dendl;
   } else {
     dout(7) << "add had " << anchor_map[ino] << dendl;
     return false;
@@ -130,7 +136,7 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
     // make sure trace is in table
     dout(25) << "trace.size=" << trace.size() << dendl;
     for (unsigned i=0; i<trace.size(); i++) {
-      add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
+      add(trace[i].ino, trace[i].dirino, trace[i].dn_hash, false);
       dout(25) << trace[i] << dendl;
     }
     inc(ino);
@@ -184,7 +190,7 @@ void AnchorServer::_commit(version_t tid)
       
       // add new
       for (unsigned i=0; i<trace.size(); i++) 
-	add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
+	add(trace[i].ino, trace[i].dirino, trace[i].dn_hash, true);
       inc(ino);
     } else {
       dout(7) << "commit " << tid << " update " << ino << " -- DNE" << dendl;

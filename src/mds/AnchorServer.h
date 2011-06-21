@@ -49,7 +49,7 @@ class AnchorServer : public MDSTableServer {
     ::decode(pending_update, p);
   }
 
-  bool add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash);
+  bool add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash, bool replace);
   void inc(inodeno_t ino);
   void dec(inodeno_t ino);
 
