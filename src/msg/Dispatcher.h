@@ -56,6 +56,9 @@ public:
 				    bool& isvalid) { return false; };
 protected:
   CephContext *cct;
+private:
+  Dispatcher(const Dispatcher &rhs);
+  Dispatcher& operator=(const Dispatcher &rhs);
 };
 
 #endif
