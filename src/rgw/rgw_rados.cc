@@ -398,6 +398,11 @@ int RGWRados::aio_wait(void *handle)
   return ret;
 }
 
+bool RGWRados::aio_completed(void *handle)
+{
+  AioCompletion *c = (AioCompletion *)handle;
+  return c->is_complete();
+}
 /**
  * Copy an object.
  * id: unused (well, it's passed to put_obj)

@@ -51,6 +51,7 @@ public:
   virtual int aio_put_obj_data(std::string& id, rgw_obj& obj, const char *data,
                                off_t ofs, size_t len, void **handle);
   virtual int aio_wait(void *handle);
+  virtual bool aio_completed(void *handle);
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs, size_t size);
   /** Copy an object, with many extra options */
