@@ -3192,7 +3192,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   conf->parse_env(); // environment variables override
 
   conf->apply_changes();
-  complain_about_parse_errors(&parse_errors);
+  complain_about_parse_errors(client->cct, &parse_errors);
   return 0;
 }
 

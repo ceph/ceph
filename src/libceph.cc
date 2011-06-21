@@ -148,7 +148,7 @@ public:
     cct->_conf->parse_env(); // environment variables override
 
     cct->_conf->apply_changes();
-    complain_about_parse_errors(&parse_errors);
+    complain_about_parse_errors(cct, &parse_errors);
     return 0;
   }
 

@@ -211,7 +211,7 @@ int main(int argc, const char **argv)
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
-    complain_about_parse_errors(&parse_errors);
+    complain_about_parse_errors(&g_ceph_context, &parse_errors);
     map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {

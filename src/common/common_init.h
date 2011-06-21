@@ -38,7 +38,8 @@ enum common_init_flags_t {
 
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
-void complain_about_parse_errors(std::deque<std::string> *parse_errors);
+void complain_about_parse_errors(CephContext *cct,
+				 std::deque<std::string> *parse_errors);
 void common_init_finish(CephContext *cct);
 
 #endif

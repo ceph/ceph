@@ -77,7 +77,7 @@ void global_init(std::vector < const char* >& args,
   conf->apply_changes();
 
   // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(&parse_errors);
+  complain_about_parse_errors(cct, &parse_errors);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
