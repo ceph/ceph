@@ -67,12 +67,13 @@ useful for specifying actual machines to run on.
 
     failed = False
     facets = [
-        f for f in os.listdir(args.suite)
+        f for f in sorted(os.listdir(args.suite))
         if not f.startswith('.')
         and os.path.isdir(os.path.join(args.suite, f))
         ]
     facet_configs = (
-        [(f, name, os.path.join(args.suite, f, name)) for name in os.listdir(os.path.join(args.suite, f))
+        [(f, name, os.path.join(args.suite, f, name))
+         for name in sorted(os.listdir(os.path.join(args.suite, f)))
          if not name.startswith('.')
          and name.endswith('.yaml')
          ]
