@@ -934,8 +934,8 @@ class inode_load_vec_t {
   static const int NUM = 2;
   std::vector < DecayCounter > vec;
 public:
-  inode_load_vec_t()
-     : vec(NUM, DecayCounter(ceph_clock_now(&g_ceph_context)))
+  inode_load_vec_t(const utime_t &now)
+     : vec(NUM, DecayCounter(now))
   {
   }
   DecayCounter &get(int t) { 
@@ -968,8 +968,8 @@ class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
   std::vector < DecayCounter > vec;
-  dirfrag_load_vec_t()
-     : vec(NUM, DecayCounter(ceph_clock_now(&g_ceph_context)))
+  dirfrag_load_vec_t(const utime_t &now)
+     : vec(NUM, DecayCounter(now))
   {
   }
   void encode(bufferlist &bl) const {
@@ -1062,8 +1062,10 @@ struct mds_load_t {
 
   double cpu_load_avg;
 
-  mds_load_t() : 
-    req_rate(0), cache_hit_rate(0), queue_len(0), cpu_load_avg(0) { 
+  mds_load_t(const utime_t &t) : 
+    auth(t), all(t), req_rate(0), cache_hit_rate(0),
+    queue_len(0), cpu_load_avg(0)
+  {
   }
   
   double mds_load();  // defiend in MDBalancer.cc

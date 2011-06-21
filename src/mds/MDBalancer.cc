@@ -143,7 +143,7 @@ double mds_load_t::mds_load()
 
 mds_load_t MDBalancer::get_load(utime_t now)
 {
-  mds_load_t load;
+  mds_load_t load(now);
 
   if (mds->mdcache->get_root()) {
     list<CDir*> ls;
@@ -190,7 +190,8 @@ void MDBalancer::send_heartbeat()
 
   // my load
   mds_load_t load = get_load(now);
-  mds_load[ mds->get_nodeid() ] = load;
+  map<int, mds_load_t>::value_type val(mds->get_nodeid(), load);
+  mds_load.insert(val);
 
   // import_map -- how much do i import from whom
   map<int, float> import_map;
@@ -231,6 +232,8 @@ void MDBalancer::send_heartbeat()
 /* This function DOES put the passed message before returning */
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
+  typedef map<int, mds_load_t> mds_load_map_t;
+
   int who = m->get_source().num();
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
@@ -256,7 +259,14 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     show_imports();
   }
 
-  mds_load[ who ] = m->get_load();
+  {
+    // set mds_load[who]
+    mds_load_map_t::value_type val(who, m->get_load());
+    pair < mds_load_map_t::iterator, bool > rval (mds_load.insert(val));
+    if (!rval.second) {
+      rval.first->second = val.second;
+    }
+  }
   mds_import_map[ who ] = m->get_import_map();
 
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
@@ -438,12 +448,13 @@ void MDBalancer::prep_rebalance(int beat)
 
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
-    if (mds_load[whoami].mds_load() > 0) {
-      double metald = mds_load[whoami].auth.meta_load(rebalance_time, mds->mdcache->decayrate);
-      double mdsld = mds_load[whoami].mds_load();
+    map<int, mds_load_t>::iterator m = mds_load.find(whoami);
+    if ((m != mds_load.end()) && (m->second.mds_load() > 0)) {
+      double metald = m->second.auth.meta_load(rebalance_time, mds->mdcache->decayrate);
+      double mdsld = m->second.mds_load();
       load_fac = metald / mdsld;
       dout(7) << " load_fac is " << load_fac
-	      << " <- " << mds_load[whoami].auth << " " << metald
+	      << " <- " << m->second.auth << " " << metald
 	      << " / " << mdsld
 	      << dendl;
     }
@@ -451,13 +462,17 @@ void MDBalancer::prep_rebalance(int beat)
     double total_load = 0;
     multimap<double,int> load_map;
     for (int i=0; i<cluster_size; i++) {
-      double l = mds_load[i].mds_load() * load_fac;
+      map<int, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(&g_ceph_context)));
+      std::pair < map<int, mds_load_t>::iterator, bool > r(mds_load.insert(val));
+      mds_load_t &load(r.first->second);
+
+      double l = load.mds_load() * load_fac;
       mds_meta_load[i] = l;
 
       if (whoami == 0)
 	dout(0) << "  mds" << i
-		<< " " << mds_load[i]
-		<< " = " << mds_load[i].mds_load()
+		<< " " << load
+		<< " = " << load.mds_load()
 		<< " ~ " << l << dendl;
 
       if (whoami == i) my_load = l;

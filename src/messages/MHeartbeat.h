@@ -32,10 +32,14 @@ class MHeartbeat : public Message {
     return import_map;
   }
 
-  MHeartbeat() {}
+  MHeartbeat()
+    : load(utime_t())
+  {
+  }
   MHeartbeat(mds_load_t& load, int beat) :
-    Message(MSG_MDS_HEARTBEAT) {
-    this->load = load;
+    Message(MSG_MDS_HEARTBEAT),
+    load(load)
+  {
     this->beat = beat;
   }
 private:

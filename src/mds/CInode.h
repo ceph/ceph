@@ -477,6 +477,7 @@ private:
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
+    pop(ceph_clock_now(&g_ceph_context)),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
     linklock(this, &linklock_type),

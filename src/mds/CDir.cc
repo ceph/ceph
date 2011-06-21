@@ -153,7 +153,12 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  item_dirty(this), item_new(this), bloom(NULL)
+  item_dirty(this), item_new(this),
+  pop_me(ceph_clock_now(&g_ceph_context)),
+  pop_nested(ceph_clock_now(&g_ceph_context)),
+  pop_auth_subtree(ceph_clock_now(&g_ceph_context)),
+  pop_auth_subtree_nested(ceph_clock_now(&g_ceph_context)),
+  bloom(NULL)
 {
   g_num_dir++;
   g_num_dira++;
