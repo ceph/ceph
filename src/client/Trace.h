@@ -44,6 +44,9 @@ class Trace {
     delete fs; 
   }
 
+  Trace(const Trace& other);
+  const Trace& operator=(const Trace& other);
+
   int get_line() { return _line; }
 
   void start();

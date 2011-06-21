@@ -23,6 +23,9 @@ struct BackTrace {
     free(strings);
   }
 
+  BackTrace(const BackTrace& other);
+  const BackTrace& operator=(const BackTrace& other);
+
   void print(std::ostream& out);
 };
 

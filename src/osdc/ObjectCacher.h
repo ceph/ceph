@@ -169,6 +169,9 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
+    Object(const Object& other);
+    const Object& operator=(const Object& other);
+
     Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),

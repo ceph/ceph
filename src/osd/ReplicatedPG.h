@@ -365,6 +365,9 @@ public:
 
     ReplicatedPG *pg;
 
+    OpContext(const OpContext& other);
+    const OpContext& operator=(const OpContext& other);
+
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),

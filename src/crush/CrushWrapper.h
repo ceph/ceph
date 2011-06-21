@@ -68,6 +68,9 @@ private:
   }
 
 public:
+  CrushWrapper(const CrushWrapper& other);
+  const CrushWrapper& operator=(const CrushWrapper& other);
+
   CrushWrapper() : crush(0), have_rmaps(false) {}
   ~CrushWrapper() {
     if (crush) crush_destroy(crush);

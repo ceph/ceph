@@ -26,7 +26,9 @@ class RWLock
   const char *name;
   int id;
 
-  public:
+public:
+  RWLock(const RWLock& other);
+  const RWLock& operator=(const RWLock& other);
 
   RWLock(const char *n) : name(n), id(-1) {
     pthread_rwlock_init(&L, NULL);

@@ -23,6 +23,9 @@ class Thread {
   pthread_t thread_id;
 
  public:
+  Thread(const Thread& other);
+  const Thread& operator=(const Thread& other);
+
   Thread();
   virtual ~Thread();
 

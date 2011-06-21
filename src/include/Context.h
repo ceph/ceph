@@ -31,6 +31,10 @@
  */
 class Context {
  public:
+  Context(const Context& other);
+  const Context& operator=(const Context& other);
+
+  Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
   virtual void finish(int r) = 0;
 };

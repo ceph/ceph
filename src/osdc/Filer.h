@@ -82,6 +82,9 @@ class Filer {
   void _probed(Probe *p, const object_t& oid, uint64_t size, utime_t mtime);
 
  public:
+  Filer(const Filer& other);
+  const Filer operator=(const Filer& other);
+
   Filer(Objecter *o) : objecter(o) {}
   ~Filer() {}
 
