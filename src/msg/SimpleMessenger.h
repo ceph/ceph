@@ -215,6 +215,9 @@ private:
     friend class Writer;
     
   public:
+    Pipe(const Pipe& other);
+    const Pipe& operator=(const Pipe& other);
+
     Pipe(SimpleMessenger *r, int st) : 
       msgr(r),
       sd(-1),
@@ -366,7 +369,7 @@ private:
     Cond cond;
     bool stop;
 
-    map<int, xlist<Pipe *> > queued_pipes;
+    map<int, xlist<Pipe *>* > queued_pipes;
     map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
     atomic_t qlen;
     
@@ -414,10 +417,11 @@ private:
       local_pipe(NULL)
     {}
     ~DispatchQueue() {
-      for (map< int, xlist<Pipe *> >::iterator i = queued_pipes.begin();
+      for (map< int, xlist<Pipe *>* >::iterator i = queued_pipes.begin();
 	   i != queued_pipes.end();
 	   ++i) {
-	i->second.clear();
+	i->second->clear();
+	delete i->second;
       }
     }
   } dispatch_queue;
