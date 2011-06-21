@@ -1061,7 +1061,7 @@ public:
       read_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
 	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
     } else {
-      C_Gather *g = new C_Gather(&g_ceph_context);
+      C_Gather *g = new C_Gather(g_ceph_context);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
@@ -1085,9 +1085,9 @@ public:
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
-	gack = new C_Gather(&g_ceph_context, onack);
+	gack = new C_Gather(g_ceph_context, onack);
       if (oncommit)
-	gcom = new C_Gather(&g_ceph_context, oncommit);
+	gcom = new C_Gather(g_ceph_context, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	bufferlist cur;
 	for (map<__u32,__u32>::iterator bit = p->buffer_extents.begin();

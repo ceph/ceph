@@ -143,7 +143,7 @@ void CDir::print(ostream& out)
 
 ostream& CDir::print_db_line_prefix(ostream& out) 
 {
-  return out << ceph_clock_now(&g_ceph_context) << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
+  return out << ceph_clock_now(g_ceph_context) << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }
 
 
@@ -154,10 +154,10 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   item_dirty(this), item_new(this),
-  pop_me(ceph_clock_now(&g_ceph_context)),
-  pop_nested(ceph_clock_now(&g_ceph_context)),
-  pop_auth_subtree(ceph_clock_now(&g_ceph_context)),
-  pop_auth_subtree_nested(ceph_clock_now(&g_ceph_context)),
+  pop_me(ceph_clock_now(g_ceph_context)),
+  pop_nested(ceph_clock_now(g_ceph_context)),
+  pop_auth_subtree(ceph_clock_now(g_ceph_context)),
+  pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
   bloom(NULL)
 {
   g_num_dir++;
@@ -1174,7 +1174,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
   list<Context*> finished;
   take_waiting(mask, finished);
   if (result < 0)
-    finish_contexts(&g_ceph_context, finished, result);
+    finish_contexts(g_ceph_context, finished, result);
   else
     cache->mds->queue_waiters(finished);
 }
@@ -1576,7 +1576,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	    in->mark_dirty_rstat();
 
 	  //in->hack_accessed = false;
-	  //in->hack_load_stamp = ceph_clock_now(&g_ceph_context);
+	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
 	  //num_new_inodes_loaded++;
 	}
       }
@@ -1957,16 +1957,16 @@ void CDir::_commit(version_t want)
   m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
   if (committed_dn == items.end())
-    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(&g_ceph_context), 0, NULL,
+    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                  new C_Dir_Committed(this, get_version(),
                                        inode->inode.last_renamed_version));
   else { // send in a different Context
-    C_Gather *gather = new C_Gather(&g_ceph_context, new C_Dir_Committed(this, get_version(),
+    C_Gather *gather = new C_Gather(g_ceph_context, new C_Dir_Committed(this, get_version(),
                                          inode->inode.last_renamed_version));
     while (committed_dn != items.end()) {
       ObjectOperation n = ObjectOperation();
       committed_dn = _commit_partial(n, snaps, max_write_size, committed_dn);
-      cache->mds->objecter->mutate(oid, oloc, n, snapc, ceph_clock_now(&g_ceph_context), 0, NULL,
+      cache->mds->objecter->mutate(oid, oloc, n, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                   gather->new_sub());
     }
     /*
@@ -1979,7 +1979,7 @@ void CDir::_commit(version_t want)
      * we simply send the message containing the header off last, we cannot
      * get our header into an incorrect state.
      */
-    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(&g_ceph_context), 0, NULL,
+    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                 gather->new_sub());
   }
 }

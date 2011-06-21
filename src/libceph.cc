@@ -228,7 +228,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
 {
   int ret;
   libceph_init_mutex.Lock();
-  CephContext *cct = &g_ceph_context;
+  CephContext *cct = g_ceph_context;
   if (!libceph_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
     iparams.conf_file = "";

@@ -942,7 +942,7 @@ void Migrator::export_go_synced(CDir *dir)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), dest);
 
   // take away the popularity we're sending.
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   mds->balancer->subtract_export(dir, now);
   
   // fill export message with cache data
@@ -1481,8 +1481,8 @@ void Migrator::export_finish(CDir *dir)
   assert(g_conf->mds_kill_export_at != 13);
   
   // finish export (adjust local cache state)
-  C_Contexts *fin = new C_Contexts(&g_ceph_context);
-  finish_export_dir(dir, fin->contexts, ceph_clock_now(&g_ceph_context));
+  C_Contexts *fin = new C_Contexts(g_ceph_context);
+  finish_export_dir(dir, fin->contexts, ceph_clock_now(g_ceph_context));
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   // unfreeze
@@ -1858,7 +1858,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
   
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   int oldauth = m->get_source().num();
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
   assert(dir->is_auth() == false);

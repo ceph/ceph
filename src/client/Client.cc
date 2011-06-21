@@ -294,7 +294,7 @@ void Client::init()
     char hostname[80];
     gethostname(hostname, 79);
     snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-    client_logger = new ProfLogger(&g_ceph_context, s, &client_logtype);
+    client_logger = new ProfLogger(g_ceph_context, s, &client_logtype);
   }
   client_logger_lock.Unlock();
 }
@@ -961,7 +961,7 @@ int Client::make_request(MetaRequest *request,
 			 bufferlist *pdirbl)
 {
   // time the call
-  utime_t start = ceph_clock_now(&g_ceph_context);
+  utime_t start = ceph_clock_now(g_ceph_context);
   
   bool nojournal = false;
   int op = request->get_op();
@@ -1066,7 +1066,7 @@ int Client::make_request(MetaRequest *request,
   
   // -- log times --
   if (client_logger) {
-    utime_t lat = ceph_clock_now(&g_ceph_context);
+    utime_t lat = ceph_clock_now(g_ceph_context);
     lat -= request->sent_stamp;
     dout(20) << "lat " << lat << dendl;
     client_logger->favg(l_c_lat,(double)lat);
@@ -1249,7 +1249,7 @@ void Client::send_request(MetaRequest *request, int mds)
   r->releases = request->cap_releases;
 
   if (request->mds == -1) {
-    request->sent_stamp = ceph_clock_now(&g_ceph_context);
+    request->sent_stamp = ceph_clock_now(g_ceph_context);
     dout(20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
   }
   request->mds = mds;
@@ -1504,7 +1504,7 @@ void Client::handle_mds_map(MMDSMap* m)
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
   MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap(&g_ceph_context);
+  mdsmap = new MDSMap(g_ceph_context);
   mdsmap->decode(m->get_encoded());
 
   // reset session
@@ -1691,7 +1691,7 @@ void Client::handle_lease(MClientLease *m)
 
 void Client::release_lease(Inode *in, Dentry *dn, int mask)
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   assert(dn);
 
@@ -1846,7 +1846,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
 void Client::cap_delay_requeue(Inode *in)
 {
   dout(10) << "cap_delay_requeue on " << *in << dendl;
-  in->hold_caps_until = ceph_clock_now(&g_ceph_context);
+  in->hold_caps_until = ceph_clock_now(g_ceph_context);
   in->hold_caps_until += 5.0;
 
   delayed_caps.push_back(&in->cap_item);
@@ -1956,7 +1956,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   else
     in->hold_caps_until = utime_t();
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   map<int,InodeCap*>::iterator it = in->caps.begin();
   while (it != in->caps.end()) {
@@ -3190,7 +3190,7 @@ void Client::tick()
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf->client_tick_interval, tick_event);
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   if (mdsmap->get_epoch()) {
     // renew caps?
@@ -3226,7 +3226,7 @@ void Client::tick()
 void Client::renew_caps()
 {
   dout(10) << "renew_caps()" << dendl;
-  last_cap_renew = ceph_clock_now(&g_ceph_context);
+  last_cap_renew = ceph_clock_now(g_ceph_context);
   
   for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
@@ -3240,7 +3240,7 @@ void Client::renew_caps()
 void Client::renew_caps(const int mds) {
   dout(10) << "renew_caps mds" << mds << dendl;
   MDSSession *session = mds_sessions[mds];
-  session->last_cap_renew_request = ceph_clock_now(&g_ceph_context);
+  session->last_cap_renew_request = ceph_clock_now(g_ceph_context);
   uint64_t seq = ++session->cap_renew_seq;
   messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
 			  mdsmap->get_inst(mds));
@@ -3310,7 +3310,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	     << dendl;
 
     // is dn lease valid?
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(g_ceph_context);
     if (dn->lease_mds >= 0 && 
 	dn->lease_ttl > now &&
 	mds_sessions.count(dn->lease_mds)) {
@@ -3357,7 +3357,7 @@ int Client::get_or_create(Inode *dir, const char* name,
     Dentry *dn = *pdn = dir->dir->dentries[name];
     
     // is dn lease valid?
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(g_ceph_context);
     if (dn->inode &&
 	dn->lease_mds >= 0 && 
 	dn->lease_ttl > now &&
@@ -3673,7 +3673,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
 
   if (!mask) {
     // caller just needs us to bump the ctime
-    in->ctime = ceph_clock_now(&g_ceph_context);
+    in->ctime = ceph_clock_now(g_ceph_context);
     if (issued & CEPH_CAP_AUTH_EXCL)
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     else if (issued & CEPH_CAP_FILE_EXCL)
@@ -3686,19 +3686,19 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
-      in->ctime = ceph_clock_now(&g_ceph_context);
+      in->ctime = ceph_clock_now(g_ceph_context);
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
     if (mask & CEPH_SETATTR_UID) {
-      in->ctime = ceph_clock_now(&g_ceph_context);
+      in->ctime = ceph_clock_now(g_ceph_context);
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
     }
     if (mask & CEPH_SETATTR_GID) {
-      in->ctime = ceph_clock_now(&g_ceph_context);
+      in->ctime = ceph_clock_now(g_ceph_context);
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
@@ -3710,7 +3710,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
 	in->mtime = utime_t(attr->st_mtim.tv_sec, attr->st_mtim.tv_nsec);
       if (mask & CEPH_SETATTR_ATIME)
 	in->atime = utime_t(attr->st_atim.tv_sec, attr->st_atim.tv_nsec);
-      in->ctime = ceph_clock_now(&g_ceph_context);
+      in->ctime = ceph_clock_now(g_ceph_context);
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
@@ -5055,7 +5055,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   dout(10) << "cur file size is " << in->size << dendl;
 
   // time it.
-  utime_t start = ceph_clock_now(&g_ceph_context);
+  utime_t start = ceph_clock_now(g_ceph_context);
     
   // copy into fresh buffer (since our write may be resub, async)
   bufferptr bp;
@@ -5083,14 +5083,14 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     
     // async, caching, non-blocking.
     objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-			     offset, size, bl, ceph_clock_now(&g_ceph_context), 0);
+			     offset, size, bl, ceph_clock_now(g_ceph_context), 0);
 
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
   } else {
     /*
       // atomic, synchronous, blocking.
       objectcacher->file_atomic_sync_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-					   offset, size, bl, ceph_clock_now(&g_ceph_context), 0, client_lock);
+					   offset, size, bl, ceph_clock_now(g_ceph_context), 0, client_lock);
     */
     // simple, non-atomic sync write
     Mutex flock("Client::_write flock");
@@ -5103,7 +5103,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		       offset, size, bl, ceph_clock_now(&g_ceph_context), filer_flags,
+		       offset, size, bl, ceph_clock_now(g_ceph_context), filer_flags,
 		       in->truncate_size, in->truncate_seq,
 		       onfinish, onsafe);
     
@@ -5112,7 +5112,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // time
-  utime_t lat = ceph_clock_now(&g_ceph_context);
+  utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= start;
   if (client_logger)
     client_logger->favg(l_c_wrlat,(double)lat);
@@ -5135,7 +5135,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // mtime
-  in->mtime = ceph_clock_now(&g_ceph_context);
+  in->mtime = ceph_clock_now(g_ceph_context);
   mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
@@ -5474,7 +5474,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
   Inode *diri = 0;
   Inode *in = 0;
   int r = 0;
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   if (inode_map.count(parent) == 0) {
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << dendl;

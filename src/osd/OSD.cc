@@ -195,7 +195,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       bp.zero();
       bl.push_back(bp);
       dout(0) << "testing disk bandwidth..." << dendl;
-      utime_t start = ceph_clock_now(&g_ceph_context);
+      utime_t start = ceph_clock_now(g_ceph_context);
       object_t oid("disk_bw_test");
       for (int i=0; i<1000; i++) {
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -203,7 +203,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
 	store->queue_transaction(NULL, t);
       }
       store->sync();
-      utime_t end = ceph_clock_now(&g_ceph_context);
+      utime_t end = ceph_clock_now(g_ceph_context);
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       ObjectStore::Transaction tr;
@@ -427,7 +427,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
   decayrate(5.0),
-  stat_oprate(ceph_clock_now(&g_ceph_context)),
+  stat_oprate(ceph_clock_now(g_ceph_context)),
   peer_stat_lock("OSD::peer_stat_lock"),
   read_latency_calc(g_conf->osd_max_opq<1 ? 1:g_conf->osd_max_opq),
   qlen_calc(3),
@@ -480,7 +480,7 @@ OSD::~OSD()
 {
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
+  g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
   delete logger;
   delete store;
 }
@@ -695,8 +695,8 @@ void OSD::open_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  logger = new ProfLogger(&g_ceph_context, name, (ProfLogType*)&osd_logtype);
-  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
+  logger = new ProfLogger(g_ceph_context, name, (ProfLogType*)&osd_logtype);
+  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
 
   if (osdmap->get_epoch() > 0)
     start_logger();
@@ -704,7 +704,7 @@ void OSD::open_logger()
 
 void OSD::start_logger()
 {
-  ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+  ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
   coll->logger_tare(osdmap->get_created());
   coll->logger_start();
   logger_started = true;
@@ -1170,7 +1170,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
 
     // ok, create PG locally using provided Info and History
     *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts(&g_ceph_context);
+    *pfin = new C_Contexts(g_ceph_context);
     if (create) {
       pg = _create_lock_new_pg(info.pgid, acting, **pt);
     } else {
@@ -1202,7 +1202,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
       return NULL;
     }
     *pt = new ObjectStore::Transaction;
-    *pfin = new C_Contexts(&g_ceph_context);
+    *pfin = new C_Contexts(g_ceph_context);
   }
   return pg;
 }
@@ -1425,7 +1425,7 @@ void OSD::update_heartbeat_peers()
   old_from.swap(heartbeat_from);
   old_con.swap(heartbeat_con);
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   heartbeat_epoch = osdmap->get_epoch();
 
@@ -1658,7 +1658,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (locked && !is_booting())
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
-      heartbeat_from_stamp[from] = ceph_clock_now(&g_ceph_context);  // don't let _my_ lag interfere.
+      heartbeat_from_stamp[from] = ceph_clock_now(g_ceph_context);  // don't let _my_ lag interfere.
       
       // remove from failure lists if needed
       if (failure_pending.count(from)) {
@@ -1698,7 +1698,7 @@ void OSD::heartbeat_entry()
     utime_t w;
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
-    heartbeat_cond.WaitInterval(&g_ceph_context, heartbeat_lock, w);
+    heartbeat_cond.WaitInterval(g_ceph_context, heartbeat_lock, w);
     dout(30) << "heartbeat_entry woke up" << dendl;
   }
   heartbeat_lock.Unlock();
@@ -1710,7 +1710,7 @@ void OSD::heartbeat_check()
   // we should also have map_lock rdlocked.
 
   // check for incoming heartbeats (move me elsewhere?)
-  utime_t grace = ceph_clock_now(&g_ceph_context);
+  utime_t grace = ceph_clock_now(g_ceph_context);
   grace -= g_conf->osd_heartbeat_grace;
   for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
@@ -1728,7 +1728,7 @@ void OSD::heartbeat_check()
 
 void OSD::heartbeat()
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   dout(30) << "heartbeat" << dendl;
 
@@ -1852,7 +1852,7 @@ void OSD::tick()
   check_replay_queue();
 
   // mon report?
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
     osd_stat_updated = true;
     do_mon_report();
@@ -1898,7 +1898,7 @@ void OSD::do_mon_report()
 {
   dout(7) << "do_mon_report" << dendl;
 
-  utime_t now(ceph_clock_now(&g_ceph_context));
+  utime_t now(ceph_clock_now(g_ceph_context));
   last_mon_report = now;
 
   // do any pending reports
@@ -1918,7 +1918,7 @@ void OSD::ms_handle_connect(Connection *con)
     send_alive();
     send_pg_temp();
     send_failures();
-    send_pg_stats(ceph_clock_now(&g_ceph_context));
+    send_pg_stats(ceph_clock_now(g_ceph_context));
   }
 }
 
@@ -1989,7 +1989,7 @@ bool OSD::ms_handle_reset(Connection *con)
 		<< " from " << obc->obs.oi << dendl;
 	entity_name_t entity = witer->first;
 	watch_info_t& w = obc->obs.oi.watchers[entity];
-	utime_t expire = ceph_clock_now(&g_ceph_context);
+	utime_t expire = ceph_clock_now(g_ceph_context);
 	expire += w.timeout_seconds;
 	obc->unconnected_watchers[entity] = expire;
 	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
@@ -2047,7 +2047,7 @@ void OSD::handle_notify_timeout(void *_notif)
     if (witer != obc->watchers.end()) {
       watch_info_t& w = obc->obs.oi.watchers[notif_iter->first];
       obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
-      utime_t expire = ceph_clock_now(&g_ceph_context);
+      utime_t expire = ceph_clock_now(g_ceph_context);
       expire += w.timeout_seconds;
       obc->unconnected_watchers[notif_iter->first] = expire;
     }
@@ -2100,7 +2100,7 @@ void OSD::queue_want_up_thru(epoch_t want)
     up_thru_wanted = want;
 
     // expedite, a bit.  WARNING this will somewhat delay other mon queries.
-    last_mon_report = ceph_clock_now(&g_ceph_context);
+    last_mon_report = ceph_clock_now(g_ceph_context);
     send_alive();
   } else {
     dout(10) << "queue_want_up_thru want " << want << " <= queued " << up_thru_wanted 
@@ -2274,7 +2274,7 @@ void OSD::handle_command(MMonCommand *m)
     ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
 
     store->sync_and_flush();
-    utime_t start = ceph_clock_now(&g_ceph_context);
+    utime_t start = ceph_clock_now(g_ceph_context);
     for (uint64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
       snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
@@ -2286,7 +2286,7 @@ void OSD::handle_command(MMonCommand *m)
       cleanupt->remove(coll_t::META_COLL, soid);
     }
     store->sync_and_flush();
-    utime_t end = ceph_clock_now(&g_ceph_context);
+    utime_t end = ceph_clock_now(g_ceph_context);
 
     // clean up
     store->queue_transaction(NULL, cleanupt);
@@ -2327,9 +2327,9 @@ void OSD::handle_command(MMonCommand *m)
 
     }
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
-    g_ceph_context.GetProfLoggerCollection()->logger_reset_all();
+    g_ceph_context->GetProfLoggerCollection()->logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
-    g_ceph_context.reopen_logs();
+    g_ceph_context->reopen_logs();
   } else if (m->cmd[0] == "heap") {
     if (ceph_using_tcmalloc())
       ceph_heap_profiler_handle_command(m->cmd, clog);
@@ -2383,7 +2383,7 @@ void OSD::handle_command(MMonCommand *m)
       clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
 		    << "to " << g_conf->osd_recovery_delay_start << "\n";
 
-      defer_recovery_until = ceph_clock_now(&g_ceph_context);
+      defer_recovery_until = ceph_clock_now(g_ceph_context);
       defer_recovery_until += g_conf->osd_recovery_delay_start;
       recovery_wq.kick();
     }
@@ -2601,7 +2601,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       bool& isvalid)
 {
   AuthAuthorizeHandler *authorize_handler =
-      get_authorize_handler(protocol, &g_ceph_context);
+      get_authorize_handler(protocol, g_ceph_context);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     isvalid = false;
@@ -2613,7 +2613,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   uint64_t global_id;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
 
-  isvalid = authorize_handler->verify_authorizer(&g_ceph_context, monc->rotating_secrets,
+  isvalid = authorize_handler->verify_authorizer(g_ceph_context, monc->rotating_secrets,
 						 authorizer_data, authorizer_reply, name, global_id, caps_info, &auid);
 
   dout(10) << "OSD::ms_verify_authorizer name=" << name << " auid=" << auid << dendl;
@@ -2876,7 +2876,7 @@ void OSD::sched_scrub()
   dout(20) << "sched_scrub" << dendl;
 
   pair<utime_t,pg_t> pos;
-  utime_t max = ceph_clock_now(&g_ceph_context);
+  utime_t max = ceph_clock_now(g_ceph_context);
   max -= g_conf->osd_scrub_max_interval;
   
   sched_scrub_lock.Lock();
@@ -3183,16 +3183,16 @@ void OSD::handle_osd_map(MOSDMap *m)
 	note_down_osd(*p);
     
     if (!logger_started)
-      g_ceph_context.GetProfLoggerCollection()->logger_start();
+      g_ceph_context->GetProfLoggerCollection()->logger_start();
 
     osdmap = newmap;
 
     superblock.current_epoch = cur;
     advance_map(t);
-    had_map_since = ceph_clock_now(&g_ceph_context);
+    had_map_since = ceph_clock_now(g_ceph_context);
   }
 
-  C_Contexts *fin = new C_Contexts(&g_ceph_context);
+  C_Contexts *fin = new C_Contexts(g_ceph_context);
   if (osdmap->is_up(whoami) &&
       osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
 
@@ -3805,7 +3805,7 @@ void OSD::kick_pg_split_queue()
 
     // create and lock children
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(&g_ceph_context);
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
     map<pg_t,PG*> children;
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
@@ -4045,7 +4045,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     
     if (can_create_pg(pgid)) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      C_Contexts *fin = new C_Contexts(&g_ceph_context);
+      C_Contexts *fin = new C_Contexts(g_ceph_context);
 
       PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
       creating_pgs.erase(pgid);
@@ -4676,7 +4676,7 @@ void OSD::generate_backlog(PG *pg)
   map< int, map<pg_t,PG::Query> > query_map;
   map< int, MOSDPGInfo* > info_map;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts(&g_ceph_context);
+  C_Contexts *fin = new C_Contexts(g_ceph_context);
   PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
 
   if (!pg->generate_backlog_epoch) {
@@ -4721,7 +4721,7 @@ void OSD::generate_backlog(PG *pg)
 
 void OSD::check_replay_queue()
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   list< pair<pg_t,utime_t> > pgids;
   replay_queue_lock.Lock();
   while (!replay_queue.empty() &&
@@ -4778,7 +4778,7 @@ bool OSD::_recover_now()
 	     << " >= max " << g_conf->osd_recovery_max_active << dendl;
     return false;
   }
-  if (ceph_clock_now(&g_ceph_context) < defer_recovery_until) {
+  if (ceph_clock_now(g_ceph_context) < defer_recovery_until) {
     dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
     return false;
   }
@@ -4978,7 +4978,7 @@ void OSD::handle_op(MOSDOp *op)
   // ...
   throttle_op_queue();
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   int r = init_op_flags(op);
   if (r) {

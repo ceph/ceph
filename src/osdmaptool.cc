@@ -51,7 +51,7 @@ int main(int argc, const char **argv)
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   const char *me = argv[0];
 
@@ -148,7 +148,7 @@ int main(int argc, const char **argv)
     }
     ceph_fsid_t fsid;
     memset(&fsid, 0, sizeof(ceph_fsid_t));
-    osdmap.build_simple(&g_ceph_context, 0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
+    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }
 

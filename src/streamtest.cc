@@ -78,14 +78,14 @@ struct C_Ack : public Context {
   off_t off;
   C_Ack(off_t o) : off(o) {}
   void finish(int r) {
-    set_ack(off, ceph_clock_now(&g_ceph_context));
+    set_ack(off, ceph_clock_now(g_ceph_context));
   }
 };
 struct C_Commit : public Context {
   off_t off;
   C_Commit(off_t o) : off(o) {}
   void finish(int r) {
-    set_commit(off, ceph_clock_now(&g_ceph_context));
+    set_commit(off, ceph_clock_now(g_ceph_context));
   }
 };
 
@@ -97,7 +97,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   // args
   if (args.size() < 3) return -1;
@@ -133,7 +133,7 @@ int main(int argc, const char **argv)
   ft.create_collection(coll_t());
   fs->apply_transaction(ft);
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t end = now;
   end += seconds;
   off_t pos = 0;
@@ -142,7 +142,7 @@ int main(int argc, const char **argv)
   while (now < end) {
     sobject_t poid(object_t("streamtest"), 0);
 
-    set_start(pos, ceph_clock_now(&g_ceph_context));
+    set_start(pos, ceph_clock_now(g_ceph_context));
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->write(coll_t(), poid, pos, bytes, bl);
     fs->queue_transaction(NULL, t, new C_Ack(pos), new C_Commit(pos));

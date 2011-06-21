@@ -348,7 +348,7 @@ int main(int argc, char **argv)
   env_to_vec(args);
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   const char *user_id = 0;
   const char *access_key = 0;
@@ -477,7 +477,7 @@ int main(int argc, char **argv)
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM);
 
-  store = RGWAccess::init_storage_provider("rados", &g_ceph_context);
+  store = RGWAccess::init_storage_provider("rados", g_ceph_context);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO

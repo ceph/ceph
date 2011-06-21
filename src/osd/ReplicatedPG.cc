@@ -569,7 +569,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   }
 
   // note my stats
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   // note some basic context for op replication that prepare_transaction may clobber
   eversion_t old_last_update = log.head;
@@ -645,7 +645,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_c_rd);
     osd->logger->inc(l_osd_c_rdb, ctx->outdata.length());
 
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(g_ceph_context);
     utime_t diff = now;
     diff -= ctx->op->get_recv_stamp();
     //dout(20) <<  "do_op " << ctx->reqid << " total op latency " << diff << dendl;
@@ -798,7 +798,7 @@ bool ReplicatedPG::snap_trimmer()
       tid_t rep_tid = osd->get_tid();
       osd_reqid_t reqid(osd->cluster_messenger->get_myname(), 0, rep_tid);
       OpContext *ctx = new OpContext(NULL, reqid, ops, &obc->obs, this);
-      ctx->mtime = ceph_clock_now(&g_ceph_context);
+      ctx->mtime = ceph_clock_now(g_ceph_context);
 
       ctx->at_version.epoch = osd->osdmap->get_epoch();
       ctx->at_version.version = log.head.version + 1;
@@ -2302,7 +2302,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       }
 
       // unconnected
-      utime_t now = ceph_clock_now(&g_ceph_context);
+      utime_t now = ceph_clock_now(g_ceph_context);
       for (map<entity_name_t, utime_t>::iterator q = obc->unconnected_watchers.begin();
 	   q != obc->unconnected_watchers.end();
 	   q++) {
@@ -2688,7 +2688,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	repop->sent_ack = true;
       }
       
-      utime_t now = ceph_clock_now(&g_ceph_context);
+      utime_t now = ceph_clock_now(g_ceph_context);
       now -= repop->start;
       osd->logger->finc(l_osd_rlsum, now);
       osd->logger->inc(l_osd_rlnum, 1);
@@ -2788,7 +2788,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
     repop->waitfor_disk.insert(osd);
   }
 
-  repop->start = ceph_clock_now(&g_ceph_context);
+  repop->start = ceph_clock_now(g_ceph_context);
 
   repop_queue.push_back(&repop->queue_item);
   repop_map[repop->rep_tid] = repop;
@@ -2901,7 +2901,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 
       if (!obc->obs.oi.watchers.empty()) {
 	// populate unconnected_watchers
-	utime_t now = ceph_clock_now(&g_ceph_context);
+	utime_t now = ceph_clock_now(g_ceph_context);
 	for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
 	     p != obc->obs.oi.watchers.end();
 	     p++) {
@@ -3211,7 +3211,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-    ack->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(&g_ceph_context), rm->ackerosd));
+    ack->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     osd->cluster_messenger->
       send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
@@ -3254,7 +3254,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
     commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
-    commit->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(&g_ceph_context), rm->ackerosd));
+    commit->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
     osd->cluster_messenger->
       send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
@@ -4373,7 +4373,7 @@ int ReplicatedPG::start_recovery_ops(int max)
     dout(10) << __func__ << ": all OSDs in the PG are up-to-date!" << dendl;
     log.reset_recovery_pointers();
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(&g_ceph_context);
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
     finish_recovery(*t, fin->contexts);
     int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);

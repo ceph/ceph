@@ -53,7 +53,7 @@ int rgw_log_op(struct req_state *s)
     entry.owner = s->acl->get_owner().get_id();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now(&g_ceph_context) - s->time;
+  entry.total_time = ceph_clock_now(g_ceph_context) - s->time;
   entry.bytes_sent = s->bytes_sent;
   entry.bytes_received = s->bytes_received;
   if (s->err.http_ret) {

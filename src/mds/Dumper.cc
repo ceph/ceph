@@ -193,7 +193,7 @@ void Dumper::undump(const char *dump_file)
   Cond cond;
   
   cout << "writing header " << oid << std::endl;
-  objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(&g_ceph_context), 0, 
+  objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
 		       NULL, 
 		       new C_SafeCond(&lock, &cond, &done));
 
@@ -212,7 +212,7 @@ void Dumper::undump(const char *dump_file)
     uint64_t l = MIN(left, 1024*1024);
     j.read_fd(fd, l);
     cout << " writing " << pos << "~" << l << std::endl;
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(&g_ceph_context), 0, NULL, new C_SafeCond(&lock, &cond, &done));
+    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, new C_SafeCond(&lock, &cond, &done));
 
     lock.Lock();
     while (!done)

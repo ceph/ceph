@@ -82,7 +82,7 @@ int main(int argc, const char **argv)
 
   // -- mkfs --
   if (mkfs) {
-    common_init_finish(&g_ceph_context);
+    common_init_finish(g_ceph_context);
     if (g_conf->monmap.empty() || !osdmapfn)
       usage();
 
@@ -104,7 +104,7 @@ int main(int argc, const char **argv)
 	   << error << std::endl;
       exit(1);
     }
-    MonMap monmap(ceph_clock_now(&g_ceph_context));
+    MonMap monmap(ceph_clock_now(g_ceph_context));
     monmap.decode(monmapbl);
     
     err = osdmapbl.read_file(osdmapfn, &error);
@@ -116,7 +116,7 @@ int main(int argc, const char **argv)
 
     // go
     MonitorStore store(g_conf->mon_data);
-    Monitor mon(&g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
+    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
     mon.mkfs(osdmapbl);
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
@@ -190,7 +190,7 @@ int main(int argc, const char **argv)
     v++;
 
     // set the version
-    MonMap tmp(ceph_clock_now(&g_ceph_context));
+    MonMap tmp(ceph_clock_now(g_ceph_context));
     tmp.decode(bl);
     if (tmp.get_epoch() != v) {
       cout << "changing monmap epoch from " << tmp.get_epoch() << " to " << v << std::endl;
@@ -213,7 +213,7 @@ int main(int argc, const char **argv)
 
 
   // monmap?
-  MonMap monmap(ceph_clock_now(&g_ceph_context));
+  MonMap monmap(ceph_clock_now(g_ceph_context));
   {
     bufferlist latest;
     store.get_bl_ss(latest, "monmap/latest", 0);
@@ -251,7 +251,7 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   int rank = monmap.get_rank(g_conf->name.get_id());
 
   cout << "starting " << g_conf->name << " rank " << rank
@@ -266,11 +266,11 @@ int main(int argc, const char **argv)
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(&g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
+  Monitor *mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
-  global_init_daemonize(&g_ceph_context, 0);
-  common_init_finish(&g_ceph_context);
-  global_init_chdir(&g_ceph_context);
+  global_init_daemonize(g_ceph_context, 0);
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
   messenger->start();
 
   uint64_t supported =

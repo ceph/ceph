@@ -48,10 +48,10 @@ int librgw_create(librgw_t *rgw, const char * const id)
     common_init_finish(cct);
   }
   else {
-    cct = &g_ceph_context;
+    cct = g_ceph_context;
   }
   librgw_init_mutex.Unlock();
-  *rgw = &g_ceph_context;
+  *rgw = g_ceph_context;
   return 0;
 }
 

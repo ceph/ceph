@@ -94,7 +94,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
 
   KeyRing keyring;
-  if (keyring.load(&g_ceph_context, g_conf->keyring) == 0) {
+  if (keyring.load(g_ceph_context, g_conf->keyring) == 0) {
     import_keyring(keyring);
   }
 
@@ -365,7 +365,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       goto reply;
     }
 
-    s->auth_handler = get_auth_service_handler(&g_ceph_context,
+    s->auth_handler = get_auth_service_handler(g_ceph_context,
 					       &mon->key_server, supported);
     if (!s->auth_handler) {
       ret = -ENOTSUP;

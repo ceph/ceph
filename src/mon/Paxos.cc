@@ -294,9 +294,9 @@ void Paxos::handle_last(MMonPaxos *last)
 	extend_lease();
 
 	// wake people up
-	finish_contexts(&g_ceph_context, waiting_for_active);
-	finish_contexts(&g_ceph_context, waiting_for_readable);
-	finish_contexts(&g_ceph_context, waiting_for_writeable);
+	finish_contexts(g_ceph_context, waiting_for_active);
+	finish_contexts(g_ceph_context, waiting_for_readable);
+	finish_contexts(g_ceph_context, waiting_for_writeable);
       }
     }
   } else {
@@ -344,10 +344,10 @@ void Paxos::begin(bufferlist& v)
     // we're alone, take it easy
     commit();
     state = STATE_ACTIVE;
-    finish_contexts(&g_ceph_context, waiting_for_active);
-    finish_contexts(&g_ceph_context, waiting_for_commit);
-    finish_contexts(&g_ceph_context, waiting_for_readable);
-    finish_contexts(&g_ceph_context, waiting_for_writeable);
+    finish_contexts(g_ceph_context, waiting_for_active);
+    finish_contexts(g_ceph_context, waiting_for_commit);
+    finish_contexts(g_ceph_context, waiting_for_readable);
+    finish_contexts(g_ceph_context, waiting_for_writeable);
     update_observers();
     return;
   }
@@ -450,10 +450,10 @@ void Paxos::handle_accept(MMonPaxos *accept)
     extend_lease();
   
     // wake people up
-    finish_contexts(&g_ceph_context, waiting_for_active);
-    finish_contexts(&g_ceph_context, waiting_for_commit);
-    finish_contexts(&g_ceph_context, waiting_for_readable);
-    finish_contexts(&g_ceph_context, waiting_for_writeable);
+    finish_contexts(g_ceph_context, waiting_for_active);
+    finish_contexts(g_ceph_context, waiting_for_commit);
+    finish_contexts(g_ceph_context, waiting_for_readable);
+    finish_contexts(g_ceph_context, waiting_for_writeable);
   }
   accept->put();
 }
@@ -478,7 +478,7 @@ void Paxos::commit()
 
   // commit locally
   last_committed++;
-  last_commit_time = ceph_clock_now(&g_ceph_context);
+  last_commit_time = ceph_clock_now(g_ceph_context);
   mon->store->put_int(last_committed, machine_name, "last_committed");
 
   // tell everyone
@@ -518,7 +518,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
   
   commit->put();
 
-  finish_contexts(&g_ceph_context, waiting_for_commit);
+  finish_contexts(g_ceph_context, waiting_for_commit);
 }
 
 void Paxos::extend_lease()
@@ -526,7 +526,7 @@ void Paxos::extend_lease()
   assert(mon->is_leader());
   assert(is_active());
 
-  lease_expire = ceph_clock_now(&g_ceph_context);
+  lease_expire = ceph_clock_now(g_ceph_context);
   lease_expire += g_conf->mon_lease;
   acked_lease.clear();
   acked_lease.insert(mon->rank);
@@ -562,7 +562,7 @@ void Paxos::extend_lease()
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   if (t > now) {
     utime_t diff = t - now;
     if (diff > g_conf->mon_clock_drift_allowed) {
@@ -571,7 +571,7 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
 	mon->clog.warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
-	last_clock_drift_warn = ceph_clock_now(&g_ceph_context);
+	last_clock_drift_warn = ceph_clock_now(g_ceph_context);
 	++clock_drift_warned;
       }
     }
@@ -606,7 +606,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
-  ack->lease_timestamp = ceph_clock_now(&g_ceph_context);
+  ack->lease_timestamp = ceph_clock_now(g_ceph_context);
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
@@ -619,9 +619,9 @@ void Paxos::handle_lease(MMonPaxos *lease)
   trim_to(lease->first_committed);
   
   // kick waiters
-  finish_contexts(&g_ceph_context, waiting_for_active);
+  finish_contexts(g_ceph_context, waiting_for_active);
   if (is_readable())
-    finish_contexts(&g_ceph_context, waiting_for_readable);
+    finish_contexts(g_ceph_context, waiting_for_readable);
 
   lease->put();
 }
@@ -780,8 +780,8 @@ void Paxos::peon_init()
   dout(10) << "peon_init -- i am a peon" << dendl;
 
   // no chance to write now!
-  finish_contexts(&g_ceph_context, waiting_for_writeable, -1);
-  finish_contexts(&g_ceph_context, waiting_for_commit, -1);
+  finish_contexts(g_ceph_context, waiting_for_writeable, -1);
+  finish_contexts(g_ceph_context, waiting_for_commit, -1);
 }
 
 void Paxos::election_starting()
@@ -790,7 +790,7 @@ void Paxos::election_starting()
   cancel_events();
   new_value.clear();
 
-  finish_contexts(&g_ceph_context, waiting_for_commit, -1);
+  finish_contexts(g_ceph_context, waiting_for_commit, -1);
 }
 
 
@@ -862,7 +862,7 @@ void Paxos::register_observer(entity_inst_t inst, version_t v)
     observers[inst] = observer = new Observer(inst, v);
   }  
 
-  utime_t timeout = ceph_clock_now(&g_ceph_context);
+  utime_t timeout = ceph_clock_now(g_ceph_context);
   timeout += g_conf->paxos_observer_timeout;
   observer->timeout = timeout;
 
@@ -883,7 +883,7 @@ void Paxos::update_observers()
     Observer *observer = iter->second;
 
     // timed out?
-    if (ceph_clock_now(&g_ceph_context) > observer->timeout) {
+    if (ceph_clock_now(g_ceph_context) > observer->timeout) {
       delete observer;
       observers.erase(iter++);
       continue;
@@ -920,7 +920,7 @@ void Paxos::update_observers()
 
 bool Paxos::is_readable(version_t v)
 {
-  dout(1) << "is_readable now=" << ceph_clock_now(&g_ceph_context) << " lease_expire=" << lease_expire
+  dout(1) << "is_readable now=" << ceph_clock_now(g_ceph_context) << " lease_expire=" << lease_expire
 	  << " has v" << v << " lc " << last_committed << dendl;
   if (v > last_committed)
     return false;
@@ -929,7 +929,7 @@ bool Paxos::is_readable(version_t v)
     (is_active() || is_updating()) &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
-     ceph_clock_now(&g_ceph_context) < lease_expire);    // have lease
+     ceph_clock_now(g_ceph_context) < lease_expire);    // have lease
 }
 
 bool Paxos::read(version_t v, bufferlist &bl)
@@ -957,7 +957,7 @@ bool Paxos::is_writeable()
   return
     mon->is_leader() &&
     is_active() &&
-    ceph_clock_now(&g_ceph_context) < lease_expire;
+    ceph_clock_now(g_ceph_context) < lease_expire;
 }
 
 bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)

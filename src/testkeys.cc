@@ -12,9 +12,9 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
-  KeyServer server(&g_ceph_context);
+  KeyServer server(g_ceph_context);
 
   dout(0) << "server created" << dendl;
 
@@ -24,7 +24,7 @@ int main(int argc, const char **argv)
   char aes_key[AES_KEY_LEN];
   memset(aes_key, 0x77, sizeof(aes_key));
   bufferptr keybuf(aes_key, sizeof(aes_key));
-  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(&g_ceph_context), keybuf);
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(g_ceph_context), keybuf);
 
   const char *msg="hello! this is a message\n";
   char pad[16];

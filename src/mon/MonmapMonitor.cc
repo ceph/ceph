@@ -87,7 +87,7 @@ void MonmapMonitor::create_pending()
 {
   pending_map = *mon->monmap;
   pending_map.epoch++;
-  pending_map.last_changed = ceph_clock_now(&g_ceph_context);
+  pending_map.last_changed = ceph_clock_now(g_ceph_context);
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
@@ -203,7 +203,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       }
 
       pending_map.add(name, addr);
-      pending_map.last_changed = ceph_clock_now(&g_ceph_context);
+      pending_map.last_changed = ceph_clock_now(g_ceph_context);
       ss << "added mon." << name << " at " << addr;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -219,7 +219,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
       entity_addr_t addr = pending_map.get_addr(name);
       pending_map.remove(name);
-      pending_map.last_changed = ceph_clock_now(&g_ceph_context);
+      pending_map.last_changed = ceph_clock_now(g_ceph_context);
       ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
       getline(ss, rs);
       // send reply immediately in case we get removed

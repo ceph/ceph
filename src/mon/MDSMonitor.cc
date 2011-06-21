@@ -56,7 +56,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 {
   m.max_mds = g_conf->max_mds;
-  m.created = ceph_clock_now(&g_ceph_context);
+  m.created = ceph_clock_now(g_ceph_context);
   m.data_pg_pools.push_back(data_pool);
   m.metadata_pg_pool = metadata_pool;
   m.cas_pg_pool = -1;
@@ -112,7 +112,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << dendl;
 
-  pending_mdsmap.modified = ceph_clock_now(&g_ceph_context);
+  pending_mdsmap.modified = ceph_clock_now(g_ceph_context);
 
   //print_map(pending_mdsmap);
 
@@ -150,7 +150,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
 
   dout(15) << "_note_beacon " << *m << " noting time" << dendl;
-  last_beacon[gid].stamp = ceph_clock_now(&g_ceph_context);  
+  last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);  
   last_beacon[gid].seq = seq;
 }
 
@@ -360,7 +360,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     }
 
     // initialize the beacon timer
-    last_beacon[gid].stamp = ceph_clock_now(&g_ceph_context);
+    last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
     last_beacon[gid].seq = seq;
 
     // new incompat?
@@ -500,7 +500,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  p = 0;
 	  r = -ENOENT;
 	} else {
-	  p = new MDSMap(&g_ceph_context);
+	  p = new MDSMap(g_ceph_context);
 	  p->decode(b);
 	}
       }
@@ -522,7 +522,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {
-	  MDSMap m(&g_ceph_context);
+	  MDSMap m(g_ceph_context);
 	  m.decode(b);
 	  m.encode(rdata);
 	  ss << "got mdsmap epoch " << m.get_epoch();
@@ -631,7 +631,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
   if (pending_mdsmap.up.count(w)) {
     uint64_t gid = pending_mdsmap.up[w];
     if (pending_mdsmap.mds_info.count(gid)) {
-      utime_t until = ceph_clock_now(&g_ceph_context);
+      utime_t until = ceph_clock_now(g_ceph_context);
       until += g_conf->mds_blacklist_interval;
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
       pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
@@ -662,7 +662,7 @@ int MDSMonitor::cluster_fail(std::ostream &ss)
   // --- reset the cluster map ---
   if (pending_mdsmap.mds_info.size()) {
     // blacklist all old mds's
-    utime_t until = ceph_clock_now(&g_ceph_context);
+    utime_t until = ceph_clock_now(g_ceph_context);
     until += g_conf->mds_blacklist_interval;
     for (map<int32_t,uint64_t>::iterator p = pending_mdsmap.up.begin();
 	 p != pending_mdsmap.up.end();
@@ -715,7 +715,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
     else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
-      MDSMap map(&g_ceph_context);
+      MDSMap map(g_ceph_context);
       map.decode(m->get_data());
       epoch_t e = atoi(m->cmd[2].c_str());
       //if (ceph_fsid_compare(&map.get_fsid(), &mon->monmap->fsid) == 0) {
@@ -812,7 +812,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	}
       }
     } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
-      MDSMap newmap(&g_ceph_context);
+      MDSMap newmap(g_ceph_context);
       int metadata = atoi(m->cmd[2].c_str());
       int data = atoi(m->cmd[3].c_str());
       pending_mdsmap = newmap;
@@ -905,7 +905,7 @@ void MDSMonitor::tick()
   }
 
   // check beacon timestamps
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t cutoff = now;
   cutoff -= g_conf->mds_beacon_grace;
 
@@ -918,7 +918,7 @@ void MDSMonitor::tick()
       dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " to last_beacon" << dendl;
-      last_beacon[p->first].stamp = ceph_clock_now(&g_ceph_context);
+      last_beacon[p->first].stamp = ceph_clock_now(g_ceph_context);
       last_beacon[p->first].seq = 0;
     }
   }
@@ -1162,7 +1162,7 @@ void MDSMonitor::do_stop()
     case MDSMap::STATE_CLIENTREPLAY:
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
       {
-	utime_t until = ceph_clock_now(&g_ceph_context);
+	utime_t until = ceph_clock_now(g_ceph_context);
 	until += g_conf->mds_blacklist_interval;
 	pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 	propose_osdmap = true;

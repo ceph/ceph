@@ -278,7 +278,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   in->inode.mode = 0500 | mode;
   in->inode.size = 0;
   in->inode.ctime = 
-    in->inode.mtime = ceph_clock_now(&g_ceph_context);
+    in->inode.mtime = ceph_clock_now(g_ceph_context);
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
 
@@ -742,7 +742,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
 
     // adjust recursive pop counters
     if (dir->is_auth()) {
-      utime_t now = ceph_clock_now(&g_ceph_context);
+      utime_t now = ceph_clock_now(g_ceph_context);
       CDir *p = dir->get_parent_dir();
       while (p) {
 	p->pop_auth_subtree.sub(now, decayrate, dir->pop_auth_subtree);
@@ -820,7 +820,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
 
     // adjust popularity?
     if (dir->is_auth()) {
-      utime_t now = ceph_clock_now(&g_ceph_context);
+      utime_t now = ceph_clock_now(g_ceph_context);
       CDir *p = dir->get_parent_dir();
       while (p) {
 	p->pop_auth_subtree.add(now, decayrate, dir->pop_auth_subtree);
@@ -1811,7 +1811,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
   // declare now?
   if (mut->now == utime_t())
-    mut->now = ceph_clock_now(&g_ceph_context);
+    mut->now = ceph_clock_now(g_ceph_context);
 
   if (in->is_base())
     return;
@@ -3607,7 +3607,7 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
-  C_Gather *gather = new C_Gather(&g_ceph_context);
+  C_Gather *gather = new C_Gather(g_ceph_context);
 
   // scan list
   set<CDir*> fetch_queue;
@@ -4603,7 +4603,7 @@ void MDCache::open_snap_parents()
   dout(10) << "open_snap_parents" << dendl;
   
   map<client_t,MClientSnap*> splits;
-  C_Gather *gather = new C_Gather(&g_ceph_context);
+  C_Gather *gather = new C_Gather(g_ceph_context);
 
   map<CInode*,map<client_t,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
   while (p != missing_snap_parents.end()) {
@@ -4673,7 +4673,7 @@ void MDCache::open_undef_dirfrags()
        p++) {
     CDir *dir = *p;
     if (!gather)
-      gather = new C_Gather(&g_ceph_context, new C_MDC_OpenUndefDirfragsFinish(this));
+      gather = new C_Gather(g_ceph_context, new C_MDC_OpenUndefDirfragsFinish(this));
     dir->fetch(gather->new_sub());
   }
 
@@ -5047,7 +5047,7 @@ void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
   SnapContext snapc;
-  mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(&g_ceph_context), 0, 0, fin);
+  mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0, 0, fin);
 }  
 
 
@@ -5424,7 +5424,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       mds->logger->inc("outt");
     else {
       mds->logger->inc("outut");
-      mds->logger->favg("oututl", ceph_clock_now(&g_ceph_context) - in->hack_load_stamp);
+      mds->logger->favg("oututl", ceph_clock_now(g_ceph_context) - in->hack_load_stamp);
     }
   }
   */
@@ -5903,7 +5903,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 
 void MDCache::trim_client_leases()
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   
   dout(10) << "trim_client_leases" << dendl;
 
@@ -5928,7 +5928,7 @@ void MDCache::trim_client_leases()
 
 void MDCache::check_memory_usage()
 {
-  static MemoryModel mm(&g_ceph_context);
+  static MemoryModel mm(g_ceph_context);
   static MemoryModel::snap last;
   mm.sample(&last);
   static MemoryModel::snap baseline = last;
@@ -5985,7 +5985,7 @@ public:
 
 void MDCache::shutdown_check()
 {
-  dout(0) << "shutdown_check at " << ceph_clock_now(&g_ceph_context) << dendl;
+  dout(0) << "shutdown_check at " << ceph_clock_now(g_ceph_context) << dendl;
 
   // cache
   int o = g_conf->debug_mds;
@@ -7957,7 +7957,7 @@ void MDCache::purge_stray(CDentry *dn)
       uint64_t num = (to + period - 1) / period;
       dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
       mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			      0, num, ceph_clock_now(&g_ceph_context), 0,
+			      0, num, ceph_clock_now(g_ceph_context), 0,
 			      new C_MDC_PurgeStrayPurged(this, dn));
     } else {
       dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
@@ -8785,7 +8785,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
 
   // waiters
-  finish_contexts(&g_ceph_context, error, -ENOENT);  // finish errors directly
+  finish_contexts(g_ceph_context, error, -ENOENT);  // finish errors directly
   mds->queue_waiters(finished);
 
   // done
@@ -9436,7 +9436,7 @@ void MDCache::split_dir(CDir *dir, int bits)
     return;
   }
 
-  C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
+  C_Gather *gather = new C_Gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
   fragment_freeze_dirs(dirs, gather);
 
   // initial mark+complete pass
@@ -9470,7 +9470,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   int bits = first->get_frag().bits() - frag.bits();
   dout(10) << " we are merginb by " << bits << " bits" << dendl;
 
-  C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, frag, bits));
+  C_Gather *gather = new C_Gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, frag, bits));
   fragment_freeze_dirs(dirs, gather);
 
   // initial mark+complete pass
@@ -9514,7 +9514,7 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
     if (!dir->is_complete()) {
       dout(15) << " fetching incomplete " << *dir << dendl;
       if (!gather)
-	gather = new C_Gather(&g_ceph_context,
+	gather = new C_Gather(g_ceph_context,
 		    new C_MDC_FragmentMarking(this, dirs));
       dir->fetch(gather->new_sub(), 
 		 true);  // ignore authpinnability
@@ -9641,7 +9641,7 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   */
 
   // freeze, journal, and store resulting frags
-  C_Gather *gather = new C_Gather(&g_ceph_context, 
+  C_Gather *gather = new C_Gather(g_ceph_context, 
 		      new C_MDC_FragmentLoggedAndStored(this, mut, 
 				  resultfrags, basefrag, bits));
 

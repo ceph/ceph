@@ -51,7 +51,7 @@ int main(int argc, const char **argv)
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("help", '\0')) {
       usage();
@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
   if (!fn)
     usage();
   
-  MonMap monmap(ceph_clock_now(&g_ceph_context));
+  MonMap monmap(ceph_clock_now(g_ceph_context));
 
   cout << me << ": monmap file " << fn << std::endl;
 

@@ -67,7 +67,7 @@ void MDSTable::save(Context *onfinish, version_t v)
   object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, ceph_clock_now(&g_ceph_context), 0,
+			    bl, ceph_clock_now(g_ceph_context), 0,
 			    NULL, new C_MT_Save(this, version));
 }
 
@@ -83,7 +83,7 @@ void MDSTable::save_2(version_t v)
     ls.splice(ls.end(), waitfor_save.begin()->second);
     waitfor_save.erase(waitfor_save.begin());
   }
-  finish_contexts(&g_ceph_context, ls,0);
+  finish_contexts(g_ceph_context, ls,0);
 }
 
 

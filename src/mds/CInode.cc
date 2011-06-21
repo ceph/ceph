@@ -65,7 +65,7 @@ LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
 {
-  return out << ceph_clock_now(&g_ceph_context) << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
+  return out << ceph_clock_now(g_ceph_context) << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
 }
 
 /*
@@ -966,7 +966,7 @@ void CInode::store(Context *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(&g_ceph_context), 0,
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
 				 NULL, new C_Inode_Stored(this, get_version(), fin) );
 }
 
@@ -995,7 +995,7 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
-  C_Gather *gather = new C_Gather(&g_ceph_context, c);
+  C_Gather *gather = new C_Gather(g_ceph_context, c);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
@@ -1091,7 +1091,7 @@ void CInode::store_parent(Context *fin)
   object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(&g_ceph_context), 0,
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
 				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );
 
 }
@@ -2397,7 +2397,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       cap->issue_norevoke(issue);
       issue = cap->pending();
       cap->set_last_issue();
-      cap->set_last_issue_stamp(ceph_clock_now(&g_ceph_context));
+      cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
       e.cap.caps = issue;
       e.cap.wanted = cap->wanted();
       e.cap.cap_id = cap->get_cap_id();
@@ -2654,7 +2654,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   if (dirty) 
     _mark_dirty(ls);
 
-  ::decode(pop, ceph_clock_now(&g_ceph_context), p);
+  ::decode(pop, ceph_clock_now(g_ceph_context), p);
 
   ::decode(replica_map, p);
   if (!replica_map.empty())

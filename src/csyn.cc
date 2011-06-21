@@ -47,14 +47,14 @@ int main(int argc, const char **argv, char *envp[])
   argv_to_vec(argc, argv, args);
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient
 
   vec_to_argv(args, argc, argv);
 
   // get monmap
-  MonClient mc(&g_ceph_context);
+  MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
@@ -65,10 +65,10 @@ int main(int argc, const char **argv, char *envp[])
 
   cout << "csyn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
-    messengers[i] = new SimpleMessenger(&g_ceph_context);
+    messengers[i] = new SimpleMessenger(g_ceph_context);
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
     messengers[i]->bind(i * 1000000 + getpid());
-    mclients[i] = new MonClient(&g_ceph_context);
+    mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
     Client *client = new Client(messengers[i], mclients[i]);
     client->set_filer_flags(syn_filer_flags);

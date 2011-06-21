@@ -195,7 +195,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     state = STATE_ACTIVE;
     list<Context*> ls;
     ls.swap(waitfor_recover);
-    finish_contexts(&g_ceph_context, ls, 0);
+    finish_contexts(g_ceph_context, ls, 0);
     return;
   } 
 
@@ -209,7 +209,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 	    << magic << "'" << dendl;
     list<Context*> ls;
     ls.swap(waitfor_recover);
-    finish_contexts(&g_ceph_context, ls, -EINVAL);
+    finish_contexts(g_ceph_context, ls, -EINVAL);
     return;
   }
 
@@ -283,7 +283,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
   // done.
   list<Context*> ls;
   ls.swap(waitfor_recover);
-  finish_contexts(&g_ceph_context, ls, 0);
+  finish_contexts(g_ceph_context, ls, 0);
 }
 
 class Journaler::C_RereadHeadProbe : public Context
@@ -334,7 +334,7 @@ void Journaler::write_head(Context *oncommit)
   last_written.write_pos = safe_pos;
   dout(10) << "write_head " << last_written << dendl;
   
-  last_wrote_head = ceph_clock_now(&g_ceph_context);
+  last_wrote_head = ceph_clock_now(g_ceph_context);
 
   bufferlist bl;
   ::encode(last_written, bl);
@@ -342,7 +342,7 @@ void Journaler::write_head(Context *oncommit)
   
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(&g_ceph_context), 0, 
+  objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(g_ceph_context), 0, 
 		       NULL, 
 		       new C_WriteHead(this, last_written, oncommit));
 }
@@ -385,7 +385,7 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 
   // calc latency?
   if (logger) {
-    utime_t lat = ceph_clock_now(&g_ceph_context);
+    utime_t lat = ceph_clock_now(g_ceph_context);
     lat -= stamp;
     logger->favg(logger_key_lat, lat);
   }
@@ -408,7 +408,7 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
   while (!waitfor_safe.empty()) {
     if (waitfor_safe.begin()->first > safe_pos)
       break;
-    finish_contexts(&g_ceph_context, waitfor_safe.begin()->second);
+    finish_contexts(g_ceph_context, waitfor_safe.begin()->second);
     waitfor_safe.erase(waitfor_safe.begin());
   }
 }
@@ -499,7 +499,7 @@ void Journaler::_do_flush(unsigned amount)
   
   // submit write for anything pending
   // flush _start_ pos to _finish_flush
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   SnapContext snapc;
 
   Context *onsafe = new C_Flush(this, flush_pos, now);  // on COMMIT
@@ -515,7 +515,7 @@ void Journaler::_do_flush(unsigned amount)
   }
 
   filer.write(ino, &layout, snapc,
-	      flush_pos, len, write_bl, ceph_clock_now(&g_ceph_context),
+	      flush_pos, len, write_bl, ceph_clock_now(g_ceph_context),
 	      0,
 	      NULL, onsafe);
 
@@ -586,7 +586,7 @@ void Journaler::flush(Context *onsafe)
   }
 
   // write head?
-  if (last_wrote_head.sec() + g_conf->journaler_write_head_interval < ceph_clock_now(&g_ceph_context).sec()) {
+  if (last_wrote_head.sec() + g_conf->journaler_write_head_interval < ceph_clock_now(g_ceph_context).sec()) {
     write_head();
   }
 }
@@ -635,7 +635,7 @@ void Journaler::_issue_prezero()
     }
     SnapContext snapc;
     Context *c = new C_Journaler_Prezero(this, prezeroing_pos, len);
-    filer.zero(ino, &layout, snapc, prezeroing_pos, len, ceph_clock_now(&g_ceph_context), 0, NULL, c);
+    filer.zero(ino, &layout, snapc, prezeroing_pos, len, ceph_clock_now(g_ceph_context), 0, NULL, c);
     prezeroing_pos += len;
   }
 }
@@ -989,7 +989,7 @@ void Journaler::trim()
   uint64_t first = trimming_pos / period;
   uint64_t num = (trim_to - trimming_pos) / period;
   SnapContext snapc;
-  filer.purge_range(ino, &layout, snapc, first, num, ceph_clock_now(&g_ceph_context), 0, 
+  filer.purge_range(ino, &layout, snapc, first, num, ceph_clock_now(g_ceph_context), 0, 
 		    new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }
@@ -1010,7 +1010,7 @@ void Journaler::_trim_finish(int r, uint64_t to)
   // finishers?
   while (!waitfor_trim.empty() &&
 	 waitfor_trim.begin()->first <= trimmed_pos) {
-    finish_contexts(&g_ceph_context, waitfor_trim.begin()->second, 0);
+    finish_contexts(g_ceph_context, waitfor_trim.begin()->second, 0);
     waitfor_trim.erase(waitfor_trim.begin());
   }
 }

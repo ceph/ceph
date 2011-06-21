@@ -270,7 +270,7 @@ public:
   public:
     OSD *osd;
     HeartbeatDispatcher(OSD *o) 
-      : Dispatcher(&g_ceph_context), osd(o)
+      : Dispatcher(g_ceph_context), osd(o)
     {
     }
   } heartbeat_dispatcher;
@@ -739,7 +739,7 @@ protected:
 	osd->recovery_queue.push_back(&pg->recovery_item);
 
 	if (g_conf->osd_recovery_delay_start > 0) {
-	  osd->defer_recovery_until = ceph_clock_now(&g_ceph_context);
+	  osd->defer_recovery_until = ceph_clock_now(g_ceph_context);
 	  osd->defer_recovery_until += g_conf->osd_recovery_delay_start;
 	}
 	return true;

@@ -55,7 +55,7 @@ int main(int argc, const char **argv)
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
   EntityName ename(g_conf->name);
 
   const char *me = argv[0];
@@ -130,7 +130,7 @@ int main(int argc, const char **argv)
 
   if (gen_print_key) {
     CryptoKey key;
-    key.create(&g_ceph_context, CEPH_CRYPTO_AES);
+    key.create(g_ceph_context, CEPH_CRYPTO_AES);
     cout << key << std::endl;    
     return 0;
   }
@@ -178,7 +178,7 @@ int main(int argc, const char **argv)
       
       cout << "importing contents of " << import_keyring << " into " << fn << std::endl;
       //other.print(cout);
-      keyring.import(&g_ceph_context, other);
+      keyring.import(g_ceph_context, other);
       modified = true;
     } else {
       cerr << "can't open " << import_keyring << ": " << err << std::endl;
@@ -187,7 +187,7 @@ int main(int argc, const char **argv)
   }
   if (gen_key) {
     EntityAuth eauth;
-    eauth.key.create(&g_ceph_context, CEPH_CRYPTO_AES);
+    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     keyring.add(ename, eauth);
     modified = true;
   }
@@ -211,7 +211,7 @@ int main(int argc, const char **argv)
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
-    complain_about_parse_errors(&g_ceph_context, &parse_errors);
+    complain_about_parse_errors(g_ceph_context, &parse_errors);
     map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {

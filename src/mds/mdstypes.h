@@ -1036,7 +1036,7 @@ inline void decode(dirfrag_load_vec_t& c, const utime_t &t, bufferlist::iterator
 inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
   // ugliness!
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   DecayRate rate(g_conf->mds_decay_halflife);
   return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
 	     << " " << dl.meta_load(now, rate)
@@ -1134,7 +1134,7 @@ public:
   DecayCounter count;
 
 public:
-  load_spread_t() : p(0), n(0), count(ceph_clock_now(&g_ceph_context))
+  load_spread_t() : p(0), n(0), count(ceph_clock_now(g_ceph_context))
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
@@ -1517,7 +1517,7 @@ protected:
   void finish_waiting(uint64_t mask, int result = 0) {
     list<Context*> finished;
     take_waiting(mask, finished);
-    finish_contexts(&g_ceph_context, finished, result);
+    finish_contexts(g_ceph_context, finished, result);
   }
 
 

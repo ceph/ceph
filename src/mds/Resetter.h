@@ -50,7 +50,7 @@ public:
     Dispatcher(messenger_->cct),
     messenger(messenger_),
     monc(monc_),
-    lock("Resetter::lock"), timer(&g_ceph_context, lock)
+    lock("Resetter::lock"), timer(g_ceph_context, lock)
   {}
 
   virtual ~Resetter();

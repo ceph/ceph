@@ -625,7 +625,7 @@ void RGWPutObj::execute()
       info.num = atoi(part_num.c_str());
       info.etag = etag;
       info.size = s->obj_size;
-      info.modified = ceph_clock_now(&g_ceph_context);
+      info.modified = ceph_clock_now(g_ceph_context);
       ::encode(info, bl);
       RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
@@ -1310,7 +1310,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   s->os_auth_token = NULL;
   s->os_user = NULL;
   s->os_groups = NULL;
-  s->time = ceph_clock_now(&g_ceph_context);
+  s->time = ceph_clock_now(g_ceph_context);
   s->user.clear();
   s->perm_mask = 0;
 }

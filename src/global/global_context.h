@@ -26,7 +26,7 @@ class DoutStreambuf;
 
 class md_config_t;
 
-extern CephContext g_ceph_context;
+extern CephContext *g_ceph_context;
 extern md_config_t *g_conf;
 extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
 

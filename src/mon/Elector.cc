@@ -67,7 +67,7 @@ void Elector::start()
   // start by trying to elect me
   if (epoch % 2 == 0) 
     bump_epoch(epoch+1);  // odd == election cycle
-  start_stamp = ceph_clock_now(&g_ceph_context);
+  start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
   acked_me.insert(mon->rank);
 
@@ -95,7 +95,7 @@ void Elector::defer(int who)
 
   // ack them
   leader_acked = who;
-  ack_stamp = ceph_clock_now(&g_ceph_context);
+  ack_stamp = ceph_clock_now(g_ceph_context);
   mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
 			       mon->monmap->get_inst(who));
   
@@ -285,7 +285,7 @@ void Elector::dispatch(Message *m)
     {
       MMonElection *em = (MMonElection*)m;
 
-      MonMap *peermap = new MonMap(ceph_clock_now(&g_ceph_context));
+      MonMap *peermap = new MonMap(ceph_clock_now(g_ceph_context));
       peermap->decode(em->monmap_bl);
       if (peermap->epoch > mon->monmap->epoch) {
 	dout(0) << m->get_source_inst() << " has newer monmap epoch " << peermap->epoch

@@ -477,7 +477,7 @@ private:
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    pop(ceph_clock_now(&g_ceph_context)),
+    pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
     linklock(this, &linklock_type),
@@ -914,7 +914,7 @@ public:
       cap->reset_seq();
     }
     cap->set_cap_id(icr.cap_id);
-    cap->set_last_issue_stamp(ceph_clock_now(&g_ceph_context));
+    cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
     return cap;
   }
   void clear_client_caps_after_export() {
