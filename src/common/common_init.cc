@@ -29,7 +29,7 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-CephContext *get_global_context(void);
+void global_init_set_globals(CephContext *cct);
 
 CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
@@ -38,8 +38,10 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   g_code_env = code_env;
 
   // Create a configuration object
-  // TODO: de-globalize
-  CephContext *cct = get_global_context(); //new CephContext();
+  CephContext *cct = new CephContext(iparams.module_type);
+
+  global_init_set_globals(cct); // TODO: fix #845
+
   md_config_t *conf = cct->_conf;
   // add config observers here
 
@@ -59,7 +61,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->set_val_or_die("daemonize", "false");
       break;
   }
-  cct->set_module_type(iparams.module_type);
   return cct;
 }
 
@@ -90,4 +91,9 @@ void common_init_finish(CephContext *cct)
 {
   ceph::crypto::init();
   cct->start_service_thread();
+}
+
+void common_destroy_context(CephContext *cct)
+{
+  //delete cct;        // TODO: fix #845
 }

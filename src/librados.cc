@@ -895,6 +895,8 @@ librados::RadosClient::
     messenger->destroy();
   if (objecter)
     delete objecter;
+  common_destroy_context(cct);
+  cct = NULL;
 }
 
 
@@ -3102,32 +3104,19 @@ librados::ObjectOperation::~ObjectOperation()
 
 
 ///////////////////////////// C API //////////////////////////////
-static Mutex rados_init_mutex("rados_init");
-static int rados_initialized = 0;
-
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
-  rados_init_mutex.Lock();
-  CephContext *cct_;
-  // FIXME: get rid of this mutex and the reference to the global
-  if (!rados_initialized) {
-    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-    iparams.conf_file = "";
-    if (id) {
-      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-    }
-
-    cct_ = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    cct_->_conf->parse_env(); // environment variables override
-    cct_->_conf->apply_changes();
-
-    ++rados_initialized;
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
+  iparams.conf_file = "";
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
-  else {
-    cct_ = g_ceph_context;
-  }
-  rados_init_mutex.Unlock();
-  librados::RadosClient *radosp = new librados::RadosClient(cct_);
+
+  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  cct->_conf->parse_env(); // environment variables override
+  cct->_conf->apply_changes();
+
+  librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   return 0;
 }
@@ -3136,17 +3125,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
  * already called global_init and want to use that particular configuration for
  * their cluster.
  */
-extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct_)
+extern "C" int rados_create_with_context(rados_t *pcluster, CephContext *cct)
 {
-  rados_init_mutex.Lock();
-  if (!rados_initialized) {
-    ++rados_initialized;
-    /* This is a no-op now. g_ceph_context is still global in libcommon and we
-     * can't actually do anything useful with the provided conf pointer.
-     */
-  }
-  rados_init_mutex.Unlock();
-  librados::RadosClient *radosp = new librados::RadosClient(cct_);
+  librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   return 0;
 }

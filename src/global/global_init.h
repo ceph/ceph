@@ -25,10 +25,42 @@
 
 class CephContext;
 
+/*
+ * global_init is the first initialization function that
+ * daemons and utility programs need to call. It takes care of a lot of
+ * initialization, including setting up g_ceph_context.
+ */
 void global_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags);
-int global_init_shutdown_stderr(CephContext *cct);
+
+/*
+ * global_init_daemonize handles daemonizing a process. 
+ *
+ * If this is called, it *must* be called before common_init_finish
+ */
 void global_init_daemonize(CephContext *cct, int flags);
+
+/*
+ * global_init_chdir changes the process directory.
+ *
+ * If this is called, it *must* be called before common_init_finish
+ */
 void global_init_chdir(const CephContext *cct);
+
+/*
+ * Explicitly shut down stderr. Usually, you don't need to do
+ * this, because global_init_daemonize will do it for you. However, in some
+ * rare cases you need to call this explicitly.
+ *
+ * If this is called, it *must* be called before common_init_finish
+ */
+int global_init_shutdown_stderr(CephContext *cct);
+
+/*
+ * NOTE: you probably don't need to use this function. Use global_init instead!
+ *
+ * Explicitly set up the process globals: g_ceph_context, g_conf, and _doss.
+ */
+void global_init_set_globals(CephContext *cct);
 
 #endif

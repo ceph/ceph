@@ -2,7 +2,7 @@
 #include "common/signal.h"
 #include "global/signal_handler.h"
 
-#include "gtest/gtest.h"
+#include "test/unit.h"
 
 #include <errno.h>
 #include <signal.h>

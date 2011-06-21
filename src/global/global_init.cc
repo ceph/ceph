@@ -22,12 +22,20 @@
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
+#include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/color.h"
 
 #include <errno.h>
 #include <deque>
+
+void global_init_set_globals(CephContext *cct)
+{
+  g_ceph_context = cct;
+  g_conf = cct->_conf;
+  _doss = g_ceph_context->_doss;
+}
 
 static void output_ceph_version()
 {
@@ -41,9 +49,13 @@ static void output_ceph_version()
 void global_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags)
 {
+  // You can only call global_init once.
+  assert(!g_ceph_context);
+
   CephInitParameters iparams =
     ceph_argparse_early_args(args, module_type, flags);
   CephContext *cct = common_preinit(iparams, code_env, flags);
+  global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
 
   std::deque<std::string> parse_errors;
@@ -103,23 +115,6 @@ void global_init(std::vector < const char* >& args,
 static void pidfile_remove_void(void)
 {
   pidfile_remove();
-}
-
-/* Map stderr to /dev/null. This isn't really re-entrant; we rely on the old unix
- * behavior that the file descriptor that gets assigned is the lowest
- * available one.
- */
-int global_init_shutdown_stderr(CephContext *cct)
-{
-  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_shutdown_stderr: open(/dev/null) failed: error "
-	 << err << dendl;
-    return 1;
-  }
-  cct->_doss->handle_stderr_shutdown();
-  return 0;
 }
 
 void global_init_daemonize(CephContext *cct, int flags)
@@ -200,3 +195,21 @@ void global_init_chdir(const CephContext *cct)
 	 << conf->chdir << "': " << cpp_strerror(err) << dendl;
   }
 }
+
+/* Map stderr to /dev/null. This isn't really re-entrant; we rely on the old unix
+ * behavior that the file descriptor that gets assigned is the lowest
+ * available one.
+ */
+int global_init_shutdown_stderr(CephContext *cct)
+{
+  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "global_init_shutdown_stderr: open(/dev/null) failed: error "
+	 << err << dendl;
+    return 1;
+  }
+  cct->_doss->handle_stderr_shutdown();
+  return 0;
+}
+

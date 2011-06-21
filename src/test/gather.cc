@@ -11,9 +11,8 @@
  * Foundation.  See file COPYING.
  * 
  */
-#include "common/config.h"
 #include "include/Context.h"
-#include "gtest/gtest.h"
+#include "test/unit.h"
 
 class C_Checker : public Context {
 public:
@@ -25,7 +24,7 @@ public:
 };
 
 TEST(ContextGather, Constructor) {
-  C_Gather *gather = new C_Gather(g_ceph_context );
+  C_Gather *gather = new C_Gather(g_ceph_context);
   EXPECT_TRUE(gather->empty());
   EXPECT_EQ(0, gather->get_num());
   EXPECT_EQ(0, gather->get_num_remaining());

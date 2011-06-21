@@ -36,10 +36,48 @@ enum common_init_flags_t {
   CINIT_FLAG_NO_CLOSE_STDERR = 0x4,
 };
 
+/*
+ * NOTE: If you are writing a Ceph daemon, ignore this function and call
+ * global_init instead. It will call common_preinit for you.
+ *
+ * common_preinit creates the CephContext.
+ *
+ * After this function gives you a CephContext, you need to set up the
+ * Ceph configuration, which lives inside the CephContext as md_config_t.
+ * The initial settings are not very useful because they do not reflect what
+ * the user asked for.
+ *
+ * This is usually done by something like this:
+ * cct->_conf->parse_env();
+ * cct->_conf->apply_changes();
+ *
+ * Your library may also supply functions to read a configuration file.
+ */
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
+
+/* Print out some parse errors. */
 void complain_about_parse_errors(CephContext *cct,
 				 std::deque<std::string> *parse_errors);
+
+/* This function is called after you have done your last
+ * fork. When you make this call, the system will initialize everything that
+ * cannot be initialized before a fork.
+ *
+ * This includes things like starting threads, initializing libraries that
+ * can't handle forking, and so forth.
+ *
+ * If you are writing a Ceph library, you can call this pretty much any time.
+ * We do not allow our library users to fork and continue using the Ceph
+ * libraries. The most obvious reason for this is that the threads started by
+ * the Ceph libraries would be destroyed by a fork().
+ */
 void common_init_finish(CephContext *cct);
+
+/* This function is called from library code to destroy a context created by
+ * the library.
+ * You should not call this function if you called global_init.
+ */
+void common_destroy_context(CephContext *cct);
 
 #endif

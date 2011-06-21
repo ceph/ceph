@@ -28,10 +28,6 @@
 #include <string.h>
 #include <string>
 
-static Mutex libceph_init_mutex("libceph_init_mutex");
-static bool libceph_initialized = false; // FIXME! remove this
-static int nonce_seed = 0;
-
 class ceph_mount_info
 {
 public:
@@ -49,11 +45,10 @@ public:
   {
     try {
       shutdown();
-    // uncomment once conf is de-globalized
-//    if (conf) {
-//      free(conf);
-//      conf = NULL;
-//    }
+      if (cct) {
+	common_destroy_context(cct);
+	cct = NULL;
+      }
     }
     catch (const std::exception& e) {
       // we shouldn't get here, but if we do, we want to know about it.
@@ -215,10 +210,11 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
   return VERSION;
 }
 
-static int ceph_create_with_context_impl(struct ceph_mount_info **cmount, CephContext *cct)
+extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
 {
-  // should hold libceph_init_mutex here
-  libceph_initialized = true;
+  // Function-static variables are thread-safe in gcc and in the forthcoming C++ standard
+  static int nonce_seed = 0;
+
   uint64_t nonce = (uint64_t)++nonce_seed * 1000000ull + (uint64_t)getpid();
   *cmount = new struct ceph_mount_info(nonce, cct);
   return 0;
@@ -226,32 +222,16 @@ static int ceph_create_with_context_impl(struct ceph_mount_info **cmount, CephCo
 
 extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const id)
 {
-  int ret;
-  libceph_init_mutex.Lock();
-  CephContext *cct = g_ceph_context;
-  if (!libceph_initialized) {
-    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-    iparams.conf_file = "";
-    if (id) {
-      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-    }
-
-    cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    cct->_conf->parse_env(); // environment variables coverride
-    cct->_conf->apply_changes();
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
+  iparams.conf_file = "";
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
-  ret = ceph_create_with_context_impl(cmount, cct);
-  libceph_init_mutex.Unlock();
-  return ret;
-}
 
-extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
-{
-  int ret;
-  libceph_init_mutex.Lock();
-  ret = ceph_create_with_context_impl(cmount, cct);
-  libceph_init_mutex.Unlock();
-  return ret;
+  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  cct->_conf->parse_env(); // environment variables coverride
+  cct->_conf->apply_changes();
+  return ceph_create_with_context(cmount, cct);
 }
 
 extern "C" void ceph_shutdown(struct ceph_mount_info *cmount)

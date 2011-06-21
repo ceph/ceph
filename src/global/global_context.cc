@@ -18,11 +18,6 @@
 /*
  * Global variables for use from process context.
  */
-CephContext *g_ceph_context = new CephContext(0);
-md_config_t *g_conf(g_ceph_context->_conf);
-DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss(g_ceph_context->_doss);
-
-CephContext *get_global_context(void)
-{
-  return g_ceph_context;
-}
+CephContext *g_ceph_context = NULL;
+md_config_t *g_conf = NULL;
+DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss = NULL;

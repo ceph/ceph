@@ -26,32 +26,20 @@
 
 #define RGW_LOG(x) pdout(x, g_conf->rgw_log)
 
-static Mutex librgw_init_mutex("librgw_init");
-static int librgw_initialized = 0;
-
 int librgw_create(librgw_t *rgw, const char * const id)
 {
-  librgw_init_mutex.Lock();
-  CephContext *cct;
-  if (!librgw_initialized) {
-    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-    iparams.conf_file = "";
-    if (id) {
-      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-    }
-    CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-    cct->_conf->log_to_stderr = 1; // quiet by default
-    cct->_conf->parse_env(); // environment variables override
-    cct->_conf->apply_changes();
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
+  iparams.conf_file = "";
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+  }
+  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  cct->_conf->log_to_stderr = 1; // quiet by default
+  cct->_conf->parse_env(); // environment variables override
+  cct->_conf->apply_changes();
 
-    ++librgw_initialized;
-    common_init_finish(cct);
-  }
-  else {
-    cct = g_ceph_context;
-  }
-  librgw_init_mutex.Unlock();
-  *rgw = g_ceph_context;
+  common_init_finish(cct);
+  *rgw = cct;
   return 0;
 }
 
@@ -141,5 +129,5 @@ void librgw_free_bin(librgw_t rgw, char *bin)
 
 void librgw_shutdown(librgw_t rgw)
 {
-  // TODO: free configuration, etc.
+  common_init_finish(rgw);
 }
