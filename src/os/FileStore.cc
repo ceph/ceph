@@ -864,14 +864,14 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   basedir_fd(-1), current_fd(-1),
   attrs(this), fake_attrs(false),
   collections(this), fake_collections(false),
-  ondisk_finisher(&g_ceph_context),
+  ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
   force_sync(false), sync_epoch(0),
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
-  timer(&g_ceph_context, sync_entry_timeo_lock),
+  timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
-  op_queue_len(0), op_queue_bytes(0), op_finisher(&g_ceph_context), next_finish(0),
-  op_tp(&g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads), op_wq(this, &op_tp),
+  op_queue_len(0), op_queue_bytes(0), op_finisher(g_ceph_context), next_finish(0),
+  op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads), op_wq(this, &op_tp),
   flusher_queue_len(0), flusher_thread(this),
   logger(NULL)
 {
@@ -1902,11 +1902,11 @@ void FileStore::start_logger(int whoami, utime_t tare)
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  logger = new ProfLogger(&g_ceph_context, name, (ProfLogType*)&fs_logtype);
+  logger = new ProfLogger(g_ceph_context, name, (ProfLogType*)&fs_logtype);
   if (journal)
     journal->logger = logger;
   {
-    ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+    ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
     coll->logger_add(logger);
     coll->logger_tare(tare);
     coll->logger_start();
@@ -1919,7 +1919,7 @@ void FileStore::stop_logger()
   if (logger) {
     if (journal)
       journal->logger = NULL;
-    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = NULL;
   }
@@ -3011,10 +3011,10 @@ void FileStore::sync_entry()
     utime_t min_interval;
     min_interval.set_from_double(g_conf->filestore_min_sync_interval);
 
-    utime_t startwait = ceph_clock_now(&g_ceph_context);
+    utime_t startwait = ceph_clock_now(g_ceph_context);
     if (!force_sync) {
       dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(&g_ceph_context, lock, max_interval);
+      sync_cond.WaitInterval(g_ceph_context, lock, max_interval);
     } else {
       dout(20) << "sync_entry not waiting, force_sync set" << dendl;
     }
@@ -3024,7 +3024,7 @@ void FileStore::sync_entry()
       force_sync = false;
     } else {
       // wait for at least the min interval
-      utime_t woke = ceph_clock_now(&g_ceph_context);
+      utime_t woke = ceph_clock_now(g_ceph_context);
       woke -= startwait;
       dout(20) << "sync_entry woke after " << woke << dendl;
       if (woke < min_interval) {
@@ -3032,7 +3032,7 @@ void FileStore::sync_entry()
 	t -= woke;
 	dout(20) << "sync_entry waiting for another " << t 
 		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(&g_ceph_context, lock, t);
+	sync_cond.WaitInterval(g_ceph_context, lock, t);
       }
     }
 
@@ -3042,7 +3042,7 @@ void FileStore::sync_entry()
     lock.Unlock();
     
     if (commit_start()) {
-      utime_t start = ceph_clock_now(&g_ceph_context);
+      utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = committing_seq;
 
       SyncEntryTimeout *sync_entry_timeo = new SyncEntryTimeout();
@@ -3122,7 +3122,7 @@ void FileStore::sync_entry()
 	}
       }
       
-      utime_t done = ceph_clock_now(&g_ceph_context);
+      utime_t done = ceph_clock_now(g_ceph_context);
       done -= start;
       dout(10) << "sync_entry commit took " << done << dendl;
       commit_finish();
@@ -3157,7 +3157,7 @@ void FileStore::sync_entry()
     }
     
     lock.Lock();
-    finish_contexts(&g_ceph_context, fin, 0);
+    finish_contexts(g_ceph_context, fin, 0);
     fin.clear();
     if (!sync_waiters.empty()) {
       dout(10) << "sync_entry more waiters, committing again" << dendl;

@@ -111,7 +111,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
   monc->set_messenger(messenger);
 
-  mdsmap = new MDSMap(&g_ceph_context);
+  mdsmap = new MDSMap(g_ceph_context);
   osdmap = new OSDMap;
 
   objecter = new Objecter(messenger, monc, osdmap, mds_lock, timer);
@@ -173,12 +173,12 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) {
-    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = 0;
   }
   if (mlogger) {
-    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
     delete mlogger;
     mlogger = 0;
   }
@@ -287,19 +287,19 @@ void MDS::open_logger()
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   logger = new ProfLogger(cct, name, (ProfLogType*)&mds_logtype);
-  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
+  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
 
   snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
 	   g_conf->name.get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   mlogger = new ProfLogger(cct, name, (ProfLogType*)&mdm_logtype);
-  g_ceph_context.GetProfLoggerCollection()->logger_add(mlogger);
+  g_ceph_context->GetProfLoggerCollection()->logger_add(mlogger);
 
   mdlog->open_logger();
   server->open_logger();
 
   {
-    ProfLoggerCollection *coll = g_ceph_context.GetProfLoggerCollection();
+    ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
     coll->logger_tare(mdsmap->get_created());
     coll->logger_start();
   }
@@ -575,7 +575,7 @@ void MDS::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   mds_load_t load = balancer->get_load(now);
   
   if (logger) {
@@ -627,7 +627,7 @@ void MDS::beacon_send()
 	   << " (currently " << ceph_mds_state_name(state) << ")"
 	   << dendl;
 
-  beacon_seq_stamp[beacon_last_seq] = ceph_clock_now(&g_ceph_context);
+  beacon_seq_stamp[beacon_last_seq] = ceph_clock_now(g_ceph_context);
   
   MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), monc->get_global_id(), name, mdsmap->get_epoch(), 
 				      want_state, beacon_last_seq);
@@ -651,7 +651,7 @@ bool MDS::is_laggy()
   if (beacon_last_acked_stamp == utime_t())
     return false;
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t since = now - beacon_last_acked_stamp;
   if (since > g_conf->mds_beacon_grace) {
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
@@ -672,7 +672,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   if (beacon_seq_stamp.count(seq)) {
     assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
     beacon_last_acked_stamp = beacon_seq_stamp[seq];
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(g_ceph_context);
     utime_t rtt = now - beacon_last_acked_stamp;
 
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
@@ -854,7 +854,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   entity_addr_t addr;
 
   // decode and process
-  mdsmap = new MDSMap(&g_ceph_context);
+  mdsmap = new MDSMap(g_ceph_context);
   mdsmap->decode(m->get_encoded());
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
@@ -1116,7 +1116,7 @@ void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  C_Gather *fin = new C_Gather(&g_ceph_context, new C_MDS_CreateFinish(this));
+  C_Gather *fin = new C_Gather(g_ceph_context, new C_MDS_CreateFinish(this));
 
   mdcache->init_layouts();
 
@@ -1192,7 +1192,7 @@ void MDS::boot_start(int step, int r)
 
   case 1:
     {
-      C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDS_BootStart(this, 2));
+      C_Gather *gather = new C_Gather(g_ceph_context, new C_MDS_BootStart(this, 2));
       dout(2) << "boot_start " << step << ": opening inotable" << dendl;
       inotable->load(gather->new_sub());
 
@@ -1216,7 +1216,7 @@ void MDS::boot_start(int step, int r)
     {
       dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
 
-      C_Gather *gather = new C_Gather(&g_ceph_context, new C_MDS_BootStart(this, 3));
+      C_Gather *gather = new C_Gather(g_ceph_context, new C_MDS_BootStart(this, 3));
 
       mdcache->open_mydir_inode(gather->new_sub());
 
@@ -1433,7 +1433,7 @@ void MDS::reconnect_start()
     reopen_log();
 
   server->reconnect_clients();
-  finish_contexts(&g_ceph_context, waiting_for_reconnect);
+  finish_contexts(g_ceph_context, waiting_for_reconnect);
 }
 void MDS::reconnect_done()
 {
@@ -1468,7 +1468,7 @@ void MDS::rejoin_done()
 void MDS::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
-  finish_contexts(&g_ceph_context, waiting_for_replay);  // kick waiters
+  finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
   queue_one_replay();
 }
 
@@ -1487,8 +1487,8 @@ void MDS::active_start()
 
   mdcache->clean_open_file_lists();
   mdcache->scan_stray_dir();
-  finish_contexts(&g_ceph_context, waiting_for_replay);  // kick waiters
-  finish_contexts(&g_ceph_context, waiting_for_active);  // kick waiters
+  finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
+  finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
 
 
@@ -1864,7 +1864,7 @@ bool MDS::_dispatch(Message *m)
 
   // hack: thrash exports
   static utime_t start;
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   if (start == utime_t()) 
     start = now;
   /*double el = now - start;
@@ -2014,7 +2014,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   Mutex::Locker l(mds_lock);
 
   AuthAuthorizeHandler *authorize_handler =
-      get_authorize_handler(protocol, &g_ceph_context);
+      get_authorize_handler(protocol, g_ceph_context);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;

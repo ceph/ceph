@@ -62,9 +62,9 @@ void usage()
 static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
-  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   messenger->bind(getpid());
-  MonClient mc(&g_ceph_context);
+  MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
@@ -197,7 +197,7 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   messenger->bind(getpid());
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;
@@ -217,14 +217,14 @@ int main(int argc, const char **argv)
 			SimpleMessenger::Policy::stateful_server(supported, 0));
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-    global_init_daemonize(&g_ceph_context, 0);
-  common_init_finish(&g_ceph_context);
+    global_init_daemonize(g_ceph_context, 0);
+  common_init_finish(g_ceph_context);
 
   // get monmap
-  MonClient mc(&g_ceph_context);
+  MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
-  global_init_chdir(&g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
   messenger->start();
 

@@ -520,7 +520,7 @@ void ObjectCacher::bh_read_finish(int poolid, sobject_t oid, loff_t start, uint6
            p++)
         ls.splice(ls.end(), p->second);
       bh->waitfor_read.clear();
-      finish_contexts(&g_ceph_context, ls);
+      finish_contexts(g_ceph_context, ls);
 
       // clean up?
       ob->try_merge_bh(bh);
@@ -617,7 +617,7 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
                << " tid " << tid << " obsolete" << dendl;
     }
 
-    finish_contexts(&g_ceph_context, ls);
+    finish_contexts(g_ceph_context, ls);
 
   }
 }
@@ -678,7 +678,7 @@ void ObjectCacher::bh_write_ack(int poolid, sobject_t oid, loff_t start, uint64_
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_ack[tid]);
       ob->waitfor_ack.erase(tid);
-      finish_contexts(&g_ceph_context, ls);
+      finish_contexts(g_ceph_context, ls);
     }
 
     // is the entire object set now clean?
@@ -713,7 +713,7 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_commit[tid]);
       ob->waitfor_commit.erase(tid);
-      finish_contexts(&g_ceph_context, ls);
+      finish_contexts(g_ceph_context, ls);
     }
 
     // is the entire object set now clean and fully committed?
@@ -736,7 +736,7 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
 
 void ObjectCacher::flush(loff_t amount)
 {
-  utime_t cutoff = ceph_clock_now(&g_ceph_context);
+  utime_t cutoff = ceph_clock_now(g_ceph_context);
   //cutoff.sec_ref() -= g_conf->client_oc_max_dirty_age;
 
   dout(10) << "flush " << amount << dendl;
@@ -960,7 +960,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
@@ -1071,7 +1071,7 @@ void ObjectCacher::flusher_entry()
       }
       else {
         // check tail of lru for old dirty items
-        utime_t cutoff = ceph_clock_now(&g_ceph_context);
+        utime_t cutoff = ceph_clock_now(g_ceph_context);
         cutoff.sec_ref()--;
         BufferHead *bh = 0;
         while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
@@ -1083,7 +1083,7 @@ void ObjectCacher::flusher_entry()
       }
     }
     if (flusher_stop) break;
-    flusher_cond.WaitInterval(&g_ceph_context, lock, utime_t(1,0));
+    flusher_cond.WaitInterval(g_ceph_context, lock, utime_t(1,0));
   }
   lock.Unlock();
   dout(10) << "flusher finish" << dendl;
@@ -1488,7 +1488,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     if (!flush(ob)) {
       // we'll need to gather...
       if (!gather && onfinish) 
-        gather = new C_Gather(&g_ceph_context, onfinish);
+        gather = new C_Gather(g_ceph_context, onfinish);
       safe = false;
 
       dout(10) << "flush_set " << oset << " will wait for ack tid " 
@@ -1535,7 +1535,7 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
       dout(10) << "commit_set " << oset << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
                << dendl;
-      if (!gather && onfinish) gather = new C_Gather(&g_ceph_context, onfinish);
+      if (!gather && onfinish) gather = new C_Gather(g_ceph_context, onfinish);
       safe = false;
       if (gather)
         ob->waitfor_commit[ob->last_write_tid].push_back( gather->new_sub() );
@@ -1735,7 +1735,7 @@ void ObjectCacher::kick_sync_writers(ObjectSet *oset)
     ls.splice(ls.begin(), ob->waitfor_wr);
   }
 
-  finish_contexts(&g_ceph_context, ls);
+  finish_contexts(g_ceph_context, ls);
 }
 
 void ObjectCacher::kick_sync_readers(ObjectSet *oset)
@@ -1756,7 +1756,7 @@ void ObjectCacher::kick_sync_readers(ObjectSet *oset)
     ls.splice(ls.begin(), ob->waitfor_rd);
   }
 
-  finish_contexts(&g_ceph_context, ls);
+  finish_contexts(g_ceph_context, ls);
 }
 
 

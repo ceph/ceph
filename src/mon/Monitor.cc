@@ -263,7 +263,7 @@ epoch_t Monitor::get_epoch()
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
-  leader_since = ceph_clock_now(&g_ceph_context);
+  leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
@@ -511,7 +511,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
-    encode_message(&g_ceph_context, req, rr->request_bl);
+    encode_message(g_ceph_context, req, rr->request_bl);
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
@@ -568,7 +568,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(&g_ceph_context, m, bl);
+  encode_message(g_ceph_context, m, bl);
 
   messenger->send_message(m, to);
 
@@ -756,7 +756,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	dout(10) << "setting timeout on session" << dendl;
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
-	s->until = ceph_clock_now(&g_ceph_context);
+	s->until = ceph_clock_now(g_ceph_context);
 	s->until += g_conf->mon_subscribe_interval;
       } else {
 	//give it monitor caps; the peer type has been authenticated
@@ -915,7 +915,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     return;
   }
 
-  s->until = ceph_clock_now(&g_ceph_context);
+  s->until = ceph_clock_now(g_ceph_context);
   s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
@@ -1049,7 +1049,7 @@ void Monitor::tick()
     (*p)->tick();
   
   // trim sessions
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
   while (!p.end()) {
     MonSession *s = *p;
@@ -1143,7 +1143,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
 
-  if (!is_supported_auth(CEPH_AUTH_CEPHX, &g_ceph_context))
+  if (!is_supported_auth(CEPH_AUTH_CEPHX, g_ceph_context))
     return false;
 
   CephXServiceTicketInfo auth_ticket_info;
@@ -1181,7 +1181,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   ::encode(blob, ticket_data);
 
   bufferlist::iterator iter = ticket_data.begin();
-  CephXTicketHandler handler(&g_ceph_context, service_id);
+  CephXTicketHandler handler(g_ceph_context, service_id);
   ::decode(handler.ticket, iter);
 
   handler.session_key = info.session_key;
@@ -1200,7 +1200,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 	   << " protocol " << protocol << dendl;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
-      is_supported_auth(CEPH_AUTH_CEPHX, &g_ceph_context)) {
+      is_supported_auth(CEPH_AUTH_CEPHX, g_ceph_context)) {
     // monitor, and cephx is enabled
     isvalid = false;
     if (protocol == CEPH_AUTH_CEPHX) {
@@ -1208,7 +1208,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(&g_ceph_context, &key_server, iter,
+	int ret = cephx_verify_authorizer(g_ceph_context, &key_server, iter,
 					  auth_ticket_info, authorizer_reply);
 	if (ret >= 0)
 	  isvalid = true;

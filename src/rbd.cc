@@ -507,8 +507,8 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
 
 static int do_kernel_add(const char *poolname, const char *imgname, const char *secretfile, const char *user)
 {
-  MonMap monmap(ceph_clock_now(&g_ceph_context));
-  int r = MonClient::build_initial_monmap(&g_ceph_context, monmap);
+  MonMap monmap(ceph_clock_now(g_ceph_context));
+  int r = MonClient::build_initial_monmap(g_ceph_context, monmap);
   if (r < 0)
     return r;
 
@@ -825,7 +825,7 @@ int main(int argc, const char **argv)
 
   int opt_cmd = OPT_NO_CMD;
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   const char *poolname = NULL;
   uint64_t size = 0;
@@ -942,7 +942,7 @@ int main(int argc, const char **argv)
   }
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP);
-  if (talk_to_cluster && rados.init_with_context(&g_ceph_context) < 0) {
+  if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }

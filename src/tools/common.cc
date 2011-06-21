@@ -90,7 +90,7 @@ static void handle_observe(CephToolCtx *ctx, MMonObserve *observe)
 
 static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
 
   dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
 	  << " v" << notify->ver
@@ -273,14 +273,14 @@ static void send_command(CephToolCtx *ctx)
   m->set_data(pending_bl);
 
   if (!ctx->concise)
-    *ctx->log << ceph_clock_now(&g_ceph_context) << " mon" << " <- " << pending_cmd << std::endl;
+    *ctx->log << ceph_clock_now(g_ceph_context) << " mon" << " <- " << pending_cmd << std::endl;
   ctx->mc.send_mon_message(m);
 }
 
 class Admin : public Dispatcher {
 public:
   Admin(CephToolCtx *ctx_)
-    : Dispatcher(&g_ceph_context),
+    : Dispatcher(g_ceph_context),
       ctx(ctx_)
   {
   }
@@ -340,7 +340,7 @@ static int do_command(CephToolCtx *ctx,
   rs = rs;
   rbl = reply_bl;
   if (!ctx->concise)
-    *ctx->log << ceph_clock_now(&g_ceph_context) << " "
+    *ctx->log << ceph_clock_now(g_ceph_context) << " "
 	   << reply_from.name << " -> '"
 	   << reply_rs << "' (" << reply_rc << ")"
 	   << std::endl;
@@ -530,7 +530,7 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   ceph_tool_mode = mode;
 
   std::auto_ptr <CephToolCtx> ctx;
-  ctx.reset(new CephToolCtx(&g_ceph_context, concise));
+  ctx.reset(new CephToolCtx(g_ceph_context, concise));
 
   // get monmap
   if (ctx->mc.build_initial_monmap() < 0)
@@ -540,7 +540,7 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   tok = tok_init(NULL);
 
   // start up network
-  messenger = new SimpleMessenger(&g_ceph_context);
+  messenger = new SimpleMessenger(g_ceph_context);
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->start_with_nonce(getpid());
   ctx->dispatcher = new Admin(ctx.get());

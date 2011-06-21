@@ -83,7 +83,7 @@ int main(int argc, const char **argv)
   }
 
   if (dump_pg_log) {
-    common_init_finish(&g_ceph_context);
+    common_init_finish(g_ceph_context);
     bufferlist bl;
     std::string error;
     int r = bl.read_file(dump_pg_log, &error);
@@ -122,8 +122,8 @@ int main(int argc, const char **argv)
   }
 
   if (mkfs) {
-    common_init_finish(&g_ceph_context);
-    MonClient mc(&g_ceph_context);
+    common_init_finish(g_ceph_context);
+    MonClient mc(g_ceph_context);
     if (mc.build_initial_monmap() < 0)
       return -1;
     if (mc.get_monmap_privately() < 0)
@@ -141,7 +141,7 @@ int main(int argc, const char **argv)
     *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
-    common_init_finish(&g_ceph_context);
+    common_init_finish(g_ceph_context);
     KeyRing *keyring = KeyRing::create_empty();
     if (!keyring) {
       derr << "Unable to get a Ceph keyring." << dendl;
@@ -149,7 +149,7 @@ int main(int argc, const char **argv)
     }
     EntityName ename(g_conf->name);
     EntityAuth eauth;
-    eauth.key.create(&g_ceph_context, CEPH_CRYPTO_AES);
+    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     keyring->add(ename, eauth);
     bufferlist bl;
     keyring->encode_plaintext(bl);
@@ -163,7 +163,7 @@ int main(int argc, const char **argv)
   if (mkfs || mkkey)
     exit(0);
   if (mkjournal) {
-    common_init_finish(&g_ceph_context);
+    common_init_finish(g_ceph_context);
     int err = OSD::mkjournal(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf->osd_journal
@@ -176,7 +176,7 @@ int main(int argc, const char **argv)
     exit(0);
   }
   if (flushjournal) {
-    common_init_finish(&g_ceph_context);
+    common_init_finish(g_ceph_context);
     int err = OSD::flushjournal(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf->osd_journal
@@ -226,9 +226,9 @@ int main(int argc, const char **argv)
     cluster_addr_set = false;
   }
 
-  SimpleMessenger *client_messenger = new SimpleMessenger(&g_ceph_context);
-  SimpleMessenger *cluster_messenger = new SimpleMessenger(&g_ceph_context);
-  SimpleMessenger *messenger_hb = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *messenger_hb = new SimpleMessenger(g_ceph_context);
 
   client_messenger->bind(g_conf->public_addr, getpid());
   cluster_messenger->bind(g_conf->cluster_addr, getpid());
@@ -276,12 +276,12 @@ int main(int argc, const char **argv)
 
   // Set up crypto, daemonize, etc.
   // Leave stderr open in case we need to report errors.
-  global_init_daemonize(&g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
-  common_init_finish(&g_ceph_context);
-  MonClient mc(&g_ceph_context);
+  global_init_daemonize(g_ceph_context, CINIT_FLAG_NO_CLOSE_STDERR);
+  common_init_finish(g_ceph_context);
+  MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
-  global_init_chdir(&g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
 		     g_conf->osd_data, g_conf->osd_journal);
@@ -293,7 +293,7 @@ int main(int argc, const char **argv)
   }
 
   // Now close the standard file descriptors
-  global_init_shutdown_stderr(&g_ceph_context);
+  global_init_shutdown_stderr(g_ceph_context);
 
   client_messenger->start();
   messenger_hb->start();

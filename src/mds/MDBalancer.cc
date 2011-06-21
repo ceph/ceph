@@ -71,8 +71,8 @@ int MDBalancer::proc_message(Message *m)
 void MDBalancer::tick()
 {
   static int num_bal_times = g_conf->mds_bal_max;
-  static utime_t first = ceph_clock_now(&g_ceph_context);
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  static utime_t first = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t elapsed = now;
   elapsed -= first;
 
@@ -171,7 +171,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
 
 void MDBalancer::send_heartbeat()
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   
   if (mds->mdsmap->is_degraded()) {
     dout(10) << "send_heartbeat degraded" << dendl;
@@ -433,7 +433,7 @@ void MDBalancer::prep_rebalance(int beat)
   } else {
     int cluster_size = mds->get_mds_map()->get_num_mds();
     int whoami = mds->get_nodeid();
-    rebalance_time = ceph_clock_now(&g_ceph_context);
+    rebalance_time = ceph_clock_now(g_ceph_context);
 
     dump_pop_map();
 
@@ -462,7 +462,7 @@ void MDBalancer::prep_rebalance(int beat)
     double total_load = 0;
     multimap<double,int> load_map;
     for (int i=0; i<cluster_size; i++) {
-      map<int, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(&g_ceph_context)));
+      map<int, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
       std::pair < map<int, mds_load_t>::iterator, bool > r(mds_load.insert(val));
       mds_load_t &load(r.first->second);
 
@@ -1166,7 +1166,7 @@ void MDBalancer::dump_pop_map()
   if (mds->mdcache->root)
     iq.push_back(mds->mdcache->root);
 
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   while (!iq.empty()) {
     CInode *in = iq.front();
     iq.pop_front();

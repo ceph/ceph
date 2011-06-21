@@ -3124,7 +3124,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     ++rados_initialized;
   }
   else {
-    cct_ = &g_ceph_context;
+    cct_ = g_ceph_context;
   }
   rados_init_mutex.Unlock();
   librados::RadosClient *radosp = new librados::RadosClient(cct_);

@@ -205,7 +205,7 @@ class SyntheticClient {
   }
 
   bool time_to_stop() {
-    utime_t now = ceph_clock_now(&g_ceph_context);
+    utime_t now = ceph_clock_now(g_ceph_context);
     if (0) cout << "time_to_stop .. now " << now 
 		<< " until " << run_until 
 		<< " start " << run_start 

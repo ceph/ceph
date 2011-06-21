@@ -81,7 +81,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // get monmap
-  MonClient mc(&g_ceph_context);
+  MonClient mc(g_ceph_context);
   int ret = mc.build_initial_monmap();
   if (ret == -EINVAL)
     usage();
@@ -90,7 +90,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     return -1;
 
   // start up network
-  SimpleMessenger *messenger = new SimpleMessenger(&g_ceph_context);
+  SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   messenger->register_entity(entity_name_t::CLIENT());
   Client *client = new Client(messenger, &mc);
   if (filer_flags) {
@@ -110,7 +110,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     childpid = fork();
   }
 
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   if (childpid == 0) {
     //cout << "child, mounting" << std::endl;

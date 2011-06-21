@@ -42,7 +42,7 @@ MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
   if (logger) {
-    g_ceph_context.GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
     delete logger;
     logger = 0;
   }
@@ -78,8 +78,8 @@ void MDLog::open_logger()
   // logger
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
-  logger = new ProfLogger(&g_ceph_context, name, &mdlog_logtype);
-  g_ceph_context.GetProfLoggerCollection()->logger_add(logger);
+  logger = new ProfLogger(g_ceph_context, name, &mdlog_logtype);
+  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
 }
 
 void MDLog::init_journaler()
@@ -172,7 +172,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   le->_segment->num_events++;
   le->update_segment();
 
-  le->set_stamp(ceph_clock_now(&g_ceph_context));
+  le->set_stamp(ceph_clock_now(g_ceph_context));
   
   num_events++;
   assert(!capped);
@@ -304,7 +304,7 @@ void MDLog::trim(int m)
   if (segments.empty()) return;
 
   // hack: only trim for a few seconds at a time
-  utime_t stop = ceph_clock_now(&g_ceph_context);
+  utime_t stop = ceph_clock_now(g_ceph_context);
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -313,7 +313,7 @@ void MDLog::trim(int m)
 	 ((max_events >= 0 && left-expiring_events-expired_events > max_events) ||
 	  (max_segments >= 0 && (int)(segments.size()-expiring_segments.size()-expired_segments.size()) > max_segments))) {
 
-    if (stop < ceph_clock_now(&g_ceph_context))
+    if (stop < ceph_clock_now(g_ceph_context))
       break;
 
     if ((int)expiring_segments.size() >= g_conf->mds_log_max_expiring)
@@ -573,7 +573,7 @@ void MDLog::_replay_thread()
   }
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
-  finish_contexts(&g_ceph_context, waitfor_replay, 0);  
+  finish_contexts(g_ceph_context, waitfor_replay, 0);  
 
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();

@@ -61,7 +61,7 @@ void OSDMonitor::create_initial(bufferlist& bl)
   newmap.decode(bl);
   newmap.set_epoch(1);
   newmap.set_fsid(mon->monmap->fsid);
-  newmap.created = newmap.modified = ceph_clock_now(&g_ceph_context);
+  newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap);
@@ -113,7 +113,7 @@ bool OSDMonitor::update_from_paxos()
     if (osdmap.is_down(o) && osdmap.is_in(o) &&
 	down_pending_out.count(o) == 0) {
       dout(10) << " adding osd" << o << " to down_pending_out map" << dendl;
-      down_pending_out[o] = ceph_clock_now(&g_ceph_context);
+      down_pending_out[o] = ceph_clock_now(g_ceph_context);
     }
 
   if (mon->is_leader()) {
@@ -240,7 +240,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 	   << dendl;
   
   // finalize up pending_inc
-  pending_inc.modified = ceph_clock_now(&g_ceph_context);
+  pending_inc.modified = ceph_clock_now(g_ceph_context);
 
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
@@ -990,7 +990,7 @@ void OSDMonitor::tick()
   bool do_propose = false;
 
   // mark down osds out?
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   map<int,utime_t>::iterator i = down_pending_out.begin();
   while (i != down_pending_out.end()) {
     int o = i->first;
@@ -1588,7 +1588,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "unable to parse address " << m->cmd[3];
       else if (m->cmd[2] == "add") {
 
-	utime_t expires = ceph_clock_now(&g_ceph_context);
+	utime_t expires = ceph_clock_now(g_ceph_context);
 	double d = 60*60;  // 1 hour default
 	if (m->cmd.size() > 4)
 	  d = atof(m->cmd[4].c_str());
@@ -1637,7 +1637,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      pp = &pending_inc.new_pools[pool];
 	      *pp = *p;
 	    }
-	    pp->add_snap(snapname.c_str(), ceph_clock_now(&g_ceph_context));
+	    pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
 	    pp->set_snap_epoch(pending_inc.epoch);
 	    ss << "created pool " << m->cmd[3] << " snap " << snapname;
 	    getline(ss, rs);
@@ -1942,7 +1942,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
-    pp->add_snap(m->name.c_str(), ceph_clock_now(&g_ceph_context));
+    pp->add_snap(m->name.c_str(), ceph_clock_now(g_ceph_context));
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
     break;
 

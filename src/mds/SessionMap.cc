@@ -84,7 +84,7 @@ void SessionMap::_load_finish(int r, bufferlist &bl)
 	   << dendl;
   projected = committing = committed = version;
   dump();
-  finish_contexts(&g_ceph_context, waiting_for_load);
+  finish_contexts(g_ceph_context, waiting_for_load);
 }
 
 
@@ -123,7 +123,7 @@ void SessionMap::save(Context *onsave, version_t needv)
 
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, ceph_clock_now(&g_ceph_context), 0,
+			    bl, ceph_clock_now(g_ceph_context), 0,
 			    NULL, new C_SM_Save(this, version));
 }
 
@@ -132,7 +132,7 @@ void SessionMap::_save_finish(version_t v)
   dout(10) << "_save_finish v" << v << dendl;
   committed = v;
 
-  finish_contexts(&g_ceph_context, commit_waiters[v]);
+  finish_contexts(g_ceph_context, commit_waiters[v]);
   commit_waiters.erase(v);
 }
 
@@ -163,7 +163,7 @@ void SessionMap::encode(bufferlist& bl)
 
 void SessionMap::decode(bufferlist::iterator& p)
 {
-  utime_t now = ceph_clock_now(&g_ceph_context);
+  utime_t now = ceph_clock_now(g_ceph_context);
   uint64_t pre;
   ::decode(pre, p);
   if (pre == (uint64_t)-1) {

@@ -58,7 +58,7 @@ int main(int argc, const char **argv)
   }
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(&g_ceph_context);
+  common_init_finish(g_ceph_context);
 
   FOR_EACH_ARG(args) {
     usage_exit();
