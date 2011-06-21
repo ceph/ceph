@@ -26,6 +26,7 @@ public:
     ~item() { 
       assert(!is_on_list());
     }
+
     // no copying!
     item(const item& other);
     const item& operator= (const item& right);
@@ -65,6 +66,9 @@ private:
   item _head;
 
 public:
+  dlist(const dlist& other);
+  const dlist& operator=(const dlist& other);
+
   dlist() : _head(NULL) {}
   ~dlist() { 
     assert(_head.empty());

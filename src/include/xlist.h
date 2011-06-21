@@ -28,6 +28,7 @@ public:
       assert(!is_on_list());
       //remove_myself();
     }
+
     // no copying!
     item(const item& other);
     const item& operator= (const item& right);
@@ -58,6 +59,9 @@ private:
   int _size;
 
 public:
+  xlist(const xlist& other);
+  const xlist& operator=(const xlist& other);
+
   xlist() : _front(0), _back(0), _size(0) {}
   ~xlist() { 
     assert(_size == 0);

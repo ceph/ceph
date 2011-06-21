@@ -38,6 +38,7 @@ public:
     ~item() { 
       assert(!is_on_list());
     }
+
     // no copying!
     item(const item& other);
     const item& operator= (const item& right);
@@ -83,6 +84,9 @@ private:
   size_t item_offset;
 
 public:
+  elist(const elist& other);
+  const elist& operator=(const elist& other);
+
   elist(size_t o) : _head(NULL), item_offset(o) {}
   ~elist() { 
     assert(_head.empty());
