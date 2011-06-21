@@ -627,7 +627,6 @@ void RGWPutObj::execute()
       info.size = s->obj_size;
       info.modified = ceph_clock_now(g_ceph_context);
       ::encode(info, bl);
-      RGW_LOG(0) << "JJJ name=" << p << "bl.length()=" << bl.length() << dendl;
       meta_attrs[p] = bl;
 
       rgw_obj meta_obj(s->bucket_str, multipart_meta_obj, s->object_str, mp_ns);

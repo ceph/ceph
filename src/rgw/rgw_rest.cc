@@ -466,8 +466,6 @@ void init_entities_from_header(struct req_state *s)
     }
   }
 
-  RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << dendl;
-
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     string ver;
     string auth_key;

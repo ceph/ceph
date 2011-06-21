@@ -336,7 +336,7 @@ done:
     pos--; // squash null termination
   strcpy(buf + pos, p);
   len = pos + strlen(p) + 1;
-  RGW_LOG(0) << "RGWFormatter::write_data: len= " << len << " bytes" << dendl;
+  RGW_LOG(20) << "RGWFormatter::write_data: len= " << len << " bytes" << dendl;
 done_free:
   if (!p_on_stack)
     free(p);
@@ -355,7 +355,7 @@ void RGWFormatter::flush(struct req_state *s)
   if (!buf)
     return;
 
-  RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
+  RGW_LOG(10) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
   CGI_PutStr(s, buf, len - 1);
   reset();
 }
@@ -365,7 +365,7 @@ void RGWFormatter::flush(ostream& os)
   if (!buf)
     return;
 
-  RGW_LOG(0) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
+  RGW_LOG(10) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
   os << buf << std::endl;
   reset();
 }

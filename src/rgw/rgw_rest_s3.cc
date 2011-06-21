@@ -517,7 +517,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
       dest.append(iter->second);
     }
   }
-  RGW_LOG(0) << "dest=" << dest << dendl;
+  RGW_LOG(10) << "get_canon_resource(): dest=" << dest << dendl;
 }
 
 /*

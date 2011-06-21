@@ -20,7 +20,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
 
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
-  RGW_LOG(0) << "bl=" << buf << dendl;
+  RGW_LOG(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   memset(k, 0, sizeof(k));
