@@ -262,6 +262,7 @@ class Objecter {
 
  
  private:
+  CephContext *cct;
   tid_t last_tid;
   int client_inc;
   uint64_t max_linger_id;
@@ -578,8 +579,9 @@ public:
   Throttle op_throttler;
 
  public:
-  Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l, SafeTimer& t) : 
-    messenger(m), monc(mc), osdmap(om),
+  Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+	   OSDMap *om, Mutex& l, SafeTimer& t) : 
+    messenger(m), monc(mc), osdmap(om), cct(cct_),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
@@ -587,7 +589,7 @@ public:
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
     num_homeless_ops(0),
-    op_throttler(g_conf->objecter_inflight_op_bytes)
+    op_throttler(cct->_conf->objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
 
@@ -596,7 +598,7 @@ public:
 
   /**
    * Tell the objecter to throttle outgoing ops according to its
-   * budget (in g_conf). If you do this, ops can block, in
+   * budget (in _conf). If you do this, ops can block, in
    * which case it will unlock client_lock and sleep until
    * incoming messages reduce the used budget low enough for
    * the ops to continue going; then it will lock client_lock again.
@@ -1061,7 +1063,7 @@ public:
       read_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
 	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
     } else {
-      C_Gather *g = new C_Gather(g_ceph_context);
+      C_Gather *g = new C_Gather(cct);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
@@ -1085,9 +1087,9 @@ public:
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
-	gack = new C_Gather(g_ceph_context, onack);
+	gack = new C_Gather(cct, onack);
       if (oncommit)
-	gcom = new C_Gather(g_ceph_context, oncommit);
+	gcom = new C_Gather(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	bufferlist cur;
 	for (map<__u32,__u32>::iterator bit = p->buffer_extents.begin();

@@ -114,7 +114,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   mdsmap = new MDSMap(g_ceph_context);
   osdmap = new OSDMap;
 
-  objecter = new Objecter(messenger, monc, osdmap, mds_lock, timer);
+  objecter = new Objecter(m->cct, messenger, monc, osdmap, mds_lock, timer);
   objecter->unset_honor_osdmap_full();
 
   filer = new Filer(objecter);

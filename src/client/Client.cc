@@ -156,7 +156,7 @@ Client::Client(Messenger *m, MonClient *mc)
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap(m->cct);
-  objecter = new Objecter(messenger, monclient, osdmap, client_lock, timer);
+  objecter = new Objecter(g_ceph_context, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock, 
 				  0,                            // all ack callback

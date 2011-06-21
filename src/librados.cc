@@ -819,7 +819,7 @@ connect()
   dout(1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
-  objecter = new Objecter(messenger, &monclient, &osdmap, lock, timer);
+  objecter = new Objecter(cct, messenger, &monclient, &osdmap, lock, timer);
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
