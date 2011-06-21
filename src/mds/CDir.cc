@@ -2134,8 +2134,8 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
 
   ::decode(dir_rep, blp);
 
-  ::decode(pop_me, blp);
-  ::decode(pop_auth_subtree, blp);
+  ::decode(pop_me, now, blp);
+  ::decode(pop_auth_subtree, now, blp);
   pop_auth_subtree_nested.add(now, cache->decayrate, pop_auth_subtree);
 
   ::decode(dir_rep_by, blp);

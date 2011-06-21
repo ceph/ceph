@@ -58,7 +58,7 @@ public:
     ::encode(delta, bl);
     ::encode(vel, bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(const utime_t &t, bufferlist::iterator &p) {
     __u8 struct_v;
     ::decode(struct_v, p);
     if (struct_v < 2) {
@@ -152,7 +152,10 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODER(DecayCounter)
+inline void encode(const DecayCounter &c, bufferlist &bl) { c.encode(bl); }
+inline void decode(DecayCounter &c, const utime_t &t, bufferlist::iterator &p) {
+  c.decode(t, p);
+}
 
 
 #endif

@@ -2654,7 +2654,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   if (dirty) 
     _mark_dirty(ls);
 
-  ::decode(pop, p);
+  ::decode(pop, ceph_clock_now(&g_ceph_context), p);
 
   ::decode(replica_map, p);
   if (!replica_map.empty())

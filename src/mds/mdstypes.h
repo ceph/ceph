@@ -952,14 +952,17 @@ public:
     for (int i=0; i<NUM; i++)
       ::encode(vec[i], bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(const utime_t &t, bufferlist::iterator &p) {
     __u8 struct_v;
     ::decode(struct_v, p);
     for (int i=0; i<NUM; i++)
-      ::decode(vec[i], p);
+      ::decode(vec[i], t, p);
   }
 };
-WRITE_CLASS_ENCODER(inode_load_vec_t)
+inline void encode(const inode_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
+inline void decode(inode_load_vec_t & c, const utime_t &t, bufferlist::iterator &p) {
+  c.decode(t, p);
+}
 
 class dirfrag_load_vec_t {
 public:
@@ -975,11 +978,11 @@ public:
     for (int i=0; i<NUM; i++)
       ::encode(vec[i], bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(const utime_t &t, bufferlist::iterator &p) {
     __u8 struct_v;
     ::decode(struct_v, p);
     for (int i=0; i<NUM; i++)
-      ::decode(vec[i], p);
+      ::decode(vec[i], t, p);
   }
 
   DecayCounter &get(int t) { 
@@ -1025,7 +1028,10 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODER(dirfrag_load_vec_t)
+inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
+inline void decode(dirfrag_load_vec_t& c, const utime_t &t, bufferlist::iterator &p) {
+  c.decode(t, p);
+}
 
 inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
@@ -1072,18 +1078,21 @@ struct mds_load_t {
     ::encode(queue_len, bl);
     ::encode(cpu_load_avg, bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(const utime_t &t, bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
-    ::decode(auth, bl);
-    ::decode(all, bl);
+    ::decode(auth, t, bl);
+    ::decode(all, t, bl);
     ::decode(req_rate, bl);
     ::decode(cache_hit_rate, bl);
     ::decode(queue_len, bl);
     ::decode(cpu_load_avg, bl);
   }
 };
-WRITE_CLASS_ENCODER(mds_load_t)
+inline void encode(const mds_load_t &c, bufferlist &bl) { c.encode(bl); }
+inline void decode(mds_load_t &c, const utime_t &t, bufferlist::iterator &p) {
+  c.decode(t, p);
+}
 
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {

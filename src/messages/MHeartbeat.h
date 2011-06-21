@@ -51,7 +51,8 @@ public:
   }
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
-    ::decode(load, p);
+    utime_t now(ceph_clock_now(cct));
+    ::decode(load, now, p);
     ::decode(beat, p);
     ::decode(import_map, p);
   }
