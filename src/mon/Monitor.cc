@@ -335,6 +335,18 @@ void Monitor::handle_command(MMonCommand *m)
       monmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "log") {
+      stringstream ss;
+      for (unsigned i=1; i<m->cmd.size(); i++) {
+	if (i > 1)
+	  ss << ' ';
+	ss << m->cmd[i];
+      }
+      clog.info(ss);
+      rs = "ok";
+      reply_command(m, 0, rs, rdata, 0);
+      return;
+    }
     if (m->cmd[0] == "stop") {
       shutdown();
       reply_command(m, 0, "stopping", 0);
