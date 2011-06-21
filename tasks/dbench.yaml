@@ -1,0 +1,5 @@
+tasks:
+- ceph:
+- kclient: [client.0]
+- autotest:
+    client.0: [dbench]
