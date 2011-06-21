@@ -1,0 +1,5 @@
+tasks:
+- ceph:
+- cfuse: [client.0]
+- workunit:
+    client.0: [misc/trivial_sync.sh]
