@@ -78,10 +78,6 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
     return -errno;
   }
 
-  // reuse addr+port when possible
-  int on = 1;
-  ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-
   // use whatever user specified (if anything)
   entity_addr_t listen_addr = bind_addr;
   listen_addr.set_family(family);
@@ -90,6 +86,11 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
   int rc = -1;
   if (listen_addr.get_port()) {
     // specific port
+
+    // reuse addr+port when possible
+    int on = 1;
+    ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
@@ -132,9 +133,9 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     char buf[80];
-    ldout(msgr->cct,0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
+    ldout(msgr->cct,0) << "accepter.bind unable to listen on " << listen_addr
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    cerr << "accepter.bind unable to listen on " << bind_addr.ss_addr()
+    cerr << "accepter.bind unable to listen on " << listen_addr
 	 << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
@@ -2313,7 +2314,7 @@ int SimpleMessenger::bind(entity_addr_t bind_addr, int64_t nonce)
     lock.Unlock();
     return -1;
   }
-  ldout(cct,10) << "rank.bind" << dendl;
+  ldout(cct,10) << "rank.bind " << bind_addr << dendl;
   lock.Unlock();
 
   // bind to a socket
