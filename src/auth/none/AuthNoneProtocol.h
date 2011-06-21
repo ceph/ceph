@@ -19,9 +19,10 @@
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
-  bool build_authorizer(uint64_t global_id) {
+  bool build_authorizer(const EntityName &ename, uint64_t global_id) {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
+    ::encode(ename, bl);
     ::encode(global_id, bl);
     return 0;
   }

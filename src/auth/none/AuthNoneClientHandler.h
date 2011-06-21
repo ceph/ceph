@@ -38,7 +38,7 @@ public:
   AuthAuthorizer *build_authorizer(uint32_t service_id) {
     AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
     if (auth) {
-      auth->build_authorizer(global_id);
+      auth->build_authorizer(cct->_conf->name, global_id);
     }
     return auth;
   }
