@@ -371,6 +371,7 @@ int RGWRados::aio_put_obj_data(std::string& id, rgw_obj& obj,
   bl.append(data, len);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  *handle = c;
   
 
   if (ofs == -1) {

@@ -432,11 +432,32 @@ void RGWDeleteBucket::execute()
   send_response();
 }
 
+struct put_obj_aio_info {
+  void *data;
+  void *handle;
+};
+
+static int drain_pending(std::list<struct put_obj_aio_info>& pending)
+{
+  int ret = 0;
+  while (!pending.empty()) {
+   struct put_obj_aio_info info = pending.front();
+   int r = rgwstore->aio_wait(info.handle);
+   free(info.data);
+   if (r < 0)
+     ret = r;
+
+   pending.pop_front();
+  }
+  return ret;
+}
+
 void RGWPutObj::execute()
 {
   bool multipart;
   string multipart_meta_obj;
   string part_num;
+  list<struct put_obj_aio_info> pending;
 
   ret = -EINVAL;
   if (!s->object) {
@@ -503,6 +524,7 @@ void RGWPutObj::execute()
     do {
       get_data();
       if (len > 0) {
+        struct put_obj_aio_info info;
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
         void *handle;
@@ -513,13 +535,21 @@ void RGWPutObj::execute()
           goto done;
 
         hash.Update((unsigned char *)data, len);
-        ret = rgwstore->aio_wait(handle);
-        free(data);
-        if (ret < 0)
-          goto done;
+        info.handle = handle;
+        info.data = data;
+        pending.push_back(info);
+        if (pending.size() > RGW_MAX_PENDING_CHUNKS) {
+          info = pending.front();
+          pending.pop_front();
+          ret = rgwstore->aio_wait(info.handle);
+          free(info.data);
+          if (ret < 0)
+            goto done;
+        }
         ofs += len;
       }
     } while ( len > 0);
+    drain_pending(pending);
 
     s->obj_size = ofs;
 
@@ -573,6 +603,7 @@ void RGWPutObj::execute()
     }
   }
 done:
+  drain_pending(pending);
   send_response();
 }
 

@@ -46,7 +46,8 @@ extern string rgw_root_bucket;
 
 #define USER_INFO_VER 7
 
-#define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
+#define RGW_MAX_CHUNK_SIZE	(512*1024)
+#define RGW_MAX_PENDING_CHUNKS  16
 
 #define RGW_LOG_BEGIN "RADOS S3 Gateway:"
 #define RGW_LOG(x) pdout(x, g_conf->rgw_log)
