@@ -65,6 +65,9 @@ public:
   ProfLoggerCollection *GetProfLoggerCollection();
 
 private:
+  CephContext(const CephContext &rhs);
+  CephContext &operator=(const CephContext &rhs);
+
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
 
