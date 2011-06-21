@@ -63,12 +63,12 @@ namespace ceph {
 
 namespace ceph {
   class atomic_t {
-    pthread_spin_lock lock;
+    mutable pthread_spinlock_t lock;
     signed long val;
   public:
     atomic_t(int i=0)
       : val(i) {
-      pthread_spin_init(&lock);
+      pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE);
     }
     ~atomic_t() {
       pthread_spin_destroy(&lock);
