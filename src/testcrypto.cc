@@ -2,6 +2,7 @@
 #include "common/Clock.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 
 
 #define AES_KEY_LEN	16

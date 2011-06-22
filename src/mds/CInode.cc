@@ -42,6 +42,7 @@
 #include <stdio.h>
 
 #include "common/config.h"
+#include "global/global_context.h"
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
@@ -1328,7 +1329,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p)
 	  if (!dirfragtree.is_leaf(*p)) {
 	    dout(10) << " forcing frag " << *p << " to leaf (split|merge)" << dendl;
-	    dirfragtree.force_to_leaf(*p);
+	    dirfragtree.force_to_leaf(g_ceph_context, *p);
 	    dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
 	  }
       } else {
@@ -1342,7 +1343,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	     p++)
 	  if (!dirfragtree.is_leaf(p->first)) {
 	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
-	    dirfragtree.force_to_leaf(p->first);
+	    dirfragtree.force_to_leaf(g_ceph_context, p->first);
 	  }
       }
       if (g_conf->mds_debug_frag)

@@ -23,6 +23,7 @@ using namespace librados;
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/Cond.h"
+#include "common/debug.h"
 #include "mds/inode_backtrace.h"
 #include <iostream>
 #include <fstream>

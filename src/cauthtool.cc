@@ -18,6 +18,7 @@ using namespace std;
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "auth/Crypto.h"
 #include "auth/Auth.h"

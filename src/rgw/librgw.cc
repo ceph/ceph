@@ -17,14 +17,13 @@
 #include "rgw/rgw_acl.h"
 #include "rgw_acl.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/common_init.h"
-#include "common/config.h"
+#include "common/dout.h"
 
 #include <errno.h>
 #include <sstream>
 #include <string.h>
-
-#define RGW_LOG(x) pdout(x, g_conf->rgw_log)
 
 int librgw_create(librgw_t *rgw, const char * const id)
 {
@@ -66,11 +65,11 @@ int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
     return 0;
   }
   catch (const std::exception &e) {
-    RGW_LOG(-1) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
+    lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
     return -2000;
   }
   catch (...) {
-    RGW_LOG(-1) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
+    lderr(rgw) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
     return -2000;
   }
 }
@@ -111,10 +110,10 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
     return 0;
   }
   catch (const std::exception &e) {
-    RGW_LOG(-1) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
+    lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
   }
   catch (...) {
-    RGW_LOG(-1) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
+    lderr(rgw) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
   }
   if (!bin_)
     free(bin_);

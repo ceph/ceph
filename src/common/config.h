@@ -529,6 +529,4 @@ struct config_option {
   const void *conf_ptr(const md_config_t *conf) const;
 };
 
-#include "common/debug.h" // TODO: remove
-
 #endif

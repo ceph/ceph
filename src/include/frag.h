@@ -393,24 +393,24 @@ public:
     _splits[x] += childbits;
   }
 
-  bool force_to_leaf(frag_t x) {
+  bool force_to_leaf(CephContext *cct, frag_t x) {
     if (is_leaf(x))
       return false;
 
-    generic_dout(10) << "force_to_leaf " << x << " on " << _splits << dendl;
+    lgeneric_dout(cct, 10) << "force_to_leaf " << x << " on " << _splits << dendl;
 
     frag_t parent = get_branch_or_leaf(x);
     assert(parent.bits() <= x.bits());
-    generic_dout(10) << "parent is " << parent << dendl;
+    lgeneric_dout(cct, 10) << "parent is " << parent << dendl;
 
     // do we need to split from parent to x?
     if (parent.bits() < x.bits()) {
       int spread = x.bits() - parent.bits();
       int nb = get_split(parent);
-      generic_dout(10) << "spread " << spread << ", parent splits by " << nb << dendl;
+      lgeneric_dout(cct, 10) << "spread " << spread << ", parent splits by " << nb << dendl;
       if (nb == 0) {
 	// easy: split parent (a leaf) by the difference
-	generic_dout(10) << "splitting parent " << parent << " by spread " << spread << dendl;
+	lgeneric_dout(cct, 10) << "splitting parent " << parent << " by spread " << spread << dendl;
 	split(parent, spread);
 	assert(is_leaf(x));
 	return true;
@@ -426,7 +426,7 @@ public:
       for (std::list<frag_t>::iterator p = subs.begin();
 	   p != subs.end();
 	   ++p) {
-	generic_dout(10) << "splitting intermediate " << *p << " by " << (nb-spread) << dendl;
+	lgeneric_dout(cct, 10) << "splitting intermediate " << *p << " by " << (nb-spread) << dendl;
 	split(*p, nb - spread, false);
       }
     }
@@ -440,13 +440,13 @@ public:
       q.pop_front();
       int nb = get_split(t);
       if (nb) {
-	generic_dout(10) << "merging child " << t << " by " << nb << dendl;
+	lgeneric_dout(cct, 10) << "merging child " << t << " by " << nb << dendl;
 	merge(t, nb, false);    // merge this point, and
 	t.split(nb, q);         // queue up children
       }
     }
 
-    generic_dout(10) << "force_to_leaf done" << dendl;
+    lgeneric_dout(cct, 10) << "force_to_leaf done" << dendl;
     assert(is_leaf(x));
     return true;
   }

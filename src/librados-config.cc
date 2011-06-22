@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/global_context.h"
 #include "include/rados/librados.h"
 
 void usage()

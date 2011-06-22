@@ -8817,7 +8817,7 @@ CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
     if (!diri->dirfragtree.is_leaf(df.frag)) {
       dout(7) << "add_replica_dir forcing frag " << df.frag << " to leaf in the fragtree "
 	      << diri->dirfragtree << dendl;
-      diri->dirfragtree.force_to_leaf(df.frag);
+      diri->dirfragtree.force_to_leaf(g_ceph_context, df.frag);
     }
 
     // add replica.
@@ -9257,7 +9257,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
   // adjust fragtree
   // yuck.  we may have discovered the inode while it was being fragmented.
   if (!diri->dirfragtree.is_leaf(basefrag))
-    diri->dirfragtree.force_to_leaf(basefrag);
+    diri->dirfragtree.force_to_leaf(g_ceph_context, basefrag);
 
   if (bits > 0)
     diri->dirfragtree.split(basefrag, bits);

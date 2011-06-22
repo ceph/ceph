@@ -21,6 +21,7 @@
 #ifndef CEPH_PGMAP_H
 #define CEPH_PGMAP_H
 
+#include "common/debug.h"
 #include "osd/osd_types.h"
 #include "common/config.h"
 #include <sstream>
