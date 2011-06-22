@@ -173,6 +173,11 @@ def dev_create(ctx, config):
                 '-p', 'rbd',
                 'map',
                 image,
+                run.Raw('&&'),
+                # wait for the symlink to be created by udev
+                'while', 'test', '!', '-e', '/dev/rbd/rbd/{image}'.format(image=image), run.Raw(';'), 'do',
+                'sleep', '1', run.Raw(';'),
+                'done',
                 ],
             )
     try:
