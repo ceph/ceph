@@ -310,7 +310,7 @@ public:
   xlist<Inode*> inodes_with_caps;
 
   SnapRealm(inodeno_t i) : 
-    ino(i), nref(0), created(0), seq(0),
+    ino(i), nref(1), created(0), seq(0),
     pparent(NULL) { }
 
   void build_snap_context();
@@ -862,7 +862,7 @@ protected:
     return realm;
   }
   void put_snap_realm(SnapRealm *realm) {
-    if (realm->nref-- == 0) {
+    if (--realm->nref == 0) {
       snap_realms.erase(realm->ino);
       delete realm;
     }
