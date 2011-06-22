@@ -97,7 +97,8 @@ void logger_start()
 {
   Mutex::Locker l(prof_logger_lock);
   logger_timer.init();
-  flush_all_loggers();
+  if (!logger_event)
+    flush_all_loggers();
 }
 
 void logger_tare(utime_t s)
