@@ -14,6 +14,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include "common/Cond.h"
+#include "common/dout.h"
 #include "common/errno.h"
 #include "include/rbd/librbd.hpp"
 
@@ -40,6 +41,7 @@ namespace librbd {
   };
 
   struct ImageCtx {
+    CephContext *cct;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
     vector<snap_t> snaps;
@@ -53,7 +55,7 @@ namespace librbd {
     Mutex refresh_lock;
     Mutex lock; // protects access to snapshot and header information
 
-    ImageCtx(std::string imgname, IoCtx& p) : snapid(CEPH_NOSNAP),
+    ImageCtx(std::string imgname, IoCtx& p) : cct(p.cct()), snapid(CEPH_NOSNAP),
 					      name(imgname),
 					      needs_refresh(true),
 					      refresh_lock("librbd::ImageCtx::refresh_lock"),
@@ -122,6 +124,7 @@ namespace librbd {
   struct AioCompletion;
 
   struct AioBlockCompletion {
+    CephContext *cct;
     struct AioCompletion *completion;
     uint64_t ofs;
     size_t len;
@@ -129,8 +132,8 @@ namespace librbd {
     map<uint64_t,uint64_t> m;
     bufferlist data_bl;
 
-    AioBlockCompletion(AioCompletion *aio_completion, uint64_t _ofs, size_t _len, char *_buf) :
-                                            completion(aio_completion), ofs(_ofs), len(_len), buf(_buf) {}
+    AioBlockCompletion(CephContext *cct_, AioCompletion *aio_completion, uint64_t _ofs, size_t _len, char *_buf) :
+                                            cct(cct_), completion(aio_completion), ofs(_ofs), len(_len), buf(_buf) {}
     void complete(ssize_t r);
   };
 
@@ -146,16 +149,14 @@ namespace librbd {
     int ref;
     bool released;
 
-    AioCompletion() : lock("AioCompletion::lock", true), done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
+    AioCompletion() : lock("AioCompletion::lock", true),
+		      done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
 		      rbd_comp(NULL), pending_count(1), ref(1), released(false) {
-      dout(20) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl;
     }
     ~AioCompletion() {
-      dout(20) << "AioCompletion::~AioCompletion() this=" << (void *)this << dendl;
     }
 
     int wait_for_complete() {
-      dout(20) << "AioCompletion::wait_for_complete() this=" << (void *)this << dendl;
       lock.Lock();
       while (!done)
 	cond.Wait(lock);
@@ -164,7 +165,6 @@ namespace librbd {
     }
 
     void add_block_completion(AioBlockCompletion *aio_completion) {
-      dout(20) << "AioCompletion::add_block_completion() this=" << (void *)this << dendl;
       lock.Lock();
       pending_count++;
       lock.Unlock();
@@ -172,7 +172,6 @@ namespace librbd {
     }
 
     void finish_adding_completions() {
-      dout(20) << "AioCompletion::finish_adding_completions() this=" << (void *)this << dendl;
       lock.Lock();
       assert(pending_count);
       int count = --pending_count;
@@ -183,7 +182,6 @@ namespace librbd {
     }
 
     void complete() {
-      dout(20) << "AioCompletion::complete() this=" << (void *)this << dendl;
       assert(lock.is_locked());
       if (complete_cb) {
 	complete_cb(rbd_comp, complete_arg);
@@ -200,7 +198,6 @@ namespace librbd {
     void complete_block(AioBlockCompletion *block_completion, ssize_t r);
 
     ssize_t get_return_value() {
-      dout(20) << "AioCompletion::get_return_value() this=" << (void *)this << dendl;
       lock.Lock();
       ssize_t r = rval;
       lock.Unlock();
@@ -209,14 +206,12 @@ namespace librbd {
 
     void get() {
       lock.Lock();
-      dout(20) << " AioCompletion::get() this=" << (void *)this << " " << ref << " -> " << ref + 1 << dendl;
       assert(ref > 0);
       ref++;
       lock.Unlock();
     }
     void release() {
       lock.Lock();
-      dout(20) << "AioCompletion::release() this=" << (void *)this << dendl;
       assert(!released);
       released = true;
       put_unlock();
@@ -227,7 +222,6 @@ namespace librbd {
     }
     void put_unlock() {
       assert(ref > 0);
-      dout(20) << "AioCompletion::put_unlock() this=" << (void *)this << " " << ref << " -> " << ref - 1 << dendl;
       int n = --ref;
       lock.Unlock();
       if (!n)
@@ -292,11 +286,11 @@ namespace librbd {
                char *buf, AioCompletion *c);
 
   AioCompletion *aio_create_completion() {
-    AioCompletion *c= new AioCompletion;
+    AioCompletion *c= new AioCompletion();
     return c;
   }
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete) {
-    AioCompletion *c = new AioCompletion;
+    AioCompletion *c = new AioCompletion();
     c->set_complete_cb(cb_arg, cb_complete);
     return c;
   }
@@ -310,7 +304,7 @@ void WatchCtx::invalidate()
 void WatchCtx::notify(uint8_t opcode, uint64_t ver)
 {
   Mutex::Locker l(lock);
-  dout(1) <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << dendl;
+  ldout(ictx->cct, 1) <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << dendl;
   if (valid) {
     Mutex::Locker lictx(ictx->refresh_lock);
     ictx->needs_refresh = true;
@@ -401,14 +395,15 @@ int init_rbd_info(struct rbd_info *info)
 
 void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize)
 {
+  CephContext *cct = io_ctx.cct();
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
-  dout(2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
+  ldout(cct, 2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
   for (uint64_t i=start; i<numseg; i++) {
     string oid = get_block_oid(header, i);
     io_ctx.remove(oid);
     if ((i & 127) == 0) {
-      dout(2) << "\t" << i << "/" << numseg << dendl;
+      ldout(cct, 2) << "\t" << i << "/" << numseg << dendl;
     }
   }
 }
@@ -548,7 +543,7 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid)
     int r;
     string oid = get_block_oid(ictx->header, i);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
-    dout(10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
+    ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -557,7 +552,8 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid)
 
 int list(IoCtx& io_ctx, std::vector<std::string>& names)
 {
-  dout(20) << "list " << &io_ctx << dendl;
+  CephContext *cct = io_ctx.cct();
+  ldout(cct, 20) << "list " << &io_ctx << dendl;
 
   bufferlist bl;
   int r = io_ctx.read(RBD_DIRECTORY, bl, 0, 0);
@@ -576,7 +572,7 @@ int list(IoCtx& io_ctx, std::vector<std::string>& names)
 
 int snap_create(ImageCtx *ictx, const char *snap_name)
 {
-  dout(20) << "snap_create " << ictx << " " << snap_name << dendl;
+  ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -595,7 +591,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
 
 int snap_remove(ImageCtx *ictx, const char *snap_name)
 {
-  dout(20) << "snap_remove " << ictx << " " << snap_name << dendl;
+  ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -622,7 +618,8 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
 
 int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
 {
-  dout(20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
+  CephContext *cct = io_ctx.cct();
+  ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
 
   string md_oid = imgname;
   md_oid += RBD_SUFFIX;
@@ -648,7 +645,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   bufferlist bl;
   bl.append((const char *)&header, sizeof(header));
 
-  dout(2) << "adding rbd image to directory..." << dendl;
+  ldout(cct, 2) << "adding rbd image to directory..." << dendl;
   bufferlist cmdbl, emptybl;
   __u8 c = CEPH_OSD_TMAP_SET;
   ::encode(c, cmdbl);
@@ -660,20 +657,21 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
     return r;
   }
 
-  dout(2) << "creating rbd image..." << dendl;
+  ldout(cct, 2) << "creating rbd image..." << dendl;
   r = io_ctx.write(md_oid, bl, bl.length(), 0);
   if (r < 0) {
     derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   }
 
-  dout(2) << "done." << dendl;
+  ldout(cct, 2) << "done." << dendl;
   return 0;
 }
 
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
-  dout(20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
+  CephContext *cct = io_ctx.cct();
+  ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
 
   string md_oid = srcname;
   md_oid += RBD_SUFFIX;
@@ -719,7 +717,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 
 int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 {
-  dout(20) << "info " << ictx << dendl;
+  ldout(ictx->cct, 20) << "info " << ictx << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -762,7 +760,8 @@ int remove(IoCtx& io_ctx, const char *imgname)
 
 int resize(ImageCtx *ictx, uint64_t size)
 {
-  dout(20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -771,15 +770,15 @@ int resize(ImageCtx *ictx, uint64_t size)
   Mutex::Locker l(ictx->lock);
   // trim
   if (size == ictx->header.image_size) {
-    dout(2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
+    ldout(cct, 2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
     return 0;
   }
 
   if (size > ictx->header.image_size) {
-    dout(2) << "expanding image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
+    ldout(cct, 2) << "expanding image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
     ictx->header.image_size = size;
   } else {
-    dout(2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
+    ldout(cct, 2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
     trim_image(ictx->data_ctx, ictx->header, size);
     ictx->header.image_size = size;
   }
@@ -798,14 +797,14 @@ int resize(ImageCtx *ictx, uint64_t size)
     notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
   }
 
-  dout(2) << "done." << dendl;
+  ldout(cct, 2) << "done." << dendl;
 
   return 0;
 }
 
 int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
 {
-  dout(20) << "snap_list " << ictx << dendl;
+  ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -869,7 +868,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 
 int ictx_check(ImageCtx *ictx)
 {
-  dout(20) << "ictx_check " << ictx << dendl;
+  ldout(ictx->cct, 20) << "ictx_check " << ictx << dendl;
   ictx->refresh_lock.Lock();
   bool needs_refresh = ictx->needs_refresh;
   ictx->refresh_lock.Unlock();
@@ -901,9 +900,9 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   bufferlist bl, bl2;
 
   if (snap_name) {
-    dout(20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
+    ldout(ictx->cct, 20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
   } else {
-    dout(20) << "ictx_refresh " << ictx << " no snap" << dendl;
+    ldout(ictx->cct, 20) << "ictx_refresh " << ictx << " no snap" << dendl;
   }
 
   int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
@@ -959,7 +958,7 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 
 int snap_rollback(ImageCtx *ictx, const char *snap_name)
 {
-  dout(20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
+  ldout(ictx->cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -981,7 +980,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   // refresh without setting the snapid we read from
   ictx_refresh(ictx, NULL);
   snap_t new_snapid = ictx->get_snapid(snap_name);
-  dout(20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
+  ldout(ictx->cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
 
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
 
@@ -1057,7 +1056,7 @@ done:
 
 int snap_set(ImageCtx *ictx, const char *snap_name)
 {
-  dout(20) << "snap_set " << ictx << " snap = " << (snap_name ? snap_name : "NULL") << dendl;
+  ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = " << (snap_name ? snap_name : "NULL") << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -1076,8 +1075,9 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
 
 int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name)
 {
+  CephContext *cct = io_ctx.cct();
   string sn = snap_name ? snap_name : "NULL";
-  dout(20) << "open_image " << &io_ctx << " ictx =  " << ictx
+  ldout(cct, 20) << "open_image " << &io_ctx << " ictx =  " << ictx
 	   << " name =  " << name << " snap_name = " << (snap_name ? snap_name : "NULL") << dendl;
 
   ictx->lock.Lock();
@@ -1097,7 +1097,7 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
 
 void close_image(ImageCtx *ictx)
 {
-  dout(20) << "close_image " << ictx << dendl;
+  ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
   ictx->lock.Lock();
   ictx->wctx->invalidate();
   ictx->md_ctx.unwatch(ictx->md_oid(), ictx->wctx->cookie);
@@ -1110,7 +1110,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		     int (*cb)(uint64_t, size_t, const char *, void *),
 		     void *arg)
 {
-  dout(20) << "read_iterate " << ictx << " off = " << off << " len = " << len << dendl;
+  ldout(ictx->cct, 20) << "read_iterate " << ictx << " off = " << off << " len = " << len << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -1151,8 +1151,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     for (iter = m.begin(); iter != m.end(); ++iter) {
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
-      dout(20) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
-      dout(20) << "block_read=" << block_read << " total_read=" << total_read << " block_ofs=" << block_ofs << dendl;
+      ldout(ictx->cct, 20) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
+      ldout(ictx->cct, 20) << "block_read=" << block_read << " total_read=" << total_read << " block_ofs=" << block_ofs << dendl;
 
       /* a hole? */
       if (extent_ofs - block_ofs > 0) {
@@ -1210,7 +1210,7 @@ ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
 
 ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 {
-  dout(20) << "write " << ictx << " off = " << off << " len = " << len << dendl;
+  ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = " << len << dendl;
 
   if (!len)
     return 0;
@@ -1252,21 +1252,21 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 
 void AioBlockCompletion::complete(ssize_t r)
 {
-  dout(10) << "AioBlockCompletion::complete()" << dendl;
+  ldout(cct, 10) << "AioBlockCompletion::complete()" << dendl;
   if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
     map<uint64_t, uint64_t>::iterator iter;
     uint64_t bl_ofs = 0, buf_bl_pos = 0;
-    dout(10) << "ofs=" << ofs << " len=" << len << dendl;
+    ldout(cct, 10) << "ofs=" << ofs << " len=" << len << dendl;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
 
-      dout(10) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
+      ldout(cct, 10) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
 
       /* a hole? */
       if (extent_ofs - ofs) {
-	dout(10) << "<1>zeroing " << buf_bl_pos << "~" << extent_ofs << dendl;
-        dout(10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
+	ldout(cct, 10) << "<1>zeroing " << buf_bl_pos << "~" << extent_ofs << dendl;
+        ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
         memset(buf + buf_bl_pos, 0, extent_ofs - ofs);
       }
 
@@ -1277,8 +1277,8 @@ void AioBlockCompletion::complete(ssize_t r)
       buf_bl_pos += extent_ofs - ofs;
 
       /* data */
-      dout(10) << "<2>copying " << buf_bl_pos << "~" << extent_len << " from ofs=" << bl_ofs << dendl;
-      dout(10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + buf_bl_pos + extent_len -1) << dendl;
+      ldout(cct, 10) << "<2>copying " << buf_bl_pos << "~" << extent_len << " from ofs=" << bl_ofs << dendl;
+      ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + buf_bl_pos + extent_len -1) << dendl;
       memcpy(buf + buf_bl_pos, data_bl.c_str() + bl_ofs, extent_len);
       bl_ofs += extent_len;
       buf_bl_pos += extent_len;
@@ -1286,8 +1286,8 @@ void AioBlockCompletion::complete(ssize_t r)
 
     /* last hole */
     if (len - buf_bl_pos) {
-      dout(10) << "<3>zeroing " << buf_bl_pos << "~" << len - buf_bl_pos << dendl;
-      dout(10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + len -1) << dendl;
+      ldout(cct, 10) << "<3>zeroing " << buf_bl_pos << "~" << len - buf_bl_pos << dendl;
+      ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + len -1) << dendl;
       memset(buf + buf_bl_pos, 0, len - buf_bl_pos);
     }
 
@@ -1298,7 +1298,9 @@ void AioBlockCompletion::complete(ssize_t r)
 
 void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t r)
 {
-  dout(20) << "AioCompletion::complete_block() this=" << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
+  CephContext *cct = block_completion->cct;
+  ldout(cct, 20) << "AioCompletion::complete_block() this=" 
+	         << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
   lock.Lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
@@ -1316,7 +1318,6 @@ void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t
 
 void rados_cb(rados_completion_t c, void *arg)
 {
-  dout(10) << "rados_cb" << dendl;
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
   block_completion->complete(rados_aio_get_return_value(c));
   delete block_completion;
@@ -1336,7 +1337,8 @@ int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
 int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 			         AioCompletion *c)
 {
-  dout(20) << "aio_write " << ictx << " off = " << off << " len = " << len << dendl;
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = " << len << dendl;
 
   if (!len)
     return 0;
@@ -1366,7 +1368,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
     ictx->lock.Unlock();
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
-    AioBlockCompletion *block_completion = new AioBlockCompletion(c, off, len, NULL);
+    AioBlockCompletion *block_completion = new AioBlockCompletion(cct, c, off, len, NULL);
     c->add_block_completion(block_completion);
     librados::AioCompletion *rados_completion =
       Rados::aio_create_completion(block_completion, NULL, rados_cb);
@@ -1387,7 +1389,6 @@ done:
 
 void rados_aio_sparse_read_cb(rados_completion_t c, void *arg)
 {
-  dout(10) << "rados_aio_sparse_read_cb" << dendl;
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
   block_completion->complete(rados_aio_get_return_value(c));
   delete block_completion;
@@ -1397,7 +1398,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 				char *buf,
                                 AioCompletion *c)
 {
-  dout(20) << "aio_read " << ictx << " off = " << off << " len = " << len << dendl;
+  ldout(ictx->cct, 20) << "aio_read " << ictx << " off = " << off << " len = " << len << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -1428,7 +1429,8 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
     map<uint64_t,uint64_t> m;
     map<uint64_t,uint64_t>::iterator iter;
 
-    AioBlockCompletion *block_completion = new AioBlockCompletion(c, block_ofs, read_len, buf + total_read);
+    AioBlockCompletion *block_completion =
+	new AioBlockCompletion(ictx->cct, c, block_ofs, read_len, buf + total_read);
     c->add_block_completion(block_completion);
 
     librados::AioCompletion *rados_completion =
@@ -1644,7 +1646,7 @@ int Image::aio_read(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletion
   ImageCtx *ictx = (ImageCtx *)ctx;
   bufferptr ptr(len);
   bl.push_back(ptr);
-  dout(10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~" << (void *)(bl.c_str() + len - 1) << dendl;
+  ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~" << (void *)(bl.c_str() + len - 1) << dendl;
   return librbd::aio_read(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
 }
 

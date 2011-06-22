@@ -2905,6 +2905,12 @@ get_id()
   return io_ctx_impl->get_id();
 }
 
+CephContext *librados::IoCtx::
+cct()
+{
+  return io_ctx_impl->client->cct;
+}
+
 librados::IoCtx::
 IoCtx(IoCtxImpl *io_ctx_impl_)
   : io_ctx_impl(io_ctx_impl_)

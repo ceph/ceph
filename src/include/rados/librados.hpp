@@ -256,6 +256,9 @@ namespace librados
     void locator_set_key(const std::string& key);
 
     int get_id();
+
+    CephContext *cct();
+
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
