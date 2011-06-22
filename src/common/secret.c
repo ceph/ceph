@@ -59,14 +59,14 @@ static int add_secret_to_kernel(const char *secret, const char *key_name)
 
   ret = ceph_unarmor(payload, payload+sizeof(payload), secret, secret+secret_len);
   if (ret < 0) {
-    printf("secret is not valid base64: %s.\n", strerror(-ret));
+    fprintf(stderr, "secret is not valid base64: %s.\n", strerror(-ret));
     return ret;
   }
 
   serial = add_key("ceph", key_name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
   if (serial < 0) {
     ret = -errno;
-    printf("error adding secret to kernel, key name %s: %s", key_name, strerror(-ret));
+    fprintf(stderr, "error adding secret to kernel, key name %s: %s", key_name, strerror(-ret));
   }
 
   return ret;
@@ -84,7 +84,7 @@ int get_secret_option(const char *secret, const char *key_name, char *secret_opt
       sprintf(option, "secret=%s", secret);
       ret = 0;
     } else {
-      printf("adding ceph secret key to kernel failed: %s.\n", strerror(-ret));
+      fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n", strerror(-ret));
       return ret;
     }
   } else {
