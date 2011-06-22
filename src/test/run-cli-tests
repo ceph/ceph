@@ -41,6 +41,10 @@ for tool in "$SRCDIR"/cli/*; do
     if ! env --ignore-environment \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
 	CEPH_CONF=/dev/null \
+	CCACHE_DIR="$CCACHE_DIR" \
+	CC="$CC" \
+	CXX="$CXX" \
+	"$SRCDIR/run-cli-tests-maybe-unset-ccache" \
 	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t; then
 	FAILED=1
     fi
