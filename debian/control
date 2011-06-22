@@ -87,7 +87,7 @@ Description: debugging symbols for ceph-fuse
 
 Package: ceph-client-tools
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados2, librbd
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: ceph
 Description: utilities to mount a ceph filesystem with the kernel client
  Ceph is a distributed network file system designed to provide
