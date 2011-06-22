@@ -35,10 +35,18 @@ def task(ctx, config):
     ctx.cluster.run(
         args=[
             'sudo',
+            'service', 'ntp', 'stop',
+            run.Raw(';'),
+            'sudo',
             'ntpdate',
             'clock1.dreamhost.com',
             'clock2.dreamhost.com',
             'clock3.dreamhost.com',
+            run.Raw(';'),
+            'sudo',
+            'service', 'ntp', 'start',
+            run.Raw('||'),
+            'true'
             ],
         )
 
