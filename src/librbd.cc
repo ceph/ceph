@@ -1117,7 +1117,6 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
-  uint64_t base = off - get_block_ofs(&ictx->header, off);
   ictx->lock.Unlock();
   uint64_t left = len;
 
@@ -1126,6 +1125,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     string oid = get_block_oid(&ictx->header, i);
     uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_read);
     uint64_t read_len = min(block_size - block_ofs, left);
+    uint64_t block_read = 0;
 
     map<uint64_t, uint64_t> m;
     map<uint64_t, uint64_t>::iterator iter;
@@ -1140,12 +1140,15 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     for (iter = m.begin(); iter != m.end(); ++iter) {
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
-dout(0) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
+      dout(20) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
+      dout(20) << "block_read=" << block_read << " total_read=" << total_read << " block_ofs=" << block_ofs << dendl;
+
       /* a hole? */
       if (extent_ofs - block_ofs > 0) {
-        r = cb(base + total_read + block_ofs, extent_ofs - block_ofs, NULL, arg);
+        r = cb(total_read + block_read, extent_ofs - block_ofs, NULL, arg);
         if (r < 0)
           return r;
+        block_read += extent_ofs - block_ofs;
       }
 
       if (bl_ofs + extent_len > bl.length())
@@ -1154,16 +1157,17 @@ dout(0) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
       block_ofs = extent_ofs;
 
       /* data */
-      r = cb(base + total_read + block_ofs, extent_len, bl.c_str() + bl_ofs, arg);
+      r = cb(total_read + block_read, extent_len, bl.c_str() + bl_ofs, arg);
       if (r < 0)
         return r;
       bl_ofs += extent_len;
       block_ofs += extent_len;
+      block_read += extent_len;
     }
 
     /* last hole */
     if (read_len - block_ofs) {
-      r = cb(base + total_read + block_ofs, read_len - block_ofs, NULL, arg);
+      r = cb(total_read + block_read, read_len - block_ofs, NULL, arg);
       if (r < 0)
         return r;
     }
