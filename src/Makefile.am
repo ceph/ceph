@@ -22,25 +22,25 @@ if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif
 
-LIBGLOBAL_LDA = libglobal.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+LIBGLOBAL_LDA = libglobal.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
 cmon_SOURCES = cmon.cc
 cmon_LDFLAGS = $(AM_LDFLAGS)
-cmon_LDADD = libmon.a $(LIBGLOBAL_LDA)
+cmon_LDADD = libmon.la $(LIBGLOBAL_LDA)
 cmon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a $(LIBGLOBAL_LDA) -ldl
+cosd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
 bin_PROGRAMS += cosd
 cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.a libosdc.a $(LIBGLOBAL_LDA)
+cmds_LDADD = libmds.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -109,7 +109,7 @@ bin_PROGRAMS += librados-config
 
 # synthetic client
 csyn_SOURCES = csyn.cc client/SyntheticClient.cc
-csyn_LDADD = libclient.a libosdc.a $(LIBGLOBAL_LDA)
+csyn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += csyn
 
 core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
@@ -118,7 +118,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a $(LIBGLOBAL_LDA)
+cfuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
 
@@ -163,13 +163,13 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a $(LIBGLOBAL_LDA)
+dupstore_LDADD = libos.la $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a $(LIBGLOBAL_LDA)
+streamtest_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a $(LIBGLOBAL_LDA)
+test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
@@ -183,17 +183,18 @@ bin_DEBUGPROGRAMS += test_libcommon_build
 ##########
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
+noinst_LTLIBRARIES = 
 
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
 	client/Client.cc \
-	${libglobal_a_SOURCES} \
-	${libosdc_a_SOURCES}
+	${libosdc_la_SOURCES}
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
-libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
+libceph_la_LIBADD = libglobal.la
+libceph_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
+            ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
@@ -215,50 +216,34 @@ bin_DEBUGPROGRAMS += testsignal_handlers
 # librados
 librados_SOURCES = \
 	librados.cc \
-	osdc/Objecter.cc \
-	${libglobal_a_SOURCES}
+	osdc/Objecter.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librados_la_LIBADD = -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librados_la_LIBADD = libglobal.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
-
-librados_a_SOURCES = ${librados_SOURCES}
-librados_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librados_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 
 # librgw
 if WITH_RADOSGW
 librgw_SOURCES = \
-	$(my_libradosgw_src) \
-	${libglobal_a_SOURCES}
+	$(my_libradosgw_src)
 librgw_la_SOURCES = ${librgw_SOURCES}
 librgw_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 librgw_la_LIBADD = librados.la
 librgw_la_LDFLAGS = -version-info 1:0:0 -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS) -lexpat -lcurl
 lib_LTLIBRARIES += librgw.la
-
-librgw_a_SOURCES = ${librgw_SOURCES}
-librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 endif
 
 # librbd
-librbd_SOURCES = \
-	librbd.cc
-
-librbd_la_SOURCES = ${librbd_SOURCES}
+librbd_la_SOURCES = librbd.cc
 librbd_la_CFLAGS = ${AM_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
-librbd_la_LIBADD = librados.la -lpthread $(EXTRALIBS)
-librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
+librbd_la_LIBADD = librados.la 
+librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
+	-export-symbols-regex '^rbd_.*' -lpthread $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
-
-librbd_a_SOURCES = ${librbd_SOURCES}
-librbd_a_CFLAGS = ${AM_CFLAGS}
-librbd_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc rados_sync.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -310,7 +295,7 @@ my_radosgw_src = \
 	rgw/rgw_escape.c
 
 my_radosgw_ldadd = \
-	librgw.a librados.a -lfcgi -lcurl -lexpat \
+	librgw.la librados.la -lfcgi -lcurl -lexpat \
 	-lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
@@ -333,7 +318,7 @@ testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
+testkeys_LDADD = libmon.la $(LIBGLOBAL_LDA) 
 testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testkeys
 
@@ -458,7 +443,7 @@ check_PROGRAMS += unittest_confutils
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -pthread -lcurl ${AM_LDFLAGS}
-unittest_librgw_LDADD =  librgw.a ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
+unittest_librgw_LDADD =  librgw.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
@@ -518,17 +503,6 @@ AM_CFLAGS += -fprofile-arcs -ftest-coverage
 AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
 EXTRALIBS += -lgcov
 endif
-
-noinst_LIBRARIES = \
-	libglobal.a \
-	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a librados.a librbd.a
-
-if WITH_RADOSGW
-noinst_LIBRARIES += librgw.a
-endif
-
-noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
@@ -594,15 +568,15 @@ clean-local:
 	-rm *.so *.gcno *.gcda
 
 # libs
-libglobal_a_SOURCES = \
+libglobal_la_SOURCES = \
 	$(libcommon_files) \
 	global/global_context.cc \
 	global/global_init.cc \
 	global/pidfile.cc \
 	global/signal_handler.cc
-
-libglobal_a_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libglobal_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libglobal_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LTLIBRARIES += libglobal.la
 
 crush_files = \
 	crush/builder.c \
@@ -682,7 +656,7 @@ endif
 
 
 
-libmon_a_SOURCES = \
+libmon_la_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
 	auth/cephx/CephxServiceHandler.cc \
 	auth/AuthServiceHandler.cc \
@@ -698,8 +672,10 @@ libmon_a_SOURCES = \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
 	mon/MonCaps.cc
+libmon_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libmon.la
 
-libmds_a_SOURCES = \
+libmds_la_SOURCES = \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
 	mds/MDS.cc \
@@ -724,15 +700,18 @@ libmds_a_SOURCES = \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc
+libmds_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libmds.la
 
-libos_a_SOURCES = \
+libos_la_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
 	os/JournalingObjectStore.cc
-libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libos_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libos.la
 
-
-libosd_a_SOURCES = \
+libosd_la_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
@@ -740,16 +719,22 @@ libosd_a_SOURCES = \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
         osd/ClassHandler.cc
+libosd_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libosd.la
 
-libosdc_a_SOURCES = \
+libosdc_la_SOURCES = \
 	osdc/Objecter.cc \
 	osdc/ObjectCacher.cc \
 	osdc/Filer.cc \
 	osdc/Journaler.cc
+libosdc_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libosdc.la
 
-libclient_a_SOURCES = \
+libclient_la_SOURCES = \
 	client/Client.cc \
 	client/Trace.cc
+libclient_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
@@ -1131,9 +1116,9 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_confi
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
-	$(libcommon_files) $(libmon_a_SOURCES) $(libmds_a_SOURCES) \
-	$(libos_a_SOURCES) $(libosd_a_SOURCES) \
-	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
+	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_la_SOURCES) \
+	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
+	$(libosdc_la_SOURCES) $(libclient_la_SOURCES) $(ceph_tool_gui_DATA)
 
 if WITH_RADOSGW
 all_sources += $(librgw_SOURCES)
