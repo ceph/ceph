@@ -88,6 +88,7 @@ def modprobe(ctx, config):
         - rbd.create_image: [client.0]
         - rbd.modprobe: [client.0]
     """
+    log.info('Loading rbd kernel module...')
     for role in config:
         (remote,) = ctx.cluster.only(role).remotes.keys()
         remote.run(
@@ -134,6 +135,7 @@ def dev_create(ctx, config):
     else:
         role_images = [(role, None) for role in config]
 
+    log.info('Creating rbd block devices...')
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
