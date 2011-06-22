@@ -782,7 +782,7 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
-	  le->prior_version >= log.tail) {      // prior_version also already in log
+	  le->prior_version > log.tail) {      // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
       } else {
 	be.version = le->prior_version;
