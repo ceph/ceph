@@ -1113,9 +1113,12 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 
   int64_t ret;
   int64_t total_read = 0;
+  ictx->lock.Lock();
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t base = off - get_block_ofs(&ictx->header, off);
+  ictx->lock.Unlock();
   uint64_t left = len;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
@@ -1137,9 +1140,10 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     for (iter = m.begin(); iter != m.end(); ++iter) {
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
+dout(0) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
       /* a hole? */
       if (extent_ofs - block_ofs > 0) {
-        r = cb(total_read + block_ofs, extent_ofs - block_ofs, NULL, arg);
+        r = cb(base + total_read + block_ofs, extent_ofs - block_ofs, NULL, arg);
         if (r < 0)
           return r;
       }
@@ -1150,7 +1154,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
       block_ofs = extent_ofs;
 
       /* data */
-      r = cb(total_read + block_ofs, extent_len, bl.c_str() + bl_ofs, arg);
+      r = cb(base + total_read + block_ofs, extent_len, bl.c_str() + bl_ofs, arg);
       if (r < 0)
         return r;
       bl_ofs += extent_len;
@@ -1159,7 +1163,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 
     /* last hole */
     if (read_len - block_ofs) {
-      r = cb(total_read + block_ofs, read_len - block_ofs, NULL, arg);
+      r = cb(base + total_read + block_ofs, read_len - block_ofs, NULL, arg);
       if (r < 0)
         return r;
     }
