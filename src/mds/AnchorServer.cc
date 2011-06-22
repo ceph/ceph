@@ -45,6 +45,7 @@ void AnchorServer::dump()
 
 /*
  * basic updates
+ * Returns true if it changed the anchor_map contents.
  */
 
 bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash,
@@ -60,7 +61,6 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash,
     // new item
     anchor_map[ino] = Anchor(ino, dirino, dn_hash, 0, version);
     dout(7) << "add added " << anchor_map[ino] << dendl;
-    return true;
   } else if (replace) {
     anchor_map[ino].dirino = dirino;
     anchor_map[ino].dn_hash = dn_hash;
@@ -70,6 +70,7 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash,
     dout(7) << "add had " << anchor_map[ino] << dendl;
     return false;
   }
+  return true;
 }
 
 void AnchorServer::inc(inodeno_t ino)
