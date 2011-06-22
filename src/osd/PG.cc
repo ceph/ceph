@@ -1545,7 +1545,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
 
   // Check local snaps
-  adjust_local_snaps(t, info.purged_snaps);
+  adjust_local_snaps();
 
   // init complete pointer
   if (missing.num_missing() == 0 &&
@@ -2507,20 +2507,33 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
-void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check)
+void PG::update_snap_collections(vector<Log::Entry> &log_entries)
 {
-  interval_set<snapid_t> to_remove;
-  to_remove.intersection_of(snap_collections, to_check);
-  while (!to_remove.empty()) {
-    snapid_t current = to_remove.range_start();
-    coll_t c(info.pgid, current);
-    t.remove_collection(c);
-    to_remove.erase(current);
-    snap_collections.erase(current);
+  for (vector<Log::Entry>::iterator i = log_entries.begin();
+       i != log_entries.end();
+       ++i) {
+    if (i->is_clone()) {
+      vector<snapid_t> snaps;
+      bufferlist::iterator p = i->snaps.begin();
+      ::decode(snaps, p);
+      if (!snap_collections.contains(*snaps.begin())) {
+	snap_collections.insert(*snaps.begin());
+      }
+      if (snaps.size() > 1 && !snap_collections.contains(*(snaps.end() - 1))) {
+	snap_collections.insert(*(snaps.end() - 1));
+      }
+    }
   }
-  write_info(t);
 }
 
+void PG::adjust_local_snaps()
+{
+  interval_set<snapid_t> to_remove;
+  to_remove.intersection_of(snap_collections, info.purged_snaps);
+  if (!to_remove.empty()) {
+    queue_snap_trim();
+  }
+}
 
 void PG::take_object_waiters(map<sobject_t, list<Message*> >& m)
 {
@@ -3653,18 +3666,20 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
   info.history.merge(oinfo.history);
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
-  // Handle changes to purged_snaps
-  interval_set<snapid_t> p;
-  p.union_of(oinfo.purged_snaps, info.purged_snaps);
-  p.subtract(info.purged_snaps);
-  info.purged_snaps = oinfo.purged_snaps;
-  if (!p.empty()) {
-    dout(10) << " purged_snaps " << info.purged_snaps
-	     << " -> " << oinfo.purged_snaps
-	     << " removed " << p << dendl;
-    adjust_local_snaps(t, p);
+  // Handle changes to purged_snaps ONLY IF we have caught up
+  if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
+    interval_set<snapid_t> p;
+    p.union_of(oinfo.purged_snaps, info.purged_snaps);
+    p.subtract(info.purged_snaps);
+    info.purged_snaps = oinfo.purged_snaps;
+    if (!p.empty()) {
+      dout(10) << " purged_snaps " << info.purged_snaps
+	       << " -> " << oinfo.purged_snaps
+	       << " removed " << p << dendl;
+      adjust_local_snaps();
+    }
+    write_info(t);
   }
-  write_info(t);
 }
 
 unsigned int PG::Missing::num_missing() const

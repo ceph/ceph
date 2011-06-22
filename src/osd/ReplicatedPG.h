@@ -333,8 +333,13 @@ public:
     vector<OSDOp>& ops;
     bufferlist outdata;
 
-    ObjectState *obs;
+    const ObjectState *obs; // Old objectstate
+    const SnapSet *snapset; // Old snapset
+
     ObjectState new_obs;  // resulting ObjectState
+    SnapSet new_snapset;  // resulting SnapSet (in case of a write)
+    pg_stat_t new_stats;  // resulting Stats
+
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
 
@@ -354,7 +359,7 @@ public:
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
-    ObjectContext *obc;
+    ObjectContext *obc;          // For ref counting purposes
     map<sobject_t,ObjectContext*> src_obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
@@ -369,12 +374,20 @@ public:
     const OpContext& operator=(const OpContext& other);
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
-	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs), new_obs(_obs->oi, _obs->exists),
+	      ObjectState *_obs, SnapSetContext *_ssc,
+	      ReplicatedPG *_pg) :
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      new_obs(_obs->oi, _obs->exists),
+      new_stats(_pg->info.stats),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
       bytes_written(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { }
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
+      if (_ssc) {
+	new_snapset = _ssc->snapset;
+	snapset = &_ssc->snapset;
+      }
+    }
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
@@ -412,6 +425,7 @@ public:
     eversion_t          pg_local_last_complete;
 
     list<ObjectStore::Transaction*> tls;
+    bool queue_snap_trimmer;
     
     RepGather(OpContext *c, ObjectContext *pi, tid_t rt, 
 	      eversion_t lc) :
@@ -423,7 +437,8 @@ public:
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
-      pg_local_last_complete(lc) { }
+      pg_local_last_complete(lc),
+      queue_snap_trimmer(false) { }
 
     void get() {
       nref++;
@@ -664,9 +679,7 @@ protected:
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
 public:
-  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
-    PG(o, _pool, p, oid, ioid)
-  { }
+  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid);
   ~ReplicatedPG() {}
 
 
@@ -674,11 +687,74 @@ public:
   void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
+  bool get_obs_to_trim(snapid_t &snap_to_trim,
+		       coll_t &col_to_trim,
+		       vector<sobject_t> &obs_to_trim);
+  RepGather *trim_object(const sobject_t &coid, const snapid_t &sn);
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
   void do_osd_op_effects(OpContext *ctx);
 private:
+  struct NotTrimming;
+  struct SnapTrim : boost::statechart::event< SnapTrim > {};
+  struct Reset : boost::statechart::event< Reset > {};
+  struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
+    ReplicatedPG *pg;
+    set<RepGather *> repops;
+    vector<sobject_t> obs_to_trim;
+    snapid_t snap_to_trim;
+    coll_t col_to_trim;
+    bool need_share_pg_info;
+    bool requeue;
+    SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false), requeue(false) {}
+    void log_enter(const char *state_name);
+    void log_exit(const char *state_name, utime_t duration);
+  } snap_trimmer_machine;
+
+  /* SnapTrimmerStates */
+  struct RepColTrim : boost::statechart::state< RepColTrim, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    interval_set<snapid_t> to_trim;
+    RepColTrim(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&);
+  };
+
+  struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    vector<sobject_t>::iterator position;
+    TrimmingObjects(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&);
+  };
+
+  struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    WaitingOnReplicas(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&);
+  };
+  
+  struct NotTrimming : boost::statechart::state< NotTrimming, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    NotTrimming(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&);
+  };
+
   void _delete_head(OpContext *ctx);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:

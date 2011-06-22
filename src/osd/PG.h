@@ -860,6 +860,15 @@ public:
 	context_list(context_list), transaction(transaction) {}
   };
 
+  struct NamedState {
+    const char *state_name;
+    utime_t enter_time;
+    const char *get_state_name() { return state_name; }
+    NamedState() : enter_time(ceph_clock_now(g_ceph_context)) {}
+    virtual ~NamedState() {}
+  };
+
+
   /* Encapsulates PG recovery process */
   class RecoveryState {
     void start_handle(RecoveryCtx *new_ctx) {
@@ -1557,7 +1566,8 @@ public:
   std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
-  void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
+  void update_snap_collections(vector<Log::Entry> &log_entries);
+  void adjust_local_snaps();
 
   void log_weirdness();
 
