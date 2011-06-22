@@ -93,13 +93,8 @@ struct librados::IoCtxImpl {
   Cond aio_write_cond;
   xlist<AioCompletionImpl*> aio_write_list;
 
-  IoCtxImpl() :
-    aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock") {}
-  IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s) :
-    ref_cnt(0), client(c), poolid(pid),
-    pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf->client_notify_timeout), oloc(pid),
-    aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"), aio_write_seq(0) {}
+  IoCtxImpl();
+  IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
     // Copy everything except the ref count
@@ -114,23 +109,8 @@ struct librados::IoCtxImpl {
     oloc = rhs.oloc;
   }
 
-  void set_snap_read(snapid_t s) {
-    if (!s)
-      s = CEPH_NOSNAP;
-    dout(10) << "set snap read " << snap_seq << " -> " << s << dendl;
-    snap_seq = s;
-  }
-
-  int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps) {
-    ::SnapContext n;
-    dout(10) << "set snap write context: seq = " << seq << " and snaps = " << snaps << dendl;
-    n.seq = seq;
-    n.snaps = snaps;
-    if (!n.is_valid())
-      return -EINVAL;
-    snapc = n;
-    return 0;
-  }
+  void set_snap_read(snapid_t s);
+  int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps);
 
   void get() {
     ref_cnt.inc();
@@ -453,7 +433,7 @@ private:
   bool ms_dispatch(Message *m);
 
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) {
-    //dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
+    //ldout(cct, 0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
     /* monitor authorization is being handled on different layer */
     if (dest_type == CEPH_ENTITY_TYPE_MON)
       return true;
@@ -788,6 +768,43 @@ public:
   }
 };
 
+librados::IoCtxImpl::
+IoCtxImpl()
+  : aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock")
+{
+}
+
+librados::IoCtxImpl::
+IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s)
+  : ref_cnt(0), client(c), poolid(pid),
+  pool_name(pool_name_), snap_seq(s), assert_ver(0),
+  notify_timeout(c->cct->_conf->client_notify_timeout), oloc(pid),
+  aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"), aio_write_seq(0)
+{
+}
+
+void librados::IoCtxImpl::
+set_snap_read(snapid_t s)
+{
+  if (!s)
+    s = CEPH_NOSNAP;
+  ldout(client->cct, 10) << "set snap read " << snap_seq << " -> " << s << dendl;
+  snap_seq = s;
+}
+
+int librados::IoCtxImpl::
+set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps)
+{
+  ::SnapContext n;
+  ldout(client->cct, 10) << "set snap write context: seq = " << seq << " and snaps = " << snaps << dendl;
+  n.seq = seq;
+  n.snaps = snaps;
+  if (!n.is_valid())
+    return -EINVAL;
+  snapc = n;
+  return 0;
+}
+
 int librados::RadosClient::
 connect()
 {
@@ -813,10 +830,10 @@ connect()
   if (!messenger)
     goto out;
 
-  dout(1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
+  ldout(cct, 1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
   messenger->register_entity(entity_name_t::CLIENT(-1));
-  dout(1) << "starting objecter" << dendl;
+  ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
   objecter = new Objecter(cct, messenger, &monclient, &osdmap, lock, timer);
@@ -834,14 +851,14 @@ connect()
   messenger->start_with_nonce(nonce);
   messenger->add_dispatcher_head(this);
 
-  dout(1) << "setting wanted keys" << dendl;
+  ldout(cct, 1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-  dout(1) << "calling monclient init" << dendl;
+  ldout(cct, 1) << "calling monclient init" << dendl;
   monclient.init();
 
   err = monclient.authenticate(conf->client_mount_timeout);
   if (err) {
-    dout(0) << conf->name << " authentication error " << strerror(-err) << dendl;
+    ldout(cct, 0) << conf->name << " authentication error " << strerror(-err) << dendl;
     shutdown();
     goto out;
   }
@@ -856,13 +873,13 @@ connect()
   monclient.renew_subs();
 
   while (osdmap.get_epoch() == 0) {
-    dout(1) << "waiting for osdmap" << dendl;
+    ldout(cct, 1) << "waiting for osdmap" << dendl;
     cond.Wait(lock);
   }
   state = CONNECTED;
   lock.Unlock();
 
-  dout(1) << "init done" << dendl;
+  ldout(cct, 1) << "init done" << dendl;
   err = 0;
 
  out:
@@ -885,7 +902,7 @@ shutdown()
     messenger->shutdown();
     messenger->wait();
   }
-  dout(1) << "shutdown" << dendl;
+  ldout(cct, 1) << "shutdown" << dendl;
 }
 
 librados::RadosClient::
@@ -1861,6 +1878,7 @@ int librados::
 RadosClient::read(IoCtxImpl& io, const object_t& oid,
                   bufferlist& bl, size_t len, uint64_t off)
 {
+  CephContext *cct = io.client->cct;
   Mutex mylock("RadosClient::read::mylock");
   Cond cond;
   bool done;
@@ -1884,7 +1902,7 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from read r=" << r << dendl;
+  ldout(cct, 10) << "Objecter returned from read r=" << r << dendl;
 
   set_sync_op_version(io, ver);
 
@@ -1892,7 +1910,7 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
     return r;
 
   if (bl.length() < len) {
-    dout(10) << "Returned length " << bl.length()
+    ldout(cct, 10) << "Returned length " << bl.length()
 	     << " less than original length "<< len << dendl;
   }
 
@@ -1902,6 +1920,7 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
 int librados::RadosClient::
 mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m)
 {
+  CephContext *cct = io.client->cct;
   bufferlist bl;
 
   Mutex mylock("RadosClient::read::mylock");
@@ -1920,7 +1939,7 @@ mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<ui
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from read r=" << r << dendl;
+  ldout(cct, 10) << "Objecter returned from read r=" << r << dendl;
 
   if (r < 0)
     return r;
@@ -1935,6 +1954,7 @@ int librados::RadosClient::
 sparse_read(IoCtxImpl& io, const object_t& oid,
 	  std::map<uint64_t,uint64_t>& m, bufferlist& data_bl, size_t len, uint64_t off)
 {
+  CephContext *cct = io.client->cct;
   bufferlist bl;
 
   Mutex mylock("RadosClient::read::mylock");
@@ -1953,7 +1973,7 @@ sparse_read(IoCtxImpl& io, const object_t& oid,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from read r=" << r << dendl;
+  ldout(cct, 10) << "Objecter returned from read r=" << r << dendl;
 
   if (r < 0)
     return r;
@@ -1968,6 +1988,7 @@ sparse_read(IoCtxImpl& io, const object_t& oid,
 int librados::RadosClient::
 stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
+  CephContext *cct = io.client->cct;
   Mutex mylock("RadosClient::stat::mylock");
   Cond cond;
   bool done;
@@ -1996,7 +2017,7 @@ stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from stat" << dendl;
+  ldout(cct, 10) << "Objecter returned from stat" << dendl;
 
   if (r >= 0 && pmtime) {
     *pmtime = mtime.sec();
@@ -2010,6 +2031,7 @@ stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
 int librados::RadosClient::
 getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 {
+  CephContext *cct = io.client->cct;
   Mutex mylock("RadosClient::getxattr::mylock");
   Cond cond;
   bool done;
@@ -2033,7 +2055,7 @@ getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from getxattr" << dendl;
+  ldout(cct, 10) << "Objecter returned from getxattr" << dendl;
 
   set_sync_op_version(io, ver);
 
@@ -2130,6 +2152,7 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 int librados::RadosClient::
 getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attrset)
 {
+  CephContext *cct = io.client->cct;
   Mutex mylock("RadosClient::getexattrs::mylock");
   Cond cond;
   bool done;
@@ -2160,7 +2183,7 @@ getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attr
   mylock.Unlock();
 
   for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++) {
-    dout(10) << "RadosClient::getxattrs: xattr=" << p->first << dendl;
+    ldout(cct, 10) << "RadosClient::getxattrs: xattr=" << p->first << dendl;
     attrset[p->first.c_str()] = p->second;
   }
 
