@@ -2055,7 +2055,7 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
 	     (dirty & CEPH_CAP_ANY_WR)) {
     in->get();
     CapSnap *capsnap = &in->cap_snaps[seq];
-    capsnap->context = in->snaprealm->cached_snap_context;
+    capsnap->context = in->snaprealm->get_snap_context();
     capsnap->issued = in->caps_issued();
     capsnap->dirty = in->caps_dirty();  // a bit conservative?
     
@@ -2582,7 +2582,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	  while (!p.end()) {
 	    Inode *in = *p;
 	    ++p;
-	    queue_cap_snap(in, realm->cached_snap_context.seq);
+	    queue_cap_snap(in, realm->get_snap_context().seq);
 	  }
 	  
 	  for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
@@ -2656,7 +2656,7 @@ void Client::handle_snap(MClientSnap *m)
 	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
 
 	// queue for snap writeback
-	queue_cap_snap(in, in->snaprealm->cached_snap_context.seq);
+	queue_cap_snap(in, in->snaprealm->get_snap_context().seq);
 
 	put_snap_realm(in->snaprealm);
 	in->snaprealm_item.remove_myself();

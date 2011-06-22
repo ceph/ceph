@@ -302,8 +302,11 @@ struct SnapRealm {
   SnapRealm *pparent;
   set<SnapRealm*> pchildren;
 
+private:
   SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
+  friend ostream& operator<<(ostream& out, const SnapRealm& r);
 
+public:
   xlist<Inode*> inodes_with_caps;
 
   SnapRealm(inodeno_t i) : 
