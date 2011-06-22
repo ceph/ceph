@@ -68,16 +68,15 @@ public:
     return count;
   }
 
-  bool get(int64_t c = 1, int64_t m = 0) {
+  void get(int64_t c = 1, int64_t m = 0) {
     assert(c >= 0);
     Mutex::Locker l(lock);
     if (m) {
       assert(m > 0);
       _reset_max(m);
     }
-    bool waited = _wait(c);
+    _wait(c);
     count += c;
-    return waited;
   }
 
   /* Returns true if it successfully got the requested amount,
