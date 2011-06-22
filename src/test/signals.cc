@@ -18,30 +18,28 @@ static void handle_sigusr1(int signo)
 
 TEST(SignalApi, SimpleInstall)
 {
-  install_sighandler(SIGUSR1, handle_sigusr1, 0);
+  install_sighandler(SIGPIPE, handle_sigusr1, 0);
 }
 
 TEST(SignalApi, SimpleInstallAndTest)
 {
-  install_sighandler(SIGUSR1, handle_sigusr1, 0);
+  install_sighandler(SIGPIPE, handle_sigusr1, 0);
 
-  // blocked signal should not be delievered until we call sigsuspend()
-  sigset_t old_sigset;
-  block_signals(NULL, &old_sigset);
-
-  int ret = kill(getpid(), SIGUSR1);
+  // SIGPIPE starts out blocked
+  int ret = kill(getpid(), SIGPIPE);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(got_sigusr1, 0);
 
+  // handle SIGPIPE
   sigset_t mask;
   sigemptyset(&mask);
-  sigdelset(&mask, SIGUSR1);
   ret = sigsuspend(&mask);
   if (ret == -1)
     ret = errno;
+
+  // we should have gotten it
   ASSERT_EQ(ret, EINTR);
   ASSERT_EQ(got_sigusr1, 1);
-  unblock_all_signals(&old_sigset);
 }
 
 TEST(SignalEffects, ErrnoTest1)
