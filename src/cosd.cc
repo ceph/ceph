@@ -214,16 +214,11 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  bool client_addr_set = !g_conf->public_addr.is_blank_addr();
-  bool cluster_addr_set = !g_conf->cluster_addr.is_blank_addr();
-
-  if (cluster_addr_set && !client_addr_set) {
-    derr << TEXT_RED << " ** "
-         << "WARNING: set cluster address but not client address!" << " **\n"
-         << "using cluster address for clients" << TEXT_NORMAL << dendl;
-    g_conf->public_addr = g_conf->cluster_addr;
-    client_addr_set = true;
-    cluster_addr_set = false;
+  if (g_conf->public_addr.is_blank_addr() && !g_conf->cluster_addr.is_blank_addr()) {
+    derr << TEXT_YELLOW
+	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
+	 << " **          you specify neither or both.                             **"
+	 << TEXT_NORMAL << dendl;
   }
 
   SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context);

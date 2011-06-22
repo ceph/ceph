@@ -160,7 +160,6 @@ bool PGMonitor::update_from_paxos()
   bufferlist bl;
   pg_map.encode(bl);
   paxos->stash_latest(paxosv, bl);
-  mon->store->put_int(paxosv, "pgmap", "last_consumed");
 
   // dump pgmap summaries?  (useful for debugging)
   if (0) {

@@ -70,6 +70,9 @@ public:
 
     bufferlist _enc;
 
+    fullbit(const fullbit& o);
+    const fullbit& operator=(const fullbit& o);
+
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, inode_t& i, fragtree_t &dft, 
 	    map<string,bufferptr> &xa, const string& sym,
@@ -272,7 +275,7 @@ public:
   private:
     mutable bufferlist dnbl;
     bool dn_decoded;
-    list<fullbit>   dfull;
+    list<std::tr1::shared_ptr<fullbit> >   dfull;
     list<remotebit> dremote;
     list<nullbit>   dnull;
 
@@ -286,7 +289,7 @@ public:
     bool is_new() { return state & STATE_NEW; }
     void mark_new() { state |= STATE_NEW; }
 
-    list<fullbit>   &get_dfull()   { return dfull; }
+    list<std::tr1::shared_ptr<fullbit> >   &get_dfull()   { return dfull; }
     list<remotebit> &get_dremote() { return dremote; }
     list<nullbit>   &get_dnull()   { return dnull; }
 
@@ -296,8 +299,8 @@ public:
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
       _decode_bits();
-      for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
-	p->print(out);
+      for (list<std::tr1::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
+	(*p)->print(out);
       for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
 	p->print(out);
       for (list<nullbit>::iterator p = dnull.begin(); p != dnull.end(); ++p)
@@ -562,15 +565,15 @@ private:
       in->encode_snap_blob(snapbl);
 
     lump.nfull++;
-    lump.get_dfull().push_back(fullbit(dn->get_name(), 
-				       dn->first, dn->last,
-				       dn->get_projected_version(), 
-				       *pi, *pdft, *px,
-				       in->symlink, snapbl,
-				       dirty, default_layout));
+    lump.get_dfull().push_back(std::tr1::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
+									 dn->first, dn->last,
+									 dn->get_projected_version(), 
+									 *pi, *pdft, *px,
+									 in->symlink, snapbl,
+									 dirty, default_layout)));
     if (pi)
-      lump.get_dfull().back().inode = *pi;
-    return &lump.get_dfull().back().inode;
+      lump.get_dfull().back()->inode = *pi;
+    return &lump.get_dfull().back()->inode;
   }
 
   // convenience: primary or remote?  figure it out.

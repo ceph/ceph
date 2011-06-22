@@ -1002,6 +1002,7 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
   
   dout(10) << "stash_latest v" << v << " len " << bl.length() << dendl;
   mon->store->put_bl_ss(final, machine_name, "latest");
+  mon->store->put_int(v, machine_name, "last_consumed");
 
   latest_stashed = v;
 }

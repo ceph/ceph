@@ -155,7 +155,7 @@ bool LogMonitor::update_from_paxos()
   bufferlist bl;
   ::encode(summary, bl);
   paxos->stash_latest(paxosv, bl);
- 
+
   if (blog.length())
     mon->store->append_bl_ss(blog, "log", NULL);
   if (blogdebug.length())
