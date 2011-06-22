@@ -833,7 +833,10 @@ int main(int argc, const char **argv)
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
   bool is_snap_cmd = false;
   FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("pool", 'p')) {
+    if (CEPH_ARGPARSE_EQ("help", 'h')) {
+      usage();
+      exit(0);
+    } else if (CEPH_ARGPARSE_EQ("pool", 'p')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("dest-pool", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&dest_poolname, OPT_STR);
