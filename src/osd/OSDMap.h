@@ -821,8 +821,6 @@ private:
     // map to osds[]
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
-
-    assert(g_conf->osd_pg_layout == CEPH_PG_LAYOUT_CRUSH);
     {
       int preferred = pg.preferred();
       if (preferred >= max_osd || preferred >= crush.get_max_devices())
@@ -834,27 +832,6 @@ private:
 	crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
     }
   
-    // no crush, but forcefeeding?
-    if (pg.preferred() >= 0 &&
-	g_conf->osd_pg_layout != CEPH_PG_LAYOUT_CRUSH) {
-      int osd = pg.preferred();
-      
-      // already in there?
-      if (osds.empty()) {
-        osds.push_back(osd);
-      } else {
-        assert(size > 0);
-        for (unsigned i=1; i<size; i++)
-          if (osds[i] == osd) {
-            // swap with position 0
-            osds[i] = osds[0];
-          }
-        osds[0] = osd;
-      }
-      
-      if (is_out(osd))
-        osds.erase(osds.begin());  // oops, but it's out
-    }
     return osds.size();
   }
 
