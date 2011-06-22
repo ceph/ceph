@@ -627,7 +627,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   // make sure it doesn't already exist
   int r = io_ctx.stat(md_oid, NULL, NULL);
   if (r == 0) {
-    derr << "rbd image header " << md_oid << " already exists" << dendl;
+    lderr(cct) << "rbd image header " << md_oid << " already exists" << dendl;
     return -EEXIST;
   }
 
@@ -635,7 +635,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   string dir_info = RBD_INFO;
   r = rbd_assign_bid(io_ctx, dir_info, &bid);
   if (r < 0) {
-    derr << "failed to assign a block name for image" << dendl;
+    lderr(cct) << "failed to assign a block name for image" << dendl;
     return r;
   }
 
@@ -653,14 +653,14 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   ::encode(emptybl, cmdbl);
   r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   if (r < 0) {
-    derr << "error adding img to directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error adding img to directory: " << strerror(-r)<< dendl;
     return r;
   }
 
   ldout(cct, 2) << "creating rbd image..." << dendl;
   r = io_ctx.write(md_oid, bl, bl.length(), 0);
   if (r < 0) {
-    derr << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
     return r;
   }
 
@@ -683,32 +683,32 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   bufferlist header;
   int r = read_header_bl(io_ctx, md_oid, header, &ver);
   if (r < 0) {
-    derr << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
     return r;
   }
   r = io_ctx.stat(dst_md_oid, NULL, NULL);
   if (r == 0) {
-    derr << "rbd image header " << dst_md_oid << " already exists" << dendl;
+    lderr(cct) << "rbd image header " << dst_md_oid << " already exists" << dendl;
     return -EEXIST;
   }
   r = write_header(io_ctx, dst_md_oid, header);
   if (r < 0) {
-    derr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << dst_md_oid << ": " << strerror(-r) << dendl;
     return r;
   }
   r = tmap_set(io_ctx, dstname_str);
   if (r < 0) {
     io_ctx.remove(dst_md_oid);
-    derr << "can't add " << dst_md_oid << " to directory" << dendl;
+    lderr(cct) << "can't add " << dst_md_oid << " to directory" << dendl;
     return r;
   }
   r = tmap_rm(io_ctx, imgname_str);
   if (r < 0)
-    derr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
+    lderr(cct) << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
   r = io_ctx.remove(md_oid);
   if (r < 0 && r != -ENOENT)
-    derr << "warning: couldn't remove old metadata" << dendl;
+    lderr(cct) << "warning: couldn't remove old metadata" << dendl;
   notify_change(io_ctx, md_oid, NULL, NULL);
 
   return 0;
@@ -730,7 +730,8 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 
 int remove(IoCtx& io_ctx, const char *imgname)
 {
-  dout(20) << "remove " << &io_ctx << " " << imgname << dendl;
+  CephContext *cct(io_ctx.cct());
+  ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
   string md_oid = imgname;
   md_oid += RBD_SUFFIX;
@@ -739,22 +740,22 @@ int remove(IoCtx& io_ctx, const char *imgname)
   int r = read_header(io_ctx, md_oid, &header, NULL);
   if (r >= 0) {
     trim_image(io_ctx, header, 0);
-    dout(2) << "removing header..." << dendl;
+    ldout(cct, 2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
 
-  dout(2) << "removing rbd image to directory..." << dendl;
+  ldout(cct, 2) << "removing rbd image to directory..." << dendl;
   bufferlist cmdbl;
   __u8 c = CEPH_OSD_TMAP_RM;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
   r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   if (r < 0) {
-    derr << "error removing img from directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error removing img from directory: " << strerror(-r)<< dendl;
     return r;
   }
 
-  dout(2) << "done." << dendl;
+  ldout(cct, 2) << "done." << dendl;
   return 0;
 }
 
@@ -789,9 +790,9 @@ int resize(ImageCtx *ictx, uint64_t size)
   r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
 
   if (r == -ERANGE)
-    derr << "operation might have conflicted with another client!" << dendl;
+    lderr(cct) << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
-    derr << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
     return r;
   } else {
     notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -833,7 +834,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
-    derr << "failed to create snap id: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "failed to create snap id: " << strerror(-r) << dendl;
     return r;
   }
 
@@ -842,7 +843,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -859,7 +860,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    derr << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
     return r;
   }
 
@@ -868,7 +869,8 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 
 int ictx_check(ImageCtx *ictx)
 {
-  ldout(ictx->cct, 20) << "ictx_check " << ictx << dendl;
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx_check " << ictx << dendl;
   ictx->refresh_lock.Lock();
   bool needs_refresh = ictx->needs_refresh;
   ictx->refresh_lock.Unlock();
@@ -881,13 +883,13 @@ int ictx_check(ImageCtx *ictx)
 
     int r = ictx_refresh(ictx, snap);
     if (r < 0) {
-      derr << "Error re-reading rbd header: " << cpp_strerror(-r) << dendl;
+      lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r) << dendl;
       return r;
     }
 
     // check if the snapshot at which we were reading was removed
     if (snap && ictx->snapname != snap) {
-      derr << "tried to read from a snapshot that no longer exists: " << snap << dendl;
+      lderr(cct) << "tried to read from a snapshot that no longer exists: " << snap << dendl;
       return -ENOENT;
     }
   }
@@ -896,23 +898,24 @@ int ictx_check(ImageCtx *ictx)
 
 int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 {
+  CephContext *cct = ictx->cct;
   assert(ictx->lock.is_locked());
   bufferlist bl, bl2;
 
   if (snap_name) {
-    ldout(ictx->cct, 20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
+    ldout(cct, 20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
   } else {
-    ldout(ictx->cct, 20) << "ictx_refresh " << ictx << " no snap" << dendl;
+    ldout(cct, 20) << "ictx_refresh " << ictx << " no snap" << dendl;
   }
 
   int r = read_header(ictx->md_ctx, ictx->md_oid(), &(ictx->header), NULL);
   if (r < 0) {
-    derr << "Error reading header: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "Error reading header: " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_list", bl, bl2);
   if (r < 0) {
-    derr << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -934,14 +937,14 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   }
 
   if (!ictx->snapc.is_valid()) {
-    derr << "image snap context is invalid!" << dendl;
+    lderr(cct) << "image snap context is invalid!" << dendl;
     return -EIO;
   }
 
   if (snap_name) {
     r = ictx->snap_set(snap_name);
     if (r < 0) {
-      derr << "could not set snap to " << snap_name << ": " << cpp_strerror(-r) << dendl;
+      lderr(cct) << "could not set snap to " << snap_name << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
     ictx->data_ctx.snap_set_read(ictx->snapid);
@@ -958,7 +961,8 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 
 int snap_rollback(ImageCtx *ictx, const char *snap_name)
 {
-  ldout(ictx->cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
 
   int r = ictx_check(ictx);
   if (r < 0)
@@ -967,13 +971,13 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   Mutex::Locker l(ictx->lock);
   snap_t snapid = ictx->get_snapid(snap_name);
   if (snapid == CEPH_NOSNAP) {
-    derr << "No such snapshot found." << dendl;
+    lderr(cct) << "No such snapshot found." << dendl;
     return -ENOENT;
   }
 
   r = rollback_image(ictx, snapid);
   if (r < 0) {
-    derr << "Error rolling back image: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -989,6 +993,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
 
 int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char *destname)
 {
+  CephContext *cct = src_md_ctx.cct();
   struct rbd_obj_header_ondisk header, dest_header;
   int64_t ret;
   int r;
@@ -1011,13 +1016,13 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
 
   r = create(dest_md_ctx, destname, header.image_size, &order);
   if (r < 0) {
-    derr << "header creation failed" << dendl;
+    lderr(cct) << "header creation failed" << dendl;
     return r;
   }
 
   ret = read_header(dest_md_ctx, dest_md_oid, &dest_header, NULL);
   if (ret < 0) {
-    derr << "failed to read newly created header" << dendl;
+    lderr(cct) << "failed to read newly created header" << dendl;
     return ret;
   }
 
@@ -1039,7 +1044,7 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
       size_t extent_len = iter->second;
       bufferlist wrbl;
       if (extent_ofs + extent_len > bl.length()) {
-	derr << "data error!" << dendl;
+	lderr(cct) << "data error!" << dendl;
 	return -EIO;
       }
       bl.copy(extent_ofs, extent_len, wrbl);
