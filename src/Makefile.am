@@ -180,6 +180,11 @@ test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
 test_libcommon_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_libcommon_build
 
+test_librados_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) $(librados_SOURCES)
+test_librados_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_librados_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_librados_build
+
 ##########
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
