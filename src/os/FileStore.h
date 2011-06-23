@@ -43,6 +43,7 @@ class FileStore : public JournalingObjectStore {
   uint64_t fsid;
   
   bool btrfs;
+  uint64_t blk_size;
   bool btrfs_trans_start_end;
   bool btrfs_clone_range;
   bool btrfs_snap_create;
@@ -295,6 +296,7 @@ public:
   int _clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid);
   int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const sobject_t& oid);
 
   void _start_sync();

@@ -109,6 +109,9 @@ using ceph::crypto::SHA1;
 #define LFN_ATTR "user.cephos.lfn"
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
+#define ALIGN_DOWN(x, by) ((x) - ((x) % (by)))
+#define ALIGN_UP(x, by) ((x) + ((by) - ((x) % (by))))
+#define ALIGNED(x, by) ((x) % (by))
 
 static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
 static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
@@ -854,7 +857,8 @@ done:
 FileStore::FileStore(const std::string &base, const std::string &jdev) :
   basedir(base), journalpath(jdev),
   fsid(0),
-  btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
+  btrfs(false), blk_size(0),
+  btrfs_trans_start_end(false), btrfs_clone_range(false),
   btrfs_snap_create(false),
   btrfs_snap_destroy(false),
   btrfs_snap_create_v2(false),
@@ -1302,6 +1306,7 @@ int FileStore::_detect_fs()
   r = ::fstatfs(fd, &st);
   if (r < 0)
     return -errno;
+  blk_size = st.f_bsize;
 
   static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
   if (st.f_type == BTRFS_F_TYPE) {
@@ -2838,20 +2843,89 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
 int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
   dout(20) << "_do_clone_range " << srcoff << "~" << len << " to " << dstoff << dendl;
+  if (!btrfs_clone_range ||
+      srcoff % blk_size != dstoff % blk_size) {
+    dout(20) << "_do_clone_range using copy" << dendl;
+    return _do_copy_range(from, to, srcoff, len, dstoff);
+  }
+  int err = 0;
   int r = 0;
+
+  uint64_t srcoffclone = ALIGN_UP(srcoff, blk_size);
+  uint64_t dstoffclone = ALIGN_UP(dstoff, blk_size);
+  if (srcoffclone >= srcoff + len) {
+    dout(20) << "_do_clone_range using copy, extent too short to align srcoff" << dendl;
+    return _do_copy_range(from, to, srcoff, len, dstoff);
+  }
+
+  uint64_t lenclone = len - (srcoffclone - srcoff);
+  if (!ALIGNED(lenclone, blk_size)) {
+    struct stat from_stat, to_stat;
+    err = ::fstat(from, &from_stat);
+    if (err) return -errno;
+    err = ::fstat(to , &to_stat);
+    if (err) return -errno;
+    
+    if (srcoff + len != (uint64_t)from_stat.st_size ||
+	dstoff + len < (uint64_t)to_stat.st_size) {
+      // Not to the end of the file, need to align length as well
+      lenclone = ALIGN_DOWN(lenclone, blk_size);
+    }
+  }
+  if (lenclone == 0) {
+    // too short
+    return _do_copy_range(from, to, srcoff, len, dstoff);
+  }
   
-  if (btrfs_clone_range) {
-    btrfs_ioctl_clone_range_args a;
-    a.src_fd = from;
-    a.src_offset = srcoff;
-    a.src_length = len;
-    a.dest_offset = dstoff;
-    r = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
-    if (r >= 0)
-      return r;
+  dout(20) << "_do_clone_range cloning " << srcoffclone << "~" << lenclone 
+	   << " to " << dstoffclone << " = " << r << dendl;
+  btrfs_ioctl_clone_range_args a;
+  a.src_fd = from;
+  a.src_offset = srcoffclone;
+  a.src_length = lenclone;
+  a.dest_offset = dstoffclone;
+  err = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
+  if (err >= 0) {
+    r += err;
+  } else if (errno == EINVAL) {
+    // Still failed, might be compressed
+    dout(20) << "_do_clone_range failed CLONE_RANGE call with -EINVAL, using copy" << dendl;
+    return _do_copy_range(from, to, srcoff, len, dstoff);
+  } else {
     return -errno;
   }
 
+  // Take care any trimmed from front
+  if (srcoffclone != srcoff) {
+    err = _do_copy_range(from, to, srcoff, srcoffclone - srcoff, dstoff);
+    if (err >= 0) {
+      r += err;
+    } else {
+      return -errno;
+    }
+  }
+
+  // Copy end
+  if (srcoffclone + lenclone != srcoff + len) {
+    err = _do_copy_range(from, to, 
+			 srcoffclone + lenclone, 
+			 (srcoff + len) - (srcoffclone + lenclone), 
+			 dstoffclone + lenclone);
+    if (err >= 0) {
+      r += err;
+    } else {
+      return -errno;
+    }
+  }
+  dout(20) << "_do_clone_range finished " << srcoff << "~" << len 
+	   << " to " << dstoff << " = " << r << dendl;
+  return r;
+}
+
+int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
+{
+  dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
+  int r = 0;
   ::lseek64(from, srcoff, SEEK_SET);
   ::lseek64(to, dstoff, SEEK_SET);
   
@@ -2865,14 +2939,14 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
     dout(25) << "  read from " << from << "~" << l << " got " << r << dendl;
     if (r < 0) {
       r = -errno;
-      derr << "FileStore::_do_clone_range: read error at " << from << "~" << len
+      derr << "FileStore::_do_copy_range: read error at " << from << "~" << len
 	   << ", " << cpp_strerror(r) << dendl;
       break;
     }
     if (r == 0) {
       // hrm, bad source range, wtf.
       r = -ERANGE;
-      derr << "FileStore::_do_clone_range got short read result at " << from
+      derr << "FileStore::_do_copy_range got short read result at " << from
 	      << " of " << from << "~" << len << dendl;
       break;
     }
@@ -2882,7 +2956,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
       dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
       if (r2 < 0) {
 	r = r2;
-	derr << "FileStore::_do_clone_range: write error at " << to << "~" << r-op
+	derr << "FileStore::_do_copy_range: write error at " << to << "~" << r-op
 	     << ", " << cpp_strerror(r) << dendl;
 	break;
       }
@@ -2892,7 +2966,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
       break;
     pos += r;
   }
-  dout(20) << "_do_clone_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
 
