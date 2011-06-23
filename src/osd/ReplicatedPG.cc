@@ -650,22 +650,25 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   utime_t latency = now;
   latency -= ctx->op->get_recv_stamp();
 
+  uint64_t inb = ctx->bytes_written;
+  uint64_t outb = ctx->bytes_read;
+
   osd->logger->inc(l_osd_op);
 
-  osd->logger->inc(l_osd_op_outb, ctx->outdata.length());
-  osd->logger->inc(l_osd_op_inb, ctx->bytes_written);
+  osd->logger->inc(l_osd_op_outb, outb);
+  osd->logger->inc(l_osd_op_inb, inb);
   osd->logger->favg(l_osd_op_lat, latency);
 
   MOSDOp *op = (MOSDOp*)ctx->op;
 
   if (op->may_read() && op->may_write()) {
     osd->logger->inc(l_osd_op_rw);
-    osd->logger->inc(l_osd_op_rw_inb, ctx->outdata.length());
-    osd->logger->inc(l_osd_op_rw_outb, ctx->bytes_written);
+    osd->logger->inc(l_osd_op_rw_inb, inb);
+    osd->logger->inc(l_osd_op_rw_outb, outb);
     osd->logger->favg(l_osd_op_rw_lat, latency);
   } else if (op->may_read()) {
     osd->logger->inc(l_osd_op_r);
-    osd->logger->inc(l_osd_op_r_outb, ctx->outdata.length());
+    osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->favg(l_osd_op_r_lat, latency);
 
     Mutex::Locker lock(osd->peer_stat_lock);
@@ -674,10 +677,12 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 
   } else if (op->may_write()) {
     osd->logger->inc(l_osd_op_w);
-    osd->logger->inc(l_osd_op_w_inb, ctx->bytes_written);
+    osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->favg(l_osd_op_w_lat, latency);
   } else
     assert(0);
+
+  dout(15) << "log_op_stats " << *op << " inb " << inb << " outb " << outb << " latency " << latency << dendl;
 }
 
 
@@ -2345,6 +2350,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // finish side-effects
   if (result == 0)
     do_osd_op_effects(ctx);
+
+  ctx->bytes_read = ctx->outdata.length();
 
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify)

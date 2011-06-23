@@ -349,7 +349,7 @@ public:
     list<notify_info_t> notifies;
     list<uint64_t> notify_acks;
     
-    uint64_t bytes_written;
+    uint64_t bytes_written, bytes_read;
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
@@ -381,7 +381,7 @@ public:
       new_stats(_pg->info.stats),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
-      bytes_written(0),
+      bytes_written(0), bytes_read(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
       if (_ssc) {
 	new_snapset = _ssc->snapset;
