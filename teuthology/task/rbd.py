@@ -355,6 +355,8 @@ def task(ctx, config):
     if isinstance(config, dict):
         role_images = {}
         for role, properties in config.iteritems():
+            if properties is None:
+                properties = {}
             role_images[role] = properties.get('image_name')
     else:
         role_images = config
