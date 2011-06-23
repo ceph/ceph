@@ -428,7 +428,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   decayrate(5.0),
   stat_oprate(ceph_clock_now(g_ceph_context)),
-  peer_stat_lock("OSD::peer_stat_lock"),
+  stat_lock("OSD::stat_lock"),
   read_latency_calc(g_conf->osd_max_opq<1 ? 1:g_conf->osd_max_opq),
   qlen_calc(3),
   iat_averager(g_conf->osd_flash_crowd_iat_alpha),
@@ -1337,7 +1337,7 @@ void OSD::update_osd_stat()
 void OSD::_refresh_my_stat(utime_t now)
 {
   assert(heartbeat_lock.is_locked());
-  assert(peer_stat_lock.is_locked());
+  assert(stat_lock.is_locked());
 
   // refresh?
   if (now - my_stat.stamp > g_conf->osd_stat_refresh_interval ||
@@ -1394,7 +1394,7 @@ void OSD::_refresh_my_stat(utime_t now)
 osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 {
   Mutex::Locker hlock(heartbeat_lock);
-  Mutex::Locker lock(peer_stat_lock);
+  Mutex::Locker lock(stat_lock);
   _refresh_my_stat(now);
   my_stat_on_peer[peer] = my_stat;
   return my_stat;
@@ -1402,7 +1402,7 @@ osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 
 void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
 {
-  Mutex::Locker lock(peer_stat_lock);
+  Mutex::Locker lock(stat_lock);
   dout(15) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
   peer_stat[peer] = stat;
 }
@@ -1755,7 +1755,7 @@ void OSD::heartbeat()
   dout(30) << "heartbeat checking stats" << dendl;
 
   // calc my stats
-  Mutex::Locker lock(peer_stat_lock);
+  Mutex::Locker lock(stat_lock);
   _refresh_my_stat(now);
   my_stat_on_peer.clear();
 
@@ -2163,9 +2163,9 @@ void OSD::send_pg_stats(const utime_t &now)
 
   dout(20) << "send_pg_stats" << dendl;
 
-  peer_stat_lock.Lock();
+  stat_lock.Lock();
   osd_stat_t cur_stat = osd_stat;
-  peer_stat_lock.Unlock();
+  stat_lock.Unlock();
    
   pg_stat_queue_lock.Lock();
 
@@ -5137,7 +5137,7 @@ void OSD::handle_op(MOSDOp *op)
   dout(10) << "handle_op " << *op << " in " << *pg << dendl;
 
   if (!op->may_write()) {
-    Mutex::Locker lock(peer_stat_lock);
+    Mutex::Locker lock(stat_lock);
     stat_rd_ops_in_queue++;
   }
 

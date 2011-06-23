@@ -295,6 +295,9 @@ public:
 
 private:
   // -- stats --
+  Mutex stat_lock;
+  osd_stat_t osd_stat;
+
   DecayRate decayrate;
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat
@@ -304,8 +307,6 @@ private:
   int stat_qlen; // cumulative queue length since last refresh
   int stat_rd_ops_in_queue;  // in queue
 
-  Mutex peer_stat_lock;
-  osd_stat_t osd_stat;
   osd_peer_stat_t my_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > peer_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > my_stat_on_peer;  // what the peer thinks of me

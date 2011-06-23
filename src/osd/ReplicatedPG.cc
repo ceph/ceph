@@ -678,7 +678,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->favg(l_osd_op_r_lat, latency);
 
-    Mutex::Locker lock(osd->peer_stat_lock);
+    Mutex::Locker lock(osd->stat_lock);
     osd->stat_rd_ops_in_queue--;
     osd->read_latency_calc.add(latency);
 
