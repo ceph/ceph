@@ -783,6 +783,7 @@ noinst_HEADERS = \
 	common/ceph_argparse.h\
 	common/ceph_context.h\
 	common/debug.h\
+	common/dout.h\
 	common/version.h\
 	common/hex.h\
 	common/entity_name.h\
