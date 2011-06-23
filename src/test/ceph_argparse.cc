@@ -109,7 +109,7 @@ TEST(CephArgParse, SimpleArgParse) {
 
 
 TEST(CephArgParse, WithDashesAndUnderscores) {
-  const char *BAZSTUFF1[] = { "./myprog", "--goo", "--baz-stuff", "50", NULL };
+  const char *BAZSTUFF1[] = { "./myprog", "--goo", "--baz-stuff", "50", "--end", NULL };
   const char *BAZSTUFF2[] = { "./myprog", "--goo2", "--baz_stuff", "50", NULL };
   const char *BAZSTUFF3[] = { "./myprog", "--goo2", "--baz-stuff=50", "50", NULL };
   const char *BAZSTUFF4[] = { "./myprog", "--goo2", "--baz_stuff=50", "50", NULL };
