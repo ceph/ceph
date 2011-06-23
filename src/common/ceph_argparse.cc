@@ -305,7 +305,9 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
     if (a == NULL)
       return false;
     strlen_a = strlen(a);
-    if (strncmp(a, first, strlen(a)) == 0) {
+    char a2[strlen_a+1];
+    dashes_to_underscores(a, a2);
+    if (strncmp(a2, first, strlen(a2)) == 0) {
       if (first[strlen_a] == '=') {
 	*ret = first + strlen_a + 1;
 	i = args.erase(i);
