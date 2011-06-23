@@ -1269,7 +1269,7 @@ void AioBlockCompletion::complete(ssize_t r)
       ldout(cct, 10) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
 
       /* a hole? */
-      if (extent_ofs - ofs) {
+      if (extent_ofs - block_ofs > 0) {
 	ldout(cct, 10) << "<1>zeroing " << buf_bl_pos << "~" << extent_ofs << dendl;
         ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
         memset(buf + buf_bl_pos, 0, extent_ofs - ofs);
@@ -1417,7 +1417,7 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
   int total_read = 0;
   ictx->lock.Lock();
   uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
   ictx->lock.Unlock();
   uint64_t left = len;
