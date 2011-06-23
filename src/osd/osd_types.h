@@ -857,10 +857,7 @@ struct pg_stat_t {
   uint64_t num_objects;
   uint64_t num_object_clones;
   uint64_t num_object_copies;  // num_objects * num_replicas
-
-  // The number of objects missing on the primary OSD
   uint64_t num_objects_missing_on_primary;
-
   uint64_t num_objects_degraded;
   uint64_t num_objects_unfound;
   uint64_t log_size;
