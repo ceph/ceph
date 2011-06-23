@@ -398,6 +398,7 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20), //  "
   OPTION(filestore_op_threads, OPT_INT, 2),
   OPTION(filestore_commit_timeout, OPT_FLOAT, 600),
+  OPTION(filestore_fiemap_threshold, OPT_INT, 4096),
   OPTION(journal_dio, OPT_BOOL, true),
   OPTION(journal_block_align, OPT_BOOL, true),
   OPTION(journal_max_write_bytes, OPT_INT, 10 << 20),

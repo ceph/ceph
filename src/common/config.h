@@ -481,6 +481,7 @@ public:
   int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
   float filestore_commit_timeout;
+  int filestore_fiemap_threshold;
 
   // journal
   bool journal_dio;
