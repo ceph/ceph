@@ -1262,24 +1262,27 @@ void AioBlockCompletion::complete(ssize_t r)
     map<uint64_t, uint64_t>::iterator iter;
     uint64_t bl_ofs = 0, buf_bl_pos = 0;
     ldout(cct, 10) << "ofs=" << ofs << " len=" << len << dendl;
+    uint64_t block_ofs = ofs;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
 
       ldout(cct, 10) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
-
+      ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
+      
       /* a hole? */
       if (extent_ofs - block_ofs > 0) {
 	ldout(cct, 10) << "<1>zeroing " << buf_bl_pos << "~" << extent_ofs << dendl;
-        ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
-        memset(buf + buf_bl_pos, 0, extent_ofs - ofs);
+	ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
+        memset(buf + buf_bl_pos, 0, extent_ofs - block_ofs);
       }
 
       if (bl_ofs + extent_len > len) {
         r = -EIO;
 	break;
       }
-      buf_bl_pos += extent_ofs - ofs;
+      buf_bl_pos += extent_ofs - block_ofs;
+      block_ofs = extent_ofs;
 
       /* data */
       ldout(cct, 10) << "<2>copying " << buf_bl_pos << "~" << extent_len << " from ofs=" << bl_ofs << dendl;
@@ -1287,6 +1290,7 @@ void AioBlockCompletion::complete(ssize_t r)
       memcpy(buf + buf_bl_pos, data_bl.c_str() + bl_ofs, extent_len);
       bl_ofs += extent_len;
       buf_bl_pos += extent_len;
+      block_ofs += extent_len;
     }
 
     /* last hole */

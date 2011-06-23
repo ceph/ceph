@@ -88,7 +88,8 @@ logger_start()
 {
   Mutex::Locker l(lock);
   logger_timer.init();
-  flush_all_loggers();
+  if (!logger_event)
+    flush_all_loggers();
 }
 
 void ProfLoggerCollection::
