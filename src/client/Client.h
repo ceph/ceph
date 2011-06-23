@@ -65,6 +65,7 @@ using namespace __gnu_cxx;
 
 #include "osdc/ObjectCacher.h"
 
+class CephContext;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
@@ -377,6 +378,8 @@ struct CapSnap {
 
 class Inode {
  public:
+  CephContext *cct;
+
   // -- the actual inode --
   inodeno_t ino;
   snapid_t  snapid;
@@ -501,11 +504,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    dout(30) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    ldout(cct, 30) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
   }
   void put(int n=1) { 
     ref -= n; 
-    dout(30) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    ldout(cct, 30) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
     assert(ref >= 0);
   }
 
@@ -517,8 +520,8 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(vinodeno_t vino, ceph_file_layout *layout) : 
-    ino(vino.ino), snapid(vino.snapid),
+  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout) : 
+    cct(cct_), ino(vino.ino), snapid(vino.snapid),
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     flags(0),
@@ -763,7 +766,8 @@ struct dir_result_t {
 
 class Client : public Dispatcher {
  public:
-  
+  CephContext *cct;
+
   // cluster descriptors
   MDSMap *mdsmap; 
   OSDMap *osdmap;
@@ -940,7 +944,7 @@ protected:
     if (in) {    // link to inode
       dn->inode = in;
       if(!in->dn_set.empty())
-        dout(5) << "adding new hard link to " << in->vino()
+        ldout(cct, 5) << "adding new hard link to " << in->vino()
                 << " from " << dn << dendl;
       in->dn_set.insert(dn);
       in->get();
