@@ -48,9 +48,8 @@ using namespace __gnu_cxx;
 enum {
   l_osd_first = 10000,
   l_osd_opq,
-
-  l_osd_op,
   l_osd_op_wip,
+  l_osd_op,
   l_osd_op_inb,
   l_osd_op_outb,
   l_osd_op_lat,
@@ -86,6 +85,7 @@ enum {
   l_osd_rop,
 
   l_osd_loadavg,
+  l_osd_buf,
 
   l_osd_pg,
   l_osd_pg_primary,
@@ -93,9 +93,6 @@ enum {
   l_osd_pg_stray,
   l_osd_hb_to,
   l_osd_hb_from,
-
-  l_osd_buf,
-
   l_osd_map,
   l_osd_mape,
   l_osd_mape_dup,

@@ -631,9 +631,9 @@ void OSD::open_logger()
   if (!didit) {
     didit = true;
     osd_logtype.add_set(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
-    osd_logtype.add_inc(l_osd_op, "op");         // ops/sec
     osd_logtype.add_set(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
 
+    osd_logtype.add_inc(l_osd_op,       "op");           // client ops
     osd_logtype.add_inc(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
     osd_logtype.add_inc(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
     osd_logtype.add_inc(l_osd_op_lat,   "op_lat");       // client op latency
@@ -651,14 +651,13 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
     osd_logtype.add_inc(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
 
-    osd_logtype.add_inc(l_osd_sop,       "sop");
-    osd_logtype.add_inc(l_osd_sop_inb,   "sop_inb");
-    osd_logtype.add_inc(l_osd_sop_lat,   "sop_lat");
+    osd_logtype.add_inc(l_osd_sop,       "sop");         // subops
+    osd_logtype.add_inc(l_osd_sop_inb,   "sop_inb");     // subop in bytes
+    osd_logtype.add_inc(l_osd_sop_lat,   "sop_lat");     // subop latency
 
     osd_logtype.add_inc(l_osd_sop_w,     "sop_w");          // replicated (client) writes
     osd_logtype.add_inc(l_osd_sop_w_inb, "sop_w_inb");      // replicated write in bytes
     osd_logtype.add_inc(l_osd_sop_w_lat, "sop_w_lat");      // replicated write latency
-
     osd_logtype.add_inc(l_osd_sop_pull,     "sop_pull");       // pull request
     osd_logtype.add_inc(l_osd_sop_pull_lat, "sop_pull_lat");
     osd_logtype.add_inc(l_osd_sop_push,     "sop_push");       // push (write)
@@ -672,6 +671,7 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_rop, "rop");       // recovery ops (started)
 
     osd_logtype.add_set(l_osd_loadavg, "loadavg");
+    osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
 
     osd_logtype.add_set(l_osd_pg, "numpg");   // num pgs
     osd_logtype.add_set(l_osd_pg_primary, "numpg_primary"); // num primary pgs
@@ -679,9 +679,6 @@ void OSD::open_logger()
     osd_logtype.add_set(l_osd_pg_stray, "numpg_stray");   // num stray pgs
     osd_logtype.add_set(l_osd_hb_to, "hbto");     // heartbeat peers we send to
     osd_logtype.add_set(l_osd_hb_from, "hbfrom"); // heartbeat peers we recv from
-  
-    osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
-  
     osd_logtype.add_inc(l_osd_map, "map");           // osdmap messages
     osd_logtype.add_inc(l_osd_mape, "mape");         // osdmap epochs
     osd_logtype.add_inc(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
