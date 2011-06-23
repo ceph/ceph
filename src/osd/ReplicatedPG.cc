@@ -925,8 +925,7 @@ bool ReplicatedPG::snap_trimmer()
 
     if (!finalizing_scrub) {
       dout(10) << "snap_trimmer posting" << dendl;
-      struct SnapTrim snap_trim;
-      snap_trimmer_machine.process_event(snap_trim);
+      snap_trimmer_machine.process_event(SnapTrim());
     }
 
     if (snap_trimmer_machine.need_share_pg_info) {
@@ -941,8 +940,7 @@ bool ReplicatedPG::snap_trimmer()
   } else if (is_active() && 
 	     last_complete_ondisk.epoch > info.history.last_epoch_started) {
     // replica collection trimming
-    struct SnapTrim snap_trim;
-    snap_trimmer_machine.process_event(snap_trim);
+    snap_trimmer_machine.process_event(SnapTrim());
   }
   if (snap_trimmer_machine.requeue) {
     dout(10) << "snap_trimmer requeue" << dendl;
@@ -4277,8 +4275,7 @@ void ReplicatedPG::on_change()
   pull_from_peer.clear();
 
   // clear snap_trimmer state
-  struct Reset reset;
-  snap_trimmer_machine.process_event(reset);
+  snap_trimmer_machine.process_event(Reset());
 }
 
 void ReplicatedPG::on_role_change()
@@ -4907,8 +4904,7 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
     t->remove_collection(col_to_trim);
     int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
     assert(r == 0);
-    struct SnapTrim snap_trim;
-    post_event(snap_trim);
+    post_event(SnapTrim());
     return discard_event();
   } else {
     // Actually have things to trim!
@@ -4984,8 +4980,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 
   // Done, 
   if (position == obs_to_trim.end()) {
-    struct SnapTrim snap_trim;
-    post_event(snap_trim);
+    post_event(SnapTrim());
     return transit< WaitingOnReplicas >();
   }
 
@@ -5073,8 +5068,7 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   context<SnapTrimmer>().need_share_pg_info = true;
 
   // Back to the start
-  struct SnapTrim snap_trim;
-  post_event(snap_trim);
+  post_event(SnapTrim());
   return transit< NotTrimming >();
 }
 
