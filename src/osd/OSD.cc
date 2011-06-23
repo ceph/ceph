@@ -678,10 +678,10 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_sop_push_lat, "sop_push_lat");
 
     osd_logtype.add_inc(l_osd_pull,      "pull");       // pull requests sent
-    osd_logtype.add_inc(l_osd_push,      "push");       // push
+    osd_logtype.add_inc(l_osd_push,      "push");       // push messages
     osd_logtype.add_inc(l_osd_push_outb, "push_outb");  // pushed bytes
 
-    osd_logtype.add_inc(l_osd_rop, "rop");       // recovery op
+    osd_logtype.add_inc(l_osd_rop, "rop");       // recovery ops (started)
 
     osd_logtype.add_set(l_osd_qlen, "qlen");
     osd_logtype.add_set(l_osd_rqlen, "rqlen");
@@ -697,11 +697,9 @@ void OSD::open_logger()
   
     osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
   
-    osd_logtype.add_inc(l_osd_map, "map");
-    osd_logtype.add_inc(l_osd_mapi, "mapi");
-    osd_logtype.add_inc(l_osd_mapidup, "mapidup");
-    osd_logtype.add_inc(l_osd_mapf, "mapf");
-    osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
+    osd_logtype.add_inc(l_osd_map, "map");           // osdmap messages
+    osd_logtype.add_inc(l_osd_mape, "mape");         // osdmap epochs
+    osd_logtype.add_inc(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
 
     osd_logtype.validate();
   }
@@ -3012,20 +3010,26 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (session)
     session->put();
 
-  dout(3) << "handle_osd_map epochs [" 
-	  << m->get_first() << "," << m->get_last() 
-	  << "], i have " << osdmap->get_epoch()
-	  << dendl;
+  epoch_t first = m->get_first();
+  epoch_t last = m->get_last();
+  dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have " << osdmap->get_epoch() << dendl;
+
+  if (logger) {
+    logger->inc(l_osd_map);
+    logger->inc(l_osd_mape, last - first + 1);
+    if (first <= osdmap->get_epoch())
+      logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
+  }
 
   // make sure there is something new, here, before we bother flushing the queues and such
-  if (m->get_last() <= osdmap->get_epoch()) {
+  if (last <= osdmap->get_epoch()) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
   }
 
   // missing some?
-  if (m->get_first() > osdmap->get_epoch() + 1) {
+  if (first > osdmap->get_epoch() + 1) {
     dout(10) << "handle_osd_map message skips epoch " << osdmap->get_epoch() + 1 << dendl;
     monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
     monc->renew_subs();
@@ -3072,12 +3076,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
 
-  logger->inc(l_osd_map);
-
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  for (epoch_t e = osdmap->get_epoch() + 1; e <= m->get_last(); e++) {
+  for (epoch_t e = osdmap->get_epoch() + 1; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
@@ -3134,7 +3136,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for cluster snapshot
   string cluster_snap;
-  for (epoch_t cur = superblock.current_epoch + 1; cur <= m->get_last() && cluster_snap.length() == 0; cur++) {
+  for (epoch_t cur = superblock.current_epoch + 1; cur <= last && cluster_snap.length() == 0; cur++) {
     OSDMap *newmap = get_map(cur);
     cluster_snap = newmap->get_cluster_snapshot();
   }
@@ -3157,8 +3159,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
 
   if (!superblock.oldest_map)
-    superblock.oldest_map = m->get_first();
-  superblock.newest_map = m->get_last();
+    superblock.oldest_map = first;
+  superblock.newest_map = last;
 
  
   // finally, take map_lock _after_ we do this flush, to avoid deadlock

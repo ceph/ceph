@@ -99,10 +99,9 @@ enum {
   l_osd_buf,
 
   l_osd_map,
-  l_osd_mapi,
-  l_osd_mapidup,
-  l_osd_mapf,
-  l_osd_mapfdup,
+  l_osd_mape,
+  l_osd_mape_dup,
+
   l_osd_last,
 };
 
