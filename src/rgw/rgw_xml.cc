@@ -194,7 +194,6 @@ bool RGWXMLParser::init()
 {
   p = XML_ParserCreate(NULL);
   if (!p) {
-    RGW_LOG(10) << "RGWXMLParser::init(): ERROR allocating memory" << dendl;
     return false;
   }
   XML_SetElementHandler(p, ::xml_start, ::xml_end);

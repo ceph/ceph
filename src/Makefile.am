@@ -185,6 +185,12 @@ test_librados_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librados_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librados_build
 
+test_librgw_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+			    $(librados_SOURCES) $(librgw_la_SOURCES)
+test_librgw_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_librgw_build
+
 ##########
 BUILT_SOURCES =
 lib_LTLIBRARIES = 

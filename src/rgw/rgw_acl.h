@@ -188,7 +188,7 @@ public:
   ~RGWAccessControlList();
 
   bool xml_end(const char *el);
-  int get_perm(string& id, int perm_mask);
+  int get_perm(CephContext *cct, string& id, int perm_mask);
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -274,7 +274,7 @@ public:
 
   bool xml_end(const char *el);
 
-  int get_perm(string& id, int perm_mask);
+  int get_perm(CephContext *cct, string& id, int perm_mask);
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;

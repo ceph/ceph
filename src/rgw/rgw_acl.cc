@@ -245,21 +245,18 @@ bool ACLGrant::xml_end(const char *el) {
     acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
     if (acl_name)
       name = acl_name->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << dendl;
     break;
   case ACL_TYPE_GROUP:
     acl_uri = (ACLURI *)acl_grantee->find_first("URI");
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << dendl;
     break;
   case ACL_TYPE_EMAIL_USER:
     acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
     if (!acl_email)
       return false;
     email = acl_email->get_data();
-    RGW_LOG(15) << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << dendl;
     break;
   default:
     // unknown user type
@@ -309,16 +306,16 @@ bool RGWAccessControlList::xml_end(const char *el) {
   return true;
 }
 
-int RGWAccessControlList::get_perm(string& id, int perm_mask) {
-  RGW_LOG(5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
+int RGWAccessControlList::get_perm(CephContext *cct, string& id, int perm_mask) {
+  ldout(cct, 5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
   if (!user_map_initialized)
     init_user_map();
   map<string, int>::iterator iter = acl_user_map.find(id);
   if (iter != acl_user_map.end()) {
-    RGW_LOG(5) << "Found permission: " << iter->second << dendl;
+    LRGW_LOG(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  RGW_LOG(5) << "Permissions for user not found" << dendl;
+  LRGW_LOG(cct, 5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
@@ -380,8 +377,8 @@ bool RGWAccessControlPolicy::xml_end(const char *el) {
   return true;
 }
 
-int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
-  int perm = acl.get_perm(id, perm_mask);
+int RGWAccessControlPolicy::get_perm(CephContext *cct, string& id, int perm_mask) {
+  int perm = acl.get_perm(cct, id, perm_mask);
 
   if (perm == perm_mask)
     return perm;
@@ -396,15 +393,15 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
 
   /* should we continue looking up? */
   if ((perm & perm_mask) != perm_mask) {
-    perm |= acl.get_perm(rgw_uri_all_users, perm_mask);
+    perm |= acl.get_perm(cct, rgw_uri_all_users, perm_mask);
 
     if (id.compare(RGW_USER_ANON_ID)) {
       /* this is not the anonymous user */
-      perm |= acl.get_perm(rgw_uri_auth_users, perm_mask);
+      perm |= acl.get_perm(cct, rgw_uri_auth_users, perm_mask);
     }
   }
 
-  RGW_LOG(5) << "Getting permissions id=" << id << " owner=" << owner << " perm=" << perm << dendl;
+  LRGW_LOG(cct, 5) << "Getting permissions id=" << id << " owner=" << owner << " perm=" << perm << dendl;
 
   return perm;
 }
