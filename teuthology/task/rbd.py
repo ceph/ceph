@@ -201,6 +201,13 @@ def dev_create(ctx, config):
                     '-p', 'rbd',
                     'unmap',
                     '/dev/rbd/rbd/{imgname}'.format(imgname=image),
+                    run.Raw('&&'),
+                    # wait for the symlink to be deleted by udev
+                    'while', 'test', '-e', '/dev/rbd/rbd/{image}'.format(image=image),
+                    run.Raw(';'),
+                    'do',
+                    'sleep', '1', run.Raw(';'),
+                    'done',
                     ],
                 )
             remote.run(
