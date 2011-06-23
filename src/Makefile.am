@@ -384,6 +384,12 @@ unittest_base64_LDADD = libceph.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
+unittest_ceph_argparse_SOURCES = test/ceph_argparse.cc
+unittest_ceph_argparse_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_ceph_argparse_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_ceph_argparse
+
 unittest_gather_SOURCES = test/gather.cc
 unittest_gather_LDADD = libceph.la ${UNITTEST_LDADD}
 unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
