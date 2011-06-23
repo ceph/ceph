@@ -52,8 +52,8 @@ public:
     }
     catch (const std::exception& e) {
       // we shouldn't get here, but if we do, we want to know about it.
-      derr << "ceph_mount_info::~ceph_mount_info: caught exception: "
-	   << e.what() << dendl;
+      lderr(cct) << "ceph_mount_info::~ceph_mount_info: caught exception: "
+	         << e.what() << dendl;
     }
     catch (...) {
       // ignore
