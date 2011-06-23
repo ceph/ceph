@@ -77,6 +77,7 @@ enum {
   l_osd_sop_push_inb,
   l_osd_sop_push_lat,
 
+  l_osd_pull,
   l_osd_push,
   l_osd_push_outb,
 

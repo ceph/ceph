@@ -3548,11 +3548,14 @@ void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
   subop->data_subset = data_subset;
   subop->first = first;
+
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
   //subop->clone_subsets.swap(clone_subsets);
-  osd->cluster_messenger->
-    send_message(subop, osd->osdmap->get_cluster_inst(fromosd));
+
+  osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(fromosd));
+
+  osd->logger->inc(l_osd_pull);
 }
 
 

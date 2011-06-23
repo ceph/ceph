@@ -675,6 +675,7 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_sop_push_inb, "sop_push_inb");
     osd_logtype.add_inc(l_osd_sop_push_lat, "sop_push_lat");
 
+    osd_logtype.add_inc(l_osd_pull,      "pull");       // pull requests sent
     osd_logtype.add_inc(l_osd_push,      "push");       // push
     osd_logtype.add_inc(l_osd_push_outb, "push_outb");  // pushed bytes
 
