@@ -1,9 +1,5 @@
 #include "common/common_init.h"
 
-void global_init_set_globals(CephContext *cct)
-{
-}
-
 /* This program exists to test that we can build libcommon without
  * referencing g_ceph_context
  *

@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+/*
 static const char SAMPLE_XML_1[] = \
 "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n\
   <Owner>\n\
@@ -101,3 +102,4 @@ TEST(LibRGW, RoundTrip) {
 
   librgw_shutdown(rgw);
 }
+*/

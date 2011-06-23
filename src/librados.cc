@@ -3129,9 +3129,6 @@ librados::ObjectOperation::~ObjectOperation()
   delete o;
 }
 
-
-void global_init_set_globals(CephContext *cct); 
-
 ///////////////////////////// C API //////////////////////////////
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
@@ -3142,7 +3139,6 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
   }
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  global_init_set_globals(cct); // FIXME: bug #845
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes();
 

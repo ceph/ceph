@@ -104,7 +104,7 @@ cephfs_SOURCES = cephfs.cc
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
-librados_config_LDADD = librados.la $(EXTRALIBS)
+librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
@@ -152,7 +152,7 @@ psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += psim
 
 test_mutate_SOURCES = test/test_mutate.cc
-test_mutate_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_mutate_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate
 
 testmsgr_SOURCES = testmsgr.cc
@@ -173,7 +173,7 @@ test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
-testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
+testsnaps_LDADD = libglobal.la librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
 
 test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
@@ -225,7 +225,7 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-librados_la_LIBADD = libglobal.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
+librados_la_LIBADD = libcommon.la -lpthread $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
@@ -251,7 +251,7 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 lib_LTLIBRARIES += librbd.la
 
 rados_SOURCES = rados.cc rados_sync.cc
-rados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
@@ -264,7 +264,7 @@ bin_DEBUGPROGRAMS += testrados testradospp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = libglobal.la librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
 testlibrbd_SOURCES = testlibrbd.c
@@ -300,7 +300,7 @@ my_radosgw_src = \
 	rgw/rgw_escape.c
 
 my_radosgw_ldadd = \
-	librgw.la librados.la -lfcgi -lcurl -lexpat \
+	libglobal.la librgw.la librados.la -lfcgi -lcurl -lexpat \
 	-lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = $(my_radosgw_src) rgw/rgw_main.cc
@@ -579,14 +579,19 @@ clean-local:
 	-rm *.so *.gcno *.gcda
 
 # libs
+libcommon_la_SOURCES = $(libcommon_files)
+libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libcommon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+noinst_LTLIBRARIES += libcommon.la
+
 libglobal_la_SOURCES = \
-	$(libcommon_files) \
 	global/global_context.cc \
 	global/global_init.cc \
 	global/pidfile.cc \
 	global/signal_handler.cc
 libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libglobal_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libglobal_la_LIBADD= libcommon.la
 noinst_LTLIBRARIES += libglobal.la
 
 crush_files = \
