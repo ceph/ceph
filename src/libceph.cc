@@ -220,6 +220,8 @@ extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephCon
   return 0;
 }
 
+void global_init_set_globals(CephContext *cct); // FIXME: bug #845
+
 extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const id)
 {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
@@ -229,6 +231,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
   }
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  global_init_set_globals(cct); // FIXME: bug #845
   cct->_conf->parse_env(); // environment variables coverride
   cct->_conf->apply_changes();
   return ceph_create_with_context(cmount, cct);

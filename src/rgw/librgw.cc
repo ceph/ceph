@@ -25,6 +25,8 @@
 #include <sstream>
 #include <string.h>
 
+void global_init_set_globals(CephContext *cct); 
+
 int librgw_create(librgw_t *rgw, const char * const id)
 {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
@@ -33,6 +35,7 @@ int librgw_create(librgw_t *rgw, const char * const id)
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  global_init_set_globals(cct); // FIXME: bug #845
   cct->_conf->log_to_stderr = 1; // quiet by default
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes();

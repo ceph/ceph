@@ -31,8 +31,6 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-void global_init_set_globals(CephContext *cct);
-
 CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
 {
@@ -41,8 +39,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   // Create a configuration object
   CephContext *cct = new CephContext(iparams.module_type);
-
-  global_init_set_globals(cct); // TODO: fix #845
 
   md_config_t *conf = cct->_conf;
   // add config observers here

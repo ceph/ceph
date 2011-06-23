@@ -56,11 +56,4 @@ void global_init_chdir(const CephContext *cct);
  */
 int global_init_shutdown_stderr(CephContext *cct);
 
-/*
- * NOTE: you probably don't need to use this function. Use global_init instead!
- *
- * Explicitly set up the process globals: g_ceph_context, g_conf, and _doss.
- */
-void global_init_set_globals(CephContext *cct);
-
 #endif

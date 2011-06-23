@@ -2,7 +2,6 @@
 
 void global_init_set_globals(CephContext *cct)
 {
-  // do nothing
 }
 
 /* This program exists to test that we can build libcommon without
