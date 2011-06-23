@@ -2696,11 +2696,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	osd->cluster_messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
-      
-      utime_t now = ceph_clock_now(g_ceph_context);
-      now -= repop->start;
-      osd->logger->finc(l_osd_rlsum, now);
-      osd->logger->inc(l_osd_rlnum, 1);
     }
   }
 

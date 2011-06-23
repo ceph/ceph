@@ -686,9 +686,6 @@ void OSD::open_logger()
 
     osd_logtype.add_set(l_osd_loadavg, "loadavg");
 
-    osd_logtype.add_inc(l_osd_rlsum, "rlsum");
-    osd_logtype.add_inc(l_osd_rlnum, "rlnum");
-
     osd_logtype.add_set(l_osd_numpg, "numpg");   // num pgs
     osd_logtype.add_set(l_osd_numpg_primary, "numpg_primary"); // num primary pgs
     osd_logtype.add_set(l_osd_numpg_replica, "numpg_replica"); // num replica pgs

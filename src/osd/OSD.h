@@ -86,8 +86,7 @@ enum {
   l_osd_qlen,
   l_osd_rqlen,
   l_osd_loadavg,
-  l_osd_rlsum,
-  l_osd_rlnum,
+
   l_osd_numpg,
   l_osd_numpg_primary,
   l_osd_numpg_replica,
