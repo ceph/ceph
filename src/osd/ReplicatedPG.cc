@@ -646,9 +646,17 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
+  MOSDOp *op = (MOSDOp*)ctx->op;
+
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t latency = now;
   latency -= ctx->op->get_recv_stamp();
+
+  utime_t rlatency;
+  if (ctx->readable_stamp != utime_t()) {
+    rlatency = ctx->readable_stamp;
+    rlatency -= ctx->op->get_recv_stamp();
+  }
 
   uint64_t inb = ctx->bytes_written;
   uint64_t outb = ctx->bytes_read;
@@ -659,12 +667,11 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   osd->logger->inc(l_osd_op_inb, inb);
   osd->logger->favg(l_osd_op_lat, latency);
 
-  MOSDOp *op = (MOSDOp*)ctx->op;
-
   if (op->may_read() && op->may_write()) {
     osd->logger->inc(l_osd_op_rw);
     osd->logger->inc(l_osd_op_rw_inb, inb);
     osd->logger->inc(l_osd_op_rw_outb, outb);
+    osd->logger->favg(l_osd_op_rw_rlat, rlatency);
     osd->logger->favg(l_osd_op_rw_lat, latency);
   } else if (op->may_read()) {
     osd->logger->inc(l_osd_op_r);
@@ -678,11 +685,16 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   } else if (op->may_write()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
+    osd->logger->favg(l_osd_op_w_rlat, rlatency);
     osd->logger->favg(l_osd_op_w_lat, latency);
   } else
     assert(0);
 
-  dout(15) << "log_op_stats " << *op << " inb " << inb << " outb " << outb << " latency " << latency << dendl;
+  dout(15) << "log_op_stats " << *op
+	   << " inb " << inb
+	   << " outb " << outb
+	   << " rlat " << rlatency
+	   << " lat " << latency << dendl;
 }
 
 void ReplicatedPG::log_subop_stats(MOSDSubOp *op, int tag_inb, int tag_lat)
@@ -2696,6 +2708,13 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	osd->cluster_messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
+
+      // note the write is now readable (for rlatency calc).  note
+      // that this will only be defined if the write is readable
+      // _prior_ to being committed; it will not get set with
+      // writeahead journaling, for instance.
+      if (repop->ctx->readable_stamp == utime_t())
+	repop->ctx->readable_stamp = ceph_clock_now(g_ceph_context);
     }
   }
 

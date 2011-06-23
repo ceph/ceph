@@ -59,10 +59,12 @@ enum {
   l_osd_op_r_lat,
   l_osd_op_w,
   l_osd_op_w_inb,
+  l_osd_op_w_rlat,
   l_osd_op_w_lat,
   l_osd_op_rw,
   l_osd_op_rw_inb,
   l_osd_op_rw_outb,
+  l_osd_op_rw_rlat,
   l_osd_op_rw_lat,
 
   l_osd_sop,

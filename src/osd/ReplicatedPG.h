@@ -368,6 +368,7 @@ public:
 
     MOSDOpReply *reply;
 
+    utime_t readable_stamp;  // when applied on all replicas
     ReplicatedPG *pg;
 
     OpContext(const OpContext& other);

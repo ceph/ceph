@@ -655,10 +655,12 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_op_r_lat,  "op_r_lat");    // client read latency
     osd_logtype.add_inc(l_osd_op_w,      "op_w");        // client writes
     osd_logtype.add_inc(l_osd_op_w_inb,  "op_w_inb");    // client write in bytes
+    osd_logtype.add_inc(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
     osd_logtype.add_inc(l_osd_op_w_lat,  "op_w_lat");    // client write latency
     osd_logtype.add_inc(l_osd_op_rw,     "op_rw");       // client rmw
     osd_logtype.add_inc(l_osd_op_rw_inb, "op_rw_inb");   // client rmw in bytes
     osd_logtype.add_inc(l_osd_op_rw_outb,"op_rw_outb");  // client rmw out bytes
+    osd_logtype.add_inc(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
     osd_logtype.add_inc(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
 
     osd_logtype.add_inc(l_osd_sop,       "sop");
