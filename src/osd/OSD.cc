@@ -683,12 +683,6 @@ void OSD::open_logger()
 
     osd_logtype.add_set(l_osd_qlen, "qlen");
     osd_logtype.add_set(l_osd_rqlen, "rqlen");
-    osd_logtype.add_set(l_osd_rdlat, "rdlat");
-    osd_logtype.add_set(l_osd_rdlatm, "rdlatm");
-    osd_logtype.add_set(l_osd_fshdin, "fshdin");
-    osd_logtype.add_set(l_osd_fshdout, "fshdout");
-    osd_logtype.add_inc(l_osd_shdout, "shdout");
-    osd_logtype.add_inc(l_osd_shdin, "shdin");
 
     osd_logtype.add_set(l_osd_loadavg, "loadavg");
 
@@ -1390,10 +1384,6 @@ void OSD::_refresh_my_stat(utime_t now)
 
     logger->fset(l_osd_qlen, my_stat.qlen);
     logger->fset(l_osd_rqlen, my_stat.recent_qlen);
-    logger->fset(l_osd_rdlat, my_stat.read_latency);
-    logger->fset(l_osd_rdlatm, my_stat.read_latency_mine);
-    logger->fset(l_osd_fshdin, my_stat.frac_rd_ops_shed_in);
-    logger->fset(l_osd_fshdout, my_stat.frac_rd_ops_shed_out);
     dout(30) << "_refresh_my_stat " << my_stat << dendl;
 
     stat_rd_ops = 0;
@@ -1761,21 +1751,9 @@ void OSD::heartbeat()
   }
 
   // get CPU load avg
-  try {
-    ifstream in("/proc/loadavg");
-    if (in.is_open()) {
-      float oneminavg;
-      in >> oneminavg;
-      logger->fset(l_osd_loadavg, oneminavg);
-      in.close();
-    }
-    else {
-      derr << "heartbeat: failed to open /proc/loadavg" << dendl;
-    }
-  }
-  catch (const ios::failure &f) {
-    derr << "heartbeat: failed to read /proc/loadavg" << dendl;
-  }
+  double loadavgs[1];
+  if (getloadavg(loadavgs, 1) == 1)
+    logger->fset(l_osd_loadavg, loadavgs[0]);
 
   dout(30) << "heartbeat checking stats" << dendl;
 

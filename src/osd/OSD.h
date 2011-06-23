@@ -85,12 +85,6 @@ enum {
 
   l_osd_qlen,
   l_osd_rqlen,
-  l_osd_rdlat,
-  l_osd_rdlatm,
-  l_osd_fshdin,
-  l_osd_fshdout,
-  l_osd_shdout,
-  l_osd_shdin,
   l_osd_loadavg,
   l_osd_rlsum,
   l_osd_rlnum,
