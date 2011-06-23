@@ -284,7 +284,7 @@ public:
     ss << "last_pg_scan " << last_pg_scan << std::endl;
     ss << "full_ratio " << full_ratio << std::endl;
     ss << "nearfull_ratio " << nearfull_ratio << std::endl;
-    ss << "pg_stat\tobjects\tmip\tunf\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
+    ss << "pg_stat\tobjects\tmip\tdegr\tunf\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
     for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
 	 i != pg_stat.end(); ++i) {
       const pg_stat_t &st(i->second);
@@ -292,8 +292,8 @@ public:
 	 << "\t" << st.num_objects
 	//<< "\t" << st.num_object_copies
 	 << "\t" << st.num_objects_missing_on_primary
-	 << "\t" << st.num_objects_unfound
 	 << "\t" << st.num_objects_degraded
+	 << "\t" << st.num_objects_unfound
 	 << "\t" << st.num_kb
 	 << "\t" << st.num_bytes
 	 << "\t" << st.log_size
@@ -313,8 +313,8 @@ public:
 	 << "\t" << p->second.num_objects
 	//<< "\t" << p->second.num_object_copies
 	 << "\t" << p->second.num_objects_missing_on_primary
-	 << "\t" << p->second.num_objects_unfound
 	 << "\t" << p->second.num_objects_degraded
+	 << "\t" << p->second.num_objects_unfound
 	 << "\t" << p->second.num_kb
 	 << "\t" << p->second.num_bytes
 	 << "\t" << p->second.log_size
