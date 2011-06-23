@@ -42,6 +42,8 @@ class MOSDPing : public Message {
   __u8 op;
   osd_peer_stat_t peer_stat;
 
+  MOSDPing(const ceph_fsid_t& f, epoch_t e, epoch_t pe, __u8 o) : 
+    Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o) { }
   MOSDPing(const ceph_fsid_t& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, __u8 o=HEARTBEAT) : 
     Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), op(o), peer_stat(ps) { }
   MOSDPing() {}

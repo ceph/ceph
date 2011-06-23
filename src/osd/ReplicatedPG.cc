@@ -646,37 +646,77 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
+  MOSDOp *op = (MOSDOp*)ctx->op;
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t latency = now;
+  latency -= ctx->op->get_recv_stamp();
+
+  utime_t rlatency;
+  if (ctx->readable_stamp != utime_t()) {
+    rlatency = ctx->readable_stamp;
+    rlatency -= ctx->op->get_recv_stamp();
+  }
+
+  uint64_t inb = ctx->bytes_written;
+  uint64_t outb = ctx->bytes_read;
+
   osd->logger->inc(l_osd_op);
 
-  if (ctx->op_t.empty()) {
-    osd->logger->inc(l_osd_c_rd);
-    osd->logger->inc(l_osd_c_rdb, ctx->outdata.length());
+  osd->logger->inc(l_osd_op_outb, outb);
+  osd->logger->inc(l_osd_op_inb, inb);
+  osd->logger->favg(l_osd_op_lat, latency);
 
-    utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t diff = now;
-    diff -= ctx->op->get_recv_stamp();
-    //dout(20) <<  "do_op " << ctx->reqid << " total op latency " << diff << dendl;
-    Mutex::Locker lock(osd->peer_stat_lock);
-    osd->stat_rd_ops_in_queue--;
-    osd->read_latency_calc.add(diff);
-	
-    /*
-    if (is_primary() &&
-	g_conf->osd_balance_reads)
-      stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
-    */
-  } else {
-    osd->logger->inc(l_osd_c_wr);
-    osd->logger->inc(l_osd_c_wrb, ctx->bytes_written);
-  }
+  if (op->may_read() && op->may_write()) {
+    osd->logger->inc(l_osd_op_rw);
+    osd->logger->inc(l_osd_op_rw_inb, inb);
+    osd->logger->inc(l_osd_op_rw_outb, outb);
+    osd->logger->favg(l_osd_op_rw_rlat, rlatency);
+    osd->logger->favg(l_osd_op_rw_lat, latency);
+  } else if (op->may_read()) {
+    osd->logger->inc(l_osd_op_r);
+    osd->logger->inc(l_osd_op_r_outb, outb);
+    osd->logger->favg(l_osd_op_r_lat, latency);
+  } else if (op->may_write()) {
+    osd->logger->inc(l_osd_op_w);
+    osd->logger->inc(l_osd_op_w_inb, inb);
+    osd->logger->favg(l_osd_op_w_rlat, rlatency);
+    osd->logger->favg(l_osd_op_w_lat, latency);
+  } else
+    assert(0);
+
+  dout(15) << "log_op_stats " << *op
+	   << " inb " << inb
+	   << " outb " << outb
+	   << " rlat " << rlatency
+	   << " lat " << latency << dendl;
 }
+
+void ReplicatedPG::log_subop_stats(MOSDSubOp *op, int tag_inb, int tag_lat)
+{
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t latency = now;
+  latency -= op->get_recv_stamp();
+
+  uint64_t inb = op->get_data().length();
+
+  osd->logger->inc(l_osd_sop);
+
+  osd->logger->inc(l_osd_sop_inb, inb);
+  osd->logger->favg(l_osd_sop_lat, latency);
+
+  if (tag_inb)
+    osd->logger->inc(tag_inb, inb);
+  osd->logger->favg(tag_lat, latency);
+
+  dout(15) << "log_subop_stats " << *op << " inb " << inb << " latency " << latency << dendl;
+}
+
 
 
 void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 {
   dout(15) << "do_sub_op " << *op << dendl;
-
-  osd->logger->inc(l_osd_subop);
 
   if (op->ops.size() >= 1) {
     OSDOp& first = op->ops[0];
@@ -2337,6 +2377,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (result == 0)
     do_osd_op_effects(ctx);
 
+  ctx->bytes_read = ctx->outdata.length();
+
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify)
     return result;
@@ -2661,11 +2703,13 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	osd->cluster_messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
-      
-      utime_t now = ceph_clock_now(g_ceph_context);
-      now -= repop->start;
-      osd->logger->finc(l_osd_rlsum, now);
-      osd->logger->inc(l_osd_rlnum, 1);
+
+      // note the write is now readable (for rlatency calc).  note
+      // that this will only be defined if the write is readable
+      // _prior_ to being committed; it will not get set with
+      // writeahead journaling, for instance.
+      if (repop->ctx->readable_stamp == utime_t())
+	repop->ctx->readable_stamp = ceph_clock_now(g_ceph_context);
     }
   }
 
@@ -2734,9 +2778,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
     }
     
     wr->pg_trim_to = pg_trim_to;
-    wr->peer_stat = osd->get_my_stat_for(now, peer);
-    osd->cluster_messenger->
-      send_message(wr, osd->osdmap->get_cluster_inst(peer));
+    osd->cluster_messenger->send_message(wr, osd->osdmap->get_cluster_inst(peer));
 
     // keep peer_info up to date
     Info &in = peer_info[peer];
@@ -2774,7 +2816,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   repop->get();
 
   if (osd->logger)
-    osd->logger->set(l_osd_opwip, repop_map.size());
+    osd->logger->set(l_osd_op_wip, repop_map.size());
 
   return repop;
 }
@@ -2785,7 +2827,7 @@ void ReplicatedPG::remove_repop(RepGather *repop)
   repop->put();
 
   if (osd->logger)
-    osd->logger->set(l_osd_opwip, repop_map.size());
+    osd->logger->set(l_osd_op_wip, repop_map.size());
 }
 
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
@@ -3099,10 +3141,6 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   assert(is_active());
   assert(is_replica());
   
-  // note peer's stat
-  int fromosd = op->get_source().num();
-  osd->take_peer_stat(fromosd, op->peer_stat);
-
   // we better not be missing this.
   assert(!missing.is_missing(soid));
 
@@ -3191,10 +3229,8 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-    ack->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
-    osd->cluster_messenger->
-      send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
+    osd->cluster_messenger->send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
 
   rm->applied = true;
@@ -3226,17 +3262,14 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
            << ", sending commit to osd" << rm->ackerosd
            << dendl;
 
-  osd->logger->inc(l_osd_r_wr);
-  osd->logger->inc(l_osd_r_wrb, rm->bytes_written);
+  log_subop_stats(rm->op, l_osd_sop_w_inb, l_osd_sop_w_lat);
 
   if (osd->osdmap->is_up(rm->ackerosd)) {
     last_complete_ondisk = rm->last_complete;
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
     commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
-    commit->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
-    osd->cluster_messenger->
-      send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
+    osd->cluster_messenger->send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
   
   rm->committed = true;
@@ -3256,8 +3289,6 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
   // must be replication.
   tid_t rep_tid = r->get_tid();
   int fromosd = r->get_source().num();
-  
-  osd->take_peer_stat(fromosd, r->get_peer_stat());
   
   if (repop_map.count(rep_tid)) {
     // oh, good.
@@ -3514,11 +3545,14 @@ void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
   subop->data_subset = data_subset;
   subop->first = first;
+
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
   //subop->clone_subsets.swap(clone_subsets);
-  osd->cluster_messenger->
-    send_message(subop, osd->osdmap->get_cluster_inst(fromosd));
+
+  osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(fromosd));
+
+  osd->logger->inc(l_osd_pull);
 }
 
 
@@ -3669,8 +3703,8 @@ int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int pe
           << " to osd" << peer
           << dendl;
 
-  osd->logger->inc(l_osd_r_push);
-  osd->logger->inc(l_osd_r_pushb, bl.length());
+  osd->logger->inc(l_osd_push);
+  osd->logger->inc(l_osd_push_outb, bl.length());
   
   // send
   osd_reqid_t rid;  // useless?
@@ -3800,29 +3834,18 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     if (r < 0)
       send_push_op_blank(soid, op->get_source().num());
   }
+
+  log_subop_stats(op, 0, l_osd_sop_pull_lat);
+
   op->put();
 }
 
 
-struct C_OSD_Commit : public Context {
-  ReplicatedPG *pg;
-  epoch_t same_since;
-  eversion_t last_complete;
-  C_OSD_Commit(ReplicatedPG *p, epoch_t ss, eversion_t lc) : pg(p), same_since(ss), last_complete(lc) {
-    pg->get();
-  }
-  void finish(int r) {
-    pg->lock();
-    pg->_committed(same_since, last_complete);
-    pg->unlock();
-    pg->put();
-  }
-};
-
-void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
+void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t last_complete)
 {
+  lock();
   if (same_since == info.history.same_acting_since) {
-    dout(10) << "_committed last_complete " << last_complete << " now ondisk" << dendl;
+    dout(10) << "_committed_pushed_object last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
     if (last_complete_ondisk == info.last_update) {
@@ -3843,13 +3866,18 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
     }
 
   } else {
-    dout(10) << "_committed pg has changed, not touching last_complete_ondisk" << dendl;
+    dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
+
+  log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+
+  unlock();
+  put();
 }
 
-void ReplicatedPG::_wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
+void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
 {
-  dout(10) << "_wrote_pushed_object " << *obc << dendl;
+  dout(10) << "_applied_pushed_object " << *obc << dendl;
   lock();
   put_object_context(obc);
   unlock();
@@ -4103,7 +4131,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	ssc->snapset.decode(sp);
       }
 
-      onreadable = new C_OSD_WrotePushedObject(this, t, obc);
+      onreadable = new C_OSD_AppliedPushedObject(this, t, obc);
       onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
     } else {
       onreadable = new ObjectStore::C_DeleteTransaction(t);
@@ -4116,13 +4144,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   // apply to disk!
   int r = osd->store->queue_transaction(&osr, t,
 					onreadable,
-					new C_OSD_Commit(this, info.history.same_acting_since,
-							 info.last_complete),
+					new C_OSD_CommittedPushedObject(this, op, info.history.same_acting_since,
+									info.last_complete),
 					onreadable_sync);
   assert(r == 0);
-
-  osd->logger->inc(l_osd_r_push);
-  osd->logger->inc(l_osd_r_pushb, data.length());
 
   if (is_primary()) {
     assert(pi);

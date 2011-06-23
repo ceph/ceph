@@ -21,7 +21,7 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-class MOSDSubOp;
+#include "messages/MOSDSubOp.h"
 class MOSDSubOpReply;
 
 class PGLSFilter {
@@ -349,7 +349,7 @@ public:
     list<notify_info_t> notifies;
     list<uint64_t> notify_acks;
     
-    uint64_t bytes_written;
+    uint64_t bytes_written, bytes_read;
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
@@ -368,6 +368,7 @@ public:
 
     MOSDOpReply *reply;
 
+    utime_t readable_stamp;  // when applied on all replicas
     ReplicatedPG *pg;
 
     OpContext(const OpContext& other);
@@ -381,7 +382,7 @@ public:
       new_stats(_pg->info.stats),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
-      bytes_written(0),
+      bytes_written(0), bytes_read(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
       if (_ssc) {
 	new_snapset = _ssc->snapset;
@@ -639,14 +640,28 @@ protected:
 	obc2->ondisk_write_unlock();
     }
   };
-  struct C_OSD_WrotePushedObject : public Context {
+  struct C_OSD_AppliedPushedObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
     ObjectContext *obc;
-    C_OSD_WrotePushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
+    C_OSD_AppliedPushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
       pg(p), t(tt), obc(o) {}
     void finish(int r) {
-      pg->_wrote_pushed_object(t, obc);
+      pg->_applied_pushed_object(t, obc);
+    }
+  };
+  struct C_OSD_CommittedPushedObject : public Context {
+    ReplicatedPG *pg;
+    MOSDSubOp *op;
+    epoch_t same_since;
+    eversion_t last_complete;
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
+      op->get();
+      pg->get();
+    }
+    void finish(int r) {
+      pg->_committed_pushed_object(op, same_since, last_complete);
+      op->put();
     }
   };
 
@@ -655,15 +670,14 @@ protected:
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
-  void _wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
 
-  void _committed(epoch_t same_since, eversion_t lc);
-  friend class C_OSD_Commit;
-  
+  void log_subop_stats(MOSDSubOp *ctx, int tag_inb, int tag_lat);
 
 
   // -- scrub --

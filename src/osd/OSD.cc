@@ -426,12 +426,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_messenger(hbm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
-  decayrate(5.0),
-  stat_oprate(ceph_clock_now(g_ceph_context)),
-  peer_stat_lock("OSD::peer_stat_lock"),
-  read_latency_calc(g_conf->osd_max_opq<1 ? 1:g_conf->osd_max_opq),
-  qlen_calc(3),
-  iat_averager(g_conf->osd_flash_crowd_iat_alpha),
+  stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
   op_wq(this, &op_tp),
   osdmap(NULL),
@@ -464,13 +459,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   map_in_progress_cond = new Cond();
   
   osdmap = 0;
-
-  memset(&my_stat, 0, sizeof(my_stat));
-
-  stat_ops = 0;
-  stat_qlen = 0;
-  stat_rd_ops = stat_rd_ops_shed_in = stat_rd_ops_shed_out = 0;
-  stat_rd_ops_in_queue = 0;
 
   pending_ops = 0;
   waiting_for_no_ops = false;
@@ -643,52 +631,57 @@ void OSD::open_logger()
   if (!didit) {
     didit = true;
     osd_logtype.add_set(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
-    osd_logtype.add_inc(l_osd_op, "op");         // ops/sec
-    osd_logtype.add_set(l_osd_opwip, "opwip");   // ops currently being processed
-    osd_logtype.add_inc(l_osd_c_rd, "c_rd");     // client reads
-    osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");   // client read bytes
-    osd_logtype.add_inc(l_osd_c_wr, "c_wr");     // client writes
-    osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");    // client write bytes
-  
-    osd_logtype.add_inc(l_osd_r_wr, "r_wr");     // replicated writes
-    osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");   // replicated write bytes
+    osd_logtype.add_set(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
 
-    osd_logtype.add_inc(l_osd_subop, "subop");   // subops (replicated writes, recovery)
+    osd_logtype.add_inc(l_osd_op,       "op");           // client ops
+    osd_logtype.add_inc(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
+    osd_logtype.add_inc(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
+    osd_logtype.add_inc(l_osd_op_lat,   "op_lat");       // client op latency
 
-    osd_logtype.add_inc(l_osd_rop, "rop");
-    osd_logtype.add_inc(l_osd_r_push, "r_push");
-    osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
-    osd_logtype.add_inc(l_osd_r_pull, "r_pull");
-    osd_logtype.add_inc(l_osd_r_pullb, "r_pullb");
-  
-    osd_logtype.add_set(l_osd_qlen, "qlen");
-    osd_logtype.add_set(l_osd_rqlen, "rqlen");
-    osd_logtype.add_set(l_osd_rdlat, "rdlat");
-    osd_logtype.add_set(l_osd_rdlatm, "rdlatm");
-    osd_logtype.add_set(l_osd_fshdin, "fshdin");
-    osd_logtype.add_set(l_osd_fshdout, "fshdout");
-    osd_logtype.add_inc(l_osd_shdout, "shdout");
-    osd_logtype.add_inc(l_osd_shdin, "shdin");
+    osd_logtype.add_inc(l_osd_op_r,      "op_r");        // client reads
+    osd_logtype.add_inc(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
+    osd_logtype.add_inc(l_osd_op_r_lat,  "op_r_lat");    // client read latency
+    osd_logtype.add_inc(l_osd_op_w,      "op_w");        // client writes
+    osd_logtype.add_inc(l_osd_op_w_inb,  "op_w_inb");    // client write in bytes
+    osd_logtype.add_inc(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
+    osd_logtype.add_inc(l_osd_op_w_lat,  "op_w_lat");    // client write latency
+    osd_logtype.add_inc(l_osd_op_rw,     "op_rw");       // client rmw
+    osd_logtype.add_inc(l_osd_op_rw_inb, "op_rw_inb");   // client rmw in bytes
+    osd_logtype.add_inc(l_osd_op_rw_outb,"op_rw_outb");  // client rmw out bytes
+    osd_logtype.add_inc(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
+    osd_logtype.add_inc(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
+
+    osd_logtype.add_inc(l_osd_sop,       "sop");         // subops
+    osd_logtype.add_inc(l_osd_sop_inb,   "sop_inb");     // subop in bytes
+    osd_logtype.add_inc(l_osd_sop_lat,   "sop_lat");     // subop latency
+
+    osd_logtype.add_inc(l_osd_sop_w,     "sop_w");          // replicated (client) writes
+    osd_logtype.add_inc(l_osd_sop_w_inb, "sop_w_inb");      // replicated write in bytes
+    osd_logtype.add_inc(l_osd_sop_w_lat, "sop_w_lat");      // replicated write latency
+    osd_logtype.add_inc(l_osd_sop_pull,     "sop_pull");       // pull request
+    osd_logtype.add_inc(l_osd_sop_pull_lat, "sop_pull_lat");
+    osd_logtype.add_inc(l_osd_sop_push,     "sop_push");       // push (write)
+    osd_logtype.add_inc(l_osd_sop_push_inb, "sop_push_inb");
+    osd_logtype.add_inc(l_osd_sop_push_lat, "sop_push_lat");
+
+    osd_logtype.add_inc(l_osd_pull,      "pull");       // pull requests sent
+    osd_logtype.add_inc(l_osd_push,      "push");       // push messages
+    osd_logtype.add_inc(l_osd_push_outb, "push_outb");  // pushed bytes
+
+    osd_logtype.add_inc(l_osd_rop, "rop");       // recovery ops (started)
 
     osd_logtype.add_set(l_osd_loadavg, "loadavg");
-
-    osd_logtype.add_inc(l_osd_rlsum, "rlsum");
-    osd_logtype.add_inc(l_osd_rlnum, "rlnum");
-
-    osd_logtype.add_set(l_osd_numpg, "numpg");   // num pgs
-    osd_logtype.add_set(l_osd_numpg_primary, "numpg_primary"); // num primary pgs
-    osd_logtype.add_set(l_osd_numpg_replica, "numpg_replica"); // num replica pgs
-    osd_logtype.add_set(l_osd_numpg_stray, "numpg_stray");   // num stray pgs
-    osd_logtype.add_set(l_osd_hbto, "hbto");     // heartbeat peers we send to
-    osd_logtype.add_set(l_osd_hbfrom, "hbfrom"); // heartbeat peers we recv from
-  
     osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
-  
-    osd_logtype.add_inc(l_osd_map, "map");
-    osd_logtype.add_inc(l_osd_mapi, "mapi");
-    osd_logtype.add_inc(l_osd_mapidup, "mapidup");
-    osd_logtype.add_inc(l_osd_mapf, "mapf");
-    osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
+
+    osd_logtype.add_set(l_osd_pg, "numpg");   // num pgs
+    osd_logtype.add_set(l_osd_pg_primary, "numpg_primary"); // num primary pgs
+    osd_logtype.add_set(l_osd_pg_replica, "numpg_replica"); // num replica pgs
+    osd_logtype.add_set(l_osd_pg_stray, "numpg_stray");   // num stray pgs
+    osd_logtype.add_set(l_osd_hb_to, "hbto");     // heartbeat peers we send to
+    osd_logtype.add_set(l_osd_hb_from, "hbfrom"); // heartbeat peers we recv from
+    osd_logtype.add_inc(l_osd_map, "map");           // osdmap messages
+    osd_logtype.add_inc(l_osd_mape, "mape");         // osdmap epochs
+    osd_logtype.add_inc(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
 
     osd_logtype.validate();
   }
@@ -1323,83 +1316,6 @@ void OSD::update_osd_stat()
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
 
-void OSD::_refresh_my_stat(utime_t now)
-{
-  assert(heartbeat_lock.is_locked());
-  assert(peer_stat_lock.is_locked());
-
-  // refresh?
-  if (now - my_stat.stamp > g_conf->osd_stat_refresh_interval ||
-      pending_ops > 2*my_stat.qlen) {
-
-    update_osd_stat();
-
-    now.encode_timeval(&my_stat.stamp);
-    my_stat.oprate = stat_oprate.get(now, decayrate);
-
-    //read_latency_calc.set_size( 20 );  // hrm.
-
-    // qlen
-    my_stat.qlen = 0;
-    if (stat_ops)
-      my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
-
-    // rd ops shed in
-    float frac_rd_ops_shed_in = 0;
-    float frac_rd_ops_shed_out = 0;
-    if (stat_rd_ops) {
-      frac_rd_ops_shed_in = (float)stat_rd_ops_shed_in / (float)stat_rd_ops;
-      frac_rd_ops_shed_out = (float)stat_rd_ops_shed_out / (float)stat_rd_ops;
-    }
-    my_stat.frac_rd_ops_shed_in = (my_stat.frac_rd_ops_shed_in + frac_rd_ops_shed_in) / 2.0;
-    my_stat.frac_rd_ops_shed_out = (my_stat.frac_rd_ops_shed_out + frac_rd_ops_shed_out) / 2.0;
-
-    // recent_qlen
-    qlen_calc.add(my_stat.qlen);
-    my_stat.recent_qlen = qlen_calc.get_average();
-
-    // read latency
-    if (stat_rd_ops) {
-      my_stat.read_latency = read_latency_calc.get_average();
-      if (my_stat.read_latency < 0) my_stat.read_latency = 0;
-    } else {
-      my_stat.read_latency = 0;
-    }
-
-    my_stat.read_latency_mine = my_stat.read_latency * (1.0 - frac_rd_ops_shed_in);
-
-    logger->fset(l_osd_qlen, my_stat.qlen);
-    logger->fset(l_osd_rqlen, my_stat.recent_qlen);
-    logger->fset(l_osd_rdlat, my_stat.read_latency);
-    logger->fset(l_osd_rdlatm, my_stat.read_latency_mine);
-    logger->fset(l_osd_fshdin, my_stat.frac_rd_ops_shed_in);
-    logger->fset(l_osd_fshdout, my_stat.frac_rd_ops_shed_out);
-    dout(30) << "_refresh_my_stat " << my_stat << dendl;
-
-    stat_rd_ops = 0;
-    stat_rd_ops_shed_in = 0;
-    stat_rd_ops_shed_out = 0;
-    stat_ops = 0;
-    stat_qlen = 0;
-  }
-}
-
-osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
-{
-  Mutex::Locker hlock(heartbeat_lock);
-  Mutex::Locker lock(peer_stat_lock);
-  _refresh_my_stat(now);
-  my_stat_on_peer[peer] = my_stat;
-  return my_stat;
-}
-
-void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
-{
-  Mutex::Locker lock(peer_stat_lock);
-  dout(15) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
-  peer_stat[peer] = stat;
-}
-
 void OSD::update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
@@ -1480,7 +1396,7 @@ void OSD::update_heartbeat_peers()
 	  dout(10) << "update_heartbeat_peers: new _from osd" << p
 		   << " " << heartbeat_con[p]->get_peer_addr() << dendl;
 	  heartbeat_from_stamp[p] = now;  
-	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat,
+	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
 				     MOSDPing::REQUEST_HEARTBEAT);
 	  heartbeat_messenger->send_message(m, heartbeat_con[p]);
 	}
@@ -1548,7 +1464,7 @@ void OSD::update_heartbeat_peers()
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
       heartbeat_messenger->send_message(new MOSDPing(osdmap->get_fsid(), heartbeat_epoch,
-						     heartbeat_epoch, my_stat,
+						     heartbeat_epoch,
 						     MOSDPing::YOU_DIED), con);
     }
     heartbeat_messenger->mark_down_on_empty(con);
@@ -1644,15 +1560,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::HEARTBEAT:
     if (heartbeat_from.count(from) &&
 	heartbeat_con[from] == m->get_connection()) {
-      // only take peer stat or share map now if map_lock is uncontended
-      if (locked) {
-	dout(20) << "handle_osd_ping " << m->get_source_inst()
-		 << " took stat " << m->peer_stat << dendl;
-	take_peer_stat(from, m->peer_stat);  // only with map_lock held!
-      } else {
-	dout(20) << "handle_osd_ping " << m->get_source_inst()
-		 << " dropped stat " << m->peer_stat << dendl;
-      }
+
+      dout(20) << "handle_osd_ping " << m->get_source_inst() << dendl;
 
       note_peer_epoch(from, m->map_epoch);
       if (locked && !is_booting())
@@ -1741,33 +1650,19 @@ void OSD::heartbeat()
   }
 
   // get CPU load avg
-  try {
-    ifstream in("/proc/loadavg");
-    if (in.is_open()) {
-      float oneminavg;
-      in >> oneminavg;
-      logger->fset(l_osd_loadavg, oneminavg);
-      in.close();
-    }
-    else {
-      derr << "heartbeat: failed to open /proc/loadavg" << dendl;
-    }
-  }
-  catch (const ios::failure &f) {
-    derr << "heartbeat: failed to read /proc/loadavg" << dendl;
-  }
+  double loadavgs[1];
+  if (getloadavg(loadavgs, 1) == 1)
+    logger->fset(l_osd_loadavg, loadavgs[0]);
 
   dout(30) << "heartbeat checking stats" << dendl;
 
-  // calc my stats
-  Mutex::Locker lock(peer_stat_lock);
-  _refresh_my_stat(now);
-  my_stat_on_peer.clear();
+  // refresh stats?
+  {
+    Mutex::Locker lock(stat_lock);
+    update_osd_stat();
+  }
 
-  dout(5) << "heartbeat: " << my_stat << dendl;
   dout(5) << "heartbeat: " << osd_stat << dendl;
-
-  //load_calc.set_size(stat_ops);
 
   bool map_locked = map_lock.try_get_read();
   dout(30) << "heartbeat map_locked=" << map_locked << dendl;
@@ -1778,12 +1673,10 @@ void OSD::heartbeat()
        i++) {
     int peer = i->first;
     if (heartbeat_con.count(peer)) {
-      my_stat_on_peer[peer] = my_stat;
       dout(30) << "heartbeat allocating ping for osd" << peer << dendl;
       Message *m = new MOSDPing(osdmap->get_fsid(),
 				map_locked ? osdmap->get_epoch():0, 
-				i->second,
-				my_stat);
+				i->second, MOSDPing::HEARTBEAT);
       m->set_priority(CEPH_MSG_PRIO_HIGH);
       dout(30) << "heartbeat sending ping to osd" << peer << dendl;
       heartbeat_messenger->send_message(m, heartbeat_con[peer]);
@@ -1797,9 +1690,10 @@ void OSD::heartbeat()
     dout(30) << "heartbeat no map_lock, no check" << dendl;
   }
 
-  if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
-  if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
-
+  if (logger) {
+    logger->set(l_osd_hb_to, heartbeat_to.size());
+    logger->set(l_osd_hb_from, heartbeat_from.size());
+  }
   
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
@@ -2167,9 +2061,9 @@ void OSD::send_pg_stats(const utime_t &now)
 
   dout(20) << "send_pg_stats" << dendl;
 
-  peer_stat_lock.Lock();
+  stat_lock.Lock();
   osd_stat_t cur_stat = osd_stat;
-  peer_stat_lock.Unlock();
+  stat_lock.Unlock();
    
   pg_stat_queue_lock.Lock();
 
@@ -3014,20 +2908,26 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (session)
     session->put();
 
-  dout(3) << "handle_osd_map epochs [" 
-	  << m->get_first() << "," << m->get_last() 
-	  << "], i have " << osdmap->get_epoch()
-	  << dendl;
+  epoch_t first = m->get_first();
+  epoch_t last = m->get_last();
+  dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have " << osdmap->get_epoch() << dendl;
+
+  if (logger) {
+    logger->inc(l_osd_map);
+    logger->inc(l_osd_mape, last - first + 1);
+    if (first <= osdmap->get_epoch())
+      logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
+  }
 
   // make sure there is something new, here, before we bother flushing the queues and such
-  if (m->get_last() <= osdmap->get_epoch()) {
+  if (last <= osdmap->get_epoch()) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
   }
 
   // missing some?
-  if (m->get_first() > osdmap->get_epoch() + 1) {
+  if (first > osdmap->get_epoch() + 1) {
     dout(10) << "handle_osd_map message skips epoch " << osdmap->get_epoch() + 1 << dendl;
     monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
     monc->renew_subs();
@@ -3074,12 +2974,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
 
-  logger->inc(l_osd_map);
-
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  for (epoch_t e = osdmap->get_epoch() + 1; e <= m->get_last(); e++) {
+  for (epoch_t e = osdmap->get_epoch() + 1; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
@@ -3136,7 +3034,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for cluster snapshot
   string cluster_snap;
-  for (epoch_t cur = superblock.current_epoch + 1; cur <= m->get_last() && cluster_snap.length() == 0; cur++) {
+  for (epoch_t cur = superblock.current_epoch + 1; cur <= last && cluster_snap.length() == 0; cur++) {
     OSDMap *newmap = get_map(cur);
     cluster_snap = newmap->get_cluster_snapshot();
   }
@@ -3159,8 +3057,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
 
   if (!superblock.oldest_map)
-    superblock.oldest_map = m->get_first();
-  superblock.newest_map = m->get_last();
+    superblock.oldest_map = first;
+  superblock.newest_map = last;
 
  
   // finally, take map_lock _after_ we do this flush, to avoid deadlock
@@ -3473,10 +3371,10 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   do_queries(query_map);
   do_infos(info_map);
 
-  logger->set(l_osd_numpg, pg_map.size());
-  logger->set(l_osd_numpg_primary, num_pg_primary);
-  logger->set(l_osd_numpg_replica, num_pg_replica);
-  logger->set(l_osd_numpg_stray, num_pg_stray);
+  logger->set(l_osd_pg, pg_map.size());
+  logger->set(l_osd_pg_primary, num_pg_primary);
+  logger->set(l_osd_pg_replica, num_pg_replica);
+  logger->set(l_osd_pg_stray, num_pg_stray);
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   trim_map_cache(oldest_last_clean);
@@ -5028,19 +4926,6 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  // update qlen stats
-  stat_oprate.hit(now, decayrate);
-  stat_ops++;
-  stat_qlen += pending_ops;
-
-  if (!op->may_write()) {
-    stat_rd_ops++;
-    if (op->get_source().is_osd()) {
-      //dout(0) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
-      stat_rd_ops_shed_in++;
-    }
-  }
-
   // we don't need encoded payload anymore
   op->clear_payload();
  
@@ -5135,11 +5020,6 @@ void OSD::handle_op(MOSDOp *op)
 
   
   dout(10) << "handle_op " << *op << " in " << *pg << dendl;
-
-  if (!op->may_write()) {
-    Mutex::Locker lock(peer_stat_lock);
-    stat_rd_ops_in_queue++;
-  }
 
   pg->get();
   if (g_conf->osd_op_threads < 1) {
