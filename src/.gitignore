@@ -37,6 +37,7 @@
 /testtimers
 /testlibrbd
 /testlibrbdpp
+/test_librados_build
 /testsnaps
 /test_libcommon_build
 /test_mutate
