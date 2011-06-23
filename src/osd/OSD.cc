@@ -644,11 +644,22 @@ void OSD::open_logger()
     didit = true;
     osd_logtype.add_set(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
     osd_logtype.add_inc(l_osd_op, "op");         // ops/sec
-    osd_logtype.add_set(l_osd_opwip, "opwip");   // ops currently being processed
-    osd_logtype.add_inc(l_osd_c_rd, "c_rd");     // client reads
-    osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");   // client read bytes
-    osd_logtype.add_inc(l_osd_c_wr, "c_wr");     // client writes
-    osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");    // client write bytes
+    osd_logtype.add_set(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
+
+    osd_logtype.add_inc(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
+    osd_logtype.add_inc(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
+    osd_logtype.add_inc(l_osd_op_outb,  "op_lat");       // client op latency
+
+    osd_logtype.add_inc(l_osd_op_r,      "op_r");        // client reads
+    osd_logtype.add_inc(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
+    osd_logtype.add_inc(l_osd_op_r_lat,  "op_r_lat");    // client read latency
+    osd_logtype.add_inc(l_osd_op_w,      "op_w");        // client writes
+    osd_logtype.add_inc(l_osd_op_w_inb,  "op_w_inb");    // client write bytes
+    osd_logtype.add_inc(l_osd_op_w_lat,  "op_w_lat");    // client write latency
+    osd_logtype.add_inc(l_osd_op_rw,     "op_rw");       // client rmw
+    osd_logtype.add_inc(l_osd_op_rw_inb, "op_rw_inb");   // client rmw bytes
+    osd_logtype.add_inc(l_osd_op_rw_outb,"op_rw_outb");  // client rmw bytes
+    osd_logtype.add_inc(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
   
     osd_logtype.add_inc(l_osd_r_wr, "r_wr");     // replicated writes
     osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");   // replicated write bytes

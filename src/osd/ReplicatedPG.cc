@@ -646,29 +646,38 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t latency = now;
+  latency -= ctx->op->get_recv_stamp();
+
   osd->logger->inc(l_osd_op);
 
-  if (ctx->op_t.empty()) {
-    osd->logger->inc(l_osd_c_rd);
-    osd->logger->inc(l_osd_c_rdb, ctx->outdata.length());
+  osd->logger->inc(l_osd_op_outb, ctx->outdata.length());
+  osd->logger->inc(l_osd_op_inb, ctx->bytes_written);
+  osd->logger->favg(l_osd_op_lat, latency);
 
-    utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t diff = now;
-    diff -= ctx->op->get_recv_stamp();
-    //dout(20) <<  "do_op " << ctx->reqid << " total op latency " << diff << dendl;
+  MOSDOp *op = (MOSDOp*)ctx->op;
+
+  if (op->may_read() && op->may_write()) {
+    osd->logger->inc(l_osd_op_rw);
+    osd->logger->inc(l_osd_op_rw_inb, ctx->outdata.length());
+    osd->logger->inc(l_osd_op_rw_outb, ctx->bytes_written);
+    osd->logger->favg(l_osd_op_rw_lat, latency);
+  } else if (op->may_read()) {
+    osd->logger->inc(l_osd_op_r);
+    osd->logger->inc(l_osd_op_r_outb, ctx->outdata.length());
+    osd->logger->favg(l_osd_op_r_lat, latency);
+
     Mutex::Locker lock(osd->peer_stat_lock);
     osd->stat_rd_ops_in_queue--;
-    osd->read_latency_calc.add(diff);
-	
-    /*
-    if (is_primary() &&
-	g_conf->osd_balance_reads)
-      stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
-    */
-  } else {
-    osd->logger->inc(l_osd_c_wr);
-    osd->logger->inc(l_osd_c_wrb, ctx->bytes_written);
-  }
+    osd->read_latency_calc.add(latency);
+
+  } else if (op->may_write()) {
+    osd->logger->inc(l_osd_op_w);
+    osd->logger->inc(l_osd_op_w_inb, ctx->bytes_written);
+    osd->logger->favg(l_osd_op_w_lat, latency);
+  } else
+    assert(0);
 }
 
 
@@ -2774,7 +2783,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   repop->get();
 
   if (osd->logger)
-    osd->logger->set(l_osd_opwip, repop_map.size());
+    osd->logger->set(l_osd_op_wip, repop_map.size());
 
   return repop;
 }
@@ -2785,7 +2794,7 @@ void ReplicatedPG::remove_repop(RepGather *repop)
   repop->put();
 
   if (osd->logger)
-    osd->logger->set(l_osd_opwip, repop_map.size());
+    osd->logger->set(l_osd_op_wip, repop_map.size());
 }
 
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
