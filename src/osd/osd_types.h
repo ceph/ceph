@@ -862,25 +862,22 @@ struct pg_stat_t {
   uint64_t num_objects_missing_on_primary;
 
   uint64_t num_objects_degraded;
+  uint64_t num_objects_unfound;
   uint64_t log_size;
   uint64_t ondisk_log_size;    // >= active_log_size
 
   uint64_t num_rd, num_rd_kb;
   uint64_t num_wr, num_wr_kb;
 
-  // The number of objects missing on the primary OSD
-  uint64_t num_objects_unfound;
-  
   vector<int> up, acting;
 
   pg_stat_t() : state(0),
 		created(0), parent_split_bits(0), 
 		num_bytes(0), num_kb(0), 
 		num_objects(0), num_object_clones(0), num_object_copies(0),
-		num_objects_missing_on_primary(0), num_objects_degraded(0),
+		num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
 		log_size(0), ondisk_log_size(0),
-		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-		num_objects_unfound(0)
+		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
   void encode(bufferlist &bl) const {
@@ -998,20 +995,17 @@ struct pool_stat_t {
   uint64_t num_object_copies;  // num_objects * num_replicas
   uint64_t num_objects_missing_on_primary;
   uint64_t num_objects_degraded;
+  uint64_t num_objects_unfound;
   uint64_t log_size;
   uint64_t ondisk_log_size;    // >= active_log_size
   uint64_t num_rd, num_rd_kb;
   uint64_t num_wr, num_wr_kb;
 
-  // The number of logical objects that are still unfound
-  uint64_t num_objects_unfound;
-
   pool_stat_t() : num_bytes(0), num_kb(0), 
 		  num_objects(0), num_object_clones(0), num_object_copies(0),
-		  num_objects_missing_on_primary(0), num_objects_degraded(0),
+		  num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
 		  log_size(0), ondisk_log_size(0),
-		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-		  num_objects_unfound(0)
+		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
   void encode(bufferlist &bl) const {
