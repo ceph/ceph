@@ -677,11 +677,6 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->favg(l_osd_op_r_lat, latency);
-
-    Mutex::Locker lock(osd->stat_lock);
-    osd->stat_rd_ops_in_queue--;
-    osd->read_latency_calc.add(latency);
-
   } else if (op->may_write()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
@@ -2783,9 +2778,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
     }
     
     wr->pg_trim_to = pg_trim_to;
-    wr->peer_stat = osd->get_my_stat_for(now, peer);
-    osd->cluster_messenger->
-      send_message(wr, osd->osdmap->get_cluster_inst(peer));
+    osd->cluster_messenger->send_message(wr, osd->osdmap->get_cluster_inst(peer));
 
     // keep peer_info up to date
     Info &in = peer_info[peer];
@@ -3148,10 +3141,6 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   assert(is_active());
   assert(is_replica());
   
-  // note peer's stat
-  int fromosd = op->get_source().num();
-  osd->take_peer_stat(fromosd, op->peer_stat);
-
   // we better not be missing this.
   assert(!missing.is_missing(soid));
 
@@ -3240,10 +3229,8 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-    ack->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
-    osd->cluster_messenger->
-      send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
+    osd->cluster_messenger->send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
 
   rm->applied = true;
@@ -3282,9 +3269,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
     commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
-    commit->set_peer_stat(osd->get_my_stat_for(ceph_clock_now(g_ceph_context), rm->ackerosd));
-    osd->cluster_messenger->
-      send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
+    osd->cluster_messenger->send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
   
   rm->committed = true;
@@ -3304,8 +3289,6 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
   // must be replication.
   tid_t rep_tid = r->get_tid();
   int fromosd = r->get_source().num();
-  
-  osd->take_peer_stat(fromosd, r->get_peer_stat());
   
   if (repop_map.count(rep_tid)) {
     // oh, good.

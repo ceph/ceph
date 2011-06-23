@@ -85,8 +85,6 @@ enum {
 
   l_osd_rop,
 
-  l_osd_qlen,
-  l_osd_rqlen,
   l_osd_loadavg,
 
   l_osd_pg,
@@ -298,105 +296,8 @@ private:
   Mutex stat_lock;
   osd_stat_t osd_stat;
 
-  DecayRate decayrate;
-  DecayCounter stat_oprate;
-  int stat_ops;  // ops since last heartbeat
-  int stat_rd_ops;
-  int stat_rd_ops_shed_in;
-  int stat_rd_ops_shed_out;
-  int stat_qlen; // cumulative queue length since last refresh
-  int stat_rd_ops_in_queue;  // in queue
-
-  osd_peer_stat_t my_stat;
-  hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > peer_stat;
-  hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > my_stat_on_peer;  // what the peer thinks of me
-
   void update_osd_stat();
-  void _refresh_my_stat(utime_t now);
-  osd_peer_stat_t get_my_stat_for(utime_t now, int peer);
-  void take_peer_stat(int peer, const osd_peer_stat_t& stat);
   
-  // load calculation
-  //current implementation is moving averges.
-  class MovingAverager {
-  private:
-    Mutex lock;
-    deque<double> m_Data;
-    unsigned m_Size;
-    double m_Total;
-    
-  public:
-    MovingAverager(unsigned size) : lock("OSD::MovingAverager::lock"), m_Size(size), m_Total(0) { }
-
-    void set_size(unsigned size) {
-      m_Size = size;
-    }
-
-    void add(double value) {
-      Mutex::Locker locker(lock);
-
-      // add item
-      m_Data.push_back(value);
-      m_Total += value;
-
-      // trim
-      while (m_Data.size() > m_Size) {
-	m_Total -= m_Data.front();
-	m_Data.pop_front();
-      }
-    }
-    
-    double get_average() {
-      Mutex::Locker locker(lock);
-      if (m_Data.empty()) return -1;
-      return m_Total / (double)m_Data.size();
-    }
-  } read_latency_calc, qlen_calc;
-
-  class IATAverager {
-  public:
-    struct iat_data {
-      double last_req_stamp;
-      double average_iat;
-      iat_data() : last_req_stamp(0), average_iat(0) {}
-    };
-  private:
-    mutable Mutex lock;
-    double alpha;
-    hash_map<object_t, iat_data> iat_map;
-
-  public:
-    IATAverager(double a) : lock("IATAverager::lock"),alpha(a) {}
-    
-    void add_sample(const object_t& oid, double now) {
-      Mutex::Locker locker(lock);
-      iat_data &r = iat_map[oid];
-      double iat = now - r.last_req_stamp;
-      r.last_req_stamp = now;
-      r.average_iat = r.average_iat*(1.0-alpha) + iat*alpha;
-    }
-    
-    bool have(const object_t& oid) const {
-      Mutex::Locker locker(lock);
-      return iat_map.count(oid);
-    }
-
-    double get_average_iat(const object_t& oid) const {
-      Mutex::Locker locker(lock);
-      hash_map<object_t, iat_data>::const_iterator p = iat_map.find(oid);
-      assert(p != iat_map.end());
-      return p->second.average_iat;
-    }
-
-    bool is_flash_crowd_candidate(const object_t& oid) const {
-      Mutex::Locker locker(lock);
-      return get_average_iat(oid) <= g_conf->osd_flash_crowd_iat_threshold;
-    }
-  };
-
-  IATAverager    iat_averager;
- 
-
   // -- waiters --
   list<class Message*> finished;
   Mutex finished_lock;
