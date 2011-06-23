@@ -3813,25 +3813,11 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 }
 
 
-struct C_OSD_Commit : public Context {
-  ReplicatedPG *pg;
-  epoch_t same_since;
-  eversion_t last_complete;
-  C_OSD_Commit(ReplicatedPG *p, epoch_t ss, eversion_t lc) : pg(p), same_since(ss), last_complete(lc) {
-    pg->get();
-  }
-  void finish(int r) {
-    pg->lock();
-    pg->_committed(same_since, last_complete);
-    pg->unlock();
-    pg->put();
-  }
-};
-
-void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
+void ReplicatedPG::_committed_pushed_object(epoch_t same_since, eversion_t last_complete)
 {
+  lock();
   if (same_since == info.history.same_acting_since) {
-    dout(10) << "_committed last_complete " << last_complete << " now ondisk" << dendl;
+    dout(10) << "_committed_pushed_object last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
     if (last_complete_ondisk == info.last_update) {
@@ -3852,13 +3838,15 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
     }
 
   } else {
-    dout(10) << "_committed pg has changed, not touching last_complete_ondisk" << dendl;
+    dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
+  unlock();
+  put();
 }
 
-void ReplicatedPG::_wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
+void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
 {
-  dout(10) << "_wrote_pushed_object " << *obc << dendl;
+  dout(10) << "_applied_pushed_object " << *obc << dendl;
   lock();
   put_object_context(obc);
   unlock();
@@ -4112,7 +4100,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	ssc->snapset.decode(sp);
       }
 
-      onreadable = new C_OSD_WrotePushedObject(this, t, obc);
+      onreadable = new C_OSD_AppliedPushedObject(this, t, obc);
       onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
     } else {
       onreadable = new ObjectStore::C_DeleteTransaction(t);
@@ -4125,8 +4113,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   // apply to disk!
   int r = osd->store->queue_transaction(&osr, t,
 					onreadable,
-					new C_OSD_Commit(this, info.history.same_acting_since,
-							 info.last_complete),
+					new C_OSD_CommittedPushedObject(this, info.history.same_acting_since,
+									info.last_complete),
 					onreadable_sync);
   assert(r == 0);
 

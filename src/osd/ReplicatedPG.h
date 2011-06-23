@@ -639,14 +639,25 @@ protected:
 	obc2->ondisk_write_unlock();
     }
   };
-  struct C_OSD_WrotePushedObject : public Context {
+  struct C_OSD_AppliedPushedObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
     ObjectContext *obc;
-    C_OSD_WrotePushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
+    C_OSD_AppliedPushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
       pg(p), t(tt), obc(o) {}
     void finish(int r) {
-      pg->_wrote_pushed_object(t, obc);
+      pg->_applied_pushed_object(t, obc);
+    }
+  };
+  struct C_OSD_CommittedPushedObject : public Context {
+    ReplicatedPG *pg;
+    epoch_t same_since;
+    eversion_t last_complete;
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, epoch_t ss, eversion_t lc) : pg(p), same_since(ss), last_complete(lc) {
+      pg->get();
+    }
+    void finish(int r) {
+      pg->_committed_pushed_object(same_since, last_complete);
     }
   };
 
@@ -655,15 +666,13 @@ protected:
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
-  void _wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _committed_pushed_object(epoch_t same_since, eversion_t lc);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
 
-  void _committed(epoch_t same_since, eversion_t lc);
-  friend class C_OSD_Commit;
-  
 
 
   // -- scrub --

@@ -648,7 +648,7 @@ void OSD::open_logger()
 
     osd_logtype.add_inc(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
     osd_logtype.add_inc(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
-    osd_logtype.add_inc(l_osd_op_outb,  "op_lat");       // client op latency
+    osd_logtype.add_inc(l_osd_op_lat,   "op_lat");       // client op latency
 
     osd_logtype.add_inc(l_osd_op_r,      "op_r");        // client reads
     osd_logtype.add_inc(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
