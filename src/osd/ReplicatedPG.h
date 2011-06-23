@@ -697,8 +697,12 @@ public:
   void do_osd_op_effects(OpContext *ctx);
 private:
   struct NotTrimming;
-  struct SnapTrim : boost::statechart::event< SnapTrim > {};
-  struct Reset : boost::statechart::event< Reset > {};
+  struct SnapTrim : boost::statechart::event< SnapTrim > {
+    SnapTrim() : boost::statechart::event < SnapTrim >() {}
+  };
+  struct Reset : boost::statechart::event< Reset > {
+    Reset() : boost::statechart::event< Reset >() {}
+  };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
     set<RepGather *> repops;
