@@ -89,13 +89,15 @@ enum {
   l_osd_rqlen,
   l_osd_loadavg,
 
-  l_osd_numpg,
-  l_osd_numpg_primary,
-  l_osd_numpg_replica,
-  l_osd_numpg_stray,
-  l_osd_hbto,
-  l_osd_hbfrom,
+  l_osd_pg,
+  l_osd_pg_primary,
+  l_osd_pg_replica,
+  l_osd_pg_stray,
+  l_osd_hb_to,
+  l_osd_hb_from,
+
   l_osd_buf,
+
   l_osd_map,
   l_osd_mapi,
   l_osd_mapidup,

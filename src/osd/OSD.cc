@@ -688,12 +688,12 @@ void OSD::open_logger()
 
     osd_logtype.add_set(l_osd_loadavg, "loadavg");
 
-    osd_logtype.add_set(l_osd_numpg, "numpg");   // num pgs
-    osd_logtype.add_set(l_osd_numpg_primary, "numpg_primary"); // num primary pgs
-    osd_logtype.add_set(l_osd_numpg_replica, "numpg_replica"); // num replica pgs
-    osd_logtype.add_set(l_osd_numpg_stray, "numpg_stray");   // num stray pgs
-    osd_logtype.add_set(l_osd_hbto, "hbto");     // heartbeat peers we send to
-    osd_logtype.add_set(l_osd_hbfrom, "hbfrom"); // heartbeat peers we recv from
+    osd_logtype.add_set(l_osd_pg, "numpg");   // num pgs
+    osd_logtype.add_set(l_osd_pg_primary, "numpg_primary"); // num primary pgs
+    osd_logtype.add_set(l_osd_pg_replica, "numpg_replica"); // num replica pgs
+    osd_logtype.add_set(l_osd_pg_stray, "numpg_stray");   // num stray pgs
+    osd_logtype.add_set(l_osd_hb_to, "hbto");     // heartbeat peers we send to
+    osd_logtype.add_set(l_osd_hb_from, "hbfrom"); // heartbeat peers we recv from
   
     osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
   
@@ -1794,9 +1794,10 @@ void OSD::heartbeat()
     dout(30) << "heartbeat no map_lock, no check" << dendl;
   }
 
-  if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
-  if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
-
+  if (logger) {
+    logger->set(l_osd_hb_to, heartbeat_to.size());
+    logger->set(l_osd_hb_from, heartbeat_from.size());
+  }
   
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
@@ -3470,10 +3471,10 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   do_queries(query_map);
   do_infos(info_map);
 
-  logger->set(l_osd_numpg, pg_map.size());
-  logger->set(l_osd_numpg_primary, num_pg_primary);
-  logger->set(l_osd_numpg_replica, num_pg_replica);
-  logger->set(l_osd_numpg_stray, num_pg_stray);
+  logger->set(l_osd_pg, pg_map.size());
+  logger->set(l_osd_pg_primary, num_pg_primary);
+  logger->set(l_osd_pg_replica, num_pg_replica);
+  logger->set(l_osd_pg_stray, num_pg_stray);
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   trim_map_cache(oldest_last_clean);
