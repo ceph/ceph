@@ -70,6 +70,11 @@ void usage()
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
   generic_client_usage();
+}
+
+void usage_exit()
+{
+  usage();
   exit(1);
 }
 
@@ -106,7 +111,7 @@ static uint32_t str_to_perm(const char *str)
   else if (strcasecmp(str, "full") == 0)
     return RGW_PERM_FULL_CONTROL;
 
-  usage();
+  usage_exit();
   return 0; // unreachable
 }
 
@@ -379,7 +384,10 @@ int main(int argc, char **argv)
   RGWFormatter *formatter = &formatter_xml;
 
   FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("uid", 'i')) {
+    if (CEPH_ARGPARSE_EQ("help", 'h')) {
+      usage();
+      exit(0);
+    } else if (CEPH_ARGPARSE_EQ("uid", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access_key, OPT_STR);
@@ -414,7 +422,7 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
       if (pool_id < 0) {
         cerr << "bad pool-id: " << pool_id << std::endl;
-        usage();
+        usage_exit();
       }
     } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
@@ -423,7 +431,7 @@ int main(int argc, char **argv)
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
         if (opt_cmd < 0) {
           cerr << "unrecognized arg " << args[i] << std::endl;
-          usage();
+          usage_exit();
         }
         if (need_more) {
           prev_cmd = CEPH_ARGPARSE_VAL;
@@ -431,13 +439,13 @@ int main(int argc, char **argv)
         }
       } else {
         cerr << "unrecognized arg " << args[i] << std::endl;
-        usage();
+        usage_exit();
       }
     }
   }
 
   if (opt_cmd == OPT_NO_CMD)
-    usage();
+    usage_exit();
 
   if (format) {
     if (strcmp(format, "xml") == 0)
@@ -446,7 +454,7 @@ int main(int argc, char **argv)
       formatter = &formatter_json;
     else {
       cerr << "unrecognized format: " << format << std::endl;
-      usage();
+      usage_exit();
     }
   }
 
@@ -470,7 +478,7 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_KEY_RM && !access_key) {
     cerr << "error: access key was not specified" << std::endl;
-    usage();
+    usage_exit();
   }
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
@@ -519,7 +527,7 @@ int main(int argc, char **argv)
       opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
-      usage();
+      usage_exit();
     }
 
     string user_id_str = user_id;
@@ -725,7 +733,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_BUCKET_LINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
-      usage();
+      usage_exit();
     }
     string bucket_str(bucket);
     string uid_str(user_id);
@@ -763,7 +771,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_BUCKET_UNLINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
-      usage();
+      usage_exit();
     }
 
     string bucket_str(bucket);
@@ -776,7 +784,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_LOG_SHOW) {
     if (!object && (!date || !bucket || pool_id < 0)) {
       cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
-      usage();
+      usage_exit();
     }
 
     string log_bucket = RGW_LOG_BUCKET_NAME;
@@ -883,7 +891,7 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_POOL_CREATE) {
     if (!bucket)
-      usage();
+      usage_exit();
     string bucket_str(bucket);
     string no_object;
     int ret;
@@ -917,7 +925,7 @@ int main(int argc, char **argv)
 
     if (!user_id) {
       cerr << "uid was not specified" << std::endl;
-      usage();
+      usage_exit();
     }
     RGWUserBuckets buckets;
     if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
