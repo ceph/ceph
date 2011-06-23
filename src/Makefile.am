@@ -191,6 +191,12 @@ test_librgw_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
+test_libceph_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+			    $(libceph_la_SOURCES) $(libosdc_la_SOURCES)
+test_libceph_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libceph_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_libceph_build
+
 ##########
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
@@ -199,11 +205,10 @@ noinst_LTLIBRARIES =
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
-	client/Client.cc \
-	${libosdc_la_SOURCES}
+	client/Client.cc
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = libglobal.la
+libceph_la_LIBADD = libosdc.la libcommon.la
 libceph_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
