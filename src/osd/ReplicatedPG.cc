@@ -685,12 +685,31 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   dout(15) << "log_op_stats " << *op << " inb " << inb << " outb " << outb << " latency " << latency << dendl;
 }
 
+void ReplicatedPG::log_subop_stats(MOSDSubOp *op, int tag_inb, int tag_lat)
+{
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t latency = now;
+  latency -= op->get_recv_stamp();
+
+  uint64_t inb = op->get_data().length();
+
+  osd->logger->inc(l_osd_sop);
+
+  osd->logger->inc(l_osd_sop_inb, inb);
+  osd->logger->favg(l_osd_sop_lat, latency);
+
+  if (tag_inb)
+    osd->logger->inc(tag_inb, inb);
+  osd->logger->favg(tag_lat, latency);
+
+  dout(15) << "log_subop_stats " << *op << " inb " << inb << " latency " << latency << dendl;
+}
+
+
 
 void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 {
   dout(15) << "do_sub_op " << *op << dendl;
-
-  osd->logger->inc(l_osd_subop);
 
   if (op->ops.size() >= 1) {
     OSDOp& first = op->ops[0];
@@ -3242,8 +3261,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
            << ", sending commit to osd" << rm->ackerosd
            << dendl;
 
-  osd->logger->inc(l_osd_r_wr);
-  osd->logger->inc(l_osd_r_wrb, rm->bytes_written);
+  log_subop_stats(rm->op, l_osd_sop_w_inb, l_osd_sop_w_lat);
 
   if (osd->osdmap->is_up(rm->ackerosd)) {
     last_complete_ondisk = rm->last_complete;
@@ -3685,8 +3703,8 @@ int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int pe
           << " to osd" << peer
           << dendl;
 
-  osd->logger->inc(l_osd_r_push);
-  osd->logger->inc(l_osd_r_pushb, bl.length());
+  osd->logger->inc(l_osd_push);
+  osd->logger->inc(l_osd_push_outb, bl.length());
   
   // send
   osd_reqid_t rid;  // useless?
@@ -3816,11 +3834,14 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     if (r < 0)
       send_push_op_blank(soid, op->get_source().num());
   }
+
+  log_subop_stats(op, 0, l_osd_sop_pull_lat);
+
   op->put();
 }
 
 
-void ReplicatedPG::_committed_pushed_object(epoch_t same_since, eversion_t last_complete)
+void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t last_complete)
 {
   lock();
   if (same_since == info.history.same_acting_since) {
@@ -3847,6 +3868,9 @@ void ReplicatedPG::_committed_pushed_object(epoch_t same_since, eversion_t last_
   } else {
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
+
+  log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+
   unlock();
   put();
 }
@@ -4120,13 +4144,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   // apply to disk!
   int r = osd->store->queue_transaction(&osr, t,
 					onreadable,
-					new C_OSD_CommittedPushedObject(this, info.history.same_acting_since,
+					new C_OSD_CommittedPushedObject(this, op, info.history.same_acting_since,
 									info.last_complete),
 					onreadable_sync);
   assert(r == 0);
-
-  osd->logger->inc(l_osd_r_push);
-  osd->logger->inc(l_osd_r_pushb, data.length());
 
   if (is_primary()) {
     assert(pi);

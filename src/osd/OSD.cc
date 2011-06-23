@@ -654,24 +654,32 @@ void OSD::open_logger()
     osd_logtype.add_inc(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
     osd_logtype.add_inc(l_osd_op_r_lat,  "op_r_lat");    // client read latency
     osd_logtype.add_inc(l_osd_op_w,      "op_w");        // client writes
-    osd_logtype.add_inc(l_osd_op_w_inb,  "op_w_inb");    // client write bytes
+    osd_logtype.add_inc(l_osd_op_w_inb,  "op_w_inb");    // client write in bytes
     osd_logtype.add_inc(l_osd_op_w_lat,  "op_w_lat");    // client write latency
     osd_logtype.add_inc(l_osd_op_rw,     "op_rw");       // client rmw
-    osd_logtype.add_inc(l_osd_op_rw_inb, "op_rw_inb");   // client rmw bytes
-    osd_logtype.add_inc(l_osd_op_rw_outb,"op_rw_outb");  // client rmw bytes
+    osd_logtype.add_inc(l_osd_op_rw_inb, "op_rw_inb");   // client rmw in bytes
+    osd_logtype.add_inc(l_osd_op_rw_outb,"op_rw_outb");  // client rmw out bytes
     osd_logtype.add_inc(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
-  
-    osd_logtype.add_inc(l_osd_r_wr, "r_wr");     // replicated writes
-    osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");   // replicated write bytes
 
-    osd_logtype.add_inc(l_osd_subop, "subop");   // subops (replicated writes, recovery)
+    osd_logtype.add_inc(l_osd_sop,       "sop");
+    osd_logtype.add_inc(l_osd_sop_inb,   "sop_inb");
+    osd_logtype.add_inc(l_osd_sop_lat,   "sop_lat");
 
-    osd_logtype.add_inc(l_osd_rop, "rop");
-    osd_logtype.add_inc(l_osd_r_push, "r_push");
-    osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
-    osd_logtype.add_inc(l_osd_r_pull, "r_pull");
-    osd_logtype.add_inc(l_osd_r_pullb, "r_pullb");
-  
+    osd_logtype.add_inc(l_osd_sop_w,     "sop_w");          // replicated (client) writes
+    osd_logtype.add_inc(l_osd_sop_w_inb, "sop_w_inb");      // replicated write in bytes
+    osd_logtype.add_inc(l_osd_sop_w_lat, "sop_w_lat");      // replicated write latency
+
+    osd_logtype.add_inc(l_osd_sop_pull,     "sop_pull");       // pull request
+    osd_logtype.add_inc(l_osd_sop_pull_lat, "sop_pull_lat");
+    osd_logtype.add_inc(l_osd_sop_push,     "sop_push");       // push (write)
+    osd_logtype.add_inc(l_osd_sop_push_inb, "sop_push_inb");
+    osd_logtype.add_inc(l_osd_sop_push_lat, "sop_push_lat");
+
+    osd_logtype.add_inc(l_osd_push,      "push");       // push
+    osd_logtype.add_inc(l_osd_push_outb, "push_outb");  // pushed bytes
+
+    osd_logtype.add_inc(l_osd_rop, "rop");       // recovery op
+
     osd_logtype.add_set(l_osd_qlen, "qlen");
     osd_logtype.add_set(l_osd_rqlen, "rqlen");
     osd_logtype.add_set(l_osd_rdlat, "rdlat");

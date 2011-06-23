@@ -48,6 +48,7 @@ using namespace __gnu_cxx;
 enum {
   l_osd_first = 10000,
   l_osd_opq,
+
   l_osd_op,
   l_osd_op_wip,
   l_osd_op_inb,
@@ -63,14 +64,24 @@ enum {
   l_osd_op_rw_inb,
   l_osd_op_rw_outb,
   l_osd_op_rw_lat,
-  l_osd_r_wr,
-  l_osd_r_wrb,
-  l_osd_subop,
+
+  l_osd_sop,
+  l_osd_sop_inb,
+  l_osd_sop_lat,
+  l_osd_sop_w,
+  l_osd_sop_w_inb,
+  l_osd_sop_w_lat,
+  l_osd_sop_pull,
+  l_osd_sop_pull_lat,
+  l_osd_sop_push,
+  l_osd_sop_push_inb,
+  l_osd_sop_push_lat,
+
+  l_osd_push,
+  l_osd_push_outb,
+
   l_osd_rop,
-  l_osd_r_push,
-  l_osd_r_pushb,
-  l_osd_r_pull,
-  l_osd_r_pullb,
+
   l_osd_qlen,
   l_osd_rqlen,
   l_osd_rdlat,

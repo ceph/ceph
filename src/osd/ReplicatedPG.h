@@ -21,7 +21,7 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-class MOSDSubOp;
+#include "messages/MOSDSubOp.h"
 class MOSDSubOpReply;
 
 class PGLSFilter {
@@ -651,13 +651,16 @@ protected:
   };
   struct C_OSD_CommittedPushedObject : public Context {
     ReplicatedPG *pg;
+    MOSDSubOp *op;
     epoch_t same_since;
     eversion_t last_complete;
-    C_OSD_CommittedPushedObject(ReplicatedPG *p, epoch_t ss, eversion_t lc) : pg(p), same_since(ss), last_complete(lc) {
+    C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
+      op->get();
       pg->get();
     }
     void finish(int r) {
-      pg->_committed_pushed_object(same_since, last_complete);
+      pg->_committed_pushed_object(op, same_since, last_complete);
+      op->put();
     }
   };
 
@@ -667,12 +670,13 @@ protected:
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
-  void _committed_pushed_object(epoch_t same_since, eversion_t lc);
+  void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
 
+  void log_subop_stats(MOSDSubOp *ctx, int tag_inb, int tag_lat);
 
 
   // -- scrub --
