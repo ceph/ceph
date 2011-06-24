@@ -14,11 +14,12 @@
 #include "Objecter.h"
 #include "Filer.h"
 
+class CephContext;
 class Objecter;
 
 class ObjectCacher {
  public:
-
+  CephContext *cct;
   class Object;
   class ObjectSet;
 
@@ -526,16 +527,10 @@ class ObjectCacher {
 
 
  public:
-  ObjectCacher(Objecter *o, Mutex& l,
+  ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       flush_set_callback_t commit_callback,
-	       void *callback_arg) : 
-    objecter(o), filer(o), lock(l),
-    flush_set_callback(flush_callback), commit_set_callback(commit_callback), flush_set_callback_arg(callback_arg),
-    flusher_stop(false), flusher_thread(this),
-    stat_waiter(0),
-    stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
-  }
+	       void *callback_arg);
   ~ObjectCacher() {
     // we should be empty.
     for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();

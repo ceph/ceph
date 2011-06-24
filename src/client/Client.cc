@@ -158,7 +158,7 @@ Client::Client(Messenger *m, MonClient *mc)
   mdsmap = new MDSMap(m->cct);
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  objectcacher = new ObjectCacher(objecter, client_lock, 
+  objectcacher = new ObjectCacher(cct, objecter, client_lock, 
 				  0,                            // all ack callback
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
