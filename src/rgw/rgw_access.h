@@ -17,6 +17,13 @@ public:
   virtual bool filter(string& name, string& key) = 0;
 };
 
+struct RGWCloneRangeInfo {
+  rgw_obj src;
+  off_t src_ofs;
+  off_t dst_ofs;
+  size_t len;
+};
+
 /**
  * Abstract class defining the interface for storage devices used by RGW.
  */
@@ -162,8 +169,19 @@ public:
                           size_t size) = 0;
 
   virtual int clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
-                        rgw_obj& src_obj, off_t src_ofs,
-                        size_t size,
+                          rgw_obj& src_obj, off_t src_ofs,
+                          size_t size, map<string, bufferlist> attrs) {
+    RGWCloneRangeInfo info;
+    vector<RGWCloneRangeInfo> v;
+    info.src = src_obj;
+    info.src_ofs = src_ofs;
+    info.len = size;
+    v.push_back(info);
+    return clone_objs(dst_obj, v, attrs);
+  }
+
+  virtual int clone_objs(rgw_obj& dst_obj,
+                        vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state

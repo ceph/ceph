@@ -432,6 +432,13 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   size_t total_len;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
+  rgw_obj tmp_obj = dest_obj;
+  string tmp_oid;
+
+  append_rand_alpha(dest_obj.key, tmp_oid, 32);
+  tmp_obj.set_key(tmp_oid);
+
+  rgw_obj tmp_dest;
 
   RGW_LOG(5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
@@ -452,7 +459,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(id, dest_obj, data, ((ofs == 0) ? -1 : ofs), ret);
+    r = put_obj_data(id, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret);
     free(data);
     if (r < 0)
       goto done_err;
@@ -465,12 +472,19 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj_meta(id, dest_obj, mtime, attrs, false);
+  ret = clone_obj(dest_obj, 0, tmp_obj, 0, end, attrs);
+  if (mtime)
+    obj_stat(tmp_obj, NULL, mtime);
+
+  r = rgwstore->delete_obj(id, tmp_obj);
+  if (r < 0)
+    RGW_LOG(0) << "ERROR: could not remove " << tmp_obj << dendl;
 
   finish_get_obj(&handle);
 
   return ret;
 done_err:
+  rgwstore->delete_obj(id, tmp_obj);
   finish_get_obj(&handle);
   return r;
 }
@@ -865,13 +879,12 @@ int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
   return io_ctx.clone_range(dst_oid, dst_ofs, src_oid, src_ofs, size);
 }
 
-int RGWRados::clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
-                        rgw_obj& src_obj, off_t src_ofs, size_t size,
+int RGWRados::clone_objs(rgw_obj& dst_obj,
+                        vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;
-  std::string& src_oid = src_obj.object;
   librados::IoCtx io_ctx;
 
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -887,7 +900,11 @@ int RGWRados::clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
     bufferlist& bl = iter->second;
     op.setxattr(name.c_str(), bl);
   }
-  op.clone_range(dst_ofs, src_oid, src_ofs, size);
+  vector<RGWCloneRangeInfo>::iterator range_iter;
+  for (range_iter = ranges.begin(); range_iter != ranges.end(); ++range_iter) {
+    RGWCloneRangeInfo& range = *range_iter;
+    op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
+  }
 
   bufferlist outbl;
   int ret = io_ctx.operate(dst_oid, &op, &outbl);

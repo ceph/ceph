@@ -1144,6 +1144,7 @@ void RGWCompleteMultipart::execute()
   rgw_obj meta_obj;
   rgw_obj target_obj;
   RGWMPObj mp;
+  vector<RGWCloneRangeInfo> ranges;
 
 
   ret = get_params();
@@ -1215,15 +1216,23 @@ void RGWCompleteMultipart::execute()
   ret = rgwstore->put_obj_meta(s->user.user_id, target_obj, NULL, attrs, false);
   if (ret < 0)
     goto done;
-
+  
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
     rgw_obj src_obj(s->bucket_str, oid, s->object_str, mp_ns);
-    ret = rgwstore->clone_range(target_obj, ofs, src_obj, 0, obj_iter->second.size);
-    if (ret < 0)
-      goto done;
+
+    RGWCloneRangeInfo range;
+    range.src = src_obj;
+    range.src_ofs = 0;
+    range.dst_ofs = ofs;
+    range.len = obj_iter->second.size;
+    ranges.push_back(range);
+
     ofs += obj_iter->second.size;
   }
+  ret = rgwstore->clone_objs(target_obj, ranges, attrs);
+  if (ret < 0)
+    goto done;
 
   // now erase all parts
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {

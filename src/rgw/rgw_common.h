@@ -656,6 +656,15 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1") == 0);
 }
 
+static inline void append_rand_alpha(string& src, string& dest, int len)
+{
+  dest = src;
+  char buf[len + 1];
+  gen_rand_alphanumeric(buf, len);
+  dest.append("_");
+  dest.append(buf);
+}
+
 /** */
 extern int parse_time(const char *time_str, time_t *time);
 /** Check if a user has a permission on that ACL */
