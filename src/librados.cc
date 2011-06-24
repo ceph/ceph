@@ -712,7 +712,6 @@ public:
     }
 
     void notify(uint8_t opcode, uint64_t ver) {
-      if (opcode != WATCH_NOTIFY_COMPLETE)
       *done = true;
       cond->Signal();
     }
