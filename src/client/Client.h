@@ -565,9 +565,9 @@ class Inode {
     /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
 	 << "session gen " << cap->gen << std::endl
 	 << "cap expire  " << cap->session->cap_ttl << std::endl
-	 << "cur time    " << ceph_clock_now(g_ceph_context) << std::endl;*/
+	 << "cur time    " << ceph_clock_now(cct) << std::endl;*/
     if ((cap->session->cap_gen <= cap->gen)
-	&& (ceph_clock_now(g_ceph_context) < cap->session->cap_ttl)) {
+	&& (ceph_clock_now(cct) < cap->session->cap_ttl)) {
       return true;
     }
     //if we make it here, the capabilities aren't up-to-date

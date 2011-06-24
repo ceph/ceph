@@ -173,7 +173,7 @@ test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
 testsnaps_SOURCES = test/osd/TestSnaps.cc
-testsnaps_LDADD = libglobal.la librados.la $(LIBGLOBAL_LDA)
+testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
 
 test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
@@ -208,7 +208,7 @@ libceph_la_SOURCES = \
 	client/Client.cc
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = libosdc.la libcommon.la
+libceph_la_LIBADD = libosdc.la
 libceph_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
@@ -218,15 +218,15 @@ testceph_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
-testtimers_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testtimers_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testtimers
 
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
-testdout_streambuf_LDADD = libceph.la -lpthread
+testdout_streambuf_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testdout_streambuf
 
 testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
-testsignal_handlers_LDADD = libceph.la -lpthread
+testsignal_handlers_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsignal_handlers
 
 # librados
@@ -396,7 +396,7 @@ unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
 
 unittest_gather_SOURCES = test/gather.cc
-unittest_gather_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_gather_LDADD = ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_gather
 
@@ -406,7 +406,7 @@ unittest_run_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_run_cmd
 
 unittest_signals_SOURCES = test/signals.cc
-unittest_signals_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_signals_LDADD = ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_signals
 
@@ -428,7 +428,7 @@ check_PROGRAMS += unittest_bufferlist
 
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDFLAGS = -lrt ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} ${UNITTEST_LDADD}
+unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
@@ -754,13 +754,13 @@ libosdc_la_SOURCES = \
 	osdc/ObjectCacher.cc \
 	osdc/Filer.cc \
 	osdc/Journaler.cc
-libosdc_la_LIBADD = libglobal.la
+libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
 
 libclient_la_SOURCES = \
 	client/Client.cc \
 	client/Trace.cc
-libclient_la_LIBADD = libglobal.la
+libclient_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
