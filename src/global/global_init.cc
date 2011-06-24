@@ -32,7 +32,7 @@
 #include <errno.h>
 #include <deque>
 
-void global_init_set_globals(CephContext *cct)
+static void global_init_set_globals(CephContext *cct)
 {
   g_ceph_context = cct;
   g_conf = cct->_conf;
