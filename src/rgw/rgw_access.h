@@ -175,6 +175,7 @@ public:
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
     info.src_ofs = src_ofs;
+    info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
     return clone_objs(dst_obj, v, attrs);
