@@ -2627,7 +2627,7 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
                     bufferlist& bl)
 {
 
-  if (!ioctl_fiemap || len <= g_conf->filestore_fiemap_threshold) {
+  if (!ioctl_fiemap || len <= (size_t)g_conf->filestore_fiemap_threshold) {
     map<uint64_t, uint64_t> m;
     m[offset] = len;
     ::encode(m, bl);
