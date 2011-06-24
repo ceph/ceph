@@ -427,7 +427,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
       dout(20) << "merge_log merging " << ne << dendl;
-      missing.add_next_event(ne);
+      missing.add_next_event(ne, oinfo);
       if (ne.is_delete())
 	t.remove(coll, ne.soid);
     }
@@ -513,7 +513,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	Log::Entry &ne = *p;
         dout(20) << "merge_log " << ne << dendl;
 	log.index(ne);
-	missing.add_next_event(ne);
+	missing.add_next_event(ne, info);
 	if (ne.is_delete())
 	  t.remove(coll, ne.soid);
       }
@@ -1635,7 +1635,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
              p != m->log.log.end();
              p++) 
           if (p->version > plu)
-            pm.add_event(*p);
+            pm.add_next_event(*p, pi);
       }
       
       if (m) {
@@ -3727,7 +3727,7 @@ eversion_t PG::Missing::have_old(const sobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(Log::Entry& e)
+void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t()) {
@@ -3741,31 +3741,15 @@ void PG::Missing::add_next_event(Log::Entry& e)
       //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog()) {
+    } else if (e.is_backlog() ||
+	       e.prior_version <= info.log_tail ||
+	       e.prior_version > info.last_update) {
+      // May not have prior version
       missing[e.soid].need = e.version;
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
     }
-    rmissing[e.version.version] = e.soid;
-  } else
-    rm(e.soid, e.version);
-}
-
-void PG::Missing::add_event(Log::Entry& e)
-{
-  if (e.is_update()) {
-    if (missing.count(e.soid)) {
-      if (missing[e.soid].need >= e.version)
-	return;   // already missing same or newer.
-      // missing older, revise need
-      rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid].need = e.version;
-    } else if (e.is_backlog()) {
-      missing[e.soid].need = e.version;
-    } else
-      // not missing => have prior_version (if any)
-      missing[e.soid] = item(e.version, e.prior_version);
     rmissing[e.version.version] = e.soid;
   } else
     rm(e.soid, e.version);
