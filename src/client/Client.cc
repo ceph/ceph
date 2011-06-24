@@ -3319,6 +3319,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       if (s->cap_ttl > now &&
 	  s->cap_gen == dn->lease_gen) {
 	*target = dn->inode;
+	touch_dn(dn);
 	goto done;
       }
       ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
@@ -3328,6 +3329,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	dn->cap_shared_gen == dir->shared_gen) {
       *target = dn->inode;
+      touch_dn(dn);
       goto done;
     }
   } else { /*
