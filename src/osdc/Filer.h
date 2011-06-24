@@ -40,6 +40,7 @@ class OSDMap;
 /**** Filer interface ***/
 
 class Filer {
+  CephContext *cct;
   Objecter   *objecter;
   
   // probes
@@ -85,7 +86,7 @@ class Filer {
   Filer(const Filer& other);
   const Filer operator=(const Filer& other);
 
-  Filer(Objecter *o) : objecter(o) {}
+  Filer(Objecter *o) : cct(o->cct), objecter(o) {}
   ~Filer() {}
 
   bool is_active() {
@@ -197,9 +198,9 @@ class Filer {
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
-	gack = new C_Gather(g_ceph_context, onack);
+	gack = new C_Gather(cct, onack);
       if (oncommit)
-	gcom = new C_Gather(g_ceph_context, oncommit);
+	gcom = new C_Gather(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	vector<OSDOp> ops(1);
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
@@ -234,9 +235,9 @@ class Filer {
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
-	gack = new C_Gather(g_ceph_context, onack);
+	gack = new C_Gather(cct, onack);
       if (oncommit)
-	gcom = new C_Gather(g_ceph_context, oncommit);
+	gcom = new C_Gather(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	if (p->offset == 0 && p->length == layout->fl_object_size)
 	  objecter->remove(p->oid, p->oloc,

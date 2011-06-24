@@ -56,12 +56,13 @@
 #include <list>
 #include <map>
 
+class CephContext;
 class Context;
 class ProfLogger;
 
 class Journaler {
-
 public:
+  CephContext *cct;
   // this goes at the head of the log "file".
   struct Header {
     uint64_t trimmed_pos;
@@ -229,7 +230,7 @@ private:
 
 public:
   Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, ProfLogger *l, int lkey, SafeTimer *tim) : 
-    last_written(mag), last_committed(mag),
+    cct(obj->cct), last_written(mag), last_committed(mag),
     ino(ino_), pg_pool(pool), readonly(true), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),

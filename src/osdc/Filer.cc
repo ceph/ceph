@@ -61,7 +61,7 @@ int Filer::probe(inodeno_t ino,
 		 int flags,
 		 Context *onfinish) 
 {
-  dout(10) << "probe " << (fwd ? "fwd ":"bwd ")
+  ldout(cct, 10) << "probe " << (fwd ? "fwd ":"bwd ")
 	   << hex << ino << dec
 	   << " starting from " << start_from
 	   << dendl;
@@ -92,7 +92,7 @@ int Filer::probe(inodeno_t ino,
 
 void Filer::_probe(Probe *probe)
 {
-  dout(10) << "_probe " << hex << probe->ino << dec 
+  ldout(cct, 10) << "_probe " << hex << probe->ino << dec 
 	   << " " << probe->probing_off << "~" << probe->probing_len 
 	   << dendl;
   
@@ -105,7 +105,7 @@ void Filer::_probe(Probe *probe)
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    dout(10) << "_probe  probing " << p->oid << dendl;
+    ldout(cct, 10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
     probe->ops[p->oid] = objecter->stat(p->oid, p->oloc, probe->snapid, &c->size, &c->mtime, 
 					probe->flags | CEPH_OSD_FLAG_RWORDERED, c);
@@ -114,7 +114,7 @@ void Filer::_probe(Probe *probe)
 
 void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mtime)
 {
-  dout(10) << "_probed " << probe->ino << " object " << oid
+  ldout(cct, 10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;
 
   probe->known_size[oid] = size;
@@ -144,7 +144,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
        p != probe->probing.end();
        p++) {
     uint64_t shouldbe = p->length + p->offset;
-    dout(10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
+    ldout(cct, 10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known_size[p->oid]
 	     << dendl;
@@ -164,12 +164,12 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
 	   i++) {
 	if (oleft <= (uint64_t)i->second) {
 	  end = probe->probing_off + i->first + oleft;
-	  dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
+	  ldout(cct, 10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
 		   << ", from was " << probe->probing_off << ", end is " << end 
 		   << dendl;
 	  
 	  probe->found_size = true;
-	  dout(10) << "_probed found size at " << end << dendl;
+	  ldout(cct, 10) << "_probed found size at " << end << dendl;
 	  *probe->psize = end;
 	  
 	  if (!probe->pmtime)  // stop if we don't need mtime too
@@ -183,7 +183,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
 
   if (!probe->found_size || (probe->probing_off && probe->pmtime)) {
     // keep probing!
-    dout(10) << "_probed probing further" << dendl;
+    ldout(cct, 10) << "_probed probing further" << dendl;
 
     uint64_t period = probe->layout.fl_stripe_count * probe->layout.fl_object_size;
     if (probe->fwd) {
@@ -201,7 +201,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
   }
 
   if (probe->pmtime) {
-    dout(10) << "_probed found mtime " << probe->max_mtime << dendl;
+    ldout(cct, 10) << "_probed found mtime " << probe->max_mtime << dendl;
     *probe->pmtime = probe->max_mtime;
   }
 
@@ -271,7 +271,7 @@ struct C_PurgeRange : public Context {
 void Filer::_do_purge_range(PurgeRange *pr, int fin)
 {
   pr->uncommitted -= fin;
-  dout(10) << "_do_purge_range " << pr->ino << " objects " << pr->first << "~" << pr->num
+  ldout(cct, 10) << "_do_purge_range " << pr->ino << " objects " << pr->first << "~" << pr->num
 	   << " uncommitted " << pr->uncommitted << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
@@ -301,7 +301,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
                             uint64_t offset, uint64_t len,
                             vector<ObjectExtent>& extents)
 {
-  dout(10) << "file_to_extents " << offset << "~" << len 
+  ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << ino << dec
            << dendl;
   assert(len > 0);
@@ -317,7 +317,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
   uint64_t stripes_per_object = object_size / su;
-  dout(20) << " stripes_per_object " << stripes_per_object << dendl;
+  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
 
   uint64_t cur = offset;
   uint64_t left = len;
@@ -364,8 +364,8 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
-    //dout(0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
+    ldout(cct, 15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
+    //ldout(cct, 0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
     
     left -= x_len;
     cur += x_len;

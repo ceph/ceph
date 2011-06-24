@@ -259,10 +259,10 @@ class Objecter {
   Messenger *messenger;
   MonClient *monc;
   OSDMap    *osdmap;
+  CephContext *cct;
 
  
  private:
-  CephContext *cct;
   tid_t last_tid;
   int client_inc;
   uint64_t max_linger_id;
