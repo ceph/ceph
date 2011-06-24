@@ -509,6 +509,61 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   return 0;
 }
 
+/**
+ * Delete buckets, don't care about content
+ * id: unused
+ * bucket: the name of the bucket to delete
+ * Returns 0 on success, -ERR# otherwise.
+ */
+int RGWRados::purge_buckets(std::string& id, vector<std::string>& buckets)
+{
+  librados::IoCtx list_ctx;
+  vector<std::string>::iterator iter;
+  vector<librados::PoolAsyncCompletion *> completions;
+  int ret = 0, r;
+
+  for (iter = buckets.begin(); iter != buckets.end(); ++iter) {
+    string bucket = *iter;
+    librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
+    r = rados->pool_delete_async(bucket.c_str(), c);
+    if (r < 0) {
+      RGW_LOG(0) << "WARNING: rados->pool_delete_async(bucket=" << bucket << ") returned err=" << r << dendl;
+      ret = r;
+    } else {
+      completions.push_back(c);
+    }
+
+    librados::IoCtx io_ctx;
+    r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
+    if (r < 0) {
+      RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
+      ret = r;
+      continue;
+    }
+
+    r = io_ctx.remove(bucket);
+    if (r < 0) {
+      RGW_LOG(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
+      ret = r;
+      continue;
+    }
+  }
+
+  vector<librados::PoolAsyncCompletion *>::iterator citer;
+  for (citer = completions.begin(); citer != completions.end(); ++citer) {
+    PoolAsyncCompletion *c = *citer;
+    c->wait();
+    r = c->get_return_value();
+    if (r < 0) {
+      RGW_LOG(0) << "WARNING: async pool_removal returned " << r << dendl;
+      ret = r;
+    }
+    c->release();
+  }
+
+  return ret;
+}
+
 int RGWRados::set_buckets_auid(vector<std::string>& buckets, uint64_t auid)
 {
   librados::IoCtx ctx;

@@ -69,6 +69,8 @@ void usage()
   cerr << "   --pool-id=<pool-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
+  cerr << "   --purge_data              when specified, user removal will also purge all the\n";
+  cerr << "                             user data\n";
   generic_client_usage();
 }
 
@@ -382,6 +384,7 @@ int main(int argc, char **argv)
   int pool_id = -1;
   const char *format = 0;
   RGWFormatter *formatter = &formatter_xml;
+  bool purge_data = false;
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("help", 'h')) {
@@ -426,6 +429,8 @@ int main(int argc, char **argv)
       }
     } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("purge-data", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&purge_data, OPT_BOOL);
     } else {
       if (!opt_cmd) {
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
@@ -483,7 +488,7 @@ int main(int argc, char **argv)
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
-                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM);
+                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
 
   store = RGWAccess::init_storage_provider("rados", g_ceph_context);
   if (!store) {
@@ -755,7 +760,7 @@ int main(int argc, char **argv)
 	return -EINVAL;
       }
       cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
-      r = rgw_remove_bucket(owner.get_id(), bucket_str);
+      r = rgw_remove_bucket(owner.get_id(), bucket_str, false);
       if (r < 0) {
 	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
 	return r;
@@ -775,7 +780,7 @@ int main(int argc, char **argv)
     }
 
     string bucket_str(bucket);
-    int r = rgw_remove_bucket(user_id, bucket_str);
+    int r = rgw_remove_bucket(user_id, bucket_str, false);
     if (r < 0)
       cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
     return -r;
@@ -870,7 +875,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_USER_RM) {
-    rgw_delete_user(info);
+    rgw_delete_user(info, purge_data);
   }
 
   if (opt_cmd == OPT_POOL_INFO) {

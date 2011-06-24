@@ -229,7 +229,7 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
 
-  RGWUserInfo() : auid(0) {}
+  RGWUserInfo() : auid(0), suspended(0) {}
 
   void encode(bufferlist& bl) const {
      __u32 ver = USER_INFO_VER;
@@ -597,6 +597,10 @@ public:
     return true;
   }
 };
+
+inline ostream& operator<<(ostream& out, const rgw_obj o) {
+  return out << o.bucket << ":" << o.key;
+}
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {

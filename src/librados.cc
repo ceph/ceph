@@ -521,6 +521,7 @@ public:
   int pool_change_auid(rados_ioctx_t io, unsigned long long auid);
   int pool_get_auid(rados_ioctx_t io, unsigned long long *auid);
 
+  int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);
   int pool_change_auid_async(rados_ioctx_t io, unsigned long long auid, PoolAsyncCompletionImpl *c);
 
   int list(Objecter::ListContext *context, int max_entries);
@@ -1208,6 +1209,19 @@ pool_delete(const char *name)
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
   return reply;
+}
+
+int librados::RadosClient::
+pool_delete_async(const char *name, PoolAsyncCompletionImpl *c)
+{
+  int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
+  if (tmp_pool_id < 0)
+    return -ENOENT;
+
+  Mutex::Locker l(lock);
+  objecter->delete_pool(tmp_pool_id, new C_PoolAsync_Safe(c));
+
+  return 0;
 }
 
 /**
@@ -3033,6 +3047,12 @@ int librados::Rados::
 pool_delete(const char *name)
 {
   return client->pool_delete(name);
+}
+
+int librados::Rados::
+pool_delete_async(const char *name, PoolAsyncCompletion *c)
+{
+  return client->pool_delete_async(name, c->pc);
 }
 
 int librados::Rados::

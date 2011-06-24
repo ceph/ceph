@@ -100,6 +100,7 @@ public:
    * Returns 0 on success, -ERR# otherwise.
    */
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
+  virtual int purge_buckets(std::string& id, vector<std::string>& buckets) { return -ENOTSUP; }
 
   virtual int disable_buckets(std::vector<std::string>& buckets) { return -ENOTSUP; }
   virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid) { return -ENOTSUP; }

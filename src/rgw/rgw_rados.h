@@ -66,6 +66,7 @@ public:
                struct rgw_err *err);
   /** delete a bucket*/
   virtual int delete_bucket(std::string& id, std::string& bucket);
+  virtual int purge_buckets(std::string& id, vector<std::string>& buckets);
 
   virtual int disable_buckets(std::vector<std::string>& buckets);
   virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid);

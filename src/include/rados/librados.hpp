@@ -288,7 +288,9 @@ namespace librados
     int pool_create(const char *name, uint64_t auid);
     int pool_create(const char *name, uint64_t auid, __u8 crush_rule);
     int pool_delete(const char *name);
+    int pool_delete_async(const char *name, PoolAsyncCompletion *c);
     int pool_lookup(const char *name);
+
 
     int ioctx_create(const char *name, IoCtx &pioctx);
 
