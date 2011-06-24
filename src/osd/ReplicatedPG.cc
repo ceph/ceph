@@ -483,31 +483,38 @@ void ReplicatedPG::do_op(MOSDOp *op)
 	int r = find_object_context(osd_op.soid.oid, op->get_object_locator(), osd_op.soid.snap,
 				    &sobc, false, &ssnapid);
 	if (r == -EAGAIN) {
-	  // If we're not the primary of this OSD, and we have
-	  // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
-	  // we have to wait for the object.
-	  if (is_primary() || (!(op->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
-	    // missing the specific snap we need; requeue and wait.
-	    sobject_t soid(osd_op.soid.oid, ssnapid);
-	    wait_for_missing_object(soid, op);
-	    return;
-	  }
-	}
-	if (r) {
+	  // missing the specific snap we need; requeue and wait.
+	  sobject_t soid(osd_op.soid.oid, ssnapid);
+	  wait_for_missing_object(soid, op);
+	} else if (r) {
 	  osd->reply_op_error(op, r);
-	  return;
-	}
-	if (sobc->obs.oi.oloc.key != obc->obs.oi.oloc.key &&
-	    sobc->obs.oi.oloc.key != obc->obs.oi.soid.oid.name &&
-	    sobc->obs.oi.soid.oid.name != obc->obs.oi.oloc.key) {
+	} else if (is_degraded_object(sobc->obs.oi.soid)) { 
+	  wait_for_degraded_object(sobc->obs.oi.soid, op);
+	} else if (sobc->obs.oi.oloc.key != obc->obs.oi.oloc.key &&
+		   sobc->obs.oi.oloc.key != obc->obs.oi.soid.oid.name &&
+		   sobc->obs.oi.soid.oid.name != obc->obs.oi.oloc.key) {
 	  dout(1) << " src_oid " << osd_op.soid << " oloc " << sobc->obs.oi.oloc << " != "
 		  << op->get_oid() << " oloc " << obc->obs.oi.oloc << dendl;
 	  osd->reply_op_error(op, -EINVAL);
-	  return;
+	} else {
+	  src_obc[osd_op.soid] = sobc;
+	  continue;
 	}
-	src_obc[osd_op.soid] = sobc;
+	// Error cleanup below
+      } else {
+	continue;
       }
+      // Error cleanup below
+    } else {
+      continue;
     }
+    // Clean up src_obc, reachable only if we are going to return
+    for (map<sobject_t,ObjectContext*>::iterator i = src_obc.begin();
+	 i != src_obc.end();
+	 ++i) {
+      put_object_context(i->second);
+    }
+    return;
   }
 
   const sobject_t& soid = obc->obs.oi.soid;

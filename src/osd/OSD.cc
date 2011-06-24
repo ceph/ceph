@@ -4996,20 +4996,6 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
 
-    // or src objects?
-    for (vector<OSDOp>::const_iterator p = op->ops.begin();
-	 p != op->ops.end();
-	 ++p) {
-      if (p->soid.oid.name.length() == 0)
-	continue;
-      sobject_t head(p->soid.oid, CEPH_NOSNAP);
-      if (pg->is_missing_object(head)) {
-	pg->wait_for_missing_object(head, op);
-	pg->unlock();
-	return;
-      }
-    }
-
     // degraded object?
     if (op->may_write() && pg->is_degraded_object(head)) {
       pg->wait_for_degraded_object(head, op);
