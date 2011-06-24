@@ -159,6 +159,9 @@ int ceph_localize_reads(struct ceph_mount_info *cmount, int val);
 /* return osd on local node, if any */
 int ceph_get_local_osd(struct ceph_mount_info *cmount);
 
+/* Get the CephContext of this mount */
+CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
+
 #ifdef __cplusplus
 }
 #endif

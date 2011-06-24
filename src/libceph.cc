@@ -612,3 +612,8 @@ extern "C" int ceph_localize_reads(struct ceph_mount_info *cmount, int val)
     cmount->get_client()->set_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
   return 0;
 }
+
+extern "C" CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount)
+{
+  return cmount->get_ceph_context();
+}

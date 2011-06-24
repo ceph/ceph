@@ -197,6 +197,15 @@ test_libceph_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libceph_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libceph_build
 
+if WITH_HADOOPCLIENT
+test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
+         $(libhadoopcephfs_la_SOURCES) $(libceph_la_SOURCES) \
+	 $(libosdc_la_SOURCES) $(libcommon_files)
+test_libhadoopcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_libhadoopcephfs_build
+endif
+
 ##########
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
