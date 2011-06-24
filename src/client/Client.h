@@ -601,6 +601,14 @@ class Inode {
     int c = exporting_issued | snap_caps;
     if ((c & mask) == mask)
       return true;
+    // prefer auth cap
+    if (auth_cap &&
+	cap_is_valid(auth_cap) &&
+	(auth_cap->issued & mask) == mask) {
+      touch_cap(auth_cap);
+      return true;
+    }
+    // try any cap
     for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++) {
