@@ -69,7 +69,7 @@ void usage()
   cerr << "   --pool-id=<pool-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
-  cerr << "   --purge_data              when specified, user removal will also purge all the\n";
+  cerr << "   --purge-data              when specified, user removal will also purge all the\n";
   cerr << "                             user data\n";
   generic_client_usage();
 }
