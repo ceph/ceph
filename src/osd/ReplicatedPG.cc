@@ -2063,7 +2063,12 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (rollback_to->obs.oi.soid.snap == CEPH_NOSNAP) {
+    if (is_degraded_object(rollback_to_sobject)) {
+      dout(20) << "_rollback_to attempted to roll back to a degraded object " 
+	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
+      wait_for_degraded_object(rollback_to_sobject, ctx->op);
+      ret = -EAGAIN;
+    } else if (rollback_to->obs.oi.soid.snap == CEPH_NOSNAP) {
       // rolling back to the head; we just need to clone it.
       ctx->modify = true;
     } else {
