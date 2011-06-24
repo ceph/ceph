@@ -329,17 +329,10 @@ void Client::trim_cache()
 
     // trim!
     Dentry *dn = (Dentry*)lru.lru_expire();
-    if (!dn) break;  // done
+    if (!dn)
+      break;  // done
     
-    ldout(cct, 15) << "trim_cache unlinking dn " << dn->name 
-	     << " in dir " << hex << dn->dir->parent_inode->ino 
-	     << dendl;
-    if (dn->dir->parent_inode->flags & I_COMPLETE) {
-      ldout(cct, 10) << " clearing I_COMPLETE on " << *dn->dir->parent_inode << dendl;
-      dn->dir->parent_inode->flags &= ~I_COMPLETE;
-      dn->dir->release_count++;
-    }
-    unlink(dn);
+    trim_dentry(dn);
   }
 
   // hose root?
@@ -349,6 +342,19 @@ void Client::trim_cache()
     root = 0;
     inode_map.clear();
   }
+}
+
+void Client::trim_dentry(Dentry *dn)
+{
+  ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
+		 << " in dir " << hex << dn->dir->parent_inode->ino 
+		 << dendl;
+  if (dn->dir->parent_inode->flags & I_COMPLETE) {
+    ldout(cct, 10) << " clearing I_COMPLETE on " << *dn->dir->parent_inode << dendl;
+    dn->dir->parent_inode->flags &= ~I_COMPLETE;
+    dn->dir->release_count++;
+  }
+  unlink(dn);
 }
 
 
@@ -2371,7 +2377,7 @@ void Client::remove_session_caps(int mds_num)
 
 void Client::trim_caps(int mds, int max)
 {
-  ldout(cct, 10) << "trim_caps mds" << mds << " max" << max << dendl;
+  ldout(cct, 10) << "trim_caps mds" << mds << " max " << max << dendl;
   MDSSession *s = mds_sessions[mds];
 
   int trimmed = 0;
@@ -2380,15 +2386,30 @@ void Client::trim_caps(int mds, int max)
     InodeCap *cap = *p;
     ++p;
     Inode *in = cap->inode;
-    if (in->caps_used() ||
-	in->caps_dirty()) {
-      ldout(cct, 20) << " keeping cap on " << *in << " used " << ccap_string(in->caps_used())
-	       << " dirty " << ccap_string(in->caps_dirty()) << dendl;
-      continue;
+    if (in->caps.size() > 1 && cap != in->auth_cap) {
+      // disposable non-auth cap
+      if (in->caps_used() || in->caps_dirty()) {
+	ldout(cct, 20) << " keeping cap on " << *in << " used " << ccap_string(in->caps_used())
+		       << " dirty " << ccap_string(in->caps_dirty()) << dendl;
+	continue;
+      }
+      ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
+      remove_cap(in, mds);
+      trimmed++;
+    } else {
+      ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
+      bool all = true;
+      set<Dentry*>::iterator q = in->dn_set.begin();
+      while (q != in->dn_set.end()) {
+	Dentry *dn = *q++;
+	if (dn->lru_is_expireable())
+	  trim_dentry(dn);
+	else
+	  all = false;
+      }
+      if (all)
+	trimmed++;
     }
-    ldout(cct, 20) << " removing unused cap on " << *in << dendl;
-    remove_cap(in, mds);
-    trimmed++;
   }
 }
 

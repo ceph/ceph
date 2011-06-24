@@ -1046,6 +1046,9 @@ protected:
 
   // trim cache.
   void trim_cache();
+  void trim_dentry(Dentry *dn);
+  void trim_caps(int mds, int max);
+  
   void dump_inode(Inode *in, set<Inode*>& did);
   void dump_cache();  // debug
   
@@ -1095,7 +1098,6 @@ protected:
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
   void remove_session_caps(int mds_num);
-  void trim_caps(int mds, int max);
   void mark_caps_dirty(Inode *in, int caps);
   void flush_caps();
   void flush_caps(Inode *in, int mds);
