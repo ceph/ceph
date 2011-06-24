@@ -160,6 +160,11 @@ public:
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
                           size_t size) = 0;
+
+  virtual int clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
+                        rgw_obj& src_obj, off_t src_ofs,
+                        size_t size,
+                        map<string, bufferlist> attrs) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state
    */

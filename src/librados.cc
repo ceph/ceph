@@ -195,6 +195,13 @@ void librados::ObjectOperation::tmap_update(const bufferlist& cmdbl)
   o->tmap_update(c);
 }
 
+void librados::ObjectOperation::clone_range(uint64_t dst_off,
+                     const std::string& src_oid, uint64_t src_off,
+                     size_t len)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->clone_range(src_oid, src_off, len, dst_off);
+}
 
 
 librados::WatchCtx::

@@ -122,6 +122,9 @@ namespace librados
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
+    void clone_range(uint64_t dst_off,
+                     const std::string& src_oid, uint64_t src_off,
+                     size_t len);
 
     void exec(const char *cls, const char *method, bufferlist& bl);
 

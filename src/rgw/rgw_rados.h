@@ -54,6 +54,10 @@ public:
   virtual bool aio_completed(void *handle);
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs, size_t size);
+  virtual int clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
+                        rgw_obj& src_obj, off_t src_ofs, size_t size,
+                        map<string, bufferlist> attrs);
+
   /** Copy an object, with many extra options */
   virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,

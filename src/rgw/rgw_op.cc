@@ -19,6 +19,7 @@ using namespace std;
 using ceph::crypto::MD5;
 
 static string mp_ns = "multipart";
+static string tmp_ns = "tmp";
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -560,6 +561,12 @@ void RGWPutObj::execute()
     rgw_obj obj;
     if (!multipart) {
       oid = s->object_str;
+      obj.set_ns(tmp_ns);
+
+      char buf[33];
+      gen_rand_alphanumeric(buf, sizeof(buf) - 1);
+      oid.append("_");
+      oid.append(buf);
     } else {
       oid = s->object_str;
       string upload_id = s->args.get("uploadId");
@@ -644,11 +651,19 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, false);
-    if (ret < 0)
-      goto done;
+    if (!multipart) {
+      rgw_obj dst_obj(s->bucket_str, s->object_str);
+      ret = rgwstore->clone_obj(dst_obj, 0, obj, 0, s->obj_size, attrs);
+      if (ret < 0)
+        goto done;
+      ret = rgwstore->delete_obj(s->user.user_id, obj);
+      if (ret < 0)
+        goto done;
+    } else {
+      ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, false);
+      if (ret < 0)
+        goto done;
 
-    if (multipart) {
       bl.clear();
       map<string, bufferlist> meta_attrs;
       RGWUploadPartInfo info;

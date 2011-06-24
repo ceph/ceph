@@ -865,6 +865,34 @@ int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
   return io_ctx.clone_range(dst_oid, dst_ofs, src_oid, src_ofs, size);
 }
 
+int RGWRados::clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
+                        rgw_obj& src_obj, off_t src_ofs, size_t size,
+                        map<string, bufferlist> attrs)
+{
+  std::string& bucket = dst_obj.bucket;
+  std::string& dst_oid = dst_obj.object;
+  std::string& src_oid = src_obj.object;
+  librados::IoCtx io_ctx;
+
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(dst_obj.key);
+  ObjectOperation op;
+  op.create(false);
+  map<string, bufferlist>::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const string& name = iter->first;
+    bufferlist& bl = iter->second;
+    op.setxattr(name.c_str(), bl);
+  }
+  op.clone_range(dst_ofs, src_oid, src_ofs, size);
+
+  bufferlist outbl;
+  int ret = io_ctx.operate(dst_oid, &op, &outbl);
+  return ret;
+}
 
 int RGWRados::get_obj(void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end)
