@@ -12,6 +12,7 @@ public:
   RGW_OS_Auth_Get() {}
   ~RGW_OS_Auth_Get() {}
 
+  int verify_permission() { return 0; }
   void execute();
 };
 

@@ -36,6 +36,11 @@ WRITE_CLASS_ENCODER(RGWUID)
  * Get the anonymous (ie, unauthenticated) user info.
  */
 extern void rgw_get_anon_user(RGWUserInfo& info);
+
+/**
+ * verify that user is an actual user, and not the anonymous user
+ */
+extern bool rgw_user_is_authenticated(RGWUserInfo& info);
 /**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.

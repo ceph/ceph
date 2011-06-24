@@ -33,6 +33,11 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
+bool rgw_user_is_authenticated(RGWUserInfo& info)
+{
+  return (info.user_id != RGW_USER_ANON_ID);
+}
+
 static int put_obj(string& uid, string& bucket, string& oid, const char *data, size_t size)
 {
   map<string,bufferlist> attrs;

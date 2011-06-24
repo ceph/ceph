@@ -43,6 +43,7 @@ public:
   virtual void init(struct req_state *s) {
     this->s = s;
   }
+  virtual int verify_permission() = 0;
   virtual void execute() = 0;
 };
 
@@ -96,6 +97,7 @@ public:
   void set_get_data(bool get_data) {
     this->get_data = get_data;
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -114,6 +116,7 @@ public:
   }
   RGWListBuckets() {}
 
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -147,6 +150,7 @@ public:
     objs.clear();
     common_prefixes.clear();
   }
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -166,6 +170,7 @@ public:
   RGWStatBucket() {}
   ~RGWStatBucket() {}
 
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -178,6 +183,7 @@ protected:
 public:
   RGWCreateBucket() {}
 
+  int verify_permission();
   void execute();
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -197,6 +203,7 @@ public:
     RGWOp::init(s);
     ret = 0;
   }
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -223,6 +230,7 @@ public:
     supplied_md5_b64 = NULL;
     etag = "";
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -241,12 +249,14 @@ public:
     RGWOp::init(s);
     ret = 0;
   }
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
 };
 
 class RGWCopyObj : public RGWOp {
+  bufferlist aclbl;
 protected:
   const char *if_mod;
   const char *if_unmod;
@@ -284,6 +294,7 @@ public:
     src_object.clear();
     mtime = 0;
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -303,6 +314,7 @@ public:
     ret = 0;
     acls.clear();
   }
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -323,6 +335,7 @@ public:
     len = 0;
     data = NULL;
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -342,6 +355,7 @@ public:
     ret = 0;
     upload_id = "";
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -367,6 +381,7 @@ public:
     data = NULL;
     len = 0;
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -384,6 +399,7 @@ public:
     RGWOp::init(s);
     ret = 0;
   }
+  int verify_permission();
   void execute();
 
   virtual void send_response() = 0;
@@ -410,6 +426,7 @@ public:
     marker = 0;
     policy = RGWAccessControlPolicy();
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
@@ -521,6 +538,7 @@ public:
     is_truncated = false;
     common_prefixes.clear();
   }
+  int verify_permission();
   void execute();
 
   virtual int get_params() = 0;

@@ -112,11 +112,18 @@ int main(int argc, const char **argv)
       abort_early(&s, ret);
       goto done;
     }
-    if (s.expect_cont)
-      dump_continue(&s);
 
     op = handler->get_op();
     if (op) {
+      ret = op->verify_permission();
+      if (ret < 0) {
+        abort_early(&s, ret);
+        goto done;
+      }
+
+      if (s.expect_cont)
+        dump_continue(&s);
+
       op->execute();
     } else {
       abort_early(&s, -ERR_METHOD_NOT_ALLOWED);
