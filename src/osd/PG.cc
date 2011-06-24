@@ -386,21 +386,25 @@ void PG::merge_log(ObjectStore::Transaction& t,
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
+
+  // Check preconditions
+
+  // If our log is empty, the incoming log either needs to have a backlog
+  // or have not been trimmed
+  assert(!log.empty() || olog.backlog || olog.tail == eversion_t());
+  // If the logs don't overlap, we need both backlogs
+  assert(log.head >= olog.tail || ((log.backlog || log.empty()) && olog.backlog));
+
+  for (map<sobject_t, Missing::item>::iterator i = missing.missing.begin();
+       i != missing.missing.end();
+       ++i) {
+    dout(20) << "Missing sobject: " << i->first << dendl;
+  }
+
   bool changed = false;
 
-  if (log.empty() ||
-      (olog.tail > log.head && olog.backlog) ||  // e.g. log=(0,20] olog=(40,50]+backlog) 
-      (log.head <= olog.head &&
-       log.tail >= olog.tail &&
-       !log.backlog && olog.backlog)) {          // olog is clearly superior in every way
-
-    if (is_primary()) {
-      // we should have our own backlog already; see peer() code where
-      // we request this.
-    } else {
-      // primary should have requested our backlog during peer().
-    }
-
+  if (log.head < olog.tail) {
+    // We need to throw away our log and process the backlogs
     hash_map<sobject_t, Log::Entry*> old_objects;
     old_objects.swap(log.objects);
 
@@ -443,6 +447,15 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	merge_old_entry(t, oe);
     }
 
+    // Remove objects whose removals we missed
+    for (hash_map<sobject_t, Log::Entry*>::iterator i = old_objects.begin();
+	 i != old_objects.end();
+	 ++i) {
+      if (!log.objects.count(i->first)) {
+	t.remove(coll, i->first);
+      }
+    }
+
     info.last_update = log.head = olog.head;
     info.log_tail = log.tail = olog.tail;
     info.log_backlog = log.backlog = olog.backlog;
@@ -450,17 +463,14 @@ void PG::merge_log(ObjectStore::Transaction& t,
       oinfo.stats.reported = info.stats.reported;
     info.stats = oinfo.stats;
     changed = true;
-  } 
-
-  else {
-    // try to merge the two logs?
+  } else {
+    // log.head >= olog.tail, we can do a normal merge
 
     // extend on tail?
     //  this is just filling in history.  it does not affect our
     //  missing set, as that should already be consistent with our
     //  current log.
-    // FIXME: what if we have backlog, but they have lower tail?
-    if (olog.tail < log.tail && olog.head >= log.tail && !log.backlog) {
+    if (olog.tail < log.tail && !log.backlog) {
       dout(10) << "merge_log extending tail to " << olog.tail
                << (olog.backlog ? " +backlog":"")
 	       << dendl;
@@ -487,8 +497,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     }
     
     // extend on head?
-    if (olog.head > log.head &&
-        olog.tail <= log.head) {
+    if (olog.head > log.head) {
       dout(10) << "merge_log extending head to " << olog.head << dendl;
       
       // find start point in olog
@@ -540,6 +549,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
       // splice
       log.log.splice(log.log.end(), 
                      olog.log, from, to);
+      log.index();   
+
       
       info.last_update = log.head = olog.head;
       if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
@@ -548,8 +559,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
       // process divergent items
       if (!divergent.empty()) {
-	// removing items screws screws our index
-	log.index();   
 	for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
 	  merge_old_entry(t, *d);
       }
@@ -559,7 +568,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
   }
   
   dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
-  //log.print(cout);
 
   if (changed) {
     write_info(t);
@@ -4288,10 +4296,6 @@ PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "received info from " << infoevt.from << dendl;
 
-  Log empty_log;
-  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
-		infoevt.info, empty_log, infoevt.from);
-
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
@@ -4585,7 +4589,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
     eversion_t since(pi.history.last_epoch_started, 0);
-    if (pi.log_tail <= since) {
+    if (pi.last_update < pg->info.log_tail) {
+      // Replica needs to generate a backlog for merge_log to catch deletions
+      dout(10) << " requesting log+missing since " << since << " from osd" << *i << dendl;
+      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
+    } else if (pi.log_tail <= since) {
       dout(10) << " requesting log+missing since " << since << " from osd" << *i << dendl;
       context< RecoveryMachine >().send_query(*i, Query(Query::LOG, since, pg->info.history));
     } else if (pi.log_backlog) {
