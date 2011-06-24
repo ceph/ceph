@@ -593,6 +593,10 @@ class Inode {
     // move to back of LRU
     cap->session->caps.push_back(&cap->cap_item);
   }
+  void try_touch_cap(Inode *inode, int mds) {
+    if (caps.count(mds))
+      touch_cap[mds];
+  }
   bool caps_issued_mask(unsigned mask) {
     int c = exporting_issued | snap_caps;
     if ((c & mask) == mask)

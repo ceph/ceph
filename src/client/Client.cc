@@ -3319,6 +3319,9 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       if (s->cap_ttl > now &&
 	  s->cap_gen == dn->lease_gen) {
 	*target = dn->inode;
+	// touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
+	// make trim_caps() behave.
+	try_touch_cap(dir, dn->lease_mds);
 	touch_dn(dn);
 	goto done;
       }
