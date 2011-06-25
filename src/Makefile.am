@@ -278,9 +278,11 @@ testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm
+testrados_delete_pool_while_open_SOURCES = test/testrados_delete_pool_while_open.c
+testrados_delete_pool_while_open_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += testrados testradospp radosacl
+bin_DEBUGPROGRAMS += testrados testradospp radosacl testrados_delete_pool_while_open
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}

@@ -165,7 +165,7 @@ static int testrados(int tnum)
 
 	/* create an io_ctx */
 	r = rados_pool_create(cl, "foo");
-	tprintf(tnum, "rados_ioctx_create = %d\n", r);
+	tprintf(tnum, "rados_pool_create = %d\n", r);
 
 	rados_ioctx_t io_ctx;
 	r = rados_ioctx_create(cl, "foo", &io_ctx);
