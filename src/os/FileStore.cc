@@ -110,8 +110,8 @@ using ceph::crypto::SHA1;
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 #define ALIGN_DOWN(x, by) ((x) - ((x) % (by)))
-#define ALIGN_UP(x, by) ((x) + ((by) - ((x) % (by))))
-#define ALIGNED(x, by) ((x) % (by))
+#define ALIGNED(x, by) (!((x) % (by)))
+#define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
 static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
 static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
