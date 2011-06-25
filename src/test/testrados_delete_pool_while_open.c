@@ -61,7 +61,7 @@ static void* do_thread1(void *v)
 	else {
 		/* This should not succeed because the pool was deleted
 		 * by the other thread. */
-		printf("rados_ioctx_pool_stat succeeded\n", ret);
+		printf("rados_ioctx_pool_stat succeeded\n");
 		return FAILURE;
 	}
 	rados_ioctx_destroy(io_ctx);
