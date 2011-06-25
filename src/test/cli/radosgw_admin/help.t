@@ -1,6 +1,4 @@
-# TODO handle --help properly, not as an error
   $ radosgw_admin --help
-  unrecognized arg --help
   usage: radosgw_admin <cmd> [options...]
   commands:
     user create                create a new user
