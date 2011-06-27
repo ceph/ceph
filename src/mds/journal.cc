@@ -64,16 +64,6 @@
 // -----------------------
 // LogSegment
 
-class C_MDL_RetryExpireSegment : public Context {
-public:
-  MDS *mds;
-  LogSegment *ls;
-  C_MDL_RetryExpireSegment(MDS *m, LogSegment *l) : mds(m), ls(l) {}
-  void finish(int r) {
-    ls->try_to_expire(mds);
-  }
-};
-
 C_Gather *LogSegment::try_to_expire(MDS *mds)
 {
   C_Gather *gather = 0;
