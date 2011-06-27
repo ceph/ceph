@@ -390,8 +390,6 @@ public:
   int osd_journal_size;  // in mb
   int osd_max_write_size; // in MB
   bool osd_balance_reads;
-  int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
-  double osd_flash_crowd_iat_alpha;
 
   int  osd_shed_reads;
   double osd_shed_reads_min_latency;

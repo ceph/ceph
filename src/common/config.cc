@@ -324,8 +324,6 @@ struct config_option config_optionsp[] = {
   OPTION(osd_journal_size, OPT_INT, 0),         // in mb
   OPTION(osd_max_write_size, OPT_INT, 90),
   OPTION(osd_balance_reads, OPT_BOOL, false),
-  OPTION(osd_flash_crowd_iat_threshold, OPT_INT, 0),
-  OPTION(osd_flash_crowd_iat_alpha, OPT_DOUBLE, 0.125),
   OPTION(osd_shed_reads, OPT_INT, false),     // forward from primary to replica
   OPTION(osd_shed_reads_min_latency, OPT_DOUBLE, .01),       // min local latency
   OPTION(osd_shed_reads_min_latency_diff, OPT_DOUBLE, .01),  // min latency difference
