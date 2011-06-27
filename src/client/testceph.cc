@@ -269,12 +269,12 @@ int main(int argc, const char **argv)
     cout << "ceph_telldir: failed" << std::endl;
   }
 
-  //ret = ceph_closedir(cmount,readdir_test_dir);
-  //if (ret == 0) {
-  //  cerr << "ceph_closedir success" << std::endl;
-  //} else {
-  //  cerr << "ceph_closedir error: " << cpp_strerror(ret) << std::endl;
-  //}
+  ret = ceph_closedir(cmount,readdir_test_dir);
+  if (ret == 0) {
+    cerr << "ceph_closedir success" << std::endl;
+  } else {
+    cerr << "ceph_closedir error: " << cpp_strerror(ret) << std::endl;
+  }
   
   ceph_shutdown(cmount);
 
