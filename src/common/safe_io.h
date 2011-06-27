@@ -15,6 +15,7 @@
 #ifndef CEPH_SAFE_IO
 #define CEPH_SAFE_IO
 
+#include "common/compiler_extensions.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,22 +27,22 @@ extern "C" {
    * -1 and setting errno).
    */
   ssize_t safe_read(int fd, void *buf, size_t count)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
   ssize_t safe_write(int fd, const void *buf, size_t count)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
   ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
   ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
 
   /*
    * Same as the above functions, but return -EDOM unless exactly the requested
    * number of bytes can be read.
    */
   ssize_t safe_read_exact(int fd, void *buf, size_t count)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
   ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
-    __attribute__ ((warn_unused_result));
+      WARN_UNUSED_RESULT;
 
 #ifdef __cplusplus
 }
