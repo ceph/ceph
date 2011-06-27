@@ -599,7 +599,7 @@ public:
 };
 
 inline ostream& operator<<(ostream& out, const rgw_obj o) {
-  return out << o.bucket << ":" << o.key;
+  return out << o.bucket << ":" << o.object;
 }
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)

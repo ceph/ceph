@@ -435,8 +435,9 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   rgw_obj tmp_obj = dest_obj;
   string tmp_oid;
 
-  append_rand_alpha(dest_obj.key, tmp_oid, 32);
-  tmp_obj.set_key(tmp_oid);
+  append_rand_alpha(dest_obj.object, tmp_oid, 32);
+  tmp_obj.set_obj(tmp_oid);
+  tmp_obj.set_key(dest_obj.object);
 
   rgw_obj tmp_dest;
 
@@ -472,7 +473,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = clone_obj(dest_obj, 0, tmp_obj, 0, end, attrs);
+  ret = clone_obj(dest_obj, 0, tmp_obj, 0, end + 1, attrs);
   if (mtime)
     obj_stat(tmp_obj, NULL, mtime);
 
@@ -647,7 +648,6 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
     return r;
 
   io_ctx.locator_set_key(obj.key);
-
   r = io_ctx.remove(oid);
   if (r < 0)
     return r;
@@ -903,6 +903,7 @@ int RGWRados::clone_objs(rgw_obj& dst_obj,
   vector<RGWCloneRangeInfo>::iterator range_iter;
   for (range_iter = ranges.begin(); range_iter != ranges.end(); ++range_iter) {
     RGWCloneRangeInfo& range = *range_iter;
+    RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
     op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
   }
 
