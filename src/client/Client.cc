@@ -321,6 +321,7 @@ void Client::shutdown()
 
 void Client::trim_cache()
 {
+  ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << lru.lru_get_max() << dendl;
   unsigned last = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
