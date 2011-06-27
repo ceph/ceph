@@ -539,7 +539,12 @@ public:
 
   void send_op(Op *op);
   bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
-  bool recalc_op_target(Op *op);
+  enum recalc_op_target_result {
+    RECALC_OP_TARGET_NO_ACTION = 0,
+    RECALC_OP_TARGET_NEED_RESEND,
+    RECALC_OP_TARGET_POOL_DISAPPEARED,
+  };
+  int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
   void send_linger(LingerOp *info);

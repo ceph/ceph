@@ -75,8 +75,10 @@ void Objecter::send_linger(LingerOp *info)
 		   info->pobjver);
     o->snapid = info->snap;
 
-    if (info->session)
-      recalc_op_target(o);
+    if (info->session) {
+      int r = recalc_op_target(o);
+      assert(r != RECALC_OP_TARGET_POOL_DISAPPEARED); // FIXME: have to handle this! Bug #1231
+    }
     op_submit(o, info->session);
     info->registering = true;
   } else {
@@ -235,10 +237,26 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	// check for changed request mappings
 	for (hash_map<tid_t,Op*>::iterator p = ops.begin();
 	     p != ops.end();
-	     p++) {
+	     ) {
 	  Op *op = p->second;
-	  if (recalc_op_target(op))
+	  int r = recalc_op_target(op);
+	  switch (r) {
+	  case RECALC_OP_TARGET_NO_ACTION:
+	    // do nothing
+	    ++p;
+	    break;
+	  case RECALC_OP_TARGET_NEED_RESEND:
 	    need_resend[op->tid] = op;
+	    ++p;
+	    break;
+	  case RECALC_OP_TARGET_POOL_DISAPPEARED:
+	    op->onack->finish(-ENOENT);
+	    delete op->onack;
+	    op->onack = NULL;
+	    delete op;
+	    ops.erase(p++);
+	    break;
+	  }
 	}
 
 	// osd addr changes?
@@ -471,7 +489,8 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   take_op_budget(op);
 
   // pick tid
-  op->tid = ++last_tid;
+  tid_t mytid = ++last_tid;
+  op->tid = mytid;
   assert(client_inc >= 0);
 
   // pick target
@@ -479,8 +498,15 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
     op->session = s;
     s->ops.push_back(&op->session_item);
   } else {
+    int r = recalc_op_target(op);
+    if (r == RECALC_OP_TARGET_POOL_DISAPPEARED) {
+      op->onack->finish(-ENOENT);
+      delete op->onack;
+      op->onack = NULL;
+      delete op;
+      return mytid;
+    }
     num_homeless_ops++;  // initially!
-    recalc_op_target(op);
   }
     
   // add to gather set(s)
@@ -546,12 +572,15 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   return false;      // same primary (tho replicas may have changed)
 }
 
-bool Objecter::recalc_op_target(Op *op)
+int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
-  if (op->oid.name.length())
-    pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
+  if (op->oid.name.length()) {
+    int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
+    if (ret == ENOENT)
+      return RECALC_OP_TARGET_POOL_DISAPPEARED;
+  }
   osdmap->pg_to_acting_osds(pgid, acting);
 
   if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
@@ -596,15 +625,17 @@ bool Objecter::recalc_op_target(Op *op)
       else
 	num_homeless_ops++;
     }
-    return true;
+    return RECALC_OP_TARGET_NEED_RESEND;
   }
-  return false;
+  return RECALC_OP_TARGET_NO_ACTION;
 }
 
 bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 {
   vector<int> acting;
-  pg_t pgid = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc);
+  pg_t pgid;
+  int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc, pgid);
+  assert(ret == 0); // FIXME: have to handle this! Bug #1231
   osdmap->pg_to_acting_osds(pgid, acting);
 
   if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {

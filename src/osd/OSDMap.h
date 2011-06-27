@@ -767,25 +767,29 @@ private:
 
 
   /****   mapping facilities   ****/
-
-  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) {
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) {
     // calculate ps (placement seed)
     const pg_pool_t *pool = get_pg_pool(loc.get_pool());
+    if (!pool)
+      return -ENOENT;
     ps_t ps;
     if (loc.key.length())
       ps = ceph_str_hash(pool->v.object_hash, loc.key.c_str(), loc.key.length());
     else
       ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
-
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
     if (loc.get_preferred() >= 0)
       ps += loc.get_preferred();
+    pg = pg_t(ps, loc.get_pool(), loc.get_preferred());
+    return 0;
+  }
 
-    //cout << "preferred " << preferred << " num "
-    // << num << " mask " << num_mask << " ps " << ps << endl;
-
-    return pg_t(ps, loc.get_pool(), loc.get_preferred());
+  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) {
+    pg_t pg;
+    int ret = object_locator_to_pg(oid, loc, pg);
+    assert(ret == 0);
+    return pg;
   }
 
   object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
