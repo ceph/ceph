@@ -64,7 +64,7 @@ class Filer {
     map<object_t, uint64_t> known_size;
     utime_t max_mtime;
 
-    map<object_t, tid_t> ops;
+    set<object_t> ops;
 
     int err;
     bool found_size;
