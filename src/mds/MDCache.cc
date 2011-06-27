@@ -3607,7 +3607,7 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
-  C_Gather *gather = new C_Gather(g_ceph_context);
+  C_GatherBuilder gather_bld(g_ceph_context);
 
   // scan list
   set<CDir*> fetch_queue;
@@ -3623,16 +3623,16 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
 
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    if (parallel_fetch_traverse_dir(p->first, p->second, fetch_queue, missing, gather))
+    if (parallel_fetch_traverse_dir(p->first, p->second, fetch_queue,
+				    missing, gather_bld))
       pathmap.erase(p++);
     else
       p++;
   }
 
-  if (pathmap.empty() && gather->empty()) {
+  if (pathmap.empty() && (!gather_bld.has_subs())) {
     dout(10) << "parallel_fetch done" << dendl;
     assert(fetch_queue.empty());
-    delete gather;
     return false;
   }
 
@@ -3641,15 +3641,16 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
        p != fetch_queue.end();
        ++p) {
     dout(10) << "parallel_fetch fetching " << **p << dendl;
-    (*p)->fetch(gather->new_sub());
+    (*p)->fetch(gather_bld.new_sub());
   }
   
-  return gather;
+  return gather_bld.get();
 }
 
 // true if we're done with this path
 bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
-					  set<CDir*>& fetch_queue, set<inodeno_t>& missing, C_Gather *gather)
+					  set<CDir*>& fetch_queue, set<inodeno_t>& missing,
+					  C_GatherBuilder &gather_bld)
 {
   CInode *cur = get_inode(path.get_ino());
   if (!cur) {
@@ -3692,7 +3693,7 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
 	dn->link_remote(dnl, cur);
       } else {
 	// open remote ino
-	open_remote_ino(dnl->get_remote_ino(), gather->new_sub());
+	open_remote_ino(dnl->get_remote_ino(), gather_bld.new_sub());
 	return false;
       }
     }

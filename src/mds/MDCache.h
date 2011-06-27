@@ -1023,8 +1023,8 @@ public:
 
   C_Gather *parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
-				   set<CDir*>& fetch_queue, set<inodeno_t>& missing, C_Gather *gather);
-
+				   set<CDir*>& fetch_queue, set<inodeno_t>& missing,
+				   C_GatherBuilder &gather_bld);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

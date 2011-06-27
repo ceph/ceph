@@ -246,6 +246,42 @@ public:
 
 };
 
+/*
+ * This is a class designed to help you construct CGather objects.
+ *
+ * You construct a C_GatherBuilder on the stack, and call new_sub as many or as
+ * few times as you need. If you call new_sub 0 times, there is no need for a
+ * CGather object, so none is created.
+ *
+ * If a C_Gather object is created, it will be destroyed when the last sub
+ * finishes.
+ */
+class C_GatherBuilder
+{
+public:
+  C_GatherBuilder(CephContext *cct_)
+    : cct(cct_), c_gather(NULL)
+  {
+  }
+  ~C_GatherBuilder() {
+  }
+  Context *new_sub() {
+    if (!c_gather) {
+      c_gather = new C_Gather(cct);
+    }
+    return c_gather->new_sub();
+  }
+  C_Gather *get() {
+    return c_gather;
+  }
+  bool has_subs() {
+    return (c_gather != NULL);
+  }
+private:
+  CephContext *cct;
+  C_Gather *c_gather;
+};
+
 #undef DOUT_SUBSYS
 
 #endif
