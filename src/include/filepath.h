@@ -42,6 +42,7 @@ class filepath {
    * NOTE: this value is LAZILY maintained... i.e. it's a cache
    */
   mutable vector<string> bits;
+  bool encoded;
 
   void rebuild_path() {
     path.clear();
@@ -57,21 +58,28 @@ class filepath {
       int nextslash = path.find('/', off);
       if (nextslash < 0) 
         nextslash = path.length();  // no more slashes
-      bits.push_back( path.substr(off,nextslash-off) );
+      if (((nextslash - off) > 0) || encoded) {
+        // skip empty components unless they were introduced deliberately
+        // see commit message for more detail
+        bits.push_back( path.substr(off,nextslash-off) );
+        assert(encoded || bits.back().size());
+        assert(encoded || bits.back().compare("/"));
+      }
       off = nextslash+1;
     }
   }
 
  public:
-  filepath() : ino(0) { }
-  filepath(const string& s, inodeno_t i) : ino(i), path(s) { }
-  filepath(const char* s, inodeno_t i) : ino(i), path(s) { }
+  filepath() : ino(0), encoded(false) { }
+  filepath(const string& s, inodeno_t i) : ino(i), path(s), encoded(false) { }
+  filepath(const char* s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const filepath& o) {
     ino = o.ino;
     path = o.path;
     bits = o.bits;
+    encoded = o.encoded;
   }
-  filepath(inodeno_t i) : ino(i) { }
+  filepath(inodeno_t i) : ino(i), encoded(false) { }
   
   void set_path(const char *s, inodeno_t b) {
     path = s;
@@ -187,6 +195,7 @@ class filepath {
     ::decode(struct_v, blp);
     ::decode(ino, blp);
     ::decode(path, blp);
+    encoded = true;
   }
 };
 
