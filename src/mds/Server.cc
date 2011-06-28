@@ -3142,6 +3142,9 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   // FIXME: only set striping parameters, for now.
   ceph_file_layout layout;
   memset(&layout, 0, sizeof(layout));
+  layout.fl_cas_hash = 0; // default value; "none"
+  layout.fl_pg_pool = 0; // default value "data" pool
+  layout.fl_pg_preferred = -1; // default value; "none"
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
     layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
@@ -3217,7 +3220,7 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_preferred > 0)
+  if (req->head.args.setlayout.layout.fl_pg_preferred != -1)
     layout->layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
   if (req->head.args.setlayout.layout.fl_pg_pool > 0)
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
