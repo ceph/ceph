@@ -79,10 +79,10 @@ useful for specifying actual machines to run on.
         for f in facets
         )
     for configs in itertools.product(*facet_configs):
-        log.info(
-            'Running teuthology with facets %s',
-            ' '.join('{facet}:{name}'.format(facet=facet, name=name)
+        description=' '.join('{facet}:{name}'.format(facet=facet, name=name)
                      for facet, name, path in configs)
+        log.info(
+            'Running teuthology with facets %s', description
             )
         arg = [
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology'),
@@ -97,6 +97,8 @@ useful for specifying actual machines to run on.
                 break
             time.sleep(1)
         arg.append('--archive={path}'.format(path=archive))
+
+        arg.append('--description=\'{desc}\''.format(desc=description))
 
         arg.append('--')
 

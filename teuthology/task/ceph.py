@@ -552,6 +552,7 @@ def mds(ctx, config):
                     '-f',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf',
+#                    '--debug-mds','20',
                     ],
                 logger=log.getChild('mds.{id}'.format(id=id_)),
                 stdin=run.PIPE,
