@@ -508,12 +508,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
     } else {
       continue;
     }
-    // Clean up src_obc, reachable only if we are going to return
-    for (map<sobject_t,ObjectContext*>::iterator i = src_obc.begin();
-	 i != src_obc.end();
-	 ++i) {
-      put_object_context(i->second);
-    }
+    put_object_contexts(src_obc);
+    put_object_context(obc);
     return;
   }
 
@@ -602,8 +598,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
     obc->ondisk_read_unlock();
   }
 
-  if (result == -EAGAIN)
+  if (result == -EAGAIN) {
+    // clean up after the ctx
+    delete ctx;
+    put_object_context(obc);
+    put_object_contexts(src_obc);
     return;
+  }
 
   // prepare the reply
   ctx->reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0); 
@@ -2095,11 +2096,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       snapset.head_exists = true;
 
       // Adjust the cached objectcontext
-      ObjectContext *clone_context = get_object_context(rollback_to_sobject,
-							oi.oloc,
-							false);
-      assert(clone_context);
-      obs.oi.size = clone_context->obs.oi.size;
+      obs.oi.size = rollback_to->obs.oi.size;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	snapset.clone_overlap.lower_bound(snapid);
@@ -2111,6 +2108,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	overlaps.intersection_of(iter->second);
       snapset.clone_overlap[*snapset.clones.rbegin()] = overlaps;
     }
+    put_object_context(rollback_to);
   }
   return ret;
 }
