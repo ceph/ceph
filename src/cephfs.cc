@@ -50,7 +50,7 @@ int main (int argc, char **argv) {
   int stripe_count = 0;
   int object_size = 0;
   int pool = 0;
-  int osd = 0;
+  int osd = -1;
   int file_offset = 0;
   bool dir = false;
 

@@ -359,8 +359,13 @@ void Monitor::handle_command(MMonCommand *m)
     }
 
     if (m->cmd[0] == "_injectargs") {
-      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-      g_conf->injectargs(m->cmd[1]);
+      if (m->cmd.size() == 2) {
+	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
+	g_conf->injectargs(m->cmd[1]);
+	reply_command(m, 0, "parsed options", 0);
+      } else {
+	reply_command(m, -EINVAL, "must supply options to be parsed in a single string!", 0);
+      }
       return;
     } 
     if (m->cmd[0] == "class") {
