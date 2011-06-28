@@ -264,6 +264,22 @@ int main(int argc, const char **argv)
     cout << "ceph_close: success" << std::endl;
   }
 
+  // test empty name components
+  my_fd = ret = ceph_open(cmount, "readdir_test//opened_file_1", O_RDONLY, 0666);
+  if (ret < 0) {
+    cerr << "ceph_open O_RDONLY error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_open: success" << std::endl;
+  }
+  ret = ceph_close(cmount, my_fd);
+  if (ret < 0) {
+    cerr << "ceph_close error: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  } else {
+    cout << "ceph_close: success" << std::endl;
+  }
+
   struct ceph_dir_result *readdir_test_dir;
   ret = ceph_opendir(cmount, "readdir_test", &readdir_test_dir);
   if (ret != 0) {
