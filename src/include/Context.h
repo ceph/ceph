@@ -132,7 +132,6 @@ private:
   int sub_created_count;
   int sub_existing_count;
   Mutex lock;
-  bool any;  /* if true, OR, otherwise, AND */
   bool activated;
 
   bool sub_finish(Context* sub, int r) {
@@ -155,19 +154,11 @@ private:
     if (!activated)
       return false;  // no finisher set yet, ignore.
 
-    if (any && onfinish) {
-      lock.Unlock();
-      onfinish->finish(result);
-      lock.Lock();
-      delete onfinish;
-      onfinish = 0;
-    }
-
     if (sub_existing_count)
       return false;  // more subs left
 
     // last one
-    if (!any && onfinish) {
+    if (onfinish) {
       lock.Unlock();
       onfinish->finish(result);
       lock.Lock();
@@ -192,11 +183,11 @@ private:
     }
   };
 
-  C_Gather(CephContext *cct_, Context *f=0, bool an=false) 
-    : cct(cct_), result(0), onfinish(f), sub_created_count(0),
-      sub_existing_count(0),
+  C_Gather(CephContext *cct_, Context *onfinish_)
+    : cct(cct_), result(0), onfinish(onfinish_),
+      sub_created_count(0), sub_existing_count(0),
       lock("C_Gather::lock", true, false), //disable lockdep
-      any(an), activated(onfinish ? true : false)
+      activated(onfinish ? true : false)
   {
     ldout(cct,10) << "C_Gather " << this << ".new" << dendl;
   }
