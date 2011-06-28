@@ -226,18 +226,20 @@ public:
 };
 
 /*
- * This is a class designed to help you construct CGather objects.
+ * How to use C_GatherBuilder:
  *
- * You construct a C_GatherBuilder on the stack, and call new_sub as many or as
- * few times as you need. If you call new_sub 0 times, there is no need for a
- * CGather object, so none is created.
+ * 1. Create a C_GatherBuilder on the stack
+ * 2. Call gather_bld.new_sub() as many times as you want to create new subs
+ *    It is safe to call this 0 times, or 100, or anything in between.
+ * 3. If you didn't supply a finisher in the C_GatherBuilder constructor,
+ *    set one with gather_bld.set_finisher(my_finisher)
+ * 4. Call gather_bld.activate()
  *
- * C_Gather objects must have a finisher context. You can provide the finisher
- * in the constructor for C_GatherBuilder, or set it later with set_finisher.
- * If you forget, you will get an assert.
+ * The finisher may be called at any point after step 4, including immediately
+ * from the activate() function.
+ * The finisher will never be called before activate().
  *
- * If a C_Gather object is created, it will be destroyed when the last sub
- * finishes.
+ * Note: Currently, subs must be manually freed by the caller (for some reason.)
  */
 class C_GatherBuilder
 {
