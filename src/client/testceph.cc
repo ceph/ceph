@@ -59,21 +59,24 @@ int main(int argc, const char **argv)
   cout << "Successfully mounted Ceph!" << std::endl;
 
   // what if foo is already there???
-  struct ceph_dir_result *foo_dir;
+  struct ceph_dir_result *foo_dir = NULL;
   ret = ceph_opendir(cmount, "foo", &foo_dir);
   if (ret != -ENOENT) {
     cerr << "ceph_opendir error: unexpected result from trying to open foo: "
 	 << cpp_strerror(ret) << std::endl;
     return 1;
   } else {
-    cout << "ceph_opendir: success" << std::endl;
+    cout << "ceph_opendir: success, foo does not exist" << std::endl;
   }
+
+  // Can't close a dir that is not open!
   //ret = ceph_closedir(cmount, foo_dir);
   //if (ret == 0) {
   //  cerr << "ceph_closedir success" << std::endl;
   //} else {
   //  cerr << "ceph_closedir error: " << cpp_strerror(ret) << std::endl;
   //}
+  //
   ret = ceph_mkdir(cmount, "foo",  0777);
   if (ret) {
     cerr << "ceph_mkdir error: " << cpp_strerror(ret) << std::endl;
@@ -114,6 +117,38 @@ int main(int argc, const char **argv)
   } else {
     cout << "ceph_mkdirs: success" << std::endl;
   }
+
+  // Should test .. as well!
+
+  cout << "testing chdir on foo/bar/baz";
+  ret = ceph_chdir(cmount, "foo/bar/baz");
+  if (ret) {
+    cerr << ": failed: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  cout << " success!" << std::endl;
+
+  // Now, try absolute
+  cout << "testing chdir to /foo/bar";
+  ret = ceph_chdir(cmount, "/foo/bar");
+  if (ret) {
+    cerr << ": failed: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  cout << " success!" << std::endl;
+
+  // Now, back to the top
+  cout << "testing chdir to /";
+  ret = ceph_chdir(cmount, "/");
+  if (ret) {
+    cerr << ": failed: " << cpp_strerror(ret) << std::endl;
+    return 1;
+  }
+
+  cout << "success!" << std::endl;
+
   ret = ceph_rmdir(cmount, "foo/bar/baz");
   if (ret) {
     cerr << "ceph_rmdir error: " << cpp_strerror(ret) << std::endl;
