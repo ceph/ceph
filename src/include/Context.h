@@ -253,36 +253,54 @@ public:
  * few times as you need. If you call new_sub 0 times, there is no need for a
  * CGather object, so none is created.
  *
+ * C_Gather objects must have a finisher context. You can provide the finisher
+ * in the constructor for C_GatherBuilder, or set it later with set_finisher.
+ * If you forget, you will get an assert.
+ *
  * If a C_Gather object is created, it will be destroyed when the last sub
  * finishes.
  */
 class C_GatherBuilder
 {
 public:
-  C_GatherBuilder(CephContext *cct_, Context *ctx_)
-    : cct(cct_), c_gather(NULL), ctx(ctx_)
+  C_GatherBuilder(CephContext *cct_)
+    : cct(cct_), c_gather(NULL), finisher(NULL)
+  {
+  }
+  C_GatherBuilder(CephContext *cct_, Context *finisher_)
+    : cct(cct_), c_gather(NULL), finisher(finisher_)
   {
   }
   ~C_GatherBuilder() {
-    if (!c_gather)
-      delete ctx;
+    if (c_gather) {
+      // If we created a C_Gather, we must also have supplied a finisher.
+      assert(finisher != NULL);
+    }
+    else {
+      delete finisher;
+    }
   }
   Context *new_sub() {
     if (!c_gather) {
-      c_gather = new C_Gather(cct, ctx);
+      c_gather = new C_Gather(cct, finisher);
     }
     return c_gather->new_sub();
   }
-  C_Gather *get() {
+  void set_finisher(Context *finisher_) {
+    finisher = finisher_;
+    if (c_gather)
+      c_gather->set_finisher(finisher);
+  }
+  C_Gather *get() const {
     return c_gather;
   }
-  bool has_subs() {
+  bool has_subs() const {
     return (c_gather != NULL);
   }
 private:
   CephContext *cct;
   C_Gather *c_gather;
-  Context *ctx;
+  Context *finisher;
 };
 
 #undef DOUT_SUBSYS

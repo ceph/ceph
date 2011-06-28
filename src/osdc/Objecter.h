@@ -1063,14 +1063,14 @@ public:
       read_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
 	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
     } else {
-      C_Gather *g = new C_Gather(cct);
+      C_GatherBuilder gather(cct);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	read_trunc(p->oid, p->oloc, p->offset, p->length,
-	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, g->new_sub());
+	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, gather.new_sub());
       }
-      g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
+      gather.set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
     }
   }
 
@@ -1085,11 +1085,8 @@ public:
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
 	    snapc, bl, mtime, flags, trunc_size, trunc_seq, onack, oncommit);
     } else {
-      C_Gather *gack = 0, *gcom = 0;
-      if (onack)
-	gack = new C_Gather(cct, onack);
-      if (oncommit)
-	gcom = new C_Gather(cct, oncommit);
+      C_GatherBuilder gack(cct, onack);
+      C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	bufferlist cur;
 	for (map<__u32,__u32>::iterator bit = p->buffer_extents.begin();
@@ -1099,8 +1096,8 @@ public:
 	assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length, 
 	      snapc, cur, mtime, flags, trunc_size, trunc_seq,
-	      gack ? gack->new_sub():0,
-	      gcom ? gcom->new_sub():0);
+	      onack ? gack.new_sub():0,
+	      oncommit ? gcom.new_sub():0);
       }
     }
   }

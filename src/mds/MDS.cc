@@ -1116,40 +1116,40 @@ void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  C_Gather *fin = new C_Gather(g_ceph_context, new C_MDS_CreateFinish(this));
+  C_GatherBuilder fin(g_ceph_context, new C_MDS_CreateFinish(this));
 
   mdcache->init_layouts();
 
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
-  mdlog->create(fin->new_sub());
-  mdlog->start_new_segment(fin->new_sub());
+  mdlog->create(fin.new_sub());
+  mdlog->start_new_segment(fin.new_sub());
 
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
-    mdcache->create_empty_hierarchy(fin);
+    mdcache->create_empty_hierarchy(fin.get());
   }
 
   dout(3) << "boot_create creating mydir hierarchy" << dendl;
-  mdcache->create_mydir_hierarchy(fin);
+  mdcache->create_mydir_hierarchy(fin.get());
 
   // fixme: fake out inotable (reset, pretend loaded)
   dout(10) << "boot_create creating fresh inotable table" << dendl;
   inotable->reset();
-  inotable->save(fin->new_sub());
+  inotable->save(fin.new_sub());
 
   // write empty sessionmap
-  sessionmap.save(fin->new_sub());
+  sessionmap.save(fin.new_sub());
   
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << dendl;
     anchorserver->reset();
-    anchorserver->save(fin->new_sub());
+    anchorserver->save(fin.new_sub());
 
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
-    snapserver->save(fin->new_sub());
+    snapserver->save(fin.new_sub());
   }
 }
 
@@ -1192,23 +1192,23 @@ void MDS::boot_start(int step, int r)
 
   case 1:
     {
-      C_Gather *gather = new C_Gather(g_ceph_context, new C_MDS_BootStart(this, 2));
+      C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, 2));
       dout(2) << "boot_start " << step << ": opening inotable" << dendl;
-      inotable->load(gather->new_sub());
+      inotable->load(gather.new_sub());
 
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
-      sessionmap.load(gather->new_sub());
+      sessionmap.load(gather.new_sub());
 
       if (mdsmap->get_tableserver() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
-	anchorserver->load(gather->new_sub());
+	anchorserver->load(gather.new_sub());
 
 	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
-	snapserver->load(gather->new_sub());
+	snapserver->load(gather.new_sub());
       }
       
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
-      mdlog->open(gather->new_sub());
+      mdlog->open(gather.new_sub());
     }
     break;
 
@@ -1216,13 +1216,13 @@ void MDS::boot_start(int step, int r)
     {
       dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
 
-      C_Gather *gather = new C_Gather(g_ceph_context, new C_MDS_BootStart(this, 3));
+      C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, 3));
 
-      mdcache->open_mydir_inode(gather->new_sub());
+      mdcache->open_mydir_inode(gather.new_sub());
 
       if (is_starting() ||
 	  whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
-	mdcache->open_root_inode(gather->new_sub());
+	mdcache->open_root_inode(gather.new_sub());
 	break;
       } else {
 	// replay.  make up fake root inode to start with
