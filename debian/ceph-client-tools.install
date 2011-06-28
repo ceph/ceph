@@ -6,3 +6,5 @@ usr/share/man/man8/csyn.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/rbd.8
 usr/share/man/man8/mount.ceph.8
+etc/bash_completion.d/rados
+etc/bash_completion.d/rbd
