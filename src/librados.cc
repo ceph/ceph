@@ -695,7 +695,7 @@ public:
       io_ctx_impl->put();
     }
     void notify(RadosClient *client, MWatchNotify *m) {
-      ctx->notify(m->opcode, m->ver);
+      ctx->notify(m->opcode, m->ver, m->bl);
       if (m->opcode != WATCH_NOTIFY_COMPLETE) {
         client->_notify_ack(*io_ctx_impl, oid, m->notify_id, m->ver);
       }
@@ -711,7 +711,7 @@ public:
       *done = false;
     }
 
-    void notify(uint8_t opcode, uint64_t ver) {
+    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
       *done = true;
       cond->Signal();
     }
@@ -750,7 +750,7 @@ public:
 
   int watch(IoCtxImpl& io, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
   int unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie);
-  int notify(IoCtxImpl& io, const object_t& oid, uint64_t ver);
+  int notify(IoCtxImpl& io, const object_t& oid, uint64_t ver, bufferlist& bl);
   int _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver);
 
   eversion_t last_version(IoCtxImpl& io) {
@@ -2306,7 +2306,7 @@ unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 }// ---------------------------------------------
 
 int librados::RadosClient::
-notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
+notify(IoCtxImpl& io, const object_t& oid, uint64_t ver, bufferlist& bl)
 {
   utime_t ut = ceph_clock_now(cct);
   bufferlist inbl, outbl;
@@ -2332,6 +2332,7 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
   uint32_t timeout = io.notify_timeout;
   ::encode(prot_ver, inbl);
   ::encode(timeout, inbl);
+  ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
   objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
@@ -2889,10 +2890,10 @@ unwatch(const string& oid, uint64_t handle)
 }
 
 int librados::IoCtx::
-notify(const string& oid, uint64_t ver)
+notify(const string& oid, uint64_t ver, bufferlist& bl)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->notify(*io_ctx_impl, obj, ver);
+  return io_ctx_impl->client->notify(*io_ctx_impl, obj, ver, bl);
 }
 
 void librados::IoCtx::
@@ -3844,7 +3845,7 @@ struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;
   void *arg;
   C_WatchCB(rados_watchcb_t _wcb, void *_arg) : wcb(_wcb), arg(_arg) {}
-  void notify(uint8_t opcode, uint64_t ver) {
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
     wcb(opcode, ver, arg);
   }
 };
@@ -3867,9 +3868,15 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
   return ctx->client->unwatch(*ctx, oid, cookie);
 }
 
-int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver)
+int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
-  return ctx->client->notify(*ctx, oid, ver);
+  bufferlist bl;
+  if (buf) {
+    bufferptr p = buffer::create(buf_len);
+    memcpy(p.c_str(), buf, buf_len);
+    bl.push_back(p);
+  }
+  return ctx->client->notify(*ctx, oid, ver, bl);
 }

@@ -199,7 +199,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
 int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
                 rados_watchcb_t watchcb, void *arg);
 int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
-int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver);
+int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
 #ifdef __cplusplus
 }

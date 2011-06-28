@@ -165,6 +165,22 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   return 0;
 }
 
+class RadosWatchCtx : public librados::WatchCtx {
+  string name;
+public:
+  RadosWatchCtx(const char *imgname) : name(imgname) {}
+  virtual ~RadosWatchCtx() {}
+  virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+    string s;
+    try {
+      bufferlist::iterator iter = bl.begin();
+      ::decode(s, iter);
+    } catch (buffer::error *err) {
+      cout << "could not decode bufferlist, buffer length=" << bl.length() << std::endl;
+    }
+    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << " msg='" << s << "'" << std::endl;
+  }
+};
 /**********************************************
 
 **********************************************/
@@ -645,7 +661,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
-  else {
+  else if (strcmp(nargs[0], "watch") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage();
+    string oid(nargs[1]);
+    RadosWatchCtx ctx(oid.c_str());
+    uint64_t cookie;
+    ret = io_ctx.watch(oid, 0, &cookie, &ctx);
+    if (ret != 0)
+      cerr << "error calling watch: " << ret << std::endl;
+    else {
+      cout << "press enter to exit..." << std::endl;
+      getchar();
+    }
+  }
+  else if (strcmp(nargs[0], "notify") == 0) {
+    if (!pool_name || nargs.size() < 3)
+      usage();
+    string oid(nargs[1]);
+    string msg(nargs[2]);
+    bufferlist bl;
+    ::encode(msg, bl);
+    ret = io_ctx.notify(oid, 0, bl);
+    if (ret != 0)
+      cerr << "error calling notify: " << ret << std::endl;
+  }  else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage();
   }
