@@ -74,7 +74,7 @@ namespace librados
   class WatchCtx {
   public:
     virtual ~WatchCtx();
-    virtual void notify(uint8_t opcode, uint64_t ver) = 0;
+    virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) = 0;
   };
 
   struct AioCompletion {
@@ -248,7 +248,7 @@ namespace librados
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,
 	      librados::WatchCtx *ctx);
     int unwatch(const std::string& o, uint64_t handle);
-    int notify(const std::string& o, uint64_t ver);
+    int notify(const std::string& o, uint64_t ver, bufferlist& bl);
     void set_notify_timeout(uint32_t timeout);
 
     // assert version for next sync operations

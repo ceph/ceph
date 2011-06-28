@@ -1394,10 +1394,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	uint32_t ver;
 	uint32_t timeout;
+        bufferlist bl;
 
 	try {
           ::decode(ver, bp);
 	  ::decode(timeout, bp);
+          ::decode(bl, bp);
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
@@ -1407,6 +1409,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	notify_info_t n;
 	n.timeout = timeout;
 	n.cookie = op.watch.cookie;
+        n.bl = bl;
 	ctx->notifies.push_back(n);
       }
       break;
@@ -2280,7 +2283,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	if (iter != notif->watchers.end()) {
 	  /* there is a pending notification for this watcher, we should resend it anyway
 	     even if we already sent it as it might not have received it */
-	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY, notif->bl);
 	  osd->client_messenger->send_message(notify_msg, session->con);
 	}
       }
@@ -2305,7 +2308,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 
       dout(10) << " " << *p << dendl;
 
-      Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, p->cookie);
+      Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, p->cookie, p->bl);
       session->get();  // notif got a reference
       notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 
@@ -2322,7 +2325,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
 	s->add_notif(notif, name);
 
-	MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+	MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY, notif->bl);
 	osd->client_messenger->send_message(notify_msg, s->con);
       }
 
@@ -2337,7 +2340,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	  notif->add_watcher(name, Watch::WATCHER_PENDING); /* FIXME: should we remove expired unconnected? probably yes */
       }
 
-      notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE);
+      notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE, notif->bl);
       if (notif->watchers.empty()) {
 	do_complete_notify(notif, obc);
       } else {

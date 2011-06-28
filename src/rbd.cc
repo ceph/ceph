@@ -479,8 +479,8 @@ class RbdWatchCtx : public librados::WatchCtx {
 public:
   RbdWatchCtx(const char *imgname) : name(imgname) {}
   virtual ~RbdWatchCtx() {}
-  virtual void notify(uint8_t opcode, uint64_t ver) {
-    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << std::endl;
+  virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << " bl.length=" << bl.length() << std::endl;
   }
 };
 

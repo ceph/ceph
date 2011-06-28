@@ -118,7 +118,7 @@ namespace librbd {
 			      lock("librbd::WatchCtx") {}
     virtual ~WatchCtx() {}
     void invalidate();
-    virtual void notify(uint8_t opcode, uint64_t ver);
+    virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl);
   };
 
   struct AioCompletion;
@@ -301,7 +301,7 @@ void WatchCtx::invalidate()
   valid = false;
 }
 
-void WatchCtx::notify(uint8_t opcode, uint64_t ver)
+void WatchCtx::notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
 {
   Mutex::Locker l(lock);
   ldout(ictx->cct, 1) <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << dendl;
@@ -488,7 +488,8 @@ int notify_change(IoCtx& io_ctx, const string& oid, uint64_t *pver, ImageCtx *ic
     ver = *pver;
   else
     ver = io_ctx.get_last_version();
-  io_ctx.notify(oid, ver);
+  bufferlist bl;
+  io_ctx.notify(oid, ver, bl);
   return 0;
 }
 

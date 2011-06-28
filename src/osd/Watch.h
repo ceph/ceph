@@ -43,12 +43,13 @@ public:
     Context *timeout;
     void *obc;
     pg_t pgid;
+    bufferlist bl;
 
     void add_watcher(const entity_name_t& name, WatcherState state) {
       watchers[name] = state;
     }
 
-    Notification(entity_name_t& n, OSD::Session *s, uint64_t c) : name(n), session(s), cookie(c) { }
+    Notification(entity_name_t& n, OSD::Session *s, uint64_t c, bufferlist& b) : name(n), session(s), cookie(c), bl(b) { }
   };
 
   class C_NotifyTimeout : public Context {

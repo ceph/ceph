@@ -25,10 +25,11 @@ class MWatchNotify : public Message {
   uint64_t ver;
   uint64_t notify_id;
   uint8_t opcode;
+  bufferlist bl;
 
   MWatchNotify() : Message(CEPH_MSG_WATCH_NOTIFY) { }
-  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o) : Message(CEPH_MSG_WATCH_NOTIFY),
-					cookie(c), ver(v), notify_id(i), opcode(o) { }
+  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, bufferlist b) : Message(CEPH_MSG_WATCH_NOTIFY),
+					cookie(c), ver(v), notify_id(i), opcode(o), bl(b) { }
 private:
   ~MWatchNotify() {}
 
@@ -41,14 +42,17 @@ public:
     ::decode(cookie, p);
     ::decode(ver, p);
     ::decode(notify_id, p);
+    if (msg_ver >= 1)
+      ::decode(bl, p);
   }
   void encode_payload(CephContext *cct) {
-    uint8_t msg_ver = 0;
+    uint8_t msg_ver = 1;
     ::encode(msg_ver, payload);
     ::encode(opcode, payload);
     ::encode(cookie, payload);
     ::encode(ver, payload);
     ::encode(notify_id, payload);
+    ::encode(bl, payload);
   }
 
   const char *get_type_name() { return "watch-notify"; }

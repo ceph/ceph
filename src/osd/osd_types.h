@@ -1306,6 +1306,7 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
 struct notify_info_t {
   uint64_t cookie;
   uint32_t timeout;
+  bufferlist bl;
 };
 
 static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
