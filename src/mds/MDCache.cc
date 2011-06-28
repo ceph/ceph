@@ -3592,6 +3592,14 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   }
 }
 
+class C_MDC_RejoinGatherFinish : public Context {
+  MDCache *cache;
+public:
+  C_MDC_RejoinGatherFinish(MDCache *c) : cache(c) {}
+  void finish(int r) {
+    cache->rejoin_gather_finish();
+  }
+};
 
 /**
  * parallel_fetch -- make a pass at fetching a bunch of paths in parallel
@@ -3607,7 +3615,7 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
-  C_GatherBuilder gather_bld(g_ceph_context);
+  C_GatherBuilder gather_bld(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
 
   // scan list
   set<CDir*> fetch_queue;
@@ -4278,17 +4286,6 @@ void MDCache::rejoin_trim_undef_inodes()
   assert(rejoin_undef_inodes.empty());
 }
 
-class C_MDC_RejoinGatherFinish : public Context {
-  MDCache *cache;
-public:
-  C_MDC_RejoinGatherFinish(MDCache *c) : cache(c) {}
-  void finish(int r) {
-    cache->rejoin_gather_finish();
-  }
-};
-
-
-
 void MDCache::rejoin_gather_finish() 
 {
   dout(10) << "rejoin_gather_finish" << dendl;
@@ -4302,7 +4299,6 @@ void MDCache::rejoin_gather_finish()
   if (!cap_import_paths.empty()) {
     C_Gather *gather = parallel_fetch(cap_import_paths, cap_imports_missing);
     if (gather) {
-      gather->set_finisher(new C_MDC_RejoinGatherFinish(this));
       return;
     }
   }

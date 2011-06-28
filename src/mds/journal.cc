@@ -64,10 +64,8 @@
 // -----------------------
 // LogSegment
 
-C_Gather *LogSegment::try_to_expire(MDS *mds)
+void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
 {
-  C_GatherBuilder gather_bld(g_ceph_context);
-
   set<CDir*> commit;
 
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
@@ -260,10 +258,8 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
-    return gather_bld.get();
   } else {
     dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
-    return NULL;
   }
 }
 

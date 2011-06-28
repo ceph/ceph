@@ -66,7 +66,7 @@ class LogSegment {
   map<int,version_t> tablev;
 
   // try to expire
-  C_Gather *try_to_expire(MDS *mds);
+  void try_to_expire(MDS *mds, C_GatherBuilder &gather_bld);
 
   // cons
   LogSegment(loff_t off) :

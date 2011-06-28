@@ -196,19 +196,16 @@ class Filer {
       ops[0].op.extent.truncate_size = extents[0].offset;
       objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc, flags, onack, oncommit);
     } else {
-      C_Gather *gack = 0, *gcom = 0;
-      if (onack)
-	gack = new C_Gather(cct, onack);
-      if (oncommit)
-	gcom = new C_Gather(cct, oncommit);
+      C_GatherBuilder gack(cct, onack);
+      C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	vector<OSDOp> ops(1);
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
 	ops[0].op.extent.truncate_size = p->offset;
 	ops[0].op.extent.truncate_seq = truncate_seq;
 	objecter->_modify(p->oid, p->oloc, ops, mtime, snapc, flags,
-			  gack ? gack->new_sub():0,
-			  gcom ? gcom->new_sub():0);
+			  onack ? gack.new_sub():0,
+			  oncommit ? gcom.new_sub():0);
       }
     }
     return 0;
@@ -233,22 +230,19 @@ class Filer {
 	objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length, 
 		       snapc, mtime, flags, onack, oncommit);
     } else {
-      C_Gather *gack = 0, *gcom = 0;
-      if (onack)
-	gack = new C_Gather(cct, onack);
-      if (oncommit)
-	gcom = new C_Gather(cct, oncommit);
+      C_GatherBuilder gack(cct, onack);
+      C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	if (p->offset == 0 && p->length == layout->fl_object_size)
 	  objecter->remove(p->oid, p->oloc,
 			   snapc, mtime, flags,
-			   gack ? gack->new_sub():0,
-			   gcom ? gcom->new_sub():0);
+			   onack ? gack.new_sub():0,
+			   oncommit ? gcom.new_sub():0);
 	else
 	  objecter->zero(p->oid, p->oloc, p->offset, p->length, 
 			 snapc, mtime, flags,
-			 gack ? gack->new_sub():0,
-			 gcom ? gcom->new_sub():0);
+			 onack ? gack.new_sub():0,
+			 oncommit ? gcom.new_sub():0);
       }
     }
     return 0;

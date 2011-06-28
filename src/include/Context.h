@@ -259,15 +259,17 @@ public:
 class C_GatherBuilder
 {
 public:
-  C_GatherBuilder(CephContext *cct_)
-    : cct(cct_), c_gather(NULL)
+  C_GatherBuilder(CephContext *cct_, Context *ctx_)
+    : cct(cct_), c_gather(NULL), ctx(ctx_)
   {
   }
   ~C_GatherBuilder() {
+    if (!c_gather)
+      delete ctx;
   }
   Context *new_sub() {
     if (!c_gather) {
-      c_gather = new C_Gather(cct);
+      c_gather = new C_Gather(cct, ctx);
     }
     return c_gather->new_sub();
   }
@@ -280,6 +282,7 @@ public:
 private:
   CephContext *cct;
   C_Gather *c_gather;
+  Context *ctx;
 };
 
 #undef DOUT_SUBSYS
