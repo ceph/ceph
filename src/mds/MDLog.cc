@@ -340,13 +340,15 @@ void MDLog::trim(int m)
 
 void MDLog::try_expire(LogSegment *ls)
 {
-  C_GatherBuilder gather_bld(g_ceph_context, new C_MaybeExpiredSegment(this, ls));
+  C_GatherBuilder gather_bld(g_ceph_context);
   ls->try_to_expire(mds, gather_bld);
   if (gather_bld.has_subs()) {
     assert(expiring_segments.count(ls) == 0);
     expiring_segments.insert(ls);
     expiring_events += ls->num_events;
     dout(5) << "try_expire expiring segment " << ls->offset << dendl;
+    gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls));
+    gather_bld.activate();
   } else {
     dout(10) << "try_expire expired segment " << ls->offset << dendl;
     _expired(ls);

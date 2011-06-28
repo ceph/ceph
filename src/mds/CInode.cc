@@ -1009,6 +1009,8 @@ void CInode::fetch(Context *fin)
   // read from separate object too
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
   mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
+
+  gather.activate();
 }
 
 void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)

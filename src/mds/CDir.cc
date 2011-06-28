@@ -1982,6 +1982,7 @@ void CDir::_commit(version_t want)
      */
     cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                 gather.new_sub());
+    gather.activate();
   }
 }
 

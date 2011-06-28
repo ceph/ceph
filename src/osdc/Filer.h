@@ -207,6 +207,8 @@ class Filer {
 			  onack ? gack.new_sub():0,
 			  oncommit ? gcom.new_sub():0);
       }
+      gack.activate();
+      gcom.activate();
     }
     return 0;
   }
@@ -244,6 +246,8 @@ class Filer {
 			 onack ? gack.new_sub():0,
 			 oncommit ? gcom.new_sub():0);
       }
+      gack.activate();
+      gcom.activate();
     }
     return 0;
   }

@@ -1433,6 +1433,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->objecter->write(oid, oloc, off, len, snapc, bl, ceph_clock_now(g_ceph_context), 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg.new_sub());
+      safeg.activate();
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1448,6 +1449,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->objecter->zero(oid, oloc, off, len, snapc, ceph_clock_now(g_ceph_context), 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg.new_sub());
+      safeg.activate();
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }

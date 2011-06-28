@@ -134,38 +134,35 @@ private:
   Mutex lock;
   bool activated;
 
-  bool sub_finish(Context* sub, int r) {
-    Mutex::Locker l(lock);
+  void sub_finish(Context* sub, int r) {
+    lock.Lock();
 #ifdef DEBUG_GATHER
     assert(waitfor.count(sub));
     waitfor.erase(sub);
 #endif
     --sub_existing_count;
-
     ldout(cct,10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
 #ifdef DEBUG_GATHER
 		    << " (remaining " << waitfor << ")"
 #endif
 		    << dendl;
-
     if (r < 0 && result == 0)
       result = r;
-
-    if (!activated)
-      return false;  // no finisher set yet, ignore.
-
-    if (sub_existing_count)
-      return false;  // more subs left
-
-    // last one
-    if (onfinish) {
+    if ((activated == false) || (sub_existing_count != 0)) {
       lock.Unlock();
+      return;
+    }
+    lock.Unlock();
+    delete_me();
+  }
+
+  void delete_me() {
+    if (onfinish) {
       onfinish->finish(result);
-      lock.Lock();
       delete onfinish;
       onfinish = 0;
     }
-    return true;
+    delete this;
   }
 
   class C_GatherSub : public Context {
@@ -173,13 +170,12 @@ private:
   public:
     C_GatherSub(C_Gather *g) : gather(g) {}
     void finish(int r) {
-      if (gather->sub_finish(this, r))
-	delete gather;   // last one!
+      gather->sub_finish(this, r);
       gather = 0;
     }
     ~C_GatherSub() {
       if (gather)
-	gather->rm_sub(this);
+	gather->sub_finish(this, 0);
     }
   };
 
@@ -187,28 +183,33 @@ private:
     : cct(cct_), result(0), onfinish(onfinish_),
       sub_created_count(0), sub_existing_count(0),
       lock("C_Gather::lock", true, false), //disable lockdep
-      activated(onfinish ? true : false)
+      activated(false)
   {
     ldout(cct,10) << "C_Gather " << this << ".new" << dendl;
   }
 public:
   ~C_Gather() {
     ldout(cct,10) << "C_Gather " << this << ".delete" << dendl;
-    assert(sub_existing_count == 0);
-#ifdef DEBUG_GATHER
-    assert(waitfor.empty());
-#endif
-    assert(!onfinish);
   }
-
-  void set_finisher(Context *c) {
+  void set_finisher(Context *onfinish_) {
     Mutex::Locker l(lock);
     assert(!onfinish);
-    onfinish = c;
+    onfinish = onfinish_;
+  }
+  void activate() {
+    lock.Lock();
+    assert(activated == false);
     activated = true;
+    if (sub_existing_count != 0) {
+      lock.Unlock();
+      return;
+    }
+    lock.Unlock();
+    delete_me();
   }
   Context *new_sub() {
     Mutex::Locker l(lock);
+    assert(activated == false);
     sub_created_count++;
     sub_existing_count++;
     Context *s = new C_GatherSub(this);
@@ -218,23 +219,9 @@ public:
     ldout(cct,10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
-  void rm_sub(Context *s) {
-    Mutex::Locker l(lock);
-#ifdef DEBUG_GATHER
-    assert(waitfor.count(s));
-    waitfor.erase(s);
-#endif
-    sub_existing_count--;
-  }
-
-  bool empty() { Mutex::Locker l(lock); return sub_existing_count == 0; }
-  int get_num() { Mutex::Locker l(lock); return sub_created_count; }
-  int get_num_remaining() { Mutex::Locker l(lock); return sub_existing_count;}
-
   void finish(int r) {
     assert(0);    // nobody should ever call me.
   }
-
   friend class C_GatherBuilder;
 };
 
@@ -256,17 +243,16 @@ class C_GatherBuilder
 {
 public:
   C_GatherBuilder(CephContext *cct_)
-    : cct(cct_), c_gather(NULL), finisher(NULL)
+    : cct(cct_), c_gather(NULL), finisher(NULL), activated(false)
   {
   }
   C_GatherBuilder(CephContext *cct_, Context *finisher_)
-    : cct(cct_), c_gather(NULL), finisher(finisher_)
+    : cct(cct_), c_gather(NULL), finisher(finisher_), activated(false)
   {
   }
   ~C_GatherBuilder() {
     if (c_gather) {
-      // If we created a C_Gather, we must also have supplied a finisher.
-      assert(finisher != NULL);
+      assert(activated); // Don't forget to activate your C_Gather!
     }
     else {
       delete finisher;
@@ -277,6 +263,13 @@ public:
       c_gather = new C_Gather(cct, finisher);
     }
     return c_gather->new_sub();
+  }
+  void activate() {
+    if (!c_gather)
+      return;
+    assert(finisher != NULL);
+    activated = true;
+    c_gather->activate();
   }
   void set_finisher(Context *finisher_) {
     finisher = finisher_;
@@ -289,10 +282,26 @@ public:
   bool has_subs() const {
     return (c_gather != NULL);
   }
+  int num_subs_created() {
+    assert(!activated);
+    if (c_gather == NULL)
+      return 0;
+    Mutex::Locker l(c_gather->lock); 
+    return c_gather->sub_created_count;
+  }
+  int num_subs_remaining() {
+    assert(!activated);
+    if (c_gather == NULL)
+      return 0;
+    Mutex::Locker l(c_gather->lock);
+    return c_gather->sub_existing_count;
+  }
+
 private:
   CephContext *cct;
   C_Gather *c_gather;
   Context *finisher;
+  bool activated;
 };
 
 #undef DOUT_SUBSYS

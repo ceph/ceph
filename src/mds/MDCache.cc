@@ -3607,11 +3607,10 @@ public:
  * @pathmap - map of inodeno to full pathnames.  we remove items from this map 
  *            as we discover we have them.
  *
- * returns a C_Gather* if there is work to do.  caller is responsible for setting
- * the C_Gather completer.
+ *	      returns true if there is work to do, false otherwise.
  */
 
-C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
+bool MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
@@ -3652,7 +3651,11 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
     (*p)->fetch(gather_bld.new_sub());
   }
   
-  return gather_bld.get();
+  if (gather_bld.get()) {
+    gather_bld.activate();
+    return true;
+  }
+  return false;
 }
 
 // true if we're done with this path
@@ -4297,8 +4300,7 @@ void MDCache::rejoin_gather_finish()
   //  do this before ack, since some inodes we may have already gotten
   //  from surviving MDSs.
   if (!cap_import_paths.empty()) {
-    C_Gather *gather = parallel_fetch(cap_import_paths, cap_imports_missing);
-    if (gather) {
+    if (parallel_fetch(cap_import_paths, cap_imports_missing)) {
       return;
     }
   }
@@ -4641,8 +4643,9 @@ void MDCache::open_snap_parents()
 
   if (gather.has_subs()) {
     dout(10) << "open_snap_parents - waiting for "
-	     << gather.get()->get_num_remaining() << dendl;
+	     << gather.num_subs_remaining() << dendl;
     gather.set_finisher(new C_MDC_OpenSnapParents(this));
+    gather.activate();
   } else {
     assert(missing_snap_parents.empty());
     assert(reconnected_snaprealms.empty());
@@ -4675,12 +4678,11 @@ void MDCache::open_undef_dirfrags()
 
   if (gather.has_subs()) {
     gather.set_finisher(new C_MDC_OpenUndefDirfragsFinish(this));
+    gather.activate();
   }
   else {
     start_files_to_recover(rejoin_recover_q, rejoin_check_q);
-   
     mds->queue_waiters(rejoin_waiters);
-
     mds->rejoin_done();
   }
 }
@@ -9436,6 +9438,7 @@ void MDCache::split_dir(CDir *dir, int bits)
   C_GatherBuilder gather(g_ceph_context, 
 	  new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
   fragment_freeze_dirs(dirs, gather);
+  gather.activate();
 
   // initial mark+complete pass
   fragment_mark_and_complete(dirs);
@@ -9471,6 +9474,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   C_GatherBuilder gather(g_ceph_context,
 	  new C_MDC_FragmentFrozen(this, dirs, frag, bits));
   fragment_freeze_dirs(dirs, gather);
+  gather.activate();
 
   // initial mark+complete pass
   fragment_mark_and_complete(dirs);
@@ -9534,6 +9538,7 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
   }
   if (gather.has_subs()) {
     gather.set_finisher(new C_MDC_FragmentMarking(this, dirs));
+    gather.activate();
   }
 
   // flush log so that request auth_pins are retired
@@ -9658,6 +9663,7 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
 
   mds->mdlog->submit_entry(le, gather.new_sub());
   mds->mdlog->flush();
+  gather.activate();
 }
 
 void MDCache::fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits)

@@ -1151,6 +1151,7 @@ void MDS::boot_create()
     snapserver->reset();
     snapserver->save(fin.new_sub());
   }
+  fin.activate();
 }
 
 void MDS::creating_done()
@@ -1209,6 +1210,7 @@ void MDS::boot_start(int step, int r)
       
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
       mdlog->open(gather.new_sub());
+      gather.activate();
     }
     break;
 
@@ -1228,6 +1230,7 @@ void MDS::boot_start(int step, int r)
 	// replay.  make up fake root inode to start with
 	mdcache->create_root_inode();
       }
+      gather.activate();
     }
     break;
 

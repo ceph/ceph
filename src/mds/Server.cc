@@ -4954,6 +4954,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
     if (anchorgather.has_subs())  {
       anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
+      anchorgather.activate();
       return;  // waiting for anchor prepares
     }
 

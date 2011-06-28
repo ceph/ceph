@@ -1071,6 +1071,7 @@ public:
 	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, gather.new_sub());
       }
       gather.set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
+      gather.activate();
     }
   }
 
@@ -1099,6 +1100,8 @@ public:
 	      onack ? gack.new_sub():0,
 	      oncommit ? gcom.new_sub():0);
       }
+      gack.activate();
+      gcom.activate();
     }
   }
 

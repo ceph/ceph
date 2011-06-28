@@ -1508,6 +1508,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
         ob->waitfor_ack[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
+  if (onfinish != NULL)
+    gather.activate();
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
@@ -1550,6 +1552,7 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
         ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
+  gather.activate();
 
   if (safe) {
     ldout(cct, 10) << "commit_set " << oset << " all committed" << dendl;
