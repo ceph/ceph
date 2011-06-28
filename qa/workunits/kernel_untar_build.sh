@@ -10,6 +10,10 @@ cd linux*
 make defconfig
 make -j`grep -c processor /proc/cpuinfo`
 cd ..
-rm -r linux*
+if ! rm -rv linux* ; then
+    echo "uh oh rm -r failed, it left behind:"
+    find .
+    exit 1
+fi
 cd ..
-rm -r t linux*
+rm -rv t linux*

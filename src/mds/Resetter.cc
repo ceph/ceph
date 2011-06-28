@@ -69,6 +69,8 @@ void Resetter::init(int rank)
 
 void Resetter::shutdown()
 {
+  messenger->shutdown();
+  messenger->wait();
   lock.Lock();
   timer.shutdown();
   lock.Unlock();
@@ -86,7 +88,18 @@ void Resetter::reset()
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
-  assert(r == 0);
+  if (r != 0) {
+    if (r == -ENOENT) {
+      cerr << "journal does not exist on-disk. Did you set a bad rank?"
+          << std::endl;
+      shutdown();
+      return;
+    } else {
+      cerr << "got error " << r << "from Journaler, failling" << std::endl;
+      shutdown();
+      return;
+    }
+  }
 
   uint64_t old_start = journaler->get_read_pos();
   uint64_t old_end = journaler->get_write_pos();
@@ -129,7 +142,5 @@ void Resetter::reset()
 
   cout << "done" << std::endl;
 
-  messenger->shutdown();
-  messenger->wait();
   shutdown();
 }

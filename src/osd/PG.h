@@ -661,8 +661,7 @@ public:
     bool is_missing(const sobject_t& oid) const;
     bool is_missing(const sobject_t& oid, eversion_t v) const;
     eversion_t have_old(const sobject_t& oid) const;
-    void add_next_event(Log::Entry& e);
-    void add_event(Log::Entry& e);
+    void add_next_event(Log::Entry& e, const Info &info);
     void revise_need(sobject_t oid, eversion_t need);
     void add(const sobject_t& oid, eversion_t need, eversion_t have);
     void rm(const sobject_t& oid, eversion_t v);

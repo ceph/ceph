@@ -3220,7 +3220,7 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_preferred != -1)
+  if (req->head.args.setlayout.layout.fl_pg_preferred != (__le32)-1)
     layout->layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
   if (req->head.args.setlayout.layout.fl_pg_pool > 0)
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;

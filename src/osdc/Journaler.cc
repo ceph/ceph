@@ -188,6 +188,15 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 {
   assert(state == STATE_READHEAD);
 
+  if (r!=0) {
+    ldout(cct, 0) << "error getting journal off disk"
+                  << dendl;
+    list<Context*> ls;
+    ls.swap(waitfor_recover);
+    finish_contexts(cct, ls, r);
+    return;
+  }
+
   if (bl.length() == 0) {
     ldout(cct, 1) << "_finish_read_head r=" << r << " read 0 bytes, assuming empty log" << dendl;    
     state = STATE_ACTIVE;
@@ -449,6 +458,7 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
   // flush previous object?
   uint64_t su = get_layout_period();
+  assert(su > 0);
   uint64_t write_off = write_pos % su;
   uint64_t write_obj = write_pos / su;
   uint64_t flush_obj = flush_pos / su;
