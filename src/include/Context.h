@@ -192,7 +192,6 @@ private:
     }
   };
 
-public:
   C_Gather(CephContext *cct_, Context *f=0, bool an=false) 
     : cct(cct_), result(0), onfinish(f), sub_created_count(0),
       sub_existing_count(0),
@@ -201,6 +200,7 @@ public:
   {
     ldout(cct,10) << "C_Gather " << this << ".new" << dendl;
   }
+public:
   ~C_Gather() {
     ldout(cct,10) << "C_Gather " << this << ".delete" << dendl;
     assert(sub_existing_count == 0);
@@ -244,6 +244,7 @@ public:
     assert(0);    // nobody should ever call me.
   }
 
+  friend class C_GatherBuilder;
 };
 
 /*

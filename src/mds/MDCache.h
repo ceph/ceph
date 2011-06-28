@@ -1173,7 +1173,7 @@ public:
   void merge_dir(CInode *diri, frag_t fg);
 
 private:
-  void fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather);
+  void fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather);
   void fragment_mark_and_complete(list<CDir*>& dirs);
   void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);

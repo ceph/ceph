@@ -996,7 +996,7 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
-  C_Gather *gather = new C_Gather(g_ceph_context, c);
+  C_GatherBuilder gather(g_ceph_context, c);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
@@ -1004,11 +1004,11 @@ void CInode::fetch(Context *fin)
   ObjectOperation rd;
   rd.getxattr("inode");
 
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &c->bl, 0, gather->new_sub());
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &c->bl, 0, gather.new_sub());
 
   // read from separate object too
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather->new_sub());
+  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
 }
 
 void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)

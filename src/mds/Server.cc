@@ -4924,7 +4924,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdnl->is_primary()) {
-    C_Gather *anchorgather = 0;
+    C_GatherBuilder anchorgather(g_ceph_context);
 
     if (srcdnl->is_primary() &&
 	(srcdnl->get_inode()->is_anchored() || 
@@ -4935,10 +4935,9 @@ void Server::handle_client_rename(MDRequest *mdr)
       dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
       vector<Anchor> trace;
       destdn->make_anchor_trace(trace, srcdnl->get_inode());
-      
-      anchorgather = new C_Gather(g_ceph_context, new C_MDS_RetryRequest(mdcache, mdr));
-      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(), trace, &mdr->more()->src_reanchor_atid, 
-					anchorgather->new_sub());
+      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
+					trace, &mdr->more()->src_reanchor_atid,
+					anchorgather.new_sub());
     }
     if (destdnl->is_primary() &&
 	destdnl->get_inode()->is_anchored() &&
@@ -4949,14 +4948,14 @@ void Server::handle_client_rename(MDRequest *mdr)
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, destdnl->get_inode());
       
-      if (!anchorgather)
-	anchorgather = new C_Gather(g_ceph_context, new C_MDS_RetryRequest(mdcache, mdr));
-      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace, &mdr->more()->dst_reanchor_atid, 
-					anchorgather->new_sub());
+      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
+		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
     }
 
-    if (anchorgather) 
+    if (anchorgather.has_subs())  {
+      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
       return;  // waiting for anchor prepares
+    }
 
     assert(g_conf->mds_kill_rename_at != 4);
   }

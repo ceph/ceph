@@ -1488,7 +1488,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
   ldout(cct, 10) << "flush_set " << oset << dendl;
 
-  C_Gather *gather = 0; // we'll need to wait for all objects to flush!
+  // we'll need to wait for all objects to flush!
+  C_GatherBuilder gather(cct, onfinish);
 
   bool safe = true;
   for (xlist<Object*>::iterator i = oset->objects.begin();
@@ -1497,16 +1498,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
     if (!flush(ob)) {
       // we'll need to gather...
-      if (!gather && onfinish) 
-        gather = new C_Gather(cct, onfinish);
       safe = false;
 
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
                << ob->last_write_tid 
                << " on " << *ob
                << dendl;
-      if (gather)
-        ob->waitfor_ack[ob->last_write_tid].push_back(gather->new_sub());
+      if (onfinish != NULL)
+        ob->waitfor_ack[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   
@@ -1534,7 +1533,8 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
   // make sure it's flushing.
   flush_set(oset);
 
-  C_Gather *gather = 0; // we'll need to wait for all objects to commit
+  // we'll need to wait for all objects to commit
+  C_GatherBuilder gather(cct, onfinish);
 
   bool safe = true;
   for (xlist<Object*>::iterator i = oset->objects.begin();
@@ -1545,10 +1545,9 @@ bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
       ldout(cct, 10) << "commit_set " << oset << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
                << dendl;
-      if (!gather && onfinish) gather = new C_Gather(cct, onfinish);
       safe = false;
-      if (gather)
-        ob->waitfor_commit[ob->last_write_tid].push_back( gather->new_sub() );
+      if (onfinish != NULL)
+        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
 

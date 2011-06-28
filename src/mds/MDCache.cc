@@ -4600,13 +4600,13 @@ void MDCache::open_snap_parents()
   dout(10) << "open_snap_parents" << dendl;
   
   map<client_t,MClientSnap*> splits;
-  C_Gather *gather = new C_Gather(g_ceph_context);
+  C_GatherBuilder gather(g_ceph_context);
 
   map<CInode*,map<client_t,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
   while (p != missing_snap_parents.end()) {
     CInode *in = p->first;
     assert(in->snaprealm);
-    if (in->snaprealm->open_parents(gather->new_sub())) {
+    if (in->snaprealm->open_parents(gather.new_sub())) {
       dout(10) << " past parents now open on " << *in << dendl;
       
       // include in a (now safe) snap split?
@@ -4639,9 +4639,10 @@ void MDCache::open_snap_parents()
 
   send_snaps(splits);
 
-  if (gather->get_num_remaining()) {
-    dout(10) << "open_snap_parents - waiting for " << gather->get_num_remaining() << dendl;
-    gather->set_finisher(new C_MDC_OpenSnapParents(this));
+  if (gather.has_subs()) {
+    dout(10) << "open_snap_parents - waiting for "
+	     << gather.get()->get_num_remaining() << dendl;
+    gather.set_finisher(new C_MDC_OpenSnapParents(this));
   } else {
     assert(missing_snap_parents.empty());
     assert(reconnected_snaprealms.empty());
@@ -4664,19 +4665,18 @@ void MDCache::open_undef_dirfrags()
 {
   dout(10) << "open_undef_dirfrags " << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
   
-  C_Gather *gather = 0;
+  C_GatherBuilder gather(g_ceph_context);
   for (set<CDir*>::iterator p = rejoin_undef_dirfrags.begin();
        p != rejoin_undef_dirfrags.end();
        p++) {
     CDir *dir = *p;
-    if (!gather)
-      gather = new C_Gather(g_ceph_context, new C_MDC_OpenUndefDirfragsFinish(this));
-    dir->fetch(gather->new_sub());
+    dir->fetch(gather.new_sub());
   }
 
-  if (rejoin_undef_dirfrags.empty()) {
-    assert(!gather);
-
+  if (gather.has_subs()) {
+    gather.set_finisher(new C_MDC_OpenUndefDirfragsFinish(this));
+  }
+  else {
     start_files_to_recover(rejoin_recover_q, rejoin_check_q);
    
     mds->queue_waiters(rejoin_waiters);
@@ -9433,7 +9433,8 @@ void MDCache::split_dir(CDir *dir, int bits)
     return;
   }
 
-  C_Gather *gather = new C_Gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
+  C_GatherBuilder gather(g_ceph_context, 
+	  new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
   fragment_freeze_dirs(dirs, gather);
 
   // initial mark+complete pass
@@ -9467,14 +9468,15 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   int bits = first->get_frag().bits() - frag.bits();
   dout(10) << " we are merginb by " << bits << " bits" << dendl;
 
-  C_Gather *gather = new C_Gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dirs, frag, bits));
+  C_GatherBuilder gather(g_ceph_context,
+	  new C_MDC_FragmentFrozen(this, dirs, frag, bits));
   fragment_freeze_dirs(dirs, gather);
 
   // initial mark+complete pass
   fragment_mark_and_complete(dirs);
 }
 
-void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather)
+void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather)
 {
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
     CDir *dir = *p;
@@ -9482,7 +9484,7 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather)
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
     assert(dir->is_freezing_dir());
-    dir->add_waiter(CDir::WAIT_FROZEN, gather->new_sub());
+    dir->add_waiter(CDir::WAIT_FROZEN, gather.new_sub());
   }
 }
 
@@ -9501,19 +9503,16 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
   CInode *diri = dirs.front()->get_inode();
   dout(10) << "fragment_mark_and_complete " << dirs << " on " << *diri << dendl;
 
-  C_Gather *gather = 0;
+  C_GatherBuilder gather(g_ceph_context);
   
   for (list<CDir*>::iterator p = dirs.begin();
        p != dirs.end();
        ++p) {
     CDir *dir = *p;
-    
+
     if (!dir->is_complete()) {
       dout(15) << " fetching incomplete " << *dir << dendl;
-      if (!gather)
-	gather = new C_Gather(g_ceph_context,
-		    new C_MDC_FragmentMarking(this, dirs));
-      dir->fetch(gather->new_sub(), 
+      dir->fetch(gather.new_sub(),
 		 true);  // ignore authpinnability
     } 
     else if (!dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
@@ -9532,6 +9531,9 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
     else {
       dout(15) << " already marked " << *dir << dendl;
     }
+  }
+  if (gather.has_subs()) {
+    gather.set_finisher(new C_MDC_FragmentMarking(this, dirs));
   }
 
   // flush log so that request auth_pins are retired
@@ -9638,8 +9640,8 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   */
 
   // freeze, journal, and store resulting frags
-  C_Gather *gather = new C_Gather(g_ceph_context, 
-		      new C_MDC_FragmentLoggedAndStored(this, mut, 
+  C_GatherBuilder gather(g_ceph_context,
+		      new C_MDC_FragmentLoggedAndStored(this, mut,
 				  resultfrags, basefrag, bits));
 
   for (list<CDir*>::iterator p = resultfrags.begin();
@@ -9651,10 +9653,10 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
 
     // freeze and store them too
     dir->state_set(CDir::STATE_FRAGMENTING);
-    dir->commit(0, gather->new_sub(), true);  // ignore authpinnability
+    dir->commit(0, gather.new_sub(), true);  // ignore authpinnability
   }
 
-  mds->mdlog->submit_entry(le, gather->new_sub());
+  mds->mdlog->submit_entry(le, gather.new_sub());
   mds->mdlog->flush();
 }
 

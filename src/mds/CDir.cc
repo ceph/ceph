@@ -1961,13 +1961,14 @@ void CDir::_commit(version_t want)
                                  new C_Dir_Committed(this, get_version(),
                                        inode->inode.last_renamed_version));
   else { // send in a different Context
-    C_Gather *gather = new C_Gather(g_ceph_context, new C_Dir_Committed(this, get_version(),
-                                         inode->inode.last_renamed_version));
+    C_GatherBuilder gather(g_ceph_context, 
+	    new C_Dir_Committed(this, get_version(),
+		      inode->inode.last_renamed_version));
     while (committed_dn != items.end()) {
       ObjectOperation n = ObjectOperation();
       committed_dn = _commit_partial(n, snaps, max_write_size, committed_dn);
       cache->mds->objecter->mutate(oid, oloc, n, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
-                                  gather->new_sub());
+                                  gather.new_sub());
     }
     /*
      * save the original object for last -- it contains the new header,
@@ -1980,7 +1981,7 @@ void CDir::_commit(version_t want)
      * get our header into an incorrect state.
      */
     cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
-                                gather->new_sub());
+                                gather.new_sub());
   }
 }
 
