@@ -467,6 +467,7 @@ public:
   bool filestore_btrfs_snap;
   bool filestore_btrfs_clone_range;
   bool filestore_fsync_flushes_journal_data;
+  bool filestore_fiemap;
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;
