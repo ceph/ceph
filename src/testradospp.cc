@@ -33,7 +33,7 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
 class C_Watch : public WatchCtx {
 public:
   C_Watch() {}
-  void notify(uint8_t opcode, uint64_t ver) {
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
     cout << "C_Watch::notify() opcode=" << (int)opcode << " ver=" << ver << std::endl;
   }
 };
@@ -118,11 +118,12 @@ int main(int argc, const char **argv)
 
   testradospp_milestone();
   io_ctx.set_notify_timeout(7);
-  r = io_ctx.notify(oid, objver);
+  bufferlist notify_bl;
+  r = io_ctx.notify(oid, objver, notify_bl);
   cout << "io_ctx.notify returned " << r << std::endl;
   testradospp_milestone();
 
-  r = io_ctx.notify(oid, objver);
+  r = io_ctx.notify(oid, objver, notify_bl);
   cout << "io_ctx.notify returned " << r << std::endl;
   testradospp_milestone();
 
@@ -131,7 +132,7 @@ int main(int argc, const char **argv)
   cout << "*** press enter to continue ***" << std::endl;
   testradospp_milestone();
 
-  r = io_ctx.notify(oid, objver);
+  r = io_ctx.notify(oid, objver, notify_bl);
   cout << "io_ctx.notify returned " << r << std::endl;
   cout << "*** press enter to continue ***" << std::endl;
   testradospp_milestone();
