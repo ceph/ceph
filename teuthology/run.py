@@ -1,6 +1,7 @@
 import argparse
 import os
 import yaml
+import getpass
 
 def config_file(string):
     config = {}
@@ -39,6 +40,14 @@ def parse_args():
         '--archive',
         metavar='DIR',
         help='path to archive results in',
+        )
+    parser.add_argument(
+        '--description',
+        help='job description'
+        )
+    parser.add_argument(
+        '--owner',
+        help='job owner'
         )
 
     args = parser.parse_args()
@@ -91,6 +100,14 @@ def main():
         ctx.cluster.add(rem, roles)
 
     ctx.summary = {}
+
+    if ctx.owner is not None:
+        ctx.summary['owner'] = ctx.owner
+    else:
+        ctx.summary['owner'] = getpass.getuser();
+
+    if ctx.description is not None:
+        ctx.summary['description'] = ctx.description
 
     ctx.config['tasks'][:0] = [
         {'internal.check_conflict': None},
