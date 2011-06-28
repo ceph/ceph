@@ -1,0 +1,60 @@
+#
+# Ceph - scalable distributed file system
+#
+# Copyright (C) 2011 Wido den Hollander <wido@widodh.nl>
+#
+# This is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License version 2.1, as published by the Free Software
+# Foundation.  See file COPYING.
+#
+
+_ceph()
+{
+        local cur prev
+
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+        if [[ ${cur} == -* ]] ; then
+            COMPREPLY=( $(compgen -W "--conf -c --name --id -m --version -s --status -w --watch -o --out-file -i --in-file" -- ${cur}) )
+            return 0
+        fi
+
+        case "${prev}" in
+            -o | --out-file | -i | --in-file | --conf | -c)
+                COMPREPLY=( $(compgen -f ${cur}) )
+                return 0
+                ;;
+            -m)
+                COMPREPLY=( $(compgen -A hostname ${cur}) )
+                return 0
+                ;;
+            auth)
+                COMPREPLY=( $(compgen -W "list add del" -- ${cur}) )
+                return 0
+                ;;
+            pg)
+                COMPREPLY=( $(compgen -W "stat dump getmap map send_pg_creates scrub repair" -- ${cur}) )
+                return 0
+                ;;
+            osd)
+                COMPREPLY=( $(compgen -W "tell stat injectargs pool dump getmaxosd tree getmap getcrushmap lspools" -- ${cur}) )
+                return 0
+                ;;
+            mon)
+                COMPREPLY=( $(compgen -W "tell stat injectargs getmap" -- ${cur}) )
+                return 0
+                ;;
+            mds)
+                COMPREPLY=( $(compgen -W "tell stat injectargs stat getmap dump compat" -- ${cur}) )
+                return 0
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "osd mon mds pg auth" -- ${cur}) )
+                return 0
+            ;;
+        esac
+}
+complete -F _ceph ceph

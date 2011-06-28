@@ -1,0 +1,44 @@
+#
+# Ceph - scalable distributed file system
+#
+# Copyright (C) 2011 Wido den Hollander <wido@widodh.nl>
+#
+# This is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License version 2.1, as published by the Free Software
+# Foundation.  See file COPYING.
+#
+
+_rbd()
+{
+        local cur prev
+
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+        if [[ ${cur} == -* ]] ; then
+            COMPREPLY=( $(compgen -W "-c --conf -m -d -f -p --pool --snap -i -o --image --dest --dest-pool --path --size --user --secret" -- ${cur}) )
+            return 0
+        fi
+
+        case "${prev}" in
+            --conf | -c | --path | --secret)
+                COMPREPLY=( $(compgen -f ${cur}) )
+                return 0
+                ;;
+            -m)
+                COMPREPLY=( $(compgen -A hostname ${cur}) )
+                return 0
+                ;;
+            snap)
+                COMPREPLY=( $(compgen -W "ls create rollback rm" -- ${cur}) )
+                return 0
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "ls list info create resize rm export import cp copy mv rename snap watch map unmap" -- ${cur}) )
+                return 0
+            ;;
+        esac
+}
+complete -F _rbd rbd
