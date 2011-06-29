@@ -3050,6 +3050,7 @@ void PG::scrub()
     if (scrub_epoch_start != info.history.same_acting_since) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       scrub_clear_state();
+      scrub_unreserve_replicas();
       unlock();
       return;
     }
@@ -3071,6 +3072,7 @@ void PG::scrub()
   if (scrub_epoch_start != info.history.same_acting_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     scrub_clear_state();
+    scrub_unreserve_replicas();
     unlock();
     return;
   }
@@ -3100,8 +3102,6 @@ void PG::scrub_clear_state()
   // active -> nothing.
   osd->dec_scrubs_active();
 
-  scrub_unreserve_replicas();
-  
   osd->take_waiters(waiting_for_active);
 
   finalizing_scrub = false;
@@ -3235,6 +3235,7 @@ void PG::scrub_finalize() {
   if (scrub_epoch_start != info.history.same_acting_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     scrub_clear_state();
+    scrub_unreserve_replicas();
     unlock();
     osd->map_lock.put_read();
     return;
@@ -3351,6 +3352,7 @@ void PG::scrub_finalize() {
   }
 
   scrub_clear_state();
+  scrub_unreserve_replicas();
   unlock();
 
   osd->map_lock.get_read();
