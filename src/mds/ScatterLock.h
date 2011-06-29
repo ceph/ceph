@@ -20,7 +20,7 @@
 
 class ScatterLock : public SimpleLock {
   struct more_bits_t {
-    bool dirty, flushing;
+    bool dirty, flushing, flushed;
     bool scatter_wanted;
     utime_t last_scatter;
     xlist<ScatterLock*>::item item_updated;
@@ -28,13 +28,15 @@ class ScatterLock : public SimpleLock {
     bool stale;
 
     more_bits_t(ScatterLock *lock) :
-      dirty(false), flushing(false), scatter_wanted(false),
+      dirty(false), flushing(false), flushed(false), scatter_wanted(false),
       item_updated(lock), stale(false)
     {}
 
     bool empty() const {
-      return dirty == false &&
+      return
+	dirty == false &&
 	flushing == false &&
+	flushed == false &&
 	scatter_wanted == false &&
 	!item_updated.is_on_list() &&
 	!stale;
@@ -116,6 +118,9 @@ public:
   bool is_flushing() const {
     return have_more() ? _more->flushing : false;
   }
+  bool is_flushed() const {
+    return have_more() ? _more->flushed : false;
+  }
   bool is_dirty_or_flushing() const {
     return have_more() ? (_more->dirty || _more->flushing) : false;
   }
@@ -134,16 +139,22 @@ public:
   void finish_flush() {
     if (more()->flushing) {
       _more->flushing = false;
+      _more->flushed = true;
       if (!_more->dirty) {
 	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
 	parent->clear_dirty_scattered(get_type());
       }
-      try_clear_more();
     }
   }
   void clear_dirty() {
     start_flush();
     finish_flush();
+  }
+  void clear_flushed() {
+    if (_more) {
+      _more->flushed = false;
+      try_clear_more();
+    }
   }
 
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }

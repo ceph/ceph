@@ -615,11 +615,12 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
     } else {
       // auth
 
-      if (lock->is_dirty()) {
+      if (lock->is_dirty() && !lock->is_flushed()) {
 	scatter_writebehind((ScatterLock*)lock);
 	mds->mdlog->flush();
 	return;
       }
+      lock->clear_flushed();
       
       switch (lock->get_state()) {
 	// to mixed
