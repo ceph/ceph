@@ -479,10 +479,27 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 
 entity_addr_t SimpleMessenger::get_myaddr()
 {
-  entity_addr_t a = msgr->ms_addr;
+  entity_addr_t a = ms_addr;
   return a;  
 }
 
+/**
+ * If ms_addr doesn't have an IP set, this function
+ * will fill it in from the passed addr. Otherwise it does nothing and returns.
+ */
+void SimpleMessenger::set_ip(entity_addr_t &addr)
+{
+  entity_addr_t blank_ip;
+  blank_ip.set_family(ms_addr.get_family());
+  blank_ip.set_port(ms_addr.get_port());
+  blank_ip.set_nonce(ms_addr.get_nonce());
+  blank_ip.type = ms_addr.type;
+
+  if (ms_addr.probably_equals(blank_ip)) {
+    ms_addr.addr = addr.addr;
+    ms_addr.set_port(blank_ip.get_port());
+  }
+}
 
 
 

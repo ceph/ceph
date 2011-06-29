@@ -516,6 +516,7 @@ private:
   }
 
   entity_addr_t get_myaddr();
+  void set_ip(entity_addr_t &addr);
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();

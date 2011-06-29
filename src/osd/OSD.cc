@@ -1967,6 +1967,7 @@ void OSD::send_boot()
     int port = cluster_addr.get_port();
     cluster_addr = client_messenger->get_myaddr();
     cluster_addr.set_port(port);
+    cluster_messenger->set_ip(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   }
   entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
@@ -1974,6 +1975,7 @@ void OSD::send_boot()
     int port = hb_addr.get_port();
     hb_addr = cluster_addr;
     hb_addr.set_port(port);
+    heartbeat_messenger->set_ip(hb_addr);
     dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
   MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
