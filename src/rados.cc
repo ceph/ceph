@@ -223,8 +223,8 @@ class LoadGen {
   size_t min_op_len;
   size_t max_op_len;
   size_t target_throughput;
-  size_t total_transfered;
-  size_t pending;
+  size_t total_sent;
+  size_t total_completed;
   int num_objs;
 
   IoCtx io_ctx;
@@ -234,6 +234,7 @@ class LoadGen {
 
   utime_t start_time;
 
+public:
   enum {
     OP_READ,
     OP_WRITE,
@@ -241,10 +242,11 @@ class LoadGen {
 
   struct LoadGenOp {
     int id;
-    int op;
+    int type;
     string oid;
     size_t off;
     size_t len;
+    bufferlist bl;
     LoadGen *lg;
 
     LoadGenOp() {}
@@ -255,28 +257,33 @@ class LoadGen {
 
   map<int, LoadGenOp> pending_ops;
 
-  void gen_op(int& op_type, string& oid, size_t& off, size_t& len);
-  void gen_next_op();
+  void gen_op(LoadGenOp& op);
+  uint64_t gen_next_op();
+  void run_op(LoadGenOp& op);
 
-  uint64_t cur_rate() {
+  uint64_t cur_sent_rate() {
+    return total_sent / time_passed();
+  }
+
+  uint64_t cur_completed_rate() {
+    return total_completed / time_passed();
+  }
+
+  uint64_t total_expected() {
+    return target_throughput * time_passed();
+  }
+
+  float time_passed() {
     utime_t now = ceph_clock_now(g_ceph_context);
     now -= start_time;
     uint64_t ns = now.nsec();
-    float delta = ns / 1000000000;
-    delta += now.sec();
-
-    if (delta == 0)
-      return 0;
-
-    return total_transferred / delta;    
+    float total = ns / 1000000000;
+    total += now.sec();
+    return total;
   }
 
   Mutex lock;
 
-  void operate(LoadGenOp& op);
-
-
-public:
   LoadGen(Rados *_rados) : rados(_rados), lock("LoadGen") {
     read_write_ratio = 4;
     min_obj_len = 1024;
@@ -284,8 +291,8 @@ public:
     min_op_len = 1024;
     max_op_len = 2 * 1024 * 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
-    total_transfered = 0;
-    pending = 0;
+    total_sent = 0;
+    total_completed = 0;
     num_objs = 1000;
     max_op = 0;
   }
@@ -293,16 +300,23 @@ public:
   int run();
   void cleanup();
 
-  void io_cb(completion_t c) {
+  void io_cb(completion_t c, LoadGenOp *op) {
+    total_completed += op->len;
+
     Mutex::Locker l(lock);
-    
+
+    cout << "op " << op->id << " completed, throughput=" << ((uint64_t)(cur_completed_rate()) >> 20) << "MB/sec" << std::endl;
+
+    map<int, LoadGenOp>::iterator iter = pending_ops.find(op->id);
+    if (iter != pending_ops.end())
+      pending_ops.erase(iter);
   }
 };
 
 static void _load_gen_cb(completion_t c, void *param)
 {
-  LoadGen *lg = (LoadGen *)lg;
-  lg->io_cb(c);
+  LoadGen::LoadGenOp *op = (LoadGen::LoadGenOp *)param;
+  op->lg->io_cb(c, op);
 }
 
 int LoadGen::bootstrap(const char *pool)
@@ -360,9 +374,9 @@ int LoadGen::bootstrap(const char *pool)
   return 0;
 }
 
-void operate(LoadGenOp& op)
+void LoadGen::run_op(LoadGenOp& op)
 {
-  librados::AioCompletion *c = rados->aio_create_completion(NULL, NULL, NULL);
+  librados::AioCompletion *c = rados->aio_create_completion(this, _load_gen_cb, NULL);
   int ret;
 
   switch (op.type) {
@@ -377,6 +391,8 @@ void operate(LoadGenOp& op)
     ret = io_ctx.aio_write(op.oid, c, op.bl, op.len, op.off);
     break;
   }
+
+  total_sent += op.len;
 }
 
 void LoadGen::gen_op(LoadGenOp& op)
@@ -401,6 +417,8 @@ void LoadGen::gen_op(LoadGenOp& op)
     op.type = OP_WRITE;
   else
     op.type = OP_READ;
+
+  cout << (op.type == OP_READ ? "READ" : "WRITE") << " : oid=" << op.oid << " off=" << op.off << " len=" << op.len << std::endl;
 }
 
 uint64_t LoadGen::gen_next_op()
@@ -410,9 +428,8 @@ uint64_t LoadGen::gen_next_op()
   LoadGenOp op(this);
   gen_op(op);
   op.id = max_op++;
-  ops[op.id] = op;
-  cout << (op_type == OP_READ ? "READ" : "WRITE") << " : oid=" << oid << " off=" << off << " len=" << len << std::endl;
-  operate(op);
+  pending_ops[op.id] = op;
+  run_op(op);
 
   return op.len;
 }
@@ -421,14 +438,17 @@ int LoadGen::run()
 {
   start_time = ceph_clock_now(g_ceph_context);
 
-  cout << "warmup" << std::endl;
-  // warmup
-  for (int i = 0; i < 100; i++) {
-    gen_next_op();
-  }
-
   while (1) {
     usleep(1000);
+
+    float expected = total_expected();  
+    lock.Lock();
+    uint64_t total = total_sent;
+    lock.Unlock();
+
+    while (total < expected) {
+      total += gen_next_op();
+    }
   }
 
   
