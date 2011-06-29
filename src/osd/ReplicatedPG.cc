@@ -910,6 +910,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
 
     ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
 				  osd_reqid_t(), ctx->mtime));
+    ::encode(coi, ctx->log.back().snaps);
     ctx->at_version.version++;
   }
 
@@ -4482,7 +4483,9 @@ int ReplicatedPG::recover_primary(int max)
 	    object_info_t oi(headobc->obs.oi);
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
-	    ::decode(oi.snaps, latest->snaps);
+	    bufferlist::iterator i = latest->snaps.begin();
+	    ::decode(oi.snaps, i);
+	    assert(oi.snaps.size() > 0);
 	    oi.copy_user_bits(headobc->obs.oi);
 	    _make_clone(*t, head, soid, &oi);
 
