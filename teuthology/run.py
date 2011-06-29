@@ -125,3 +125,52 @@ def main():
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
+
+
+def nuke():
+    from gevent import monkey; monkey.patch_all()
+    from orchestra import monkey; monkey.patch_all()
+
+    import logging
+
+    log = logging.getLogger(__name__)
+    ctx = parse_args()
+
+    loglevel = logging.INFO
+    if ctx.verbose:
+        loglevel = logging.DEBUG
+
+    logging.basicConfig(
+        level=loglevel,
+        )
+
+    log.info('\n  '.join(['targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
+    log.info('Opening connections...')
+
+    from orchestra import connection, remote, run
+    import orchestra.cluster
+
+    remotes = [remote.Remote(name=t, ssh=connection.connect(t))
+               for t in ctx.config['targets']]
+    ctx.cluster = orchestra.cluster.Cluster()
+
+    for rem, name in zip(remotes, ctx.config['targets']):
+        ctx.cluster.add(rem, name)
+
+    log.info('Killing daemons, unmounting, and removing data...')
+
+    ctx.cluster.run(
+        args=[
+            'killall',
+            '--quiet',
+            '/tmp/cephtest/binary/usr/local/bin/cmon',
+            '/tmp/cephtest/binary/usr/local/bin/cosd',
+            '/tmp/cephtest/binary/usr/local/bin/cmds',
+            '/tmp/cephtest/binary/usr/local/bin/cfuse',
+            run.Raw(';'),
+            'fusermount', '-u', '/tmp/cephtest/mnt.*',
+            run.Raw(';'),
+            'rm', '-rf', '/tmp/cephtest'
+            ])
+
+    log.info('Done.')
