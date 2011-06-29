@@ -5936,14 +5936,18 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   int res = get_or_create(dir, name, &req->dentry);
-  if (res<0)
-    return res;
+  if (res < 0)
+    goto fail;
 
   res = make_request(req, uid, gid);
 
   trim_cache();
 
   ldout(cct, 3) << "mknod(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6001,8 +6005,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   int res = get_or_create(dir, name, &req->dentry);
-  if (res<0)
-    return res;
+  if (res < 0)
+    goto fail;
 
   res = make_request(req, uid, gid);
   
@@ -6024,6 +6028,10 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 	  << ' ' << file_replication
 	  << ' ' << preferred_pg
 	  <<") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6052,7 +6060,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
   
   ldout(cct, 10) << "_mkdir: making request" << dendl;
   res = make_request(req, uid, gid);
@@ -6061,6 +6069,10 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   trim_cache();
 
   ldout(cct, 3) << "_mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6113,12 +6125,17 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
 
   res = make_request(req, uid, gid);
 
   trim_cache();
   ldout(cct, 3) << "_symlink(\"" << path << "\", \"" << target << "\") = " << res << dendl;
+  return res;
+
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6162,7 +6179,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -6182,6 +6199,10 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 
   trim_cache();
   ldout(cct, 3) << "unlink(" << path << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6218,7 +6239,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
   res = _lookup(dir, name, &req->inode);
 
   res = make_request(req, uid, gid);
@@ -6234,6 +6255,10 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 
   trim_cache();
   ldout(cct, 3) << "rmdir(" << path << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6272,19 +6297,19 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   int res = get_or_create(fromdir, fromname, &req->old_dentry);
   if (res < 0)
-    return res;
+    goto fail;
   req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
   req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
   res = get_or_create(todir, toname, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   res = _lookup(fromdir, fromname, &req->old_inode);
   if (res < 0)
-    return res;
+    goto fail;
   req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
   res = _lookup(todir, toname, &req->other_inode);
@@ -6300,6 +6325,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   trim_cache();
   ldout(cct, 3) << "rename(" << from << ", " << to << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
@@ -6344,13 +6373,17 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
 
   int res = get_or_create(dir, newname, &req->dentry);
   if (res < 0)
-    return res;
+    goto fail;
   
   res = make_request(req, uid, gid);
   ldout(cct, 10) << "link result is " << res << dendl;
 
   trim_cache();
   ldout(cct, 3) << "link(" << existing << ", " << path << ") = " << res << dendl;
+  return res;
+
+ fail:
+  delete req;
   return res;
 }
 
