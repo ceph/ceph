@@ -176,10 +176,17 @@ struct MetaRequest {
     memset(&head, 0, sizeof(ceph_mds_request_head));
     head.op = op;
   }
+  ~MetaRequest();
 
-  MetaRequest* get() {++ref; return this; }
+  MetaRequest* get() {
+    ++ref;
+    return this;
+  }
 
-  void put() {if(--ref == 0) delete this; }
+  void put() {
+    if (--ref == 0)
+      delete this;
+  }
 
   // normal fields
   void set_tid(tid_t t) { tid = t; }

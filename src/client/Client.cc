@@ -106,6 +106,14 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 }
 
 
+MetaRequest::~MetaRequest()
+{
+  if (dentry)
+    dentry->put();
+  if (old_dentry)
+    old_dentry->put();
+}
+
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
@@ -1153,9 +1161,10 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
  * Additionally, if you set any *drop member, you'd better have
  * set the corresponding dentry!
  */
-void Client::encode_cap_releases(MetaRequest *req, int mds) {
+void Client::encode_cap_releases(MetaRequest *req, int mds)
+{
   ldout(cct, 20) << "encode_cap_releases enter (req: "
-	   << req << ", mds: " << mds << ")" << dendl;
+		 << req << ", mds: " << mds << ")" << dendl;
   if (req->inode_drop && req->inode)
     encode_inode_release(req->inode, req,
 			 mds, req->inode_drop,
@@ -3382,7 +3391,7 @@ int Client::get_or_create(Inode *dir, const char* name,
   // lookup
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
-    Dentry *dn = *pdn = dir->dir->dentries[name];
+    Dentry *dn = dir->dir->dentries[name];
     
     // is dn lease valid?
     utime_t now = ceph_clock_now(cct);
@@ -3395,15 +3404,16 @@ int Client::get_or_create(Inode *dir, const char* name,
 	  s->cap_gen == dn->lease_gen) {
 	if (expect_null)
 	  return -EEXIST;
-	else
-	  return 0;
       }
     }
-    return 0;
+    *pdn = dn;
+  } else {
+    // otherwise link up a new one
+    *pdn = link(dir->dir, name, NULL);
   }
-  
-  // otherwise link up a new one
-  *pdn = link(dir->dir, name, NULL);
+
+  // success
+  (*pdn)->get();
   return 0;
 }
 
