@@ -23,8 +23,9 @@ setup(
     entry_points={
         'console_scripts': [
             'teuthology = teuthology.run:main',
-            'teuthology-suite = teuthology.suite:main',
             'teuthology-nuke = teuthology.run:nuke',
+            'teuthology-suite = teuthology.suite:main',
+            'teuthology-ls = teuthology.suite:ls',
             ],
         },
 

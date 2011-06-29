@@ -117,3 +117,39 @@ useful for specifying actual machines to run on.
         log.info('Failed.')
         sys.exit(1)
 
+
+def ls():
+    parser = argparse.ArgumentParser(description='List teuthology job results')
+    parser.add_argument(
+        '--archive-dir',
+        metavar='DIR',
+        help='path under which to archive results',
+        required=True,
+        )
+    args = parser.parse_args()
+
+    import yaml
+    
+    for j in sorted(os.listdir(args.archive_dir)):
+        if j.startswith('.'):
+            continue
+        
+        try:
+            summary = {}
+            with file('%s/%s/summary.yaml' % (args.archive_dir,j)) as f:
+                g = yaml.safe_load_all(f)
+                for new in g:
+                    summary = dict(summary.items() + new.items())
+        except IOError, e:
+            continue
+
+        for key in ['owner', 'description']:
+            if not key in summary:
+                summary[key] = '-'
+
+        print "{job} {success} {owner} {desc}".format(
+            job=j,
+            owner=summary['owner'],
+            desc=summary['description'],
+            success='pass' if summary['success'] else 'FAIL',
+            )
