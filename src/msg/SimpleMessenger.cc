@@ -489,15 +489,10 @@ entity_addr_t SimpleMessenger::get_myaddr()
  */
 void SimpleMessenger::set_ip(entity_addr_t &addr)
 {
-  entity_addr_t blank_ip;
-  blank_ip.set_family(ms_addr.get_family());
-  blank_ip.set_port(ms_addr.get_port());
-  blank_ip.set_nonce(ms_addr.get_nonce());
-  blank_ip.type = ms_addr.type;
-
-  if (ms_addr.probably_equals(blank_ip)) {
+  if (ms_addr.is_blank_ip()) {
+    int port = ms_addr.get_port();
     ms_addr.addr = addr.addr;
-    ms_addr.set_port(blank_ip.get_port());
+    ms_addr.set_port(port);
   }
 }
 
