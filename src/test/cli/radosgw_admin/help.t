@@ -40,6 +40,8 @@
      --pool-id=<pool-id>
      --format=<format>         specify output format for certain operations: xml,
                                json
+     --purge-data              when specified, user removal will also purge all the
+                               user data
   --conf/-c        Read configuration from the given configuration file
   -d               Run in foreground, log to stderr.
   -f               Run in foreground, log to usual location.
