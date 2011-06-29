@@ -2,6 +2,7 @@ import argparse
 import os
 import yaml
 import getpass
+import socket
 
 def config_file(string):
     config = {}
@@ -104,7 +105,7 @@ def main():
     if ctx.owner is not None:
         ctx.summary['owner'] = ctx.owner
     else:
-        ctx.summary['owner'] = getpass.getuser();
+        ctx.summary['owner'] = getpass.getuser() + '@' + socket.gethostname()
 
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
