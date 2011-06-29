@@ -31,7 +31,6 @@ using namespace std;
 #include "common/config.h"
 
 // ceph stuff
-#include "Client.h"
 
 #include "messages/MMonMap.h"
 
@@ -62,10 +61,14 @@ using namespace std;
 #include "common/config.h"
 
 #define DOUT_SUBSYS client
+
+#include "Client.h"
+
 #undef dout_prefix
 #define dout_prefix *_dout << "client" << whoami << " "
 
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
+
 
 
 // static logger
