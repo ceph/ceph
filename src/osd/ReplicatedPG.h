@@ -359,6 +359,7 @@ public:
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
+    interval_set<uint64_t> modified_ranges;
     ObjectContext *obc;          // For ref counting purposes
     map<sobject_t,ObjectContext*> src_obc;
     ObjectContext *clone_obc;    // if we created a clone
@@ -582,7 +583,8 @@ protected:
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
 
-  void write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi, SnapSet& ss,
+  void write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi,
+				   SnapSet& ss, interval_set<uint64_t>& modified,
 				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
 

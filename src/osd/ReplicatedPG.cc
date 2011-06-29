@@ -1465,9 +1465,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         } else {
           t.touch(coll, soid);
         }
-	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset,
+	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
-
 	maybe_created = true;
       }
       break;
@@ -1481,13 +1480,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	else
 	  maybe_created = true;
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
-	if (ssc->snapset.clones.size()) {
-	  snapid_t newest = *ssc->snapset.clones.rbegin();
-
-	  // Replace clone_overlap[newest] with an empty interval set since there
-	  // should no longer be any overlap
-	  ssc->snapset.clone_overlap.erase(newest);
-	  ssc->snapset.clone_overlap[newest];
+	if (ssc->snapset.clones.size() && oi.size > 0) {
+	  interval_set<uint64_t> ch;
+	  ch.insert(0, oi.size);
+	  ctx->modified_ranges.union_of(ch);
 	  oi.size = 0;
 	}
 	if (op.extent.length != oi.size) {
@@ -1512,11 +1508,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (obs.exists) {
 	  t.zero(coll, soid, op.extent.offset, op.extent.length);
 	  if (ssc->snapset.clones.size()) {
-	    snapid_t newest = *ssc->snapset.clones.rbegin();
 	    interval_set<uint64_t> ch;
 	    ch.insert(op.extent.offset, op.extent.length);
-	    ch.intersection_of(ssc->snapset.clone_overlap[newest]);
-	    ssc->snapset.clone_overlap[newest].subtract(ch);
+	    ctx->modified_ranges.union_of(ch);
 	    add_interval_usage(ch, ctx->new_stats);
 	  }
 	  ctx->new_stats.num_wr++;
@@ -1567,13 +1561,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  interval_set<uint64_t> trim;
 	  if (oi.size > op.extent.offset) {
 	    trim.insert(op.extent.offset, oi.size-op.extent.offset);
+	    ctx->modified_ranges.union_of(trim);
 	    trim.intersection_of(ssc->snapset.clone_overlap[newest]);
 	    add_interval_usage(trim, ctx->new_stats);
 	  }
-	  interval_set<uint64_t> keep;
-	  if (op.extent.offset)
-	    keep.insert(0, op.extent.offset);
-	  ssc->snapset.clone_overlap[newest].intersection_of(keep);
 	}
 	if (op.extent.offset != oi.size) {
 	  ctx->new_stats.num_bytes -= oi.size;
@@ -1604,7 +1595,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	t.clone_range(coll, osd_op.soid, obs.oi.soid,
 		      op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);
 
-	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset,
+	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset, ctx->modified_ranges,
 				    op.clonerange.offset, op.clonerange.length, false);
       }
       break;
@@ -1994,10 +1985,11 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
     snapid_t newest = *snapset.clones.rbegin();
     add_interval_usage(snapset.clone_overlap[newest], ctx->new_stats);
 
-    // Replace clone_overlap[newest] with an empty interval set since there
-    // should no longer be any overlap
-    snapset.clone_overlap.erase(newest);  // ok, redundant.
-    snapset.clone_overlap[newest];
+    if (oi.size > 0) {
+      interval_set<uint64_t> ch;
+      ch.insert(0, oi.size);
+      ctx->modified_ranges.union_of(ch);
+    }
   }
   if (obs.exists) {
     ctx->new_stats.num_objects--;
@@ -2085,7 +2077,14 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    iter != snapset.clone_overlap.end();
 	    ++iter)
 	overlaps.intersection_of(iter->second);
-      snapset.clone_overlap[*snapset.clones.rbegin()] = overlaps;
+
+      if (ctx->obs->oi.size > 0) {
+	interval_set<uint64_t> modified;
+	modified.insert(0, ctx->obs->oi.size);
+	overlaps.intersection_of(modified);
+	modified.subtract(overlaps);
+	ctx->modified_ranges.union_of(modified);
+      }
     }
     put_object_context(rollback_to);
   }
@@ -2190,6 +2189,13 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
     ctx->at_version.version++;
   }
+
+  // update most recent clone_overlap
+  if (ctx->new_snapset.clones.size() > 0) {
+    interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
+    ctx->modified_ranges.intersection_of(newest_overlap);
+    newest_overlap.subtract(ctx->modified_ranges);
+  }
   
   // prepend transaction to op_t
   t.append(ctx->op_t);
@@ -2203,7 +2209,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 }
 
 
-void ReplicatedPG::write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi, SnapSet& ss,
+void ReplicatedPG::write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi,
+					       SnapSet& ss, interval_set<uint64_t>& modified,
 					       uint64_t offset, uint64_t length, bool count_bytes)
 {
   if (ss.clones.size()) {
@@ -2211,8 +2218,7 @@ void ReplicatedPG::write_update_size_and_usage(pg_stat_t& stats, object_info_t& 
     interval_set<uint64_t> ch;
     if (length)
       ch.insert(offset, length);
-    ch.intersection_of(ss.clone_overlap[newest]);
-    ss.clone_overlap[newest].subtract(ch);
+    modified.union_of(ch);
     add_interval_usage(ch, stats);
   }
   if (length && (offset + length > oi.size)) {
