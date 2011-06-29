@@ -264,16 +264,30 @@ class Dentry : public LRUObject {
   ceph_seq_t lease_seq;
   int cap_shared_gen;
   
+  /*
+   * ref==1 -> cached, unused
+   * ref >1 -> pinned in lru
+   */
   void get() { 
-    assert(ref == 0); ref++; lru_pin(); 
+    assert(ref > 0);
+    if (++ref == 2)
+      lru_pin(); 
     //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
   }
   void put() { 
-    assert(ref == 1); ref--; lru_unpin(); 
+    assert(ref > 0);
+    if (--ref == 1)
+      lru_unpin();
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
+    if (ref == 0)
+      delete this;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+private:
+  ~Dentry() {
+    assert(ref == 0);
+  }
 };
 
 class Dir {
@@ -670,7 +684,8 @@ class Inode {
   Dir *open_dir() {
     if (!dir) {
       assert(dn_set.size() < 2); // dirs can't be hard-linked
-      if (!dn_set.empty()) (*dn_set.begin())->get();      // pin dentry
+      if (!dn_set.empty())
+	(*dn_set.begin())->get();      // pin dentry
       get();                  // pin inode
       dir = new Dir(this);
     }
@@ -987,7 +1002,7 @@ protected:
 
     // delete den
     lru.lru_remove(dn);
-    delete dn;
+    dn->put();
   }
 
   /* If an inode's been moved from one dentry to another
@@ -1021,7 +1036,7 @@ protected:
     olddn->inode = 0;
     olddn->dir = 0;
     lru.lru_remove(olddn);
-    delete olddn;
+    olddn->put();
     
     // link new dn to dir
     dir->dentries[name] = newdn;
