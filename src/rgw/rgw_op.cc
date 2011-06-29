@@ -1230,7 +1230,7 @@ void RGWCompleteMultipart::execute()
 
     ofs += obj_iter->second.size;
   }
-  ret = rgwstore->clone_objs(target_obj, ranges, attrs);
+  ret = rgwstore->clone_objs(target_obj, ranges, attrs, true);
   if (ret < 0)
     goto done;
 

@@ -881,7 +881,8 @@ int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
 
 int RGWRados::clone_objs(rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs)
+                        map<string, bufferlist> attrs,
+                        bool truncate_dest)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;
@@ -894,6 +895,8 @@ int RGWRados::clone_objs(rgw_obj& dst_obj,
   io_ctx.locator_set_key(dst_obj.key);
   ObjectOperation op;
   op.create(false);
+  if (truncate_dest)
+    op.truncate(0);
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
@@ -902,7 +905,18 @@ int RGWRados::clone_objs(rgw_obj& dst_obj,
   }
   vector<RGWCloneRangeInfo>::iterator range_iter;
   for (range_iter = ranges.begin(); range_iter != ranges.end(); ++range_iter) {
-    RGWCloneRangeInfo& range = *range_iter;
+    RGWCloneRangeInfo range = *range_iter;
+    vector<RGWCloneRangeInfo>::iterator next_iter = range_iter;
+
+    // merge ranges
+    while (++next_iter !=  ranges.end()) {
+      RGWCloneRangeInfo& next = *next_iter;
+      if (range.src_ofs + (int64_t)range.len != next.src_ofs ||
+          range.dst_ofs + (int64_t)range.len != next.dst_ofs)
+        break;
+      range_iter++;
+      range.len += next.len;
+    }
     RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
     op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
   }

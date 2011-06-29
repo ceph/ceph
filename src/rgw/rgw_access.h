@@ -178,12 +178,12 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(dst_obj, v, attrs);
+    return clone_objs(dst_obj, v, attrs, true);
   }
 
   virtual int clone_objs(rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs) { return -ENOTSUP; }
+                        map<string, bufferlist> attrs, bool truncate_dest) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state
    */

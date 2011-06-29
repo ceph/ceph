@@ -56,7 +56,7 @@ public:
                           rgw_obj& src_obj, off_t src_ofs, size_t size);
   virtual int clone_objs(rgw_obj& dst_obj, 
                         vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs);
+                        map<string, bufferlist> attrs, bool truncate_dest);
 
   /** Copy an object, with many extra options */
   virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
