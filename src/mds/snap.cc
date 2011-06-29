@@ -367,8 +367,8 @@ void SnapRealm::split_at(SnapRealm *child)
 	   << " on " << *child->inode << dendl;
 
   if (!child->inode->is_dir()) {
+    // it's not a dir.
     if (child->inode->containing_realm) {
-      // it's not a dir:
       //  - no open children.
       //  - only need to move this child's inode's caps.
       child->inode->move_to_realm(child);
@@ -406,16 +406,21 @@ void SnapRealm::split_at(SnapRealm *child)
     ++p;
 
     // does inode fall within the child realm?
-    CInode *t = in;
     bool under_child = false;
-    while (t->get_parent_dn()) {
-      t = t->get_parent_dn()->get_dir()->get_inode();
-      if (t == child->inode) {
-	under_child = true;
-	break;
+
+    if (in == child->inode) {
+      under_child = true;
+    } else {
+      CInode *t = in;
+      while (t->get_parent_dn()) {
+	t = t->get_parent_dn()->get_dir()->get_inode();
+	if (t == child->inode) {
+	  under_child = true;
+	  break;
+	}
+	if (t == in)
+	  break;
       }
-      if (t == in)
-	break;
     }
     if (under_child) {
       dout(20) << " child gets " << *in << dendl;
