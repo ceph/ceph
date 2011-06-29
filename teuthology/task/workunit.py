@@ -100,6 +100,7 @@ def task(ctx, config):
                         run.Raw('&&'),
                         'cd', '--', scratch_tmp,
                         run.Raw('&&'),
+                        run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                         '{srcdir}/{workunit}'.format(
                             srcdir=srcdir,
                             workunit=workunit,
