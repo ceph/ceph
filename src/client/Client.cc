@@ -82,9 +82,18 @@ ostream& operator<<(ostream &out, Inode &in)
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
-      << " caps=" << ccap_string(in.caps_issued())
       << " mode=" << oct << in.mode << dec
-      << " mtime=" << in.mtime;
+      << " mtime=" << in.mtime
+      << " caps=" << ccap_string(in.caps_issued());
+  if (!in.caps.empty()) {
+    out << "(";
+    for (map<int,InodeCap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
+      if (p != in.caps.begin())
+	out << ',';
+      out << p->first << '=' << ccap_string(p->second->issued);
+    }
+    out << ")";
+  }
   if (in.dirty_caps)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
   if (in.flushing_caps)
