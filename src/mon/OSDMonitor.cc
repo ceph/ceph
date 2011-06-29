@@ -542,7 +542,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     goto ignore;
   }
 
-  if (m->get_orig_source_inst().addr.is_blank_addr()) {
+  if (m->get_orig_source_inst().addr.is_blank_ip()) {
     dout(0) << "preprocess_boot got blank addr for " << m->get_orig_source_inst() << dendl;
     goto ignore;
   }
@@ -603,7 +603,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     down_pending_out.erase(from);  // if any
 
     pending_inc.new_up_client[from] = m->get_orig_source_addr();
-    if (!m->cluster_addr.is_blank_addr())
+    if (!m->cluster_addr.is_blank_ip())
       pending_inc.new_up_internal[from] = m->cluster_addr;
     pending_inc.new_hb_up[from] = m->hb_addr;
 

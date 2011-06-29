@@ -214,7 +214,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  if (g_conf->public_addr.is_blank_addr() && !g_conf->cluster_addr.is_blank_addr()) {
+  if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
     derr << TEXT_YELLOW
 	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
 	 << " **          you specify neither or both.                             **"
@@ -230,7 +230,7 @@ int main(int argc, const char **argv)
 
   // hb should bind to same ip as cluster_addr (if specified)
   entity_addr_t hb_addr = g_conf->cluster_addr;
-  if (!hb_addr.is_blank_addr())
+  if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
   messenger_hb->bind(hb_addr, getpid());
 

@@ -1963,7 +1963,7 @@ void OSD::send_boot()
 {
   dout(10) << "send_boot" << dendl;
   entity_addr_t cluster_addr = cluster_messenger->get_myaddr();
-  if (cluster_addr.is_blank_addr()) {
+  if (cluster_addr.is_blank_ip()) {
     int port = cluster_addr.get_port();
     cluster_addr = client_messenger->get_myaddr();
     cluster_addr.set_port(port);
@@ -1971,7 +1971,7 @@ void OSD::send_boot()
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   }
   entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
-  if (hb_addr.is_blank_addr()) {
+  if (hb_addr.is_blank_ip()) {
     int port = hb_addr.get_port();
     hb_addr = cluster_addr;
     hb_addr.set_port(port);

@@ -207,7 +207,7 @@ struct entity_addr_t {
       return false;
     if (get_nonce() != o.get_nonce())
       return false;
-    if (is_blank_addr() || o.is_blank_addr())
+    if (is_blank_ip() || o.is_blank_ip())
       return true;
     if (memcmp(&addr, &o.addr, sizeof(addr)) == 0)
       return true;
@@ -226,7 +226,7 @@ struct entity_addr_t {
     return false;
   }
 
-  bool is_blank_addr() const {
+  bool is_blank_ip() const {
     switch (addr.ss_family) {
     case AF_INET:
       return addr4.sin_addr.s_addr == INADDR_ANY;

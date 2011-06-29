@@ -682,7 +682,7 @@ int SimpleMessenger::Pipe::accept()
   }
 
   ldout(msgr->cct,10) << "accept peer addr is " << peer_addr << dendl;
-  if (peer_addr.is_blank_addr()) {
+  if (peer_addr.is_blank_ip()) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     int port = peer_addr.get_port();
     peer_addr.addr = socket_addr.addr;
@@ -1098,7 +1098,7 @@ int SimpleMessenger::Pipe::connect()
 
   ldout(msgr->cct,20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (peer_addr != paddr) {
-    if (paddr.is_blank_addr() &&
+    if (paddr.is_blank_ip() &&
 	peer_addr.get_port() == paddr.get_port() &&
 	peer_addr.get_nonce() == paddr.get_nonce()) {
       ldout(msgr->cct,0) << "connect claims to be " 
