@@ -224,6 +224,7 @@ struct MetaRequest {
   }
 };
 
+class CapSnap;
 
 struct MDSSession {
   int mds_num;
@@ -238,6 +239,7 @@ struct MDSSession {
 
   xlist<InodeCap*> caps;
   xlist<Inode*> flushing_caps;
+  xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
 
@@ -353,6 +355,7 @@ struct InodeCap {
 
 struct CapSnap {
   //snapid_t follows;  // map key
+  Inode *in;
   SnapContext context;
   int issued, dirty;
 
@@ -367,9 +370,14 @@ struct CapSnap {
 
   bool writing, dirty_data;
   uint64_t flush_tid;
-  CapSnap() : issued(0), dirty(0), 
-	      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-	      writing(false), dirty_data(false), flush_tid(0) {}
+  xlist<CapSnap*>::item flushing_item;
+
+  CapSnap(Inode *i)
+    : in(i), issued(0), dirty(0), 
+      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
+      writing(false), dirty_data(false), flush_tid(0),
+      flushing_item(this)
+  {}
 };
 
 
@@ -444,7 +452,7 @@ class Inode {
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
   Inode *snapdir_parent;  // only if we are a snapdir inode
-  map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
+  map<snapid_t,CapSnap*> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -1122,7 +1130,7 @@ protected:
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in);
+  void flush_snaps(Inode *in, CapSnap *again=0);
   void wait_sync_caps(uint64_t want);
   void queue_cap_snap(Inode *in, snapid_t seq=0);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
