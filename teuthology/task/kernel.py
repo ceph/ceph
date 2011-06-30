@@ -225,10 +225,7 @@ def task(ctx, config):
             flavor='kernel',
             )
         log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
-        if ctx.archive is not None:
-            with file(os.path.join(ctx.archive,
-                                   'ceph-kernel-sha1.{role}'.format(role=role)), 'w') as f:
-                f.write(sha1 + '\n')
+        ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
         if need_to_install(ctx, role, sha1):
             need_install[role] = sha1
 
