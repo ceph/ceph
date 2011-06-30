@@ -1,6 +1,5 @@
 from cStringIO import StringIO
 
-import contextlib
 import logging
 import os
 import errno
@@ -163,7 +162,6 @@ def reconnect(ctx, timeout):
              log.exception('error re-opening connections')
           raise
 
-@contextlib.contextmanager
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -243,4 +241,3 @@ def task(ctx, config):
         log.info('Checking client {client} for new kernel version...'.format(client=client))
         assert not need_to_install(ctx, client, sha1), \
             "Client did not boot to the new kernel!"
-    yield
