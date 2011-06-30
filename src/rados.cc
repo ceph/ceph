@@ -559,7 +559,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t max_op_len = 0;
   uint64_t max_backlog = 0;
   uint64_t target_throughput = 0;
-  uint64_t read_percent = -1;
+  int64_t read_percent = -1;
   uint64_t num_objs = 0;
   int run_length = 0;
 
