@@ -71,7 +71,7 @@ public:
   void remove_observer(md_config_obs_t* observer_);
 
   // Parse a config file
-  int parse_config_files(const std::list<std::string> &conf_files,
+  int parse_config_files(const char *conf_files,
 			 std::deque<std::string> *parse_errors);
 
   // Absorb config settings from the environment
@@ -114,6 +114,9 @@ public:
   bool expand_meta(std::string &val) const;
 
 private:
+  int parse_config_files_impl(const std::list<std::string> &conf_files,
+		   std::deque<std::string> *parse_errors);
+
   // Private function for setting a default for a config option
   void set_val_from_default(const config_option *opt);
 

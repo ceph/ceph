@@ -221,22 +221,10 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 }
 
 // The defaults for CephInitParameters
-CephInitParameters::CephInitParameters(uint32_t module_type_, const char *conf_file_)
-  : module_type(module_type_),
-    conf_file(conf_file_)
+CephInitParameters::CephInitParameters(uint32_t module_type_)
+  : module_type(module_type_)
 {
-  const char *c = getenv("CEPH_CONF");
-  if (c)
-    conf_file = c;
   name.set(module_type, "admin");
-}
-
-std::list<std::string> CephInitParameters::
-get_conf_files() const
-{
-  std::list<std::string> ret;
-  get_str_list(conf_file, ret);
-  return ret;
 }
 
 static void dashes_to_underscores(const char *input, char *output)
@@ -330,11 +318,10 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 }
 
 CephInitParameters ceph_argparse_early_args
-	  (std::vector<const char*>& args, uint32_t module_type, int flags)
+	  (std::vector<const char*>& args, uint32_t module_type, int flags,
+	   std::string *conf_file_list)
 {
-  const char *conf = (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE) ?
-    "" : CEPH_CONF_FILE_DEFAULT;
-  CephInitParameters iparams(module_type, conf);
+  CephInitParameters iparams(module_type);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0)
@@ -344,7 +331,7 @@ CephInitParameters ceph_argparse_early_args
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
-      iparams.conf_file = val;
+      *conf_file_list = val;
     }
     else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
 	     (ceph_argparse_witharg(args, i, &val, "-i", (char*)NULL))) {

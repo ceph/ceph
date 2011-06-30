@@ -27,8 +27,7 @@
 
 int librgw_create(librgw_t *rgw, const char * const id)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-  iparams.conf_file = "";
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }

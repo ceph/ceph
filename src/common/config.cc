@@ -490,7 +490,20 @@ remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::
-parse_config_files(const std::list<std::string> &conf_files,
+parse_config_files(const char *conf_files,
+		   std::deque<std::string> *parse_errors)
+{
+  if (!conf_files) {
+    const char *c = getenv("CEPH_CONF");
+    conf_files = c ? c : CEPH_CONF_FILE_DEFAULT;
+  }
+  std::list<std::string> cfl;
+  get_str_list(conf_files, cfl);
+  return parse_config_files_impl(cfl, parse_errors);
+}
+
+int md_config_t::
+parse_config_files_impl(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors)
 {
   // open new conf

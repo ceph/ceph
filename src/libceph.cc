@@ -129,19 +129,12 @@ public:
     }
   }
 
-  int conf_read_file(const char *path)
+  int conf_read_file(const char *path_list)
   {
-    if (!path)
-      path = CEPH_CONF_FILE_DEFAULT;
-
-    std::list<std::string> conf_files;
-    get_str_list(path, conf_files);
     std::deque<std::string> parse_errors;
-    int ret = cct->_conf->parse_config_files(conf_files, &parse_errors);
+    int ret = cct->_conf->parse_config_files(path_list, &parse_errors);
     if (ret)
       return ret;
-    cct->_conf->parse_env(); // environment variables override
-
     cct->_conf->apply_changes();
     complain_about_parse_errors(cct, &parse_errors);
     return 0;
@@ -222,8 +215,7 @@ extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephCon
 
 extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const id)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-  iparams.conf_file = "";
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }

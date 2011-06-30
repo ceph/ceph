@@ -74,11 +74,10 @@ extern bool ceph_argparse_cmd_equals(const char *cmd, const char *opt,
 class CephInitParameters
 {
 public:
-  CephInitParameters(uint32_t module_type_, const char *conf_file_);
+  CephInitParameters(uint32_t module_type_);
   std::list<std::string> get_conf_files() const;
 
   uint32_t module_type;
-  std::string conf_file;
   EntityName name;
 };
 
@@ -98,7 +97,8 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...);
 extern CephInitParameters ceph_argparse_early_args
-	    (std::vector<const char*>& args, uint32_t module_type, int flags);
+	    (std::vector<const char*>& args, uint32_t module_type, int flags,
+	     std::string *conf_file_list);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

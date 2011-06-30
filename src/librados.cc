@@ -3159,8 +3159,7 @@ librados::ObjectOperation::~ObjectOperation()
 ///////////////////////////// C API //////////////////////////////
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
-  iparams.conf_file = "";
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
@@ -3210,17 +3209,12 @@ extern "C" void rados_version(int *major, int *minor, int *extra)
 
 
 // -- config --
-extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
+extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
 {
-  if (!path)
-    path = CEPH_CONF_FILE_DEFAULT;
-
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
-  std::list<std::string> conf_files;
-  get_str_list(path, conf_files);
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(conf_files, &parse_errors);
+  int ret = conf->parse_config_files(path_list, &parse_errors);
   if (ret)
     return ret;
   conf->parse_env(); // environment variables override

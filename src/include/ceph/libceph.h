@@ -49,7 +49,7 @@ void ceph_shutdown(struct ceph_mount_info *cmount);
  *
  * Functions for manipulating the Ceph configuration at runtime.
  */
-int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path);
+int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path_list);
 
 void ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc, const char **argv);
 

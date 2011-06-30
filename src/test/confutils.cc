@@ -463,20 +463,18 @@ TEST(Overrides, ConfUtils) {
   std::deque<std::string> err;
   std::string override_conf_1_f(next_tempfile(override_config_1));
 
-  std::list<std::string> conf_files;
-  conf_files.push_back(override_conf_1_f);
   conf.name.set(CEPH_ENTITY_TYPE_MON, "0");
-  conf.parse_config_files(conf_files, &err);
+  conf.parse_config_files(override_conf_1_f.c_str(), &err);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "global_log");
 
   conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
-  conf.parse_config_files(conf_files, &err);
+  conf.parse_config_files(override_conf_1_f.c_str(), &err);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "mds_log");
 
   conf.name.set(CEPH_ENTITY_TYPE_OSD, "0");
-  conf.parse_config_files(conf_files, &err);
+  conf.parse_config_files(override_conf_1_f.c_str(), &err);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "osd0_log");
 }

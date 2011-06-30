@@ -48,20 +48,27 @@ static void output_ceph_version()
   generic_dout(0) << buf << dendl;
 }
 
+static const char* c_str_or_null(const std::string &str)
+{
+  if (str.empty())
+    return NULL;
+  return str.c_str();
+}
+
 void global_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
-
-  CephInitParameters iparams =
-    ceph_argparse_early_args(args, module_type, flags);
+  std::string conf_file_list;
+  CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
+							&conf_file_list);
   CephContext *cct = common_preinit(iparams, code_env, flags);
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
 
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(iparams.get_conf_files(), &parse_errors);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);
