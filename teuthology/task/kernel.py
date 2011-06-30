@@ -1,14 +1,12 @@
 from cStringIO import StringIO
 
 import logging
-import os
 import errno
 import socket
 import time
 
 from teuthology import misc as teuthology
-from orchestra import connection, remote, run
-import orchestra.cluster
+from orchestra import connection, run
 
 log = logging.getLogger(__name__)
 
@@ -141,26 +139,24 @@ def reboot(ctx, config):
 def reconnect(ctx, timeout):
     log.info('Re-opening connections...')
     starttime = time.time()
+    need_reconnect = ctx.cluster.remotes.keys()
     while True:
-       try:
-          remotes = [remote.Remote(name=t, ssh=connection.connect(t))
-                     for t in ctx.config['targets']]
-          ctx.cluster = orchestra.cluster.Cluster()
-          for rem, roles in zip(remotes, ctx.config['roles']):
-             ctx.cluster.add(rem, roles)
-          break
-       except socket.error as (code, description):
-          if code == errno.ECONNREFUSED or \
-                 code == errno.ETIMEDOUT:
-             if time.time() - starttime < timeout:
-                log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
-                time.sleep(1)
-                continue
-             else:
-                log.error('Failed to re-open connections within timeout period.')
-          else:
-             log.exception('error re-opening connections')
-          raise
+        for remote in list(need_reconnect):
+            try:
+                remote.ssh = connection.connect(remote.name)
+            except socket.error as (code, description):
+                if (code != errno.ECONNREFUSED and \
+                        code != errno.ETIMEDOUT) or \
+                        time.time() - starttime > timeout:
+                    raise
+            else:
+                need_reconnect.remove(remote)
+
+        if not need_reconnect:
+            break
+        log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
+        time.sleep(1)
+
 
 def task(ctx, config):
     """
