@@ -109,17 +109,17 @@ def install(ctx, config):
                 'wget',
                 '-nv',
                 '-O',
-                '/tmp/cephtest/linux-image.deb',
-                '--base={url}'.format(url=str(deb_url)),
+                '/tmp/linux-image.deb',
+                '--base={url}'.format(url=deb_url),
                 '--input-file=-',
                 run.Raw('&&'),
                 'sudo',
                 'dpkg',
                 '-i',
-                '/tmp/cephtest/linux-image.deb',
+                '/tmp/linux-image.deb',
                 run.Raw('&&'),
                 'rm',
-                '/tmp/cephtest/linux-image.deb',
+                '/tmp/linux-image.deb',
                 ],
             )
 
@@ -165,42 +165,41 @@ def task(ctx, config):
 
     To install the kernel from the master branch on all hosts::
 
+        kernel:
         tasks:
-        - kernel:
         - ceph:
 
     To wait 5 minutes for hosts to reboot::
 
+        kernel:
+          timeout: 300
         tasks:
-        - kernel:
-            timeout: 300
         - ceph:
 
     To specify different kernels for each client::
 
+        kernel:
+          client.0:
+            branch: foo
+          client.1:
+            tag: v3.0rc1
+          client.2:
+            sha1: db3540522e955c1ebb391f4f5324dff4f20ecd09
         tasks:
-        - kernel:
-            client.0:
-              branch: foo
-            client.1:
-              tag: v3.0rc1
-            client.2:
-              sha1: db3540522e955c1ebb391f4f5324dff4f20ecd09
         - ceph:
 
     You can specify a branch, tag, or sha1 for all roles
     of a certain type (more specific roles override this)::
 
-        tasks:
-        - kernel:
-            client:
-              tag: v3.0
-            osd:
-              branch: btrfs_fixes
-            client.1:
-              branch: more_specific_branch
-            osd.3:
-              branch: master
+        kernel:
+          client:
+            tag: v3.0
+          osd:
+            branch: btrfs_fixes
+          client.1:
+            branch: more_specific_branch
+          osd.3:
+            branch: master
     """
     assert config is None or isinstance(config, dict), \
         "task kernel only supports a dictionary for configuration"

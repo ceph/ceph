@@ -110,13 +110,21 @@ def main():
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
 
-    ctx.config['tasks'][:0] = [
-        {'internal.check_conflict': None},
-        {'internal.base': None},
-        {'internal.archive': None},
-        {'internal.coredump': None},
-        {'internal.syslog': None},
-        ]
+    for task in ctx.config['tasks']:
+        assert 'kernel' not in task, \
+            'kernel installation shouldn be a base-level item, not part of the tasks list'
+
+    init_tasks = [{'internal.check_conflict': None}]
+    if 'kernel' in ctx.config:
+        init_tasks.append({'kernel': ctx.config['kernel']})
+    init_tasks.extend([
+            {'internal.base': None},
+            {'internal.archive': None},
+            {'internal.coredump': None},
+            {'internal.syslog': None},
+            ])
+
+    ctx.config['tasks'][:0] = init_tasks
 
     from teuthology.run_tasks import run_tasks
     try:
