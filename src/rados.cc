@@ -91,7 +91,20 @@ void usage()
 "   -o outfile\n"
 "        specify input or output file (for certain commands)\n"
 "   --create\n"
-"        create the pool or directory that was specified\n";
+"        create the pool or directory that was specified\n"
+"\n"
+"LOAD GEN OPTIONS:\n"
+"   --num-objs                       total number of objects\n"
+"   --min-obj_len                    min number of objects\n"
+"   --max-obj_len                    max number of objects\n"
+"   --min-op_len                     min number of operations\n"
+"   --max-op_len                     max number of operations\n"
+"   --max-backlog                    max backlog (in MB)\n"
+"   --percent                        percent of operations that are read\n"
+"   --target-throughput              target throughput (in MB)\n"
+"   --run-length                     total time (in seconds)\n";
+
+
 }
 
 static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, bool check_stdio)
@@ -217,15 +230,8 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
 }
 
 class LoadGen {
-  int read_write_ratio;
-  size_t min_obj_len;
-  size_t max_obj_len;
-  size_t min_op_len;
-  size_t max_op_len;
-  size_t target_throughput;
   size_t total_sent;
   size_t total_completed;
-  int num_objs;
 
   IoCtx io_ctx;
   Rados *rados;
@@ -234,7 +240,19 @@ class LoadGen {
 
   utime_t start_time;
 
+  bool going_down;
+
 public:
+  int read_percent;
+  int num_objs;
+  size_t min_obj_len;
+  size_t max_obj_len;
+  size_t min_op_len;
+  size_t max_op_len;
+  size_t max_backlog;
+  size_t target_throughput;
+  int run_length;
+
   enum {
     OP_READ,
     OP_WRITE,
@@ -248,18 +266,19 @@ public:
     size_t len;
     bufferlist bl;
     LoadGen *lg;
+    librados::AioCompletion *completion;
 
     LoadGenOp() {}
-    LoadGenOp(LoadGen *_lg) : lg(_lg) {}
+    LoadGenOp(LoadGen *_lg) : lg(_lg), completion(NULL) {}
   };
 
   int max_op;
 
-  map<int, LoadGenOp> pending_ops;
+  map<int, LoadGenOp *> pending_ops;
 
-  void gen_op(LoadGenOp& op);
+  void gen_op(LoadGenOp *op);
   uint64_t gen_next_op();
-  void run_op(LoadGenOp& op);
+  void run_op(LoadGenOp *op);
 
   uint64_t cur_sent_rate() {
     return total_sent / time_passed();
@@ -284,16 +303,19 @@ public:
 
   Mutex lock;
 
-  LoadGen(Rados *_rados) : rados(_rados), lock("LoadGen") {
-    read_write_ratio = 4;
+  LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
+    read_percent = 80;
     min_obj_len = 1024;
     max_obj_len = (uint64_t)5 * 1024 * 1024 * 1024;
     min_op_len = 1024;
-    max_op_len = 2 * 1024 * 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
+    max_op_len = 2 * 1024 * 1024;
+    max_backlog = target_throughput * 2;
+    run_length = 60;
+
     total_sent = 0;
     total_completed = 0;
-    num_objs = 1000;
+    num_objs = 200;
     max_op = 0;
   }
   int bootstrap(const char *pool);
@@ -305,11 +327,18 @@ public:
 
     Mutex::Locker l(lock);
 
-    cout << "op " << op->id << " completed, throughput=" << ((uint64_t)(cur_completed_rate()) >> 20) << "MB/sec" << std::endl;
+    double rate = (double)cur_completed_rate() / (1024 * 1024);
+    cout.precision(3);
+    cout << "op " << op->id << " completed, throughput=" << rate  << "MB/sec" << std::endl;
 
-    map<int, LoadGenOp>::iterator iter = pending_ops.find(op->id);
+    map<int, LoadGenOp *>::iterator iter = pending_ops.find(op->id);
     if (iter != pending_ops.end())
       pending_ops.erase(iter);
+
+    if (!going_down)
+      op->completion->release();
+
+    delete op;
   }
 };
 
@@ -374,32 +403,32 @@ int LoadGen::bootstrap(const char *pool)
   return 0;
 }
 
-void LoadGen::run_op(LoadGenOp& op)
+void LoadGen::run_op(LoadGenOp *op)
 {
-  librados::AioCompletion *c = rados->aio_create_completion(this, _load_gen_cb, NULL);
+  op->completion = rados->aio_create_completion(op, _load_gen_cb, NULL);
   int ret;
 
-  switch (op.type) {
+  switch (op->type) {
   case OP_READ:
-    ret = io_ctx.aio_read(op.oid, c, &op.bl, op.len, op.off);
+    ret = io_ctx.aio_read(op->oid, op->completion, &op->bl, op->len, op->off);
     break;
   case OP_WRITE:
-    bufferptr p = buffer::create(op.len);
-    memset(p.c_str(), 0, op.len);
-    op.bl.push_back(p);
+    bufferptr p = buffer::create(op->len);
+    memset(p.c_str(), 0, op->len);
+    op->bl.push_back(p);
     
-    ret = io_ctx.aio_write(op.oid, c, op.bl, op.len, op.off);
+    ret = io_ctx.aio_write(op->oid, op->completion, op->bl, op->len, op->off);
     break;
   }
 
-  total_sent += op.len;
+  total_sent += op->len;
 }
 
-void LoadGen::gen_op(LoadGenOp& op)
+void LoadGen::gen_op(LoadGenOp *op)
 {
   int i = get_random(0, objs.size() - 1);
   obj_info& info = objs[i];
-  op.oid = info.name;
+  op->oid = info.name;
 
   size_t len = get_random(min_op_len, max_op_len);
   if (len > info.len)
@@ -409,49 +438,90 @@ void LoadGen::gen_op(LoadGenOp& op)
   if (off + len > info.len)
     off = info.len - len;
 
-  op.off = off;
-  op.len = len;
+  op->off = off;
+  op->len = len;
 
-  i = get_random(0, read_write_ratio + 1);
-  if (i == 0)
-    op.type = OP_WRITE;
+  i = get_random(1, 100);
+  if (i > read_percent)
+    op->type = OP_WRITE;
   else
-    op.type = OP_READ;
+    op->type = OP_READ;
 
-  cout << (op.type == OP_READ ? "READ" : "WRITE") << " : oid=" << op.oid << " off=" << op.off << " len=" << op.len << std::endl;
+  cout << (op->type == OP_READ ? "READ" : "WRITE") << " : oid=" << op->oid << " off=" << op->off << " len=" << op->len << std::endl;
 }
 
 uint64_t LoadGen::gen_next_op()
 {
-  Mutex::Locker l(lock);
+  lock.Lock();
 
-  LoadGenOp op(this);
+  LoadGenOp *op = new LoadGenOp(this);
   gen_op(op);
-  op.id = max_op++;
-  pending_ops[op.id] = op;
+  op->id = max_op++;
+  pending_ops[op->id] = op;
+
+  lock.Unlock();
+
   run_op(op);
 
-  return op.len;
+  return op->len;
 }
 
 int LoadGen::run()
 {
   start_time = ceph_clock_now(g_ceph_context);
+  utime_t end_time = start_time;
+  end_time += run_length;
+  utime_t stamp_time = start_time;
+  uint32_t total_sec = 0;
 
   while (1) {
     usleep(1000);
 
-    float expected = total_expected();  
+    utime_t now = ceph_clock_now(g_ceph_context);
+
+    if (now > end_time)
+      break;
+
+    uint64_t expected = total_expected();  
     lock.Lock();
-    uint64_t total = total_sent;
+    uint64_t sent = total_sent;
+    uint64_t completed = total_completed;
     lock.Unlock();
 
-    while (total < expected) {
-      total += gen_next_op();
+    if (now - stamp_time >= utime_t(1, 0)) {
+      double rate = (double)cur_completed_rate() / (1024 * 1024);
+      ++total_sec;
+      cout.precision(3);
+      cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      stamp_time = now; 
+    }
+
+    while (sent < expected &&
+           sent - completed < max_backlog) {
+      sent += gen_next_op();
     }
   }
 
-  
+  // get a reference to all pending requests
+  vector<librados::AioCompletion *> completions;
+  lock.Lock();
+  going_down = true;
+  map<int, LoadGenOp *>::iterator iter;
+  for (iter = pending_ops.begin(); iter != pending_ops.end(); ++iter) {
+    LoadGenOp *op = iter->second;
+    completions.push_back(op->completion);
+  }
+  lock.Unlock();
+
+  cout << "waiting for all operations to complete" << std::endl;
+
+  // now wait on all the pending requests
+  vector<librados::AioCompletion *>::iterator citer;
+  for (citer = completions.begin(); citer != completions.end(); citer++) {
+    librados::AioCompletion *c = *citer;
+    c->wait_for_complete();
+    c->release();
+  }
 
   return 0;
 }
@@ -483,6 +553,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
 
+  uint64_t min_obj_len = 0;
+  uint64_t max_obj_len = 0;
+  uint64_t min_op_len = 0;
+  uint64_t max_op_len = 0;
+  uint64_t max_backlog = 0;
+  uint64_t target_throughput = 0;
+  uint64_t read_percent = -1;
+  uint64_t num_objs = 0;
+  int run_length = 0;
+
   i = opts.find("create");
   if (i != opts.end()) {
     create_pool = true;
@@ -506,6 +586,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("snapid");
   if (i != opts.end()) {
     snapid = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("min-obj-len");
+  if (i != opts.end()) {
+    min_obj_len = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("max-obj-len");
+  if (i != opts.end()) {
+    max_obj_len = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("min-op-len");
+  if (i != opts.end()) {
+    min_op_len = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("max-op-len");
+  if (i != opts.end()) {
+    max_op_len = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("max-backlog");
+  if (i != opts.end()) {
+    max_backlog = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("target-throughput");
+  if (i != opts.end()) {
+    target_throughput = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("read-percent");
+  if (i != opts.end()) {
+    read_percent = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("num-objs");
+  if (i != opts.end()) {
+    num_objs = strtoll(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("run-length");
+  if (i != opts.end()) {
+    run_length = strtol(i->second.c_str(), NULL, 10);
   }
 
   // open rados
@@ -976,12 +1092,32 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name)
       usage();
     LoadGen lg(&rados);
-    cout << "preparing objects" << std::endl;
+    if (min_obj_len)
+      lg.min_obj_len = min_obj_len;
+    if (max_obj_len)
+      lg.max_obj_len = max_obj_len;
+    if (min_op_len)
+      lg.min_op_len = min_op_len;
+    if (max_op_len)
+      lg.max_op_len = max_op_len;
+    if (max_backlog)
+      lg.max_backlog = max_backlog;
+    if (target_throughput)
+      lg.target_throughput = target_throughput << 20;
+    if (read_percent >= 0)
+      lg.read_percent = read_percent;
+    if (num_objs)
+      lg.num_objs = num_objs;
+    if (run_length)
+      lg.run_length = run_length;
+
+    cout << "preparing " << lg.num_objs << " objects" << std::endl;
     ret = lg.bootstrap(pool_name);
     if (ret < 0) {
       cerr << "load-gen bootstrap failed" << std::endl;
       exit(1);
     }
+    cout << "load-gen will run " << lg.run_length << " seconds" << std::endl;
     lg.run();
     lg.cleanup();
   }  else {
@@ -1026,6 +1162,22 @@ int main(int argc, const char **argv)
       opts["snap"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {
       opts["snapid"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-obj-len", (char*)NULL)) {
+      opts["min-obj-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-obj-len", (char*)NULL)) {
+      opts["max-obj-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-op-len", (char*)NULL)) {
+      opts["min-op-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-op-len", (char*)NULL)) {
+      opts["max-op-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-backlog", (char*)NULL)) {
+      opts["max-backlog"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-throughput", (char*)NULL)) {
+      opts["target-throughput"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--read-percent", (char*)NULL)) {
+      opts["read-percent"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-objs", (char*)NULL)) {
+      opts["num-objs"] = val;
     } else {
       if (val[0] == '-')
         usage();
