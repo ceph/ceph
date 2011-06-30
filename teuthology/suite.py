@@ -139,7 +139,7 @@ def ls():
             with file('%s/%s/summary.yaml' % (args.archive_dir,j)) as f:
                 g = yaml.safe_load_all(f)
                 for new in g:
-                    summary = dict(summary.items() + new.items())
+                    summary.update(new)
         except IOError, e:
             continue
 
