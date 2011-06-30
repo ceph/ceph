@@ -227,7 +227,7 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
 
-  RGWUserInfo() : auid(0) {}
+  RGWUserInfo() : auid(0), suspended(0) {}
 
   void encode(bufferlist& bl) const {
      __u32 ver = USER_INFO_VER;
