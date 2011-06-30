@@ -178,7 +178,7 @@ def nuke():
             run.Raw(';'),
             'fusermount', '-u', run.Raw('/tmp/cephtest/mnt.*'),
             run.Raw(';'),
-            'rm', '-rf', '/tmp/cephtest'
+            'sudo', 'rm', '-rf', '/tmp/cephtest'
             ])
 
     log.info('Done.')
