@@ -1109,6 +1109,7 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(int mds_num);
   void mark_caps_dirty(Inode *in, int caps);
+  int mark_caps_flushing(Inode *in);
   void flush_caps();
   void flush_caps(Inode *in, int mds);
   void kick_flushing_caps(int mds);
@@ -1126,11 +1127,11 @@ protected:
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, uint64_t tid);
+  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, CapSnap *again=0);
+  void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
   void wait_sync_caps(uint64_t want);
   void queue_cap_snap(Inode *in, snapid_t seq=0);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
