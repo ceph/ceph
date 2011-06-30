@@ -124,18 +124,18 @@ def archive(ctx, config):
                         continue
                 proc.exitstatus.get()
 
-            log.info('Removing archived files...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'rm',
-                        '-rf',
-                        '--',
-                        '/tmp/cephtest/archive',
-                        ],
-                    wait=False,
-                    ),
-                )
+        log.info('Removing archive directory...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '--',
+                    '/tmp/cephtest/archive',
+                    ],
+                wait=False,
+                ),
+            )
 
 @contextlib.contextmanager
 def coredump(ctx, config):
