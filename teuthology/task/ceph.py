@@ -101,38 +101,77 @@ def ship_utilities(ctx, config):
 
 @contextlib.contextmanager
 def binaries(ctx, config):
-    log.info('Unpacking ceph binaries...')
-    sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
-        branch=config.get('branch'),
-        tag=config.get('tag'),
-        sha1=config.get('sha1'),
-        flavor=config.get('flavor'),
-        )
-    ctx.summary['flavor'] = config.get('flavor', 'default')
-    if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
-            f.write(sha1 + '\n')
-    ctx.cluster.run(
-        args=[
-            'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
-            run.Raw('&&'),
-            'uname', '-m',
-            run.Raw('|'),
-            'sed', '-e', 's/^/ceph./; s/$/.tgz/',
-            run.Raw('|'),
-            'wget',
-            '-nv',
-            '-O-',
-            '--base={url}'.format(url=ceph_bindir_url),
-            # need to use --input-file to make wget respect --base
-            '--input-file=-',
-            run.Raw('|'),
-            'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
-            ],
-        )
+    dir = config.get('path')
+    tmpdir = None
+    tmptar = None
+
+    if dir is None:
+        # fetch from gitbuilder gitbuilder
+        log.info('Fetching and unpacking ceph binaries from gitbuilder...')
+        sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
+            branch=config.get('branch'),
+            tag=config.get('tag'),
+            sha1=config.get('sha1'),
+            flavor=config.get('flavor'),
+            )
+        ctx.summary['flavor'] = config.get('flavor', 'default')
+        if ctx.archive is not None:
+            with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
+                f.write(sha1 + '\n')
+        ctx.cluster.run(
+            args=[
+                'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+                run.Raw('&&'),
+                'uname', '-m',
+                run.Raw('|'),
+                'sed', '-e', 's/^/ceph./; s/$/.tgz/',
+                run.Raw('|'),
+                'wget',
+                '-nv',
+                '-O-',
+                '--base={url}'.format(url=ceph_bindir_url),
+                # need to use --input-file to make wget respect --base
+                '--input-file=-',
+                run.Raw('|'),
+                'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
+                ],
+            )
+    else:
+        tmpdir = '/tmp/cephpush.%d' % os.getpid()
+        tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
+        log.info('Installing %s to %s...' % (dir, tmpdir))
+        os.system(('mkdir -p {tmpdir} && ' +
+                   'cd {srcdir} && ' +
+                   'make install DESTDIR={tmpdir} && ' +
+                   '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
+                   ).format(srcdir=dir, tmpdir=tmpdir))
+        log.info('Building ceph binary tarball %s from %s...' % (tmptar,
+                                                                 tmpdir))
+        os.system(('( cd {tmpdir} && tar czf {tmptar} . ) && ' +
+                   'rm -rf {tmpdir}').format(tmpdir=tmpdir, tmptar=tmptar));
+        tmpdir = None
+        log.info('Pushing tarball %s...' % tmptar)
+        with file(tmptar, 'rb') as f:
+            for rem in ctx.cluster.remotes.iterkeys():
+                rem.run(
+                    args=[
+                        'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+                        run.Raw('&&'),
+                        'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary'
+                        ],
+                    stdin=f
+                    )
+                f.seek(0)
+        os.unlink(tmptar)
+        tmptar = None
+
     try:
         yield
     finally:
+        if tmpdir is not None:
+            os.system('rm -rf %s' % tmpdir)
+        if tmptar is not None:
+            os.unlink(tmptar)
         log.info('Removing ceph binaries...')
         run.wait(
             ctx.cluster.run(
@@ -607,6 +646,12 @@ def task(ctx, config):
         - ceph:
             sha1: 1376a5ab0c89780eab39ffbbe436f6a6092314ed
 
+    Or a local source dir::
+
+        tasks:
+        - ceph:
+            path: /home/sage/ceph
+
     To capture code coverage data, use::
 
         tasks:
@@ -643,6 +688,7 @@ def task(ctx, config):
                 branch=config.get('branch'),
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
+                path=config.get('path'),
                 flavor=flavor,
                 )),
         lambda: cluster(ctx=ctx, config=None),
