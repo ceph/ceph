@@ -106,7 +106,7 @@ ostream& operator<<(ostream &out, Inode &in)
       out << " parent=" << *i;
       ++i;
   }
-  out << ")";
+  out << &in << ")";
   return out;
 }
 
@@ -1730,20 +1730,21 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
 
 void Client::put_inode(Inode *in, int n)
 {
-  //cout << "put_inode on " << in << " " << in->ino << endl;
+  ldout(cct, 10) << "put_inode on " << *in << dendl;
   in->put(n);
   if (in->ref == 0) {
     // release any caps
     remove_all_caps(in);
 
-    //cout << "put_inode deleting " << in << " " << in->ino << std::endl;
+    ldout(cct, 10) << "put_inode deleting " << *in << dendl;
     objectcacher->release_set(&in->oset);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
     in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
-    if (in == root) root = 0;
+    if (in == root)
+      root = 0;
     delete in;
   }
 }

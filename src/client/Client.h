@@ -504,11 +504,13 @@ class Inode {
 
   void get() { 
     ref++; 
-    ldout(cct, 15) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    ldout(cct, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
+		   << " now " << ref << dendl;
   }
   void put(int n=1) { 
     ref -= n; 
-    ldout(cct, 15) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    ldout(cct, 15) << "inode.put on " << this << " " << ino << '.' << snapid
+		   << " now " << ref << dendl;
     assert(ref >= 0);
   }
 
