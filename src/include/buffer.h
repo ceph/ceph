@@ -156,9 +156,6 @@ public:
 
     raw *clone();
     
-    void clone_in_place();
-    bool do_cow();
-
     void swap(ptr& other) {
       raw *r = _raw;
       unsigned o = _off;
@@ -547,18 +544,6 @@ public:
 	   it != _buffers.end();
 	   it++)
         it->zero();
-    }
-    void do_cow() {
-      for (std::list<ptr>::iterator it = _buffers.begin();
-	   it != _buffers.end();
-	   it++)
-	it->do_cow();
-    }
-    void clone_in_place() {
-      for (std::list<ptr>::iterator it = _buffers.begin();
-	   it != _buffers.end();
-	   it++)
-	it->clone_in_place();
     }
     void zero(unsigned o, unsigned l) {
       assert(o+l <= _len);

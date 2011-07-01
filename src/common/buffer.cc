@@ -294,21 +294,6 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     return _raw->clone();
   }
 
-  void buffer::ptr::clone_in_place() {
-    raw *newraw = _raw->clone();
-    release();
-    newraw->nref.inc();
-    _raw = newraw;
-  }
-  bool buffer::ptr::do_cow() {
-    if (_raw->nref.read() > 1) {
-      //std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
-      clone_in_place();
-      return true;
-    } else
-      return false;
-  }
-
   void buffer::ptr::release() {
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
