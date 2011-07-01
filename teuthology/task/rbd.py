@@ -157,7 +157,7 @@ def dev_create(ctx, config):
                 'sudo',
                 'mv',
                 '/tmp/cephtest/51-rbd.rules',
-                '/etc/udev/rules.d',
+                '/etc/udev/rules.d/',
                 ],
             )
 
