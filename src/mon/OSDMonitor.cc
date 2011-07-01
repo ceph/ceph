@@ -1561,6 +1561,48 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "create") {
+      int i;
+      if (m->cmd.size() > 2) {
+	i = atoi(m->cmd[2].c_str());
+	if (i < 0 || i >= osdmap.get_max_osd()) {
+	  ss << i << " is not a valid osd id";
+	  getline(ss, rs);
+	  return -ERANGE;
+	}
+	if (osdmap.exists(i) ||
+	    pending_inc.new_up_client.count(i) ||
+	    (pending_inc.new_state.count(i) &&
+	     (pending_inc.new_state[i] & CEPH_OSD_EXISTS))) {
+	  ss << i << " already exists";
+	  getline(ss, rs);
+	  return -EEXIST;
+	}
+      } else {
+	// allocate a new id
+	for (i=0; i < osdmap.get_max_osd(); i++) {
+	  if (!osdmap.exists(i) &&
+	      pending_inc.new_up_client.count(i) == 0 &&
+	      (pending_inc.new_state.count(i) == 0 ||
+	       (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0))
+	    goto done;
+	}
+	// hrm.  raise max_osd
+	if (pending_inc.new_max_osd < 0)
+	  pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
+	else
+	  pending_inc.new_max_osd++;
+	i = pending_inc.new_max_osd - 1;
+      }
+
+  done:
+      dout(10) << " creating osd" << i << dendl;
+      pending_inc.new_state[i] |= CEPH_OSD_EXISTS;
+      ss << i;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
     else if (m->cmd[1] == "rm" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
