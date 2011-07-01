@@ -147,13 +147,9 @@ def ls():
             else:
                 raise
 
-        for key in ['owner', 'description']:
-            if not key in summary:
-                summary[key] = '-'
-
         print "{job} {success} {owner} {desc}".format(
             job=j,
-            owner=summary['owner'],
-            desc=summary['description'],
+            owner=summary.get('owner', '-'),
+            desc=summary.get('description', '-'),
             success='pass' if summary['success'] else 'FAIL',
             )
