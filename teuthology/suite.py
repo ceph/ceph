@@ -1,4 +1,5 @@
 import argparse
+import errno
 import itertools
 import logging
 import os
@@ -141,7 +142,10 @@ def ls():
                 for new in g:
                     summary.update(new)
         except IOError, e:
-            continue
+            if e.errno == errno.ENOENT:
+                continue
+            else:
+                raise
 
         for key in ['owner', 'description']:
             if not key in summary:
