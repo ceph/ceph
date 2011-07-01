@@ -176,7 +176,7 @@ def nuke():
             '/tmp/cephtest/binary/usr/local/bin/cmds',
             '/tmp/cephtest/binary/usr/local/bin/cfuse',
             run.Raw(';'),
-            'fusermount', '-u', '/tmp/cephtest/mnt.*',
+            'fusermount', '-u', run.Raw('/tmp/cephtest/mnt.*'),
             run.Raw(';'),
             'rm', '-rf', '/tmp/cephtest'
             ])
