@@ -10,6 +10,36 @@ static string data_space = "data";
 static string attr_space = "attr";
 static string stat_space = "stat";
 
+enum {
+  UPDATE_OBJ_DATA,
+  UPDATE_OBJ_INFO,
+};
+
+struct RGWCacheNotifyInfo {
+  uint32_t op;
+  rgw_obj obj;
+  bufferlist bl;
+  off_t ofs;
+
+  void encode(bufferlist& obl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, obl);
+    ::encode(op, obl);
+    ::encode(obj, obl);
+    ::encode(bl, obl);
+    ::encode(ofs, obl);
+  }
+  void decode(bufferlist::iterator& ibl) {
+    __u8 struct_v;
+    ::decode(struct_v, ibl);
+    ::decode(op, ibl);
+    ::decode(obj, ibl);
+    ::decode(bl, ibl);
+    ::decode(ofs, ibl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
+
 class ObjectCache {
   std::map<string, bufferlist> cache_map;
 
@@ -33,10 +63,12 @@ class RGWCache  : public T
     return string(buf);
   }
 
+  int distribute(rgw_obj& obj, const char *data, off_t ofs, size_t len);
+  int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:
   RGWCache() {}
 
-  int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+  int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
 
   int get_obj(void **handle, std::string& bucket, std::string& oid, 
@@ -73,18 +105,29 @@ int RGWCache<T>::get_obj(void **handle, std::string& bucket, std::string& oid,
 }
 
 template <class T>
-int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+int RGWCache<T>::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len)
 {
-  string name = normal_name(data_space, bucket, obj);
+  string& bucket = obj.bucket;
+  string& oid = obj.object;
+  string name = normal_name(data_space, bucket, oid);
+  bool cacheable = false;
   if ((bucket[0] == '.') && ((ofs == 0) || (ofs == -1))) {
+    cacheable = true;
     bufferptr p(len);
     memcpy(p.c_str(), data, len);
     bufferlist bl;
     bl.append(p);
     cache.put(name, bl);
   }
-  return T::put_obj_data(id, bucket, obj, data, ofs, len);
+  int ret = T::put_obj_data(id, obj, data, ofs, len);
+  if (cacheable && ret >= 0) {
+    int r = distribute(obj, data, ofs, len);
+    if (r < 0)
+      RGW_LOG(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+  }
+
+  return ret;
 }
 
 template <class T>
@@ -122,6 +165,60 @@ done:
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
+  return 0;
+}
+
+template <class T>
+int RGWCache<T>::distribute(rgw_obj& obj, const char *data, off_t ofs, size_t len)
+{
+  RGWCacheNotifyInfo info;
+  bufferlist bl;
+
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+
+  bufferptr p(data, len);
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  info.bl.push_back(p);
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  info.obj = obj;
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  info.op = UPDATE_OBJ_DATA;
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  ::encode(info, bl);
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  int ret = T::distribute(bl);
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
+  return ret;
+}
+
+template <class T>
+int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
+{
+  RGWCacheNotifyInfo info;
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(info, iter);
+  } catch (buffer::error *err) {
+    RGW_LOG(0) << "ERROR: got bad notification" << dendl;
+    return -EIO;
+  }
+
+  string& bucket = info.obj.bucket;
+  string& oid = info.obj.object;
+  string name = normal_name(data_space, bucket, oid);
+
+  switch (info.op) {
+  case UPDATE_OBJ_DATA:
+    cache.put(name, info.bl);
+    break;
+  case UPDATE_OBJ_INFO:
+    break; // TODO
+  default:
+    RGW_LOG(0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    return -EINVAL;
+  }
+
   return 0;
 }
 

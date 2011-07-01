@@ -4,12 +4,13 @@
 #include "rgw_rados.h"
 #include "rgw_cache.h"
 
-#if 0
+#if 1
 static RGWCache<RGWFS> fs_provider;
 static RGWCache<RGWRados> rados_provider;
-#endif
+#else
 static RGWFS fs_provider;
 static RGWRados rados_provider;
+#endif
 
 RGWAccess* RGWAccess::store;
 

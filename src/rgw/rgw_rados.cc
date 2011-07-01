@@ -18,7 +18,18 @@ using namespace std;
 
 Rados *rados = NULL;
 
-static librados::IoCtx root_pool_ctx;
+static string notify_oid = "notify";
+
+class RGWWatcher : public librados::WatchCtx {
+  RGWRados *rados;
+public:
+  RGWWatcher(RGWRados *r) : rados(r) {}
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+    cout << "RGWWatcher::notify() opcode=" << (int)opcode << " ver=" << ver << " bl.length()=" << bl.length() << std::endl;
+    rados->watch_cb(opcode, ver, bl);
+  }
+};
+
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
@@ -40,6 +51,10 @@ int RGWRados::initialize(CephContext *cct)
    return ret;
 
   ret = open_root_pool_ctx();
+  if (ret < 0)
+    return ret;
+
+  ret = init_watch();
 
   return ret;
 }
@@ -58,6 +73,29 @@ int RGWRados::open_root_pool_ctx()
 
     r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
   }
+
+  return r;
+}
+
+int RGWRados::init_watch()
+{
+  int r = rados->ioctx_create(RGW_CONTROL_BUCKET, control_pool_ctx);
+  if (r == -ENOENT) {
+    r = rados->pool_create(RGW_CONTROL_BUCKET);
+    if (r < 0)
+      return r;
+
+    r = rados->ioctx_create(RGW_CONTROL_BUCKET, control_pool_ctx);
+    if (r < 0)
+      return r;
+  }
+
+  r = control_pool_ctx.create(notify_oid, false);
+  if (r < 0 && r != -EEXIST)
+    return r;
+
+  watcher = new RGWWatcher(this);
+  r = control_pool_ctx.watch(notify_oid, 0, &watch_handle, watcher);
 
   return r;
 }
@@ -1129,3 +1167,9 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
   return r;
 }
 
+int RGWRados::distribute(bufferlist& bl)
+{
+  RGW_LOG(0) << "JJJ sending notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
+  int r = control_pool_ctx.notify(notify_oid, 0, bl);
+  return r;
+}

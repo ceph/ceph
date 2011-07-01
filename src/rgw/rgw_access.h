@@ -74,6 +74,8 @@ public:
     }
     return ret;
   }
+
+  virtual int distribute(bufferlist& bl) { return -ENOTSUP; }
   virtual int aio_wait(void *handle) { return -ENOTSUP; }
 
   virtual bool aio_completed(void *handle) { return false; }

@@ -34,6 +34,8 @@ extern string rgw_root_bucket;
 
 #define RGW_ROOT_BUCKET ".rgw"
 
+#define RGW_CONTROL_BUCKET ".rgw.control"
+
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
@@ -596,7 +598,25 @@ public:
     obj = obj.substr(pos + 1);
     return true;
   }
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(bucket, bl);
+    ::encode(key, bl);
+    ::encode(ns, bl);
+    ::encode(object, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(bucket, bl);
+    ::decode(key, bl);
+    ::decode(ns, bl);
+    ::decode(object, bl);
+  }
 };
+WRITE_CLASS_ENCODER(rgw_obj)
 
 inline ostream& operator<<(ostream& out, const rgw_obj o) {
   return out << o.bucket << ":" << o.object;
