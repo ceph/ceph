@@ -1407,7 +1407,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     Capability *cap = p->second;
     int issued = cap->issued();
     if ((issued & CEPH_CAP_ANY_WR) &&
-	cap->client_follows <= oldin->first) {
+	cap->client_follows < last) {
       // note in oldin
       for (int i = 0; i < num_cinode_locks; i++) {
 	if (issued & cinode_lock_info[i].wr_caps) {
