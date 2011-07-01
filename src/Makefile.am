@@ -40,7 +40,7 @@ cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.la libosdc.la $(LIBGLOBAL_LDA)
+cmds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -210,6 +210,7 @@ endif
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
 noinst_LTLIBRARIES = 
+noinst_LIBRARIES =
 
 # libceph
 libceph_la_SOURCES = \
@@ -713,7 +714,7 @@ libmon_la_SOURCES = \
 libmon_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libmon.la
 
-libmds_la_SOURCES = \
+libmds_a_SOURCES = \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
 	mds/MDS.cc \
@@ -738,8 +739,7 @@ libmds_la_SOURCES = \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc
-libmds_la_LIBADD = libglobal.la
-noinst_LTLIBRARIES += libmds.la
+noinst_LIBRARIES += libmds.a
 
 libos_la_SOURCES = \
 	os/FileJournal.cc \
@@ -1156,7 +1156,7 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_confi
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
-	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_la_SOURCES) \
+	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
 	$(libosdc_la_SOURCES) $(libclient_la_SOURCES) $(ceph_tool_gui_DATA)
 
