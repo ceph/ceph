@@ -850,8 +850,7 @@ connect()
 
   messenger->add_dispatcher_head(this);
 
-  rados_instance.inc();
-  nonce = getpid() + (1000000 * (uint64_t)rados_instance.read());
+  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
 
   messenger->start_with_nonce(nonce);
   messenger->add_dispatcher_head(this);
