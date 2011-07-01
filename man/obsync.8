@@ -1,0 +1,98 @@
+.TH OBSYNC 8
+.SH NAME
+obsync \- The object synchronizer tool
+.SH SYNOPSIS
+.B obsync [ \fIoptions\fP ] \fIsource\fP \fIdestination\fP
+
+.SH DESCRIPTION
+.B obsync
+Obsync is an object syncrhonizer tool designed to transfer objects between
+different object storage systems.  Similar to rsync, you specify a source and a
+deestination, and it will transfer objects between them until the destination
+has all the objects in the source. Obsync will never modify the source-- only the
+destination.
+
+By default, obsync does not delete anything. However, by specifying \fB--delete-after\fP
+or \fB--delete-before\fP, you can ask it to delete objects from the destination that are
+not in the source.
+
+.SH TARGET TYPES
+Obsync supports \fIS3\fP via \fIlibboto\fP.
+To use the s3 target, your URL should look like this:
+s3://\fIhost-name\fP/\fIbucket-name\fP
+
+Obsync supports storing files locally via the \fIfile://\fP target.
+To use the file target, your URL should look like this:
+file://\fIdirectory-name\fP
+
+Alternately, give no prefix, like this:
+\fI\./directory-name\fP
+
+Obsync supports storing files in a \fIRados Gateway\fP backend via the \fIlibrados\fP Python bindings.
+To use the rgw target, your URL should look like this:
+rgw:\fIceph-configuration-path\fP:\fIrgw-bucket-name\fP
+
+.SH OPTIONS
+\fB\-h\fP | \fB\-\-help\fP
+Display a help message
+
+\fB\-n\fP | \fB\-\-dry-run\fP
+Show what would be done, but do not modify the destination.
+
+\fB\-c\fP | \fB\-\-create-dest\fP
+Create the destination if it does not exist.
+
+\fB\-\-delete-before\fP
+Before copying any files, delete objects in the destination that are not in the source.
+
+\fB\-L\fP | \fB\-\-follow-symlinks\fP
+Follow symlinks when dealing with \fIfile://\fP targets.
+
+\fB\-\-no-preserve-acls\fP
+Don't preserve ACLs when copying objects.
+
+\fB\-v\fP | \fB\-\-verbose\fP
+Be verbose.
+
+\fB\-V\fP | \fB\-\-more-verbose\fP
+Be really, really verbose (developer mode)
+
+\fB\-x\fP \fBSRC\fP=\fBDST\fP | \fB\-\-xuser\fP \fBSRC\fP=\fBDST\fP
+Set up a user translation. You can specify multiple user translations with
+multiple \fB--xuser\fP arguments.
+
+\fB\-\-force\fP
+Overwrite all destination objects, even if they appear to be the same as the
+source objects.
+
+.SH ENVIRONMENT VARIABLES
+\fBSRC_AKEY\fP          Access key for the source URL
+
+\fBSRC_SKEY\fP          Secret access key for the source URL
+
+\fBDST_AKEY\fP          Access key for the destination URL
+
+\fBDST_SKEY\fP          Secret access key for the destination URL
+
+\fBAKEY\fP              Access key for both source and dest
+
+\fBSKEY\fP              Secret access key for both source and dest
+
+\fBDST_CONSISTENCY\fP   Set to 'eventual' if the destination is eventually consistent.
+If the destination is eventually consistent, we may have to retry certain operations
+multiple times.
+
+.SH EXAMPLES
+\fIAKEY=... SKEY=... obsync -c -d -v ./backup-directory s3://myhost1/mybucket1\fP
+
+Copy objects from backup-directory to mybucket1 on myhost1
+
+\fISRC_AKEY=... SRC_SKEY=...  DST_AKEY=... DST_SKEY=...
+obsync -c -d -v s3://myhost1/mybucket1 s3://myhost1/mybucket2\fP
+
+Copy objects from mybucket1 to mybucket2
+
+.SH AVAILABILITY
+.B obsync
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.

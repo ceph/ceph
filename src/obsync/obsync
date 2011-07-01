@@ -1069,6 +1069,7 @@ DST_AKEY          Access key for the destination URL
 DST_SKEY          Secret access key for the destination URL
 AKEY              Access key for both source and dest
 SKEY              Secret access key for both source and dest
+DST_CONSISTENCY   Set to 'eventual' if the destination is eventually consistent
 
 If these environment variables are not given, we will fall back on libboto
 defaults.
