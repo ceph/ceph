@@ -26,6 +26,7 @@ setup(
             'teuthology-nuke = teuthology.run:nuke',
             'teuthology-suite = teuthology.suite:main',
             'teuthology-ls = teuthology.suite:ls',
+            'teuthology-lock = teuthology.lock:main',
             ],
         },
 
