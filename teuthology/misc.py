@@ -3,6 +3,8 @@ from cStringIO import StringIO
 import os
 import logging
 import configobj
+import getpass
+import socket
 import time
 import urllib2
 import urlparse
@@ -292,3 +294,6 @@ def get_clients(ctx, roles):
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         yield (id_, remote)
+
+def get_user():
+    return getpass.getuser() + '@' + socket.gethostname()
