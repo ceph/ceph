@@ -3980,7 +3980,8 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  assert(in->get_loner() >= 0 && in->mds_caps_wanted.empty());
+  assert((in->get_loner() >= 0 && in->mds_caps_wanted.empty()) ||
+	 (lock->get_state() == LOCK_XSYN));  // must do xsyn -> excl -> <anything else>
   
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
