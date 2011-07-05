@@ -299,7 +299,9 @@ if [ -n "$prepareosdfs" ]; then
     
     test -d $osd_data || mkdir -p $osd_data
 
-    [ -n "$osd_journal" ] && test -d $osd_journal || mkdir -p `dirname $osd_journal`
+    if [ -n "$osd_journal" ]; then
+	test -d $osd_journal || mkdir -p `dirname $osd_journal`
+    fi
 
     umount $btrfs_path || true
     for f in $btrfs_devs ; do
