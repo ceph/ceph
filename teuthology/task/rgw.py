@@ -122,15 +122,6 @@ def start_apache(ctx, config):
 
         run.wait(apaches.itervalues())
 
-        # radosgw does not get shutdown with apache
-        for client in config:
-            ctx.cluster.only(client).run(
-                args=[
-                    'killall',
-                    'radosgw',
-                    ],
-                )
-
 
 @contextlib.contextmanager
 def task(ctx, config):
