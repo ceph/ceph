@@ -62,6 +62,7 @@ def ship_config(ctx, config):
             path='/tmp/cephtest/apache/htdocs/rgw.fcgi',
             data="""#!/bin/sh
 ulimit -c unlimited
+export LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib
 exec /tmp/cephtest/binary/usr/local/bin/radosgw -c /tmp/cephtest/ceph.conf
 """
             )
