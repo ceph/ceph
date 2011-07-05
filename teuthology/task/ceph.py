@@ -160,11 +160,19 @@ def cluster(ctx, config):
             )
         )
 
-    log.info('Writing configs...')
+    log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
     ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
     conf = teuthology.skeleton_config(roles=roles, ips=ips)
+    for section, keys in config['conf'].iteritems():
+        for key, value in keys.iteritems():
+            log.info("[%s] %s = %s" % (section, key, value))
+            if section not in conf:
+                conf[section] = {}
+            conf[section][key] = value
+    
+    log.info('Writing configs...')
     conf_fp = StringIO()
     conf.write(conf_fp)
     conf_fp.seek(0)
@@ -613,6 +621,26 @@ def task(ctx, config):
         - ceph:
             coverage: true
 
+    To adjust or modify config options, use::
+
+        tasks:
+        - ceph:
+            conf:
+              section:
+                key: value
+
+    For example::
+
+        tasks:
+        - ceph:
+            conf:
+              mds.0:
+                some option: value
+                other key: other value
+              client.0:
+                debug client: 10
+                debug ms: 1
+
     """
     if config is None:
         config = {}
@@ -645,7 +673,9 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 flavor=flavor,
                 )),
-        lambda: cluster(ctx=ctx, config=None),
+        lambda: cluster(ctx=ctx, config=dict(
+                conf=config.get('conf', {})
+                )),
         lambda: mon(ctx=ctx, config=dict(
                 coverage=config.get('coverage'),
                 )),
