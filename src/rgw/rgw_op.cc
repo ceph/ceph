@@ -656,7 +656,7 @@ void RGWPutObj::execute()
       ret = rgwstore->clone_obj(dst_obj, 0, obj, 0, s->obj_size, attrs);
       if (ret < 0)
         goto done;
-      ret = rgwstore->delete_obj(s->user.user_id, obj);
+      ret = rgwstore->delete_obj(s->user.user_id, obj, false);
       if (ret < 0)
         goto done;
     } else {

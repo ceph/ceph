@@ -71,20 +71,20 @@ public:
   int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
 
-  int get_obj(void **handle, std::string& bucket, std::string& oid, 
-            char **data, off_t ofs, off_t end);
+  int get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
   int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 };
 
 
 template <class T>
-int RGWCache<T>::get_obj(void **handle, std::string& bucket, std::string& oid, 
-            char **data, off_t ofs, off_t end)
+int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
+  string& bucket = obj.bucket;
+  string& oid = obj.object;
   string name = normal_name(data_space, bucket, oid);
   if (bucket[0] != '.' || ofs != 0)
-    return T::get_obj(handle, bucket, oid, data, ofs, end);
+    return T::get_obj(handle, obj, data, ofs, end);
 
   bufferlist bl;
   if (cache.get(name, bl) == 0) {
@@ -92,7 +92,7 @@ int RGWCache<T>::get_obj(void **handle, std::string& bucket, std::string& oid,
     memcpy(*data, bl.c_str(), bl.length());
     return bl.length();
   }
-  int r = T::get_obj(handle, bucket, oid, data, ofs, end);
+  int r = T::get_obj(handle, obj, data, ofs, end);
   if (r < 0)
     return r;
 
@@ -174,20 +174,12 @@ int RGWCache<T>::distribute(rgw_obj& obj, const char *data, off_t ofs, size_t le
   RGWCacheNotifyInfo info;
   bufferlist bl;
 
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
-
   bufferptr p(data, len);
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   info.bl.push_back(p);
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   info.obj = obj;
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   info.op = UPDATE_OBJ_DATA;
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   ::encode(info, bl);
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   int ret = T::distribute(bl);
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   return ret;
 }
 
@@ -199,7 +191,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
-  } catch (buffer::error *err) {
+  } catch (buffer::end_of_buffer *err) {
     RGW_LOG(0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   }

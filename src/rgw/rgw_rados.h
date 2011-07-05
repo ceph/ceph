@@ -86,7 +86,7 @@ public:
   virtual int bucket_suspended(std::string& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(std::string& id, rgw_obj& src_obj);
+  virtual int delete_obj(std::string& id, rgw_obj& src_obj, bool sync);
 
   /** Get the attributes for an object.*/
   virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest);

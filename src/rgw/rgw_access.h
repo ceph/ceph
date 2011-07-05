@@ -125,7 +125,7 @@ public:
    * obj: name of the object to delete
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int delete_obj(std::string& id, rgw_obj& obj) = 0;
+  virtual int delete_obj(std::string& id, rgw_obj& obj, bool sync = true) = 0;
 
 /**
  * Get data about an object out of RADOS and into memory.

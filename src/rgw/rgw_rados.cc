@@ -515,7 +515,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   if (mtime)
     obj_stat(tmp_obj, NULL, mtime);
 
-  r = rgwstore->delete_obj(id, tmp_obj);
+  r = rgwstore->delete_obj(id, tmp_obj, false);
   if (r < 0)
     RGW_LOG(0) << "ERROR: could not remove " << tmp_obj << dendl;
 
@@ -523,7 +523,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
   return ret;
 done_err:
-  rgwstore->delete_obj(id, tmp_obj);
+  rgwstore->delete_obj(id, tmp_obj, false);
   finish_get_obj(&handle);
   return r;
 }
@@ -676,7 +676,7 @@ int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
+int RGWRados::delete_obj(std::string& id, rgw_obj& obj, bool sync)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -686,7 +686,15 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
     return r;
 
   io_ctx.locator_set_key(obj.key);
-  r = io_ctx.remove(oid);
+  if (sync) {
+    r = io_ctx.remove(oid);
+  } else {
+    ObjectOperation op;
+    op.remove();
+    librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+    r = io_ctx.aio_operate(obj.key, completion, &op, NULL);
+    completion->release();
+  }
   if (r < 0)
     return r;
 
