@@ -94,12 +94,10 @@ def configure(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
-                'pushd',
+                'cd',
                 '/tmp/cephtest/s3-tests',
                 run.Raw('&&'),
                 './bootstrap',
-                run.Raw(';'),
-                'popd',
                 ],
             )
         conf_fp = StringIO()
