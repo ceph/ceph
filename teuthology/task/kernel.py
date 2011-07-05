@@ -145,9 +145,9 @@ def reconnect(ctx, timeout):
             try:
                 remote.ssh = connection.connect(remote.name)
             except socket.error as (code, description):
-                if (code != errno.ECONNREFUSED and \
-                        code != errno.ETIMEDOUT) or \
-                        time.time() - starttime > timeout:
+                if code not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
+                                errno.EHOSTUNREACH, errno.EHOSTDOWN] or \
+                                time.time() - starttime > timeout:
                     raise
             else:
                 need_reconnect.remove(remote)
