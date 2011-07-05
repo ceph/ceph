@@ -72,7 +72,7 @@ public:
 
   // Parse a config file
   int parse_config_files(const char *conf_files,
-			 std::deque<std::string> *parse_errors);
+			 std::deque<std::string> *parse_errors, int flags);
 
   // Absorb config settings from the environment
   void parse_env();
