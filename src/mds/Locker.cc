@@ -585,6 +585,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
 	case LOCK_MIX_SYNC2:
 	  ((ScatterLock *)lock)->finish_flush();
+	  ((ScatterLock *)lock)->clear_flushed();
 
 	case LOCK_SYNC_MIX2:
 	  // do nothing, we already acked
@@ -4135,6 +4136,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     }
 
     ((ScatterLock *)lock)->finish_flush();
+    ((ScatterLock *)lock)->clear_flushed();
 
     // ok
     lock->decode_locked_state(m->get_data());
@@ -4157,6 +4159,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 
   case LOCK_AC_LOCKFLUSHED:
     ((ScatterLock *)lock)->finish_flush();
+    ((ScatterLock *)lock)->clear_flushed();
     break;
     
   case LOCK_AC_MIX:
