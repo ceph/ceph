@@ -2,26 +2,29 @@
 
 dir=`dirname $0`
 
-$dir/prepare.sh
+CEPH_TOOL='./ceph'
+$CEPH_TOOL || CEPH_TOOL='ceph'
 
-$dir/pri_nul.sh
-rm mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/prepare.sh
 
-$dir/rem_nul.sh
-rm mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/pri_nul.sh
+rm ./?/* || true
 
-$dir/pri_pri.sh
-rm mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/rem_nul.sh
+rm ./?/* || true
 
-$dir/rem_pri.sh
-rm mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/pri_pri.sh
+rm ./?/* || true
 
-$dir/rem_rem.sh
-rm mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/rem_pri.sh
+rm ./?/* || true
 
-$dir/pri_nul.sh
-rm -r mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/rem_rem.sh
+rm ./?/* || true
 
-$dir/pri_pri.sh
-rm -r mnt/?/* || true
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/pri_nul.sh
+rm -r ./?/* || true
+
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/pri_pri.sh
+rm -r ./?/* || true
 

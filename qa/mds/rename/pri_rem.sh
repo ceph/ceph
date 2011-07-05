@@ -6,11 +6,11 @@ dotest() {
     destdn=$3
     n=$4
 
-    touch mnt/$src/src$n
-    touch mnt/$desti/desti$n
-    ln mnt/$desti/desti$n mnt/$destdn/destdn$n
+    touch ./$src/src$n
+    touch ./$desti/desti$n
+    ln ./$desti/desti$n ./$destdn/destdn$n
 
-    mv mnt/$src/src$n mnt/$destdn/destdn$n
+    mv ./$src/src$n ./$destdn/destdn$n
 }
 
 

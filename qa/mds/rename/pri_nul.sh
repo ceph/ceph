@@ -1,11 +1,11 @@
 #!/bin/sh -ex
 
 # srcdn=destdn
-touch mnt/a/file1
-mv mnt/a/file1 mnt/a/file1.renamed
+touch ./a/file1
+mv ./a/file1 ./a/file1.renamed
 
 # different
-touch mnt/a/file2
-mv mnt/a/file2 mnt/b
+touch ./a/file2
+mv ./a/file2 ./b
 
 

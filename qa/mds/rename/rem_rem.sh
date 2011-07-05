@@ -7,12 +7,12 @@ dotest() {
     destdn=$4
     n=$5
 
-    touch mnt/$srci/srci$n
-    ln mnt/$srci/srci$n mnt/$srcdn/srcdn$n
-    touch mnt/$desti/desti$n
-    ln mnt/$desti/desti$n mnt/$destdn/destdn$n
+    touch ./$srci/srci$n
+    ln ./$srci/srci$n ./$srcdn/srcdn$n
+    touch ./$desti/desti$n
+    ln ./$desti/desti$n ./$destdn/destdn$n
 
-    mv mnt/$srcdn/srcdn$n mnt/$destdn/destdn$n
+    mv ./$srcdn/srcdn$n ./$destdn/destdn$n
 }
 
 #  srci=srcdn=destdn=desti
