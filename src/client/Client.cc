@@ -2815,7 +2815,8 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 		 CEPH_CAP_FLAG_AUTH);
   
   // reflush any/all caps
-  flush_snaps(in, true);
+  if (in->cap_snaps.size())
+    flush_snaps(in, true);
   if (in->flushing_caps)
     flush_caps(in, mds);
 
