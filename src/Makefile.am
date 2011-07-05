@@ -375,6 +375,17 @@ libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
+## System tests
+libsystest_la_SOURCES = \
+	test/system/systest_runnable.cc \
+	test/system/systest_settings.cc
+libsystest_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libsystest.la
+
+rados_list_parallel_SOURCES = test/system/rados_list_parallel.cc
+rados_list_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += rados_list_parallel
+
 ## unit tests
 
 # target to build but not run the unit tests
@@ -1150,7 +1161,9 @@ noinst_HEADERS = \
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
 	global/pidfile.h\
-	common/sync_filesystem.h
+	common/sync_filesystem.h \
+	test/system/systest_runnable.h \
+	test/system/systest_settings.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
