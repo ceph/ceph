@@ -68,7 +68,7 @@ void global_init(std::vector < const char* >& args,
   md_config_t *conf = cct->_conf;
 
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, flags);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);

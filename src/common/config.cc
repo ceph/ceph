@@ -491,11 +491,18 @@ remove_observer(md_config_obs_t* observer_)
 
 int md_config_t::
 parse_config_files(const char *conf_files,
-		   std::deque<std::string> *parse_errors)
+		   std::deque<std::string> *parse_errors, int flags)
 {
   if (!conf_files) {
     const char *c = getenv("CEPH_CONF");
-    conf_files = c ? c : CEPH_CONF_FILE_DEFAULT;
+    if (c) {
+      conf_files = c;
+    }
+    else {
+      if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
+	return 0;
+      conf_files = CEPH_CONF_FILE_DEFAULT;
+    }
   }
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
