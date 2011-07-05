@@ -30,13 +30,17 @@
  * Context - abstract callback class
  */
 class Context {
- public:
   Context(const Context& other);
   const Context& operator=(const Context& other);
 
+ public:
   Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
   virtual void finish(int r) = 0;
+  virtual void complete(int r) {
+    finish(r);
+    delete this;
+  }
 };
 
 
@@ -58,8 +62,7 @@ inline void finish_contexts(CephContext *cct, std::list<Context*>& finished,
        it++) {
     Context *c = *it;
     ldout(cct,10) << "---- " << c << dendl;
-    c->finish(result);
-    delete c;
+    c->complete(result);
   }
 }
 
@@ -78,8 +81,7 @@ inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished,
        it++) {
     Context *c = *it;
     ldout(cct,10) << "---- " << c << dendl;
-    c->finish(result);
-    delete c;
+    c->complete(result);
   }
 }
 
@@ -158,8 +160,7 @@ private:
 
   void delete_me() {
     if (onfinish) {
-      onfinish->finish(result);
-      delete onfinish;
+      onfinish->complete(result);
       onfinish = 0;
     }
     delete this;
