@@ -51,6 +51,7 @@ void usage()
 "   df                              show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
 "   chown 123                        change the pool owner to auid 123\n"
+"\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
@@ -67,7 +68,9 @@ void usage()
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations]\n"
-"                                    default is 16 concurrent IOs and 4 MB op size\n\n"
+"                                    default is 16 concurrent IOs and 4 MB ops\n"
+"   load-gen [options]               generate load on the cluster\n"
+"\n"
 "IMPORT AND EXPORT\n"
 "   import [options] <local-directory> <rados-pool>\n"
 "       Upload <local-directory> to <rados-pool>\n"
@@ -78,6 +81,7 @@ void usage()
 "       -d / --delete-after          After synchronizing, delete unreferenced\n"
 "                                    files or objects from the target bucket\n"
 "                                    or directory.\n"
+"\n"
 "GLOBAL OPTIONS:\n"
 "   -p pool\n"
 "   --pool=pool\n"
@@ -94,11 +98,11 @@ void usage()
 "        create the pool or directory that was specified\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
-"   --num-objs                       total number of objects\n"
-"   --min-obj_len                    min number of objects\n"
-"   --max-obj_len                    max number of objects\n"
-"   --min-op_len                     min number of operations\n"
-"   --max-op_len                     max number of operations\n"
+"   --num-objects                    total number of objects\n"
+"   --min-object-size                min object size\n"
+"   --max-object-size                max object size\n"
+"   --min-ops                        min number of operations\n"
+"   --max-ops                        max number of operations\n"
 "   --max-backlog                    max backlog (in MB)\n"
 "   --percent                        percent of operations that are read\n"
 "   --target-throughput              target throughput (in MB)\n"
@@ -587,19 +591,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     snapid = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("min-obj-len");
+  i = opts.find("min-object-size");
   if (i != opts.end()) {
     min_obj_len = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("max-obj-len");
+  i = opts.find("max-object-size");
   if (i != opts.end()) {
     max_obj_len = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("min-op-len");
+  i = opts.find("min-ops");
   if (i != opts.end()) {
     min_op_len = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("max-op-len");
+  i = opts.find("max-ops");
   if (i != opts.end()) {
     max_op_len = strtoll(i->second.c_str(), NULL, 10);
   }
@@ -615,7 +619,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     read_percent = strtoll(i->second.c_str(), NULL, 10);
   }
-  i = opts.find("num-objs");
+  i = opts.find("num-objects");
   if (i != opts.end()) {
     num_objs = strtoll(i->second.c_str(), NULL, 10);
   }
@@ -1162,22 +1166,22 @@ int main(int argc, const char **argv)
       opts["snap"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {
       opts["snapid"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-obj-len", (char*)NULL)) {
-      opts["min-obj-len"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-obj-len", (char*)NULL)) {
-      opts["max-obj-len"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-op-len", (char*)NULL)) {
-      opts["min-op-len"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-op-len", (char*)NULL)) {
-      opts["max-op-len"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-object-size", (char*)NULL)) {
+      opts["min-object-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-object-size", (char*)NULL)) {
+      opts["max-object-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-ops", (char*)NULL)) {
+      opts["min-ops"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-ops", (char*)NULL)) {
+      opts["max-ops"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-backlog", (char*)NULL)) {
       opts["max-backlog"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-throughput", (char*)NULL)) {
       opts["target-throughput"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--read-percent", (char*)NULL)) {
       opts["read-percent"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--num-objs", (char*)NULL)) {
-      opts["num-objs"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)NULL)) {
+      opts["num-objects"] = val;
     } else {
       if (val[0] == '-')
         usage();
