@@ -114,7 +114,6 @@ def binaries(ctx, config):
             sha1=config.get('sha1'),
             flavor=config.get('flavor'),
             )
-        ctx.summary['flavor'] = config.get('flavor', 'default')
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
                 f.write(sha1 + '\n')
@@ -665,9 +664,14 @@ def task(ctx, config):
         "task ceph only supports a dictionary for configuration"
 
     flavor = None
-    if config.get('coverage'):
-        log.info('Recording coverage for this run.')
-        flavor = 'gcov'
+    if config.get('path'):
+        # local dir precludes any other flavors
+        flavor = 'local'
+    else:
+        if config.get('coverage'):
+            log.info('Recording coverage for this run.')
+            flavor = 'gcov'
+    ctx.summary['flavor'] = flavor or 'default'
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
     log.info('Creating coverage directory...')
