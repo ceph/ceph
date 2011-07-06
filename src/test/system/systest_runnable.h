@@ -44,11 +44,11 @@ class SysTestRunnable
 public:
   static const int ID_STR_SZ = 128;
 
-  SysTestRunnable();
+  SysTestRunnable(int argc, const char **argv);
   virtual ~SysTestRunnable();
 
   /* Returns 0 on success; error code otherwise. */
-  virtual int run(void) = 0;
+  virtual int run() = 0;
 
   /* Return a string identifying the runnable. */ 
   const char* get_id_str(void) const;
@@ -65,11 +65,19 @@ public:
   static std::string run_until_finished(std::vector < SysTestRunnable * >&
 					runnables);
 
+protected:
+  int m_argc;
+  const char **m_argv;
+
 private:
+  SysTestRunnable(const SysTestRunnable &rhs);
+  SysTestRunnable& operator=(const SysTestRunnable &rhs);
   void update_id_str(bool started);
+  void set_argv(int argc, const char **argv);
 
   friend void* systest_runnable_pthread_helper(void *arg);
 
+  const char **m_argv_orig;
   bool m_started;
   int m_id;
   pthread_t m_pthread;

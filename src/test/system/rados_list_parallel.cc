@@ -50,8 +50,8 @@ static CrossProcessSem *modify_sem = NULL;
 class RadosCreateBigPoolR : public SysTestRunnable
 {
 public:
-  RadosCreateBigPoolR()
-    : SysTestRunnable()
+  RadosCreateBigPoolR(int argc, const char **argv)
+    : SysTestRunnable(argc, argv)
   {
   }
 
@@ -59,7 +59,7 @@ public:
   {
   }
 
-  int run(void)
+  int run()
   {
     rados_t cl;
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
@@ -114,8 +114,8 @@ static int do_ioctx_create(const char *id_str, rados_t &cl,
 class RadosListObjectsR : public SysTestRunnable
 {
 public:
-  RadosListObjectsR()
-    : SysTestRunnable()
+  RadosListObjectsR(int argc, const char **argv)
+    : SysTestRunnable(argc, argv)
   {
   }
 
@@ -123,7 +123,7 @@ public:
   {
   }
 
-  int run(void)
+  int run()
   {
     rados_t cl;
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
@@ -139,8 +139,8 @@ public:
 //    const char *obj_name;
 //    char tmp[RLP_OBJECT_SZ_MAX];
     rados_list_ctx_t h;
-    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
 //    printf("%s: listing objects.\n", get_id_str());
+    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
 //    while (true) {
 //      ret = rados_objects_list_next(h, &obj_name);
 //      if (ret == -ENOENT) {
@@ -173,8 +173,8 @@ public:
 class RadosModifyPoolR : public SysTestRunnable
 {
 public:
-  RadosModifyPoolR()
-    : SysTestRunnable()
+  RadosModifyPoolR(int argc, const char **argv)
+    : SysTestRunnable(argc, argv)
   {
   }
 
@@ -236,9 +236,9 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
-  RadosCreateBigPoolR r1;
-  RadosListObjectsR r2;
-  RadosModifyPoolR r3;
+  RadosCreateBigPoolR r1(argc, argv);
+  RadosListObjectsR r2(argc, argv);
+  RadosModifyPoolR r3(argc, argv);
   vector < SysTestRunnable* > vec;
   vec.push_back(&r1);
   vec.push_back(&r2);
