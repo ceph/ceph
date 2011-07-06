@@ -5,6 +5,7 @@ import logging
 import os
 import tarfile
 
+from teuthology import lock
 from teuthology import misc as teuthology
 from teuthology import safepath
 from orchestra import run
@@ -41,6 +42,52 @@ def base(ctx, config):
                 ),
             )
 
+
+@contextlib.contextmanager
+def lock_machines(ctx, config):
+    log.info('Locking machines...')
+    assert isinstance(config, int), 'config must be an integer'
+    newly_locked = lock.lock_many(config, ctx.owner)
+    if len(newly_locked) != config:
+        log.error('Could not lock enough machines, unlocking and exiting...')
+        for machine in newly_locked:
+            lock.unlock(machine, ctx.owner)
+        assert 0
+    ctx.config['targets'] = newly_locked
+    try:
+        yield
+    finally:
+        log.info('Unlocking machines...')
+        for machine in newly_locked:
+            lock.unlock(machine, ctx.owner)
+
+def check_lock(ctx, config):
+    log.info('Checking locks...')
+    for machine in ctx.config['targets']:
+        status = lock.get_status(machine)
+        log.debug('machine status is %s', repr(status))
+        assert status is not None, \
+            'could not read lock status for {name}'.format(name=machine)
+        assert status['up'], 'machine {name} is marked down'.format(name=machine)
+        assert status['locked'], \
+            'machine {name} is not locked'.format(name=machine)
+        assert status['locked_by'] == ctx.owner, \
+            'machine {name} is locked by {user}, not {owner}'.format(
+            name=machine,
+            user=status['locked_by'],
+            owner=ctx.owner,
+            )
+
+def connect(ctx, config):
+    log.info('Opening connections...')
+    from orchestra import connection, remote
+    import orchestra.cluster
+
+    remotes = [remote.Remote(name=t, ssh=connection.connect(t))
+               for t in ctx.config['targets']]
+    ctx.cluster = orchestra.cluster.Cluster()
+    for rem, roles in zip(remotes, ctx.config['roles']):
+        ctx.cluster.add(rem, roles)
 
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')

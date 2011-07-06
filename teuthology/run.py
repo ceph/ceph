@@ -48,6 +48,12 @@ def parse_args():
         '--owner',
         help='job owner'
         )
+    parser.add_argument(
+        '--lock',
+        action='store_true',
+        default=False,
+        help='lock machines for the duration of the run',
+        )
 
     args = parser.parse_args()
     return args
@@ -87,24 +93,13 @@ def main():
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
-    log.info('Opening connections...')
-
-    from orchestra import connection, remote
-    import orchestra.cluster
-
-    remotes = [remote.Remote(name=t, ssh=connection.connect(t))
-               for t in ctx.config['targets']]
-    ctx.cluster = orchestra.cluster.Cluster()
-    for rem, roles in zip(remotes, ctx.config['roles']):
-        ctx.cluster.add(rem, roles)
 
     ctx.summary = {}
 
-    if ctx.owner is not None:
-        ctx.summary['owner'] = ctx.owner
-    else:
+    if ctx.owner is None:
         from teuthology.misc import get_user
-        ctx.summary['owner'] = get_user()
+        ctx.owner = get_user()
+    ctx.summary['owner'] = ctx.owner
 
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
@@ -113,7 +108,17 @@ def main():
         assert 'kernel' not in task, \
             'kernel installation shouldn be a base-level item, not part of the tasks list'
 
-    init_tasks = [{'internal.check_conflict': None}]
+    init_tasks = []
+    if ctx.lock:
+        assert 'targets' not in ctx.config, \
+            'You cannot specify targets in a config file when using the --lock option'
+        init_tasks.append({'internal.lock_machines': len(ctx.config['roles'])})
+
+    init_tasks.extend([
+            {'internal.check_lock': None},
+            {'internal.connect': None},
+            {'internal.check_conflict': None},
+            ])
     if 'kernel' in ctx.config:
         init_tasks.append({'kernel': ctx.config['kernel']})
     init_tasks.extend([
