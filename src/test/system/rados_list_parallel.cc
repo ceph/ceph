@@ -82,7 +82,11 @@ public:
 	printf("%s: rados_write error %d\n", get_id_str(), ret);
 	return ret;
       }
+      if (((i % 25) == 0) || (i == RLP_NUM_OBJECTS - 1)) {
+	printf("%s: created object %d...\n", get_id_str(), i);
+      }
     }
+    printf("%s: finishing.\n", get_id_str());
     sem_post(&pool_setup_sem);
     sem_post(&pool_setup_sem);
     rados_ioctx_destroy(cl);
@@ -118,6 +122,7 @@ public:
     char tmp[RLP_OBJECT_SZ_MAX];
     rados_list_ctx_t h;
     RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
+    printf("%s: listing objects.\n", get_id_str());
     while (true) {
       ret = rados_objects_list_next(h, &obj_name);
       if (ret == -ENOENT) {
@@ -127,10 +132,12 @@ public:
 	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
 	return ret;
       }
+      printf("%s: listed an object!\n", get_id_str());
       int len = strlen(obj_name);
       if (len > RLP_OBJECT_SZ_MAX)
 	len = RLP_OBJECT_SZ_MAX;
       memcpy(tmp, obj_name, strlen(obj_name));
+      printf("%s: listing object '%s'\n", get_id_str(), obj_name);
       ++saw;
       if (saw == RLP_NUM_OBJECTS / 2)
 	sem_wait(&modify_sem);
@@ -204,7 +211,8 @@ public:
 int main(int argc, const char **argv)
 {
   sem_init(&pool_setup_sem, 1, 0);
-  sem_init(&modify_sem, 1, 0);
+  //sem_init(&modify_sem, 1, 0);
+  sem_init(&modify_sem, 1, 1);
 
   RadosCreateBigPoolR r1;
   RadosListObjectsR r2;
@@ -212,7 +220,7 @@ int main(int argc, const char **argv)
   vector < SysTestRunnable* > vec;
   vec.push_back(&r1);
   vec.push_back(&r2);
-  vec.push_back(&r3);
+  //vec.push_back(&r3);
   std::string error = SysTestRunnable::run_until_finished(vec);
   if (!error.empty()) {
     printf("got error: %s\n", error.c_str());
