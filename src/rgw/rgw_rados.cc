@@ -692,7 +692,7 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj, bool sync)
     ObjectOperation op;
     op.remove();
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_operate(obj.key, completion, &op, NULL);
+    r = io_ctx.aio_operate(obj.object, completion, &op, NULL);
     completion->release();
   }
   if (r < 0)
