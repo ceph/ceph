@@ -3987,7 +3987,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       // did we get more data than we need?
       if (!data_subset.subset_of(data_needed)) {
 	interval_set<uint64_t> extra = data_subset;
-	extra.subtract(data_needed);
+	interval_set<uint64_t> usable;
+	usable.intersection_of(extra, data_needed);
+	extra.subtract(usable);
 	dout(10) << " we got some extra: " << extra << dendl;
 
 	bufferlist result;
