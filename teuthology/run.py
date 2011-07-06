@@ -157,20 +157,14 @@ def nuke():
         )
 
     log.info('\n  '.join(['targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
-    log.info('Opening connections...')
 
-    from orchestra import connection, remote, run
-    import orchestra.cluster
-
-    remotes = [remote.Remote(name=t, ssh=connection.connect(t))
-               for t in ctx.config['targets']]
-    ctx.cluster = orchestra.cluster.Cluster()
-
-    for rem, name in zip(remotes, ctx.config['targets']):
-        ctx.cluster.add(rem, name)
+    from teuthology.task.internal import check_lock, connect
+    check_lock(ctx, None)
+    connect(ctx, None)
 
     log.info('Killing daemons, unmounting, and removing data...')
 
+    from orchestra import run
     ctx.cluster.run(
         args=[
             'killall',
