@@ -206,7 +206,7 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
 
 // full bl decoder
 template<class T>
-inline void decode(T o, bufferlist& bl)
+inline void decode(T &o, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   decode(o, p);
