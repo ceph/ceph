@@ -42,57 +42,59 @@ extern const struct sm_t sm_locallock;
 
 // -- lock states --
 // sync <-> lock
-#define LOCK_UNDEF    0
+enum {
+  LOCK_UNDEF = 0,
 
-//                                    auth               rep
-#define LOCK_SYNC        1    // AR   R . RD L . / C .   R RD L . / C . 
-#define LOCK_LOCK        2    // AR   R . .. . X / . .   . .. . . / . .
+  //                                    auth               rep
+  LOCK_SYNC,    // AR   R . RD L . / C .   R RD L . / C . 
+  LOCK_LOCK,    // AR   R . .. . X / . .   . .. . . / . .
 
-#define LOCK_PREXLOCK    3    // A    . . .. . . / . .   (lock)
-#define LOCK_XLOCK       4    // A    . . .. . . / . .   (lock)
-#define LOCK_XLOCKDONE   5    // A    r p rd l x / . .   (lock)  <-- by same client only!!
-#define LOCK_LOCK_XLOCK  6
+  LOCK_PREXLOCK,    // A    . . .. . . / . .   (lock)
+  LOCK_XLOCK,       // A    . . .. . . / . .   (lock)
+  LOCK_XLOCKDONE,   // A    r p rd l x / . .   (lock)  <-- by same client only!!
+  LOCK_LOCK_XLOCK,
 
-#define LOCK_SYNC_LOCK   7    // AR   R . .. . . / . .   R .. . . / . .
-#define LOCK_LOCK_SYNC   8    // A    R p rd l . / . .   (lock)  <-- lc by same client only
+  LOCK_SYNC_LOCK,    // AR   R . .. . . / . .   R .. . . / . .
+  LOCK_LOCK_SYNC,    // A    R p rd l . / . .   (lock)  <-- lc by same client only
 
-#define LOCK_EXCL        9    // A    . . .. . . / c x * (lock)
-#define LOCK_EXCL_SYNC  10    // A    . . .. . . / c . * (lock)
-#define LOCK_EXCL_LOCK  11    // A    . . .. . . / . .   (lock)
-#define LOCK_SYNC_EXCL  12    // Ar   R . .. . . / c . * (sync->lock)
-#define LOCK_LOCK_EXCL  13    // A    R . .. . . / . .   (lock)
+  LOCK_EXCL,         // A    . . .. . . / c x * (lock)
+  LOCK_EXCL_SYNC,    // A    . . .. . . / c . * (lock)
+  LOCK_EXCL_LOCK,    // A    . . .. . . / . .   (lock)
+  LOCK_SYNC_EXCL,    // Ar   R . .. . . / c . * (sync->lock)
+  LOCK_LOCK_EXCL,    // A    R . .. . . / . .   (lock)
 
-#define LOCK_REMOTEXLOCK  14  // on NON-auth
+  LOCK_REMOTEXLOCK,  // on NON-auth
 
-// * = loner mode
+  // * = loner mode
 
-#define LOCK_MIX      15
-#define LOCK_SYNC_MIX 16
-#define LOCK_SYNC_MIX2 17
-#define LOCK_LOCK_MIX 18
-#define LOCK_EXCL_MIX 19
-#define LOCK_MIX_SYNC 20
-#define LOCK_MIX_SYNC2 21
-#define LOCK_MIX_LOCK 22
-#define LOCK_MIX_EXCL 23
+  LOCK_MIX,
+  LOCK_SYNC_MIX,
+  LOCK_SYNC_MIX2,
+  LOCK_LOCK_MIX,
+  LOCK_EXCL_MIX,
+  LOCK_MIX_SYNC,
+  LOCK_MIX_SYNC2,
+  LOCK_MIX_LOCK,
+  LOCK_MIX_EXCL,
 
-#define LOCK_TSYN      24
-#define LOCK_TSYN_LOCK 25
-#define LOCK_TSYN_MIX  26
-#define LOCK_LOCK_TSYN 27
-#define LOCK_MIX_TSYN  28
+  LOCK_TSYN,
+  LOCK_TSYN_LOCK,
+  LOCK_TSYN_MIX,
+  LOCK_LOCK_TSYN,
+  LOCK_MIX_TSYN,
 
-#define LOCK_PRE_SCAN 29
-#define LOCK_SCAN     30
-#define LOCK_SCAN_LOCK 31
+  LOCK_PRE_SCAN,
+  LOCK_SCAN,
+  LOCK_SCAN_LOCK,
 
-#define LOCK_SNAP_SYNC 32
+  LOCK_SNAP_SYNC,
 
-#define LOCK_XSYN  33
-#define LOCK_XSYN_EXCL  34
-#define LOCK_EXCL_XSYN  35
+  LOCK_XSYN,
+  LOCK_XSYN_EXCL,
+  LOCK_EXCL_XSYN,
 
-#define LOCK_MAX      36
+  LOCK_MAX,
+};
 
 // -------------------------
 // lock actions
