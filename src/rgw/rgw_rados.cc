@@ -214,7 +214,8 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     }
 
     uint64_t s;
-    io_ctx.locator_set_key(key);
+    if (key.compare(name) != 0)
+      io_ctx.locator_set_key(key);
     if (io_ctx.stat(oid, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
