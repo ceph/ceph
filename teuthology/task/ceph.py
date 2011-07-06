@@ -568,6 +568,15 @@ def mds(ctx, config):
                 )
             mds_daemons[id_] = proc
 
+    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    mon0_remote.run(args=[
+            '/tmp/cephtest/enable-coredump',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
+            '/tmp/cephtest/binary/usr/local/bin/ceph',
+            '-c', '/tmp/cephtest/ceph.conf',
+            'mds', 'set_max_mds', str(len(mdss.remotes))])
+
     try:
         yield
     finally:
