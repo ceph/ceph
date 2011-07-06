@@ -120,6 +120,7 @@ def run_tests(ctx, config):
                 '-w',
                 '/tmp/cephtest/s3-tests',
                 '-v',
+                '-a', '!fails_on_rgw',
                 ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])
