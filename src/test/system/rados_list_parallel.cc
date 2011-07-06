@@ -95,6 +95,22 @@ public:
   }
 };
 
+/* Rados doesn't have read-after-write consistency for pool creation events.
+ * What this means is that even after the first process has created the pool,
+ * we may have to wait a while before we're able to see it. We will be able to
+ * see it when a new OSDMap arrives.
+ */
+static int do_ioctx_create(const char *id_str, rados_t &cl,
+			   const char *pool_name, rados_ioctx_t &io_ctx)
+{
+  int ret = rados_pool_create(cl, "foo");
+  if (ret != -EEXIST) {
+    return ret;
+  }
+  ret = rados_ioctx_create(cl, "foo", &io_ctx);
+  return ret;
+}
+
 class RadosListObjectsR : public SysTestRunnable
 {
 public:
@@ -116,13 +132,14 @@ public:
     pool_setup_sem->wait();
 
     rados_ioctx_t io_ctx;
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+    printf("%s: do_ioctx_create.\n", get_id_str());
+    RETURN_IF_NONZERO(do_ioctx_create(get_id_str(), cl, "foo", io_ctx));
 
 //    int ret, saw = 0;
 //    const char *obj_name;
 //    char tmp[RLP_OBJECT_SZ_MAX];
-//    rados_list_ctx_t h;
-//    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
+    rados_list_ctx_t h;
+    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
 //    printf("%s: listing objects.\n", get_id_str());
 //    while (true) {
 //      ret = rados_objects_list_next(h, &obj_name);
@@ -143,7 +160,7 @@ public:
 ////      if (saw == RLP_NUM_OBJECTS / 2)
 ////	modify_sem->wait();
 //    }
-//    rados_objects_list_close(h);
+    rados_objects_list_close(h);
 
     //printf("%s: saw %d objects\n", get_id_str(), saw);
 
@@ -175,7 +192,7 @@ public:
     pool_setup_sem->wait();
 
     rados_ioctx_t io_ctx;
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+    RETURN_IF_NONZERO(do_ioctx_create(get_id_str(), cl, "foo", io_ctx));
 
     std::vector <std::string> to_delete;
     for (int i = 0; i < RLP_NUM_OBJECTS; ++i) {
