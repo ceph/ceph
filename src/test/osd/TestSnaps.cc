@@ -85,6 +85,7 @@ int main(int argc, char **argv)
   int ops = 1000;
   int objects = 50;
   int max_in_flight = 16;
+  int size = 400000;
   if (argc > 1) {
     ops = atoi(argv[1]);
   }
@@ -97,6 +98,10 @@ int main(int argc, char **argv)
     max_in_flight = atoi(argv[3]);
   }
 
+  if (argc > 4) {
+    size = atoi(argv[4]);
+  }
+
   if (max_in_flight > objects) {
     cerr << "Error: max_in_flight must be greater than the number of objects" 
 	 << std::endl;
@@ -107,7 +112,8 @@ int main(int argc, char **argv)
   if (id) cerr << "Client id is: " << id << std::endl;
 		
   string pool_name = "data";
-  RadosTestContext context(pool_name, max_in_flight, id);
+  VarLenGenerator cont_gen(size);
+  RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
 
   TestOpStat stats;
   SnapTestGenerator gen = SnapTestGenerator(ops, objects, &stats);

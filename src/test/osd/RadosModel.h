@@ -9,20 +9,22 @@
 #include <set>
 #include <list>
 #include <string>
+#include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include "Object.h"
+#include "TestOpStat.h"
+
+#ifndef RADOSMODEL_H
+#define RADOSMODEL_H
 
 using namespace std;
 
-/* Snap creation/removal tester
- */
-
-struct RadosTestContext;
-struct TestOpStat;
+class RadosTestContext;
+class TestOpStat;
 
 template <typename T>
-typename T::iterator rand_choose(T &cont)
-{
+typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
@@ -33,8 +35,8 @@ typename T::iterator rand_choose(T &cont)
   return retval;
 }
 
-struct TestOp
-{
+class TestOp {
+public:
   RadosTestContext *context;
   TestOpStat *stat;
   bool done;
@@ -59,120 +61,17 @@ struct TestOp
   void finish();
 };
 
-struct TestOpStat
-{
-  Mutex stat_lock;
-
-  TestOpStat() : stat_lock("TestOpStat lock") {}
-    
-  static uint64_t gettime()
-  {
-    timeval t;
-    gettimeofday(&t,0);
-    return (1000000*t.tv_sec) + t.tv_usec;
-  }
-
-  struct TypeStatus
-  {
-    map<TestOp*,uint64_t> inflight;
-    multiset<uint64_t> latencies;
-    void begin(TestOp *in)
-    {
-      assert(!inflight.count(in));
-      inflight[in] = gettime();
-    }
-
-    void end(TestOp *in)
-    {
-      assert(inflight.count(in));
-      uint64_t curtime = gettime();
-      latencies.insert(curtime - inflight[in]);
-      inflight.erase(in);
-    }
-
-    void export_latencies(map<double,uint64_t> &in) const
-    {
-      map<double,uint64_t>::iterator i = in.begin();
-      multiset<uint64_t>::iterator j = latencies.begin();
-      int count = 0;
-      while (j != latencies.end() && i != in.end()) {
-	count++;
-	if ((((double)count)/((double)latencies.size())) * 100 >= i->first) {
-	  i->second = *j;
-	  ++i;
-	}
-	++j;
-      }
-    }
-  };
-  map<string,TypeStatus> stats;
-
-  void begin(TestOp *in)
-  {
-    stat_lock.Lock();
-    stats[in->getType()].begin(in);
-    stat_lock.Unlock();
-  }
-
-  void end(TestOp *in)
-  {
-    stat_lock.Lock();
-    stats[in->getType()].end(in);
-    stat_lock.Unlock();
-  }
-
-  friend std::ostream & operator<<(std::ostream &, TestOpStat&);
-};
-
-std::ostream & operator<<(std::ostream &out, TestOpStat &rhs)
-{
-  rhs.stat_lock.Lock();
-  for (map<string,TestOpStat::TypeStatus>::iterator i = rhs.stats.begin();
-       i != rhs.stats.end();
-       ++i) {
-    map<double,uint64_t> latency;
-    latency[10] = 0;
-    latency[50] = 0;
-    latency[90] = 0;
-    latency[99] = 0;
-    i->second.export_latencies(latency);
-    
-    out << i->first << " latency: " << std::endl;
-    for (map<double,uint64_t>::iterator j = latency.begin();
-	 j != latency.end();
-	 ++j) {
-      if (j->second == 0) break;
-      out << "\t" << j->first << "th percentile: " 
-	  << j->second / 1000 << "ms" << std::endl;
-    }
-  }
-  rhs.stat_lock.Unlock();
-  return out;
-}
-
-void TestOp::begin()
-{
-  if (stat) stat->begin(this);
-  _begin();
-}
-
-void TestOp::finish()
-{
-  if (stat) stat->end(this);
-  _finish();
-}
-
-struct TestOpGenerator
-{
+class TestOpGenerator {
+public:
   virtual ~TestOpGenerator();
   virtual TestOp *next(RadosTestContext &context) = 0;
 };
 
-struct RadosTestContext
-{
+class RadosTestContext {
+public:
   Mutex state_lock;
   Cond wait_cond;
-  map<int, map<string,string> > pool_obj_cont;
+  map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<int> snaps;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
@@ -184,16 +83,20 @@ struct RadosTestContext
   string prefix;
   int errors;
   int max_in_flight;
+  ContentsGenerator &cont_gen;
+  int seq_num;
 	
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
+		   ContentsGenerator &cont_gen,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
     current_snap(0),
     pool_name(pool_name),
     errors(0),
-    max_in_flight(max_in_flight)
+    max_in_flight(max_in_flight),
+    cont_gen(cont_gen), seq_num(0)
   {
     rados.init(id);
     rados.conf_read_file("ceph.conf");
@@ -259,15 +162,33 @@ struct RadosTestContext
     wait_cond.Signal();
   }
 
-  bool find_object(string oid, string &contents, int snap = -1) const
+  void update_object(const string &oid, const ContDesc &contents)
   {
-    for (map<int, map<string,string> >::const_reverse_iterator i = 
+    ObjectDesc new_obj(&cont_gen);
+    for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      map<string,ObjectDesc>::iterator j = i->second.find(oid);
+      if (j != i->second.end()) {
+	new_obj = j->second;
+	break;
+      }
+    }
+    new_obj.update(contents);
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+  }
+
+  bool find_object(const string &oid, ObjectDesc *contents, int snap = -1) const
+  {
+    for (map<int, map<string,ObjectDesc> >::const_reverse_iterator i = 
 	   pool_obj_cont.rbegin();
 	 i != pool_obj_cont.rend();
 	 ++i) {
       if (snap != -1 && snap < i->first) continue;
       if (i->second.count(oid) != 0) {
-	contents = i->second.find(oid)->second;
+	*contents = i->second.find(oid)->second;
 	return true;
       }
     }
@@ -276,16 +197,16 @@ struct RadosTestContext
 
   void remove_snap(int snap)
   {
-    map<int, map<string,string> >::iterator next_iter = pool_obj_cont.find(snap);
-    map<int, map<string,string> >::iterator current_iter = next_iter++;
+    map<int, map<string,ObjectDesc> >::iterator next_iter = pool_obj_cont.find(snap);
+    map<int, map<string,ObjectDesc> >::iterator current_iter = next_iter++;
     if (next_iter != pool_obj_cont.end()) {
-      map<string,string> &current = current_iter->second;
-      map<string,string> &next = next_iter->second;
-      for (map<string,string>::iterator i = current.begin();
+      map<string,ObjectDesc> &current = current_iter->second;
+      map<string,ObjectDesc> &next = next_iter->second;
+      for (map<string,ObjectDesc>::iterator i = current.begin();
 	   i != current.end();
 	   ++i) {
 	if (next.count(i->first) == 0) {
-	  next[i->first] = i->second;
+	  next.insert(pair<string,ObjectDesc>(i->first, i->second));
 	}
       }
     }
@@ -300,24 +221,22 @@ struct RadosTestContext
     snaps.insert(current_snap - 1);
   }
 
-  void roll_back(string oid, int snap)
+  void roll_back(const string &oid, int snap)
   {
-    string contents;
-    find_object(oid, contents, snap);
-    pool_obj_cont.rbegin()->second[oid] = contents;
+    ObjectDesc contents(&cont_gen);
+    find_object(oid, &contents, snap);
+    pool_obj_cont.rbegin()->second.erase(oid);
+    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
   }
 };
 
-void callback(librados::completion_t cb, void *arg) {
-  TestOp *op = (TestOp *) arg;
-  op->finish();
-}
+void callback(librados::completion_t cb, void *arg);
 
-struct WriteOp : public TestOp
-{
+class WriteOp : public TestOp {
+public:
   string oid;
-  string written;
-  librados::AioCompletion *completion;
+  ContDesc cont;
+  set<librados::AioCompletion *> waiting;
 
   WriteOp(RadosTestContext *context, 
 	  const string &oid,
@@ -330,42 +249,76 @@ struct WriteOp : public TestOp
   {
     context->state_lock.Lock();
     done = 0;
-    completion = context->rados.aio_create_completion((void *) this, &callback, 0);
-    stringstream to_write;
-    to_write << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
-    written = to_write.str();
-    context->pool_obj_cont[context->current_snap][oid] = written;
+    stringstream acc;
+    acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
+    string prefix = acc.str();
+
+    cont = ContDesc(context->seq_num, context->current_snap, context->seq_num, prefix);
+
+    context->update_object(oid, cont);
 
     context->oid_in_use.insert(oid);
     if (context->oid_not_in_use.count(oid) != 0) {
       context->oid_not_in_use.erase(oid);
     }
 
-    bufferlist write_buffer;
-    write_buffer.append(to_write.str());
+    context->seq_num++;
     context->state_lock.Unlock();
 
-    context->io_ctx.aio_write(context->prefix+oid, completion,
-			     write_buffer, to_write.str().length(), 0);
+    interval_set<uint64_t> ranges;
+    context->cont_gen.get_ranges(cont, ranges);
+    ContentsGenerator::iterator gen_pos = context->cont_gen.get_iterator(cont);
+    for (interval_set<uint64_t>::iterator i = ranges.begin();
+	 i != ranges.end();
+	 ++i) {
+      librados::AioCompletion *completion = 
+	context->rados.aio_create_completion((void *) this, &callback, &callback);
+      bufferlist to_write;
+      gen_pos.seek(i.get_start());
+      for (uint64_t k = 0; k != i.get_len(); ++k, ++gen_pos) {
+	to_write.append(*gen_pos);
+      }
+      assert(to_write.length() == i.get_len());
+      assert(to_write.length() > 0);
+      std::cout << "Writing " << context->prefix+oid << " from " << i.get_start()
+		<< " to " << i.get_len() + i.get_start() << " ranges are " 
+		<< ranges << std::endl;
+      context->io_ctx.aio_write(context->prefix+oid, completion,
+				to_write, i.get_len(), i.get_start());
+      waiting.insert(completion);
+    }
   }
 
   void _finish()
   {
     context->state_lock.Lock();
-    context->oid_in_use.erase(oid);
-    context->oid_not_in_use.insert(oid);
-    if (int err = completion->get_return_value()) {
-      cerr << "Error: oid " << oid << " write returned error code "
-	   << err << std::endl;
+    for (set<librados::AioCompletion *>::iterator i = waiting.begin();
+	 i != waiting.end();
+	 ) {
+      if ((*i)->is_complete() && (*i)->is_safe()) {
+	if (int err = (*i)->get_return_value()) {
+	  cerr << "Error: oid " << oid << " write returned error code "
+	       << err << std::endl;
+	}
+	waiting.erase(i++);
+      } else {
+	++i;
+      }
     }
-    context->kick();
-    done = true;
+
+    if (waiting.empty()) {
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
+      done = true;
+    }
     context->state_lock.Unlock();
+	
   }
 
   bool finished()
   {
-    return done && completion->is_complete();
+    return waiting.empty();
   }
 
   string getType()
@@ -374,17 +327,18 @@ struct WriteOp : public TestOp
   }
 };
 
-struct ReadOp : public TestOp
-{
+class ReadOp : public TestOp {
+public:
   librados::AioCompletion *completion;
   string oid;
   bufferlist result;
-  string old_value;
+  ObjectDesc old_value;
   ReadOp(RadosTestContext *context, 
 	 const string &oid,
 	 TestOpStat *stat = 0) : 
     TestOp(context, stat),
-    oid(oid)
+    oid(oid),
+    old_value(&context->cont_gen)
   {}
 		
   void _begin()
@@ -395,11 +349,11 @@ struct ReadOp : public TestOp
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-    context->find_object(oid, old_value);
+    context->find_object(oid, &old_value);
 
     context->state_lock.Unlock();
     context->io_ctx.aio_read(context->prefix+oid, completion,
-			   &result, old_value.length(), 0);
+			     &result, context->cont_gen.get_length(old_value.most_recent()), 0);
   }
 
   void _finish()
@@ -411,13 +365,20 @@ struct ReadOp : public TestOp
       cerr << "Error: oid " << oid << " read returned error code "
 	   << err << std::endl;
     } else {
-      string to_check;
-      result.copy(0, result.length(), to_check);
-      if (to_check != old_value) {
+      ContDesc to_check;
+      bufferlist::iterator p = result.begin();
+      if (!context->cont_gen.read_header(p, to_check)) {
+	cerr << "Unable to decode oid " << oid << " at snap " << context->current_snap << std::endl;
 	context->errors++;
-	cerr << "Error: oid " << oid << " read returned \n"
-	     << to_check << "\nShould have returned\n"
-	     << old_value << "\nCurrent snap is " << context->current_snap << std::endl;
+      }
+      if (to_check != old_value.most_recent()) {
+	cerr << "Found incorrect object contents " << to_check 
+	     << ", expected " << old_value.most_recent() << " oid " << oid << std::endl;
+	context->errors++;
+      }
+      if (!old_value.check(result)) {
+	cerr << "Object " << oid << " contents " << to_check << " corrupt" << std::endl;
+	context->errors++;
       }
     }
     context->kick();
@@ -436,8 +397,8 @@ struct ReadOp : public TestOp
   }
 };
 
-struct SnapCreateOp : public TestOp
-{
+class SnapCreateOp : public TestOp {
+public:
   SnapCreateOp(RadosTestContext *context,
 	       TestOpStat *stat = 0) :
     TestOp(context, stat)
@@ -466,8 +427,8 @@ struct SnapCreateOp : public TestOp
   }
 };
 
-struct SnapRemoveOp : public TestOp
-{
+class SnapRemoveOp : public TestOp {
+public:
   int to_remove;
   SnapRemoveOp(RadosTestContext *context,
 	       int snap,
@@ -499,8 +460,8 @@ struct SnapRemoveOp : public TestOp
   }
 };
 
-struct RollbackOp : public TestOp
-{
+class RollbackOp : public TestOp {
+public:
   string oid;
   int roll_back_to;
   RollbackOp(RadosTestContext *context,
@@ -536,3 +497,5 @@ struct RollbackOp : public TestOp
     return "RollBackOp";
   }
 };
+
+#endif

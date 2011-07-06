@@ -172,7 +172,7 @@ test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
-testsnaps_SOURCES = test/osd/TestSnaps.cc
+testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
 testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
 
