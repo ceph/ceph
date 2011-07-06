@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/errno.h"
 #include "include/atomic.h"
 #include "systest_runnable.h"
 #include "systest_settings.h"
@@ -26,6 +27,7 @@
 #include <string>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <vector>
 
 using std::ostringstream;
@@ -75,9 +77,22 @@ start()
     return 0;
   }
   else {
-    // TODO: implement
-    // m_pid = ???
-    return -ENOTSUP;
+    pid_t pid = fork();
+    if (pid == -1) {
+      int err = errno;
+      return -err;
+    }
+    else if (pid == 0) {
+      m_started = true;
+      m_pid = getpid();
+      void *retptr = systest_runnable_pthread_helper(static_cast<void*>(this));
+      exit((int)(uintptr_t)retptr);
+    }
+    else {
+      m_started = true;
+      m_pid = pid;
+      return 0;
+    }
   }
 }
 
@@ -105,9 +120,34 @@ join()
     return "";
   }
   else {
-    // TODO: implement
-    // m_pid = ???
-    return "processes not supported yet";
+    int status;
+    printf("waitpid(%d)\n", m_pid);
+    pid_t pid = waitpid(m_pid, &status, 0);
+    if (pid == -1) {
+      int err = errno;
+      ostringstream oss;
+      oss << get_id_str() << " waitpid error: " << cpp_strerror(err);
+      return oss.str();
+    }
+    else if (WIFSIGNALED(status)) {
+      ostringstream oss;
+      oss << get_id_str() << " exited with a signal";
+      return oss.str();
+    }
+    else if (!WIFEXITED(status)) {
+      ostringstream oss;
+      oss << get_id_str() << " did not exit normally";
+      return oss.str();
+    }
+    else {
+      int exit_status = WEXITSTATUS(status);
+      if (exit_status != 0) {
+	ostringstream oss;
+	oss << get_id_str() << " returned exit_status " << exit_status;
+	return oss.str();
+      }
+      return "";
+    }
   }
 }
 
@@ -152,7 +192,7 @@ run_until_finished(std::vector < SysTestRunnable * > &runnables)
     if (!rstr.empty()) {
       ostringstream oss;
       oss << "run_until_finished: runnable " << (*r)->get_id_str() 
-	  << ": got error " << rstr;
+	  << ": got error: " << rstr;
       return oss.str();
     }
   }
