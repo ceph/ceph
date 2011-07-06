@@ -84,37 +84,38 @@ def task(ctx, config):
         workunits = sorted(teuthology.get_file(remote, '/tmp/cephtest/workunits.list').split('\0'))
         assert workunits
 
-        assert isinstance(tests, list)
-        for spec in tests:
-            log.info('Running workunits matching %s on %s...', spec, role)
-            prefix = '{spec}/'.format(spec=spec)
-            to_run = [w for w in workunits if w == spec or w.startswith(prefix)]
-            if not to_run:
-                raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
-            for workunit in to_run:
-                log.info('Running workunit %s...', workunit)
-                remote.run(
-                    logger=log.getChild(role),
-                    args=[
-                        'mkdir', '--', scratch_tmp,
-                        run.Raw('&&'),
-                        'cd', '--', scratch_tmp,
-                        run.Raw('&&'),
-                        run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
-                        run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
-                        run.Raw('CEPH_ARGS="-c /tmp/cephtest/ceph.conf"'),
-                        '{srcdir}/{workunit}'.format(
-                            srcdir=srcdir,
-                            workunit=workunit,
-                            ),
-                        run.Raw('&&'),
-                        'rm', '-rf', '--', scratch_tmp,
+        try:
+            assert isinstance(tests, list)
+            for spec in tests:
+                log.info('Running workunits matching %s on %s...', spec, role)
+                prefix = '{spec}/'.format(spec=spec)
+                to_run = [w for w in workunits if w == spec or w.startswith(prefix)]
+                if not to_run:
+                    raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
+                for workunit in to_run:
+                    log.info('Running workunit %s...', workunit)
+                    remote.run(
+                        logger=log.getChild(role),
+                        args=[
+                            'mkdir', '--', scratch_tmp,
+                            run.Raw('&&'),
+                            'cd', '--', scratch_tmp,
+                            run.Raw('&&'),
+                            run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
+                            run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
+                            run.Raw('CEPH_ARGS="-c /tmp/cephtest/ceph.conf"'),
+                            '{srcdir}/{workunit}'.format(
+                                srcdir=srcdir,
+                                workunit=workunit,
+                                ),
+                            run.Raw('&&'),
+                            'rm', '-rf', '--', scratch_tmp,
+                        ],
+                    )
+        finally:
+            remote.run(
+                logger=log.getChild(role),
+                args=[
+                    'rm', '-rf', '--', '/tmp/cephtest/workunits.list', srcdir,
                     ],
                 )
-
-        remote.run(
-            logger=log.getChild(role),
-            args=[
-                'rm', '-rf', '--', '/tmp/cephtest/workunits.list', srcdir,
-                ],
-            )
