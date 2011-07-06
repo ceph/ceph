@@ -11,8 +11,11 @@ mkdir -p ./b/b
 mkdir -p ./c/c
 mkdir -p ./d/d
 
-$CEPH_TOOL mds tell 0 export_dir /b 1
-$CEPH_TOOL mds tell 0 export_dir /c 2
-$CEPH_TOOL mds tell 0 export_dir /d 3
+mount_dir=`df . | grep -o " /.*" | grep -o "/.*"`
+cur_dir=`pwd`
+ceph_dir=${cur_dir##$mount_dir}
+$CEPH_TOOL mds tell 0 export_dir $ceph_dir/b 1
+$CEPH_TOOL mds tell 0 export_dir $ceph_dir/c 2
+$CEPH_TOOL mds tell 0 export_dir $ceph_dir/d 3
 sleep 5
 
