@@ -24,7 +24,7 @@
   do {\
     int _rinv_ret = expr;\
     if (_rinv_ret != expected) {\
-      printf("%s: file %s, line %d: expected %d, got %d",\
+      printf("%s: file %s, line %d: expected %d, got %d\n",\
 	     get_id_str(), __FILE__, __LINE__, expected, _rinv_ret);\
       return _rinv_ret;\
     }\

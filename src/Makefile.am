@@ -383,9 +383,17 @@ libsystest_la_SOURCES = \
 libsystest_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libsystest.la
 
-rados_list_parallel_SOURCES = test/system/rados_list_parallel.cc
+rados_list_parallel_SOURCES = \
+	test/system/rados_list_parallel.cc \
+	test/system/st_rados_create_pool.cc
 rados_list_parallel_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += rados_list_parallel
+
+rados_open_pools_parallel_SOURCES = \
+	test/system/rados_open_pools_parallel.cc \
+	test/system/st_rados_create_pool.cc
+rados_open_pools_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += rados_open_pools_parallel
 
 ## unit tests
 
@@ -1164,6 +1172,7 @@ noinst_HEADERS = \
 	global/pidfile.h\
 	common/sync_filesystem.h \
 	test/system/cross_process_sem.h \
+	test/system/st_rados_create_pool.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h
 

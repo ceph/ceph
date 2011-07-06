@@ -89,3 +89,4 @@ ceph.conf
 .ceph_keyring
 massif.out.*
 rados_list_parallel
+rados_open_pools_parallel

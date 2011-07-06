@@ -12,9 +12,10 @@
 *
 */
 
-#include "include/rados/librados.h"
-#include "systest_runnable.h"
 #include "cross_process_sem.h"
+#include "include/rados/librados.h"
+#include "st_rados_create_pool.h"
+#include "systest_runnable.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -31,70 +32,10 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-static const int RLP_NUM_OBJECTS = 50; //16384;
-static const int RLP_OBJECT_SZ_MAX = 256;
-
-static std::string get_random_buf(void)
-{
-  ostringstream oss;
-  int size = rand() % RLP_OBJECT_SZ_MAX; // yep, it's not very random
-  for (int i = 0; i < size; ++i) {
-    oss << ".";
-  }
-  return oss.str();
-}
+static const int RLP_NUM_OBJECTS = 50;
 
 static CrossProcessSem *pool_setup_sem = NULL;
 static CrossProcessSem *modify_sem = NULL;
-
-class RadosCreateBigPoolR : public SysTestRunnable
-{
-public:
-  RadosCreateBigPoolR(int argc, const char **argv)
-    : SysTestRunnable(argc, argv)
-  {
-  }
-
-  ~RadosCreateBigPoolR()
-  {
-  }
-
-  int run()
-  {
-    rados_t cl;
-    RETURN_IF_NONZERO(rados_create(&cl, NULL));
-    rados_conf_parse_argv(cl, m_argc, m_argv);
-    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
-    RETURN_IF_NONZERO(rados_connect(cl));
-    int ret = rados_pool_delete(cl, "foo");
-    if (!((ret == 0) || (ret == -ENOENT))) {
-      printf("%s: rados_pool_delete error %d\n", get_id_str(), ret);
-      return ret;
-    }
-    RETURN_IF_NONZERO(rados_pool_create(cl, "foo"));
-    rados_ioctx_t io_ctx;
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
-
-    for (int i = 0; i < RLP_NUM_OBJECTS; ++i) {
-      char oid[128];
-      snprintf(oid, sizeof(oid), "%d.obj", i);
-      std::string buf(get_random_buf());
-      ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
-      if (ret < static_cast<int>(buf.size())) {
-	printf("%s: rados_write error %d\n", get_id_str(), ret);
-	return ret;
-      }
-      if (((i % 25) == 0) || (i == RLP_NUM_OBJECTS - 1)) {
-	printf("%s: created object %d...\n", get_id_str(), i);
-      }
-    }
-    printf("%s: finishing.\n", get_id_str());
-    pool_setup_sem->post();
-    pool_setup_sem->post();
-    rados_ioctx_destroy(cl);
-    return 0;
-  }
-};
 
 /* Rados doesn't have read-after-write consistency for pool creation events.
  * What this means is that even after the first process has created the pool,
@@ -239,7 +180,7 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
-  RadosCreateBigPoolR r1(argc, argv);
+  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
   RadosListObjectsR r2(argc, argv);
   RadosModifyPoolR r3(argc, argv);
   vector < SysTestRunnable* > vec;
