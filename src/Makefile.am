@@ -377,6 +377,7 @@ endif
 
 ## System tests
 libsystest_la_SOURCES = \
+	test/system/cross_process_sem.cc \
 	test/system/systest_runnable.cc \
 	test/system/systest_settings.cc
 libsystest_la_LIBADD = libglobal.la
@@ -1162,6 +1163,7 @@ noinst_HEADERS = \
 	test/osd/RadosModel.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
+	test/system/cross_process_sem.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h
 

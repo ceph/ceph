@@ -3,7 +3,7 @@
 /*
 * Ceph - scalable distributed file system
 *
-* Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+* Copyright (C) 2011 New Dream Network
 *
 * This is free software; you can redistribute it and/or
 * modify it under the terms of the GNU Lesser General Public
@@ -14,6 +14,7 @@
 
 #include "include/rados/librados.h"
 #include "systest_runnable.h"
+#include "cross_process_sem.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -43,8 +44,8 @@ static std::string get_random_buf(void)
   return oss.str();
 }
 
-sem_t pool_setup_sem;
-sem_t modify_sem;
+static CrossProcessSem *pool_setup_sem = NULL;
+static CrossProcessSem *modify_sem = NULL;
 
 class RadosCreateBigPoolR : public SysTestRunnable
 {
@@ -87,8 +88,8 @@ public:
       }
     }
     printf("%s: finishing.\n", get_id_str());
-    sem_post(&pool_setup_sem);
-    sem_post(&pool_setup_sem);
+    pool_setup_sem->post();
+    pool_setup_sem->post();
     rados_ioctx_destroy(cl);
     return 0;
   }
@@ -112,39 +113,39 @@ public:
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
-    sem_wait(&pool_setup_sem);
+    pool_setup_sem->wait();
 
     rados_ioctx_t io_ctx;
     RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
-    int ret, saw = 0;
-    const char *obj_name;
-    char tmp[RLP_OBJECT_SZ_MAX];
-    rados_list_ctx_t h;
-    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
-    printf("%s: listing objects.\n", get_id_str());
-    while (true) {
-      ret = rados_objects_list_next(h, &obj_name);
-      if (ret == -ENOENT) {
-	break;
-      }
-      else if (ret != 0) {
-	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
-	return ret;
-      }
-      printf("%s: listed an object!\n", get_id_str());
-      int len = strlen(obj_name);
-      if (len > RLP_OBJECT_SZ_MAX)
-	len = RLP_OBJECT_SZ_MAX;
-      memcpy(tmp, obj_name, strlen(obj_name));
-      printf("%s: listing object '%s'\n", get_id_str(), obj_name);
-      ++saw;
-      if (saw == RLP_NUM_OBJECTS / 2)
-	sem_wait(&modify_sem);
-    }
-    rados_objects_list_close(h);
+//    int ret, saw = 0;
+//    const char *obj_name;
+//    char tmp[RLP_OBJECT_SZ_MAX];
+//    rados_list_ctx_t h;
+//    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
+//    printf("%s: listing objects.\n", get_id_str());
+//    while (true) {
+//      ret = rados_objects_list_next(h, &obj_name);
+//      if (ret == -ENOENT) {
+//	break;
+//      }
+//      else if (ret != 0) {
+//	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
+//	return ret;
+//      }
+//      printf("%s: listed an object!\n", get_id_str());
+//      int len = strlen(obj_name);
+//      if (len > RLP_OBJECT_SZ_MAX)
+//	len = RLP_OBJECT_SZ_MAX;
+//      memcpy(tmp, obj_name, strlen(obj_name));
+//      printf("%s: listing object '%s'\n", get_id_str(), obj_name);
+//      ++saw;
+////      if (saw == RLP_NUM_OBJECTS / 2)
+////	modify_sem->wait();
+//    }
+//    rados_objects_list_close(h);
 
-    printf("%s: saw %d objects\n", get_id_str(), saw);
+    //printf("%s: saw %d objects\n", get_id_str(), saw);
 
     rados_ioctx_destroy(cl);
 
@@ -171,7 +172,7 @@ public:
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
-    sem_wait(&pool_setup_sem);
+    pool_setup_sem->wait();
 
     rados_ioctx_t io_ctx;
     RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
@@ -197,7 +198,7 @@ public:
       }
       ++removed;
       if (removed == RLP_NUM_OBJECTS / 2)
-	sem_post(&modify_sem);
+	modify_sem->post();
     }
 
     printf("%s: removed %d objects\n", get_id_str(), removed);
@@ -208,11 +209,15 @@ public:
   }
 };
 
+const char *get_id_str()
+{
+  return "main";
+}
+
 int main(int argc, const char **argv)
 {
-  sem_init(&pool_setup_sem, 1, 0);
-  //sem_init(&modify_sem, 1, 0);
-  sem_init(&modify_sem, 1, 1);
+  RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
+  RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
   RadosCreateBigPoolR r1;
   RadosListObjectsR r2;
