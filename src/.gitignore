@@ -88,3 +88,4 @@ Makefile
 ceph.conf
 .ceph_keyring
 massif.out.*
+rados_list_parallel
