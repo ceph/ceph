@@ -179,6 +179,8 @@ public:
       out << " dirty";
     if (is_flushing())
       out << " flushing";
+    if (is_flushed())
+      out << " flushed";
     out << ")";
   }
 };

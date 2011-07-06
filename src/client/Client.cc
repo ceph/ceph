@@ -2465,10 +2465,6 @@ int Client::mark_caps_flushing(Inode *in)
 
   int flushing = in->dirty_caps;
   assert(flushing);
-  in->flushing_caps |= flushing;
-  in->dirty_caps = 0;
-  
-  in->flushing_cap_seq = ++last_flush_seq;
 
   if (flushing && !in->flushing_caps) {
     ldout(cct, 10) << "mark_caps_flushing " << ccap_string(flushing) << " " << *in << dendl;
@@ -2476,6 +2472,12 @@ int Client::mark_caps_flushing(Inode *in)
   } else {
     ldout(cct, 10) << "mark_caps_flushing (more) " << ccap_string(flushing) << " " << *in << dendl;
   }
+
+  in->flushing_caps |= flushing;
+  in->dirty_caps = 0;
+ 
+  in->flushing_cap_seq = ++last_flush_seq;
+
   session->flushing_caps.push_back(&in->flushing_cap_item);
 
   return flushing;
@@ -2815,7 +2817,8 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 		 CEPH_CAP_FLAG_AUTH);
   
   // reflush any/all caps
-  flush_snaps(in, true);
+  if (in->cap_snaps.size())
+    flush_snaps(in, true);
   if (in->flushing_caps)
     flush_caps(in, mds);
 
