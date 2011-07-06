@@ -63,6 +63,7 @@ public:
   {
     rados_t cl;
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    rados_conf_parse_argv(cl, m_argc, m_argv);
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
     int ret = rados_pool_delete(cl, "foo");
@@ -127,6 +128,7 @@ public:
   {
     rados_t cl;
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    rados_conf_parse_argv(cl, m_argc, m_argv);
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
@@ -187,6 +189,7 @@ public:
     int ret;
     rados_t cl;
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    rados_conf_parse_argv(cl, m_argc, m_argv);
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
