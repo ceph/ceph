@@ -116,6 +116,7 @@ public:
     case LOCK_LOCK_TSYN: return "lock->tsyn";
       
     case LOCK_MIX_LOCK: return "mix->lock";
+    case LOCK_MIX_LOCK2: return "mix->lock(2)";
     case LOCK_MIX: return "mix";
     case LOCK_MIX_TSYN: return "mix->tsyn";
       

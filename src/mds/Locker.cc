@@ -616,6 +616,17 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
     } else {
       // auth
 
+      // once the first (local) stage of mix->lock gather complete we can
+      // gather from replicas
+      if (lock->get_state() == LOCK_MIX_LOCK &&
+	  lock->get_parent()->is_replicated()) {
+	dout(10) << " finished (local) gather for mix->lock, now gathering from replicas" << dendl;
+	send_lock_message(lock, LOCK_AC_LOCK);
+	lock->init_gather();
+	lock->set_state(LOCK_MIX_LOCK2);
+	return;
+      }
+
       if (lock->is_dirty() && !lock->is_flushed()) {
 	scatter_writebehind((ScatterLock*)lock);
 	mds->mdlog->flush();
@@ -3279,12 +3290,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   int gather = 0;
-  if (lock->get_parent()->is_replicated() &&
-      lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
-    gather++;
-    send_lock_message(lock, LOCK_AC_LOCK);
-    lock->init_gather();
-  }
   if (lock->get_num_client_lease()) {
     gather++;
     revoke_client_leases(lock);
@@ -3306,6 +3311,23 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
     gather++;
+  }
+
+  if (lock->get_parent()->is_replicated() &&
+      lock->get_state() == LOCK_MIX_LOCK &&
+      gather) {
+    dout(10) << " doing local stage of mix->lock gather before gathering from replicas" << dendl;
+  } else {
+    // move to second stage of gather now, so we don't send the lock action later.
+    if (lock->get_state() == LOCK_MIX_LOCK)
+      lock->set_state(LOCK_MIX_LOCK2);
+
+    if (lock->get_parent()->is_replicated() &&
+	lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
+      gather++;
+      send_lock_message(lock, LOCK_AC_LOCK);
+      lock->init_gather();
+    }
   }
 
   if (!gather && lock->is_dirty()) {
@@ -3455,6 +3477,7 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   if (in->is_replicated()) {
     switch (lock->get_state()) {
     case LOCK_MIX_LOCK:
+    case LOCK_MIX_LOCK2:
     case LOCK_MIX_EXCL:
     case LOCK_MIX_TSYN:
       send_lock_message(lock, LOCK_AC_LOCKFLUSHED);
@@ -4189,6 +4212,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKACK:
     assert(lock->get_state() == LOCK_SYNC_LOCK ||
            lock->get_state() == LOCK_MIX_LOCK ||
+           lock->get_state() == LOCK_MIX_LOCK2 ||
            lock->get_state() == LOCK_MIX_EXCL ||
            lock->get_state() == LOCK_SYNC_EXCL ||
            lock->get_state() == LOCK_SYNC_MIX ||
@@ -4197,6 +4221,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     lock->remove_gather(from);
     
     if (lock->get_state() == LOCK_MIX_LOCK ||
+	lock->get_state() == LOCK_MIX_LOCK2 ||
 	lock->get_state() == LOCK_MIX_EXCL ||
 	lock->get_state() == LOCK_MIX_TSYN)
       lock->decode_locked_state(m->get_data());
