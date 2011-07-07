@@ -16,8 +16,10 @@
 #include "include/rados/librados.h"
 #include "st_rados_create_pool.h"
 #include "systest_runnable.h"
+#include "systest_settings.h"
 
 #include <errno.h>
+#include <map>
 #include <pthread.h>
 #include <semaphore.h>
 #include <sstream>
@@ -36,22 +38,6 @@ static const int RLP_NUM_OBJECTS = 50;
 
 static CrossProcessSem *pool_setup_sem = NULL;
 static CrossProcessSem *modify_sem = NULL;
-
-/* Rados doesn't have read-after-write consistency for pool creation events.
- * What this means is that even after the first process has created the pool,
- * we may have to wait a while before we're able to see it. We will be able to
- * see it when a new OSDMap arrives.
- */
-static int do_ioctx_create(const char *id_str, rados_t &cl,
-			   const char *pool_name, rados_ioctx_t &io_ctx)
-{
-  int ret = rados_pool_create(cl, "foo");
-  if (ret != -EEXIST) {
-    return ret;
-  }
-  ret = rados_ioctx_create(cl, "foo", &io_ctx);
-  return ret;
-}
 
 class RadosListObjectsR : public SysTestRunnable
 {
@@ -73,39 +59,38 @@ public:
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
     RETURN_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
+    pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    printf("%s: do_ioctx_create.\n", get_id_str());
-    RETURN_IF_NONZERO(do_ioctx_create(get_id_str(), cl, "foo", io_ctx));
+    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
-//    int ret, saw = 0;
-//    const char *obj_name;
-//    char tmp[RLP_OBJECT_SZ_MAX];
+    int ret, saw = 0;
+    const char *obj_name;
     rados_list_ctx_t h;
-//    printf("%s: listing objects.\n", get_id_str());
+    printf("%s: listing objects.\n", get_id_str());
     RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
-//    while (true) {
-//      ret = rados_objects_list_next(h, &obj_name);
-//      if (ret == -ENOENT) {
-//	break;
-//      }
-//      else if (ret != 0) {
-//	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
-//	return ret;
-//      }
-//      printf("%s: listed an object!\n", get_id_str());
-//      int len = strlen(obj_name);
-//      if (len > RLP_OBJECT_SZ_MAX)
-//	len = RLP_OBJECT_SZ_MAX;
-//      memcpy(tmp, obj_name, strlen(obj_name));
-//      printf("%s: listing object '%s'\n", get_id_str(), obj_name);
-//      ++saw;
-////      if (saw == RLP_NUM_OBJECTS / 2)
-////	modify_sem->wait();
-//    }
+    while (true) {
+      ret = rados_objects_list_next(h, &obj_name);
+      if (ret == -ENOENT) {
+	break;
+      }
+      else if (ret != 0) {
+	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
+	return ret;
+      }
+      char *obj_name_copy = strdup(obj_name);
+      free(obj_name_copy);
+      if ((saw % 25) == 0) {
+	printf("%s: listed object %d...\n", get_id_str(), saw);
+      }
+      ++saw;
+      if (saw == RLP_NUM_OBJECTS / 2)
+	modify_sem->wait();
+    }
     rados_objects_list_close(h);
 
-    //printf("%s: saw %d objects\n", get_id_str(), saw);
+    printf("%s: saw %d objects\n", get_id_str(), saw);
 
     rados_ioctx_destroy(cl);
 
@@ -132,17 +117,22 @@ public:
     RETURN_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
     RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
+    std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
+    if (!log_name.empty())
+      rados_conf_set(cl, "log_file", log_name.c_str());
     RETURN_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
+    pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    RETURN_IF_NONZERO(do_ioctx_create(get_id_str(), cl, "foo", io_ctx));
+    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
-    std::vector <std::string> to_delete;
+    std::map <int, std::string> to_delete;
     for (int i = 0; i < RLP_NUM_OBJECTS; ++i) {
       char oid[128];
       snprintf(oid, sizeof(oid), "%d.obj", i);
-      to_delete.push_back(oid);
+      to_delete[i] = oid;
     }
 
     int removed = 0;
@@ -150,7 +140,14 @@ public:
       if (to_delete.empty())
 	break;
       int r = rand() % to_delete.size();
-      std::string oid(to_delete[r]);
+      std::map <int, std::string>::iterator d = to_delete.begin();
+      for (int i = 0; i < r; ++i)
+	++d;
+      if (d == to_delete.end()) {
+	return -EDOM;
+      }
+      std::string oid(d->second);
+      to_delete.erase(d);
       ret = rados_remove(io_ctx, oid.c_str());
       if (ret != 0) {
 	printf("%s: rados_remove(%s) failed with error %d\n",
@@ -158,8 +155,13 @@ public:
 	return ret;
       }
       ++removed;
-      if (removed == RLP_NUM_OBJECTS / 2)
+      if ((removed % 25) == 0) {
+	printf("%s: removed %d objects...\n", get_id_str(), removed);
+      }
+      if (removed == RLP_NUM_OBJECTS / 2) {
+	printf("%s: removed half of the objects\n", get_id_str());
 	modify_sem->post();
+      }
     }
 
     printf("%s: removed %d objects\n", get_id_str(), removed);
@@ -180,14 +182,31 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
-  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
-  RadosListObjectsR r2(argc, argv);
-  RadosModifyPoolR r3(argc, argv);
-  vector < SysTestRunnable* > vec;
-  vec.push_back(&r1);
-  vec.push_back(&r2);
-  //vec.push_back(&r3);
-  std::string error = SysTestRunnable::run_until_finished(vec);
+  std::string error;
+
+  // Test 1... list objects
+//  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
+//  RadosListObjectsR r2(argc, argv);
+//  vector < SysTestRunnable* > vec;
+//  vec.push_back(&r1);
+//  vec.push_back(&r2);
+//  error = SysTestRunnable::run_until_finished(vec);
+//  if (!error.empty()) {
+//    printf("got error: %s\n", error.c_str());
+//    return EXIT_FAILURE;
+//  }
+
+  // Test 2... list objects while they're being deleted
+  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  StRadosCreatePool r3(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
+  RadosListObjectsR r4(argc, argv);
+  RadosModifyPoolR r5(argc, argv);
+  vector < SysTestRunnable* > vec2;
+  vec2.push_back(&r3);
+  vec2.push_back(&r4);
+  vec2.push_back(&r5);
+  error = SysTestRunnable::run_until_finished(vec2);
   if (!error.empty()) {
     printf("got error: %s\n", error.c_str());
     return EXIT_FAILURE;

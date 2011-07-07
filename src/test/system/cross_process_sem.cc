@@ -79,6 +79,27 @@ post()
   }
 }
 
+int CrossProcessSem::
+reinit(int dval)
+{
+  if (dval < 0)
+    return -EINVAL;
+  int cval;
+  if (sem_getvalue(&m_data->sem, &cval) == -1)
+    return errno;
+  if (cval < dval) {
+    int diff = dval - cval;
+    for (int i = 0; i < diff; ++i)
+      sem_post(&m_data->sem);
+  }
+  else {
+    int diff = cval - dval;
+    for (int i = 0; i < diff; ++i)
+      sem_wait(&m_data->sem);
+  }
+  return 0;
+}
+
 CrossProcessSem::
 CrossProcessSem(struct cross_process_sem_data_t *data)
   : m_data(data)

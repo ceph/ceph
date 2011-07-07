@@ -29,6 +29,11 @@ public:
   /* Semaphore post */
   void post();
 
+  /* Reinitialize the semaphore to the desired value.
+   * NOT thread-safe if it is in use at the time!
+   */ 
+  int reinit(int dval);
+
 private:
   CrossProcessSem(struct cross_process_sem_data_t *data);
   struct cross_process_sem_data_t *m_data;
