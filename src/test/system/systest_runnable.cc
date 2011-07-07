@@ -202,14 +202,14 @@ update_id_str(bool started)
 
   if (started) {
     if (use_threads)
-      snprintf(extra, sizeof(extra), " [%d]", do_gettid());
+      snprintf(extra, sizeof(extra), "_[%d]", do_gettid());
     else
-      snprintf(extra, sizeof(extra), " [%d]", getpid());
+      snprintf(extra, sizeof(extra), "_[%d]", getpid());
   }
   if (use_threads)
-    snprintf(m_id_str, SysTestRunnable::ID_STR_SZ, "thread %d%s", m_id, extra);
+    snprintf(m_id_str, SysTestRunnable::ID_STR_SZ, "thread_%d%s", m_id, extra);
   else
-    snprintf(m_id_str, SysTestRunnable::ID_STR_SZ, "process %d%s", m_id, extra);
+    snprintf(m_id_str, SysTestRunnable::ID_STR_SZ, "process_%d%s", m_id, extra);
 }
 
 // Copy argv so that if some fiend decides to modify it, it's ok.

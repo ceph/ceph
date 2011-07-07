@@ -15,6 +15,7 @@
 #include "systest_settings.h"
 
 #include <pthread.h>
+#include <sstream>
 #include <stdlib.h>
 
 pthread_mutex_t g_system_test_settings_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -35,6 +36,16 @@ use_threads() const
   return m_use_threads;
 }
 
+std::string SysTestSettings::
+get_log_name(const std::string &suffix) const
+{
+  if (m_log_file_base.empty())
+    return "";
+  std::ostringstream oss;
+  oss << m_log_file_base << "." << suffix;
+  return oss.str();
+}
+
 SysTestSettings* SysTestSettings::
 m_inst = NULL;
 
@@ -42,6 +53,9 @@ SysTestSettings::
 SysTestSettings()
 {
   m_use_threads = !!getenv("USE_THREADS");
+  const char *lfb = getenv("LOG_FILE_BASE");
+  if (lfb)
+    m_log_file_base.assign(lfb);
 }
 
 SysTestSettings::

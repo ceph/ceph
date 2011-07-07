@@ -15,18 +15,22 @@
 #ifndef CEPH_SYSTEM_TEST_SETTINGS_H
 #define CEPH_SYSTEM_TEST_SETTINGS_H
 
+#include <string>
+
 /* Singleton with settings grabbed from environment variables */
 class SysTestSettings
 {
 public:
   static SysTestSettings& inst();
   bool use_threads() const;
+  std::string get_log_name(const std::string &suffix) const;
 private:
   static SysTestSettings* m_inst;
   SysTestSettings();
   ~SysTestSettings();
 
   bool m_use_threads;
+  std::string m_log_file_base;
 };
 
 #endif
