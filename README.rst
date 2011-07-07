@@ -107,14 +107,35 @@ run::
 Reserving target machines
 -------------------------
 
-Right now there is no automatic machine allocation and locking
-support.
+Before locking machines will work, you must create a .teuthology.yaml
+file in your home directory that sets a lock_server, i.e.::
 
-For the `sepia` cluster, use the Autotest web UI, lock the hosts you
-intend to use, and write a ``targets.yaml`` file yourself.
+	lock_server: http://host.example.com:8080/lock
 
-Later, a utility will be written to create a similar yaml with as many
-hosts as you request, while taking care of the locking. (TODO)
+Teuthology automatically locks nodes for you if you specify the
+``--lock`` option. Without this option, you must specify machines to
+run on in a ``targets.yaml`` file, and lock them using
+teuthology-lock.
+
+Note that the default owner of a machine is ``USER@HOST``.
+You can override this with the ``--owner`` option when running
+teuthology or teuthology-lock.
+
+With teuthology-lock, you can also add a description, so you can
+remember which tests you were running on them. This can be done when
+locking or unlocking machines, or as a separate action with the
+``--update`` option. To lock 3 machines and set a description, run::
+
+	./virtualenv/bin/teuthology-lock --lock-many 3 --desc 'test foo'
+
+If machines become unusable for some reason, you can mark them down::
+
+	./virtualenv/bin/teuthology-lock --update --status down machine1 machine2
+
+To see the status of all machines, use the ``--list`` option. This can
+be restricted to particular machines as well::
+
+	./virtualenv/bin/teuthology-lock --list machine1 machine2
 
 
 Tasks
