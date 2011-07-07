@@ -1875,7 +1875,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
 
   if (!osdmap.get_pg_pool(m->pool)) {
     dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
-    _pool_op_reply(m, -ENODATA, pending_inc.epoch);
+    _pool_op_reply(m, -ENODATA, osdmap.get_epoch());
     return true;
   }
   
@@ -1887,7 +1887,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
     if (snap_exists) {
-      _pool_op_reply(m, -EEXIST, pending_inc.epoch);
+      _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
       return true;
     }
     return false; // continue processing
@@ -1895,7 +1895,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
     return false; // continue processing
   case POOL_OP_DELETE_SNAP:
     if (!snap_exists) {
-      _pool_op_reply(m, -ENOENT, pending_inc.epoch);
+      _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
       return true;
     }
     return false;
@@ -1917,7 +1917,7 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
 {
   MonSession *session = m->get_session();
   if (!session) {
-    _pool_op_reply(m, -EPERM, pending_inc.epoch);
+    _pool_op_reply(m, -EPERM, osdmap.get_epoch());
     return true;
   }
   if ((m->auid && !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) &&
@@ -1926,13 +1926,13 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
       dout(5) << "attempt to create new pool without sufficient auid privileges!"
 	      << "message: " << *m  << std::endl
 	      << "caps: " << m->get_session()->caps << dendl;
-    _pool_op_reply(m, -EPERM, pending_inc.epoch);
+    _pool_op_reply(m, -EPERM, osdmap.get_epoch());
     return true;
   }
 
   int pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
-    _pool_op_reply(m, -EEXIST, pending_inc.epoch);
+    _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
     return true;
   }
 
