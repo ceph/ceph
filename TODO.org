@@ -1,7 +1,6 @@
 #+FILETAGS: :newdream:teuthology:todo:
 
 * TODO osd etc killing while test is running
-* TODO automatic host locking
 * TODO force cleanup on errors
 for now, you can run something like this:
 dsh -m ubuntu@sepia70.ceph.dreamhost.com,ubuntu@sepia71.ceph.dreamhost.com,ubuntu@sepia72.ceph.dreamhost.com 'killall --quiet /tmp/cephtest/binary/usr/local/bin/cmon /tmp/cephtest/binary/usr/local/bin/cosd /tmp/cephtest/binary/usr/local/bin/cmds ; fusermount -u /tmp/cephtest/mnt.*; rm -rf /tmp/cephtest' 
