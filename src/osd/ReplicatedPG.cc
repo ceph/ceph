@@ -1610,8 +1610,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	bufferlist::iterator p = osd_op.data.begin();
 
-	if (!obs.exists)
+	if (!obs.exists) {
 	  t.touch(coll, obs.oi.soid);
+	  maybe_created = true;
+	}
 	t.clone_range(coll, osd_op.soid, obs.oi.soid,
 		      op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);
 	// fix up accounting
@@ -1623,7 +1625,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  info.stats.num_bytes += oi.size;
 	  info.stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
 	}
-	ssc->snapset.head_exists = true;
 	info.stats.num_wr++;
       }
       break;
@@ -1684,8 +1685,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	string name = "_" + aname;
 	bufferlist bl;
 	bp.copy(op.xattr.value_len, bl);
-	if (!obs.exists)  // create object if it doesn't yet exist.
-	  t.touch(coll, soid);
 	t.setattr(coll, soid, name, bl);
  	ctx->new_stats.num_wr++;
       }
