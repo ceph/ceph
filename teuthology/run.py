@@ -54,6 +54,12 @@ def parse_args():
         default=False,
         help='lock machines for the duration of the run',
         )
+    parser.add_argument(
+        '--block',
+        action='store_true',
+        default=False,
+        help='block until locking machines succeeds (use with --lock)',
+        )
 
     args = parser.parse_args()
     return args
@@ -74,6 +80,10 @@ def main():
     logging.basicConfig(
         level=loglevel,
         )
+
+    if ctx.block:
+        assert ctx.lock, \
+            'the --block option is only supported with the --lock option'
 
     from teuthology.misc import read_config
     read_config(ctx)

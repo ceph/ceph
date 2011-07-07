@@ -4,6 +4,7 @@ import gevent
 import logging
 import os
 import tarfile
+import time
 
 from teuthology import lock
 from teuthology import misc as teuthology
@@ -47,18 +48,28 @@ def base(ctx, config):
 def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config, int), 'config must be an integer'
-    newly_locked = lock.lock_many(ctx, config, ctx.owner)
-    if len(newly_locked) != config:
-        log.error('Could not lock enough machines, unlocking and exiting...')
-        for machine in newly_locked:
-            lock.unlock(ctx, machine, ctx.owner)
-        assert 0
-    ctx.config['targets'] = newly_locked
+
+    while True:
+        newly_locked = lock.lock_many(ctx, config, ctx.owner)
+        if len(newly_locked) == config:
+            ctx.config['targets'] = newly_locked
+            break
+        elif not ctx.block:
+            assert 0, 'not enough machines are available'
+
+        # make sure there are enough machines up
+        machines = lock.list_locks(ctx)
+        assert machines is not None, 'error listing machines'
+        num_up = len(filter(lambda machine: machine['up'], machines))
+        assert num_up >= config, 'not enough machines are up'
+
+        log.warn('Could not lock enough machines, waiting...')
+        time.sleep(10)
     try:
         yield
     finally:
         log.info('Unlocking machines...')
-        for machine in newly_locked:
+        for machine in ctx.config['targets']:
             lock.unlock(ctx, machine, ctx.owner)
 
 def check_lock(ctx, config):
