@@ -2774,7 +2774,7 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     mdcache->touch_client_lease(l, pool, now);
 
     LeaseStat e;
-    e.mask = 1;
+    e.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
     e.seq = ++l->seq;
     e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
     ::encode(e, bl);
@@ -2805,7 +2805,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     assert(lock->get_type() == CEPH_LOCK_DN);
 
     CDentry *dn = (CDentry*)lock->get_parent();
-    int mask = 1;
+    int mask = 1 | CEPH_LOCK_DN; // old and new bits
     
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
