@@ -236,7 +236,7 @@ def cluster(ctx, config):
             ],
         )
 
-    log.info('Copying mon.0 info to all monitors...')
+    log.info('Copying monmap to all nodes...')
     keyring = teuthology.get_file(
         remote=mon0_remote,
         path='/tmp/cephtest/ceph.keyring',
@@ -245,12 +245,10 @@ def cluster(ctx, config):
         remote=mon0_remote,
         path='/tmp/cephtest/monmap',
         )
-    mons = ctx.cluster.only(teuthology.is_type('mon'))
-    mons_no_0 = mons.exclude('mon.0')
 
-    for rem in mons_no_0.remotes.iterkeys():
+    for rem in ctx.cluster.remotes.iterkeys():
         # copy mon key and initial monmap
-        log.info('Sending mon0 info to node {remote}'.format(remote=rem))
+        log.info('Sending monmap to node {remote}'.format(remote=rem))
         teuthology.write_file(
             remote=rem,
             path='/tmp/cephtest/ceph.keyring',
@@ -263,6 +261,8 @@ def cluster(ctx, config):
             )
 
     log.info('Setting up mon nodes...')
+    mons = ctx.cluster.only(teuthology.is_type('mon'))
+    mons_no_0 = mons.exclude('mon.0')
     run.wait(
         mons.run(
             args=[
@@ -445,6 +445,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/ceph.conf',
                     '/tmp/cephtest/ceph.keyring',
                     '/tmp/cephtest/data',
+                    '/tmp/cephtest/monmap',
                     ],
                 wait=False,
                 ),
