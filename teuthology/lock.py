@@ -2,15 +2,14 @@ import argparse
 import httplib2
 import json
 import logging
-import os
 import urllib
 
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def _lock_url():
-    return os.getenv('TEUTHOLOGY_LOCK_SERVER', 'http://localhost:8080/lock')
+def _lock_url(ctx):
+    return ctx.teuthology_config['lock_server']
 
 def send_request(method, url, body=None):
     http = httplib2.Http()
@@ -21,10 +20,10 @@ def send_request(method, url, body=None):
              method, url, body, resp.status)
     return (False, None)
 
-def lock_many(num, user=None):
+def lock_many(ctx, num, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, content = send_request('POST', _lock_url(),
+    success, content = send_request('POST', _lock_url(ctx),
                                     urllib.urlencode(dict(user=user, num=num)))
     if success:
         machines = json.loads(content)
@@ -33,10 +32,10 @@ def lock_many(num, user=None):
     log.warn('Could not lock %d nodes', num)
     return []
 
-def lock(name, user=None):
+def lock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _ = send_request('POST', _lock_url() + '/' + name,
+    success, _ = send_request('POST', _lock_url(ctx) + '/' + name,
                               urllib.urlencode(dict(user=user)))
     if success:
         log.debug('locked %s as %s', name, user)
@@ -44,10 +43,10 @@ def lock(name, user=None):
         log.error('failed to lock %s', name)
     return success
 
-def unlock(name, user=None):
+def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _ = send_request('DELETE', _lock_url() + '/' + name + '?' + \
+    success, _ = send_request('DELETE', _lock_url(ctx) + '/' + name + '?' + \
                                   urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
@@ -55,19 +54,19 @@ def unlock(name, user=None):
         log.error('failed to unlock %s', name)
     return success
 
-def get_status(name):
-    success, content = send_request('GET', _lock_url() + '/' + name)
+def get_status(ctx, name):
+    success, content = send_request('GET', _lock_url(ctx) + '/' + name)
     if success:
         return json.loads(content)
     return None
 
-def list_locks():
-    success, content = send_request('GET', _lock_url())
+def list_locks(ctx):
+    success, content = send_request('GET', _lock_url(ctx))
     if success:
         return json.loads(content)
     return None
 
-def update_lock(name, description=None, status=None):
+def update_lock(ctx, name, description=None, status=None):
     updated = {}
     if description is not None:
         updated['desc'] = description
@@ -75,7 +74,7 @@ def update_lock(name, description=None, status=None):
         updated['status'] = status
 
     if updated:
-        success, _ = send_request('PUT', _lock_url() + '/' + name + '?' + \
+        success, _ = send_request('PUT', _lock_url(ctx) + '/' + name + '?' + \
                                       urllib.urlencode(updated))
         return success
     return True
@@ -168,6 +167,8 @@ Lock, unlock, or query lock status of machines.
         level=loglevel,
         )
 
+    teuthology.read_config(ctx)
+
     ret = 0
     user = ctx.owner
     machines = ctx.machines
@@ -179,9 +180,9 @@ Lock, unlock, or query lock status of machines.
             return 1
 
         if machines:
-            statuses = [get_status(machine) for machine in machines]
+            statuses = [get_status(ctx, machine) for machine in machines]
         else:
-            statuses = list_locks()
+            statuses = list_locks(ctx)
 
         if statuses:
             print json.dumps(statuses, indent=4)
@@ -191,7 +192,7 @@ Lock, unlock, or query lock status of machines.
     elif ctx.lock:
         assert machines, 'You must specify machines to lock.'
         for machine in machines:
-            if not lock(machine, user):
+            if not lock(ctx, machine, user):
                 ret = 1
                 if not ctx.f:
                     return ret
@@ -200,7 +201,7 @@ Lock, unlock, or query lock status of machines.
     elif ctx.unlock:
         assert machines, 'You must specify machines to unlock.'
         for machine in machines:
-            if not unlock(machine, user):
+            if not unlock(ctx, machine, user):
                 ret = 1
                 if not ctx.f:
                     return ret
@@ -209,7 +210,7 @@ Lock, unlock, or query lock status of machines.
     elif ctx.num_to_lock:
         assert not machines, \
             'The --lock-many option does not support specifying machines'
-        result = lock_many(ctx.num_to_lock, user)
+        result = lock_many(ctx, ctx.num_to_lock, user)
         if not result:
             ret = 1
         else:
@@ -221,6 +222,6 @@ Lock, unlock, or query lock status of machines.
 
     if ctx.desc is not None or ctx.status is not None:
         for machine in machines_to_update:
-            update_lock(machine, ctx.desc, ctx.status)
+            update_lock(ctx, machine, ctx.desc, ctx.status)
 
     return ret

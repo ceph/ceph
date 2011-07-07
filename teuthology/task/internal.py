@@ -47,11 +47,11 @@ def base(ctx, config):
 def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config, int), 'config must be an integer'
-    newly_locked = lock.lock_many(config, ctx.owner)
+    newly_locked = lock.lock_many(ctx, config, ctx.owner)
     if len(newly_locked) != config:
         log.error('Could not lock enough machines, unlocking and exiting...')
         for machine in newly_locked:
-            lock.unlock(machine, ctx.owner)
+            lock.unlock(ctx, machine, ctx.owner)
         assert 0
     ctx.config['targets'] = newly_locked
     try:
@@ -59,12 +59,12 @@ def lock_machines(ctx, config):
     finally:
         log.info('Unlocking machines...')
         for machine in newly_locked:
-            lock.unlock(machine, ctx.owner)
+            lock.unlock(ctx, machine, ctx.owner)
 
 def check_lock(ctx, config):
     log.info('Checking locks...')
     for machine in ctx.config['targets']:
-        status = lock.get_status(machine)
+        status = lock.get_status(ctx, machine)
         log.debug('machine status is %s', repr(status))
         assert status is not None, \
             'could not read lock status for {name}'.format(name=machine)

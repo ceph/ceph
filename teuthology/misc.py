@@ -8,6 +8,7 @@ import socket
 import time
 import urllib2
 import urlparse
+import yaml
 
 from orchestra import run
 
@@ -297,3 +298,11 @@ def get_clients(ctx, roles):
 
 def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
+
+def read_config(ctx):
+    filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+    ctx.teuthology_config = {}
+    with file(filename) as f:
+        g = yaml.safe_load_all(f)
+        for new in g:
+            ctx.teuthology_config.update(new)

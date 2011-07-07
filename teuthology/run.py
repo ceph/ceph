@@ -75,6 +75,9 @@ def main():
         level=loglevel,
         )
 
+    from teuthology.misc import read_config
+    read_config(ctx)
+
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 
@@ -155,6 +158,9 @@ def nuke():
     logging.basicConfig(
         level=loglevel,
         )
+
+    from teuthology.misc import read_config
+    read_config(ctx)
 
     log.info('\n  '.join(['targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
 
