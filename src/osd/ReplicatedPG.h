@@ -581,6 +581,9 @@ protected:
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
+
+  void write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi, SnapSet& ss,
+				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
