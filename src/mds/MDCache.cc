@@ -6523,6 +6523,12 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       return 1;
     }
     
+    // can we conclude ENOENT?
+    if (dnl->is_null() && dn->lock.can_read(client)) {
+      dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
+      return -ENOENT;
+    }
+
     if (dnl && !dnl->is_null()) {
       CInode *in = dnl->get_inode();
       
@@ -6605,8 +6611,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
 	    dn = NULL;
 	  } else if (dn) {
-	    dout(20) << " had null " << *dn << dendl;
-	    assert(dnl->is_null());
+	    assert(0); // should have fallen out in ->is_null() check above
 	  } else if (curdir->is_frozen()) {
 	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
