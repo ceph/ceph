@@ -1,0 +1,30 @@
+ceph-qa-suite
+-------------
+
+The basic idea is that the set of tests to run consists of all
+combinations of taking one yaml fragment from each facet.
+
+Each directory represents a facet.  For example, given the files
+
+  clusters/
+  clusters/fixed-3.yaml
+  clusters/fixed-9.yaml
+  tasks/
+  tasks/a
+  tasks/b
+  tasks/c
+
+teuthology-suite would run tasks a, b, and c on both fixed-3 and fixed-9
+clusters.  
+
+Note that the 'clusters' and 'tasks' terminology is actually
+meaningless here.  All teuthology-suite does is stick the yaml
+fragments together (one from each facet) and run teuthology on the
+result (optionally combined with any additional fragments passed on
+the command line).
+
+
+That is the current approach.  Eventually we may want something
+smarter, like different collections of facets, or some other way to
+limit the total size of the test space (e.g., running certain tasks
+only on certain clusters).
