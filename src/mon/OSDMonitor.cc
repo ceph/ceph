@@ -1950,29 +1950,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     return prepare_pool_op_auid(m);
   }
 
-  // pool snaps vs unmanaged snaps are mutually exclusive
-  const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
-  int rc = 0;
-  switch (m->op) {
-  case POOL_OP_CREATE_SNAP:
-  case POOL_OP_DELETE_SNAP:
-    if (!p->removed_snaps.empty())
-      rc = -EINVAL;
-    break;
-
-  case POOL_OP_CREATE_UNMANAGED_SNAP:
-  case POOL_OP_DELETE_UNMANAGED_SNAP:
-    if (!p->snaps.empty())
-      rc = -EINVAL;
-    break;
-  }
-  if (rc) {
-    _pool_op_reply(m, rc, 0);
-    return false;
-  }
-
   bufferlist *blp = NULL;
-  uint64_t snapid(0);
   int ret = 0;
 
   // projected pool info
@@ -1980,8 +1958,26 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   if (pending_inc.new_pools.count(m->pool))
     pp = pending_inc.new_pools[m->pool];
   else
-    pp = *p;
+    pp = *osdmap.get_pg_pool(m->pool);
 
+  // pool snaps vs unmanaged snaps are mutually exclusive
+  switch (m->op) {
+  case POOL_OP_CREATE_SNAP:
+  case POOL_OP_DELETE_SNAP:
+    if (!pp.removed_snaps.empty()) {
+      ret = -EINVAL;
+      goto out;
+    }
+    break;
+
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+  case POOL_OP_DELETE_UNMANAGED_SNAP:
+    if (!pp.snaps.empty()) {
+      ret = -EINVAL;
+      goto out;
+    }
+  }
+ 
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
     if (pp.snap_exists(m->name.c_str()))
@@ -2002,10 +1998,13 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     }
     break;
 
-  case POOL_OP_CREATE_UNMANAGED_SNAP:
-    blp = new bufferlist();
-    pp.add_unmanaged_snap(snapid);
-    ::encode(snapid, *blp);
+  case POOL_OP_CREATE_UNMANAGED_SNAP: 
+    {
+      blp = new bufferlist();
+      uint64_t snapid;
+      pp.add_unmanaged_snap(snapid);
+      ::encode(snapid, *blp);
+    }
     break;
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
@@ -2025,6 +2024,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     pending_inc.new_pools[m->pool] = pp;
   }
 
+ out:
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch, blp));
   propose_pending();
   return false;
