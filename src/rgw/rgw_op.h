@@ -293,6 +293,7 @@ public:
     src_bucket.clear();
     src_object.clear();
     mtime = 0;
+    aclbl.clear();
   }
   int verify_permission();
   void execute();
