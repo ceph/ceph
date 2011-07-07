@@ -6524,7 +6524,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
     }
     
     // can we conclude ENOENT?
-    if (dnl->is_null() && dn->lock.can_read(client)) {
+    if (dnl && dnl->is_null() && dn->lock.can_read(client)) {
       dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
       return -ENOENT;
     }
