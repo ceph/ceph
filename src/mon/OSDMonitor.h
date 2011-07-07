@@ -89,7 +89,7 @@ private:
   bool preprocess_pgtemp(class MOSDPGTemp *m);
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
-  void _prepare_remove_pool(int pool);
+  int _prepare_remove_pool(int pool);
 
   bool preprocess_pool_op ( class MPoolOp *m);
   bool preprocess_pool_op_create ( class MPoolOp *m);
@@ -101,7 +101,7 @@ private:
 		       int crush_rule = -1);
   int prepare_new_pool(MPoolOp *m);
 
-  void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch, bufferlist *blp=NULL);
+  void _pool_op_reply(MPoolOp *m, int ret, epoch_t epoch, bufferlist *blp=NULL);
 
   struct C_Booted : public Context {
     OSDMonitor *cmon;
@@ -147,7 +147,7 @@ private:
     C_PoolOp(OSDMonitor * osd, MPoolOp *m_, int rc, int e, bufferlist *rd=NULL) : 
       osdmon(osd), m(m_), replyCode(rc), epoch(e), reply_data(rd) {}
     void finish(int r) {
-      osdmon->_pool_op(m, replyCode, epoch, reply_data);
+      osdmon->_pool_op_reply(m, replyCode, epoch, reply_data);
     }
   };
 
