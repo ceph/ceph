@@ -174,10 +174,20 @@ Lock, unlock, or query lock status of machines.
     machines = ctx.machines
     machines_to_update = []
 
+    if ctx.f:
+        assert ctx.lock or ctx.unlock, \
+            '-f is only supported by --lock and --unlock'
+    if ctx.machines:
+        assert ctx.lock or ctx.unlock or ctx.list or ctx.update, \
+            'machines cannot be specified with that operation'
+    else:
+        assert ctx.num_to_lock or ctx.list, \
+            'machines must be specified for that operation'
+
     if ctx.list:
-        if ctx.status is not None or ctx.desc is not None:
-            log.error('--up and --desc do nothing with --list')
-            return 1
+        assert ctx.status is None and ctx.desc is None, \
+            '--status and --desc do nothing with --list'
+        assert ctx.owner is None, 'the owner option does nothing with --list'
 
         if machines:
             statuses = [get_status(ctx, machine) for machine in machines]
@@ -190,7 +200,6 @@ Lock, unlock, or query lock status of machines.
             log.error('error retrieving lock statuses')
             ret = 1
     elif ctx.lock:
-        assert machines, 'You must specify machines to lock.'
         for machine in machines:
             if not lock(ctx, machine, user):
                 ret = 1
@@ -199,7 +208,6 @@ Lock, unlock, or query lock status of machines.
             else:
                 machines_to_update.append(machine)
     elif ctx.unlock:
-        assert machines, 'You must specify machines to unlock.'
         for machine in machines:
             if not unlock(ctx, machine, user):
                 ret = 1
@@ -208,8 +216,6 @@ Lock, unlock, or query lock status of machines.
             else:
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
-        assert not machines, \
-            'The --lock-many option does not support specifying machines'
         result = lock_many(ctx, ctx.num_to_lock, user)
         if not result:
             ret = 1
@@ -217,7 +223,9 @@ Lock, unlock, or query lock status of machines.
             machines_to_update = result
             print json.dumps(result, indent=4)
     elif ctx.update:
-        assert machines, 'You must specify machines to update'
+        assert ctx.desc is not None or ctx.status is not None, \
+            'you must specify description or status to update'
+        assert ctx.owner is None, 'only description and status may be updated'
         machines_to_update = machines
 
     if ctx.desc is not None or ctx.status is not None:
