@@ -77,6 +77,8 @@ protected:
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
+  void _drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
+  void _drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
