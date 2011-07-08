@@ -34,7 +34,7 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-static const int RLP_NUM_OBJECTS = 50;
+static int g_num_objects = 50;
 
 static CrossProcessSem *pool_setup_sem = NULL;
 static CrossProcessSem *modify_sem = NULL;
@@ -85,7 +85,7 @@ public:
 	printf("%s: listed object %d...\n", get_id_str(), saw);
       }
       ++saw;
-      if (saw == RLP_NUM_OBJECTS / 2)
+      if (saw == g_num_objects / 2)
 	modify_sem->wait();
     }
     rados_objects_list_close(h);
@@ -129,7 +129,7 @@ public:
     RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
     std::map <int, std::string> to_delete;
-    for (int i = 0; i < RLP_NUM_OBJECTS; ++i) {
+    for (int i = 0; i < g_num_objects; ++i) {
       char oid[128];
       snprintf(oid, sizeof(oid), "%d.obj", i);
       to_delete[i] = oid;
@@ -158,7 +158,7 @@ public:
       if ((removed % 25) == 0) {
 	printf("%s: removed %d objects...\n", get_id_str(), removed);
       }
-      if (removed == RLP_NUM_OBJECTS / 2) {
+      if (removed == g_num_objects / 2) {
 	printf("%s: removed half of the objects\n", get_id_str());
 	modify_sem->post();
       }
@@ -179,27 +179,34 @@ const char *get_id_str()
 
 int main(int argc, const char **argv)
 {
+  const char *num_objects = getenv("NUM_OBJECTS");
+  if (num_objects) {
+    g_num_objects = atoi(num_objects); 
+    if (g_num_objects == 0)
+      return 100;
+  }
+
   RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
   std::string error;
 
   // Test 1... list objects
-//  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
-//  RadosListObjectsR r2(argc, argv);
-//  vector < SysTestRunnable* > vec;
-//  vec.push_back(&r1);
-//  vec.push_back(&r2);
-//  error = SysTestRunnable::run_until_finished(vec);
-//  if (!error.empty()) {
-//    printf("got error: %s\n", error.c_str());
-//    return EXIT_FAILURE;
-//  }
+  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+  RadosListObjectsR r2(argc, argv);
+  vector < SysTestRunnable* > vec;
+  vec.push_back(&r1);
+  vec.push_back(&r2);
+  error = SysTestRunnable::run_until_finished(vec);
+  if (!error.empty()) {
+    printf("got error: %s\n", error.c_str());
+    return EXIT_FAILURE;
+  }
 
   // Test 2... list objects while they're being deleted
   RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN_IF_NONZERO(modify_sem->reinit(0));
-  StRadosCreatePool r3(argc, argv, pool_setup_sem, NULL, RLP_NUM_OBJECTS);
+  StRadosCreatePool r3(argc, argv, pool_setup_sem, NULL, g_num_objects);
   RadosListObjectsR r4(argc, argv);
   RadosModifyPoolR r5(argc, argv);
   vector < SysTestRunnable* > vec2;
