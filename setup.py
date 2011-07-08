@@ -18,6 +18,7 @@ setup(
         'PyYAML',
         'bunch >=1.0.0',
         'argparse >=1.2.1',
+        'httplib2',
         ],
 
     entry_points={
