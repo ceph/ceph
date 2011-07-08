@@ -28,3 +28,9 @@ rm -r ./?/* || true
 CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/pri_pri.sh
 rm -r ./?/* || true
 
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/dir_pri_pri.sh
+rm -r ./?/* || true
+
+CEPH_ARGS=$CEPH_ARGS CEPH_TOOL=$CEPH_TOOL $dir/dir_pri_nul.sh
+rm -r ./?/* || true
+
