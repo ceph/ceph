@@ -5558,7 +5558,6 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
   Inode *diri = 0;
   Inode *in = 0;
   int r = 0;
-  utime_t now = ceph_clock_now(cct);
 
   if (inode_map.count(parent) == 0) {
     ldout(cct, 1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << dendl;
