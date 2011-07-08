@@ -918,8 +918,10 @@ int RGWRados::clone_objs(rgw_obj& dst_obj,
       range_iter++;
       range.len += next.len;
     }
-    RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
-    op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
+    if (range.len) {
+      RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
+      op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
+    }
   }
 
   bufferlist outbl;

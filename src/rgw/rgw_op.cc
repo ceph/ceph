@@ -519,6 +519,7 @@ void RGWPutObj::execute()
   string part_num;
   list<struct put_obj_aio_info> pending;
   size_t max_chunks = RGW_MAX_PENDING_CHUNKS;
+  bool created_obj = false;
 
   ret = -EINVAL;
   if (!s->object) {
@@ -597,6 +598,8 @@ void RGWPutObj::execute()
         if (ret < 0)
           goto done;
 
+        created_obj = true;
+
         hash.Update((unsigned char *)data, len);
         info.handle = handle;
         info.data = data;
@@ -656,9 +659,11 @@ void RGWPutObj::execute()
       ret = rgwstore->clone_obj(dst_obj, 0, obj, 0, s->obj_size, attrs);
       if (ret < 0)
         goto done;
-      ret = rgwstore->delete_obj(s->user.user_id, obj);
-      if (ret < 0)
-        goto done;
+      if (created_obj) {
+        ret = rgwstore->delete_obj(s->user.user_id, obj);
+        if (ret < 0)
+          goto done;
+      }
     } else {
       ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, false);
       if (ret < 0)
