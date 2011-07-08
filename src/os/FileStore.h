@@ -67,9 +67,9 @@ class FileStore : public JournalingObjectStore {
   Finisher ondisk_finisher;
 
   // helper fns
-  int append_oname(const sobject_t &oid, char *s, int len);
+  int append_oname(const hobject_t &oid, char *s, int len);
   int get_cdir(coll_t cid, char *s, int len);
-  bool parse_object(char *s, sobject_t& o);
+  bool parse_object(char *s, hobject_t& o);
   
   int lock_fsid();
 
@@ -238,18 +238,18 @@ public:
   void start_logger(int whoami, utime_t tare);
   void stop_logger();
 
-  int lfn_get(coll_t cid, const sobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn);
-  int lfn_find(coll_t cid, const sobject_t& oid, char *pathname, int len);
-  int lfn_getxattr(coll_t cid, const sobject_t& oid, const char *name, void *val, size_t size);
-  int lfn_setxattr(coll_t cid, const sobject_t& oid, const char *name, const void *val, size_t size);
-  int lfn_removexattr(coll_t cid, const sobject_t& oid, const char *name);
-  int lfn_listxattr(coll_t cid, const sobject_t& oid, char *names, size_t len);
-  int lfn_truncate(coll_t cid, const sobject_t& oid, off_t length);
-  int lfn_stat(coll_t cid, const sobject_t& oid, struct stat *buf);
-  int lfn_open(coll_t cid, const sobject_t& oid, int flags, mode_t mode);
-  int lfn_open(coll_t cid, const sobject_t& oid, int flags);
-  int lfn_link(coll_t c, coll_t cid, const sobject_t& o) ;
-  int lfn_unlink(coll_t cid, const sobject_t& o);
+  int lfn_get(coll_t cid, const hobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn);
+  int lfn_find(coll_t cid, const hobject_t& oid, char *pathname, int len);
+  int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
+  int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
+  int lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name);
+  int lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len);
+  int lfn_truncate(coll_t cid, const hobject_t& oid, off_t length);
+  int lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf);
+  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
+  int lfn_open(coll_t cid, const hobject_t& oid, int flags);
+  int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
+  int lfn_unlink(coll_t cid, const hobject_t& o);
 
  public:
   FileStore(const std::string &base, const std::string &jdev);
@@ -282,23 +282,23 @@ public:
 
   // ------------------
   // objects
-  int pick_object_revision_lt(sobject_t& oid) {
+  int pick_object_revision_lt(hobject_t& oid) {
     return 0;
   }
-  bool exists(coll_t cid, const sobject_t& oid);
-  int stat(coll_t cid, const sobject_t& oid, struct stat *st);
-  int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
-  int fiemap(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  bool exists(coll_t cid, const hobject_t& oid);
+  int stat(coll_t cid, const hobject_t& oid, struct stat *st);
+  int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
-  int _touch(coll_t cid, const sobject_t& oid);
-  int _write(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
-  int _zero(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len);
-  int _truncate(coll_t cid, const sobject_t& oid, uint64_t size);
-  int _clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid);
-  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _touch(coll_t cid, const hobject_t& oid);
+  int _write(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
+  int _zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len);
+  int _truncate(coll_t cid, const hobject_t& oid, uint64_t size);
+  int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid);
+  int _clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _remove(coll_t cid, const sobject_t& oid);
+  int _remove(coll_t cid, const hobject_t& oid);
 
   void _start_sync();
 
@@ -312,19 +312,19 @@ public:
   int snapshot(const string& name);
 
   // attrs
-  int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size);
-  int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr &bp);
-  int getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
+  int getattr(coll_t cid, const hobject_t& oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp);
+  int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
-  int _getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& bp);
-  int _getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) ;
+  int _getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp);
+  int _getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) ;
   int _getattr(const char *fn, const char *name, bufferptr& bp);
   int _getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only = false);
 
-  int _setattr(coll_t cid, const sobject_t& oid, const char *name, const void *value, size_t size);
-  int _setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset);
-  int _rmattr(coll_t cid, const sobject_t& oid, const char *name);
-  int _rmattrs(coll_t cid, const sobject_t& oid);
+  int _setattr(coll_t cid, const hobject_t& oid, const char *name, const void *value, size_t size);
+  int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset);
+  int _rmattr(coll_t cid, const hobject_t& oid, const char *name);
+  int _rmattrs(coll_t cid, const hobject_t& oid);
 
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
@@ -340,16 +340,16 @@ public:
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
-  int collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& o, int count, collection_list_handle_t *handle);
-  int collection_list(coll_t c, vector<sobject_t>& o);
+  int collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>& o, int count, collection_list_handle_t *handle);
+  int collection_list(coll_t c, vector<hobject_t>& o);
 
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, coll_t ocid, const sobject_t& o);
-  int _collection_remove(coll_t c, const sobject_t& o);
+  int _collection_add(coll_t c, coll_t ocid, const hobject_t& o);
+  int _collection_remove(coll_t c, const hobject_t& o);
 
-  void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) {}
-  int is_cached(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) { return -1; }
+  void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) {}
+  int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) { return -1; }
 };
 
 #endif
