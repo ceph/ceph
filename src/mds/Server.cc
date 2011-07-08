@@ -1253,6 +1253,20 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
 
+    case MMDSSlaveRequest::OP_WRLOCKACK:
+      {
+	// identify lock, master request
+	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
+						 m->get_object_info());
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	mdr->more()->slaves.insert(from);
+	dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
+	mdr->remote_wrlocks[lock] = from;
+	mdr->locks.insert(lock);
+	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+      }
+      break;
+
     case MMDSSlaveRequest::OP_AUTHPINACK:
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
@@ -1331,37 +1345,50 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 
   if (logger) logger->inc(l_mdss_dsreq);
 
-  switch (mdr->slave_request->get_op()) {
+  int op = mdr->slave_request->get_op();
+  switch (op) {
   case MMDSSlaveRequest::OP_XLOCK:
+  case MMDSSlaveRequest::OP_WRLOCK:
     {
       // identify object
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
 
-      if (lock && lock->get_parent()->is_auth()) {
-	// xlock.
+      if (!lock) {
+	dout(10) << "don't have object, dropping" << dendl;
+	assert(0); // can this happen, if we auth pinned properly.
+      }
+      if (op == MMDSSlaveRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
+	dout(10) << "not auth for remote xlock attempt, dropping on " 
+		 << *lock << " on " << *lock->get_parent() << dendl;
+      } else {
 	// use acquire_locks so that we get auth_pinning.
 	set<SimpleLock*> rdlocks;
-	set<SimpleLock*> wrlocks;
+	set<SimpleLock*> wrlocks = mdr->wrlocks;
 	set<SimpleLock*> xlocks = mdr->xlocks;
-	xlocks.insert(lock);
+
+	int replycode = 0;
+	switch (op) {
+	case MMDSSlaveRequest::OP_XLOCK:
+	  xlocks.insert(lock);
+	  replycode = MMDSSlaveRequest::OP_XLOCKACK;
+	  break;
+	case MMDSSlaveRequest::OP_WRLOCK:
+	  wrlocks.insert(lock);
+	  replycode = MMDSSlaveRequest::OP_WRLOCKACK;
+	  break;
+	default:
+	  assert(0);
+	}
 	
 	if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
 	  return;
 	
 	// ack
-	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
+	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, replycode);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
 	mds->send_message(r, mdr->slave_request->get_connection());
-      } else {
-	if (lock) {
-	  dout(10) << "not auth for remote xlock attempt, dropping on " 
-		   << *lock << " on " << *lock->get_parent() << dendl;
-	} else {
-	  dout(10) << "don't have object, dropping" << dendl;
-	  assert(0); // can this happen, if we auth pinned properly.
-	}
       }
 
       // done.
@@ -1371,12 +1398,20 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_UNXLOCK:
+  case MMDSSlaveRequest::OP_UNWRLOCK:
     {  
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
       assert(lock);
       bool need_issue = false;
-      mds->locker->xlock_finish(lock, mdr, &need_issue);
+      switch (op) {
+      case MMDSSlaveRequest::OP_UNXLOCK:
+	mds->locker->xlock_finish(lock, mdr, &need_issue);
+	break;
+      case MMDSSlaveRequest::OP_UNWRLOCK:
+	mds->locker->wrlock_finish(lock, mdr, &need_issue);
+	break;
+      }
       if (need_issue)
 	mds->locker->issue_caps((CInode*)lock->get_parent());
 
@@ -4782,13 +4817,21 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 
   // -- locks --
+  map<SimpleLock*, int> remote_wrlocks;
 
   // srctrace items.  this mirrors locks taken in rdlock_path_xlock_dentry
   for (int i=0; i<(int)srctrace.size(); i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
-  wrlocks.insert(&srcdn->get_dir()->inode->filelock);
-  wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+  int srcdirauth = srcdn->get_dir()->authority().first;
+  if (srcdirauth != mds->whoami) {
+    dout(10) << " will remote_wrlock srcdir scatterlocks on mds" << srcdirauth << dendl;
+    remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
+    remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
+  } else {
+    wrlocks.insert(&srcdn->get_dir()->inode->filelock);
+    wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+  }
   mds->locker->include_snap_rdlocks(rdlocks, srcdn->get_dir()->inode);
 
   // straydn?
@@ -4802,7 +4845,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   //  strictly speaking, having the slave node freeze the inode is 
   //  otherwise sufficient for avoiding conflicts with inode locks, etc.
   if (!srcdn->is_auth() && srcdnl->is_primary())  // xlock versionlock on srci if there are any witnesses
-      xlocks.insert(&srci->versionlock);
+    xlocks.insert(&srci->versionlock);
 
   // xlock versionlock on dentries if there are witnesses.
   //  replicas can't see projected dentry linkages, and will get
@@ -4839,7 +4882,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // take any locks needed for anchor creation/verification
   mds->mdcache->anchor_create_prep_locks(mdr, srci, rdlocks, xlocks);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, &remote_wrlocks))
     return;
 
   if (oldin &&

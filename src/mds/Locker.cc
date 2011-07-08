@@ -170,7 +170,8 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
 bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
-			   set<SimpleLock*> &xlocks)
+			   set<SimpleLock*> &xlocks,
+			   map<SimpleLock*,int> *remote_wrlocks)
 {
   if (mdr->done_locking &&
       !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
@@ -228,10 +229,21 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
     else if (!(*p)->get_parent()->is_auth() &&
-	     !(*p)->can_wrlock(client)) {       // we might have to request a scatter
+	     !(*p)->can_wrlock(client) &&  // we might have to request a scatter
+	     !mdr->is_slave()) {           // if we are slave (remote_wrlock), the master already authpinned
       dout(15) << " will also auth_pin " << *(*p)->get_parent()
 	       << " in case we need to request a scatter" << dendl;
       mustpin.insert(*p);
+    }
+  }
+
+  // remote_wrlocks
+  if (remote_wrlocks) {
+    for (map<SimpleLock*,int>::iterator p = remote_wrlocks->begin(); p != remote_wrlocks->end(); ++p) {
+      dout(20) << " must remote_wrlock on mds" << p->second << " "
+	       << *p->first << " " << *(p->first)->get_parent() << dendl;
+      sorted.insert(p->first);
+      mustpin.insert(p->first);
     }
   }
 
@@ -343,15 +355,30 @@ bool Locker::acquire_locks(MDRequest *mdr,
       // right kind?
       SimpleLock *have = *existing;
       existing++;
-      if (xlocks.count(*p) && mdr->xlocks.count(*p))
+      if (xlocks.count(have) && mdr->xlocks.count(have)) {
 	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << dendl;
-      else if (wrlocks.count(*p) && mdr->wrlocks.count(*p))
+	continue;
+      }
+      if (wrlocks.count(have) && mdr->wrlocks.count(have)) {
 	dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << dendl;
-      else if (rdlocks.count(*p) && mdr->rdlocks.count(*p))
+	continue;
+      }
+      if (remote_wrlocks && remote_wrlocks->count(have) &&
+	  mdr->remote_wrlocks.count(have)) {
+	if (mdr->remote_wrlocks[have] == (*remote_wrlocks)[have]) {
+	  dout(10) << " already remote_wrlocked " << *have << " " << *have->get_parent() << dendl;
+	  continue;
+	}
+	dout(10) << " unlocking remote_wrlock on wrong mds" << mdr->remote_wrlocks[have]
+		 << " (want mds" << (*remote_wrlocks)[have] << ") " 
+		 << *have << " " << *have->get_parent() << dendl;
+	remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr);
+	// continue...
+      }
+      if (rdlocks.count(have) && mdr->rdlocks.count(have)) {
 	dout(10) << " already rdlocked " << *have << " " << *have->get_parent() << dendl;
-      else
-	assert(0);
-      continue;
+	continue;
+      }
     }
     
     // hose any stray locks
@@ -364,6 +391,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	xlock_finish(stray, mdr, &need_issue);
       else if (mdr->wrlocks.count(stray))
 	wrlock_finish(stray, mdr, &need_issue);
+      else if (mdr->remote_wrlocks.count(stray))
+	remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
       else
 	rdlock_finish(stray, mdr, &need_issue);
       if (need_issue)
@@ -379,6 +408,9 @@ bool Locker::acquire_locks(MDRequest *mdr,
       if (!wrlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
+    } else if (remote_wrlocks && remote_wrlocks->count(*p)) {
+      remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
+      goto out;
     } else {
       if (!rdlock_start(*p, mdr)) 
 	goto out;
@@ -396,6 +428,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
       xlock_finish(stray, mdr, &need_issue);
     else if (mdr->wrlocks.count(stray))
       wrlock_finish(stray, mdr, &need_issue);
+    else if (mdr->remote_wrlocks.count(stray))
+      remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
     else
       rdlock_finish(stray, mdr, &need_issue);
     if (need_issue)
@@ -421,13 +455,19 @@ void Locker::set_xlocks_done(Mutation *mut)
   }
 }
 
-void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::_drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
-  // leftover locks
-  set<CInode*> my_need_issue;
-  if (!pneed_issue)
-    pneed_issue = &my_need_issue;
+  while (!mut->rdlocks.empty()) {
+    bool ni = false;
+    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
+    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
+    if (ni)
+      pneed_issue->insert((CInode*)p);
+  }
+}
 
+void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
+{
   while (!mut->xlocks.empty()) {
     bool ni = false;
     MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
@@ -435,13 +475,9 @@ void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
     if (ni)
       pneed_issue->insert((CInode*)p);
   }
-  while (!mut->rdlocks.empty()) {
-    bool ni = false;
-    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
-    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
-    if (ni)
-      pneed_issue->insert((CInode*)p);
-  }	 
+  while (!mut->remote_wrlocks.empty()) {
+    remote_wrlock_finish(mut->remote_wrlocks.begin()->first, mut->remote_wrlocks.begin()->second, mut);
+  }
   while (!mut->wrlocks.empty()) {
     bool ni = false;
     MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
@@ -449,6 +485,17 @@ void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
     if (ni)
       pneed_issue->insert((CInode*)p);
   }
+}
+
+void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
+{
+  // leftover locks
+  set<CInode*> my_need_issue;
+  if (!pneed_issue)
+    pneed_issue = &my_need_issue;
+
+  _drop_non_rdlocks(mut, pneed_issue);
+  _drop_rdlocks(mut, pneed_issue);
 
   if (pneed_issue == &my_need_issue)
     issue_caps_set(*pneed_issue);
@@ -461,20 +508,7 @@ void Locker::drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   if (!pneed_issue)
     pneed_issue = &my_need_issue;
 
-  while (!mut->xlocks.empty()) {
-    bool ni = false;
-    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
-    xlock_finish(*mut->xlocks.begin(), mut, &ni);
-    if (ni)
-      pneed_issue->insert((CInode*)p);
-  }
-  while (!mut->wrlocks.empty()) {
-    bool ni = false;
-    MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
-    wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
-    if (ni)
-      pneed_issue->insert((CInode*)p);
-  }
+  _drop_non_rdlocks(mut, pneed_issue);
 
   if (pneed_issue == &my_need_issue)
     issue_caps_set(*pneed_issue);
@@ -486,13 +520,7 @@ void Locker::drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   if (!pneed_issue)
     pneed_issue = &my_need_issue;
 
-  while (!mut->rdlocks.empty()) {
-    bool ni = false;
-    MDSCacheObject *p = (*mut->rdlocks.begin())->get_parent();
-    rdlock_finish(*mut->rdlocks.begin(), mut, &ni);
-    if (ni)
-      pneed_issue->insert((CInode*)p);
-  }
+  _drop_rdlocks(mut, pneed_issue);
 
   if (pneed_issue == &my_need_issue)
     issue_caps_set(*pneed_issue);
@@ -615,6 +643,17 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       }
     } else {
       // auth
+
+      // once the first (local) stage of mix->lock gather complete we can
+      // gather from replicas
+      if (lock->get_state() == LOCK_MIX_LOCK &&
+	  lock->get_parent()->is_replicated()) {
+	dout(10) << " finished (local) gather for mix->lock, now gathering from replicas" << dendl;
+	send_lock_message(lock, LOCK_AC_LOCK);
+	lock->init_gather();
+	lock->set_state(LOCK_MIX_LOCK2);
+	return;
+      }
 
       if (lock->is_dirty() && !lock->is_flushed()) {
 	scatter_writebehind((ScatterLock*)lock);
@@ -1127,6 +1166,45 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 }
 
 
+// remote wrlock
+
+void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
+{
+  dout(7) << "remote_wrlock_start mds" << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
+
+  // wait for single auth
+  if (lock->get_parent()->is_ambiguous_auth()) {
+    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
+				   new C_MDS_RetryRequest(mdcache, mut));
+    return;
+  }
+    
+  // send lock request
+  mut->more()->slaves.insert(target);
+  MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_WRLOCK);
+  r->set_lock_type(lock->get_type());
+  lock->get_parent()->set_object_info(r->get_object_info());
+  mds->send_message_mds(r, target);
+  
+  // wait
+  lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
+}
+
+void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
+{
+  // drop ref
+  mut->remote_wrlocks.erase(lock);
+  mut->locks.erase(lock);
+  
+  dout(7) << "remote_wrlock_finish releasing remote wrlock on mds" << target
+	  << " " << *lock->get_parent()  << dendl;
+  if (mds->mdsmap->get_state(target) >= MDSMap::STATE_REJOIN) {
+    MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_UNWRLOCK);
+    slavereq->set_lock_type(lock->get_type());
+    lock->get_parent()->set_object_info(slavereq->get_object_info());
+    mds->send_message_mds(slavereq, target);
+  }
+}
 
 
 // ------------------
@@ -3279,12 +3357,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   int gather = 0;
-  if (lock->get_parent()->is_replicated() &&
-      lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
-    gather++;
-    send_lock_message(lock, LOCK_AC_LOCK);
-    lock->init_gather();
-  }
   if (lock->get_num_client_lease()) {
     gather++;
     revoke_client_leases(lock);
@@ -3306,6 +3378,23 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
     gather++;
+  }
+
+  if (lock->get_parent()->is_replicated() &&
+      lock->get_state() == LOCK_MIX_LOCK &&
+      gather) {
+    dout(10) << " doing local stage of mix->lock gather before gathering from replicas" << dendl;
+  } else {
+    // move to second stage of gather now, so we don't send the lock action later.
+    if (lock->get_state() == LOCK_MIX_LOCK)
+      lock->set_state(LOCK_MIX_LOCK2);
+
+    if (lock->get_parent()->is_replicated() &&
+	lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
+      gather++;
+      send_lock_message(lock, LOCK_AC_LOCK);
+      lock->init_gather();
+    }
   }
 
   if (!gather && lock->is_dirty()) {
@@ -3455,6 +3544,7 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   if (in->is_replicated()) {
     switch (lock->get_state()) {
     case LOCK_MIX_LOCK:
+    case LOCK_MIX_LOCK2:
     case LOCK_MIX_EXCL:
     case LOCK_MIX_TSYN:
       send_lock_message(lock, LOCK_AC_LOCKFLUSHED);
@@ -4189,6 +4279,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKACK:
     assert(lock->get_state() == LOCK_SYNC_LOCK ||
            lock->get_state() == LOCK_MIX_LOCK ||
+           lock->get_state() == LOCK_MIX_LOCK2 ||
            lock->get_state() == LOCK_MIX_EXCL ||
            lock->get_state() == LOCK_SYNC_EXCL ||
            lock->get_state() == LOCK_SYNC_MIX ||
@@ -4197,6 +4288,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     lock->remove_gather(from);
     
     if (lock->get_state() == LOCK_MIX_LOCK ||
+	lock->get_state() == LOCK_MIX_LOCK2 ||
 	lock->get_state() == LOCK_MIX_EXCL ||
 	lock->get_state() == LOCK_MIX_TSYN)
       lock->decode_locked_state(m->get_data());

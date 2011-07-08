@@ -7351,6 +7351,15 @@ void MDCache::request_drop_foreign_locks(MDRequest *mdr)
     }
   }
 
+  map<SimpleLock*, int>::iterator q = mdr->remote_wrlocks.begin();
+  while (q != mdr->remote_wrlocks.end()) {
+    dout(10) << "request_drop_foreign_locks forgetting remote_wrlock " << *q->first
+	     << " on mds" << q->second
+	     << " on " << *(q->first)->get_parent() << dendl;
+    mdr->locks.erase(q->first);
+    mdr->remote_wrlocks.erase(q++);
+  }
+
   mdr->more()->slaves.clear(); /* we no longer have requests out to them, and
                                 * leaving them in can cause double-notifies as
                                 * this function can get called more than once */

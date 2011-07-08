@@ -106,7 +106,7 @@ ostream& operator<<(ostream &out, Inode &in)
       out << " parent=" << *i;
       ++i;
   }
-  out << &in << ")";
+  out << ' ' << &in << ")";
   return out;
 }
 

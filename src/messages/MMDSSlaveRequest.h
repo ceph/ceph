@@ -34,6 +34,10 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RENAMEPREP =     7;
   static const int OP_RENAMEPREPACK = -7;
 
+  static const int OP_WRLOCK = 8;
+  static const int OP_WRLOCKACK = -8;
+  static const int OP_UNWRLOCK = 9;
+
   static const int OP_FINISH = 17;  
   static const int OP_COMMITTED = -18;  
 
@@ -58,6 +62,10 @@ class MMDSSlaveRequest : public Message {
 
     case OP_FINISH: return "finish"; // commit
     case OP_COMMITTED: return "committed";
+
+    case OP_WRLOCK: return "wrlock";
+    case OP_WRLOCKACK: return "wrlock_ack";
+    case OP_UNWRLOCK: return "unwrlock";
 
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";

@@ -77,6 +77,8 @@ protected:
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
+  void _drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
+  void _drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
@@ -85,7 +87,8 @@ public:
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
-		     set<SimpleLock*> &xlocks);
+		     set<SimpleLock*> &xlocks,
+		     map<SimpleLock*,int> *remote_wrlocks=NULL);
 
   void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(Mutation *mut);
@@ -132,6 +135,9 @@ public:
   void wrlock_force(SimpleLock *lock, Mutation *mut);
   bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
+
+  void remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut);
+  void remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut);
 
   bool xlock_start(SimpleLock *lock, MDRequest *mut);
   void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
