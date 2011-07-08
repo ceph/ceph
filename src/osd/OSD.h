@@ -158,31 +158,31 @@ public:
   ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
   
-  static sobject_t get_osdmap_pobject_name(epoch_t epoch) { 
+  static hobject_t get_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     snprintf(foo, sizeof(foo), "osdmap.%d", epoch);
-    return sobject_t(object_t(foo), 0); 
+    return hobject_t(object_t(foo), 0); 
   }
-  static sobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
+  static hobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
-    return sobject_t(object_t(foo), 0); 
+    return hobject_t(object_t(foo), 0); 
   }
 
-  sobject_t make_pg_log_oid(pg_t pg) {
+  hobject_t make_pg_log_oid(pg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;
     string s;
     getline(ss, s);
-    return sobject_t(object_t(s.c_str()), 0);
+    return hobject_t(object_t(s.c_str()), 0);
   }
   
-  sobject_t make_pg_biginfo_oid(pg_t pg) {
+  hobject_t make_pg_biginfo_oid(pg_t pg) {
     stringstream ss;
     ss << "pginfo_" << pg;
     string s;
     getline(ss, s);
-    return sobject_t(object_t(s.c_str()), 0);
+    return hobject_t(object_t(s.c_str()), 0);
   }
   
 
@@ -641,7 +641,7 @@ protected:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
-  map<pg_t, set<sobject_t> > recovery_oids;
+  map<pg_t, set<hobject_t> > recovery_oids;
 #endif
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
@@ -693,8 +693,8 @@ protected:
   } recovery_wq;
 
   bool queue_for_recovery(PG *pg);
-  void start_recovery_op(PG *pg, const sobject_t& soid);
-  void finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue);
+  void start_recovery_op(PG *pg, const hobject_t& soid);
+  void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
   void defer_recovery(PG *pg);
   void do_recovery(PG *pg);
   bool _recover_now();

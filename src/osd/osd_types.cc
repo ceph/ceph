@@ -618,11 +618,11 @@ void ScrubMap::merge_incr(const ScrubMap &l)
   logbl = l.logbl;
   valid_through = l.valid_through;
 
-  for (map<sobject_t,object>::const_iterator p = l.objects.begin();
+  for (map<hobject_t,object>::const_iterator p = l.objects.begin();
        p != l.objects.end();
        p++){
     if (p->second.negative) {
-      map<sobject_t,object>::iterator q = objects.find(p->first);
+      map<hobject_t,object>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
 	objects.erase(q);
       }

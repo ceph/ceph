@@ -102,7 +102,7 @@ enum {
   CEPH_RBD_RULE,
 };
 
-#define OSD_SUPERBLOCK_POBJECT sobject_t(object_t("osd_superblock"), 0)
+#define OSD_SUPERBLOCK_POBJECT hobject_t(object_t("osd_superblock"), 0)
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -1164,7 +1164,7 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 
 
 struct object_info_t {
-  sobject_t soid;
+  hobject_t soid;
   object_locator_t oloc;
   string category;
 
@@ -1193,7 +1193,7 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(const sobject_t& s, const object_locator_t& o)
+  object_info_t(const hobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
       lost(false), truncate_seq(0), truncate_size(0) {}
 
@@ -1236,7 +1236,7 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  map<sobject_t,object> objects;
+  map<hobject_t,object> objects;
   map<string,bufferptr> attrs;
   bufferlist logbl;
   eversion_t valid_through;
@@ -1254,7 +1254,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 struct OSDOp {
   ceph_osd_op op;
   bufferlist data;
-  sobject_t soid;
+  hobject_t soid;
 
   OSDOp() {
     memset(&op, 0, sizeof(ceph_osd_op));

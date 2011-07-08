@@ -89,21 +89,21 @@ bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
 // ====================
 // missing objects
 
-bool ReplicatedPG::is_missing_object(const sobject_t& soid)
+bool ReplicatedPG::is_missing_object(const hobject_t& soid)
 {
   return missing.missing.count(soid);
 }
 
-void ReplicatedPG::wait_for_missing_object(const sobject_t& soid, Message *m)
+void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
 {
   assert(is_missing_object(soid));
 
   // we don't have it (yet).
-  map<sobject_t, Missing::item>::const_iterator g = missing.missing.find(soid);
+  map<hobject_t, Missing::item>::const_iterator g = missing.missing.find(soid);
   assert(g != missing.missing.end());
   const eversion_t &v(g->second.need);
 
-  map<sobject_t, pull_info_t>::const_iterator p = pulling.find(soid);
+  map<hobject_t, pull_info_t>::const_iterator p = pulling.find(soid);
   if (p != pulling.end()) {
     dout(7) << "missing " << soid << " v " << v << ", already pulling." << dendl;
   }
@@ -117,7 +117,7 @@ void ReplicatedPG::wait_for_missing_object(const sobject_t& soid, Message *m)
   waiting_for_missing_object[soid].push_back(m);
 }
 
-bool ReplicatedPG::is_degraded_object(const sobject_t& soid)
+bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (missing.missing.count(soid))
     return true;
@@ -130,7 +130,7 @@ bool ReplicatedPG::is_degraded_object(const sobject_t& soid)
   return false;
 }
 
-void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
+void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, Message *m)
 {
   assert(is_degraded_object(soid));
 
@@ -191,7 +191,7 @@ bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
   return true;
 }
 
-bool ReplicatedPG::pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata)
+bool ReplicatedPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata)
 {
   bufferlist bl;
 
@@ -259,7 +259,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
       } else {
         dout(10) << " pgls pg=" << op->get_pg() << " count " << p->op.pgls.count << dendl;
 	// read into a buffer
-        vector<sobject_t> sentries;
+        vector<hobject_t> sentries;
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(uint64_t)(p->op.pgls.cookie);
 
@@ -277,7 +277,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	  // it's an offset into the missing set
 	  version_t v = response.handle;
 	  dout(10) << " handle low/missing " << v << dendl;
-	  map<version_t, sobject_t>::iterator mp = missing.rmissing.lower_bound(v);
+	  map<version_t, hobject_t>::iterator mp = missing.rmissing.lower_bound(v);
 	  result = 0;
 	  while (sentries.size() < p->op.pgls.count) {
 	    if (mp == missing.rmissing.end()) {
@@ -302,7 +302,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	}
 
 	if (result == 0) {
-          vector<sobject_t>::iterator iter;
+          vector<hobject_t>::iterator iter;
           for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
 	    bool keep = true;
 	    // skip snapdir objects
@@ -379,7 +379,7 @@ void ReplicatedPG::calc_trim_to()
   }
 }
 
-ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
+ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid) : 
   PG(o, _pool, p, oid, ioid), snap_trimmer_machine(this)
 { 
   snap_trimmer_machine.initiate();
@@ -417,7 +417,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       if (is_primary() || (!(op->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
 	// missing the specific snap we need; requeue and wait.
 	assert(!can_create); // only happens on a read
-	sobject_t soid(op->get_oid(), snapid);
+	hobject_t soid(op->get_oid(), snapid);
 	wait_for_missing_object(soid, op);
 	return;
       }
@@ -474,7 +474,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   dout(10) << "do_op mode now " << mode << dendl;
 
   // src_oids
-  map<sobject_t,ObjectContext*> src_obc;
+  map<hobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     OSDOp& osd_op = *p;
     if (osd_op.soid.oid.name.length()) {
@@ -485,7 +485,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 				    &sobc, false, &ssnapid);
 	if (r == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
-	  sobject_t soid(osd_op.soid.oid, ssnapid);
+	  hobject_t soid(osd_op.soid.oid, ssnapid);
 	  wait_for_missing_object(soid, op);
 	} else if (r) {
 	  osd->reply_op_error(op, r);
@@ -514,7 +514,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return;
   }
 
-  const sobject_t& soid = obc->obs.oi.soid;
+  const hobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
@@ -777,7 +777,7 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
  * obs_to_trim */
 bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
 				   coll_t &col_to_trim,
-				   vector<sobject_t> &obs_to_trim)
+				   vector<hobject_t> &obs_to_trim)
 {
   assert_locked();
   obs_to_trim.clear();
@@ -806,7 +806,7 @@ bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
   return true;
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
+ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 						   const snapid_t &sn)
 {
   // load clone info
@@ -921,7 +921,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
   // save head snapset
   dout(10) << coid << " new snapset " << snapset << dendl;
 
-  sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
+  hobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
   ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
   assert(ctx->snapset_obc->registered);
   if (snapset.clones.empty() && !snapset.head_exists) {
@@ -1126,7 +1126,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
   bool maybe_created = false;
 
-  const sobject_t& soid = oi.soid;
+  const hobject_t& soid = oi.soid;
 
   ObjectStore::Transaction& t = ctx->op_t;
 
@@ -2052,7 +2052,7 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
-  const sobject_t& soid = oi.soid;
+  const hobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
 
   if (obs.exists)
@@ -2083,7 +2083,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
-  const sobject_t& soid = oi.soid;
+  const hobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
   snapid_t snapid = (uint64_t)op.snap.snapid;
   snapid_t cloneid = 0;
@@ -2103,7 +2103,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       /* a different problem, like degraded pool
        * with not-yet-restored object. We shouldn't have been able
        * to get here; recovery should have completed first! */
-      sobject_t rollback_target(soid.oid, cloneid);
+      hobject_t rollback_target(soid.oid, cloneid);
       assert(is_missing_object(rollback_target));
       dout(20) << "_rollback_to attempted to roll back to a missing object " 
 	       << rollback_target << " (requested snapid: ) " << snapid << dendl;
@@ -2113,7 +2113,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       assert(0);
     }
   } else { //we got our context, let's use it to do the rollback!
-    sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
+    hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
     if (is_degraded_object(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object " 
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
@@ -2177,7 +2177,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 }
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
-			       const sobject_t& head, const sobject_t& coid,
+			       const hobject_t& head, const hobject_t& coid,
 			       object_info_t *poi)
 {
   bufferlist bv;
@@ -2194,7 +2194,7 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 
 void ReplicatedPG::make_writeable(OpContext *ctx)
 {
-  const sobject_t& soid = ctx->obs->oi.soid;
+  const hobject_t& soid = ctx->obs->oi.soid;
   SnapContext& snapc = ctx->snapc;
   /*
   ObjectState& obs = ctx->new_obs;
@@ -2218,7 +2218,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snapc.snaps.size() &&                 // there are snaps
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
     // clone
-    sobject_t coid = soid;
+    hobject_t coid = soid;
     coid.snap = snapc.seq;
     
     unsigned l;
@@ -2331,7 +2331,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
     OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
     ObjectContext *obc = ctx->obc;
     object_info_t& oi = ctx->new_obs.oi;
-    sobject_t& soid = oi.soid;
+    hobject_t& soid = oi.soid;
     entity_name_t entity = ctx->reqid.name;
 
     dout(10) << "do_osd_op_effects applying watch/notify effects on session " << session << dendl;
@@ -2462,7 +2462,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
   assert(!ctx->ops.empty());
   
-  const sobject_t& soid = ctx->obs->oi.soid;
+  const hobject_t& soid = ctx->obs->oi.soid;
 
   // we'll need this to log
   eversion_t old_version = ctx->obs->oi.version;
@@ -2540,7 +2540,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->op_t.setattr(coll, soid, SS_ATTR, bss);   
     if (!head_existed) {
       // if we logically recreated the head, remove old _snapdir object
-      sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
+      hobject_t snapoid(soid.oid, CEPH_SNAPDIR);
 
       ctx->snapset_obc = get_object_context(snapoid, ctx->new_obs.oi.oloc, false);
       if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
@@ -2557,7 +2557,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     }
   } else if (ctx->new_snapset.clones.size()) {
     // save snapset on _snap
-    sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
+    hobject_t snapoid(soid.oid, CEPH_SNAPDIR);
     dout(10) << " final snapset " << ctx->new_snapset
 	     << " in " << snapoid << dendl;
     ctx->at_version.version++;
@@ -2842,7 +2842,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 			       eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version)
 {
   OpContext *ctx = repop->ctx;
-  const sobject_t& soid = ctx->obs->oi.soid;
+  const hobject_t& soid = ctx->obs->oi.soid;
   MOSDOp *op = (MOSDOp *)ctx->op;
 
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
@@ -2980,11 +2980,11 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 // -------------------------------------------------------
 
 
-ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& soid,
+ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
 							      bool can_create)
 {
-  map<sobject_t, ObjectContext*>::iterator p = object_contexts.find(soid);
+  map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(soid);
   ObjectContext *obc;
   if (p != object_contexts.end()) {
     obc = p->second;
@@ -3052,7 +3052,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
 				      snapid_t *psnapid)
 {
   // want the head?
-  sobject_t head(oid, CEPH_NOSNAP);
+  hobject_t head(oid, CEPH_NOSNAP);
   if (snapid == CEPH_NOSNAP) {
     ObjectContext *obc = get_object_context(head, oloc, can_create);
     if (!obc)
@@ -3109,7 +3109,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
     put_snapset_context(ssc);
     return -ENOENT;
   }
-  sobject_t soid(oid, ssc->snapset.clones[k]);
+  hobject_t soid(oid, ssc->snapset.clones[k]);
 
   put_snapset_context(ssc); // we're done with ssc
   ssc = 0;
@@ -3166,9 +3166,9 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   }
 }
 
-void ReplicatedPG::put_object_contexts(map<sobject_t,ObjectContext*>& obcv)
+void ReplicatedPG::put_object_contexts(map<hobject_t,ObjectContext*>& obcv)
 {
-  for (map<sobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
+  for (map<hobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
     put_object_context(p->second);
   obcv.clear();
 }
@@ -3181,11 +3181,11 @@ ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& 
     ssc = p->second;
   } else {
     bufferlist bv;
-    sobject_t head(oid, CEPH_NOSNAP);
+    hobject_t head(oid, CEPH_NOSNAP);
     int r = osd->store->getattr(coll, head, SS_ATTR, bv);
     if (r < 0) {
       // try _snapset
-      sobject_t snapdir(oid, CEPH_SNAPDIR);
+      hobject_t snapdir(oid, CEPH_SNAPDIR);
       r = osd->store->getattr(coll, snapdir, SS_ATTR, bv);
       if (r < 0 && !can_create)
 	return NULL;
@@ -3221,7 +3221,7 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 
 void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 {
-  const sobject_t& soid = op->poid;
+  const hobject_t& soid = op->poid;
 
   const char *opname;
   if (op->noop)
@@ -3415,10 +3415,10 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 
 // ===========================================================
 
-void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
+void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 				     Missing& missing,
 				     interval_set<uint64_t>& data_subset,
-				     map<sobject_t, interval_set<uint64_t> >& clone_subsets)
+				     map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   dout(10) << "calc_head_subsets " << head
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -3432,7 +3432,7 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
     prev.insert(0, st.st_size);    
   
   for (int j=snapset.clones.size()-1; j>=0; j--) {
-    sobject_t c = head;
+    hobject_t c = head;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c)) {
@@ -3456,10 +3456,10 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 	   << "  clone_subsets " << clone_subsets << dendl;
 }
 
-void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
+void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
 				      Missing& missing,
 				      interval_set<uint64_t>& data_subset,
-				      map<sobject_t, interval_set<uint64_t> >& clone_subsets)
+				      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   dout(10) << "calc_clone_subsets " << soid
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -3477,7 +3477,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
   if (size)
     prev.insert(0, size);    
   for (int j=i-1; j>=0; j--) {
-    sobject_t c = soid;
+    hobject_t c = soid;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c)) {
@@ -3496,7 +3496,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
   if (size)
     next.insert(0, size);    
   for (unsigned j=i+1; j<snapset.clones.size(); j++) {
-    sobject_t c = soid;
+    hobject_t c = soid;
     c.snap = snapset.clones[j];
     next.intersection_of(snapset.clone_overlap[snapset.clones[j-1]]);
     if (!missing.is_missing(c)) {
@@ -3532,12 +3532,12 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
  */
 enum { PULL_NONE, PULL_OTHER, PULL_YES };
 
-int ReplicatedPG::pull(const sobject_t& soid)
+int ReplicatedPG::pull(const hobject_t& soid)
 {
   eversion_t v = missing.missing[soid].need;
 
   int fromosd = -1;
-  map<sobject_t,set<int> >::iterator q = missing_loc.find(soid);
+  map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
   if (q != missing_loc.end()) {
     for (set<int>::iterator p = q->second.begin();
 	 p != q->second.end();
@@ -3561,14 +3561,14 @@ int ReplicatedPG::pull(const sobject_t& soid)
 	  << " from osd" << fromosd
 	  << dendl;
 
-  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
   bool need_size = false;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
     // do we have the head and/or snapdir?
-    sobject_t head = soid;
+    hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
     if (missing.is_missing(head)) {
       if (pulling.count(head)) {
@@ -3630,7 +3630,7 @@ int ReplicatedPG::pull(const sobject_t& soid)
   return PULL_YES;
 }
 
-void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
+void ReplicatedPG::send_pull_op(const hobject_t& soid, eversion_t v, bool first,
 				const interval_set<uint64_t>& data_subset, int fromosd)
 {
   // send op
@@ -3663,19 +3663,19 @@ void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
  * intelligently push an object to a replica.  make use of existing
  * clones/heads and dup data ranges where possible.
  */
-void ReplicatedPG::push_to_replica(ObjectContext *obc, const sobject_t& soid, int peer)
+void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, int peer)
 {
   const object_info_t& oi = obc->obs.oi;
   uint64_t size = obc->obs.oi.size;
 
   dout(10) << "push_to_replica " << soid << " v" << oi.version << " size " << size << " to osd" << peer << dendl;
 
-  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
   
   // are we doing a clone on the replica?
   if (soid.snap && soid.snap < CEPH_NOSNAP) {	
-    sobject_t head = soid;
+    hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
     if (peer_missing[peer].is_missing(head) &&
 	peer_missing[peer].have_old(head) == oi.prior_version) {
@@ -3683,7 +3683,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const sobject_t& soid, in
 	       << " v" << oi.prior_version 
 	       << ", pushing " << soid << " attrs as a clone op" << dendl;
       interval_set<uint64_t> data_subset;
-      map<sobject_t, interval_set<uint64_t> > clone_subsets;
+      map<hobject_t, interval_set<uint64_t> > clone_subsets;
       if (size)
 	clone_subsets[head].insert(0, size);
       push_start(soid, peer, size, oi.version, data_subset, clone_subsets);
@@ -3696,7 +3696,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const sobject_t& soid, in
       dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
       return push_start(soid, peer);
     }
-    sobject_t snapdir = head;
+    hobject_t snapdir = head;
     snapdir.snap = CEPH_SNAPDIR;
     if (missing.is_missing(snapdir)) {
       dout(15) << "push_to_replica missing snapdir " << snapdir << ", pushing raw clone" << dendl;
@@ -3720,7 +3720,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const sobject_t& soid, in
   push_start(soid, peer, size, oi.version, data_subset, clone_subsets);
 }
 
-void ReplicatedPG::push_start(const sobject_t& soid, int peer)
+void ReplicatedPG::push_start(const hobject_t& soid, int peer)
 {
   struct stat st;
   int r = osd->store->stat(coll, soid, &st);
@@ -3732,16 +3732,16 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer)
   object_info_t oi(bl);
 
   interval_set<uint64_t> data_subset;
-  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t> > clone_subsets;
   data_subset.insert(0, size);
 
   push_start(soid, peer, size, oi.version, data_subset, clone_subsets);
 }
 
-void ReplicatedPG::push_start(const sobject_t& soid, int peer,
+void ReplicatedPG::push_start(const hobject_t& soid, int peer,
 			      uint64_t size, eversion_t version,
 			      interval_set<uint64_t> &data_subset,
-			      map<sobject_t, interval_set<uint64_t> >& clone_subsets)
+			      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   // take note.
   push_info_t *pi = &pushing[soid][peer];
@@ -3763,10 +3763,10 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
  * push - send object to a peer
  */
 
-int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int peer, 
+int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int peer, 
 			       uint64_t size, bool first, bool complete,
 			       interval_set<uint64_t> &data_subset,
-			       map<sobject_t, interval_set<uint64_t> >& clone_subsets)
+			       map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   // read data+attrs
   bufferlist bl;
@@ -3830,7 +3830,7 @@ int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int pe
   return 0;
 }
 
-void ReplicatedPG::send_push_op_blank(const sobject_t& soid, int peer)
+void ReplicatedPG::send_push_op_blank(const hobject_t& soid, int peer)
 {
   // send a blank push back to the primary
   osd_reqid_t rid;
@@ -3848,7 +3848,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
   
   int peer = reply->get_source().num();
-  const sobject_t& soid = reply->get_poid();
+  const hobject_t& soid = reply->get_poid();
   
   if (pushing.count(soid) == 0) {
     dout(10) << "huh, i wasn't pushing " << soid << " to osd" << peer
@@ -3906,7 +3906,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
  */
 void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 {
-  const sobject_t soid = op->poid;
+  const hobject_t soid = op->poid;
 
   dout(7) << "op_pull " << soid << " v " << op->version
           << " from " << op->get_source()
@@ -3991,7 +3991,7 @@ void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectCon
  */
 void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 {
-  const sobject_t& soid = op->poid;
+  const hobject_t& soid = op->poid;
   eversion_t v = op->version;
   OSDOp& push = op->ops[0];
 
@@ -4012,7 +4012,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
 
   interval_set<uint64_t> data_subset;
-  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t> > clone_subsets;
 
   bufferlist data;
   op->claim_data(data);
@@ -4161,7 +4161,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     }
 
     // clone bits
-    for (map<sobject_t, interval_set<uint64_t> >::const_iterator p = clone_subsets.begin();
+    for (map<hobject_t, interval_set<uint64_t> >::const_iterator p = clone_subsets.begin();
 	 p != clone_subsets.end();
 	 ++p)
     {
@@ -4301,7 +4301,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       waiting_for_missing_object.erase(soid);
     } else {
       dout(20) << " no waiters on " << soid << dendl;
-      /*for (hash_map<sobject_t,list<class Message*> >::iterator p = waiting_for_missing_object.begin();
+      /*for (hash_map<hobject_t,list<class Message*> >::iterator p = waiting_for_missing_object.begin();
 	 p != waiting_for_missing_object.end();
 	 p++)
       dout(20) << "   " << p->first << dendl;
@@ -4314,9 +4314,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 void ReplicatedPG::_failed_push(MOSDSubOp *op)
 {
-  const sobject_t& soid = op->poid;
+  const hobject_t& soid = op->poid;
   int from = op->get_source().num();
-  map<sobject_t,set<int> >::iterator p = missing_loc.find(soid);
+  map<hobject_t,set<int> >::iterator p = missing_loc.find(soid);
   if (p != missing_loc.end()) {
     dout(0) << "_failed_push " << soid << " from osd" << from
 	    << ", reps on " << p->second << dendl;
@@ -4436,7 +4436,7 @@ void ReplicatedPG::_clear_recovery_state()
 
 void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
 {
-  for (map<int, set<sobject_t> >::iterator j = pull_from_peer.begin();
+  for (map<int, set<hobject_t> >::iterator j = pull_from_peer.begin();
        j != pull_from_peer.end();
        ) {
     if (osdmap->is_up(j->first)) {
@@ -4446,7 +4446,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
     dout(10) << "Reseting pulls from osd" << j->first
 	     << ", osdmap has it marked down" << dendl;
     
-    for (set<sobject_t>::iterator i = j->second.begin();
+    for (set<hobject_t>::iterator i = j->second.begin();
 	 i != j->second.end();
 	 ++i) {
       assert(pulling.count(*i) == 1);
@@ -4521,9 +4521,9 @@ int ReplicatedPG::recover_primary(int max)
   int started = 0;
   int skipped = 0;
 
-  map<version_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
+  map<version_t, hobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
   while (p != missing.rmissing.end()) {
-    sobject_t soid;
+    hobject_t soid;
     version_t v = p->first;
 
     if (log.objects.count(p->second)) {
@@ -4537,7 +4537,7 @@ int ReplicatedPG::recover_primary(int max)
     Missing::item& item = missing.missing[p->second];
     p++;
 
-    sobject_t head = soid;
+    hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
     bool unfound = (missing_loc.find(soid) == missing_loc.end());
@@ -4616,7 +4616,7 @@ int ReplicatedPG::recover_primary(int max)
   return started;
 }
 
-int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
+int ReplicatedPG::recover_object_replicas(const hobject_t& soid, eversion_t v)
 {
   dout(10) << "recover_object_replicas " << soid << dendl;
 
@@ -4680,10 +4680,10 @@ int ReplicatedPG::recover_replicas(int max)
 
     // oldest first!
     const Missing &m(pm->second);
-    for (map<version_t, sobject_t>::const_iterator p = m.rmissing.begin();
+    for (map<version_t, hobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
-      const sobject_t soid(p->second);
+      const hobject_t soid(p->second);
 
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
@@ -4699,7 +4699,7 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<sobject_t,Missing::item>::const_iterator p = m.missing.find(soid);
+      map<hobject_t,Missing::item>::const_iterator p = m.missing.find(soid);
       started += recover_object_replicas(soid, p->second.need);
     }
   }
@@ -4707,7 +4707,7 @@ int ReplicatedPG::recover_replicas(int max)
   return started;
 }
 
-void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid)
+void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid)
 {
   t.remove(coll, soid);
   if (soid.snap < CEPH_MAXSNAP) {
@@ -4738,11 +4738,11 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     // FIXME: sloppy pobject vs object conversions abound!  ***
     
     // be thorough.
-    vector<sobject_t> ls;
+    vector<hobject_t> ls;
     osd->store->collection_list(coll, ls);
 
-    set<sobject_t> s;   
-    for (vector<sobject_t>::iterator i = ls.begin();
+    set<hobject_t> s;   
+    for (vector<hobject_t>::iterator i = ls.begin();
          i != ls.end();
          i++)
       if (i->snap == CEPH_NOSNAP)
@@ -4750,7 +4750,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
     dout(10) << " " << s.size() << " local objects" << dendl;
 
-    set<sobject_t> did;
+    set<hobject_t> did;
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
          p != log.log.rend();
          p++) {
@@ -4770,7 +4770,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       }
     }
 
-    for (set<sobject_t>::iterator i = s.begin(); 
+    for (set<hobject_t>::iterator i = s.begin(); 
          i != s.end();
          i++) {
       dout(10) << " deleting stray " << *i << dendl;
@@ -4779,7 +4779,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
   } else {
     // just scan the log.
-    set<sobject_t> did;
+    set<hobject_t> did;
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
          p != log.log.rend();
          p++) {
@@ -4814,7 +4814,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   const char *mode = repair ? "repair":"scrub";
 
   // traverse in reverse order.
-  sobject_t head;
+  hobject_t head;
   SnapSet snapset;
   vector<snapid_t>::reverse_iterator curclone;
 
@@ -4822,10 +4822,10 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
   bufferlist last_data;
 
-  for (map<sobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
+  for (map<hobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        p++) {
-    const sobject_t& soid = p->first;
+    const hobject_t& soid = p->first;
     object_stat_sum_t stat;
     stat.num_objects++;
 
@@ -4843,14 +4843,14 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       ::decode(snapset, blp);
 
       // did we finish the last oid?
-      if (head != sobject_t()) {
+      if (head != hobject_t()) {
 	osd->clog.error() << "Missing clone(s) for " << head << "\n";
 	errors++;
       }
       
       // what will be next?
       if (snapset.clones.empty())
-	head = sobject_t();  // no clones.
+	head = hobject_t();  // no clones.
       else {
 	curclone = snapset.clones.rbegin();
 	head = p->first;
@@ -4898,7 +4898,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       }
     } else if (soid.snap) {
       // it's a clone
-      assert(head != sobject_t());
+      assert(head != hobject_t());
 
       stat.num_object_clones++;
       
@@ -4914,7 +4914,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	curclone++;
 
       if (curclone == snapset.clones.rend())
-	head = sobject_t();
+	head = hobject_t();
 
     } else {
       // it's unversioned.
@@ -5013,7 +5013,7 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   }
 
   // Primary trimming
-  vector<sobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
+  vector<hobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
   snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
   coll_t &col_to_trim = context<SnapTrimmer>().col_to_trim;
   if (!pg->get_obs_to_trim(snap_to_trim,
@@ -5072,10 +5072,10 @@ boost::statechart::result ReplicatedPG::RepColTrim::react(const SnapTrim&)
   coll_t col_to_trim(pg->info.pgid, snap_to_trim);
   to_trim.erase(snap_to_trim);
   
-  vector<sobject_t> obs_to_trim;
+  vector<hobject_t> obs_to_trim;
   pg->osd->store->collection_list(col_to_trim, obs_to_trim);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  for (vector<sobject_t>::iterator i = obs_to_trim.begin();
+  for (vector<hobject_t>::iterator i = obs_to_trim.begin();
        i != obs_to_trim.end();
        ++i) {
     t->collection_remove(col_to_trim, *i);
@@ -5105,7 +5105,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 {
   dout(10) << "TrimmingObjects react" << dendl;
   ReplicatedPG *pg = context< SnapTrimmer >().pg;
-  vector<sobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
+  vector<hobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
   snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
   set<RepGather *> &repops = context<SnapTrimmer>().repops;
 

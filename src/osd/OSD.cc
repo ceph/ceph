@@ -202,7 +202,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       object_t oid("disk_bw_test");
       for (int i=0; i<1000; i++) {
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+	t->write(coll_t::META_COLL, hobject_t(oid, 0), i*bl.length(), bl.length(), bl);
 	store->queue_transaction(NULL, t);
       }
       store->sync();
@@ -210,7 +210,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       ObjectStore::Transaction tr;
-      tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
+      tr.remove(coll_t::META_COLL, hobject_t(oid, 0));
       ret = store->apply_transaction(tr);
       if (ret) {
 	derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
@@ -867,7 +867,7 @@ void OSD::clear_temp()
 {
   dout(10) << "clear_temp" << dendl;
 
-  vector<sobject_t> objects;
+  vector<hobject_t> objects;
   store->collection_list(coll_t::TEMP_COLL, objects);
 
   dout(10) << objects.size() << " objects" << dendl;
@@ -876,7 +876,7 @@ void OSD::clear_temp()
 
   // delete them.
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  for (vector<sobject_t>::iterator p = objects.begin();
+  for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
        p++)
     t->collection_remove(coll_t::TEMP_COLL, *p);
@@ -940,8 +940,8 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 
   // create
   PG *pg;
-  sobject_t logoid = make_pg_log_oid(pgid);
-  sobject_t infooid = make_pg_biginfo_oid(pgid);
+  hobject_t logoid = make_pg_log_oid(pgid);
+  hobject_t infooid = make_pg_biginfo_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
     pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
   else 
@@ -2133,7 +2133,7 @@ void OSD::handle_command(MMonCommand *m)
       char nm[30];
       snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       object_t oid(nm);
-      sobject_t soid(oid, 0);
+      hobject_t soid(oid, 0);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(coll_t::META_COLL, soid, 0, bsize, bl);
       store->queue_transaction(NULL, t);
@@ -2209,11 +2209,11 @@ void OSD::handle_command(MMonCommand *m)
 	pg->lock();
 
 	fout << *pg << std::endl;
-	std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-	std::map<sobject_t, PG::Missing::item>::iterator mi = pg->missing.missing.begin();
+	std::map<hobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
+	std::map<hobject_t, PG::Missing::item>::iterator mi = pg->missing.missing.begin();
 	for (; mi != mend; ++mi) {
 	  fout << mi->first << " -> " << mi->second << std::endl;
-	  map<sobject_t, set<int> >::const_iterator mli =
+	  map<hobject_t, set<int> >::const_iterator mli =
 	    pg->missing_loc.find(mi->first);
 	  if (mli == pg->missing_loc.end())
 	    continue;
@@ -2954,7 +2954,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
       add_map(o);
 
-      sobject_t fulloid = get_osdmap_pobject_name(e);
+      hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
       add_map_bl(e, bl);
       continue;
@@ -2964,7 +2964,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (p != m->incremental_maps.end()) {
       dout(10) << "handle_osd_map  got inc map for epoch " << e << dendl;
       bufferlist& bl = p->second;
-      sobject_t oid = get_inc_osdmap_pobject_name(e);
+      hobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, oid, 0, bl.length(), bl);
       add_map_inc_bl(e, bl);
 
@@ -2989,7 +2989,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist fbl;
       o->encode(fbl);
 
-      sobject_t fulloid = get_osdmap_pobject_name(e);
+      hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
       add_map_bl(e, fbl);
       continue;
@@ -3726,11 +3726,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   pg_t parentid = parent->info.pgid;
 
   // split objects
-  vector<sobject_t> olist;
+  vector<hobject_t> olist;
   store->collection_list(coll_t(parent->info.pgid), olist);
 
-  for (vector<sobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
-    sobject_t poid = *p;
+  for (vector<hobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
+    hobject_t poid = *p;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
     pg_t pgid = osdmap->raw_pg_to_pg(pg_t(l.ol_pgid));
     if (pgid != parentid) {
@@ -3779,7 +3779,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   while (p != parent->log.log.end()) {
     list<PG::Log::Entry>::iterator cur = p;
     p++;
-    sobject_t& poid = cur->soid;
+    hobject_t& poid = cur->soid;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
     pg_t pgid = osdmap->raw_pg_to_pg(pg_t(l.ol_pgid));
     if (pgid != parentid) {
@@ -4402,10 +4402,10 @@ void OSD::_remove_pg(PG *pg)
     for (snapid_t cur = p.get_start();
 	 cur < p.get_start() + p.get_len();
 	 ++cur) {
-      vector<sobject_t> olist;      
+      vector<hobject_t> olist;      
       store->collection_list(coll_t(pgid, cur), olist);
       dout(10) << "_remove_pg " << pgid << " snap " << cur << " " << olist.size() << " objects" << dendl;
-      for (vector<sobject_t>::iterator q = olist.begin();
+      for (vector<hobject_t>::iterator q = olist.begin();
 	   q != olist.end();
 	   q++) {
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4429,10 +4429,10 @@ void OSD::_remove_pg(PG *pg)
   }
 
   // (what remains of the) main collection
-  vector<sobject_t> olist;
+  vector<hobject_t> olist;
   store->collection_list(coll_t(pgid), olist);
   dout(10) << "_remove_pg " << pgid << " " << olist.size() << " objects" << dendl;
-  for (vector<sobject_t>::iterator p = olist.begin();
+  for (vector<hobject_t>::iterator p = olist.begin();
        p != olist.end();
        p++) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4714,7 +4714,7 @@ void OSD::do_recovery(PG *pg)
   pg->put();
 }
 
-void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
+void OSD::start_recovery_op(PG *pg, const hobject_t& soid)
 {
   recovery_wq.lock();
   dout(10) << "start_recovery_op " << *pg << " " << soid
@@ -4732,7 +4732,7 @@ void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
   recovery_wq.unlock();
 }
 
-void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
+void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 {
   dout(10) << "finish_recovery_op " << *pg << " " << soid
 	   << " dequeue=" << dequeue
@@ -4961,7 +4961,7 @@ void OSD::handle_op(MOSDOp *op)
 
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
     // missing object?
-    sobject_t head(op->get_oid(), CEPH_NOSNAP);
+    hobject_t head(op->get_oid(), CEPH_NOSNAP);
     if (pg->is_missing_object(head)) {
       pg->wait_for_missing_object(head, op);
       pg->unlock();
