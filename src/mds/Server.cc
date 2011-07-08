@@ -1367,7 +1367,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	set<SimpleLock*> wrlocks = mdr->wrlocks;
 	set<SimpleLock*> xlocks = mdr->xlocks;
 
-	int replycode;
+	int replycode = 0;
 	switch (op) {
 	case MMDSSlaveRequest::OP_XLOCK:
 	  xlocks.insert(lock);
@@ -1377,6 +1377,8 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	  wrlocks.insert(lock);
 	  replycode = MMDSSlaveRequest::OP_WRLOCKACK;
 	  break;
+	default:
+	  assert(0);
 	}
 	
 	if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
