@@ -4815,13 +4815,21 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 
   // -- locks --
+  map<SimpleLock*, int> remote_wrlocks;
 
   // srctrace items.  this mirrors locks taken in rdlock_path_xlock_dentry
   for (int i=0; i<(int)srctrace.size(); i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
-  wrlocks.insert(&srcdn->get_dir()->inode->filelock);
-  wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+  int srcdirauth = srcdn->get_dir()->authority().first;
+  if (srcdirauth != mds->whoami) {
+    dout(10) << " will remote_wrlock srcdir scatterlocks on mds" << srcdirauth << dendl;
+    remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
+    remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
+  } else {
+    wrlocks.insert(&srcdn->get_dir()->inode->filelock);
+    wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+  }
   mds->locker->include_snap_rdlocks(rdlocks, srcdn->get_dir()->inode);
 
   // straydn?
@@ -4835,7 +4843,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   //  strictly speaking, having the slave node freeze the inode is 
   //  otherwise sufficient for avoiding conflicts with inode locks, etc.
   if (!srcdn->is_auth() && srcdnl->is_primary())  // xlock versionlock on srci if there are any witnesses
-      xlocks.insert(&srci->versionlock);
+    xlocks.insert(&srci->versionlock);
 
   // xlock versionlock on dentries if there are witnesses.
   //  replicas can't see projected dentry linkages, and will get
@@ -4872,7 +4880,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // take any locks needed for anchor creation/verification
   mds->mdcache->anchor_create_prep_locks(mdr, srci, rdlocks, xlocks);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, &remote_wrlocks))
     return;
 
   if (oldin &&
