@@ -1253,6 +1253,20 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       }
       break;
 
+    case MMDSSlaveRequest::OP_WRLOCKACK:
+      {
+	// identify lock, master request
+	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
+						 m->get_object_info());
+	MDRequest *mdr = mdcache->request_get(m->get_reqid());
+	mdr->more()->slaves.insert(from);
+	dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
+	mdr->remote_wrlocks[lock] = from;
+	mdr->locks.insert(lock);
+	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+      }
+      break;
+
     case MMDSSlaveRequest::OP_AUTHPINACK:
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
@@ -1331,37 +1345,48 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 
   if (logger) logger->inc(l_mdss_dsreq);
 
-  switch (mdr->slave_request->get_op()) {
+  int op = mdr->slave_request->get_op();
+  switch (op) {
   case MMDSSlaveRequest::OP_XLOCK:
+  case MMDSSlaveRequest::OP_WRLOCK:
     {
       // identify object
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
 
-      if (lock && lock->get_parent()->is_auth()) {
-	// xlock.
+      if (!lock) {
+	dout(10) << "don't have object, dropping" << dendl;
+	assert(0); // can this happen, if we auth pinned properly.
+      }
+      if (op == MMDSSlaveRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
+	dout(10) << "not auth for remote xlock attempt, dropping on " 
+		 << *lock << " on " << *lock->get_parent() << dendl;
+      } else {
 	// use acquire_locks so that we get auth_pinning.
 	set<SimpleLock*> rdlocks;
-	set<SimpleLock*> wrlocks;
+	set<SimpleLock*> wrlocks = mdr->wrlocks;
 	set<SimpleLock*> xlocks = mdr->xlocks;
-	xlocks.insert(lock);
+
+	int replycode;
+	switch (op) {
+	case MMDSSlaveRequest::OP_XLOCK:
+	  xlocks.insert(lock);
+	  replycode = MMDSSlaveRequest::OP_XLOCKACK;
+	  break;
+	case MMDSSlaveRequest::OP_WRLOCK:
+	  wrlocks.insert(lock);
+	  replycode = MMDSSlaveRequest::OP_WRLOCKACK;
+	  break;
+	}
 	
 	if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
 	  return;
 	
 	// ack
-	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
+	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, replycode);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
 	mds->send_message(r, mdr->slave_request->get_connection());
-      } else {
-	if (lock) {
-	  dout(10) << "not auth for remote xlock attempt, dropping on " 
-		   << *lock << " on " << *lock->get_parent() << dendl;
-	} else {
-	  dout(10) << "don't have object, dropping" << dendl;
-	  assert(0); // can this happen, if we auth pinned properly.
-	}
       }
 
       // done.
@@ -1371,12 +1396,20 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_UNXLOCK:
+  case MMDSSlaveRequest::OP_UNWRLOCK:
     {  
       SimpleLock *lock = mds->locker->get_lock(mdr->slave_request->get_lock_type(),
 					       mdr->slave_request->get_object_info());
       assert(lock);
       bool need_issue = false;
-      mds->locker->xlock_finish(lock, mdr, &need_issue);
+      switch (op) {
+      case MMDSSlaveRequest::OP_UNXLOCK:
+	mds->locker->xlock_finish(lock, mdr, &need_issue);
+	break;
+      case MMDSSlaveRequest::OP_UNWRLOCK:
+	mds->locker->wrlock_finish(lock, mdr, &need_issue);
+	break;
+      }
       if (need_issue)
 	mds->locker->issue_caps((CInode*)lock->get_parent());
 

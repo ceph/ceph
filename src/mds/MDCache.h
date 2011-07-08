@@ -86,6 +86,7 @@ struct Mutation {
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
   set< SimpleLock* > wrlocks;  // always local.
+  map< SimpleLock*, int > remote_wrlocks;
   set< SimpleLock* > xlocks;   // local or remote.
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
@@ -118,6 +119,7 @@ struct Mutation {
     assert(xlocks.empty());
     assert(rdlocks.empty());
     assert(wrlocks.empty());
+    assert(remote_wrlocks.empty());
   }
 
   bool is_master() { return slave_to_mds < 0; }
