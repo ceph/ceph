@@ -19,6 +19,7 @@ setup(
         'bunch >=1.0.0',
         'argparse >=1.2.1',
         'httplib2',
+        'beanstalkc >=0.2.0',
         ],
 
     entry_points={
@@ -27,7 +28,9 @@ setup(
             'teuthology-nuke = teuthology.run:nuke',
             'teuthology-suite = teuthology.suite:main',
             'teuthology-ls = teuthology.suite:ls',
+            'teuthology-worker = teuthology.queue:worker',
             'teuthology-lock = teuthology.lock:main',
+            'teuthology-schedule = teuthology.run:schedule',
             ],
         },
 

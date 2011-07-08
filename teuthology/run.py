@@ -196,3 +196,55 @@ def nuke():
             ])
 
     log.info('Done.')
+
+def schedule():
+    parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
+    parser.add_argument(
+        'config',
+        metavar='CONFFILE',
+        nargs='+',
+        type=config_file,
+        action=MergeConfig,
+        default={},
+        help='config file to read',
+        )
+    parser.add_argument(
+        '--name',
+        required=True,
+        help='job name',
+        )
+    parser.add_argument(
+        '--description',
+        help='job description',
+        )
+    parser.add_argument(
+        '--owner',
+        help='job owner',
+        )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        default=False,
+        help='be more verbose',
+        )
+
+    ctx = parser.parse_args()
+
+    from teuthology.misc import read_config, get_user
+    if ctx.owner is None:
+        ctx.owner = get_user()
+    read_config(ctx)
+
+    import teuthology.queue
+    beanstalk = teuthology.queue.connect(ctx)
+
+    beanstalk.use('teuthology')
+    job = yaml.safe_dump(dict(
+            config=ctx.config,
+            name=ctx.name,
+            description=ctx.description,
+            owner=ctx.owner,
+            verbose=ctx.verbose,
+            ))
+    jid = beanstalk.put(job, ttr=60*60*24)
+    print 'Job scheduled with ID {jid}'.format(jid=jid)
