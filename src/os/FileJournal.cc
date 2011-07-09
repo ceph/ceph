@@ -169,10 +169,13 @@ static int get_kernel_version(int *a, int *b, int *c)
   }
 
   if (sscanf(buf, "Linux version %d.%d.%d", a, b, c) != 3) {
-    derr << "get_kernel_version: failed to parse string: '"
-	 << buf << "'" << dendl;
-    ret = EIO;
-    goto close_fd;
+    if (sscanf(buf, "Linux version %d.%d", a, b) != 2) {
+      derr << "get_kernel_version: failed to parse string: '"
+	   << buf << "'" << dendl;
+      ret = EIO;
+      goto close_fd;
+    }
+    *c = 0;
   }
 
   dout(0) << " kernel version is " << *a <<"." << *b << "." << *c << dendl;

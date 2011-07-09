@@ -1178,7 +1178,7 @@ int main(int argc, const char **argv)
       for (unsigned i = 0; i < per.size(); i++)
 	cout << " device " << i << ":\t" << per[i] << std::endl;
       for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
-	cout << " num results " << p->first << ":\t" << p->second << std::endl;
+	cout << " result size " << p->first << "x:\t" << p->second << std::endl;
     }
   }
 

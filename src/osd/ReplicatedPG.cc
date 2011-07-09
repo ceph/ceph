@@ -1464,23 +1464,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         } else {
           t.touch(coll, soid);
         }
-	if (ssc->snapset.clones.size()) {
-	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  interval_set<uint64_t> ch;
-	  if (op.extent.length)
-	    ch.insert(op.extent.offset, op.extent.length);
-	  ch.intersection_of(ssc->snapset.clone_overlap[newest]);
-	  ssc->snapset.clone_overlap[newest].subtract(ch);
-	  add_interval_usage(ch, ctx->new_stats);
-	}
-	if (op.extent.length && (op.extent.offset + op.extent.length > oi.size)) {
-	  uint64_t new_size = op.extent.offset + op.extent.length;
-	  ctx->new_stats.num_bytes += new_size - oi.size;
-	  ctx->new_stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
-	  oi.size = new_size;
-	}
-	ctx->new_stats.num_wr++;
-	ctx->new_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset,
+				    op.extent.offset, op.extent.length, true);
+
 	maybe_created = true;
       }
       break;
@@ -1610,21 +1596,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	bufferlist::iterator p = osd_op.data.begin();
 
-	if (!obs.exists)
+	if (!obs.exists) {
 	  t.touch(coll, obs.oi.soid);
+	  maybe_created = true;
+	}
 	t.clone_range(coll, osd_op.soid, obs.oi.soid,
 		      op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);
-	// fix up accounting
-	uint64_t endoff = op.clonerange.offset + op.clonerange.length;
-	if (endoff > oi.size) {
-	  info.stats.num_bytes -= oi.size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-	  oi.size = endoff;
-	  info.stats.num_bytes += oi.size;
-	  info.stats.num_kb += SHIFT_ROUND_UP(oi.size, 10);
-	}
-	ssc->snapset.head_exists = true;
-	info.stats.num_wr++;
+
+	write_update_size_and_usage(ctx->new_stats, oi, ssc->snapset,
+				    op.clonerange.offset, op.clonerange.length, false);
       }
       break;
       
@@ -1684,8 +1664,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	string name = "_" + aname;
 	bufferlist bl;
 	bp.copy(op.xattr.value_len, bl);
-	if (!obs.exists)  // create object if it doesn't yet exist.
-	  t.touch(coll, soid);
 	t.setattr(coll, soid, name, bl);
  	ctx->new_stats.num_wr++;
       }
@@ -2223,6 +2201,29 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
 }
 
+
+void ReplicatedPG::write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi, SnapSet& ss,
+					       uint64_t offset, uint64_t length, bool count_bytes)
+{
+  if (ss.clones.size()) {
+    snapid_t newest = *ss.clones.rbegin();
+    interval_set<uint64_t> ch;
+    if (length)
+      ch.insert(offset, length);
+    ch.intersection_of(ss.clone_overlap[newest]);
+    ss.clone_overlap[newest].subtract(ch);
+    add_interval_usage(ch, stats);
+  }
+  if (length && (offset + length > oi.size)) {
+    uint64_t new_size = offset + length;
+    stats.num_bytes += new_size - oi.size;
+    stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
+    oi.size = new_size;
+  }
+  stats.num_wr++;
+  if (count_bytes)
+    stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
+}
 
 void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& stats)
 {
