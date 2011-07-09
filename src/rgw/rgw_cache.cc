@@ -7,13 +7,20 @@ using namespace std;
 
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {
-  map<string, ObjectCacheInfo>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end())
+  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  if (iter == cache_map.end()) {
+    RGW_LOG(0) << "cache get: name=" << name << " : miss" << dendl;
     return -ENOENT;
+  }
 
-  ObjectCacheInfo& src = iter->second;
-  if ((src.flags & mask) != mask)
+  touch_lru(name, iter->second.lru_iter);
+
+  ObjectCacheInfo& src = iter->second.info;
+  if ((src.flags & mask) != mask) {
+    RGW_LOG(0) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << dendl;
     return -ENOENT;
+  }
+  RGW_LOG(0) << "cache get: name=" << name << " : hit" << dendl;
 
   info = src;
 
@@ -22,8 +29,18 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
 void ObjectCache::put(string& name, ObjectCacheInfo& info)
 {
-  map<string, ObjectCacheInfo>::iterator iter;
-  ObjectCacheInfo& target = cache_map[name];
+  RGW_LOG(0) << "cache put: name=" << name << dendl;
+  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  if (iter == cache_map.end()) {
+    ObjectCacheEntry entry;
+    entry.lru_iter = lru.end();
+    cache_map.insert(pair<string, ObjectCacheEntry>(name, entry));
+    iter = cache_map.find(name);
+  }
+  ObjectCacheEntry& entry = iter->second;
+  ObjectCacheInfo& target = entry.info;
+
+  touch_lru(name, entry.lru_iter);
 
   target.status = info.status;
 
@@ -50,9 +67,48 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 
 void ObjectCache::remove(string& name)
 {
-  map<string, ObjectCacheInfo>::iterator iter = cache_map.find(name);
+  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+
+  remove_lru(name, iter->second.lru_iter);
+
   if (iter != cache_map.end())
     cache_map.erase(iter);
+}
+
+void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
+{
+  if (lru_iter == lru.end()) {
+    lru.push_back(name);
+    lru_iter--;
+    RGW_LOG(0) << "adding " << name << " to cache LRU end" << dendl;
+
+
+#define MAX_CACHE_SIZE 10000 // FIXME: make this configurable
+    while (lru.size() > MAX_CACHE_SIZE) {
+      list<string>::iterator iter = lru.begin();
+      map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
+      RGW_LOG(0) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
+      if (map_iter != cache_map.end())
+        cache_map.erase(map_iter);
+      lru.pop_front();
+    }
+  } else {
+    string name = *lru_iter;
+    RGW_LOG(0) << "moving " << name << " to cache LRU end" << dendl;
+    lru.erase(lru_iter);
+    lru.push_back(name);
+    lru_iter = lru.end();
+    --lru_iter;
+  }
+}
+
+void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter)
+{
+  if (lru_iter == lru.end())
+    return;
+
+  lru.erase(lru_iter);
+  lru_iter = lru.end();
 }
 
 

@@ -92,9 +92,17 @@ struct RGWCacheNotifyInfo {
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 
-class ObjectCache {
-  std::map<string, ObjectCacheInfo> cache_map;
+struct ObjectCacheEntry {
+  ObjectCacheInfo info;
+  std::list<string>::iterator lru_iter;
+};
 
+class ObjectCache {
+  std::map<string, ObjectCacheEntry> cache_map;
+  std::list<string> lru;
+
+  void touch_lru(string& name, std::list<string>::iterator& lru_iter);
+  void remove_lru(string& name, std::list<string>::iterator& lru_iter);
 public:
   ObjectCache() { }
   int get(std::string& name, ObjectCacheInfo& bl, uint32_t mask);
