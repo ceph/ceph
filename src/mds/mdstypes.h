@@ -1408,6 +1408,10 @@ protected:
   virtual void auth_pin(void *who) = 0;
   virtual void auth_unpin(void *who) = 0;
   virtual bool is_frozen() = 0;
+  virtual bool is_freezing() = 0;
+  virtual bool is_freezing_or_frozen() {
+    return is_frozen() || is_freezing();
+  }
 
 
   // --------------------------------------------

@@ -415,6 +415,11 @@ bool CDentry::is_frozen()
   return dir->is_frozen();
 }
 
+bool CDentry::is_freezing()
+{
+  return dir->is_freezing();
+}
+
 
 void CDentry::adjust_nested_anchors(int by)
 {

@@ -3153,7 +3153,8 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_parent()->is_frozen()) return;
+  if (lock->get_parent()->is_freezing_or_frozen())
+    return;
 
   CInode *in = 0;
   int wanted = 0, issued = 0;
@@ -3569,7 +3570,8 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_parent()->is_frozen()) return;
+  if (lock->get_parent()->is_freezing_or_frozen())
+    return;
   
   if (lock->get_type() == CEPH_LOCK_INEST) {
     // in general, we want to keep INEST writable at all times.
@@ -3906,7 +3908,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   assert(lock->is_stable());
 
   if (lock->is_xlocked() || 
-      lock->get_parent()->is_frozen()) return;
+      lock->get_parent()->is_freezing_or_frozen())
+    return;
 
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
