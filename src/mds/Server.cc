@@ -4471,6 +4471,11 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
   le->metablob.add_null_dentry(dn, true);
 
+  if (in->is_dir()) {
+    dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
+    le->metablob.renamed_dirino = in->ino();
+  }
+
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
