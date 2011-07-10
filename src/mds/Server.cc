@@ -3726,6 +3726,12 @@ void Server::handle_client_link(MDRequest *mdr)
   xlocks.insert(&targeti->linklock);
 
   // take any locks needed for anchor creation/verification
+  // NOTE: we do this on the master even if the anchor/link update may happen
+  // on the slave.  That means we may have out of date anchor state on our
+  // end.  That's fine:  either, we xlock when we don't need to (slow but
+  // not a problem), or we rdlock when we need to xlock, but then discover we
+  // need to xlock and on our next pass through we adjust the locks (this works
+  // as long as the linklock rdlock isn't the very last lock we take).
   mds->mdcache->anchor_create_prep_locks(mdr, targeti, rdlocks, xlocks);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -4001,15 +4007,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   // anchor?
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     
-    set<SimpleLock*> rdlocks = mdr->rdlocks;
-    set<SimpleLock*> wrlocks = mdr->wrlocks;
-    set<SimpleLock*> xlocks = mdr->xlocks;
-
-    // take any locks needed for anchor creation/verification
-    mds->mdcache->anchor_create_prep_locks(mdr, targeti, rdlocks, xlocks);
-
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-      return;
+    // NOTE: the master took any locks needed for anchor creation/verification.
 
     if (targeti->is_anchored()) {
       dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
