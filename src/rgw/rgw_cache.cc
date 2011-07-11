@@ -77,24 +77,22 @@ void ObjectCache::remove(string& name)
 
 void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
 {
+  while (lru.size() > (size_t)rgwconf->max_cache_lru) {
+    list<string>::iterator iter = lru.begin();
+    map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
+    RGW_LOG(10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
+    if (map_iter != cache_map.end())
+      cache_map.erase(map_iter);
+    lru.pop_front();
+  }
+
   if (lru_iter == lru.end()) {
     lru.push_back(name);
     lru_iter--;
-    RGW_LOG(0) << "adding " << name << " to cache LRU end" << dendl;
-
-
-#define MAX_CACHE_SIZE 10000 // FIXME: make this configurable
-    while (lru.size() > MAX_CACHE_SIZE) {
-      list<string>::iterator iter = lru.begin();
-      map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
-      RGW_LOG(0) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
-      if (map_iter != cache_map.end())
-        cache_map.erase(map_iter);
-      lru.pop_front();
-    }
+    RGW_LOG(10) << "adding " << name << " to cache LRU end" << dendl;
   } else {
     string name = *lru_iter;
-    RGW_LOG(0) << "moving " << name << " to cache LRU end" << dendl;
+    RGW_LOG(10) << "moving " << name << " to cache LRU end" << dendl;
     lru.erase(lru_iter);
     lru.push_back(name);
     lru_iter = lru.end();

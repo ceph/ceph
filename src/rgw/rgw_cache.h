@@ -284,9 +284,6 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     return -EIO;
   }
 
-  string& bucket = info.obj.bucket;
-  string& oid = info.obj.object;
-
   switch (info.op) {
   case UPDATE_OBJ:
     cache.put(info.ns, info.obj_info);

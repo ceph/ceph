@@ -155,6 +155,40 @@ class XMLArgs
    map<string, string>& get_sub_resources() { return sub_resources; }
 };
 
+class RGWConf;
+
+class RGWEnv {
+  std::map<string, string> env_map;
+public:
+  RGWConf *conf; 
+
+  RGWEnv() : conf(NULL) {}
+  ~RGWEnv();
+  void reinit(char **envp);
+  const char *get(const char *name, const char *def_val = NULL);
+  int get_int(const char *name, int def_val = 0);
+  size_t get_size(const char *name, size_t def_val = 0);
+};
+
+class RGWConf {
+  friend class RGWEnv;
+protected:
+  void init(RGWEnv * env);
+public:
+  RGWConf() :
+    max_cache_lru(0),
+    log_level(0),
+    should_log(0) {}
+
+  size_t max_cache_lru;
+  int log_level;
+  int should_log;
+};
+
+extern RGWEnv rgw_env;
+
+#define rgwconf rgw_env.conf
+
 enum http_op {
   OP_GET,
   OP_PUT,
@@ -398,7 +432,7 @@ struct req_state {
 
    int prot_flags;
 
-   char *os_auth_token;
+   const char *os_auth_token;
    char *os_user;
    char *os_groups;
 

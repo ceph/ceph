@@ -6,7 +6,7 @@
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
-  const char *p = FCGX_GetParam(name, s->fcgx->envp);
+  const char *p = rgw_env.get(name);
   if (p)
     str = p;
 }

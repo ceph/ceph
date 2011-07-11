@@ -209,11 +209,11 @@ void dump_range(struct req_state *s, off_t ofs, off_t end)
 
 int RGWGetObj_REST::get_params()
 {
-  range_str = FCGX_GetParam("HTTP_RANGE", s->fcgx->envp);
-  if_mod = FCGX_GetParam("HTTP_IF_MODIFIED_SINCE", s->fcgx->envp);
-  if_unmod = FCGX_GetParam("HTTP_IF_UNMODIFIED_SINCE", s->fcgx->envp);
-  if_match = FCGX_GetParam("HTTP_IF_MATCH", s->fcgx->envp);
-  if_nomatch = FCGX_GetParam("HTTP_IF_NONE_MATCH", s->fcgx->envp);
+  range_str = rgw_env.get("HTTP_RANGE");
+  if_mod = rgw_env.get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = rgw_env.get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = rgw_env.get("HTTP_IF_MATCH");
+  if_nomatch = rgw_env.get("HTTP_IF_NONE_MATCH");
 
   return 0;
 }
@@ -221,7 +221,7 @@ int RGWGetObj_REST::get_params()
 
 int RGWPutObj_REST::get_params()
 {
-  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+  supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -247,17 +247,17 @@ int RGWPutObj_REST::get_data()
   }
 
   if (!ofs)
-    supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+    supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
 
   return 0;
 }
 
 int RGWCopyObj_REST::get_params()
 {
-  if_mod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE", s->fcgx->envp);
-  if_unmod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE", s->fcgx->envp);
-  if_match = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MATCH", s->fcgx->envp);
-  if_nomatch = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_NONE_MATCH", s->fcgx->envp);
+  if_mod = rgw_env.get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
+  if_unmod = rgw_env.get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
+  if_match = rgw_env.get("HTTP_X_AMZ_COPY_IF_MATCH");
+  if_nomatch = rgw_env.get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   return 0;
 }
@@ -377,9 +377,7 @@ void init_entities_from_header(struct req_state *s)
   string req;
   string first;
 
-  gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
-  if (!gateway_dns_name)
-    gateway_dns_name = "s3.";
+  gateway_dns_name = rgw_env.get("RGW_DNS_NAME", "s3.");
 
   RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
@@ -438,7 +436,7 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *openstack_url_prefix = FCGX_GetParam("RGW_OPENSTACK_URL_PREFIX", s->fcgx->envp);
+    const char *openstack_url_prefix = rgw_env.get("RGW_OPENSTACK_URL_PREFIX");
     bool cut_url = (openstack_url_prefix != NULL);
     if (!openstack_url_prefix)
       openstack_url_prefix = "v1";
@@ -470,12 +468,11 @@ void init_entities_from_header(struct req_state *s)
     string ver;
     string auth_key;
 
-    RGW_LOG(10) << "before2" << dendl;
     next_tok(req, ver, '/');
     RGW_LOG(10) << "ver=" << ver << dendl;
     next_tok(req, auth_key, '/');
     RGW_LOG(10) << "auth_key=" << auth_key << dendl;
-    s->os_auth_token = FCGX_GetParam("HTTP_X_AUTH_TOKEN", s->fcgx->envp);
+    s->os_auth_token = rgw_env.get("HTTP_X_AUTH_TOKEN");
     next_tok(req, first, '/');
 
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
@@ -682,16 +679,16 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
   int ret = 0;
   RGWHandler::init_state(s, fcgx);
 
-  s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
-  s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
+  s->path_name = rgw_env.get("SCRIPT_NAME");
+  s->path_name_url = rgw_env.get("REQUEST_URI");
   int pos = s->path_name_url.find('?');
   if (pos >= 0)
     s->path_name_url = s->path_name_url.substr(0, pos);
-  s->method = FCGX_GetParam("REQUEST_METHOD", s->fcgx->envp);
-  s->host = FCGX_GetParam("HTTP_HOST", s->fcgx->envp);
-  s->query = FCGX_GetParam("QUERY_STRING", s->fcgx->envp);
-  s->length = FCGX_GetParam("CONTENT_LENGTH", s->fcgx->envp);
-  s->content_type = FCGX_GetParam("CONTENT_TYPE", s->fcgx->envp);
+  s->method = rgw_env.get("REQUEST_METHOD");
+  s->host = rgw_env.get("HTTP_HOST");
+  s->query = rgw_env.get("QUERY_STRING");
+  s->length = rgw_env.get("CONTENT_LENGTH");
+  s->content_type = rgw_env.get("CONTENT_TYPE");
   s->prot_flags = 0;
 
   if (!s->method)
@@ -720,16 +717,16 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
 
   init_auth_info(s);
 
-  const char *cacl = FCGX_GetParam("HTTP_X_AMZ_ACL", s->fcgx->envp);
+  const char *cacl = rgw_env.get("HTTP_X_AMZ_ACL");
   if (cacl)
     s->canned_acl = cacl;
 
-  s->copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->fcgx->envp);
-  s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
+  s->copy_source = rgw_env.get("HTTP_X_AMZ_COPY_SOURCE");
+  s->http_auth = rgw_env.get("HTTP_AUTHORIZATION");
 
-  const char *cgi_env_continue = FCGX_GetParam("RGW_PRINT_CONTINUE", s->fcgx->envp);
+  const char *cgi_env_continue = rgw_env.get("RGW_PRINT_CONTINUE");
   if (rgw_str_to_bool(cgi_env_continue, 0)) {
-    const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
+    const char *expect = rgw_env.get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
   return ret;

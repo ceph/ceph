@@ -319,7 +319,8 @@ my_radosgw_src = \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
-	rgw/rgw_escape.c
+	rgw/rgw_escape.c \
+	rgw/rgw_env.cc
 
 my_radosgw_ldadd = \
 	libglobal.la librgw.la librados.la -lfcgi -lcurl -lexpat \

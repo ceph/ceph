@@ -87,6 +87,8 @@ int main(int argc, const char **argv)
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
+    rgw_env.reinit(fcgx.envp);
+
     RGWOp *op;
     int init_error = 0;
     RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx, &init_error);
