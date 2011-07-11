@@ -122,3 +122,29 @@ TEST(MimeTests, DecodeOutOfSpace) {
   ASSERT_EQ(len, 4);
   ASSERT_EQ(string("a="), string(output));
 }
+
+TEST(MimeTests, DecodeErrors) {
+  char output[128];
+  memset(output, 0, sizeof(output));
+  int len;
+
+  // incomplete escape sequence
+  len = mime_decode_from_qp("boo=", output, sizeof(output));
+  ASSERT_LT(len, 0);
+
+  // invalid escape sequences
+  len = mime_decode_from_qp("boo=gg", output, sizeof(output));
+  ASSERT_LT(len, 0);
+  len = mime_decode_from_qp("boo=g", output, sizeof(output));
+  ASSERT_LT(len, 0);
+  len = mime_decode_from_qp("boo==", output, sizeof(output));
+  ASSERT_LT(len, 0);
+  len = mime_decode_from_qp("boo=44bar=z", output, sizeof(output));
+  ASSERT_LT(len, 0);
+
+  // high bit should not be set in quoted-printable mime output
+  unsigned char bad_input2[] = { 0x81, 0x6a, 0x0 };
+  len = mime_decode_from_qp(reinterpret_cast<const char*>(bad_input2),
+			    output, sizeof(output));
+  ASSERT_LT(len, 0);
+}
