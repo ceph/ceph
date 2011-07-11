@@ -127,7 +127,7 @@ class RGWCache  : public T
     return normal_name(obj.bucket, obj.object);
   }
 
-  int distribute(rgw_obj& obj, ObjectCacheInfo& obj_info);
+  int distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
   int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:
   RGWCache() {}
@@ -138,9 +138,26 @@ public:
   int get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
   int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+
+  int delete_obj(std::string& id, rgw_obj& obj, bool sync);
 };
 
 
+template <class T>
+int RGWCache<T>::delete_obj(std::string& id, rgw_obj& obj, bool sync)
+{
+  string& bucket = obj.bucket;
+  if (bucket[0] != '.')
+    return T::delete_obj(id, obj, sync);
+
+  string name = normal_name(obj);
+  cache.remove(name);
+
+  ObjectCacheInfo info;
+  distribute(obj, info, REMOVE_OBJ);
+
+  return T::delete_obj(id, obj, sync);
+}
 
 template <class T>
 int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
@@ -206,7 +223,7 @@ int RGWCache<T>::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
   if (cacheable) {
     if (ret >= 0) {
       cache.put(name, info);
-      int r = distribute(obj, info);
+      int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
         RGW_LOG(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
@@ -262,11 +279,11 @@ done:
 }
 
 template <class T>
-int RGWCache<T>::distribute(rgw_obj& obj, ObjectCacheInfo& obj_info)
+int RGWCache<T>::distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op)
 {
   RGWCacheNotifyInfo info;
 
-  info.op = UPDATE_OBJ;
+  info.op = op;
 
   info.obj_info = obj_info;
   info.obj = obj;
@@ -294,6 +311,9 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
   switch (info.op) {
   case UPDATE_OBJ:
     cache.put(name, info.obj_info);
+    break;
+  case REMOVE_OBJ:
+    cache.remove(name);
     break;
   default:
     RGW_LOG(0) << "WARNING: got unknown notification op: " << info.op << dendl;

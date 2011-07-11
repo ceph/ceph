@@ -68,11 +68,13 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 void ObjectCache::remove(string& name)
 {
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  if (iter == cache_map.end())
+    return;
+
+  RGW_LOG(10) << "removing " << name << " from cache" << dendl;
 
   remove_lru(name, iter->second.lru_iter);
-
-  if (iter != cache_map.end())
-    cache_map.erase(iter);
+  cache_map.erase(iter);
 }
 
 void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)

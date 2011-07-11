@@ -452,13 +452,8 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (s->bucket) {
-    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
-
-    if (ret == 0) {
-      rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
-    }
-  }
+  if (s->bucket)
+    ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
 
   send_response();
 }

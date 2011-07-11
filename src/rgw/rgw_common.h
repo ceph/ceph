@@ -176,9 +176,9 @@ protected:
   void init(RGWEnv * env);
 public:
   RGWConf() :
-    max_cache_lru(0),
+    max_cache_lru(10000),
     log_level(0),
-    should_log(0) {}
+    should_log(1) {}
 
   size_t max_cache_lru;
   int log_level;

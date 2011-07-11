@@ -548,14 +548,8 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   if (r < 0)
     return r;
 
-  librados::IoCtx io_ctx;
-  r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
-  if (r < 0) {
-    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
-    return r;
-  }
-
-  r = io_ctx.remove(bucket);
+  rgw_obj obj(rgw_root_bucket, bucket);
+  r = delete_obj(id, obj, true);
   if (r < 0)
     return r;
 
@@ -586,15 +580,8 @@ int RGWRados::purge_buckets(std::string& id, vector<std::string>& buckets)
       completions.push_back(c);
     }
 
-    librados::IoCtx io_ctx;
-    r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
-    if (r < 0) {
-      RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
-      ret = r;
-      continue;
-    }
-
-    r = io_ctx.remove(bucket);
+    rgw_obj obj(rgw_root_bucket, bucket);
+    r = delete_obj(id, obj, true);
     if (r < 0) {
       RGW_LOG(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
       ret = r;
