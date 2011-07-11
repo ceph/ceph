@@ -5,6 +5,7 @@ import logging
 import os
 import tarfile
 import time
+import yaml
 
 from teuthology import lock
 from teuthology import misc as teuthology
@@ -53,7 +54,7 @@ def lock_machines(ctx, config):
         newly_locked = lock.lock_many(ctx, config, ctx.owner)
         if len(newly_locked) == config:
             ctx.config['targets'] = newly_locked
-            log.info('\n  '.join(['Locked targets:', ] + newly_locked))
+            log.info('\n  '.join(['Locked targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
             break
         elif not ctx.block:
             assert 0, 'not enough machines are available'
