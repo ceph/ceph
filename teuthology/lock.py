@@ -151,6 +151,12 @@ Lock, unlock, or query lock status of machines.
         help='update status',
         )
     parser.add_argument(
+        '-t', '--targets',
+        dest='targets',
+        default=None,
+        help='input yaml containing targets'
+        )        
+    parser.add_argument(
         'machines',
         metavar='MACHINE',
         default=[],
@@ -174,6 +180,18 @@ Lock, unlock, or query lock status of machines.
     user = ctx.owner
     machines = ctx.machines
     machines_to_update = []
+ 
+    if ctx.targets:
+        config = {}
+        try:
+            with file(ctx.targets) as f:
+                g = yaml.safe_load_all(f)
+                for new in g:
+                    if 'targets' in new:
+                        for t in new['targets']:
+                            machines.append(t) 
+        except IOError, e:
+            raise argparse.ArgumentTypeError(str(e))
 
     if ctx.f:
         assert ctx.lock or ctx.unlock, \
