@@ -101,6 +101,10 @@ ostream& operator<<(ostream &out, Inode &in)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
   if (in.flushing_caps)
     out << " flushing_caps=" << ccap_string(in.flushing_caps);
+
+  if (in.flags & I_COMPLETE)
+    out << " COMPLETE";
+
   set<Dentry*>::iterator i = in.dn_set.begin();
   while(i != in.dn_set.end()) {
       out << " parent=" << *i;
@@ -502,11 +506,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
+  bool updating_inode = false;
+  int issued = 0;
   if (st->version == 0 ||
       (in->version & ~1) < st->version) {
+    updating_inode = true;
 
     int implemented = 0;
-    int issued = in->caps_issued(&implemented) | in->caps_dirty();
+    issued = in->caps_issued(&implemented) | in->caps_dirty();
     issued |= implemented;
 
     in->version = st->version;
@@ -544,22 +551,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
 			   issued);
-
-    if (in->is_dir() &&
-	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
-	(issued & CEPH_CAP_FILE_EXCL) == 0 &&
-	in->dirstat.nfiles == 0 &&
-	in->dirstat.nsubdirs == 0) {
-      ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-      in->flags |= I_COMPLETE;
-      if (in->dir) {
-	ldout(cct, 0) << "WARNING: dir is open on empty dir " << in->ino << " with "
-		<< in->dir->dentry_map.size() << " entries" << dendl;
-	in->dir->max_offset = 2;
-	
-	// FIXME: tear down dir?
-      }
-    }  
   }
 
   // move me if/when version reflects fragtree changes.
@@ -569,6 +560,24 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     add_update_cap(in, mds, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
   else
     in->snap_caps |= st->cap.caps;
+
+  // setting I_COMPLETE needs to happen after adding the cap
+  if (updating_inode &&
+      in->is_dir() &&
+      (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+      (issued & CEPH_CAP_FILE_EXCL) == 0 &&
+      in->dirstat.nfiles == 0 &&
+      in->dirstat.nsubdirs == 0) {
+    ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
+    in->flags |= I_COMPLETE;
+    if (in->dir) {
+      ldout(cct, 0) << "WARNING: dir is open on empty dir " << in->ino << " with "
+		    << in->dir->dentry_map.size() << " entries" << dendl;
+      in->dir->max_offset = 2;
+      
+      // FIXME: tear down dir?
+    }
+  }  
 
   return in;
 }
