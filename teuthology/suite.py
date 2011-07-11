@@ -5,7 +5,6 @@ import logging
 import os
 import subprocess
 import sys
-import time
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +34,12 @@ combination, and will override anything in the suite.
         required=True,
         )
     parser.add_argument(
-        '--archive-dir',
-        metavar='DIR',
-        help='path under which to archive results',
+        '--owner',
+        help='job owner',
+        )
+    parser.add_argument(
+        '--name',
+        help='name for this suite',
         required=True,
         )
     parser.add_argument(
@@ -58,13 +60,6 @@ combination, and will override anything in the suite.
         level=loglevel,
         )
 
-    if not os.path.isdir(args.archive_dir):
-        sys.exit("{prog}: archive directory must exist: {path}".format(
-                prog=os.path.basename(sys.argv[0]),
-                path=args.archive_dir,
-                ))
-
-    failed = False
     facets = [
         f for f in sorted(os.listdir(args.suite))
         if not f.startswith('.')
@@ -82,43 +77,29 @@ combination, and will override anything in the suite.
         description=' '.join('{facet}:{name}'.format(facet=facet, name=name)
                      for facet, name, path in configs)
         log.info(
-            'Running teuthology with facets %s', description
+            'Running teuthology-schedule with facets %s', description
             )
         arg = [
-            os.path.join(os.path.dirname(sys.argv[0]), 'teuthology'),
+            os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
             ]
 
         if args.verbose:
             arg.append('-v')
 
-        while True:
-            archive = os.path.join(args.archive_dir, time.strftime('%Y-%m-%dT%H-%M-%S'))
-            if not os.path.exists(archive):
-                break
-            time.sleep(1)
+        if args.owner:
+            arg.extend(['--owner', args.owner])
+
         arg.extend([
-                '--lock',
-                '--block',
-                '--archive={path}'.format(path=archive),
-                '--description=\'{desc}\''.format(desc=description),
+                '--name', args.name,
+                '--description', description,
                 '--',
                 ])
 
         arg.extend(path for facet, name, path in configs)
         arg.extend(args.config)
-        try:
-            subprocess.check_call(
-                args=arg,
-                close_fds=True,
-                )
-        except subprocess.CalledProcessError as e:
-            log.exception(e)
-            failed = True
-
-    if failed:
-        log.info('Failed.')
-        sys.exit(1)
-
+        subprocess.check_call(
+            args=arg,
+            )
 
 def ls():
     parser = argparse.ArgumentParser(description='List teuthology job results')
