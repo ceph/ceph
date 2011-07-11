@@ -115,7 +115,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
       bufferlist sbl;
       sbl.substr_of(bl, 0, t);
       ObjectStore::Transaction tr;
-      hobject_t oid(poid, 0);
+      hobject_t oid(sobject_t(poid, 0));
       tr.write(coll_t(), oid, off, t, sbl);
       store->apply_transaction(tr);
       off += t;
@@ -157,7 +157,7 @@ void Ager::age_empty(float pc) {
     generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << poid << dec << dendl;
     
     ObjectStore::Transaction t;
-    hobject_t oid(poid, 0);
+    hobject_t oid(sobject_t(poid, 0));
     t.remove(coll_t(), oid);
     store->apply_transaction(t);
     age_free_oids.push_back(poid);

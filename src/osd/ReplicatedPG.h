@@ -505,11 +505,12 @@ protected:
   }
   void put_object_context(ObjectContext *obc);
   void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
-  int find_object_context(const object_t& oid, const object_locator_t& oloc,
+  int find_object_context(const object_t& oid, ps_t seed,
+			  const object_locator_t& oloc,
 			  snapid_t snapid, ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
-  SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
+  SnapSetContext *get_snapset_context(const object_t& oid, ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
       ssc->registered = true;

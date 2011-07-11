@@ -102,7 +102,7 @@ enum {
   CEPH_RBD_RULE,
 };
 
-#define OSD_SUPERBLOCK_POBJECT hobject_t(object_t("osd_superblock"), 0)
+#define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -1254,7 +1254,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 struct OSDOp {
   ceph_osd_op op;
   bufferlist data;
-  hobject_t soid;
+  sobject_t soid;
 
   OSDOp() {
     memset(&op, 0, sizeof(ceph_osd_op));

@@ -202,7 +202,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       object_t oid("disk_bw_test");
       for (int i=0; i<1000; i++) {
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->write(coll_t::META_COLL, hobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+	t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
 	store->queue_transaction(NULL, t);
       }
       store->sync();
@@ -210,7 +210,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       ObjectStore::Transaction tr;
-      tr.remove(coll_t::META_COLL, hobject_t(oid, 0));
+      tr.remove(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)));
       ret = store->apply_transaction(tr);
       if (ret) {
 	derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
@@ -2133,7 +2133,7 @@ void OSD::handle_command(MMonCommand *m)
       char nm[30];
       snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       object_t oid(nm);
-      hobject_t soid(oid, 0);
+      hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(coll_t::META_COLL, soid, 0, bsize, bl);
       store->queue_transaction(NULL, t);
@@ -4961,7 +4961,7 @@ void OSD::handle_op(MOSDOp *op)
 
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
     // missing object?
-    hobject_t head(op->get_oid(), CEPH_NOSNAP);
+    hobject_t head(op->get_oid(), CEPH_NOSNAP, op->get_pg().ps());
     if (pg->is_missing_object(head)) {
       pg->wait_for_missing_object(head, op);
       pg->unlock();

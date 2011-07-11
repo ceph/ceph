@@ -161,12 +161,12 @@ public:
   static hobject_t get_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     snprintf(foo, sizeof(foo), "osdmap.%d", epoch);
-    return hobject_t(object_t(foo), 0); 
+    return hobject_t(sobject_t(object_t(foo), 0)); 
   }
   static hobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
-    return hobject_t(object_t(foo), 0); 
+    return hobject_t(sobject_t(object_t(foo), 0)); 
   }
 
   hobject_t make_pg_log_oid(pg_t pg) {
@@ -174,7 +174,7 @@ public:
     ss << "pglog_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(object_t(s.c_str()), 0);
+    return hobject_t(sobject_t(object_t(s.c_str()), 0));
   }
   
   hobject_t make_pg_biginfo_oid(pg_t pg) {
@@ -182,7 +182,7 @@ public:
     ss << "pginfo_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(object_t(s.c_str()), 0);
+    return hobject_t(sobject_t(object_t(s.c_str()), 0));
   }
   
 
