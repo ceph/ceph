@@ -456,6 +456,12 @@ unittest_utf8_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
 
+unittest_mime_SOURCES = test/mime.cc
+unittest_mime_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_mime_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_mime_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_mime
+
 unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
 unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_rgw_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
@@ -676,6 +682,7 @@ libcommon_files = \
 	include/ceph_frag.cc \
 	common/config.cc \
 	common/utf8.c \
+	common/mime.c \
 	common/strtol.cc \
 	common/page.cc \
 	common/lockdep.cc \
@@ -860,6 +867,7 @@ noinst_HEADERS = \
         common/config_obs.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
+	common/mime.h\
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
