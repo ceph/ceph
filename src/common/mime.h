@@ -21,6 +21,10 @@ extern "C" {
 
 /* Encode a buffer as quoted-printable.
  *
+ * The input is a null-terminated string.
+ * The output is a null-terminated string representing the input encoded as
+ * a MIME quoted-printable.
+ *
  * Returns the length of the buffer we would need to do the encoding.
  * If we don't have enough buffer space, the output will be truncated.
  *
@@ -31,13 +35,17 @@ signed int mime_encode_as_qp(const char *input, char *output, int outlen);
 
 /* Decode a quoted-printable buffer.
  *
+ * The input is a null-terminated string encoded as a MIME quoted-printable.
+ * The output is a null-terminated string representing the input decoded.
+ *
  * Returns a negative error code if the input is not a valid quoted-printable
  * buffer.
  * Returns the length of the buffer we would need to do the encoding.
  * If we don't have enough buffer space, the output will be truncated.
  *
- * You may call mime_encode_as_qp(input, NULL, 0) to find the size of the
- * buffer you will need.
+ * You may call mime_decode_as_qp(input, NULL, 0) to find the size of the
+ * buffer you will need. The output will never be longer than the input for
+ * this function.
  */
 signed int mime_decode_from_qp(const char *input, char *output, int outlen);
 
