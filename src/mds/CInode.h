@@ -972,8 +972,15 @@ public:
       (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
   }
   int get_caps_allowed_for_client(client_t client) {
-    int allowed = get_caps_allowed_by_type(client == get_loner() ? CAP_LONER : CAP_ANY);
-    allowed |= get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client);
+    int allowed;
+    if (client == get_loner()) {
+      // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
+      allowed =
+	get_caps_allowed_by_type(CAP_LONER) |
+	(get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client));
+    } else {
+      allowed = get_caps_allowed_by_type(CAP_ANY);
+    }
     return allowed;
   }
 
