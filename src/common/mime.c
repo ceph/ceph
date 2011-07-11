@@ -101,7 +101,7 @@ int mime_decode_from_qp(const char *input, char *output, int outlen)
 {
 	int ret = 1;
 	char *o = output;
-	const unsigned char *i = input;
+	const unsigned char *i = (const unsigned char*)input;
 	while (1) {
 		unsigned int c = *i;
 		if (c == '\0') {
