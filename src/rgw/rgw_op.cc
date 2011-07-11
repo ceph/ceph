@@ -4,8 +4,10 @@
 
 #include <sstream>
 
-#include "common/armor.h"
 #include "common/Clock.h"
+#include "common/armor.h"
+#include "common/mime.h"
+#include "common/utf8.h"
 
 #include "rgw_access.h"
 #include "rgw_op.h"
@@ -79,6 +81,28 @@ done:
   return r;
 }
 
+static void format_xattr(std::string &xattr)
+{
+  /* If the extended attribute is not valid UTF-8, we encode it using quoted-printable
+   * encoding.
+   */
+  if ((check_utf8(xattr.c_str(), xattr.length()) != 0) ||
+      (check_for_control_characters(xattr.c_str(), xattr.length()) != 0)) {
+    static const char MIME_PREFIX_STR[] = "=?UTF-8?Q?";
+    static const int MIME_PREFIX_LEN = sizeof(MIME_PREFIX_STR) - 1;
+    static const char MIME_SUFFIX_STR[] = "?=";
+    static const int MIME_SUFFIX_LEN = sizeof(MIME_SUFFIX_STR) - 1;
+    int mlen = mime_encode_as_qp(xattr.c_str(), NULL, 0);
+    char *mime = new char[MIME_PREFIX_LEN + mlen + MIME_SUFFIX_LEN + 1];
+    strcpy(mime, MIME_PREFIX_STR);
+    mime_encode_as_qp(xattr.c_str(), mime + MIME_PREFIX_LEN, mlen);
+    strcpy(mime + MIME_PREFIX_LEN + (mlen - 1), MIME_SUFFIX_STR);
+    xattr.assign(mime);
+    delete [] mime;
+    RGW_LOG(10) << "format_xattr: formatted as '" << xattr << "'" << dendl;
+  }
+}
+
 /**
  * Get the HTTP request metadata out of the req_state as a
  * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
@@ -90,16 +114,18 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
-    string name = iter->first;
+    const string &name(iter->first);
+    string &xattr(iter->second);
 #define X_AMZ_META "x-amz-meta"
     if (name.find(X_AMZ_META) == 0) {
-      RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
-      string& val = iter->second;
-      bufferlist bl;
-      bl.append(val.c_str(), val.size() + 1);
-      string attr_name = RGW_ATTR_PREFIX;
+      RGW_LOG(10) << "x>> " << name << ":" << xattr << dendl;
+      format_xattr(xattr);
+      string attr_name(RGW_ATTR_PREFIX);
       attr_name.append(name);
-      attrs[attr_name.c_str()] = bl;
+      map<string, bufferlist>::value_type v(attr_name, bufferlist());
+      std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
+      bufferlist& bl(rval.first->second);
+      bl.append(xattr.c_str(), xattr.size() + 1);
     }
   }
 }
