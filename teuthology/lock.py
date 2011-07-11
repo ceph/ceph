@@ -3,6 +3,7 @@ import httplib2
 import json
 import logging
 import urllib
+import yaml
 
 from teuthology import misc as teuthology
 
@@ -221,7 +222,8 @@ Lock, unlock, or query lock status of machines.
             ret = 1
         else:
             machines_to_update = result
-            print json.dumps(result, indent=4)
+            y = { 'targets': result }
+            print yaml.safe_dump(y, default_flow_style=False)
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
             'you must specify description or status to update'
