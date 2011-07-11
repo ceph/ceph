@@ -97,8 +97,13 @@ def connect(ctx, config):
     remotes = [remote.Remote(name=t, ssh=connection.connect(t))
                for t in ctx.config['targets']]
     ctx.cluster = orchestra.cluster.Cluster()
-    for rem, roles in zip(remotes, ctx.config['roles']):
-        ctx.cluster.add(rem, roles)
+    if 'roles' in ctx.config:
+        for rem, roles in zip(remotes, ctx.config['roles']):
+            ctx.cluster.add(rem, roles)
+    else:
+        for rem in remotes:
+            ctx.cluster.add(rem, rem.name)
+        
 
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')
