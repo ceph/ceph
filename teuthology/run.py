@@ -174,6 +174,10 @@ def nuke():
 
     log.info('\n  '.join(['targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
 
+    if ctx.owner is None:
+        from teuthology.misc import get_user
+        ctx.owner = get_user()
+
     from teuthology.task.internal import check_lock, connect
     check_lock(ctx, None)
     connect(ctx, None)
