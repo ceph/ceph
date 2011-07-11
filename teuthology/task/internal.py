@@ -70,9 +70,10 @@ def lock_machines(ctx, config):
     try:
         yield
     finally:
-        log.info('Unlocking machines...')
-        for machine in ctx.config['targets']:
-            lock.unlock(ctx, machine, ctx.owner)
+        if ctx.summary['success'] or not ctx.keep_locked_on_error:
+            log.info('Unlocking machines...')
+            for machine in ctx.config['targets']:
+                lock.unlock(ctx, machine, ctx.owner)
 
 def check_lock(ctx, config):
     log.info('Checking locks...')
