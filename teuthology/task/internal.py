@@ -53,6 +53,7 @@ def lock_machines(ctx, config):
         newly_locked = lock.lock_many(ctx, config, ctx.owner)
         if len(newly_locked) == config:
             ctx.config['targets'] = newly_locked
+            log.info('\n  '.join(['Locked targets:', ] + newly_locked))
             break
         elif not ctx.block:
             assert 0, 'not enough machines are available'
