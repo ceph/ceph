@@ -3407,13 +3407,13 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       touch_dn(dn);
       goto done;
     }
-  } else { /*
+  } else {
     // can we conclude ENOENT locally?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	(dir->flags & I_COMPLETE)) {
       ldout(cct, 10) << "_lookup concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
       return -ENOENT;
-      }*/
+    }
   }
 
   r = _do_lookup(dir, dname.c_str(), target);
