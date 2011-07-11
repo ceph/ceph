@@ -6,6 +6,11 @@
 
 RGWEnv rgw_env;
 
+RGWEnv::RGWEnv()
+{
+  conf = new RGWConf;
+}
+
 RGWEnv::~RGWEnv()
 {
   delete conf;
@@ -26,9 +31,6 @@ void RGWEnv::reinit(char **envp)
     string val = s.substr(pos + 1);
     env_map[name] = val;
   }
-
-  if (!conf)
-    conf = new RGWConf;
 
   conf->init(this);
 }

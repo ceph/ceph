@@ -162,7 +162,7 @@ class RGWEnv {
 public:
   RGWConf *conf; 
 
-  RGWEnv() : conf(NULL) {}
+  RGWEnv();
   ~RGWEnv();
   void reinit(char **envp);
   const char *get(const char *name, const char *def_val = NULL);

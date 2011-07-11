@@ -123,6 +123,10 @@ class RGWCache  : public T
     return string(buf);
   }
 
+  string normal_name(rgw_obj& obj) {
+    return normal_name(obj.bucket, obj.object);
+  }
+
   int distribute(rgw_obj& obj, ObjectCacheInfo& obj_info);
   int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:
@@ -142,10 +146,11 @@ template <class T>
 int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
   string& bucket = obj.bucket;
-  string& oid = obj.object;
-  string name = normal_name(bucket, oid);
   if (bucket[0] != '.' || ofs != 0)
     return T::get_obj(handle, obj, data, ofs, end);
+
+  string& oid = obj.object;
+  string name = normal_name(bucket, oid);
 
   ObjectCacheInfo info;
   if (cache.get(name, info, CACHE_FLAG_DATA) == 0) {
@@ -284,9 +289,11 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     return -EIO;
   }
 
+  string name = normal_name(info.obj);
+
   switch (info.op) {
   case UPDATE_OBJ:
-    cache.put(info.ns, info.obj_info);
+    cache.put(name, info.obj_info);
     break;
   default:
     RGW_LOG(0) << "WARNING: got unknown notification op: " << info.op << dendl;
