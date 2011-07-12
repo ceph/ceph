@@ -27,12 +27,11 @@
 
 using std::ostringstream;
 
-static const int RLP_OBJECT_SZ_MAX = 256;
-
-static std::string get_random_buf(void)
+std::string StRadosCreatePool::
+get_random_buf(int sz)
 {
   ostringstream oss;
-  int size = rand() % RLP_OBJECT_SZ_MAX; // yep, it's not very random
+  int size = rand() % sz; // yep, it's not very random
   for (int i = 0; i < size; ++i) {
     oss << ".";
   }
@@ -78,7 +77,7 @@ run()
   for (int i = 0; i < m_num_objects; ++i) {
     char oid[128];
     snprintf(oid, sizeof(oid), "%d.obj", i);
-    std::string buf(get_random_buf());
+    std::string buf(get_random_buf(256));
     ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
     if (ret < static_cast<int>(buf.size())) {
       printf("%s: rados_write error %d\n", get_id_str(), ret);

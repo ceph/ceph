@@ -98,15 +98,15 @@ public:
   }
 };
 
-class RadosModifyPoolR : public SysTestRunnable
+class RadosDeleteObjectsR : public SysTestRunnable
 {
 public:
-  RadosModifyPoolR(int argc, const char **argv)
+  RadosDeleteObjectsR(int argc, const char **argv)
     : SysTestRunnable(argc, argv)
   {
   }
 
-  ~RadosModifyPoolR()
+  ~RadosDeleteObjectsR()
   {
   }
 
@@ -172,6 +172,82 @@ public:
   }
 };
 
+class RadosAddObjectsR : public SysTestRunnable
+{
+public:
+  RadosAddObjectsR(int argc, const char **argv)
+    : SysTestRunnable(argc, argv)
+  {
+  }
+
+  ~RadosAddObjectsR()
+  {
+  }
+
+  int run(void)
+  {
+    int ret;
+    rados_t cl;
+    RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    rados_conf_parse_argv(cl, m_argc, m_argv);
+    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
+    std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
+    if (!log_name.empty())
+      rados_conf_set(cl, "log_file", log_name.c_str());
+    RETURN_IF_NONZERO(rados_connect(cl));
+    pool_setup_sem->wait();
+    pool_setup_sem->post();
+
+    rados_ioctx_t io_ctx;
+    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+
+    std::map <int, std::string> to_add;
+    for (int i = 0; i < g_num_objects; ++i) {
+      char oid[128];
+      snprintf(oid, sizeof(oid), "%d.obj2", i);
+      to_add[i] = oid;
+    }
+
+    int added = 0;
+    while (true) {
+      if (to_add.empty())
+	break;
+      int r = rand() % to_add.size();
+      std::map <int, std::string>::iterator d = to_add.begin();
+      for (int i = 0; i < r; ++i)
+	++d;
+      if (d == to_add.end()) {
+	return -EDOM;
+      }
+      std::string oid(d->second);
+      to_add.erase(d);
+
+      std::string buf(StRadosCreatePool::get_random_buf(256));
+      ret = rados_write(io_ctx, oid.c_str(), buf.c_str(), buf.size(), 0);
+      if (ret != buf.size()) {
+	printf("%s: rados_write(%s) failed with error %d\n",
+	       get_id_str(), oid.c_str(), ret);
+	return ret;
+      }
+      ++added;
+      if ((added % 25) == 0) {
+	printf("%s: added %d objects...\n", get_id_str(), added);
+      }
+      if (added == g_num_objects / 2) {
+	printf("%s: added half of the objects\n", get_id_str());
+	modify_sem->post();
+      }
+    }
+
+    printf("%s: added %d objects\n", get_id_str(), added);
+
+    rados_ioctx_destroy(cl);
+
+    return 0;
+  }
+};
+
 const char *get_id_str()
 {
   return "main";
@@ -192,31 +268,53 @@ int main(int argc, const char **argv)
   std::string error;
 
   // Test 1... list objects
-  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-  RadosListObjectsR r2(argc, argv);
-  vector < SysTestRunnable* > vec;
-  vec.push_back(&r1);
-  vec.push_back(&r2);
-  error = SysTestRunnable::run_until_finished(vec);
-  if (!error.empty()) {
-    printf("got error: %s\n", error.c_str());
-    return EXIT_FAILURE;
+  {
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    RadosListObjectsR r2(argc, argv);
+    vector < SysTestRunnable* > vec;
+    vec.push_back(&r1);
+    vec.push_back(&r2);
+    error = SysTestRunnable::run_until_finished(vec);
+    if (!error.empty()) {
+      printf("got error: %s\n", error.c_str());
+      return EXIT_FAILURE;
+    }
   }
 
   // Test 2... list objects while they're being deleted
   RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN_IF_NONZERO(modify_sem->reinit(0));
-  StRadosCreatePool r3(argc, argv, pool_setup_sem, NULL, g_num_objects);
-  RadosListObjectsR r4(argc, argv);
-  RadosModifyPoolR r5(argc, argv);
-  vector < SysTestRunnable* > vec2;
-  vec2.push_back(&r3);
-  vec2.push_back(&r4);
-  vec2.push_back(&r5);
-  error = SysTestRunnable::run_until_finished(vec2);
-  if (!error.empty()) {
-    printf("got error: %s\n", error.c_str());
-    return EXIT_FAILURE;
+  {
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    RadosListObjectsR r2(argc, argv);
+    RadosDeleteObjectsR r3(argc, argv);
+    vector < SysTestRunnable* > vec;
+    vec.push_back(&r1);
+    vec.push_back(&r2);
+    vec.push_back(&r3);
+    error = SysTestRunnable::run_until_finished(vec);
+    if (!error.empty()) {
+      printf("got error: %s\n", error.c_str());
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Test 3... list objects while others are being added
+  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  {
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    RadosListObjectsR r2(argc, argv);
+    RadosAddObjectsR r3(argc, argv);
+    vector < SysTestRunnable* > vec;
+    vec.push_back(&r1);
+    vec.push_back(&r2);
+    vec.push_back(&r3);
+    error = SysTestRunnable::run_until_finished(vec);
+    if (!error.empty()) {
+      printf("got error: %s\n", error.c_str());
+      return EXIT_FAILURE;
+    }
   }
 
   printf("******* SUCCESS **********\n"); 

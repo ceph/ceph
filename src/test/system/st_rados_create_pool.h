@@ -28,6 +28,7 @@ class CrossProcessSem;
 class StRadosCreatePool : public SysTestRunnable
 {
 public:
+  static std::string get_random_buf(int sz);
   StRadosCreatePool(int argc, const char **argv,
 	CrossProcessSem *pool_setup_sem, CrossProcessSem *close_create_pool_sem,
 	int num_objects);
