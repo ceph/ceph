@@ -256,7 +256,7 @@ public:
   int read_percent;
   int num_objs;
   size_t min_obj_len;
-  size_t max_obj_len;
+  uint64_t max_obj_len;
   size_t min_op_len;
   size_t max_op_len;
   size_t max_backlog;
@@ -316,7 +316,7 @@ public:
   LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
     read_percent = 80;
     min_obj_len = 1024;
-    max_obj_len = (uint64_t)5 * 1024 * 1024 * 1024;
+    max_obj_len = 5ull * 1024ull * 1024ull * 1024ull;
     min_op_len = 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
     max_op_len = 2 * 1024 * 1024;
