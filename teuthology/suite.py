@@ -119,7 +119,7 @@ def ls():
 
         summary = {}
         try:
-            with file('%s/%s/summary.yaml' % (args.archive_dir,j)) as f:
+            with file('%s/%s/summary.yaml' % (args.archive_dir, j)) as f:
                 g = yaml.safe_load_all(f)
                 for new in g:
                     summary.update(new)

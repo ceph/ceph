@@ -38,13 +38,13 @@ def normalize_config(ctx, config):
     it is applied to all nodes.
     """
     if config is None or \
-           len(config) == 1 and config.keys() in [['tag'], ['branch'], ['sha1']]:
-       new_config = {}
-       if config is None:
-          config = {'branch': 'master'}
-       for _, roles_for_host in ctx.cluster.remotes.iteritems():
-           new_config[roles_for_host[0]] = config
-       return new_config
+            len(config) == 1 and config.keys() in [['tag'], ['branch'], ['sha1']]:
+        new_config = {}
+        if config is None:
+            config = {'branch': 'master'}
+        for _, roles_for_host in ctx.cluster.remotes.iteritems():
+            new_config[roles_for_host[0]] = config
+        return new_config
 
     new_config = {}
     for role, role_config in config.iteritems():
@@ -61,17 +61,17 @@ def normalize_config(ctx, config):
     return new_config
 
 def validate_config(ctx, config):
-   for _, roles_for_host in ctx.cluster.remotes.iteritems():
-       kernel = None
-       for role in roles_for_host:
-           role_kernel = config.get(role, kernel)
-           if kernel is None:
-               kernel = role_kernel
-           elif role_kernel is not None:
-               assert kernel == role_kernel, \
-                   "everything on the same host must use the same kernel"
-               if role in config:
-                   del config[role]
+    for _, roles_for_host in ctx.cluster.remotes.iteritems():
+        kernel = None
+        for role in roles_for_host:
+            role_kernel = config.get(role, kernel)
+            if kernel is None:
+                kernel = role_kernel
+            elif role_kernel is not None:
+                assert kernel == role_kernel, \
+                    "everything on the same host must use the same kernel"
+                if role in config:
+                    del config[role]
 
 def need_to_install(ctx, role, sha1):
     ret = True
@@ -206,7 +206,7 @@ def task(ctx, config):
 
     timeout = 180
     if config is not None and 'timeout' in config:
-       timeout = config.pop('timeout')
+        timeout = config.pop('timeout')
 
     config = normalize_config(ctx, config)
     validate_config(ctx, config)
@@ -225,9 +225,9 @@ def task(ctx, config):
             need_install[role] = sha1
 
     if len(need_install) > 0:
-       install(ctx, need_install)
-       reboot(ctx, need_install.keys())
-       reconnect(ctx, timeout)
+        install(ctx, need_install)
+        reboot(ctx, need_install.keys())
+        reconnect(ctx, timeout)
 
     for client, sha1 in need_install.iteritems():
         log.info('Checking client {client} for new kernel version...'.format(client=client))

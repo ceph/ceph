@@ -154,8 +154,8 @@ Lock, unlock, or query lock status of machines.
         '-t', '--targets',
         dest='targets',
         default=None,
-        help='input yaml containing targets'
-        )        
+        help='input yaml containing targets',
+        )
     parser.add_argument(
         'machines',
         metavar='MACHINE',
@@ -180,7 +180,7 @@ Lock, unlock, or query lock status of machines.
     user = ctx.owner
     machines = ctx.machines
     machines_to_update = []
- 
+
     if ctx.targets:
         try:
             with file(ctx.targets) as f:
@@ -188,7 +188,7 @@ Lock, unlock, or query lock status of machines.
                 for new in g:
                     if 'targets' in new:
                         for t in new['targets']:
-                            machines.append(t) 
+                            machines.append(t)
         except IOError, e:
             raise argparse.ArgumentTypeError(str(e))
 
@@ -239,8 +239,7 @@ Lock, unlock, or query lock status of machines.
             ret = 1
         else:
             machines_to_update = result
-            y = { 'targets': result }
-            print yaml.safe_dump(y, default_flow_style=False)
+            print yaml.safe_dump(dict(targets=result), default_flow_style=False)
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
             'you must specify description or status to update'

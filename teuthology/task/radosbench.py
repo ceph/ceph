@@ -20,7 +20,7 @@ def task(ctx, config):
 
     tasks:
     - ceph:
-    - radosbench: 
+    - radosbench:
         clients: [client.0]
         time: 360
     - interactive:
@@ -39,7 +39,7 @@ def task(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
 
         proc = remote.run(
-            args= [
+            args=[
                 "/bin/sh", "-c",
                 " ".join(['LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
                           '/tmp/cephtest/binary/usr/local/bin/rados',

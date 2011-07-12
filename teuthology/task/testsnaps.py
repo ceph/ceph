@@ -22,7 +22,7 @@ def task(ctx, config):
 
     tasks:
     - ceph:
-    - testsnaps: 
+    - testsnaps:
         clients: [client.0]
         ops: 1000
         objects: 25
@@ -45,7 +45,7 @@ def task(ctx, config):
         remotes.append(remote)
 
         remote.run(
-            args= [
+            args=[
                 'cp',
                 '/tmp/cephtest/ceph.conf',
                 '/tmp/cephtest/data/ceph.conf',
@@ -55,7 +55,7 @@ def task(ctx, config):
             )
 
         proc = remote.run(
-            args= [
+            args=[
                 '/bin/sh', '-c',
                 " ".join([
                     'cd', '/tmp/cephtest/data;',
@@ -84,6 +84,6 @@ def task(ctx, config):
                 logger=log.getChild('testsnaps.{id}'.format(id=id_)),
                 wait=True,
                 )
-                
+
         log.info('joining testrados')
         run.wait(testsnaps.itervalues())

@@ -106,7 +106,6 @@ def connect(ctx, config):
     else:
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
-        
 
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')

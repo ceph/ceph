@@ -53,7 +53,7 @@ def task(ctx, config):
                     ],
                 logger=log.getChild('locktest_client.{id}'.format(id=client_name)),
                 )
-    
+
         log.info('built locktest on each client')
         
         log.info('starting on host')

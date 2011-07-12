@@ -5,7 +5,7 @@ import gevent
 from orchestra import run
 
 class Thrasher(gevent.Greenlet):
-    def __init__(self, manager, logger = None):
+    def __init__(self, manager, logger=None):
         self.ceph_manager = manager
         self.ceph_manager.wait_till_clean()
         osd_status = self.ceph_manager.get_osd_status()
@@ -23,11 +23,11 @@ class Thrasher(gevent.Greenlet):
         self.start()
 
     def wait_till_clean(self):
-	self.log("Waiting until clean")
-	while not self.ceph_manager.is_clean():
-		time.sleep(3)
-		print "..."
-	self.log("Clean!") 
+        self.log("Waiting until clean")
+        while not self.ceph_manager.is_clean():
+            time.sleep(3)
+            print "..."
+        self.log("Clean!")
 
     def remove_osd(self):
         osd = random.choice(self.in_osds)
@@ -62,10 +62,10 @@ class Thrasher(gevent.Greenlet):
             if (len(self.out_osds) == 0):
                 self.remove_osd()
             elif (len(self.in_osds) <= 2):
-		self.add_osd()
+                self.add_osd()
             else:
-		x = random.choice([self.remove_osd, self.add_osd])
-		x()
+                x = random.choice([self.remove_osd, self.add_osd])
+                x()
             time.sleep(DELAY)
 
 class CephManager:
@@ -91,7 +91,7 @@ class CephManager:
             stdout=run.PIPE,
             wait=False
             )
-        
+
         out = ""
         tmp = proc.stdout.read(1)
         while tmp:
@@ -101,7 +101,7 @@ class CephManager:
 
     def raw_cluster_status(self):
         return self.raw_cluster_cmd("-s")
-        
+
     def raw_osd_status(self):
         return self.raw_cluster_cmd("osd dump -o -")
 
@@ -125,7 +125,7 @@ class CephManager:
         down_osds = [int(i[3:].split()[0]) for i in filter(
                 lambda x: " down " in x,
                 osd_lines)]
-        return { 'in' : in_osds, 'out' : out_osds, 'up' : up_osds, 
+        return { 'in' : in_osds, 'out' : out_osds, 'up' : up_osds,
                  'down' : down_osds, 'raw' : osd_lines }
 
     def get_num_pgs(self):

@@ -42,11 +42,11 @@ def parse_args():
         )
     parser.add_argument(
         '--description',
-        help='job description'
+        help='job description',
         )
     parser.add_argument(
         '--owner',
-        help='job owner'
+        help='job owner',
         )
     parser.add_argument(
         '--lock',
@@ -109,7 +109,6 @@ def main():
             )
         handler.setFormatter(formatter)
         logging.getLogger().addHandler(handler)
-
 
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
@@ -205,7 +204,7 @@ def nuke():
             run.Raw(';'),
             'fusermount', '-u', run.Raw('/tmp/cephtest/mnt.*'),
             run.Raw(';'),
-            'sudo', 'rm', '-rf', '/tmp/cephtest'
+            'sudo', 'rm', '-rf', '/tmp/cephtest',
             ])
 
     log.info('Done.')

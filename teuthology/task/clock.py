@@ -51,4 +51,3 @@ def task(ctx, config):
 
     # TODO do the skew
     #for role, skew in config.iteritems():
-

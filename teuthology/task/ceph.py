@@ -171,7 +171,7 @@ def cluster(ctx, config):
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
-    
+
     log.info('Writing configs...')
     conf_fp = StringIO()
     conf.write(conf_fp)
@@ -338,7 +338,7 @@ def cluster(ctx, config):
     keys_fp = StringIO()
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for type_ in ['osd','mds','client']:
+        for type_ in ['osd', 'mds', 'client']:
             for id_ in teuthology.roles_of_type(roles_for_host, type_):
                 data = teuthology.get_file(
                     remote=remote,

@@ -16,18 +16,18 @@ def task(ctx, config):
 
     tasks:
     - ceph:
-    - thrashosds: 
+    - thrashosds:
     - interactive:
     """
     log.info('Beginning thrashosds...')
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
     manager = ceph_manager.CephManager(
-        mon, 
-        logger = log.getChild('ceph_manager'),
+        mon,
+        logger=log.getChild('ceph_manager'),
         )
     thrash_proc = ceph_manager.Thrasher(
         manager,
-        logger = log.getChild('thrasher'),
+        logger=log.getChild('thrasher'),
         )
     try:
         yield
