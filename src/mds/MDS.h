@@ -393,6 +393,8 @@ class MDS : public Dispatcher {
   // messages
   bool _dispatch(Message *m);
 
+  bool is_stale_message(Message *m);
+
   bool handle_core_message(Message *m);
   bool handle_deferrable_message(Message *m);
   

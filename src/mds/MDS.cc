@@ -1778,9 +1778,7 @@ bool MDS::handle_deferrable_message(Message *m)
   return true;
 }
 
-/* If this function returns true, it has put the message. If it returns false,
- * it has not put the message. */
-bool MDS::_dispatch(Message *m)
+bool MDS::is_stale_message(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
@@ -1799,10 +1797,20 @@ bool MDS::_dispatch(Message *m)
       } else {
 	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << dendl;
-	m->put();
 	return true;
       }
     }
+  }
+  return false;
+}
+
+/* If this function returns true, it has put the message. If it returns false,
+ * it has not put the message. */
+bool MDS::_dispatch(Message *m)
+{
+  if (is_stale_message(m)) {
+    m->put();
+    return true;
   }
 
   // core
@@ -1845,8 +1853,13 @@ bool MDS::_dispatch(Message *m)
 
     Message *m = waiting_for_nolaggy.front();
     waiting_for_nolaggy.pop_front();
-    dout(7) << " processing laggy deferred " << *m << dendl;
-    handle_deferrable_message(m);
+
+    if (is_stale_message(m)) {
+      m->put();
+    } else {
+      dout(7) << " processing laggy deferred " << *m << dendl;
+      handle_deferrable_message(m);
+    }
 
     // give other threads (beacon!) a chance
     mds_lock.Unlock();
