@@ -1245,11 +1245,18 @@ public:
 void Migrator::handle_export_ack(MExportDirAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
-  assert(dir);
-  assert(dir->is_frozen_tree_root());  // i'm exporting!
+  if (!dir ||
+      export_state.count(dir) == 0 ||
+      export_state[dir] != EXPORT_EXPORTING) {
+    // export must have aborted.  
+    dout(7) << "export must have aborted" << dendl;
+    m->put();
+    return;
+  }
 
   // yay!
   dout(7) << "handle_export_ack " << *dir << dendl;
+  assert(dir->is_frozen_tree_root());  // i'm exporting!
 
   export_warning_ack_waiting.erase(dir);
   
