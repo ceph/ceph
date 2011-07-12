@@ -6539,7 +6539,7 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << dendl;
+  ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
   tout(cct) << off << std::endl;
@@ -6551,7 +6551,7 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << dendl;
+  ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off << "~" << len << dendl;
   tout(cct) << "ll_write" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
   tout(cct) << off << std::endl;
@@ -6565,7 +6565,7 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 int Client::ll_flush(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_flush " << fh << dendl;
+  ldout(cct, 3) << "ll_flush " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_flush" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
@@ -6575,7 +6575,7 @@ int Client::ll_flush(Fh *fh)
 int Client::ll_fsync(Fh *fh, bool syncdataonly) 
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_fsync " << fh << dendl;
+  ldout(cct, 3) << "ll_fsync " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
@@ -6586,7 +6586,7 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
 int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_release " << fh << dendl;
+  ldout(cct, 3) << "ll_release " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_release" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
