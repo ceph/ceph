@@ -175,8 +175,9 @@ public:
 class RadosAddObjectsR : public SysTestRunnable
 {
 public:
-  RadosAddObjectsR(int argc, const char **argv)
-    : SysTestRunnable(argc, argv)
+  RadosAddObjectsR(int argc, const char **argv, const std::string &suffix)
+    : SysTestRunnable(argc, argv),
+      m_suffix(suffix)
   {
   }
 
@@ -205,7 +206,7 @@ public:
     std::map <int, std::string> to_add;
     for (int i = 0; i < g_num_objects; ++i) {
       char oid[128];
-      snprintf(oid, sizeof(oid), "%d.obj2", i);
+      snprintf(oid, sizeof(oid), "%d.%s", i, m_suffix.c_str());
       to_add[i] = oid;
     }
 
@@ -225,7 +226,7 @@ public:
 
       std::string buf(StRadosCreatePool::get_random_buf(256));
       ret = rados_write(io_ctx, oid.c_str(), buf.c_str(), buf.size(), 0);
-      if (ret != buf.size()) {
+      if (ret != (int)buf.size()) {
 	printf("%s: rados_write(%s) failed with error %d\n",
 	       get_id_str(), oid.c_str(), ret);
 	return ret;
@@ -246,6 +247,8 @@ public:
 
     return 0;
   }
+private:
+  std::string m_suffix;
 };
 
 const char *get_id_str()
@@ -305,11 +308,33 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
     RadosListObjectsR r2(argc, argv);
-    RadosAddObjectsR r3(argc, argv);
+    RadosAddObjectsR r3(argc, argv, "obj2");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
     vec.push_back(&r3);
+    error = SysTestRunnable::run_until_finished(vec);
+    if (!error.empty()) {
+      printf("got error: %s\n", error.c_str());
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Test 4... list objects while others are being added and deleted
+  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  {
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    RadosListObjectsR r2(argc, argv);
+    RadosAddObjectsR r3(argc, argv, "obj2");
+    RadosAddObjectsR r4(argc, argv, "obj3");
+    RadosDeleteObjectsR r5(argc, argv);
+    vector < SysTestRunnable* > vec;
+    vec.push_back(&r1);
+    vec.push_back(&r2);
+    vec.push_back(&r3);
+    vec.push_back(&r4);
+    vec.push_back(&r5);
     error = SysTestRunnable::run_until_finished(vec);
     if (!error.empty()) {
       printf("got error: %s\n", error.c_str());
