@@ -262,7 +262,6 @@ def cluster(ctx, config):
 
     log.info('Setting up mon nodes...')
     mons = ctx.cluster.only(teuthology.is_type('mon'))
-    mons_no_0 = mons.exclude('mon.0')
     run.wait(
         mons.run(
             args=[

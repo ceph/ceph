@@ -1,8 +1,5 @@
-import json
 import logging
-import os
 
-from teuthology import misc as teuthology
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -72,7 +69,7 @@ def task(ctx, config):
             logger=log.getChild('locktest.host'),
             )
         log.info('starting on client')
-        childproc = client.run(
+        client.run(
             args=[
                 '/tmp/cephtest/enable-coredump',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
