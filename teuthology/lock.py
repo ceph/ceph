@@ -182,7 +182,6 @@ Lock, unlock, or query lock status of machines.
     machines_to_update = []
  
     if ctx.targets:
-        config = {}
         try:
             with file(ctx.targets) as f:
                 g = yaml.safe_load_all(f)
