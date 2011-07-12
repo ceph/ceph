@@ -125,6 +125,7 @@ def ls():
                     summary.update(new)
         except IOError, e:
             if e.errno == errno.ENOENT:
+                print "%s (no summary.yaml)" % j
                 continue
             else:
                 raise
