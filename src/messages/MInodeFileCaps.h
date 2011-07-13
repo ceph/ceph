@@ -38,7 +38,10 @@ private:
   ~MInodeFileCaps() {}
 
 public:
-  const char *get_type_name() { return "Icap";}
+  const char *get_type_name() { return "inode_file_caps";}
+  void print(ostream& out) {
+    out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
+  }
   
   void encode_payload(CephContext *cct) {
     ::encode(from, payload);
