@@ -3,6 +3,7 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
+import shutil
 import tempfile
 
 from teuthology import misc as teuthology
@@ -138,18 +139,19 @@ def binaries(ctx, config):
             )
     else:
         tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
-        tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
-        log.info('Installing %s to %s...' % (path, tmpdir))
-        os.system((
-                   'cd {srcdir} && ' +
-                   'make install DESTDIR={tmpdir} && ' +
-                   '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
-                   ).format(srcdir=path, tmpdir=tmpdir))
-        log.info('Building ceph binary tarball %s from %s...' % (tmptar,
-                                                                 tmpdir))
-        os.system(('( cd {tmpdir} && tar czf {tmptar} . ) && ' +
-                   'rm -rf {tmpdir}').format(tmpdir=tmpdir, tmptar=tmptar));
-        tmpdir = None
+        try:
+            tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
+            log.info('Installing %s to %s...' % (path, tmpdir))
+            os.system((
+                       'cd {srcdir} && ' +
+                       'make install DESTDIR={tmpdir} && ' +
+                       '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
+                       ).format(srcdir=path, tmpdir=tmpdir))
+            log.info('Building ceph binary tarball %s from %s...' % (tmptar,
+                                                                     tmpdir))
+            os.system(('( cd {tmpdir} && tar czf {tmptar} . )').format(tmpdir=tmpdir, tmptar=tmptar));
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
         log.info('Pushing tarball %s...' % tmptar)
         with file(tmptar, 'rb') as f:
             for rem in ctx.cluster.remotes.iterkeys():
@@ -168,8 +170,6 @@ def binaries(ctx, config):
     try:
         yield
     finally:
-        if tmpdir is not None:
-            os.system('rm -rf %s' % tmpdir)
         if tmptar is not None:
             os.unlink(tmptar)
         log.info('Removing ceph binaries...')
