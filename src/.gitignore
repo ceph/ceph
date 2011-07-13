@@ -90,3 +90,4 @@ ceph.conf
 massif.out.*
 rados_list_parallel
 rados_open_pools_parallel
+rados_delete_pools_parallel

@@ -56,19 +56,19 @@ public:
   {
     int ret;
     rados_t cl;
-    RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
-    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
+    RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
     std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
     if (!log_name.empty())
       rados_conf_set(cl, "log_file", log_name.c_str());
-    RETURN_IF_NONZERO(rados_connect(cl));
+    RETURN1_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
     pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
     std::map <int, std::string> to_delete;
     for (int i = 0; i < g_num_objects; ++i) {
@@ -132,19 +132,19 @@ public:
   {
     int ret;
     rados_t cl;
-    RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
-    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
+    RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
     std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
     if (!log_name.empty())
       rados_conf_set(cl, "log_file", log_name.c_str());
-    RETURN_IF_NONZERO(rados_connect(cl));
+    RETURN1_IF_NONZERO(rados_connect(cl));
     pool_setup_sem->wait();
     pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
     std::map <int, std::string> to_add;
     for (int i = 0; i < g_num_objects; ++i) {
@@ -209,15 +209,16 @@ int main(int argc, const char **argv)
       return 100;
   }
 
-  RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
-  RETURN_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
+  RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
+  RETURN1_IF_NONZERO(CrossProcessSem::create(1, &modify_sem));
 
   std::string error;
 
   // Test 1... list objects
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
+    StRadosListObjects r2(argc, argv, false, g_num_objects,
+			  pool_setup_sem, modify_sem);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
@@ -229,11 +230,12 @@ int main(int argc, const char **argv)
   }
 
   // Test 2... list objects while they're being deleted
-  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
-  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
+    StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
+			  pool_setup_sem, modify_sem);
     RadosDeleteObjectsR r3(argc, argv);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -247,11 +249,12 @@ int main(int argc, const char **argv)
   }
 
   // Test 3... list objects while others are being added
-  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
-  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
+    StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
+			  pool_setup_sem, modify_sem);
     RadosAddObjectsR r3(argc, argv, "obj2");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -265,11 +268,12 @@ int main(int argc, const char **argv)
   }
 
   // Test 4... list objects while others are being added and deleted
-  RETURN_IF_NONZERO(pool_setup_sem->reinit(0));
-  RETURN_IF_NONZERO(modify_sem->reinit(0));
+  RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
+    StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
+			  pool_setup_sem, modify_sem);
     RadosAddObjectsR r3(argc, argv, "obj2");
     RadosAddObjectsR r4(argc, argv, "obj3");
     RadosDeleteObjectsR r5(argc, argv);

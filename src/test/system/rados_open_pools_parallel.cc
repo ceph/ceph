@@ -62,21 +62,21 @@ public:
   int run()
   {
     rados_t cl;
-    RETURN_IF_NONZERO(rados_create(&cl, NULL));
+    RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
     std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
     if (!log_name.empty())
       rados_conf_set(cl, "log_file", log_name.c_str());
-    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
-    RETURN_IF_NONZERO(rados_connect(cl));
+    RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
+    RETURN1_IF_NONZERO(rados_connect(cl));
     if (m_pool_setup_sem)
       m_pool_setup_sem->wait();
 
     printf("%s: rados_pool_create.\n", get_id_str());
-    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
     rados_ioctx_t io_ctx;
     printf("%s: rados_ioctx_create.\n", get_id_str());
-    RETURN_IF_NOT_VAL(0, rados_ioctx_create(cl, "foo", &io_ctx));
+    RETURN1_IF_NOT_VAL(0, rados_ioctx_create(cl, "foo", &io_ctx));
     if (m_open_pool_sem)
       m_open_pool_sem->post();
     rados_ioctx_destroy(io_ctx);
@@ -99,7 +99,7 @@ int main(int argc, const char **argv)
   // first test: create a pool, shut down the client, access that 
   // pool in a different process.
   CrossProcessSem *pool_setup_sem = NULL;
-  RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
+  RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, 50);
   StRadosOpenPool r2(argc, argv, pool_setup_sem, NULL);
   vector < SysTestRunnable* > vec;
@@ -114,9 +114,9 @@ int main(int argc, const char **argv)
   // second test: create a pool, access that 
   // pool in a different process, THEN shut down the first client.
   CrossProcessSem *pool_setup_sem2 = NULL;
-  RETURN_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem2));
+  RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem2));
   CrossProcessSem *open_pool_sem2 = NULL;
-  RETURN_IF_NONZERO(CrossProcessSem::create(0, &open_pool_sem2));
+  RETURN1_IF_NONZERO(CrossProcessSem::create(0, &open_pool_sem2));
   StRadosCreatePool r3(argc, argv, pool_setup_sem2, open_pool_sem2, 50);
   StRadosOpenPool r4(argc, argv, pool_setup_sem2, open_pool_sem2);
   vector < SysTestRunnable* > vec2;

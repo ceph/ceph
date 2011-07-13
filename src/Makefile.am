@@ -396,6 +396,20 @@ rados_open_pools_parallel_SOURCES = \
 rados_open_pools_parallel_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += rados_open_pools_parallel
 
+rados_list_parallel_SOURCES = \
+	test/system/rados_list_parallel.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
+rados_list_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += rados_list_parallel
+
+rados_delete_pools_parallel_SOURCES = \
+	test/system/rados_delete_pools_parallel.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
+rados_delete_pools_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += rados_delete_pools_parallel
+
 ## unit tests
 
 # target to build but not run the unit tests

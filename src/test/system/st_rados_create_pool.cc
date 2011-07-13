@@ -57,22 +57,22 @@ int StRadosCreatePool::
 run()
 {
   rados_t cl;
-  RETURN_IF_NONZERO(rados_create(&cl, NULL));
+  RETURN1_IF_NONZERO(rados_create(&cl, NULL));
   rados_conf_parse_argv(cl, m_argc, m_argv);
   rados_conf_parse_argv(cl, m_argc, m_argv);
-  RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
+  RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
   std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
   if (!log_name.empty())
     rados_conf_set(cl, "log_file", log_name.c_str());
-  RETURN_IF_NONZERO(rados_connect(cl));
+  RETURN1_IF_NONZERO(rados_connect(cl));
   int ret = rados_pool_delete(cl, "foo");
   if (!((ret == 0) || (ret == -ENOENT))) {
     printf("%s: rados_pool_delete error %d\n", get_id_str(), ret);
     return ret;
   }
-  RETURN_IF_NONZERO(rados_pool_create(cl, "foo"));
+  RETURN1_IF_NONZERO(rados_pool_create(cl, "foo"));
   rados_ioctx_t io_ctx;
-  RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+  RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
   for (int i = 0; i < m_num_objects; ++i) {
     char oid[128];

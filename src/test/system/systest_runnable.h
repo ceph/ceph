@@ -20,18 +20,18 @@
 #include <string>
 #include <vector>
 
-#define RETURN_IF_NOT_VAL(expected, expr) \
+#define RETURN1_IF_NOT_VAL(expected, expr) \
   do {\
     int _rinv_ret = expr;\
     if (_rinv_ret != expected) {\
       printf("%s: file %s, line %d: expected %d, got %d\n",\
 	     get_id_str(), __FILE__, __LINE__, expected, _rinv_ret);\
-      return _rinv_ret;\
+      return 1; \
     }\
   } while(0);
 
-#define RETURN_IF_NONZERO(expr) \
-  RETURN_IF_NOT_VAL(0, expr)
+#define RETURN1_IF_NONZERO(expr) \
+  RETURN1_IF_NOT_VAL(0, expr)
 
 extern void* systest_runnable_pthread_helper(void *arg);
 
