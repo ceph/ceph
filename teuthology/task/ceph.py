@@ -1,9 +1,11 @@
 from cStringIO import StringIO
 
 import contextlib
+import errno
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 
 from teuthology import misc as teuthology
@@ -142,14 +144,32 @@ def binaries(ctx, config):
         try:
             tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
             log.info('Installing %s to %s...' % (path, tmpdir))
-            os.system((
-                       'cd {srcdir} && ' +
-                       'make install DESTDIR={tmpdir} && ' +
-                       '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
-                       ).format(srcdir=path, tmpdir=tmpdir))
+            subprocess.check_call(
+                args=[
+                    'make',
+                    'install',
+                    'DESTDIR={tmpdir}'.format(tmpdir=tmpdir),
+                    ],
+                cwd=path,
+                )
+            try:
+                os.symlink('.', os.path.join(tmpdir, 'usr', 'local'))
+            except OSError as e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else:
+                    raise
             log.info('Building ceph binary tarball %s from %s...' % (tmptar,
                                                                      tmpdir))
-            os.system(('( cd {tmpdir} && tar czf {tmptar} . )').format(tmpdir=tmpdir, tmptar=tmptar));
+            subprocess.check_call(
+                args=[
+                    'tar',
+                    'czf',
+                    tmptar,
+                    '.',
+                    ],
+                cwd=tmpdir,
+                )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
         log.info('Pushing tarball %s...' % tmptar)
