@@ -406,8 +406,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
   ObjectContext *obc;
   bool can_create = op->may_write();
   snapid_t snapid;
-  int r = find_object_context(op->get_oid(), op->get_pg().ps(), op->get_object_locator(),
-			      op->get_snapid(), &obc, can_create, &snapid);
+  int r = find_object_context(hobject_t(op->get_oid(), op->get_snapid(), op->get_pg().ps()),
+			      op->get_object_locator(),
+			      &obc, can_create, &snapid);
 
   if (r) {
     if (r == -EAGAIN) {
@@ -482,8 +483,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
       if (!src_obc.count(toid)) {
 	ObjectContext *sobc;
 	snapid_t ssnapid;
-	int r = find_object_context(toid.oid, op->get_pg().ps(),
-				    op->get_object_locator(), toid.snap,
+	int r = find_object_context(hobject_t(toid.oid, toid.snap, op->get_pg().ps()),
+				    op->get_object_locator(),
 				    &sobc, false, &ssnapid);
 	if (r == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
@@ -814,8 +815,8 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
   // load clone info
   bufferlist bl;
   ObjectContext *obc = 0;
-  int r = find_object_context(coid.oid, coid.hash,
-			      OLOC_BLANK, sn, &obc, false, NULL);
+  int r = find_object_context(hobject_t(coid.oid, sn, coid.hash),
+			      OLOC_BLANK, &obc, false, NULL);
   if (r == -ENOENT || coid.snap != obc->obs.oi.soid.snap) {
     if (obc) put_object_context(obc);
     return 0;
@@ -1103,7 +1104,7 @@ void ReplicatedPG::remove_watchers()
   dout(10) << "remove_watchers" << dendl;
 
   osd->watch_lock.Lock();
-  for (map<sobject_t, ObjectContext*>::iterator iter = object_contexts.begin();
+  for (map<hobject_t, ObjectContext*>::iterator iter = object_contexts.begin();
        iter != object_contexts.end();
        ++iter) {
     ObjectContext *obc = iter->second;
@@ -1155,7 +1156,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     ObjectContext *src_obc = 0;
     if (ceph_osd_op_type_multi(op.op)) {
-      src_obc = ctx->src_obc[osd_op.soid];
+      src_obc = ctx->src_obc[hobject_t(osd_op.soid, soid.hash)];
       assert(src_obc);
     }
 
@@ -2094,8 +2095,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
 
   ObjectContext *rollback_to;
-  int ret = find_object_context(soid.oid, soid.hash, oi.oloc,
-				snapid, &rollback_to, false, &cloneid);
+  int ret = find_object_context(hobject_t(soid.oid, snapid, soid.hash), 
+				oi.oloc, &rollback_to, false, &cloneid);
   if (ret) {
     if (-ENOENT == ret) {
       // there's no snapshot here, or there's no object.
@@ -3049,42 +3050,41 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
 }
 
 
-int ReplicatedPG::find_object_context(const object_t& oid, ps_t seed,
+int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      const object_locator_t& oloc,
-				      snapid_t snapid,
 				      ObjectContext **pobc,
 				      bool can_create,
 				      snapid_t *psnapid)
 {
   // want the head?
-  hobject_t head(oid, CEPH_NOSNAP, seed);
-  if (snapid == CEPH_NOSNAP) {
+  hobject_t head(oid.oid, CEPH_NOSNAP, oid.hash);
+  if (oid.snap == CEPH_NOSNAP) {
     ObjectContext *obc = get_object_context(head, oloc, can_create);
     if (!obc)
       return -ENOENT;
-    dout(10) << "find_object_context " << oid << " @" << snapid << dendl;
+    dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
     *pobc = obc;
 
     if (can_create && !obc->ssc)
-      obc->ssc = get_snapset_context(oid, seed, true);
+      obc->ssc = get_snapset_context(oid.oid, oid.hash, true);
 
     return 0;
   }
 
   // we want a snap
-  SnapSetContext *ssc = get_snapset_context(oid, seed, can_create);
+  SnapSetContext *ssc = get_snapset_context(oid.oid, oid.hash, can_create);
   if (!ssc)
     return -ENOENT;
 
-  dout(10) << "find_object_context " << oid << " @" << snapid
+  dout(10) << "find_object_context " << oid << " @" << oid.snap
 	   << " snapset " << ssc->snapset << dendl;
  
   // head?
-  if (snapid > ssc->snapset.seq) {
+  if (oid.snap > ssc->snapset.seq) {
     if (ssc->snapset.head_exists) {
       ObjectContext *obc = get_object_context(head, oloc, false);
       dout(10) << "find_object_context  " << head
-	       << " want " << snapid << " > snapset seq " << ssc->snapset.seq
+	       << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
 	       << " -- HIT " << obc->obs
 	       << dendl;
       if (!obc->ssc)
@@ -3097,7 +3097,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, ps_t seed,
       return 0;
     }
     dout(10) << "find_object_context  " << head
-	     << " want " << snapid << " > snapset seq " << ssc->snapset.seq
+	     << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
 	     << " but head dne -- DNE"
 	     << dendl;
     put_snapset_context(ssc);
@@ -3107,14 +3107,14 @@ int ReplicatedPG::find_object_context(const object_t& oid, ps_t seed,
   // which clone would it be?
   unsigned k = 0;
   while (k < ssc->snapset.clones.size() &&
-	 ssc->snapset.clones[k] < snapid)
+	 ssc->snapset.clones[k] < oid.snap)
     k++;
   if (k == ssc->snapset.clones.size()) {
-    dout(10) << "find_object_context  no clones with last >= snapid " << snapid << " -- DNE" << dendl;
+    dout(10) << "find_object_context  no clones with last >= oid.snap " << oid.snap << " -- DNE" << dendl;
     put_snapset_context(ssc);
     return -ENOENT;
   }
-  hobject_t soid(oid, ssc->snapset.clones[k], seed);
+  hobject_t soid(oid.oid, ssc->snapset.clones[k], oid.hash);
 
   put_snapset_context(ssc); // we're done with ssc
   ssc = 0;
@@ -3132,14 +3132,14 @@ int ReplicatedPG::find_object_context(const object_t& oid, ps_t seed,
   dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps << dendl;
   snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
   snapid_t last = obc->obs.oi.snaps[0];
-  if (first <= snapid) {
+  if (first <= oid.snap) {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
-	     << "] contains " << snapid << " -- HIT " << obc->obs << dendl;
+	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;
     *pobc = obc;
     return 0;
   } else {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
-	     << "] does not contain " << snapid << " -- DNE" << dendl;
+	     << "] does not contain " << oid.snap << " -- DNE" << dendl;
     put_object_context(obc);
     return -ENOENT;
   }

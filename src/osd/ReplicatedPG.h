@@ -505,9 +505,9 @@ protected:
   }
   void put_object_context(ObjectContext *obc);
   void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
-  int find_object_context(const object_t& oid, ps_t seed,
+  int find_object_context(const hobject_t& oid,
 			  const object_locator_t& oloc,
-			  snapid_t snapid, ObjectContext **pobc,
+			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
   SnapSetContext *get_snapset_context(const object_t& oid, ps_t seed, bool can_create);
