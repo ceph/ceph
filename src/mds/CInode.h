@@ -797,12 +797,15 @@ public:
     assert(want_loner_cap >= 0);
     if (loner_cap >= 0 && loner_cap != want_loner_cap)
       return false;
-    loner_cap = want_loner_cap;
+    set_loner_cap(want_loner_cap);
+    return true;
+  }
+  void set_loner_cap(client_t l) {
+    loner_cap = l;
     authlock.set_excl_client(loner_cap);
     filelock.set_excl_client(loner_cap);
     linklock.set_excl_client(loner_cap);
     xattrlock.set_excl_client(loner_cap);
-    return true;
   }
   bool try_drop_loner() {
     if (loner_cap < 0)
@@ -812,11 +815,7 @@ public:
     Capability *cap = get_client_cap(loner_cap);
     if (!cap ||
 	(cap->issued() & ~other_allowed) == 0) {
-      loner_cap = -1;
-      authlock.set_excl_client(-1);
-      filelock.set_excl_client(-1);
-      linklock.set_excl_client(-1);
-      xattrlock.set_excl_client(-1);
+      set_loner_cap(-1);
       return true;
     }
     return false;

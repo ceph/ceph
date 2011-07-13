@@ -210,10 +210,13 @@ private:
 
 public:
 
-  void set_excl_client(client_t c) { more()->excl_client = c; }
-
   client_t get_excl_client() const {
     return have_more() ? more()->excl_client : -1;
+  }
+  void set_excl_client(client_t c) {
+    if (c < 0 && !have_more())
+      return;  // default is -1
+    more()->excl_client = c;
   }
 
   SimpleLock(MDSCacheObject *o, LockType *lt) :

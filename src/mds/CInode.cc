@@ -2543,6 +2543,8 @@ void CInode::_encode_locks_full(bufferlist& bl)
   ::encode(nestlock, bl);
   ::encode(flocklock, bl);
   ::encode(policylock, bl);
+
+  ::encode(loner_cap, bl);
 }
 void CInode::_decode_locks_full(bufferlist::iterator& p)
 {
@@ -2555,6 +2557,10 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(nestlock, p);
   ::decode(flocklock, p);
   ::decode(policylock, p);
+
+  ::decode(loner_cap, p);
+  set_loner_cap(loner_cap);
+  want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl)
