@@ -514,6 +514,7 @@ void RGWPutObj::execute()
   string part_num;
   list<struct put_obj_aio_info> pending;
   size_t max_chunks = RGW_MAX_PENDING_CHUNKS;
+  rgw_obj obj;
 
   ret = -EINVAL;
   if (!s->object) {
@@ -553,7 +554,6 @@ void RGWPutObj::execute()
     MD5 hash;
     string oid;
     multipart = s->args.exists("uploadId");
-    rgw_obj obj;
     if (!multipart) {
       oid = s->object_str;
       obj.set_ns(tmp_ns);
@@ -590,7 +590,7 @@ void RGWPutObj::execute()
 				     data,
 				     ((ofs == 0) ? -1 : ofs), len, &handle);
         if (ret < 0)
-          goto done;
+          goto done_err;
 
         hash.Update((unsigned char *)data, len);
         info.handle = handle;
@@ -600,7 +600,7 @@ void RGWPutObj::execute()
         while (pending_has_completed(pending)) {
           ret = wait_pending_front(pending);
           if (ret < 0)
-            goto done;
+            goto done_err;
 
         }
 
@@ -611,7 +611,7 @@ void RGWPutObj::execute()
         if (pending.size() > max_chunks) {
           ret = wait_pending_front(pending);
           if (ret < 0)
-            goto done;
+            goto done_err;
         }
         ofs += len;
       }
@@ -626,7 +626,7 @@ void RGWPutObj::execute()
 
     if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
        ret = -ERR_BAD_DIGEST;
-       goto done;
+       goto done_err;
     }
     bufferlist aclbl;
     policy.encode(aclbl);
@@ -650,14 +650,14 @@ void RGWPutObj::execute()
       rgw_obj dst_obj(s->bucket_str, s->object_str);
       ret = rgwstore->clone_obj(dst_obj, 0, obj, 0, s->obj_size, attrs);
       if (ret < 0)
-        goto done;
+        goto done_err;
       ret = rgwstore->delete_obj(s->user.user_id, obj, false);
       if (ret < 0)
         goto done;
     } else {
       ret = rgwstore->put_obj_meta(s->user.user_id, obj, NULL, attrs, false);
       if (ret < 0)
-        goto done;
+        goto done_err;
 
       bl.clear();
       map<string, bufferlist> meta_attrs;
@@ -677,6 +677,12 @@ void RGWPutObj::execute()
     }
   }
 done:
+  drain_pending(pending);
+  send_response();
+  return;
+
+done_err:
+  rgwstore->delete_obj(s->user.user_id, obj, true);
   drain_pending(pending);
   send_response();
 }
