@@ -92,7 +92,8 @@ public:
 
     printf("%s: saw %d objects\n", get_id_str(), saw);
 
-    rados_ioctx_destroy(cl);
+    rados_ioctx_destroy(io_ctx);
+    rados_shutdown(cl);
 
     return 0;
   }
@@ -166,7 +167,8 @@ public:
 
     printf("%s: removed %d objects\n", get_id_str(), removed);
 
-    rados_ioctx_destroy(cl);
+    rados_ioctx_destroy(io_ctx);
+    rados_shutdown(cl);
 
     return 0;
   }
@@ -243,7 +245,8 @@ public:
 
     printf("%s: added %d objects\n", get_id_str(), added);
 
-    rados_ioctx_destroy(cl);
+    rados_ioctx_destroy(io_ctx);
+    rados_shutdown(cl);
 
     return 0;
   }
