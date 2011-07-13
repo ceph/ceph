@@ -1,8 +1,12 @@
 from cStringIO import StringIO
 
 import contextlib
+import errno
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -101,36 +105,86 @@ def ship_utilities(ctx, config):
 
 @contextlib.contextmanager
 def binaries(ctx, config):
-    log.info('Unpacking ceph binaries...')
-    sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
-        branch=config.get('branch'),
-        tag=config.get('tag'),
-        sha1=config.get('sha1'),
-        flavor=config.get('flavor'),
-        )
-    ctx.summary['flavor'] = config.get('flavor', 'default')
-    ctx.summary['ceph-sha1'] = sha1
-    if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
-            f.write(sha1 + '\n')
-    ctx.cluster.run(
-        args=[
-            'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
-            run.Raw('&&'),
-            'uname', '-m',
-            run.Raw('|'),
-            'sed', '-e', 's/^/ceph./; s/$/.tgz/',
-            run.Raw('|'),
-            'wget',
-            '-nv',
-            '-O-',
-            '--base={url}'.format(url=ceph_bindir_url),
-            # need to use --input-file to make wget respect --base
-            '--input-file=-',
-            run.Raw('|'),
-            'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
-            ],
-        )
+    path = config.get('path')
+    tmpdir = None
+
+    if path is None:
+        # fetch from gitbuilder gitbuilder
+        log.info('Fetching and unpacking ceph binaries from gitbuilder...')
+        sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
+            branch=config.get('branch'),
+            tag=config.get('tag'),
+            sha1=config.get('sha1'),
+            flavor=config.get('flavor'),
+            )
+        ctx.summary['ceph-sha1'] = sha1
+        if ctx.archive is not None:
+            with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
+                f.write(sha1 + '\n')
+        ctx.cluster.run(
+            args=[
+                'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+                run.Raw('&&'),
+                'uname', '-m',
+                run.Raw('|'),
+                'sed', '-e', 's/^/ceph./; s/$/.tgz/',
+                run.Raw('|'),
+                'wget',
+                '-nv',
+                '-O-',
+                '--base={url}'.format(url=ceph_bindir_url),
+                # need to use --input-file to make wget respect --base
+                '--input-file=-',
+                run.Raw('|'),
+                'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
+                ],
+            )
+    else:
+        with tempfile.TemporaryFile(prefix='teuthology-tarball-', suffix='.tgz') as tar_fp:
+            tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
+            try:
+                log.info('Installing %s to %s...' % (path, tmpdir))
+                subprocess.check_call(
+                    args=[
+                        'make',
+                        'install',
+                        'DESTDIR={tmpdir}'.format(tmpdir=tmpdir),
+                        ],
+                    cwd=path,
+                    )
+                try:
+                    os.symlink('.', os.path.join(tmpdir, 'usr', 'local'))
+                except OSError as e:
+                    if e.errno == errno.EEXIST:
+                        pass
+                    else:
+                        raise
+                log.info('Building ceph binary tarball from %s...', tmpdir)
+                subprocess.check_call(
+                    args=[
+                        'tar',
+                        'cz',
+                        '.',
+                        ],
+                    cwd=tmpdir,
+                    stdout=tar_fp,
+                    )
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            log.info('Pushing tarball...')
+            tar_fp.seek(0)
+            writes = ctx.cluster.run(
+                args=[
+                    'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+                    run.Raw('&&'),
+                    'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary'
+                    ],
+                stdin=run.PIPE,
+                wait=False,
+                )
+            teuthology.feed_many_stdins_and_close(tar_fp, writes)
+            run.wait(writes)
+
     try:
         yield
     finally:
@@ -625,6 +679,12 @@ def task(ctx, config):
         - ceph:
             sha1: 1376a5ab0c89780eab39ffbbe436f6a6092314ed
 
+    Or a local source dir::
+
+        tasks:
+        - ceph:
+            path: /home/sage/ceph
+
     To capture code coverage data, use::
 
         tasks:
@@ -658,9 +718,14 @@ def task(ctx, config):
         "task ceph only supports a dictionary for configuration"
 
     flavor = None
-    if config.get('coverage'):
-        log.info('Recording coverage for this run.')
-        flavor = 'gcov'
+    if config.get('path'):
+        # local dir precludes any other flavors
+        flavor = 'local'
+    else:
+        if config.get('coverage'):
+            log.info('Recording coverage for this run.')
+            flavor = 'gcov'
+    ctx.summary['flavor'] = flavor or 'default'
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
     log.info('Creating coverage directory...')
@@ -681,6 +746,7 @@ def task(ctx, config):
                 branch=config.get('branch'),
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
+                path=config.get('path'),
                 flavor=flavor,
                 )),
         lambda: cluster(ctx=ctx, config=dict(
