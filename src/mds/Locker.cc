@@ -1771,8 +1771,7 @@ void Locker::request_inode_file_caps(CInode *in)
     in->replica_caps_wanted = wanted;
 
     if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
-      mds->send_message_mds(new MInodeFileCaps(in->ino(), mds->get_nodeid(),
-					       in->replica_caps_wanted),
+      mds->send_message_mds(new MInodeFileCaps(in->ino(), in->replica_caps_wanted),
 			    auth);
   } else {
     in->replica_caps_wanted_keep_until.sec_ref() = 0;
@@ -1787,6 +1786,8 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
   // ok
   CInode *in = mdcache->get_inode(m->get_ino());
+  int from = m->get_source().num();
+
   assert(in);
   assert(in->is_auth());
 
@@ -1798,12 +1799,12 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   }
 
   
-  dout(7) << "handle_inode_file_caps replica mds" << m->get_from() << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
+  dout(7) << "handle_inode_file_caps replica mds" << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
   if (m->get_caps())
-    in->mds_caps_wanted[m->get_from()] = m->get_caps();
+    in->mds_caps_wanted[from] = m->get_caps();
   else
-    in->mds_caps_wanted.erase(m->get_from());
+    in->mds_caps_wanted.erase(from);
 
   try_eval(in, CEPH_CAP_LOCKS);
   m->put();

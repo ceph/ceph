@@ -18,20 +18,16 @@
 
 class MInodeFileCaps : public Message {
   inodeno_t ino;
-  __s32     from;
   __u32     caps;
 
  public:
   inodeno_t get_ino() { return ino; }
-  int       get_from() { return from; }
   int       get_caps() { return caps; }
 
   MInodeFileCaps() {}
-  // from auth
-  MInodeFileCaps(inodeno_t ino, int from, int caps) :
+  MInodeFileCaps(inodeno_t ino, int caps) :
     Message(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
-    this->from = from;
     this->caps = caps;
   }
 private:
@@ -44,13 +40,11 @@ public:
   }
   
   void encode_payload(CephContext *cct) {
-    ::encode(from, payload);
     ::encode(ino, payload);
     ::encode(caps, payload);
   }
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
     ::decode(ino, p);
     ::decode(caps, p);
   }
