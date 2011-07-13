@@ -171,16 +171,18 @@ def binaries(ctx, config):
             finally:
                 shutil.rmtree(tmpdir, ignore_errors=True)
             log.info('Pushing tarball...')
-            for rem in ctx.cluster.remotes.iterkeys():
-                tar_fp.seek(0)
-                rem.run(
-                    args=[
-                        'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
-                        run.Raw('&&'),
-                        'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary'
-                        ],
-                    stdin=tar_fp,
-                    )
+            tar_fp.seek(0)
+            writes = ctx.cluster.run(
+                args=[
+                    'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+                    run.Raw('&&'),
+                    'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary'
+                    ],
+                stdin=run.PIPE,
+                wait=False,
+                )
+            teuthology.feed_many_stdins_and_close(tar_fp, writes)
+            run.wait(writes)
 
     try:
         yield
