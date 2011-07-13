@@ -3,6 +3,7 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
+import tempfile
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -136,10 +137,10 @@ def binaries(ctx, config):
                 ],
             )
     else:
-        tmpdir = '/tmp/cephpush.%d' % os.getpid()
+        tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
         tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
         log.info('Installing %s to %s...' % (path, tmpdir))
-        os.system(('mkdir -p {tmpdir} && ' +
+        os.system((
                    'cd {srcdir} && ' +
                    'make install DESTDIR={tmpdir} && ' +
                    '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
