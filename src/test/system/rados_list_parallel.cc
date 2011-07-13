@@ -15,6 +15,7 @@
 #include "cross_process_sem.h"
 #include "include/rados/librados.h"
 #include "st_rados_create_pool.h"
+#include "st_rados_list_objects.h"
 #include "systest_runnable.h"
 #include "systest_settings.h"
 
@@ -38,66 +39,6 @@ static int g_num_objects = 50;
 
 static CrossProcessSem *pool_setup_sem = NULL;
 static CrossProcessSem *modify_sem = NULL;
-
-class RadosListObjectsR : public SysTestRunnable
-{
-public:
-  RadosListObjectsR(int argc, const char **argv)
-    : SysTestRunnable(argc, argv)
-  {
-  }
-
-  ~RadosListObjectsR()
-  {
-  }
-
-  int run()
-  {
-    rados_t cl;
-    RETURN_IF_NONZERO(rados_create(&cl, NULL));
-    rados_conf_parse_argv(cl, m_argc, m_argv);
-    RETURN_IF_NONZERO(rados_conf_read_file(cl, NULL));
-    RETURN_IF_NONZERO(rados_connect(cl));
-    pool_setup_sem->wait();
-    pool_setup_sem->post();
-
-    rados_ioctx_t io_ctx;
-    RETURN_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
-    RETURN_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
-
-    int ret, saw = 0;
-    const char *obj_name;
-    rados_list_ctx_t h;
-    printf("%s: listing objects.\n", get_id_str());
-    RETURN_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
-    while (true) {
-      ret = rados_objects_list_next(h, &obj_name);
-      if (ret == -ENOENT) {
-	break;
-      }
-      else if (ret != 0) {
-	printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
-	return ret;
-      }
-      char *obj_name_copy = strdup(obj_name);
-      free(obj_name_copy);
-      if ((saw % 25) == 0) {
-	printf("%s: listed object %d...\n", get_id_str(), saw);
-      }
-      ++saw;
-      if (saw == g_num_objects / 2)
-	modify_sem->wait();
-    }
-    rados_objects_list_close(h);
-
-    printf("%s: saw %d objects\n", get_id_str(), saw);
-
-    rados_ioctx_destroy(io_ctx);
-    rados_shutdown(cl);
-
-    return 0;
-  }
-};
 
 class RadosDeleteObjectsR : public SysTestRunnable
 {
@@ -276,7 +217,7 @@ int main(int argc, const char **argv)
   // Test 1... list objects
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    RadosListObjectsR r2(argc, argv);
+    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
@@ -292,7 +233,7 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    RadosListObjectsR r2(argc, argv);
+    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
     RadosDeleteObjectsR r3(argc, argv);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -310,7 +251,7 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    RadosListObjectsR r2(argc, argv);
+    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
     RadosAddObjectsR r3(argc, argv, "obj2");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -328,7 +269,7 @@ int main(int argc, const char **argv)
   RETURN_IF_NONZERO(modify_sem->reinit(0));
   {
     StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
-    RadosListObjectsR r2(argc, argv);
+    StRadosListObjects r2(argc, argv, g_num_objects, pool_setup_sem, modify_sem);
     RadosAddObjectsR r3(argc, argv, "obj2");
     RadosAddObjectsR r4(argc, argv, "obj3");
     RadosDeleteObjectsR r5(argc, argv);

@@ -385,7 +385,8 @@ noinst_LTLIBRARIES += libsystest.la
 
 rados_list_parallel_SOURCES = \
 	test/system/rados_list_parallel.cc \
-	test/system/st_rados_create_pool.cc
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
 rados_list_parallel_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += rados_list_parallel
 
@@ -1173,6 +1174,7 @@ noinst_HEADERS = \
 	common/sync_filesystem.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
+	test/system/st_rados_list_objects.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h
 
