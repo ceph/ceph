@@ -3062,21 +3062,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     
   case LOCK_AC_LOCK:
     assert(lock->get_state() == LOCK_SYNC);
-    //||           lock->get_state() == LOCK_SYNC_LOCK);
-    
-    // wait for readers to finish?
-    if (lock->is_rdlocked() ||
-	lock->get_num_client_lease()) {
-      dout(7) << "handle_simple_lock has reader|leases, waiting before ack on " << *lock
-	      << " on " << *lock->get_parent() << dendl;
-      if (lock->get_num_client_lease())
-	revoke_client_leases(lock);
-      lock->set_state(LOCK_SYNC_LOCK);
-    } else {
-      // update lock and reply
-      lock->set_state(LOCK_LOCK);
-      mds->send_message(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), m->get_connection());
-    }
+    lock->set_state(LOCK_SYNC_LOCK);
+    eval_gather(lock, true);
     break;
 
 
