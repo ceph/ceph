@@ -41,7 +41,7 @@ by section.
 
 * Naming > Constant Names:
 
-   Google uses kSomeThing for constants.  We prefere SOME_THING.
+   Google uses kSomeThing for constants.  We prefer SOME_THING.
 
 * Naming > Function Names:
 
@@ -64,16 +64,16 @@ the code origin isn't reflected by the git history.
 
         if (foo) {   // okay
 
-	if ( foo ) { // no
+        if ( foo ) { // no
 
    - Always use newline following if:
 
- 	if (foo)
-	  bar;         // okay
+        if (foo)
+          bar;         // okay
 
-        if (foo) bar;  // no, usually hardler to visually parse
+        if (foo) bar;  // no, usually harder to parse visually
 
-       
+
 
 
 The following guidelines have not been followed in the legacy code,
