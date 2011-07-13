@@ -107,7 +107,6 @@ def ship_utilities(ctx, config):
 def binaries(ctx, config):
     path = config.get('path')
     tmpdir = None
-    tmptar = None
 
     if path is None:
         # fetch from gitbuilder gitbuilder
@@ -140,58 +139,52 @@ def binaries(ctx, config):
                 ],
             )
     else:
-        tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
-        try:
-            tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
-            log.info('Installing %s to %s...' % (path, tmpdir))
-            subprocess.check_call(
-                args=[
-                    'make',
-                    'install',
-                    'DESTDIR={tmpdir}'.format(tmpdir=tmpdir),
-                    ],
-                cwd=path,
-                )
+        with tempfile.TemporaryFile(prefix='teuthology-tarball-', suffix='.tgz') as tar_fp:
+            tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
             try:
-                os.symlink('.', os.path.join(tmpdir, 'usr', 'local'))
-            except OSError as e:
-                if e.errno == errno.EEXIST:
-                    pass
-                else:
-                    raise
-            log.info('Building ceph binary tarball %s from %s...' % (tmptar,
-                                                                     tmpdir))
-            subprocess.check_call(
-                args=[
-                    'tar',
-                    'czf',
-                    tmptar,
-                    '.',
-                    ],
-                cwd=tmpdir,
-                )
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        log.info('Pushing tarball %s...' % tmptar)
-        with file(tmptar, 'rb') as f:
+                log.info('Installing %s to %s...' % (path, tmpdir))
+                subprocess.check_call(
+                    args=[
+                        'make',
+                        'install',
+                        'DESTDIR={tmpdir}'.format(tmpdir=tmpdir),
+                        ],
+                    cwd=path,
+                    )
+                try:
+                    os.symlink('.', os.path.join(tmpdir, 'usr', 'local'))
+                except OSError as e:
+                    if e.errno == errno.EEXIST:
+                        pass
+                    else:
+                        raise
+                log.info('Building ceph binary tarball from %s...', tmpdir)
+                subprocess.check_call(
+                    args=[
+                        'tar',
+                        'cz',
+                        '.',
+                        ],
+                    cwd=tmpdir,
+                    stdout=tar_fp,
+                    )
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            log.info('Pushing tarball...')
             for rem in ctx.cluster.remotes.iterkeys():
+                tar_fp.seek(0)
                 rem.run(
                     args=[
                         'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
                         run.Raw('&&'),
                         'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary'
                         ],
-                    stdin=f
+                    stdin=tar_fp,
                     )
-                f.seek(0)
-        os.unlink(tmptar)
-        tmptar = None
 
     try:
         yield
     finally:
-        if tmptar is not None:
-            os.unlink(tmptar)
         log.info('Removing ceph binaries...')
         run.wait(
             ctx.cluster.run(
