@@ -202,7 +202,8 @@ def nuke():
             '/tmp/cephtest/binary/usr/local/bin/cmds',
             '/tmp/cephtest/binary/usr/local/bin/cfuse',
             run.Raw(';'),
-            'fusermount', '-u', run.Raw('/tmp/cephtest/mnt.*'),
+            'find', '/tmp/cephtest', '-maxdepth', '1', '-name', 'mnt.*',
+            '-execdir', 'fusermount', '-u', '{}', ';',
             run.Raw(';'),
             'sudo', 'rm', '-rf', '/tmp/cephtest',
             ])
