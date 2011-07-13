@@ -213,7 +213,16 @@ ostream& operator<<(ostream& out, CInode& in)
       if (in.get_loner() != in.get_wanted_loner())
 	out << "(" << in.get_wanted_loner() << ")";
     }
-    
+  }
+  if (!in.get_mds_caps_wanted().empty()) {
+    out << " mcw={";
+    for (map<int,int>::iterator p = in.get_mds_caps_wanted().begin();
+	 p != in.get_mds_caps_wanted().end(); ++p) {
+      if (p != in.get_mds_caps_wanted().begin())
+	out << ',';
+      out << p->first << '=' << ccap_string(p->second);
+    }
+    out << '}';
   }
 
   if (in.get_num_ref()) {

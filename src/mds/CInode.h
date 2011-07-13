@@ -885,6 +885,8 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
+  map<int,int>& get_mds_caps_wanted() { return mds_caps_wanted; }
+
   map<client_t,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(client_t client) {
     if (client_caps.count(client))
