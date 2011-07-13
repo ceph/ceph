@@ -182,6 +182,7 @@ run_until_finished(std::vector < SysTestRunnable * > &runnables)
       return oss.str();
     }
   }
+  printf("*******************************\n");
   return "";
 }
 
