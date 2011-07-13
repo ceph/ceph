@@ -33,3 +33,12 @@ RGWAccess *RGWAccess::init_storage_provider(const char *type, CephContext *cct)
 
   return store;
 }
+
+void RGWAccess::close_storage()
+{
+  if (!store)
+    return;
+
+  store->finalize();
+  store = NULL;
+}

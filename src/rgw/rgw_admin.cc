@@ -26,7 +26,7 @@ using namespace std;
 static RGWFormatter_XML formatter_xml;
 static RGWFormatter_JSON formatter_json;
 
-void usage() 
+void _usage() 
 {
   cerr << "usage: radosgw_admin <cmd> [options...]" << std::endl;
   cerr << "commands:\n";
@@ -74,9 +74,15 @@ void usage()
   generic_client_usage();
 }
 
+int usage()
+{
+  _usage();
+  return 1;
+}
+
 void usage_exit()
 {
-  usage();
+  _usage();
   exit(1);
 }
 
@@ -349,7 +355,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 
 int main(int argc, char **argv) 
 {
-  DEFINE_CONF_VARS(usage);
+  DEFINE_CONF_VARS(_usage);
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
@@ -389,7 +395,7 @@ int main(int argc, char **argv)
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
-      exit(0);
+      return 0;
     } else if (CEPH_ARGPARSE_EQ("uid", 'i')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
@@ -425,7 +431,7 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
       if (pool_id < 0) {
         cerr << "bad pool-id: " << pool_id << std::endl;
-        usage_exit();
+        return usage();
       }
     } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
@@ -436,7 +442,7 @@ int main(int argc, char **argv)
         opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
         if (opt_cmd < 0) {
           cerr << "unrecognized arg " << args[i] << std::endl;
-          usage_exit();
+          return usage();
         }
         if (need_more) {
           prev_cmd = CEPH_ARGPARSE_VAL;
@@ -444,13 +450,13 @@ int main(int argc, char **argv)
         }
       } else {
         cerr << "unrecognized arg " << args[i] << std::endl;
-        usage_exit();
+        return usage();
       }
     }
   }
 
   if (opt_cmd == OPT_NO_CMD)
-    usage_exit();
+    return usage();
 
   if (format) {
     if (strcmp(format, "xml") == 0)
@@ -459,7 +465,7 @@ int main(int argc, char **argv)
       formatter = &formatter_json;
     else {
       cerr << "unrecognized format: " << format << std::endl;
-      usage_exit();
+      return usage();
     }
   }
 
@@ -473,7 +479,7 @@ int main(int argc, char **argv)
       if (user_id) {
         if (strcmp(user_id, suser) != 0) {
           cerr << "bad subuser " << subuser << " for uid " << user_id << std::endl;
-          exit(1);
+          return 1;
         }
       } else
         user_id = suser;
@@ -483,14 +489,15 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_KEY_RM && !access_key) {
     cerr << "error: access key was not specified" << std::endl;
-    usage_exit();
+    return usage();
   }
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
                     opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
 
-  store = RGWAccess::init_storage_provider("rados", g_ceph_context);
+  RGWStoreManager store_manager;
+  store = store_manager.init("rados", g_ceph_context);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
@@ -532,7 +539,7 @@ int main(int argc, char **argv)
       opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
-      usage_exit();
+      return usage();
     }
 
     string user_id_str = user_id;
@@ -542,11 +549,11 @@ int main(int argc, char **argv)
     if (opt_cmd == OPT_USER_CREATE) {
       if (found) {
         cerr << "error: user already exists" << std::endl;
-        exit(1);
+        return 1;
       }
     } else if (!found) {
       cerr << "error reading user info, aborting" << std::endl;
-      exit(1);
+      return 1;
     }
   }
 
@@ -554,18 +561,18 @@ int main(int argc, char **argv)
       opt_cmd == OPT_SUBUSER_RM) {
     if (!subuser) {
       cerr << "subuser creation was requires specifying subuser name" << std::endl;
-      exit(1);
+      return 1;
     }
     map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
     bool found = (iter != info.subusers.end());
     if (opt_cmd == OPT_SUBUSER_CREATE) {
       if (found) {
         cerr << "error: subuser already exists" << std::endl;
-        exit(1);
+        return 1;
       }
     } else if (!found) {
       cerr << "error: subuser doesn't exist" << std::endl;
-      exit(1);
+      return 1;
     }
   }
 
@@ -584,7 +591,7 @@ int main(int argc, char **argv)
       ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
-        exit(1);
+        return 1;
       }
       secret_key = secret_key_buf;
     }
@@ -595,7 +602,7 @@ int main(int argc, char **argv)
 	ret = gen_rand_alphanumeric_upper(public_id_buf, sizeof(public_id_buf));
 	if (ret < 0) {
 	  cerr << "aborting" << std::endl;
-	  exit(1);
+	  return 1;
 	}
 	access_key = public_id_buf;
 	duplicate_check_id = access_key;
@@ -625,7 +632,7 @@ int main(int argc, char **argv)
       info.access_keys[access_key] = k;
    } else if (access_key || secret_key) {
       cerr << "access key modification requires both access key and secret key" << std::endl;
-      exit(1);
+      return 1;
     }
     if (display_name)
       info.display_name = display_name;
@@ -738,7 +745,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_BUCKET_LINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
-      usage_exit();
+      return usage();
     }
     string bucket_str(bucket);
     string uid_str(user_id);
@@ -776,7 +783,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_BUCKET_UNLINK) {
     if (!bucket) {
       cerr << "bucket name was not specified" << std::endl;
-      usage_exit();
+      return usage();
     }
 
     string bucket_str(bucket);
@@ -789,7 +796,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_LOG_SHOW) {
     if (!object && (!date || !bucket || pool_id < 0)) {
       cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
-      usage_exit();
+      return usage();
     }
 
     string log_bucket = RGW_LOG_BUCKET_NAME;
@@ -896,7 +903,7 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_POOL_CREATE) {
     if (!bucket)
-      usage_exit();
+      return usage();
     string bucket_str(bucket);
     string no_object;
     int ret;
@@ -930,7 +937,7 @@ int main(int argc, char **argv)
 
     if (!user_id) {
       cerr << "uid was not specified" << std::endl;
-      usage_exit();
+      return usage();
     }
     RGWUserBuckets buckets;
     if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
@@ -944,7 +951,7 @@ int main(int argc, char **argv)
     ret = rgw_store_user_info(info);
     if (ret < 0) {
       cerr << "ERROR: failed to store user info user=" << user_id << " ret=" << ret << std::endl;
-      exit(1);
+      return 1;
     }
      
     if (disable)
@@ -963,7 +970,7 @@ int main(int argc, char **argv)
       ret = rgwstore->enable_buckets(bucket_names, info.auid);
     if (ret < 0) {
       cerr << "ERROR: failed to change pool" << std::endl;
-      exit(1);
+      return 1;
     }
   } 
 

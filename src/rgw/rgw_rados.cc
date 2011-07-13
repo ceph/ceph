@@ -59,6 +59,11 @@ int RGWRados::initialize(CephContext *cct)
   return ret;
 }
 
+void RGWRados::finalize()
+{
+  control_pool_ctx.unwatch(notify_oid, watch_handle);
+}
+
 /**
  * Open the pool used as root for this gateway
  * Returns: 0 on success, -ERR# otherwise.

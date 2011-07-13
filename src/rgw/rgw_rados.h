@@ -33,6 +33,7 @@ public:
 
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize(CephContext *cct);
+  virtual void finalize();
   /** set up a bucket listing. id is ignored, handle is filled in. */
   virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle);
   /** 
