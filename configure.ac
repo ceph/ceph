@@ -341,6 +341,8 @@ AS_IF([test "x$with_gtk2" != "xno"],
 		])])
 AM_CONDITIONAL(WITH_GTK2, [test "x$have_gtk2" != "xno"])
 
+AM_CONDITIONAL(WITH_BUILD_TESTS, test "$WITH_BUILD_TESTS" = "1")
+
 AM_PATH_PYTHON([2.4],
 	[], [AC_MSG_FAILURE([Failed to find Python 2.4 or newer])])
 

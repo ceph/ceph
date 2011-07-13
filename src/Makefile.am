@@ -176,6 +176,7 @@ testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object
 testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
 
+if WITH_BUILD_TESTS
 test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
 test_libcommon_build_LDADD = -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_libcommon_build
@@ -196,6 +197,7 @@ test_libceph_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
 test_libceph_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libceph_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libceph_build
+endif
 
 if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
