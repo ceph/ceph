@@ -41,10 +41,11 @@ get_random_buf(int sz)
 StRadosCreatePool::
 StRadosCreatePool(int argc, const char **argv,
 		  CrossProcessSem *pool_setup_sem, CrossProcessSem *close_create_pool,
-		  int num_objects)
+		  int num_objects, const std::string &suffix)
   : SysTestRunnable(argc, argv),
     m_pool_setup_sem(pool_setup_sem), m_close_create_pool(close_create_pool),
-    m_num_objects(num_objects)
+    m_num_objects(num_objects),
+    m_suffix(suffix)
 {
 }
 
@@ -76,7 +77,7 @@ run()
 
   for (int i = 0; i < m_num_objects; ++i) {
     char oid[128];
-    snprintf(oid, sizeof(oid), "%d.obj", i);
+    snprintf(oid, sizeof(oid), "%d%s", i, m_suffix.c_str());
     std::string buf(get_random_buf(256));
     ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
     if (ret < static_cast<int>(buf.size())) {

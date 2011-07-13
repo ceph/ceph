@@ -149,7 +149,7 @@ public:
     std::map <int, std::string> to_add;
     for (int i = 0; i < g_num_objects; ++i) {
       char oid[128];
-      snprintf(oid, sizeof(oid), "%d.%s", i, m_suffix.c_str());
+      snprintf(oid, sizeof(oid), "%d%s", i, m_suffix.c_str());
       to_add[i] = oid;
     }
 
@@ -216,7 +216,7 @@ int main(int argc, const char **argv)
 
   // Test 1... list objects
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, false, g_num_objects,
 			  pool_setup_sem, modify_sem);
     vector < SysTestRunnable* > vec;
@@ -233,7 +233,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
     RadosDeleteObjectsR r3(argc, argv);
@@ -252,10 +252,10 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
-    RadosAddObjectsR r3(argc, argv, "obj2");
+    RadosAddObjectsR r3(argc, argv, ".obj2");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
@@ -271,11 +271,11 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
-    RadosAddObjectsR r3(argc, argv, "obj2");
-    RadosAddObjectsR r4(argc, argv, "obj3");
+    RadosAddObjectsR r3(argc, argv, ".obj2");
+    RadosAddObjectsR r4(argc, argv, ".obj3");
     RadosDeleteObjectsR r5(argc, argv);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -283,6 +283,26 @@ int main(int argc, const char **argv)
     vec.push_back(&r3);
     vec.push_back(&r4);
     vec.push_back(&r5);
+    error = SysTestRunnable::run_until_finished(vec);
+    if (!error.empty()) {
+      printf("got error: %s\n", error.c_str());
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Test 5... list objects while they are being modified
+  RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
+  RETURN1_IF_NONZERO(modify_sem->reinit(0));
+  {
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
+    StRadosListObjects r2(argc, argv, false, g_num_objects / 2,
+			  pool_setup_sem, modify_sem);
+    // AddObjects with the same 'suffix' as used in StRadosCreatePool
+    RadosAddObjectsR r3(argc, argv, ".obj");
+    vector < SysTestRunnable* > vec;
+    vec.push_back(&r1);
+    vec.push_back(&r2);
+    vec.push_back(&r3);
     error = SysTestRunnable::run_until_finished(vec);
     if (!error.empty()) {
       printf("got error: %s\n", error.c_str());

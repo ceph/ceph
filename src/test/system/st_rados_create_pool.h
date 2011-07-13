@@ -31,13 +31,14 @@ public:
   static std::string get_random_buf(int sz);
   StRadosCreatePool(int argc, const char **argv,
 	CrossProcessSem *pool_setup_sem, CrossProcessSem *close_create_pool_sem,
-	int num_objects);
+	int num_objects, const std::string &suffix);
   ~StRadosCreatePool();
   virtual int run();
 private:
   CrossProcessSem *m_pool_setup_sem;
   CrossProcessSem *m_close_create_pool;
   int m_num_objects;
+  std::string m_suffix;
 };
 
 #endif

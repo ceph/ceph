@@ -111,7 +111,7 @@ int main(int argc, const char **argv)
 
   // first test: create a pool, then delete that pool
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, 50);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, 50, ".obj");
     StRadosDeletePool r2(argc, argv, pool_setup_sem, NULL, "foo");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -128,7 +128,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(delete_pool_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects);
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
     StRadosDeletePool r2(argc, argv,
 			 pool_setup_sem, delete_pool_sem, "foo");
     StRadosListObjects r3(argc, argv, true, g_num_objects / 2,
