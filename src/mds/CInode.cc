@@ -116,7 +116,7 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " pv" << in.get_projected_version();
 
   if (in.is_auth_pinned()) {
-    out << " ap=" << in.get_num_auth_pins();
+    out << " ap=" << in.get_num_auth_pins() << "+" << in.get_num_nested_auth_pins();
 #ifdef MDS_AUTHPIN_SET
     out << "(" << in.auth_pin_set << ")";
 #endif
