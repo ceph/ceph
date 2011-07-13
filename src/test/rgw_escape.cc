@@ -88,3 +88,8 @@ TEST(EscapeJson, ControlChars) {
   uint8_t cc2[] = { 0x61, 0x62, 0x63, 0x7f, 0x0 };
   ASSERT_EQ(escape_json_attrs((char*)cc2), "abc\\007f");
 }
+
+TEST(EscapeJson, Utf8) {
+  uint8_t cc1[] = { 0xe6, 0xb1, 0x89, 0xe5, 0xad, 0x97, 0x0a, 0x0 };
+  ASSERT_EQ(escape_xml_attrs((const char*)cc1), (const char*)cc1);
+}
