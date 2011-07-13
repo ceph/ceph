@@ -101,11 +101,11 @@ def ship_utilities(ctx, config):
 
 @contextlib.contextmanager
 def binaries(ctx, config):
-    dir = config.get('path')
+    path = config.get('path')
     tmpdir = None
     tmptar = None
 
-    if dir is None:
+    if path is None:
         # fetch from gitbuilder gitbuilder
         log.info('Fetching and unpacking ceph binaries from gitbuilder...')
         sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
@@ -138,12 +138,12 @@ def binaries(ctx, config):
     else:
         tmpdir = '/tmp/cephpush.%d' % os.getpid()
         tmptar = '/tmp/cephpush.%d.tar.gz' % os.getpid()
-        log.info('Installing %s to %s...' % (dir, tmpdir))
+        log.info('Installing %s to %s...' % (path, tmpdir))
         os.system(('mkdir -p {tmpdir} && ' +
                    'cd {srcdir} && ' +
                    'make install DESTDIR={tmpdir} && ' +
                    '[ -d {tmpdir}/usr/local ] || ln -s . {tmpdir}/usr/local'
-                   ).format(srcdir=dir, tmpdir=tmpdir))
+                   ).format(srcdir=path, tmpdir=tmpdir))
         log.info('Building ceph binary tarball %s from %s...' % (tmptar,
                                                                  tmpdir))
         os.system(('( cd {tmpdir} && tar czf {tmptar} . ) && ' +
