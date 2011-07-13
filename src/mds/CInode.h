@@ -920,6 +920,9 @@ public:
   void clear_client_caps_after_export() {
     while (!client_caps.empty())
       remove_client_cap(client_caps.begin()->first);
+    loner_cap = -1;
+    want_loner_cap = -1;
+    mds_caps_wanted.clear();
   }
   void export_client_caps(map<client_t,Capability::Export>& cl) {
     for (map<client_t,Capability*>::iterator it = client_caps.begin();
