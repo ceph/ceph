@@ -377,6 +377,41 @@ libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
+## System tests
+libsystest_la_SOURCES = \
+	test/system/cross_process_sem.cc \
+	test/system/systest_runnable.cc \
+	test/system/systest_settings.cc
+libsystest_la_LIBADD = libglobal.la
+noinst_LTLIBRARIES += libsystest.la
+
+testrados_list_parallel_SOURCES = \
+	test/system/rados_list_parallel.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
+testrados_list_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += testrados_list_parallel
+
+testrados_open_pools_parallel_SOURCES = \
+	test/system/rados_open_pools_parallel.cc \
+	test/system/st_rados_create_pool.cc
+testrados_open_pools_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += testrados_open_pools_parallel
+
+testrados_list_parallel_SOURCES = \
+	test/system/rados_list_parallel.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
+testrados_list_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += testrados_list_parallel
+
+testrados_delete_pools_parallel_SOURCES = \
+	test/system/rados_delete_pools_parallel.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_list_objects.cc
+testrados_delete_pools_parallel_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += testrados_delete_pools_parallel
+
 ## unit tests
 
 # target to build but not run the unit tests
@@ -1160,7 +1195,12 @@ noinst_HEADERS = \
 	tools/gui_resources.h\
 	test/osd/RadosModel.h\
 	global/pidfile.h\
-	common/sync_filesystem.h
+	common/sync_filesystem.h \
+	test/system/cross_process_sem.h \
+	test/system/st_rados_create_pool.h \
+	test/system/st_rados_list_objects.h \
+	test/system/systest_runnable.h \
+	test/system/systest_settings.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \

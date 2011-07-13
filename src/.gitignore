@@ -88,3 +88,6 @@ Makefile
 ceph.conf
 .ceph_keyring
 massif.out.*
+testrados_list_parallel
+testrados_open_pools_parallel
+testrados_delete_pools_parallel

@@ -1102,7 +1102,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
       op->blp->claim(m->response_data);
     if (m->version > last_seen_osdmap_version)
       last_seen_osdmap_version = m->version;
-    if (m->replyCode == 0 && osdmap->get_epoch() < m->epoch) {
+    if (osdmap->get_epoch() < m->epoch) {
       ldout(cct, 20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
       wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
     }
