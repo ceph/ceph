@@ -35,7 +35,7 @@ int escape_xml_attr_len(const char *buf)
 	const char *b;
 	int ret = 0;
 	for (b = buf; *b; ++b) {
-		char c = *b;
+		unsigned char c = *b;
 		switch (c) {
 		case '<':
 			ret += SSTRL(LESS_THAN_XESCAPE);
@@ -73,7 +73,7 @@ void escape_xml_attr(const char *buf, char *out)
 	char *o = out;
 	const char *b;
 	for (b = buf; *b; ++b) {
-		char c = *b;
+		unsigned char c = *b;
 		switch (c) {
 		case '<':
 			memcpy(o, LESS_THAN_XESCAPE, SSTRL(LESS_THAN_XESCAPE));
@@ -124,7 +124,7 @@ int escape_json_attr_len(const char *buf)
 	const char *b;
 	int ret = 0;
 	for (b = buf; *b; ++b) {
-		char c = *b;
+		unsigned char c = *b;
 		switch (c) {
 		case '\'':
 			ret += SSTRL(SGL_QUOTE_JESCAPE);
@@ -164,7 +164,7 @@ void escape_json_attr(const char *buf, char *out)
 	char *o = out;
 	const char *b;
 	for (b = buf; *b; ++b) {
-		char c = *b;
+		unsigned char c = *b;
 		switch (c) {
 		case '\'':
 			memcpy(o, SGL_QUOTE_JESCAPE, SSTRL(SGL_QUOTE_JESCAPE));
