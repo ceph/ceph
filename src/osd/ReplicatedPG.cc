@@ -3994,8 +3994,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 	bufferlist result;
 	int off = 0;
-	for (interval_set<uint64_t>::const_iterator p = data_subset.begin();
-	     p != data_subset.end();
+	for (interval_set<uint64_t>::const_iterator p = usable.begin();
+	     p != usable.end();
 	     ++p) {
 	  interval_set<uint64_t> x;
 	  x.insert(p.get_start(), p.get_len());
