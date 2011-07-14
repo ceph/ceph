@@ -10,6 +10,7 @@ import tempfile
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology import parallel
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -103,6 +104,26 @@ def ship_utilities(ctx, config):
                 ),
             )
 
+def _download_binaries(remote, ceph_bindir_url):
+    remote.run(
+        args=[
+            'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
+            run.Raw('&&'),
+            'uname', '-m',
+            run.Raw('|'),
+            'sed', '-e', 's/^/ceph./; s/$/.tgz/',
+            run.Raw('|'),
+            'wget',
+            '-nv',
+            '-O-',
+            '--base={url}'.format(url=ceph_bindir_url),
+            # need to use --input-file to make wget respect --base
+            '--input-file=-',
+            run.Raw('|'),
+            'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
+            ],
+        )
+
 @contextlib.contextmanager
 def binaries(ctx, config):
     path = config.get('path')
@@ -121,24 +142,9 @@ def binaries(ctx, config):
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
                 f.write(sha1 + '\n')
-        ctx.cluster.run(
-            args=[
-                'install', '-d', '-m0755', '--', '/tmp/cephtest/binary',
-                run.Raw('&&'),
-                'uname', '-m',
-                run.Raw('|'),
-                'sed', '-e', 's/^/ceph./; s/$/.tgz/',
-                run.Raw('|'),
-                'wget',
-                '-nv',
-                '-O-',
-                '--base={url}'.format(url=ceph_bindir_url),
-                # need to use --input-file to make wget respect --base
-                '--input-file=-',
-                run.Raw('|'),
-                'tar', '-xzf', '-', '-C', '/tmp/cephtest/binary',
-                ],
-            )
+
+        args = [[remote, ceph_bindir_url] for remote in ctx.cluster.remotes.iterkeys()]
+        parallel.run(_download_binaries, args)
     else:
         with tempfile.TemporaryFile(prefix='teuthology-tarball-', suffix='.tgz') as tar_fp:
             tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
