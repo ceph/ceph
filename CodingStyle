@@ -28,17 +28,31 @@ by section.
 
     Google uses CamelCaps for all type names.  We use two naming schemes:
 
-    - for structs (simple data containers), lower case with _t suffix:
-        struct my_type_t {
+    - for naked structs (simple data containers), lower case with _d
+      suffix ('d' for data).  Not _t, because that means typdef.
+
+        struct my_type_d {
           int a, b;
-          my_type_t() : a(0), b(0) {}
+          my_type_d() : a(0), b(0) {}
         };
-    - for regular classes, CamelCaps, private: section, etc.
+
+    - for full-blown classes, CamelCaps, private: section, accessors,
+      probably not copyable, etc.
 
 * Naming > Variable Names:
 
-   Google uses _ suffix for class members.  We haven't up until now.  Should we?
+   Google uses _ suffix for class members.  That's ugly.  We'll use
+   a m_ prefix, like so:
 
+        class Foo {
+	 public:
+          int get_foo() const { return m_foo; }
+          void set_foo(int foo) { m_foo = foo; }
+
+         private:
+          int m_foo;
+   	};
+   
 * Naming > Constant Names:
 
    Google uses kSomeThing for constants.  We prefer SOME_THING.
@@ -69,7 +83,11 @@ the code origin isn't reflected by the git history.
    - Always use newline following if:
 
         if (foo)
-          bar;         // okay
+          bar;         // okay, but discouraged...
+
+        if (foo) {
+          bar;         // this is better!
+        }
 
         if (foo) bar;  // no, usually harder to parse visually
 
