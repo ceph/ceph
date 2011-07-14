@@ -385,8 +385,6 @@ struct req_state {
 
    map<string, string> x_amz_map;
 
-   vector<pair<string, string> > x_amz_meta;
-
    RGWUserInfo user; 
    RGWAccessControlPolicy *acl;
 
