@@ -167,6 +167,7 @@ public:
   void reinit(char **envp);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
+  bool get_bool(const char *name, bool def_val = 0);
   size_t get_size(const char *name, size_t def_val = 0);
 };
 

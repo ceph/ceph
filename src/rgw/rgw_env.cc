@@ -54,6 +54,16 @@ int RGWEnv::get_int(const char *name, int def_val)
   return atoi(s);  
 }
 
+bool RGWEnv::get_bool(const char *name, bool def_val)
+{
+  map<string, string>::iterator iter = env_map.find(name);
+  if (iter == env_map.end())
+    return def_val;
+
+  const char *s = iter->second.c_str();
+  return rgw_str_to_bool(s, def_val);
+}
+
 size_t RGWEnv::get_size(const char *name, size_t def_val)
 {
   map<string, string>::iterator iter = env_map.find(name);
@@ -68,5 +78,5 @@ void RGWConf::init(RGWEnv *env)
 {
   max_cache_lru = env->get_size("RGW_MAX_CACHE_LRU", 10000);
   log_level = env->get_int("RGW_LOG_LEVEL", g_conf->rgw_log);
-  should_log = env->get_int("RGW_SHOULD_LOG", RGW_SHOULD_LOG_DEFAULT);
+  should_log = env->get_bool("RGW_SHOULD_LOG", RGW_SHOULD_LOG_DEFAULT);
 }

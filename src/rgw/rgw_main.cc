@@ -94,7 +94,7 @@ int main(int argc, const char **argv)
 
     struct req_state *s = new req_state;
 
-    RGWOp *op;
+    RGWOp *op = NULL;
     int init_error = 0;
     RGWHandler *handler = rest.get_handler(s, &fcgx, &init_error);
     int ret;
