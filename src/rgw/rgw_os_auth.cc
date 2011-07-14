@@ -170,7 +170,7 @@ done:
   end_header(s);
 }
 
-bool RGWHandler_OS_Auth::authorize(struct req_state *s)
+bool RGWHandler_OS_Auth::authorize()
 {
   return true;
 }
@@ -190,5 +190,9 @@ RGWOp *RGWHandler_OS_Auth::get_op()
     op->init(s);
   }
   return op;
+}
+
+void RGWHandler_OS_Auth::put_op(RGWOp *op)
+{
 }
 

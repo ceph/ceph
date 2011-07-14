@@ -440,7 +440,8 @@ struct req_state {
 
    int pool_id;
 
-   req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL) {}
+   req_state();
+   ~req_state();
 };
 
 /** Store basic data on an object */

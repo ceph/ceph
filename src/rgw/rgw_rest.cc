@@ -12,16 +12,6 @@
 #include "rgw_formats.h"
 
 
-
-static RGWHandler_REST_S3 rgwhandler_s3;
-static RGWHandler_REST_OS rgwhandler_os;
-static RGWHandler_OS_Auth rgwhandler_os_auth;
-
-static RGWFormatter_Plain formatter_plain;
-static RGWFormatter_XML formatter_xml;
-static RGWFormatter_JSON formatter_json;
-
-
 static void dump_status(struct req_state *s, const char *status)
 {
   CGI_PRINTF(s,"Status: %s\n", status);
@@ -393,7 +383,7 @@ void init_entities_from_header(struct req_state *s)
 
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;
-  s->formatter = &formatter_xml;
+  s->formatter = new RGWFormatter_XML;
 
   int pos;
   if (s->host) {
@@ -453,14 +443,14 @@ void init_entities_from_header(struct req_state *s)
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     s->format = 0;
-    s->formatter = &formatter_plain;
+    s->formatter = new RGWFormatter_Plain;
     string format_str = s->args.get("format");
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
-      s->formatter = &formatter_xml;
+      s->formatter = new RGWFormatter_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
-      s->formatter = &formatter_json;
+      s->formatter = new RGWFormatter_JSON;
     }
   }
 
@@ -674,10 +664,11 @@ static int validate_object_name(const char *object)
   return 0;
 }
 
-int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
+int RGWHandler_REST::init(struct req_state *s, struct fcgx_state *fcgx)
 {
-  int ret = 0;
-  RGWHandler::init_state(s, fcgx);
+  int ret = RGWHandler::init(s, fcgx);
+  if (ret < 0)
+    return ret;
 
   s->path_name = rgw_env.get("SCRIPT_NAME");
   s->path_name_url = rgw_env.get("REQUEST_URI");
@@ -744,7 +735,7 @@ int RGWHandler_REST::read_permissions()
   case OP_PUT:
   case OP_POST:
     /* is it a 'create bucket' request? */
-    if (is_acl_op(s)) {
+    if (is_acl_op()) {
       only_bucket = false;
       break;
     }
@@ -765,19 +756,19 @@ RGWOp *RGWHandler_REST::get_op()
   RGWOp *op;
   switch (s->op) {
    case OP_GET:
-     op = get_retrieve_op(s, true);
+     op = get_retrieve_op(true);
      break;
    case OP_PUT:
-     op = get_create_op(s);
+     op = get_create_op();
      break;
    case OP_DELETE:
-     op = get_delete_op(s);
+     op = get_delete_op();
      break;
    case OP_HEAD:
-     op = get_retrieve_op(s, false);
+     op = get_retrieve_op(false);
      break;
    case OP_POST:
-     op = get_post_op(s);
+     op = get_post_op();
      break;
    default:
      return NULL;
@@ -790,22 +781,39 @@ RGWOp *RGWHandler_REST::get_op()
 }
 
 
-RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx,
-					  int *init_error)
+RGWRESTMgr::RGWRESTMgr()
+{
+  m_os_handler = new RGWHandler_REST_OS;
+  m_os_auth_handler = new RGWHandler_OS_Auth;
+  m_s3_handler = new RGWHandler_REST_S3;
+}
+
+RGWRESTMgr::~RGWRESTMgr()
+{
+  delete m_os_handler;
+  delete m_os_auth_handler;
+  delete m_s3_handler;
+}
+
+RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, struct fcgx_state *fcgx,
+				    int *init_error)
 {
   RGWHandler *handler;
 
-  *init_error = init_rest(s, fcgx);
-
   if (s->prot_flags & RGW_REST_OPENSTACK)
-    handler = &rgwhandler_os;
+    handler = m_os_handler;
   else if (s->prot_flags & RGW_REST_OPENSTACK_AUTH)
-    handler = &rgwhandler_os_auth;
+    handler = m_os_auth_handler;
   else
-    handler = &rgwhandler_s3;
+    handler = m_s3_handler;
 
-  handler->set_state(s);
+  *init_error = handler->init(s, fcgx);
 
   return handler;
+}
+
+void RGWHandler_REST::put_op(RGWOp *op)
+{
+  delete op;
 }
 

@@ -56,7 +56,6 @@ static void godown_alarm(int signum)
  */
 int main(int argc, const char **argv)
 {
-  struct req_state s;
   struct fcgx_state fcgx;
 
   curl_global_init(CURL_GLOBAL_ALL);
@@ -87,33 +86,37 @@ int main(int argc, const char **argv)
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
+  RGWRESTMgr rest;
+
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
     rgw_env.reinit(fcgx.envp);
 
+    struct req_state *s = new req_state;
+
     RGWOp *op;
     int init_error = 0;
-    RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx, &init_error);
+    RGWHandler *handler = rest.get_handler(s, &fcgx, &init_error);
     int ret;
     
     if (init_error != 0) {
-      abort_early(&s, init_error);
+      abort_early(s, init_error);
       goto done;
     }
 
-    if (!handler->authorize(&s)) {
+    if (!handler->authorize()) {
       RGW_LOG(10) << "failed to authorize request" << dendl;
-      abort_early(&s, -EPERM);
+      abort_early(s, -EPERM);
       goto done;
     }
-    if (s.user.suspended) {
-      RGW_LOG(10) << "user is suspended, uid=" << s.user.user_id << dendl;
-      abort_early(&s, -ERR_USER_SUSPENDED);
+    if (s->user.suspended) {
+      RGW_LOG(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+      abort_early(s, -ERR_USER_SUSPENDED);
       goto done;
     }
     ret = handler->read_permissions();
     if (ret < 0) {
-      abort_early(&s, ret);
+      abort_early(s, ret);
       goto done;
     }
 
@@ -121,19 +124,22 @@ int main(int argc, const char **argv)
     if (op) {
       ret = op->verify_permission();
       if (ret < 0) {
-        abort_early(&s, ret);
+        abort_early(s, ret);
         goto done;
       }
 
-      if (s.expect_cont)
-        dump_continue(&s);
+      if (s->expect_cont)
+        dump_continue(s);
 
       op->execute();
     } else {
-      abort_early(&s, -ERR_METHOD_NOT_ALLOWED);
+      abort_early(s, -ERR_METHOD_NOT_ALLOWED);
     }
 done:
-    rgw_log_op(&s);
+    rgw_log_op(s);
+
+    handler->put_op(op);
+    delete s;
   }
   return 0;
 }

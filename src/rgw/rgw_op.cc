@@ -1378,12 +1378,12 @@ done:
   send_response();
 }
 
-void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
+int RGWHandler::init(struct req_state *_s, struct fcgx_state *fcgx)
 {
+  s = _s;
+
   if (rgwconf->log_level >= 0)
     g_conf->rgw_log = rgwconf->log_level;
-
-  s->should_log = rgwconf->should_log;
 
   if (g_conf->rgw_log >= 20) {
     char *p;
@@ -1392,24 +1392,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
     }
   }
   s->fcgx = fcgx;
-  s->content_started = false;
-  s->err.clear();
-  s->format = 0;
-  if (s->acl) {
-     delete s->acl;
-     s->acl = new RGWAccessControlPolicy;
-  }
-  s->canned_acl.clear();
-  s->expect_cont = false;
-
-  free(s->os_user);
-  free(s->os_groups);
-  s->os_auth_token = NULL;
-  s->os_user = NULL;
-  s->os_groups = NULL;
-  s->time = ceph_clock_now(g_ceph_context);
-  s->user.clear();
-  s->perm_mask = 0;
+  return 0;
 }
 
 int RGWHandler::do_read_permissions(bool only_bucket)

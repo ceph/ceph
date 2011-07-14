@@ -6,6 +6,7 @@
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
 #include "common/errno.h"
+#include "common/Clock.h"
 #include "auth/Crypto.h"
 
 using namespace ceph::crypto;
@@ -40,6 +41,29 @@ bool rgw_err::
 is_err() const
 {
   return (http_ret != 200 && http_ret != 204);
+}
+
+
+req_state::req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL)
+{
+  should_log = rgwconf->should_log;
+  content_started = false;
+  format = 0;
+  acl = new RGWAccessControlPolicy;
+  expect_cont = false;
+
+  os_auth_token = NULL;
+  os_user = NULL;
+  os_groups = NULL;
+  time = ceph_clock_now(g_ceph_context);
+  perm_mask = 0;
+}
+
+req_state::~req_state() {
+  delete acl;
+  delete formatter;
+  free(os_user);
+  free(os_groups);
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)

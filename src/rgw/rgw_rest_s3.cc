@@ -401,76 +401,77 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   s->formatter->flush(s);
 }
 
-RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(bool get_data)
 {
-  if (is_acl_op(s)) {
-    return &get_acls_op;
+  if (is_acl_op()) {
+    return new RGWGetACLs_REST_S3;
   }
   if (s->object) {
-    get_obj_op.set_get_data(get_data);
-    return &get_obj_op;
+    RGWGetObj_REST_S3 *get_obj_op = new RGWGetObj_REST_S3;
+    get_obj_op->set_get_data(get_data);
+    return get_obj_op;
   } else if (!s->bucket) {
     return NULL;
   }
 
   if (s->args.exists("uploads"))
-    return &list_bucket_multiparts;
+    return new RGWListBucketMultiparts_REST_S3;
 
-  return &list_bucket_op;
+  return new RGWListBucket_REST_S3;
 }
 
-RGWOp *RGWHandler_REST_S3::get_retrieve_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST_S3::get_retrieve_op(bool get_data)
 {
   if (s->bucket) {
-    if (is_acl_op(s)) {
-      return &get_acls_op;
+    if (is_acl_op()) {
+      return new RGWGetACLs_REST_S3;
     } else if (s->args.exists("uploadId")) {
-      return &list_multipart;
+      return new RGWListMultipart_REST_S3;
     }
-    return get_retrieve_obj_op(s, get_data);
+    return get_retrieve_obj_op(get_data);
   }
 
-  return &list_buckets_op;
+  return new RGWListBuckets_REST_S3;
 }
 
-RGWOp *RGWHandler_REST_S3::get_create_op(struct req_state *s)
+RGWOp *RGWHandler_REST_S3::get_create_op()
 {
-  if (is_acl_op(s)) {
-    return &put_acls_op;
+  if (is_acl_op()) {
+    return new RGWPutACLs_REST_S3;
   } else if (s->object) {
     if (!s->copy_source)
-      return &put_obj_op;
+      return new RGWPutObj_REST_S3;
     else
-      return &copy_obj_op;
+      return new RGWCopyObj_REST_S3;
   } else if (s->bucket) {
-    return &create_bucket_op;
+    return new RGWCreateBucket_REST_S3;
   }
 
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_S3::get_delete_op(struct req_state *s)
+RGWOp *RGWHandler_REST_S3::get_delete_op()
 {
   string upload_id = s->args.get("uploadId");
 
   if (s->object) {
     if (upload_id.empty())
-      return &delete_obj_op;
+      return new RGWDeleteObj_REST_S3;
     else
-      return &abort_multipart;
+      return new RGWAbortMultipart_REST_S3;
   } else if (s->bucket)
-    return &delete_bucket_op;
+    return new RGWDeleteBucket_REST_S3;
 
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_S3::get_post_op(struct req_state *s)
+RGWOp *RGWHandler_REST_S3::get_post_op()
 {
   if (s->object) {
     if (s->args.exists("uploadId"))
-      return &complete_multipart;
+      return new RGWCompleteMultipart_REST_S3;
     else
-      return &init_multipart;
+      return new RGWInitMultipart_REST_S3;
   }
 
   return NULL;
@@ -567,7 +568,7 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
-bool RGWHandler_REST_S3::authorize(struct req_state *s)
+bool RGWHandler_REST_S3::authorize()
 {
   bool qsr = false;
   string auth_id;
