@@ -72,12 +72,12 @@ def lock_machines(ctx, config):
     finally:
         if not ctx.keep_locked_on_error or ctx.summary.get('success', False):
             log.info('Unlocking machines...')
-            for machine in ctx.config['targets']:
+            for machine in ctx.config['targets'].iterkeys():
                 lock.unlock(ctx, machine, ctx.owner)
 
 def check_lock(ctx, config):
     log.info('Checking locks...')
-    for machine in ctx.config['targets']:
+    for machine in ctx.config['targets'].iterkeys():
         status = lock.get_status(ctx, machine)
         log.debug('machine status is %s', repr(status))
         assert status is not None, \
@@ -98,7 +98,7 @@ def connect(ctx, config):
     import orchestra.cluster
 
     remotes = [remote.Remote(name=t, ssh=connection.connect(t))
-               for t in ctx.config['targets']]
+               for t, key in ctx.config['targets'].iteritems()]
     ctx.cluster = orchestra.cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):

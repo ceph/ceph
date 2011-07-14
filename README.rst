@@ -45,8 +45,9 @@ Test configuration
 
 An integration test run takes three items of configuration:
 
-- ``targets``: what hosts to run on; this is a list of entries like
-  "username@hostname.example.com"
+- ``targets``: what hosts to run on; this is a dictionary mapping
+  hosts to ssh host keys, like:
+  "username@hostname.example.com: ssh-rsa long_hostkey_here"
 - ``roles``: how to use the hosts; this is a list of lists, where each
   entry lists all the roles to be run on a single host; for example, a
   single entry might say ``[mon.1, osd.1]``

@@ -29,7 +29,7 @@ def lock_many(ctx, num, user=None):
                                     urllib.urlencode(dict(user=user, num=num)))
     if success:
         machines = json.loads(content)
-        log.debug('locked {machines}'.format(machines=', '.join(machines)))
+        log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
         return machines
     log.warn('Could not lock %d nodes', num)
     return []
@@ -190,7 +190,7 @@ Lock, unlock, or query lock status of machines.
                 g = yaml.safe_load_all(f)
                 for new in g:
                     if 'targets' in new:
-                        for t in new['targets']:
+                        for t in new['targets'].iterkeys():
                             machines.append(t)
         except IOError, e:
             raise argparse.ArgumentTypeError(str(e))
@@ -241,7 +241,7 @@ Lock, unlock, or query lock status of machines.
         if not result:
             ret = 1
         else:
-            machines_to_update = result
+            machines_to_update = result.keys()
             print yaml.safe_dump(dict(targets=result), default_flow_style=False)
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
@@ -310,7 +310,7 @@ to run on, or use -a to check all of them automatically.
                 g = yaml.safe_load_all(f)
                 for new in g:
                     if 'targets' in new:
-                        for t in new['targets']:
+                        for t in new['targets'].iterkeys():
                             machines.append(t)
         except IOError, e:
             raise argparse.ArgumentTypeError(str(e))
