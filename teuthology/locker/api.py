@@ -83,13 +83,17 @@ class Lock:
         while True:
             try:
                 with DB.transaction():
-                    results = list(DB.select('machine', what='name',
+                    results = list(DB.select('machine', what='name, sshpubkey',
                                              where='locked = false and up = true',
                                              limit=num))
                     if len(results) < num:
                         raise web.HTTPError(status='503 Service Unavailable')
-                    names = [row.name for row in results]
-                    num_locked = DB.update('machine', where=web.db.sqlors('name = ', names),
+                    name_keys = {}
+                    for row in results:
+                        name_keys[row.name] = row.sshpubkey
+                    num_locked = DB.update('machine',
+                                           where=web.db.sqlors('name = ',
+                                                               name_keys.keys()),
                                            locked=True,
                                            locked_by=user,
                                            locked_since=web.db.SQLLiteral('NOW()'))
@@ -103,4 +107,4 @@ class Lock:
                 break
 
         web.header('Content-type', 'text/json')
-        return json.dumps(names)
+        return json.dumps(name_keys)
