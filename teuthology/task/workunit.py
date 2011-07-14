@@ -2,7 +2,7 @@ import logging
 import os
 
 from teuthology import misc as teuthology
-from teuthology import parallel
+from teuthology.parallel import parallel
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -43,8 +43,9 @@ def task(ctx, config):
                 ],
             )
 
-    args = [[ctx, role, tests] for role, tests in config.iteritems()]
-    parallel.run(_run_tests, args)
+    with parallel() as p:
+        for role, tests in config.iteritems():
+            p.spawn(_run_tests, ctx, role, tests)
 
 def _run_tests(ctx, role, tests):
     assert isinstance(role, basestring)

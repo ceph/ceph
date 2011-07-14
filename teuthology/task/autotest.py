@@ -3,7 +3,7 @@ import logging
 import os
 
 from teuthology import misc as teuthology
-from teuthology import parallel
+from teuthology.parallel import parallel
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -29,8 +29,10 @@ def task(ctx, config):
     assert isinstance(config, dict)
 
     log.info('Setting up autotest...')
-    remotes = [ctx.cluster.only(role).remotes.keys() for role in config.iterkeys()]
-    parallel.run(_download, remotes)
+    with parallel() as p:
+        for role in config.iterkeys():
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            p.spawn(_download, remote)
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.iterkeys():
@@ -53,9 +55,10 @@ def task(ctx, config):
                 ],
             )
 
-    args = [[remote, role, tests] \
-                for (remote,), (role, tests) in zip(remotes, config.iteritems())]
-    parallel.run(_run_tests, args)
+    with parallel() as p:
+        for role, tests in config.iteritems():
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            p.spawn(_run_tests, remote, role, tests)
 
 def _download(remote):
     remote.run(

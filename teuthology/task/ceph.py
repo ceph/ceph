@@ -10,7 +10,7 @@ import tempfile
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology import parallel
+from teuthology.parallel import parallel
 from orchestra import run
 
 log = logging.getLogger(__name__)
@@ -143,8 +143,9 @@ def binaries(ctx, config):
             with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
                 f.write(sha1 + '\n')
 
-        args = [[remote, ceph_bindir_url] for remote in ctx.cluster.remotes.iterkeys()]
-        parallel.run(_download_binaries, args)
+        with parallel() as p:
+            for remote in ctx.cluster.remotes.iterkeys():
+                p.spawn(_download_binaries, remote, ceph_bindir_url)
     else:
         with tempfile.TemporaryFile(prefix='teuthology-tarball-', suffix='.tgz') as tar_fp:
             tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
