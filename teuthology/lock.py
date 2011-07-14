@@ -2,6 +2,7 @@ import argparse
 import httplib2
 import json
 import logging
+import subprocess
 import urllib
 import yaml
 
@@ -67,12 +68,14 @@ def list_locks(ctx):
         return json.loads(content)
     return None
 
-def update_lock(ctx, name, description=None, status=None):
+def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
     updated = {}
     if description is not None:
         updated['desc'] = description
     if status is not None:
         updated['status'] = status
+    if sshpubkey is not None:
+        updated['sshpubkey'] = sshpubkey
 
     if updated:
         success, _ = send_request('PUT', _lock_url(ctx) + '/' + name + '?' + \
@@ -249,5 +252,101 @@ Lock, unlock, or query lock status of machines.
     if ctx.desc is not None or ctx.status is not None:
         for machine in machines_to_update:
             update_lock(ctx, machine, ctx.desc, ctx.status)
+
+    return ret
+
+def update_hostkeys():
+    parser = argparse.ArgumentParser(description="""
+Update any hostkeys that have changed. You can list specific machines
+to run on, or use -a to check all of them automatically.
+""")
+    parser.add_argument(
+        '-t', '--targets',
+        default=None,
+        help='input yaml containing targets to check',
+        )
+    parser.add_argument(
+        'machines',
+        metavar='MACHINES',
+        default=[],
+        nargs='*',
+        help='hosts to check for updated keys',
+        )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        default=False,
+        help='be more verbose',
+        )
+    parser.add_argument(
+        '-a', '--all',
+        action='store_true',
+        default=False,
+        help='update hostkeys of all machines in the db',
+        )
+
+    ctx = parser.parse_args()
+
+    loglevel = logging.ERROR
+    if ctx.verbose:
+        loglevel = logging.DEBUG
+
+    logging.basicConfig(
+        level=loglevel,
+        )
+
+    teuthology.read_config(ctx)
+
+    assert ctx.all or ctx.targets or ctx.machines, 'You must specify machines to update'
+    if ctx.all:
+        assert not ctx.targets and not ctx.machines, \
+            'You can\'t specify machines with the --all option'
+
+    machines = ctx.machines
+
+    if ctx.targets:
+        try:
+            with file(ctx.targets) as f:
+                g = yaml.safe_load_all(f)
+                for new in g:
+                    if 'targets' in new:
+                        for t in new['targets']:
+                            machines.append(t)
+        except IOError, e:
+            raise argparse.ArgumentTypeError(str(e))
+
+    locks = list_locks(ctx)
+    current_locks = {}
+    for lock in locks:
+        current_locks[lock['name']] = lock
+
+    if ctx.all:
+        machines = current_locks.keys()
+
+    for i, machine in enumerate(machines):
+        if '@' in machine:
+            _, machines[i] = machine.rsplit('@')
+
+    args = ['ssh-keyscan']
+    args.extend(machines)
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+        )
+    out, _ = p.communicate()
+    assert p.returncode == 0, 'ssh-keyscan failed'
+
+    ret = 0
+    for key_entry in out.splitlines():
+        hostname, pubkey = key_entry.split(' ', 1)
+        # TODO: separate out user
+        full_name = 'ubuntu@{host}'.format(host=hostname)
+        log.info('Checking %s', full_name)
+        assert full_name in current_locks, 'host is not in the database!'
+        if current_locks[full_name]['sshpubkey'] != pubkey:
+            log.info('New key found. Updating...')
+            if not update_lock(ctx, full_name, sshpubkey=pubkey):
+                log.error('failed to update %s!', full_name)
+                ret = 1
 
     return ret

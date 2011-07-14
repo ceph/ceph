@@ -31,6 +31,7 @@ setup(
             'teuthology-worker = teuthology.queue:worker',
             'teuthology-lock = teuthology.lock:main',
             'teuthology-schedule = teuthology.run:schedule',
+            'teuthology-updatekeys = teuthology.lock:update_hostkeys',
             ],
         },
 
