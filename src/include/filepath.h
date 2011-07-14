@@ -62,8 +62,6 @@ class filepath {
         // skip empty components unless they were introduced deliberately
         // see commit message for more detail
         bits.push_back( path.substr(off,nextslash-off) );
-        assert(encoded || bits.back().size());
-        assert(encoded || bits.back().compare("/"));
       }
       off = nextslash+1;
     }
