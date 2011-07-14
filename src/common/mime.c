@@ -27,7 +27,7 @@ int mime_encode_as_qp(const char *input, char *output, int outlen)
 		if (c == '\0') {
 			break;
 		}
-		else if ((c & 0x80) || (c == '=')) {
+		else if ((c & 0x80) || (c == '=') || (is_control_character(c))) {
 			if (outlen >= 3) {
 				snprintf(o, outlen, "=%02X", c);
 				outlen -= 3;
