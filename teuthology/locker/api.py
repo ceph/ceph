@@ -47,12 +47,15 @@ class MachineLock:
     def PUT(self, name):
         desc = web.input(desc=None)['desc']
         status = web.input(status=None)['status']
+        sshpubkey = web.input(sshpubkey=None)['sshpubkey']
 
         updated = {}
         if desc is not None:
             updated['description'] = desc
         if status is not None:
             updated['up'] = (status == 'up')
+        if sshpubkey is not None:
+            updated['sshpubkey'] = sshpubkey
 
         if not updated:
             raise web.BadRequest()
