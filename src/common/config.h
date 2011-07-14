@@ -505,7 +505,10 @@ public:
   bool  bdev_debug_check_io_overlap;
   int   bdev_fake_mb;
   int   bdev_fake_max_mb;
+
+  // rgw
   int   rgw_log;
+  bool  rgw_cache_enabled;
 };
 
 typedef enum {

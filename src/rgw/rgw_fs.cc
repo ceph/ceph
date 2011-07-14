@@ -345,7 +345,7 @@ int RGWFS::delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int RGWFS::delete_obj(std::string& id, rgw_obj& obj)
+int RGWFS::delete_obj(std::string& id, rgw_obj& obj, bool sync)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;

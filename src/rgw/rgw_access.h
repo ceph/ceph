@@ -32,6 +32,7 @@ public:
   virtual ~RGWAccess();
   /** do all necessary setup of the storage device */
   virtual int initialize(CephContext *cct) = 0;
+  virtual void finalize() {}
   /** prepare a listing of all buckets. */
   virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle) = 0;
   /** get the next bucket in the provided listing context. */
@@ -74,6 +75,10 @@ public:
     }
     return ret;
   }
+
+  virtual int init_watch() { return -ENOTSUP; }
+  virtual void finalize_watch() {}
+  virtual int distribute(bufferlist& bl) { return -ENOTSUP; }
   virtual int aio_wait(void *handle) { return -ENOTSUP; }
 
   virtual bool aio_completed(void *handle) { return false; }
@@ -123,7 +128,7 @@ public:
    * obj: name of the object to delete
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int delete_obj(std::string& id, rgw_obj& obj) = 0;
+  virtual int delete_obj(std::string& id, rgw_obj& obj, bool sync = true) = 0;
 
 /**
  * Get data about an object out of RADOS and into memory.
@@ -232,7 +237,23 @@ public:
    * with the given arguments.
    */
   static RGWAccess *init_storage_provider(const char *type, CephContext *cct);
+  static void close_storage();
   static RGWAccess *store;
+};
+
+class RGWStoreManager {
+  RGWAccess *store;
+public:
+  RGWStoreManager() : store(NULL) {}
+  ~RGWStoreManager() {
+    if (store)
+      RGWAccess::close_storage();
+  }
+  RGWAccess *init(const char *type, CephContext *cct) {
+    store = RGWAccess::init_storage_provider(type, cct);
+    return store;
+  }
+
 };
 
 #define rgwstore RGWAccess::store

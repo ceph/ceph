@@ -452,13 +452,8 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (s->bucket) {
-    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
-
-    if (ret == 0) {
-      rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
-    }
-  }
+  if (s->bucket)
+    ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
 
   send_response();
 }
@@ -1385,17 +1380,10 @@ done:
 
 void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
 {
-  /* Retrieve the loglevel from the CGI envirioment (if set) */
-  const char *cgi_env_level = FCGX_GetParam("RGW_LOG_LEVEL", fcgx->envp);
-  if (cgi_env_level != NULL) {
-    int level = atoi(cgi_env_level);
-    if (level >= 0) {
-      g_conf->rgw_log = level;
-    }
-  }
+  if (rgwconf->log_level >= 0)
+    g_conf->rgw_log = rgwconf->log_level;
 
-  const char *cgi_should_log = FCGX_GetParam("RGW_SHOULD_LOG", fcgx->envp);
-  s->should_log = rgw_str_to_bool(cgi_should_log, RGW_SHOULD_LOG_DEFAULT);
+  s->should_log = rgwconf->should_log;
 
   if (g_conf->rgw_log >= 20) {
     char *p;

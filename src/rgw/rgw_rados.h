@@ -5,6 +5,8 @@
 #include "rgw_access.h"
 #include "rgw_common.h"
 
+class RGWWatcher;
+
 class RGWRados  : public RGWAccess
 {
   /** Open the pool used as root for this gateway */
@@ -21,7 +23,14 @@ class RGWRados  : public RGWAccess
 
   int set_buckets_auid(vector<std::string>& buckets, uint64_t auid);
 
+  RGWWatcher *watcher;
+  uint64_t watch_handle;
+  librados::IoCtx root_pool_ctx;
+  librados::IoCtx control_pool_ctx;
+
 public:
+  RGWRados() : watcher(NULL), watch_handle(0) {}
+
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize(CephContext *cct);
   /** set up a bucket listing. id is ignored, handle is filled in. */
@@ -77,7 +86,7 @@ public:
   virtual int bucket_suspended(std::string& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(std::string& id, rgw_obj& src_obj);
+  virtual int delete_obj(std::string& id, rgw_obj& src_obj, bool sync);
 
   /** Get the attributes for an object.*/
   virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest);
@@ -115,6 +124,11 @@ public:
   virtual int tmap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
+
+  virtual int init_watch();
+  virtual void finalize_watch();
+  virtual int distribute(bufferlist& bl);
+  virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
 };
 
 #endif

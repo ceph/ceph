@@ -34,6 +34,8 @@ extern string rgw_root_bucket;
 
 #define RGW_ROOT_BUCKET ".rgw"
 
+#define RGW_CONTROL_BUCKET ".rgw.control"
+
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
@@ -152,6 +154,40 @@ class XMLArgs
    }
    map<string, string>& get_sub_resources() { return sub_resources; }
 };
+
+class RGWConf;
+
+class RGWEnv {
+  std::map<string, string> env_map;
+public:
+  RGWConf *conf; 
+
+  RGWEnv();
+  ~RGWEnv();
+  void reinit(char **envp);
+  const char *get(const char *name, const char *def_val = NULL);
+  int get_int(const char *name, int def_val = 0);
+  size_t get_size(const char *name, size_t def_val = 0);
+};
+
+class RGWConf {
+  friend class RGWEnv;
+protected:
+  void init(RGWEnv * env);
+public:
+  RGWConf() :
+    max_cache_lru(10000),
+    log_level(0),
+    should_log(1) {}
+
+  size_t max_cache_lru;
+  int log_level;
+  int should_log;
+};
+
+extern RGWEnv rgw_env;
+
+#define rgwconf rgw_env.conf
 
 enum http_op {
   OP_GET,
@@ -396,7 +432,7 @@ struct req_state {
 
    int prot_flags;
 
-   char *os_auth_token;
+   const char *os_auth_token;
    char *os_user;
    char *os_groups;
 
@@ -596,7 +632,25 @@ public:
     obj = obj.substr(pos + 1);
     return true;
   }
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(bucket, bl);
+    ::encode(key, bl);
+    ::encode(ns, bl);
+    ::encode(object, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(bucket, bl);
+    ::decode(key, bl);
+    ::decode(ns, bl);
+    ::decode(object, bl);
+  }
 };
+WRITE_CLASS_ENCODER(rgw_obj)
 
 inline ostream& operator<<(ostream& out, const rgw_obj o) {
   return out << o.bucket << ":" << o.object;

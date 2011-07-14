@@ -18,7 +18,18 @@ using namespace std;
 
 Rados *rados = NULL;
 
-static librados::IoCtx root_pool_ctx;
+static string notify_oid = "notify";
+
+class RGWWatcher : public librados::WatchCtx {
+  RGWRados *rados;
+public:
+  RGWWatcher(RGWRados *r) : rados(r) {}
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+    cout << "RGWWatcher::notify() opcode=" << (int)opcode << " ver=" << ver << " bl.length()=" << bl.length() << std::endl;
+    rados->watch_cb(opcode, ver, bl);
+  }
+};
+
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
@@ -40,8 +51,15 @@ int RGWRados::initialize(CephContext *cct)
    return ret;
 
   ret = open_root_pool_ctx();
+  if (ret < 0)
+    return ret;
 
   return ret;
+}
+
+void RGWRados::finalize_watch()
+{
+  control_pool_ctx.unwatch(notify_oid, watch_handle);
 }
 
 /**
@@ -58,6 +76,29 @@ int RGWRados::open_root_pool_ctx()
 
     r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
   }
+
+  return r;
+}
+
+int RGWRados::init_watch()
+{
+  int r = rados->ioctx_create(RGW_CONTROL_BUCKET, control_pool_ctx);
+  if (r == -ENOENT) {
+    r = rados->pool_create(RGW_CONTROL_BUCKET);
+    if (r < 0)
+      return r;
+
+    r = rados->ioctx_create(RGW_CONTROL_BUCKET, control_pool_ctx);
+    if (r < 0)
+      return r;
+  }
+
+  r = control_pool_ctx.create(notify_oid, false);
+  if (r < 0 && r != -EEXIST)
+    return r;
+
+  watcher = new RGWWatcher(this);
+  r = control_pool_ctx.watch(notify_oid, 0, &watch_handle, watcher);
 
   return r;
 }
@@ -478,7 +519,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   if (mtime)
     obj_stat(tmp_obj, NULL, mtime);
 
-  r = rgwstore->delete_obj(id, tmp_obj);
+  r = rgwstore->delete_obj(id, tmp_obj, false);
   if (r < 0)
     RGW_LOG(0) << "ERROR: could not remove " << tmp_obj << dendl;
 
@@ -486,7 +527,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
   return ret;
 done_err:
-  rgwstore->delete_obj(id, tmp_obj);
+  rgwstore->delete_obj(id, tmp_obj, false);
   finish_get_obj(&handle);
   return r;
 }
@@ -511,14 +552,8 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   if (r < 0)
     return r;
 
-  librados::IoCtx io_ctx;
-  r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
-  if (r < 0) {
-    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
-    return r;
-  }
-
-  r = io_ctx.remove(bucket);
+  rgw_obj obj(rgw_root_bucket, bucket);
+  r = delete_obj(id, obj, true);
   if (r < 0)
     return r;
 
@@ -549,15 +584,8 @@ int RGWRados::purge_buckets(std::string& id, vector<std::string>& buckets)
       completions.push_back(c);
     }
 
-    librados::IoCtx io_ctx;
-    r = rados->ioctx_create(RGW_ROOT_BUCKET, io_ctx);
-    if (r < 0) {
-      RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << dendl;
-      ret = r;
-      continue;
-    }
-
-    r = io_ctx.remove(bucket);
+    rgw_obj obj(rgw_root_bucket, bucket);
+    r = delete_obj(id, obj, true);
     if (r < 0) {
       RGW_LOG(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
       ret = r;
@@ -639,7 +667,7 @@ int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
+int RGWRados::delete_obj(std::string& id, rgw_obj& obj, bool sync)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -649,7 +677,15 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj)
     return r;
 
   io_ctx.locator_set_key(obj.key);
-  r = io_ctx.remove(oid);
+  if (sync) {
+    r = io_ctx.remove(oid);
+  } else {
+    ObjectOperation op;
+    op.remove();
+    librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+    r = io_ctx.aio_operate(obj.object, completion, &op, NULL);
+    completion->release();
+  }
   if (r < 0)
     return r;
 
@@ -1132,3 +1168,9 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
   return r;
 }
 
+int RGWRados::distribute(bufferlist& bl)
+{
+  RGW_LOG(0) << "sending notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
+  int r = control_pool_ctx.notify(notify_oid, 0, bl);
+  return r;
+}

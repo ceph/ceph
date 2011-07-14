@@ -215,7 +215,7 @@ protected:
   size_t len;
   off_t ofs;
   char *data;
-  char *supplied_md5_b64;
+  const char *supplied_md5_b64;
   string etag;
 
 public:

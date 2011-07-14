@@ -77,7 +77,9 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  if (!RGWAccess::init_storage_provider("rados", g_ceph_context)) {
+  RGWStoreManager store_manager;
+
+  if (!store_manager.init("rados", g_ceph_context)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
   }
@@ -87,6 +89,8 @@ int main(int argc, const char **argv)
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
+    rgw_env.reinit(fcgx.envp);
+
     RGWOp *op;
     int init_error = 0;
     RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx, &init_error);
