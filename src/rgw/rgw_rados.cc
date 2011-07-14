@@ -54,12 +54,10 @@ int RGWRados::initialize(CephContext *cct)
   if (ret < 0)
     return ret;
 
-  ret = init_watch();
-
   return ret;
 }
 
-void RGWRados::finalize()
+void RGWRados::finalize_watch()
 {
   control_pool_ctx.unwatch(notify_oid, watch_handle);
 }
@@ -1169,7 +1167,7 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
 
 int RGWRados::distribute(bufferlist& bl)
 {
-  RGW_LOG(0) << "JJJ sending notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
+  RGW_LOG(0) << "sending notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
 }

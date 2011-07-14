@@ -127,6 +127,19 @@ class RGWCache  : public T
     return normal_name(obj.bucket, obj.object);
   }
 
+  int initialize(CephContext *cct) {
+    int ret;
+    ret = T::initialize(cct);
+    if (ret < 0)
+      return ret;
+
+    ret = T::init_watch();
+    return ret;
+  }
+
+  void finalize() {
+    T::finalize_watch();
+  }
   int distribute(rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
   int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:

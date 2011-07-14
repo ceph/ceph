@@ -76,6 +76,8 @@ public:
     return ret;
   }
 
+  virtual int init_watch() { return -ENOTSUP; }
+  virtual void finalize_watch() {}
   virtual int distribute(bufferlist& bl) { return -ENOTSUP; }
   virtual int aio_wait(void *handle) { return -ENOTSUP; }
 
