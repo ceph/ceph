@@ -164,3 +164,20 @@ int check_utf8_cstr(const char *buf)
 {
 	return check_utf8(buf, strlen(buf));
 }
+
+int check_for_control_characters(const char *buf, int len)
+{
+	int i;
+	for (i = 0; i < len; ++i) {
+		unsigned char c = (unsigned char)buf[i];
+		if (((c != 0U) && (c < 0x20U)) || (c == 0x7fU)) {
+ 			return i + 1;
+		}
+	}
+	return 0;
+}
+
+int check_for_control_characters_cstr(const char *buf)
+{
+	return check_for_control_characters(buf, strlen(buf));
+}

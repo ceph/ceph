@@ -47,3 +47,20 @@ TEST(IsValidUtf8, InvalidUtf8) {
   uint8_t invalid2[] = { 0xc3, 0x28 };
   ASSERT_NE(0, check_utf8((char*)invalid2, sizeof(invalid2)));
 }
+
+TEST(HasControlChars, HasControlChars1) {
+  uint8_t has_control_chars[] = { 0x41, 0x01, 0x00 };
+  ASSERT_NE(0, check_for_control_characters_cstr((const char*)has_control_chars));
+  uint8_t has_control_chars2[] = { 0x7f, 0x41, 0x00 };
+  ASSERT_NE(0, check_for_control_characters_cstr((const char*)has_control_chars2));
+
+  char has_newline[] = "blah   blah\n";
+  ASSERT_NE(0, check_for_control_characters_cstr(has_newline));
+
+  char no_control_chars[] = "blah   blah";
+  ASSERT_EQ(0, check_for_control_characters_cstr(no_control_chars));
+
+  uint8_t validutf[] = { 0x66, 0xd1, 0x86, 0xd1, 0x9d, 0xd2, 0xa0, 0xd3,
+		       0xad, 0xd3, 0xae, 0x0 };
+  ASSERT_EQ(0, check_for_control_characters_cstr((const char*)validutf));
+}
