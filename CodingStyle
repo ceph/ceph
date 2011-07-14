@@ -69,8 +69,8 @@ by section.
 
 * Comments > File Comments:
 
-   Don't sweat it, unless the license varies from that of the project (LGPL2) or
-the code origin isn't reflected by the git history.
+   Don't sweat it, unless the license varies from that of the project
+   (LGPL2) or the code origin isn't reflected by the git history.
 
 * Formatting > Conditionals:
 
