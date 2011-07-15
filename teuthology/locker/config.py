@@ -9,7 +9,8 @@ The schema can be created with::
         locked boolean NOT NULL,
         locked_since timestamp NOT NULL DEFAULT '0000-00-00T00:00:00',
         locked_by varchar(32),
-        description TEXT,
+        description text,
+        sshpubkey text NOT NULL,
         PRIMARY KEY (name),
         INDEX (locked),
         INDEX (up));
