@@ -1,3 +1,4 @@
+import base64
 import paramiko
 
 def split_user(user_at_host):
@@ -9,13 +10,32 @@ def split_user(user_at_host):
         "Bad input to split_user: {user_at_host!r}".format(user_at_host=user_at_host)
     return user, host
 
+def create_key(keytype, key):
+    if keytype == 'ssh-rsa':
+        return paramiko.rsakey.RSAKey(data=base64.decodestring(key))
+    elif keytype == 'ssh-dss':
+        return paramiko.dsskey.DSSKey(data=base64.decodestring(key))
+    else:
+        raise ValueError('keytype must be ssh-rsa or ssh-dsa')
 
-def connect(user_at_host, _SSHClient=None):
+def connect(user_at_host, host_key=None, _SSHClient=None, _create_key=None):
     user, host = split_user(user_at_host)
     if _SSHClient is None:
         _SSHClient = paramiko.SSHClient
     ssh = _SSHClient()
-    ssh.load_system_host_keys()
+    if _create_key is None:
+        _create_key = create_key
+
+    if host_key is None:
+        ssh.load_system_host_keys()
+    else:
+        keytype, key = host_key.split(' ', 1)
+        ssh.get_host_keys().add(
+            hostname=host,
+            keytype=keytype,
+            key=_create_key(keytype, key)
+            )
+
     ssh.connect(
         hostname=host,
         username=user,

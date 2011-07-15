@@ -41,3 +41,29 @@ def test_connect():
         _SSHClient=sshclient,
         )
     assert got is ssh
+
+@nose.with_setup(fudge.clear_expectations)
+@fudge.with_fakes
+def test_connect_override_hostkeys():
+    sshclient = fudge.Fake('SSHClient')
+    ssh = sshclient.expects_call().with_args().returns_fake()
+    ssh.remember_order()
+    host_keys = fudge.Fake('HostKeys')
+    host_keys.expects('add').with_args(
+        hostname='orchestra.test.newdream.net.invalid',
+        keytype='ssh-rsa',
+        key='testkey',
+        )
+    ssh.expects('get_host_keys').with_args().returns(host_keys)
+    ssh.expects('connect').with_args(
+        hostname='orchestra.test.newdream.net.invalid',
+        username='jdoe',
+        timeout=60,
+        )
+    got = connection.connect(
+        'jdoe@orchestra.test.newdream.net.invalid',
+        host_key='ssh-rsa testkey',
+        _SSHClient=sshclient,
+        _create_key=lambda keytype, key: key,
+        )
+    assert got is ssh
