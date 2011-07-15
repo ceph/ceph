@@ -1876,42 +1876,37 @@ int FileStore::get_max_object_name_length()
   return ret;
 }
 
-
 void FileStore::start_logger(int whoami, utime_t tare)
 {
   dout(10) << "start_logger" << dendl;
   assert(!logger);
 
-  static ProfLogType fs_logtype(l_os_first, l_os_last);
-  static bool didit = false;
-  if (!didit) {
-    didit = true;
-
-    fs_logtype.add_inc(l_os_in_ops, "in_o");
-    //fs_logtype.add_inc(l_os_in_bytes, "in_b");
-    fs_logtype.add_inc(l_os_readable_ops, "or_o");
-    fs_logtype.add_inc(l_os_readable_bytes, "or_b");
-    //fs_logtype.add_inc(l_os_commit_bytes, "com_o");
-    //fs_logtype.add_inc(l_os_commit_bytes, "com_b");
-
-    fs_logtype.add_set(l_os_jq_max_ops, "jq_mo");
-    fs_logtype.add_set(l_os_jq_ops, "jq_o");
-    fs_logtype.add_inc(l_os_j_ops, "j_o");
-    fs_logtype.add_set(l_os_jq_max_bytes, "jq_mb");
-    fs_logtype.add_set(l_os_jq_bytes, "jq_b");
-    fs_logtype.add_inc(l_os_j_bytes, "j_b");
-    fs_logtype.add_set(l_os_oq_max_ops, "oq_mo");
-    fs_logtype.add_set(l_os_oq_ops, "oq_o");
-    fs_logtype.add_inc(l_os_ops, "o");
-    fs_logtype.add_set(l_os_oq_max_bytes, "oq_mb");
-    fs_logtype.add_set(l_os_oq_bytes, "oq_b");
-    fs_logtype.add_inc(l_os_bytes, "b");
-    fs_logtype.add_set(l_os_committing, "comitng");
-  }
-
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  logger = new ProfLogger(g_ceph_context, name, (ProfLogType*)&fs_logtype);
+  ProfLoggerBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
+
+  plb.add_inc(l_os_in_ops, "in_o");
+  //plb.add_inc(l_os_in_bytes, "in_b");
+  plb.add_inc(l_os_readable_ops, "or_o");
+  plb.add_inc(l_os_readable_bytes, "or_b");
+  //plb.add_inc(l_os_commit_bytes, "com_o");
+  //plb.add_inc(l_os_commit_bytes, "com_b");
+
+  plb.add_set(l_os_jq_max_ops, "jq_mo");
+  plb.add_set(l_os_jq_ops, "jq_o");
+  plb.add_inc(l_os_j_ops, "j_o");
+  plb.add_set(l_os_jq_max_bytes, "jq_mb");
+  plb.add_set(l_os_jq_bytes, "jq_b");
+  plb.add_inc(l_os_j_bytes, "j_b");
+  plb.add_set(l_os_oq_max_ops, "oq_mo");
+  plb.add_set(l_os_oq_ops, "oq_o");
+  plb.add_inc(l_os_ops, "o");
+  plb.add_set(l_os_oq_max_bytes, "oq_mb");
+  plb.add_set(l_os_oq_bytes, "oq_b");
+  plb.add_inc(l_os_bytes, "b");
+  plb.add_set(l_os_committing, "comitng");
+
+  logger = plb.create_proflogger();
   if (journal)
     journal->logger = logger;
   {

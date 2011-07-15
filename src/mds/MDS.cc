@@ -46,7 +46,6 @@
 #include "InoTable.h"
 
 #include "common/ProfLogger.h"
-#include "common/ProfLogType.h"
 
 #include "common/Timer.h"
 
@@ -187,113 +186,102 @@ MDS::~MDS() {
     messenger->destroy();
 }
 
-
 void MDS::open_logger()
 {
-  static ProfLogType mds_logtype(l_mds_first, l_mds_last);
-  static ProfLogType mdm_logtype(l_mdm_first, l_mdm_last);
+  dout(10) << "open_logger" << dendl;
+  {
+    char name[80];
+    snprintf(name, sizeof(name), "mds.%s.%llu.log",
+	     g_conf->name.get_id().c_str(),
+	     (unsigned long long) monc->get_global_id());
+    ProfLoggerBuilder mds_plb(g_ceph_context, name,
+			      l_mds_first, l_mds_last);
 
-  static bool didit = false;
-  if (!didit) {
-    didit = true;
+    mds_plb.add_inc(l_mds_req, "req");
+    mds_plb.add_inc(l_mds_reply, "reply");
+    mds_plb.add_avg(l_mds_replyl, "replyl");
+    mds_plb.add_inc(l_mds_fw, "fw");
     
-    mds_logtype.add_inc(l_mds_req, "req");
-    mds_logtype.add_inc(l_mds_reply, "reply");
-    mds_logtype.add_avg(l_mds_replyl, "replyl");
-    mds_logtype.add_inc(l_mds_fw, "fw");
-    
-    mds_logtype.add_inc(l_mds_dir_f, "dir_f");
-    mds_logtype.add_inc(l_mds_dir_c, "dir_c");
-    mds_logtype.add_inc(l_mds_dir_sp, "dir_sp");
-    mds_logtype.add_inc(l_mds_dir_ffc, "dir_ffc");
-    //mds_logtype.add_inc("mkdir");
+    mds_plb.add_inc(l_mds_dir_f, "dir_f");
+    mds_plb.add_inc(l_mds_dir_c, "dir_c");
+    mds_plb.add_inc(l_mds_dir_sp, "dir_sp");
+    mds_plb.add_inc(l_mds_dir_ffc, "dir_ffc");
+    //mds_plb.add_inc("mkdir");
 
     /*
-    mds_logtype.add_inc("newin"); // new inodes (pre)loaded
-    mds_logtype.add_inc("newt");  // inodes first touched/used
-    mds_logtype.add_inc("outt");  // trimmed touched
-    mds_logtype.add_inc("outut"); // trimmed untouched (wasted effort)
-    mds_logtype.add_avg("oututl"); // avg trim latency for untouched
+    mds_plb.add_inc("newin"); // new inodes (pre)loaded
+    mds_plb.add_inc("newt");  // inodes first touched/used
+    mds_plb.add_inc("outt");  // trimmed touched
+    mds_plb.add_inc("outut"); // trimmed untouched (wasted effort)
+    mds_plb.add_avg("oututl"); // avg trim latency for untouched
 
-    mds_logtype.add_inc("dirt1");
-    mds_logtype.add_inc("dirt2");
-    mds_logtype.add_inc("dirt3");
-    mds_logtype.add_inc("dirt4");
-    mds_logtype.add_inc("dirt5");
+    mds_plb.add_inc("dirt1");
+    mds_plb.add_inc("dirt2");
+    mds_plb.add_inc("dirt3");
+    mds_plb.add_inc("dirt4");
+    mds_plb.add_inc("dirt5");
     */
 
-    mds_logtype.add_set(l_mds_imax, "imax");
-    mds_logtype.add_set(l_mds_i, "i");
-    mds_logtype.add_set(l_mds_itop, "itop");
-    mds_logtype.add_set(l_mds_ibot, "ibot");
-    mds_logtype.add_set(l_mds_iptail, "iptail");  
-    mds_logtype.add_set(l_mds_ipin, "ipin");
-    mds_logtype.add_inc(l_mds_iex, "iex");
-    mds_logtype.add_inc(l_mds_icap, "icap");
-    mds_logtype.add_inc(l_mds_cap, "cap");
+    mds_plb.add_set(l_mds_imax, "imax");
+    mds_plb.add_set(l_mds_i, "i");
+    mds_plb.add_set(l_mds_itop, "itop");
+    mds_plb.add_set(l_mds_ibot, "ibot");
+    mds_plb.add_set(l_mds_iptail, "iptail");  
+    mds_plb.add_set(l_mds_ipin, "ipin");
+    mds_plb.add_inc(l_mds_iex, "iex");
+    mds_plb.add_inc(l_mds_icap, "icap");
+    mds_plb.add_inc(l_mds_cap, "cap");
     
-    mds_logtype.add_inc(l_mds_dis, "dis");
+    mds_plb.add_inc(l_mds_dis, "dis");
 
-    mds_logtype.add_inc(l_mds_t, "t"); 
-    mds_logtype.add_inc(l_mds_thit, "thit");
-    mds_logtype.add_inc(l_mds_tfw, "tfw");
-    mds_logtype.add_inc(l_mds_tdis, "tdis");
-    mds_logtype.add_inc(l_mds_tdirf, "tdirf");
-    mds_logtype.add_inc(l_mds_trino, "trino");
-    mds_logtype.add_inc(l_mds_tlock, "tlock");
+    mds_plb.add_inc(l_mds_t, "t"); 
+    mds_plb.add_inc(l_mds_thit, "thit");
+    mds_plb.add_inc(l_mds_tfw, "tfw");
+    mds_plb.add_inc(l_mds_tdis, "tdis");
+    mds_plb.add_inc(l_mds_tdirf, "tdirf");
+    mds_plb.add_inc(l_mds_trino, "trino");
+    mds_plb.add_inc(l_mds_tlock, "tlock");
     
-    mds_logtype.add_set(l_mds_l, "l");
-    mds_logtype.add_set(l_mds_q, "q");
-    mds_logtype.add_set(l_mds_popanyd, "popanyd");
-    mds_logtype.add_set(l_mds_popnest, "popnest");
+    mds_plb.add_set(l_mds_l, "l");
+    mds_plb.add_set(l_mds_q, "q");
+    mds_plb.add_set(l_mds_popanyd, "popanyd");
+    mds_plb.add_set(l_mds_popnest, "popnest");
     
-    mds_logtype.add_set(l_mds_sm, "sm");
-    mds_logtype.add_inc(l_mds_ex, "ex");
-    mds_logtype.add_inc(l_mds_iexp, "iexp");
-    mds_logtype.add_inc(l_mds_im, "im");
-    mds_logtype.add_inc(l_mds_iim, "iim");
-    /*
-    mds_logtype.add_inc("imex");  
-    mds_logtype.add_set("nex");
-    mds_logtype.add_set("nim");
-    */
-
-    mds_logtype.validate();
-
-    mdm_logtype.add_set(l_mdm_ino, "ino");
-    mdm_logtype.add_inc(l_mdm_inoa, "ino+");
-    mdm_logtype.add_inc(l_mdm_inos, "ino-");
-    mdm_logtype.add_set(l_mdm_dir, "dir");
-    mdm_logtype.add_inc(l_mdm_dira, "dir+");
-    mdm_logtype.add_inc(l_mdm_dirs, "dir-");
-    mdm_logtype.add_set(l_mdm_dn, "dn");
-    mdm_logtype.add_inc(l_mdm_dna, "dn+");
-    mdm_logtype.add_inc(l_mdm_dns, "dn-");
-    mdm_logtype.add_set(l_mdm_cap, "cap");
-    mdm_logtype.add_inc(l_mdm_capa, "cap+");
-    mdm_logtype.add_inc(l_mdm_caps, "cap-");
-    mdm_logtype.add_set(l_mdm_rss, "rss");
-    mdm_logtype.add_set(l_mdm_heap, "heap");
-    mdm_logtype.add_set(l_mdm_malloc, "malloc");
-    mdm_logtype.add_set(l_mdm_buf, "buf");
-    mdm_logtype.validate();
+    mds_plb.add_set(l_mds_sm, "sm");
+    mds_plb.add_inc(l_mds_ex, "ex");
+    mds_plb.add_inc(l_mds_iexp, "iexp");
+    mds_plb.add_inc(l_mds_im, "im");
+    mds_plb.add_inc(l_mds_iim, "iim");
+    logger = mds_plb.create_proflogger();
+    g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
   }
 
-  dout(10) << "open_logger" << dendl;
-
-  // open loggers
-  char name[80];
-  snprintf(name, sizeof(name), "mds.%s.%llu.log",
-	   g_conf->name.get_id().c_str(),
-           (unsigned long long) monc->get_global_id());
-  logger = new ProfLogger(cct, name, (ProfLogType*)&mds_logtype);
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
-
-  snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
-	   g_conf->name.get_id().c_str(),
-           (unsigned long long) monc->get_global_id());
-  mlogger = new ProfLogger(cct, name, (ProfLogType*)&mdm_logtype);
-  g_ceph_context->GetProfLoggerCollection()->logger_add(mlogger);
+  {
+    char name[80];
+    snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
+	     g_conf->name.get_id().c_str(),
+	     (unsigned long long) monc->get_global_id());
+    ProfLoggerBuilder mdm_plb(g_ceph_context, name,
+			      l_mdm_first, l_mdm_last);
+    mdm_plb.add_set(l_mdm_ino, "ino");
+    mdm_plb.add_inc(l_mdm_inoa, "ino+");
+    mdm_plb.add_inc(l_mdm_inos, "ino-");
+    mdm_plb.add_set(l_mdm_dir, "dir");
+    mdm_plb.add_inc(l_mdm_dira, "dir+");
+    mdm_plb.add_inc(l_mdm_dirs, "dir-");
+    mdm_plb.add_set(l_mdm_dn, "dn");
+    mdm_plb.add_inc(l_mdm_dna, "dn+");
+    mdm_plb.add_inc(l_mdm_dns, "dn-");
+    mdm_plb.add_set(l_mdm_cap, "cap");
+    mdm_plb.add_inc(l_mdm_capa, "cap+");
+    mdm_plb.add_inc(l_mdm_caps, "cap-");
+    mdm_plb.add_set(l_mdm_rss, "rss");
+    mdm_plb.add_set(l_mdm_heap, "heap");
+    mdm_plb.add_set(l_mdm_malloc, "malloc");
+    mdm_plb.add_set(l_mdm_buf, "buf");
+    mlogger = mdm_plb.create_proflogger();
+    g_ceph_context->GetProfLoggerCollection()->logger_add(mlogger);
+  }
 
   mdlog->open_logger();
   server->open_logger();

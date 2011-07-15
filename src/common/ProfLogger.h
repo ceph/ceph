@@ -115,4 +115,40 @@ class ProfLogger {
   friend class ProfLoggerCollection;
 };
 
+class ProfLoggerBuilder
+{
+public:
+  ProfLoggerBuilder(CephContext *cct, const std::string &name,
+		    int first, int last)
+      : m_cct(cct),
+        m_name(name)
+  {
+    m_plt = new ProfLogType(first, last);
+  }
+
+  void add_inc(int key, const char *name) {
+    m_plt->add_inc(key, name);
+  }
+  void add_set(int key, const char *name) {
+    m_plt->add_set(key, name);
+  }
+  void add_avg(int key, const char *name) {
+    m_plt->add_avg(key, name);
+  }
+
+  ProfLogger* create_proflogger() {
+    // TODO: remove m_plt
+    m_plt->validate();
+    return new ProfLogger(m_cct, m_name, m_plt);
+  }
+
+private:
+  ProfLoggerBuilder(const ProfLoggerBuilder &rhs);
+  ProfLoggerBuilder& operator=(const ProfLoggerBuilder &rhs);
+
+  CephContext *m_cct;
+  std::string m_name;
+  ProfLogType *m_plt;
+};
+
 #endif

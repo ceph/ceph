@@ -73,7 +73,6 @@ using namespace std;
 
 // static logger
 Mutex client_logger_lock("client_logger_lock");
-ProfLogType client_logtype(l_c_first, l_c_last);
 ProfLogger  *client_logger = 0;
 
 
@@ -306,19 +305,19 @@ void Client::init()
   
   // logger?
   client_logger_lock.Lock();
+  char s[80];
+  char hostname[80];
+  gethostname(hostname, 79);
+  snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
+  ProfLoggerBuilder plb(cct, s, l_c_first, l_c_last);
   if (client_logger == 0) {
-    client_logtype.add_inc(l_c_reply, "reply");
-    client_logtype.add_avg(l_c_lat, "lat");
-    client_logtype.add_avg(l_c_wrlat, "wrlat");
-    client_logtype.add_avg(l_c_owrlat, "owrlat");
-    client_logtype.add_avg(l_c_ordlat, "ordlat");
-    client_logtype.validate();
+    plb.add_inc(l_c_reply, "reply");
+    plb.add_avg(l_c_lat, "lat");
+    plb.add_avg(l_c_wrlat, "wrlat");
+    plb.add_avg(l_c_owrlat, "owrlat");
+    plb.add_avg(l_c_ordlat, "ordlat");
     
-    char s[80];
-    char hostname[80];
-    gethostname(hostname, 79);
-    snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-    client_logger = new ProfLogger(cct, s, &client_logtype);
+    client_logger = plb.create_proflogger();
   }
   client_logger_lock.Unlock();
 }
