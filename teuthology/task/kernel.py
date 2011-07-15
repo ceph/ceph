@@ -143,7 +143,10 @@ def reconnect(ctx, timeout):
     while True:
         for remote in list(need_reconnect):
             try:
-                remote.ssh = connection.connect(remote.name)
+                remote.ssh = connection.connect(
+                    user_at_host=remote.name,
+                    host_key=ctx.config['targets'][remote.name],
+                    )
             except socket.error as (code, description):
                 if code not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
                                 errno.EHOSTUNREACH, errno.EHOSTDOWN] or \

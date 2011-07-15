@@ -97,7 +97,8 @@ def connect(ctx, config):
     from orchestra import connection, remote
     import orchestra.cluster
 
-    remotes = [remote.Remote(name=t, ssh=connection.connect(t))
+    remotes = [remote.Remote(name=t,
+                             ssh=connection.connect(user_at_host=t, host_key=key))
                for t, key in ctx.config['targets'].iteritems()]
     ctx.cluster = orchestra.cluster.Cluster()
     if 'roles' in ctx.config:
