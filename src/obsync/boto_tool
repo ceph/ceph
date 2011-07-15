@@ -169,6 +169,13 @@ def head_obj(conn, opts):
     k = bucket.get_key(opts.obj_name)
     print k
 
+def get_obj_xattr(conn, opts):
+    print "downloading object xattr from bucket: '%s', object name: '%s'" % \
+        (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
+    k = bucket.get_key(opts.obj_name)
+    print k.metadata
+
 ########################## main ##########################
 host = None
 aws_access_key_id = None
@@ -207,6 +214,8 @@ parser.add_option("--head", action="store_true", dest="head",
     help="use the HEAD operation to find out about an object")
 parser.add_option("--putacl", dest="putacl_file", help="set XML acl from FILE")
 parser.add_option("--getacl", dest="getacl_file", help="dump XML acl into FILE")
+parser.add_option("--get-obj-xattr", action="store_true",
+    dest="get_obj_xattr", help="print the object's xattrs")
 parser.add_option("-v", "--verbose", action="store_true", dest="verbose",
     help="be verbose")
 (opts, args) = parser.parse_args()
@@ -269,6 +278,8 @@ elif opts.putacl_file:
     sys.exit(put_obj_acl(conn, opts))
 elif opts.getacl_file:
     sys.exit(get_obj_acl(conn, opts))
+elif opts.get_obj_xattr:
+    sys.exit(get_obj_xattr(conn, opts))
 elif opts.head:
     sys.exit(head_obj(conn, opts))
 else:
