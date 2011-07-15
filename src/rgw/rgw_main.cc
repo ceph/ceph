@@ -16,6 +16,7 @@
 #include "global/global_init.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/Thread.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
@@ -51,25 +52,77 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-static int rgw_req_handler()
+class RGWThread : public Thread {
+  FCGX_Request *fcgx;
+public:
+  RGWThread(FCGX_Request *_f) : fcgx(_f) {}
+  ~RGWThread() { delete fcgx; }
+  void *entry();
+};
+
+class RGWProcess {
+  vector<RGWThread *> m_threads;
+
+public:
+  RGWProcess() {}
+  void start(int num_threads);
+  void join();
+};
+
+void RGWProcess::start(int num_threads)
 {
-  FCGX_Request fcgx;
+#if 0
+  string sock = "/tmp/.radosgw.sock";
+  int s = FCGX_OpenSocket(sock.c_str(), 100);
+  if (s < 0) {
+    RGW_LOG(0) << "ERROR: FCGX_OpenSocket (" << sock << ") returned " << s << dendl;
+    return;
+  }
+#endif
+
+  for (;;) {
+    FCGX_Request *fcgx = new FCGX_Request;
+//    FCGX_InitRequest(fcgx, s, 0);
+    FCGX_InitRequest(fcgx, 0, 0);
+    int ret = FCGX_Accept_r(fcgx);
+    if (ret < 0)
+      return;
+
+    RGWThread *thread = new RGWThread(fcgx);
+    m_threads.push_back(thread);
+    thread->create();
+  }
+}
+
+void RGWProcess::join()
+{
+  vector<RGWThread *>::iterator iter;
+  for (iter = m_threads.begin(); iter != m_threads.end(); ++iter) {
+    RGWThread *thr = *iter;
+    int ret = thr->join();
+    delete thr;
+    if (ret < 0) {
+      cerr << "WARNING: thread join returned " << ret << std::endl;
+    }
+  }
+}
+
+void *RGWThread::entry()
+{
   RGWRESTMgr rest;
 
-  FCGX_InitRequest(&fcgx, 0, 0);
+  RGW_LOG(0) << "thread started thread_id=" << hex << (uint64_t)get_thread_id() << dec << dendl;
 
-  while (1) {
-    int ret = FCGX_Accept_r(&fcgx);
-    if (ret < 0)
-      return ret;
-        
-    rgw_env.reinit(fcgx.envp);
+  int ret;
+
+  {
+    rgw_env.reinit(fcgx->envp);
 
     struct req_state *s = new req_state;
 
     RGWOp *op = NULL;
     int init_error = 0;
-    RGWHandler *handler = rest.get_handler(s, &fcgx, &init_error);
+    RGWHandler *handler = rest.get_handler(s, fcgx, &init_error);
     
     if (init_error != 0) {
       abort_early(s, init_error);
@@ -112,10 +165,10 @@ done:
 
     handler->put_op(op);
     delete s;
-    FCGX_Finish_r(&fcgx);
+    FCGX_Finish_r(fcgx);
   }
 
-  return 0;
+  return NULL;
 }
 
 /*
@@ -153,9 +206,9 @@ int main(int argc, const char **argv)
     return EIO;
   }
 
-  int ret = rgw_req_handler();
-  if (ret < 0)
-    return -ret;
+  RGWProcess process;
+  process.start(20);
+  process.join();
 
   return 0;
 }
