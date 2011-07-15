@@ -5,6 +5,7 @@
 #include <string>
 #include <map>
 #include "include/types.h"
+#include "include/utime.h"
 
 enum {
   UPDATE_OBJ,
@@ -23,13 +24,16 @@ struct ObjectMetaInfo {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(size, bl);
-    ::encode(mtime, bl);
+    utime_t t(mtime, 0);
+    ::encode(t, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(size, bl);
-    ::decode(mtime, bl);
+    utime_t t;
+    ::decode(t, bl);
+    mtime = t.sec();
   }
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
