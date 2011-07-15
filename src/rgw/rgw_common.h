@@ -199,13 +199,6 @@ enum http_op {
   OP_UNKNOWN,
 };
 
-struct fcgx_state {
-   FCGX_ParamArray envp;
-   FCGX_Stream *in;
-   FCGX_Stream *out;
-   FCGX_Stream *err;
-};
-
 class RGWAccessControlPolicy;
 
 struct RGWAccessKey {
@@ -389,7 +382,7 @@ public:
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
-   struct fcgx_state *fcgx;
+   FCGX_Request *fcgx;
    http_op op;
    bool content_started;
    int format;

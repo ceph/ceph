@@ -554,7 +554,7 @@ protected:
 public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
-  virtual int init(struct req_state *_s, struct fcgx_state *fcgx);
+  virtual int init(struct req_state *_s, FCGX_Request *fcgx);
 
   virtual RGWOp *get_op() = 0;
   virtual void put_op(RGWOp *op) = 0;

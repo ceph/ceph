@@ -452,8 +452,13 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (s->bucket)
-    ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
+  if (s->bucket) {
+    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
+
+    if (ret == 0) {
+      ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, false);
+    }
+  }
 
   send_response();
 }
@@ -1378,7 +1383,7 @@ done:
   send_response();
 }
 
-int RGWHandler::init(struct req_state *_s, struct fcgx_state *fcgx)
+int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
@@ -1391,7 +1396,6 @@ int RGWHandler::init(struct req_state *_s, struct fcgx_state *fcgx)
       RGW_LOG(20) << p << dendl;
     }
   }
-  s->fcgx = fcgx;
   return 0;
 }
 

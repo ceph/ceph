@@ -143,7 +143,7 @@ public:
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
-  int init(struct req_state *s, struct fcgx_state *fcgx);
+  static int preprocess(struct req_state *s, FCGX_Request *fcgx);
   virtual bool authorize() = 0;
 };
 
@@ -159,7 +159,7 @@ class RGWRESTMgr {
 public:
   RGWRESTMgr();
   ~RGWRESTMgr();
-  RGWHandler *get_handler(struct req_state *s, struct fcgx_state *fcgx,
+  RGWHandler *get_handler(struct req_state *s, FCGX_Request *fcgx,
 			  int *init_error);
 };
 

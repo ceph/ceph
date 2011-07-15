@@ -664,12 +664,9 @@ static int validate_object_name(const char *object)
   return 0;
 }
 
-int RGWHandler_REST::init(struct req_state *s, struct fcgx_state *fcgx)
+int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 {
-  int ret = RGWHandler::init(s, fcgx);
-  if (ret < 0)
-    return ret;
-
+  s->fcgx = fcgx;
   s->path_name = rgw_env.get("SCRIPT_NAME");
   s->path_name_url = rgw_env.get("REQUEST_URI");
   int pos = s->path_name_url.find('?');
@@ -698,7 +695,7 @@ int RGWHandler_REST::init(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
-  ret = validate_bucket_name(s->bucket_str.c_str());
+  int ret = validate_bucket_name(s->bucket_str.c_str());
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());
@@ -795,10 +792,12 @@ RGWRESTMgr::~RGWRESTMgr()
   delete m_s3_handler;
 }
 
-RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, struct fcgx_state *fcgx,
+RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
 				    int *init_error)
 {
   RGWHandler *handler;
+
+  *init_error = RGWHandler_REST::preprocess(s, fcgx);
 
   if (s->prot_flags & RGW_REST_OPENSTACK)
     handler = m_os_handler;
@@ -807,7 +806,7 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, struct fcgx_state *fcgx
   else
     handler = m_s3_handler;
 
-  *init_error = handler->init(s, fcgx);
+  handler->init(s, fcgx);
 
   return handler;
 }

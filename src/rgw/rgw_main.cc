@@ -51,45 +51,18 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-/*
- * start up the RADOS connection and then handle HTTP messages as they come in
- */
-int main(int argc, const char **argv)
+static int rgw_req_handler()
 {
-  struct fcgx_state fcgx;
-
-  curl_global_init(CURL_GLOBAL_ALL);
-
-  // dout() messages will be sent to stderr, but FCGX wants messages on stdout
-  // Redirect stderr to stdout.
-  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
-  if (TEMP_FAILURE_RETRY(dup2(STDOUT_FILENO, STDERR_FILENO) < 0)) {
-    int err = errno;
-    cout << "failed to redirect stderr to stdout: " << cpp_strerror(err)
-	 << std::endl;
-    return ENOSYS;
-  }
-
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  RGWStoreManager store_manager;
-
-  if (!store_manager.init("rados", g_ceph_context)) {
-    derr << "Couldn't init storage provider (RADOS)" << dendl;
-    return EIO;
-  }
-
-  sighandler_usr1 = signal(SIGUSR1, godown_handler);
-  sighandler_alrm = signal(SIGALRM, godown_alarm);
-
+  FCGX_Request fcgx;
   RGWRESTMgr rest;
 
-  while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
-  {
+  FCGX_InitRequest(&fcgx, 0, 0);
+
+  while (1) {
+    int ret = FCGX_Accept_r(&fcgx);
+    if (ret < 0)
+      return ret;
+        
     rgw_env.reinit(fcgx.envp);
 
     struct req_state *s = new req_state;
@@ -97,7 +70,6 @@ int main(int argc, const char **argv)
     RGWOp *op = NULL;
     int init_error = 0;
     RGWHandler *handler = rest.get_handler(s, &fcgx, &init_error);
-    int ret;
     
     if (init_error != 0) {
       abort_early(s, init_error);
@@ -140,7 +112,51 @@ done:
 
     handler->put_op(op);
     delete s;
+    FCGX_Finish_r(&fcgx);
   }
+
+  return 0;
+}
+
+/*
+ * start up the RADOS connection and then handle HTTP messages as they come in
+ */
+int main(int argc, const char **argv)
+{
+  curl_global_init(CURL_GLOBAL_ALL);
+
+  // dout() messages will be sent to stderr, but FCGX wants messages on stdout
+  // Redirect stderr to stdout.
+  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  if (TEMP_FAILURE_RETRY(dup2(STDOUT_FILENO, STDERR_FILENO) < 0)) {
+    int err = errno;
+    cout << "failed to redirect stderr to stdout: " << cpp_strerror(err)
+	 << std::endl;
+    return ENOSYS;
+  }
+
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  sighandler_usr1 = signal(SIGUSR1, godown_handler);
+  sighandler_alrm = signal(SIGALRM, godown_alarm);
+
+  FCGX_Init();
+
+  RGWStoreManager store_manager;
+
+  if (!store_manager.init("rados", g_ceph_context)) {
+    derr << "Couldn't init storage provider (RADOS)" << dendl;
+    return EIO;
+  }
+
+  int ret = rgw_req_handler();
+  if (ret < 0)
+    return -ret;
+
   return 0;
 }
 
