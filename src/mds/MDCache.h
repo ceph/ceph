@@ -1142,7 +1142,7 @@ public:
   // -- namespace --
 public:
   void send_dentry_link(CDentry *dn);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr);
 protected:
   void handle_dentry_link(MDentryLink *m);
   void handle_dentry_unlink(MDentryUnlink *m);

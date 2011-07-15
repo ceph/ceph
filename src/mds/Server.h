@@ -191,7 +191,14 @@ public:
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t);    
+			    version_t);
+  void _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
+  void handle_slave_rmdir_prep(MDRequest *mdr);
+  void _rmdir_logged_witness(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
+  void handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
+  void _commit_slave_rmdir(MDRequest *mdr, int r, CDentry *dn, CDentry *straydn);
+  void do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr);
+  void _rmdir_rollback_finish(MDRequest *mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
   // rename
   void handle_client_rename(MDRequest *mdr);

@@ -2740,12 +2740,19 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       // perform rollback (and journal a rollback entry)
       // note: this will hold up the resolve a bit, until the rollback entries journal.
-      if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::LINK)
+      switch (uncommitted_slave_updates[from][*p]->origop) {
+      case ESlaveUpdate::LINK:
 	mds->server->do_link_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
-      else if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::RENAME)  
-	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);    
-      else
+	break;
+      case ESlaveUpdate::RENAME:
+	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
+	break;
+      case ESlaveUpdate::RMDIR:
+	mds->server->do_rmdir_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
+	break;
+      default:
 	assert(0);
+      }
 
       delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
@@ -9096,13 +9103,17 @@ void MDCache::handle_dentry_link(MDentryLink *m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
 {
   dout(10) << "send_dentry_unlink " << *dn << dendl;
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
        it++) {
+    // don't tell (rmdir) witnesses; they already know
+    if (mdr && mdr->more()->witnessed.count(it->first))
+      continue;
+
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
     if (straydn)
       replicate_stray(straydn, it->first, unlink->straybl);

@@ -38,6 +38,9 @@ class MMDSSlaveRequest : public Message {
   static const int OP_WRLOCKACK = -8;
   static const int OP_UNWRLOCK = 9;
 
+  static const int OP_RMDIRPREP = 10;
+  static const int OP_RMDIRPREPACK = -10;
+
   static const int OP_FINISH = 17;  
   static const int OP_COMMITTED = -18;  
 
@@ -66,6 +69,9 @@ class MMDSSlaveRequest : public Message {
     case OP_WRLOCK: return "wrlock";
     case OP_WRLOCKACK: return "wrlock_ack";
     case OP_UNWRLOCK: return "unwrlock";
+
+    case OP_RMDIRPREP: return "rmdir_prep";
+    case OP_RMDIRPREPACK: return "rmdir_prep_ack";
 
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";

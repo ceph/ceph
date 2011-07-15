@@ -54,6 +54,40 @@ struct link_rollback {
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
+/*
+ * this is only used on an empty dir with a dirfrag on a remote node.
+ * we are auth for nothing.  all we need to do is relink the directory
+ * in the hierarchy properly during replay to avoid breaking the
+ * subtree map.
+ */
+struct rmdir_rollback {
+  metareqid_t reqid;
+  dirfrag_t src_dir;
+  string src_dname;
+  dirfrag_t dest_dir;
+  string dest_dname;
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(reqid, bl);
+    ::encode(src_dir, bl);
+    ::encode(src_dname, bl);
+    ::encode(dest_dir, bl);
+    ::encode(dest_dname, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(reqid, bl);
+    ::decode(src_dir, bl);
+    ::decode(src_dname, bl);
+    ::decode(dest_dir, bl);
+    ::decode(dest_dname, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rmdir_rollback)
+
 struct rename_rollback {
   struct drec {
     dirfrag_t dirfrag;
@@ -75,7 +109,7 @@ struct rename_rollback {
       ::encode(dname, bl);
       ::encode(remote_d_type, bl);
       ::encode(old_ctime, bl);
-   } 
+    }
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
@@ -126,6 +160,8 @@ public:
   
   const static int LINK = 1;
   const static int RENAME = 2;
+  const static int RMDIR = 3;
+
   /*
    * we journal a rollback metablob that contains the unmodified metadata
    * too, because we may be updating previously dirty metadata, which 
