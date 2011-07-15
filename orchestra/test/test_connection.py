@@ -52,7 +52,7 @@ def test_connect_override_hostkeys():
     host_keys.expects('add').with_args(
         hostname='orchestra.test.newdream.net.invalid',
         keytype='ssh-rsa',
-        key='testkey',
+        key='frobnitz',
         )
     ssh.expects('get_host_keys').with_args().returns(host_keys)
     ssh.expects('connect').with_args(
@@ -60,10 +60,12 @@ def test_connect_override_hostkeys():
         username='jdoe',
         timeout=60,
         )
+    create_key = fudge.Fake('create_key')
+    create_key.expects_call().with_args('ssh-rsa', 'testkey').returns('frobnitz')
     got = connection.connect(
         'jdoe@orchestra.test.newdream.net.invalid',
         host_key='ssh-rsa testkey',
         _SSHClient=sshclient,
-        _create_key=lambda keytype, key: key,
+        _create_key=create_key,
         )
     assert got is ssh
