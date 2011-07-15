@@ -399,13 +399,6 @@ testrados_open_pools_parallel_SOURCES = \
 testrados_open_pools_parallel_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += testrados_open_pools_parallel
 
-testrados_list_parallel_SOURCES = \
-	test/system/rados_list_parallel.cc \
-	test/system/st_rados_create_pool.cc \
-	test/system/st_rados_list_objects.cc
-testrados_list_parallel_LDADD = libsystest.la librados.la
-bin_DEBUGPROGRAMS += testrados_list_parallel
-
 testrados_delete_pools_parallel_SOURCES = \
 	test/system/rados_delete_pools_parallel.cc \
 	test/system/st_rados_create_pool.cc \
