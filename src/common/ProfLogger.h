@@ -98,13 +98,13 @@ class ProfLogger {
     wrote_header_last(10000), lock(NULL) { }
   ~ProfLogger();
 
-  int64_t inc(int f, int64_t v = 1);
-  int64_t set(int f, int64_t v);
+  void inc(int f, int64_t v = 1);
+  void set(int f, int64_t v);
   int64_t get(int f);
 
-  double fset(int f, double v);
-  double finc(int f, double v);
-  double favg(int f, double v);
+  void fset(int f, double v);
+  void finc(int f, double v);
+  void favg(int f, double v);
 
   void _flush(bool need_reopen, bool need_reset, int last_flush);
 

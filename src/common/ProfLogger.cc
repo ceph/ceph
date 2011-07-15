@@ -364,67 +364,58 @@ void ProfLogger::_flush(bool need_reopen, bool need_reset, int last_flush)
 
 
 
-int64_t ProfLogger::inc(int key, int64_t v)
+void ProfLogger::inc(int key, int64_t v)
 {
   if (!cct->_conf->profiling_logger)
-    return 0;
+    return;
   lock->Lock();
   int i = type->lookup_key(key);
   vals[i] += v;
-  int64_t r = vals[i];
   lock->Unlock();
-  return r;
 }
 
-double ProfLogger::finc(int key, double v)
+void ProfLogger::finc(int key, double v)
 {
   if (!cct->_conf->profiling_logger)
-    return 0;
+    return;
   lock->Lock();
   int i = type->lookup_key(key);
   fvals[i] += v;
-  double r = fvals[i];
   lock->Unlock();
-  return r;
 }
 
-int64_t ProfLogger::set(int key, int64_t v)
+void ProfLogger::set(int key, int64_t v)
 {
   if (!cct->_conf->profiling_logger)
-    return 0;
+    return;
   lock->Lock();
   int i = type->lookup_key(key);
-  //cout << this << " set " << i << " to " << v << std::endl;
-  int64_t r = vals[i] = v;
+  vals[i] = v;
   lock->Unlock();
-  return r;
 }
 
 
-double ProfLogger::fset(int key, double v)
+void ProfLogger::fset(int key, double v)
 {
   if (!cct->_conf->profiling_logger)
-    return 0;
+    return;
   lock->Lock();
   int i = type->lookup_key(key);
-  //cout << this << " fset " << i << " to " << v << std::endl;
-  double r = fvals[i] = v;
+  fvals[i] = v;
   lock->Unlock();
-  return r;
 }
 
-double ProfLogger::favg(int key, double v)
+void ProfLogger::favg(int key, double v)
 {
   if (!cct->_conf->profiling_logger)
-    return 0;
+    return;
   lock->Lock();
   int i = type->lookup_key(key);
   vals[i]++;
-  double r = fvals[i] += v;
+  fvals[i] += v;
   if (cct->_conf->profiling_logger_calc_variance)
     vals_to_avg[i].push_back(v);
   lock->Unlock();
-  return r;
 }
 
 int64_t ProfLogger::get(int key)
