@@ -23,6 +23,7 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from optparse import OptionParser
 from sys import stderr
+import ast
 import ConfigParser
 import boto
 import os
@@ -105,12 +106,21 @@ def bucket_exists(conn, opts):
     return 0
 
 def put_obj(conn, opts):
-    print "uploading to bucket: '%s', object name: '%s'" % \
-        (opts.bucket_name, opts.obj_name)
+    if (opts.xattr == None):
+        xattr = {}
+    else:
+        xattr = ast.literal_eval(opts.xattr)
+        if not type(xattr) is dict:
+          raise "You must supply a dictionary of xattr names to xattr " + \
+            "values.  Example. \"{\"foo\" : \"bar\"}\""
+    print "uploading to bucket: '%s', object name: '%s' \
+xattr: '%s'" % (opts.bucket_name, opts.obj_name, str(xattr))
     bucket = conn.get_bucket(opts.bucket_name)
     k = Key(bucket)
     k.key = opts.obj_name
+    k.metadata = xattr
     k.set_contents_from_filename(opts.put_file)
+    return 0
 
 def put_obj_acl(conn, opts):
     print "uploading object ACL to bucket: '%s', object name: '%s'" \
@@ -170,7 +180,14 @@ def head_obj(conn, opts):
     print k
 
 def get_obj_xattr(conn, opts):
-    print "downloading object xattr from bucket: '%s', object name: '%s'" % \
+    print "downloading object xattr. bucket: '%s', object name: '%s'" % \
+        (opts.bucket_name, opts.obj_name)
+    bucket = conn.get_bucket(opts.bucket_name)
+    k = bucket.get_key(opts.obj_name)
+    print k.metadata
+
+def get_obj_xattr(conn, opts):
+    print "downloading object xattr. bucket: '%s', object name: '%s'" % \
         (opts.bucket_name, opts.obj_name)
     bucket = conn.get_bucket(opts.bucket_name)
     k = bucket.get_key(opts.obj_name)
@@ -204,6 +221,7 @@ parser.add_option("--rmbucket", action="store_true",
     dest="rmbucket", help="remove a bucket")
 parser.add_option("-o", "--object-name", dest="obj_name", help="object name")
 parser.add_option("--put", dest="put_file", help="put FILE")
+parser.add_option("--xattr", dest="xattr", help="xattrs to use")
 parser.add_option("--get", dest="get_file", help="get to FILE")
 parser.add_option("--rm", action="store_true", dest="rm", help="remove an object")
 parser.add_option("--rmobjects", action="store_true", dest="rmobjects",
