@@ -590,6 +590,7 @@ static void init_auth_info(struct req_state *s)
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
     RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
+
 }
 
 static bool looks_like_ip_address(const char *bucket)

@@ -31,6 +31,19 @@ int check_utf8(const char *buf, int len);
  */
 int check_utf8_cstr(const char *buf);
 
+/* Returns true if 'ch' is a control character.
+ * We do count newline as a control character, but not NULL.
+ */
+int is_control_character(int ch);
+
+/* Checks if a buffer contains control characters.
+ */
+int check_for_control_characters(const char *buf, int len);
+
+/* Checks if a null-terminated string contains control characters.
+ */
+int check_for_control_characters_cstr(const char *buf);
+
 #ifdef __cplusplus
 }
 #endif
