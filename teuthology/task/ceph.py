@@ -724,6 +724,9 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task ceph only supports a dictionary for configuration"
 
+    overrides = ctx.config.get('overrides', {})
+    config.update(overrides.get('ceph', {}))
+
     flavor = None
     if config.get('path'):
         # local dir precludes any other flavors
