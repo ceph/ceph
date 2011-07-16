@@ -2053,9 +2053,9 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
        *    forward from rollback snapshot */
       dout(10) << "_rollback_to deleting " << soid.oid
 	       << " and rolling back to old snap" << dendl;
-      
-      _delete_head(ctx);
-      obs.exists = true; //we're about to recreate it
+
+      if (obs.exists)
+	t.remove(coll, soid);
       
       map<string, bufferptr> attrs;
       t.clone(coll,
@@ -2066,9 +2066,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       t.setattrs(coll, soid, attrs);
       snapset.head_exists = true;
 
-      // Adjust the cached objectcontext
-      obs.oi.size = rollback_to->obs.oi.size;
-
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	snapset.clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
@@ -2078,13 +2075,25 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    ++iter)
 	overlaps.intersection_of(iter->second);
 
-      if (ctx->obs->oi.size > 0) {
+      if (obs.oi.size > 0) {
 	interval_set<uint64_t> modified;
-	modified.insert(0, ctx->obs->oi.size);
+	modified.insert(0, obs.oi.size);
 	overlaps.intersection_of(modified);
 	modified.subtract(overlaps);
 	ctx->modified_ranges.union_of(modified);
       }
+
+      // Adjust the cached objectcontext
+      if (!obs.exists) {
+	obs.exists = true; //we're about to recreate it
+	ctx->new_stats.num_objects++;
+      }
+      ctx->new_stats.num_bytes -= obs.oi.size;
+      ctx->new_stats.num_bytes -= SHIFT_ROUND_UP(obs.oi.size, 10);
+      ctx->new_stats.num_bytes += rollback_to->obs.oi.size;
+      ctx->new_stats.num_bytes += SHIFT_ROUND_UP(rollback_to->obs.oi.size, 10);
+      obs.oi.size = rollback_to->obs.oi.size;
+      snapset.head_exists = true;
     }
     put_object_context(rollback_to);
   }
