@@ -159,15 +159,16 @@ void ObjectDesc::update(const ContDesc &next) {
 
 bool ObjectDesc::check(bufferlist &to_check) {
   iterator i = begin();
+  uint64_t pos = 0;
   for (bufferlist::iterator p = to_check.begin();
        !p.end();
-       ++p, ++i) {
+       ++p, ++i, ++pos) {
     if (i.end()) {
       std::cout << "reached end of iterator first" << std::endl;
       return false;
     }
     if (*i != *p) {
-      std::cout << "incorrect buffer num layers: " << layers.size() << std::endl;
+      std::cout << "incorrect buffer at pos " << pos << std::endl;
       return false;
     }
   }

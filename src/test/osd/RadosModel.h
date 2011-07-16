@@ -72,7 +72,6 @@ public:
   Mutex state_lock;
   Cond wait_cond;
   map<int, map<string,ObjectDesc> > pool_obj_cont;
-  set<int> snaps;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
   int current_snap;
@@ -85,6 +84,9 @@ public:
   int max_in_flight;
   ContentsGenerator &cont_gen;
   int seq_num;
+  map<int,uint64_t> snaps;
+  uint64_t seq;
+  
 	
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -96,7 +98,7 @@ public:
     pool_name(pool_name),
     errors(0),
     max_in_flight(max_in_flight),
-    cont_gen(cont_gen), seq_num(0)
+    cont_gen(cont_gen), seq_num(0), seq(0)
   {
     rados.init(id);
     rados.conf_read_file("ceph.conf");
@@ -198,27 +200,28 @@ public:
   void remove_snap(int snap)
   {
     map<int, map<string,ObjectDesc> >::iterator next_iter = pool_obj_cont.find(snap);
+    assert(next_iter != pool_obj_cont.end());
     map<int, map<string,ObjectDesc> >::iterator current_iter = next_iter++;
-    if (next_iter != pool_obj_cont.end()) {
-      map<string,ObjectDesc> &current = current_iter->second;
-      map<string,ObjectDesc> &next = next_iter->second;
-      for (map<string,ObjectDesc>::iterator i = current.begin();
-	   i != current.end();
-	   ++i) {
-	if (next.count(i->first) == 0) {
-	  next.insert(pair<string,ObjectDesc>(i->first, i->second));
-	}
+    assert(current_iter != pool_obj_cont.end());
+    map<string,ObjectDesc> &current = current_iter->second;
+    map<string,ObjectDesc> &next = next_iter->second;
+    for (map<string,ObjectDesc>::iterator i = current.begin();
+	 i != current.end();
+	 ++i) {
+      if (next.count(i->first) == 0) {
+	next.insert(pair<string,ObjectDesc>(i->first, i->second));
       }
     }
-    snaps.erase(snap);
     pool_obj_cont.erase(current_iter);
+    snaps.erase(snap);
   }
 
-  void add_snap()
+  void add_snap(uint64_t snap)
   {
+    snaps[current_snap] = snap;
     current_snap++;
     pool_obj_cont[current_snap];
-    snaps.insert(current_snap - 1);
+    seq = snap;
   }
 
   void roll_back(const string &oid, int snap)
@@ -237,12 +240,13 @@ public:
   string oid;
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
+  int waiting_on;
 
   WriteOp(RadosTestContext *context, 
 	  const string &oid,
 	  TestOpStat *stat = 0) : 
     TestOp(context, stat),
-    oid(oid)
+    oid(oid), waiting_on(0)
   {}
 		
   void _begin()
@@ -263,16 +267,37 @@ public:
     }
 
     context->seq_num++;
-    context->state_lock.Unlock();
 
+    vector<uint64_t> snapset(context->snaps.size());
+    int j = 0;
+    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
+	 i != context->snaps.rend();
+	 ++i, ++j) {
+      snapset[j] = i->second;
+    }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
-    ContentsGenerator::iterator gen_pos = context->cont_gen.get_iterator(cont);
     for (interval_set<uint64_t>::iterator i = ranges.begin();
 	 i != ranges.end();
 	 ++i) {
+      ++waiting_on;
       librados::AioCompletion *completion = 
-	context->rados.aio_create_completion((void *) this, &callback, &callback);
+	context->rados.aio_create_completion((void *) this, &callback, 0);
+      waiting.insert(completion);
+    }
+    context->state_lock.Unlock();
+
+    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
+    if (r) {
+      cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
+      assert(0);
+    }
+
+    ContentsGenerator::iterator gen_pos = context->cont_gen.get_iterator(cont);
+    set<librados::AioCompletion*>::iterator l = waiting.begin();
+    for (interval_set<uint64_t>::iterator i = ranges.begin(); 
+	 i != ranges.end();
+	 ++i, ++l) {
       bufferlist to_write;
       gen_pos.seek(i.get_start());
       for (uint64_t k = 0; k != i.get_len(); ++k, ++gen_pos) {
@@ -283,37 +308,35 @@ public:
       std::cout << "Writing " << context->prefix+oid << " from " << i.get_start()
 		<< " to " << i.get_len() + i.get_start() << " ranges are " 
 		<< ranges << std::endl;
-      context->io_ctx.aio_write(context->prefix+oid, completion,
+      context->io_ctx.aio_write(context->prefix+oid, *l,
 				to_write, i.get_len(), i.get_start());
-      waiting.insert(completion);
     }
   }
 
   void _finish()
   {
     context->state_lock.Lock();
-    for (set<librados::AioCompletion *>::iterator i = waiting.begin();
-	 i != waiting.end();
-	 ) {
-      if ((*i)->is_complete() && (*i)->is_safe()) {
+    assert(!done);
+    waiting_on--;
+    if (waiting_on == 0) {
+      for (set<librados::AioCompletion *>::iterator i = waiting.begin();
+	   i != waiting.end();
+	   ) {
+	assert((*i)->is_complete());
 	if (int err = (*i)->get_return_value()) {
 	  cerr << "Error: oid " << oid << " write returned error code "
 	       << err << std::endl;
 	}
+	(*i)->release();
 	waiting.erase(i++);
-      } else {
-	++i;
       }
-    }
-
-    if (waiting.empty()) {
+      
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
       done = true;
     }
     context->state_lock.Unlock();
-	
   }
 
   bool finished()
@@ -333,6 +356,7 @@ public:
   string oid;
   bufferlist result;
   ObjectDesc old_value;
+  int snap;
   ReadOp(RadosTestContext *context, 
 	 const string &oid,
 	 TestOpStat *stat = 0) : 
@@ -344,21 +368,33 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
+    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+    } else {
+      snap = -1;
+    }
     done = 0;
     completion = context->rados.aio_create_completion((void *) this, &callback, 0);
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-    context->find_object(oid, &old_value);
+    assert(context->find_object(oid, &old_value, snap));
 
     context->state_lock.Unlock();
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
     context->io_ctx.aio_read(context->prefix+oid, completion,
 			     &result, context->cont_gen.get_length(old_value.most_recent()), 0);
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish()
   {
     context->state_lock.Lock();
+    assert(!done);
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     if (int err = completion->get_return_value()) {
@@ -380,6 +416,7 @@ public:
 	cerr << "Object " << oid << " contents " << to_check << " corrupt" << std::endl;
 	context->errors++;
       }
+      if (context->errors) assert(0);
     }
     context->kick();
     done = true;
@@ -406,13 +443,13 @@ public:
 
   void _begin()
   {
+    uint64_t snap;
+    assert(!context->io_ctx.selfmanaged_snap_create(&snap));
+
     context->state_lock.Lock();
-    context->add_snap();
+    context->add_snap(snap);
     context->state_lock.Unlock();
 
-    stringstream snap_name;
-    snap_name << context->prefix << context->current_snap - 1;
-    context->io_ctx.snap_create(snap_name.str().c_str());
     finish();
   }
 
@@ -440,12 +477,11 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
+    uint64_t snap = context->snaps[to_remove];
     context->remove_snap(to_remove);
     context->state_lock.Unlock();
 
-    stringstream snap_name;
-    snap_name << context->prefix << to_remove;
-    context->io_ctx.snap_remove(snap_name.str().c_str());
+    assert(!context->io_ctx.selfmanaged_snap_remove(snap));
     finish();
   }
 
@@ -478,11 +514,25 @@ public:
     context->state_lock.Lock();
     context->oid_in_use.insert(oid);
     context->roll_back(oid, roll_back_to);
+    uint64_t snap = context->snaps[roll_back_to];
+
+    vector<uint64_t> snapset(context->snaps.size());
+    int j = 0;
+    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
+	 i != context->snaps.rend();
+	 ++i, ++j) {
+      snapset[j] = i->second;
+    }
     context->state_lock.Unlock();
+    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
+
 	
-    stringstream snap_name;
-    snap_name << context->prefix << roll_back_to;
-    context->io_ctx.rollback(context->prefix+oid, snap_name.str().c_str());
+    int r = context->io_ctx.selfmanaged_snap_rollback(context->prefix+oid, 
+						      snap);
+    if (r) {
+      cerr << "r is " << r << std::endl;
+      assert(0);
+    }
     finish();
   }
 

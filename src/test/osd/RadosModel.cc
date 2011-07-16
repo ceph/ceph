@@ -4,6 +4,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include "include/rados/librados.h"
 #include "RadosModel.h"
 #include "TestOpStat.h"
 
@@ -21,6 +22,6 @@ void TestOp::finish()
 }
 
 void callback(librados::completion_t cb, void *arg) {
-  TestOp *op = (TestOp *) arg;
+  TestOp *op = static_cast<TestOp*>(arg);
   op->finish();
 }

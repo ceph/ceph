@@ -64,13 +64,13 @@ struct SnapTestGenerator : public TestOpGenerator
 	   << context.current_snap << std::endl;
       return new WriteOp(&context, oid, stats);
     } else if ((switchval < 45) && !context.snaps.empty()) {
-      int snap = *(rand_choose(context.snaps));
+      int snap = rand_choose(context.snaps)->first;
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "RollingBack " << oid << " to " << snap << std::endl;
       nextop = new ReadOp(&context, oid, stats);
       return new RollbackOp(&context, oid, snap);
     } else if ((switchval < 47) && !context.snaps.empty()) {
-      int snap = *(rand_choose(context.snaps));
+      int snap = rand_choose(context.snaps)->first;
       cout << "RemovingSnap " << snap << std::endl;
       return new SnapRemoveOp(&context, snap, stats);
     } else {
