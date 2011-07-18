@@ -49,3 +49,6 @@ cscope.out
 core
 /build-stamp
 /configure-stamp
+.settings
+.project
+.cproject
