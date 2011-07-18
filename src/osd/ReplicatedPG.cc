@@ -1586,8 +1586,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_CLONERANGE:
       {
-	bufferlist::iterator p = osd_op.data.begin();
-
 	if (!obs.exists) {
 	  t.touch(coll, obs.oi.soid);
 	  maybe_created = true;
@@ -1751,7 +1749,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	bufferlist::iterator ip = ibl.begin();
 	bufferlist obl;
-	bool changed = false;
 
 	dout(30) << "the update command is: \n";
 	osd_op.data.hexdump(*_dout);
@@ -1782,7 +1779,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		bufferlist data;
 		::decode(data, bp);
 		m[key] = data;
-		changed = true;
 	      }
 	      break;
 	      
@@ -1794,7 +1790,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		if (m.count(key))
 		  return -EEXIST;
 		m[key] = data;
-		changed = true;
 	      }
 	      break;
 
@@ -1802,14 +1797,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      ::decode(key, bp);
 	      if (m.count(key)) {
 		m.erase(key);
-		changed = true;
 	      }
 	      break;
 	      
 	    case CEPH_OSD_TMAP_HDR: // update header
 	      {
 		::decode(header, bp);
-		changed = true;
 	      }
 	      break;
 	      
@@ -1834,7 +1827,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
 	    ++bp;
 	    ::decode(header, bp);
-	    changed = true;
 	    dout(10) << "tmapup new header " << header.length() << dendl;
 	  }
 	  
@@ -1903,7 +1895,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    } else if (op == CEPH_OSD_TMAP_RM) {
 	      // do nothing.
 	    }
-	    changed = true;
 	  }
 
 	  // copy remaining
@@ -2223,7 +2214,6 @@ void ReplicatedPG::write_update_size_and_usage(pg_stat_t& stats, object_info_t& 
 					       uint64_t offset, uint64_t length, bool count_bytes)
 {
   if (ss.clones.size()) {
-    snapid_t newest = *ss.clones.rbegin();
     interval_set<uint64_t> ch;
     if (length)
       ch.insert(offset, length);
@@ -3834,7 +3824,6 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 {
   const sobject_t soid = op->poid;
-  const eversion_t v = op->version;
 
   dout(7) << "op_pull " << soid << " v " << op->version
           << " from " << op->get_source()

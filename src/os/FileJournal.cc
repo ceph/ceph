@@ -760,8 +760,6 @@ void FileJournal::do_write(bufferlist& bl)
 
   writing = true;
 
-  header_t old_header = header;
-
   write_lock.Unlock();
 
   dout(15) << "do_write writing " << write_pos << "~" << bl.length() 

@@ -1950,7 +1950,6 @@ void OSD::handle_notify_timeout(void *_notif)
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
   
   ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
-  pg_t pgid = notif->pgid;
   pg->do_complete_notify(notif, obc);
   pg->put_object_context(obc);
   pg->unlock();
@@ -3312,7 +3311,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
        it++) {
-    pg_t pgid = it->first;
     PG *pg = it->second;
 
     vector<int> newup, newacting;
@@ -4055,7 +4053,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   for (vector<PG::Info>::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        it++) {
-    pg_t pgid = it->pgid;
     PG *pg = 0;
 
     ObjectStore::Transaction *t;
@@ -4877,8 +4874,6 @@ void OSD::handle_op(MOSDOp *op)
 
   // ...
   throttle_op_queue();
-
-  utime_t now = ceph_clock_now(g_ceph_context);
 
   int r = init_op_flags(op);
   if (r) {
