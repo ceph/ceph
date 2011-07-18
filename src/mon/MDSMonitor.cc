@@ -156,7 +156,6 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
-  entity_addr_t addr = m->get_orig_source_inst().addr;
   int state = m->get_state();
   uint64_t gid = m->get_global_id();
   version_t seq = m->get_seq();

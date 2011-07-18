@@ -130,7 +130,6 @@ bool OSDMonitor::update_from_paxos()
 void OSDMonitor::remove_redundant_pg_temp()
 {
   dout(10) << "remove_redundant_pg_temp" << dendl;
-  bool removed = false;
 
   for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp.begin();
        p != osdmap.pg_temp.end();
@@ -141,7 +140,6 @@ void OSDMonitor::remove_redundant_pg_temp()
       if (raw_up == p->second) {
 	dout(10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
 	pending_inc.new_pg_temp[p->first].clear();
-	removed = true;
       }
     }
   }

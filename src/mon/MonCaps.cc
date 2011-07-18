@@ -110,9 +110,7 @@ bool MonCaps::parse(bufferlist::iterator& iter)
 
     bool op_allow = false;
     bool op_deny = false;
-    bool cmd_service = false;
     bool any_cmd = false;
-    bool cmd_uid = false;
     bool got_eq = false;
     list<int> services_list;
     list<int> uid_list;
@@ -123,8 +121,6 @@ bool MonCaps::parse(bufferlist::iterator& iter)
       if (init) {
         op_allow = false;
         op_deny = false;
-        cmd_service = false;
-	cmd_uid = false;
         any_cmd = false;
         got_eq = false;
         last_is_comma = false;
@@ -157,12 +153,10 @@ do { \
         } else if ((token.compare("services") == 0) ||
                    (token.compare("service") == 0)) {
           ASSERT_STATE(op_allow || op_deny);
-          cmd_service = true;
           any_cmd = true;
 	} else if (token.compare("uid") == 0) {
 	  ASSERT_STATE(op_allow || op_deny);
 	  any_cmd = true;
-	  cmd_uid = true;
 	} else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
