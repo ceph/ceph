@@ -297,7 +297,7 @@ init(const std::string &uri)
   }
   m_thread->create();
   m_shutdown_fd = pipe_wr;
-  return 0;
+  return true;
 }
 
 void ProfLoggerCollection::

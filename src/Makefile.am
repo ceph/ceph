@@ -475,6 +475,12 @@ unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
+unittest_proflogger_SOURCES = test/proflogger.cc
+unittest_proflogger_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_proflogger_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_proflogger_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_proflogger
+
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 unittest_ceph_crypto_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)

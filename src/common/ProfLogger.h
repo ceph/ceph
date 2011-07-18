@@ -24,6 +24,7 @@
 #include <vector>
 
 class ProfLoggerBuilder;
+class ProfLoggerCollectionTest;
 class CephContext;
 class Thread;
 
@@ -54,6 +55,7 @@ private:
   std::set <ProfLogger*> m_loggers;
 
   friend class ProfLogThread;
+  friend class ProfLoggerCollectionTest;
 };
 
 class ProfLogger
