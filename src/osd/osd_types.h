@@ -465,6 +465,17 @@ struct osd_stat_t {
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
+  void dump_json(ostream& o, int osd, string prefix) const {
+    o << prefix << "{ \"osd\": " << osd << ",\n"
+      << prefix << "  \"kb\": " << kb << ",\n"
+      << prefix << "  \"kb_used\": " << kb_used << ",\n"
+      << prefix << "  \"kb_avail\": " << kb_avail << ",\n"
+      << prefix << "  \"hb_in\": [" << hb_in << "],\n"
+      << prefix << "  \"hb_out\": [" << hb_out << "],\n"
+      << prefix << "  \"snap_trim_queue_len\": " << snap_trim_queue_len << ",\n"
+      << prefix << "  \"num_snap_trimming\": " << num_snap_trimming << "}";
+  }
+
   void encode(bufferlist &bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -877,6 +888,36 @@ struct pg_stat_t {
 		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
+  void dump_json(ostream& o, pg_t pgid, string prefix) const {
+    o << prefix << "{ \"pgid\": " << pgid << ",\n"
+      << prefix << "  \"version\": " << version << ",\n"
+      << prefix << "  \"reported\": " << reported << ",\n"
+      << prefix << "  \"state\": " << pg_state_string(state) << ",\n"
+      << prefix << "  \"log_start\": " << log_start << ",\n"
+      << prefix << "  \"ondisk_log_start\": " << ondisk_log_start << ",\n"
+      << prefix << "  \"created\": " << created << ",\n"
+      << prefix << "  \"parent\": " << parent << ",\n"
+      << prefix << "  \"parent_split_bits\": " << parent_split_bits << ",\n"
+      << prefix << "  \"last_scrub\": " << last_scrub << ",\n"
+      << prefix << "  \"last_scrub_stamp\": " << last_scrub_stamp << ",\n"
+      << prefix << "  \"num_bytes\": " << num_bytes << ",\n"
+      << prefix << "  \"num_kb\": " << num_kb << ",\n"
+      << prefix << "  \"num_objects\": " << num_objects << ",\n"
+      << prefix << "  \"num_object_clones\": " << num_object_clones << ",\n"
+      << prefix << "  \"num_object_copies\": " << num_object_copies << ",\n"
+      << prefix << "  \"num_objects_missing_on_primary\": " << num_objects_missing_on_primary << ",\n"
+      << prefix << "  \"num_objects_degraded\": " << num_objects_degraded << ",\n"
+      << prefix << "  \"num_objects_unfound\": " << num_objects_unfound << ",\n"
+      << prefix << "  \"log_size\": " << log_size << ",\n"
+      << prefix << "  \"ondisk_log_size\": " << ondisk_log_size << ",\n"
+      << prefix << "  \"num_read\": " << num_rd << ",\n"
+      << prefix << "  \"num_read_kb\": " << num_rd_kb << ",\n"
+      << prefix << "  \"num_write\": " << num_wr << ",\n"
+      << prefix << "  \"num_write_kb\": " << num_wr_kb << ",\n"
+      << prefix << "  \"up\": " << up << ",\n"
+      << prefix << "  \"acting\": " << acting << " }";
+  }
+
   void encode(bufferlist &bl) const {
     __u8 v = 4;
     ::encode(v, bl);
@@ -1004,6 +1045,24 @@ struct pool_stat_t {
 		  log_size(0), ondisk_log_size(0),
 		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
+
+  void dump_json(ostream& o, int pool, string prefix) const {
+    o << prefix << "{ \"pool\": " << pool << ",\n"
+      << prefix << "  \"num_bytes\": " << num_bytes << ",\n"
+      << prefix << "  \"num_kb\": " << num_kb << ",\n"
+      << prefix << "  \"num_objects\": " << num_objects << ",\n"
+      << prefix << "  \"num_object_clones\": " << num_object_clones << ",\n"
+      << prefix << "  \"num_object_copies\": " << num_object_copies << ",\n"
+      << prefix << "  \"num_objects_missing_on_primary\": " << num_objects_missing_on_primary << ",\n"
+      << prefix << "  \"num_objects_degraded\": " << num_objects_degraded << ",\n"
+      << prefix << "  \"num_objects_unfound\": " << num_objects_unfound << ",\n"
+      << prefix << "  \"log_size\": " << log_size << ",\n"
+      << prefix << "  \"ondisk_log_size\": " << ondisk_log_size << ",\n"
+      << prefix << "  \"num_read\": " << num_rd << ",\n"
+      << prefix << "  \"num_read_kb\": " << num_rd_kb << ",\n"
+      << prefix << "  \"num_write\": " << num_wr << ",\n"
+      << prefix << "  \"num_write_kb\": " << num_wr_kb << "}";
+  }
 
   void encode(bufferlist &bl) const {
     __u8 v = 3;
