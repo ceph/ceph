@@ -66,7 +66,7 @@ static int get_obj(string& bucket, string& key, bufferlist& bl)
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
   ret = rgwstore->prepare_get_obj(obj, 0, NULL, NULL, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &handle, &err);
+                                  NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 

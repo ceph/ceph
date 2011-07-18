@@ -57,6 +57,7 @@ protected:
   off_t ofs;
   size_t len;
   size_t total_len;
+  off_t start;
   off_t end;
   time_t mod_time;
   time_t lastmod;
@@ -79,6 +80,7 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
+    start = 0;
     ofs = 0;
     len = 0;
     total_len = 0;

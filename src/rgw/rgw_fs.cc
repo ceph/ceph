@@ -305,12 +305,12 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
   char *data;
   void *handle;
   off_t ofs = 0, end = -1;
-  size_t total_len;
+  size_t total_len, obj_size;
   time_t lastmod;
 
   map<string, bufferlist> attrset;
   ret = prepare_get_obj(src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
-                        if_match, if_nomatch, &total_len, &handle, err);
+                        if_match, if_nomatch, &total_len, &obj_size, &handle, err);
   if (ret < 0)
     return ret;
  
@@ -462,6 +462,7 @@ int RGWFS::prepare_get_obj(rgw_obj& obj,
             const char *if_match,
             const char *if_nomatch,
             size_t *total_size,
+            size_t *obj_size,
             void **handle,
             struct rgw_err *err)
 {
@@ -546,7 +547,10 @@ int RGWFS::prepare_get_obj(rgw_obj& obj,
 
   free(etag);
 
-  *total_size = (max_len > 0 ? max_len : 0);
+  if (total_size)
+    *total_size = (max_len > 0 ? max_len : 0);
+  if (obj_size)
+    *obj_size = size;
   r = 0;
   return r;
 

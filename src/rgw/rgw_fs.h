@@ -51,6 +51,7 @@ public:
             const char *if_match,
             const char *if_nomatch,
             size_t *size,
+            size_t *obj_size,
             void **handle,
             struct rgw_err *err);
 

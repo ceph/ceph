@@ -42,7 +42,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
     goto send_data;
 
   if (range_str)
-    dump_range(s, ofs, end);
+    dump_range(s, start, end, s->obj_size);
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);

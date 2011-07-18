@@ -471,7 +471,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   int ret, r;
   char *data;
   off_t end = -1;
-  size_t total_len;
+  size_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
   rgw_obj tmp_obj = dest_obj;
@@ -489,7 +489,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
 
   map<string, bufferlist> attrset;
   ret = prepare_get_obj(src_obj, 0, &end, &attrset,
-                mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, err);
+                mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, &handle, err);
 
   if (ret < 0)
     return ret;
@@ -792,6 +792,7 @@ int RGWRados::prepare_get_obj(rgw_obj& obj,
             const char *if_match,
             const char *if_nomatch,
             size_t *total_size,
+            size_t *obj_size,
             void **handle,
             struct rgw_err *err)
 {
@@ -888,6 +889,8 @@ int RGWRados::prepare_get_obj(rgw_obj& obj,
 
   if (total_size)
     *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
+  if (obj_size)
+    *obj_size = size;
   if (lastmod)
     *lastmod = mtime;
 

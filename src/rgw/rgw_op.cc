@@ -252,11 +252,9 @@ void RGWGetObj::execute()
 
   obj.init(s->bucket_str, s->object_str);
   ret = rgwstore->prepare_get_obj(obj, ofs, &end, &attrs, mod_ptr,
-                                  unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &s->err);
+                                  unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
     goto done;
-
-  s->obj_size = total_len;
 
   if (!get_data || ofs > end)
     goto done;
@@ -288,6 +286,7 @@ int RGWGetObj::init_common()
     int r = parse_range(range_str, ofs, end);
     if (r < 0)
       return r;
+    start = ofs;
   }
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0)
@@ -1122,7 +1121,7 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   rgw_obj obj(s->bucket_str, meta_oid, s->object_str, mp_ns);
 
   int ret = rgwstore->prepare_get_obj(obj, 0, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+                                      NULL, NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
   rgwstore->finish_get_obj(&handle);
 
   if (ret < 0)
