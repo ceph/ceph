@@ -126,16 +126,15 @@ public:
     m_plt = new ProfLogType(first, last);
   }
 
-  void add_inc(int key, const char *name) {
+  void add_u64(int key, const char *name) {
     m_plt->add_inc(key, name);
   }
-  void add_set(int key, const char *name) {
-    m_plt->add_set(key, name);
+  void add_fl(int key, const char *name) {
+    m_plt->add_inc(key, name);
   }
-  void add_avg(int key, const char *name) {
+  void add_fl_avg(int key, const char *name) {
     m_plt->add_avg(key, name);
   }
-
   ProfLogger* create_proflogger() {
     // TODO: remove m_plt
     m_plt->validate();

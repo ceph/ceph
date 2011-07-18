@@ -50,24 +50,24 @@ void MDLog::open_logger()
   snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
   ProfLoggerBuilder plb(g_ceph_context, name, l_mdl_first, l_mdl_last);
 
-  plb.add_inc(l_mdl_evadd, "evadd");
-  plb.add_inc(l_mdl_evex, "evex");
-  plb.add_inc(l_mdl_evtrm, "evtrm");
-  plb.add_set(l_mdl_ev, "ev");
-  plb.add_set(l_mdl_evexg, "evexg");
-  plb.add_set(l_mdl_evexd, "evexd");
+  plb.add_u64(l_mdl_evadd, "evadd");
+  plb.add_u64(l_mdl_evex, "evex");
+  plb.add_u64(l_mdl_evtrm, "evtrm");
+  plb.add_u64(l_mdl_ev, "ev");
+  plb.add_u64(l_mdl_evexg, "evexg");
+  plb.add_u64(l_mdl_evexd, "evexd");
 
-  plb.add_inc(l_mdl_segadd, "segadd");
-  plb.add_inc(l_mdl_segex, "segex");
-  plb.add_inc(l_mdl_segtrm, "segtrm");
-  plb.add_set(l_mdl_seg, "seg");
-  plb.add_set(l_mdl_segexg, "segexg");
-  plb.add_set(l_mdl_segexd, "segexd");
+  plb.add_u64(l_mdl_segadd, "segadd");
+  plb.add_u64(l_mdl_segex, "segex");
+  plb.add_u64(l_mdl_segtrm, "segtrm");
+  plb.add_u64(l_mdl_seg, "seg");
+  plb.add_u64(l_mdl_segexg, "segexg");
+  plb.add_u64(l_mdl_segexd, "segexd");
 
-  plb.add_set(l_mdl_expos, "expos");
-  plb.add_set(l_mdl_wrpos, "wrpos");
-  plb.add_set(l_mdl_rdpos, "rdpos");
-  plb.add_avg(l_mdl_jlat, "jlat");
+  plb.add_u64(l_mdl_expos, "expos");
+  plb.add_u64(l_mdl_wrpos, "wrpos");
+  plb.add_u64(l_mdl_rdpos, "rdpos");
+  plb.add_u64(l_mdl_jlat, "jlat");
 
   // logger
   logger = plb.create_proflogger();

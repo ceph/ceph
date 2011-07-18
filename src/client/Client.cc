@@ -311,11 +311,11 @@ void Client::init()
   snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
   ProfLoggerBuilder plb(cct, s, l_c_first, l_c_last);
   if (client_logger == 0) {
-    plb.add_inc(l_c_reply, "reply");
-    plb.add_avg(l_c_lat, "lat");
-    plb.add_avg(l_c_wrlat, "wrlat");
-    plb.add_avg(l_c_owrlat, "owrlat");
-    plb.add_avg(l_c_ordlat, "ordlat");
+    plb.add_fl_avg(l_c_reply, "reply");
+    plb.add_fl_avg(l_c_lat, "lat");
+    plb.add_fl_avg(l_c_wrlat, "wrlat");
+    plb.add_fl_avg(l_c_owrlat, "owrlat");
+    plb.add_fl_avg(l_c_ordlat, "ordlat");
     
     client_logger = plb.create_proflogger();
   }
