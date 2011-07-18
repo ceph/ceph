@@ -141,7 +141,7 @@ public:
       return oss.str();
     }
 
-    printf("MESSAGE FROM SERVER: %s\n", buffer);
+    //printf("MESSAGE FROM SERVER: %s\n", buffer);
     message->assign((const char*)buffer);
     close(socket_fd);
     return "";
@@ -164,12 +164,41 @@ TEST(ProfLogger, TeardownSetup) {
 }
 
 TEST(ProfLogger, SimpleTest) {
-
   ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ProfLoggerTestClient test_client(get_socket_path());
   std::string message;
   ASSERT_EQ("", test_client.get_message(&message));
-  ASSERT_EQ("{ }", message);
+  ASSERT_EQ("{}", message);
+}
+
+enum {
+  FAKE_PROFLOGGER1_ELEMENT_FIRST = 200,
+  FAKE_PROFLOGGER1_ELEMENT_1,
+  FAKE_PROFLOGGER1_ELEMENT_2,
+  FAKE_PROFLOGGER1_ELEMENT_3,
+  FAKE_PROFLOGGER1_ELEMENT_LAST,
+};
+
+static ProfLogger* setup_fake_proflogger1(CephContext *cct)
+{
+  ProfLoggerBuilder bld(cct, "fake_proflogger_1",
+	  FAKE_PROFLOGGER1_ELEMENT_FIRST, FAKE_PROFLOGGER1_ELEMENT_LAST);
+  bld.add_u64(FAKE_PROFLOGGER1_ELEMENT_1, "element1");
+  bld.add_fl(FAKE_PROFLOGGER1_ELEMENT_2, "element2");
+  bld.add_fl_avg(FAKE_PROFLOGGER1_ELEMENT_3, "element3");
+  return bld.create_proflogger();
+}
+
+TEST(ProfLogger, FakeProflogger1) {
+  ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
+  coll->logger_add(setup_fake_proflogger1(g_ceph_context));
+  ProfLoggerCollectionTest plct(coll);
+  ASSERT_EQ(true, plct.shutdown());
+  ASSERT_EQ(true, plct.init(get_socket_path()));
+  ProfLoggerTestClient test_client(get_socket_path());
+  std::string message;
+  ASSERT_EQ("", test_client.get_message(&message));
+  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},}", message);
 }

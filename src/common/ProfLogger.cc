@@ -259,7 +259,6 @@ private:
     {
       Mutex::Locker lck(m_parent->m_lock); // Take lock to access m_loggers
       buffer.push_back('{');
-      buffer.push_back(' ');
       for (std::set <ProfLogger*>::iterator l = m_parent->m_loggers.begin();
 	   l != m_parent->m_loggers.end(); ++l)
       {
@@ -522,13 +521,13 @@ write_json_to_buf(std::vector <char> &buffer)
     if (d->count != COUNT_DISABLED) {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "\"%s\" : { \"count\" : %" PRId64 ", "
-		  "\"sum\" : %" PRId64 " },\n", 
+	  snprintf(buf, sizeof(buf), "'%s':{'count':%" PRId64 ","
+		  "'sum':%" PRId64 "},", 
 		  data.name, data.count, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "\"%s\" : { \"count\" : %" PRId64 ", "
-		  "\"sum\" : %g },\n",
+	  snprintf(buf, sizeof(buf), "'%s':{'count':%" PRId64 ","
+		  "'sum':%g},",
 		  data.name, data.count, data.u.dbl);
 	  break;
 	default:
@@ -539,11 +538,11 @@ write_json_to_buf(std::vector <char> &buffer)
     else {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "\"%s\" : %" PRId64 ",\n",
+	  snprintf(buf, sizeof(buf), "'%s':%" PRId64 ",",
 		   data.name, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "\"%s\" : %g,\n", data.name, data.u.dbl);
+	  snprintf(buf, sizeof(buf), "'%s':%g,", data.name, data.u.dbl);
 	  break;
 	default:
 	  assert(0);
