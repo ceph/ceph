@@ -104,7 +104,7 @@ cephfs_SOURCES = cephfs.cc
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
-librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS)
+librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS) $(CRYPTO_LIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
