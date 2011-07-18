@@ -234,12 +234,10 @@ void send_observe_requests(CephToolCtx *ctx)
 {
   dout(1) << "send_observe_requests " << dendl;
 
-  bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
     MMonObserve *m = new MMonObserve(ctx->mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
     ctx->mc.send_mon_message(m);
-    sent = true;
   }
 
   registered.clear();

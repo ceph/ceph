@@ -825,7 +825,6 @@ int main(int argc, const char **argv)
   bool test = false;
   bool verbose = false;
   const char *outfn = 0;
-  bool clobber = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -851,9 +850,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
-      clobber = true;
-    } else if (CEPH_ARGPARSE_EQ("decompile", 'd')) {
+    if (CEPH_ARGPARSE_EQ("decompile", 'd')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
       decompile = true;
     } else if (CEPH_ARGPARSE_EQ("infn", 'i')) {
