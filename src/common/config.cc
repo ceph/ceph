@@ -75,39 +75,39 @@ struct ceph_file_layout g_default_file_layout = {
 #define TYCHECK(x, ty) STATIC_ASSERT(sizeof(x) == sizeof(ty))
 
 #define OPTION_OPT_STR(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, std::string), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, std::string), \
 	  OPT_STR, offsetof(struct md_config_t, name), def_val, 0, 0 }
 
 #define OPTION_OPT_ADDR(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, entity_addr_t), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, entity_addr_t), \
 	 OPT_ADDR, offsetof(struct md_config_t, name), def_val, 0, 0 }
 
 #define OPTION_OPT_LONGLONG(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, long long), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, long long), \
          OPT_LONGLONG, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_INT(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, int), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, int), \
          OPT_INT, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_BOOL(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, bool), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, bool), \
          OPT_BOOL, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_U32(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, uint32_t), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, uint32_t), \
          OPT_U32, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_U64(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, uint64_t), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, uint64_t), \
          OPT_U64, offsetof(struct md_config_t, name), 0, def_val, 0 }
 
 #define OPTION_OPT_DOUBLE(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, double), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, double), \
 	 OPT_DOUBLE, offsetof(struct md_config_t, name), 0, 0, def_val }
 
 #define OPTION_OPT_FLOAT(name, def_val) \
-       { STRINGIFY(name) + TYCHECK(g_conf->name, float), \
+       { STRINGIFY(name) + TYCHECK(md_config_t::name, float), \
 	 OPT_FLOAT, offsetof(struct md_config_t, name), 0, 0, def_val }
 
 #define OPTION(name, type, def_val) OPTION_##type(name, def_val)
@@ -573,7 +573,7 @@ parse_env()
 void md_config_t::
 parse_argv(std::vector<const char*>& args)
 {
-  // In this function, don't change any parts of g_conf directly.
+  // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
   std::string val;
@@ -858,13 +858,8 @@ set_val_from_default(const config_option *opt)
       std::string *str = (std::string *)opt->conf_ptr(this);
       *str = opt->def_str ? opt->def_str : "";
       if (expand_meta(*str)) {
-	// We don't allow metavariables in default values.  The reason for this
-	// is that default values take effect at global constructor time.  At
-	// global constructor time, we don't have valid values for $host,
-	// $name, $id and so forth. So trying to set default variables would
-	// inevitably lead to the wrong behavior.  Once g_conf is
-	// de-globalized, and we don't have to worry about global constructor
-	// time, this restriction can be eased.
+	// We current don't allow metavariables in default values at the moment.
+	// This restriction will probably be eased soon.
 	ostringstream oss;
 	oss << "found metavariables in the default value for '"
 	    << opt->name << "'. " << "metavariables cannot be "

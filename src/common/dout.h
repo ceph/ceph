@@ -18,8 +18,8 @@
 
 #include "global/global_context.h"
 #include "common/DoutStreambuf.h"
+#include "common/config.h"
 #include "common/likely.h"
-#include "common/config.h"		    // need for g_conf
 #include "include/assert.h"
 
 #include <iostream>
