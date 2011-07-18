@@ -5414,7 +5414,6 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
   CDentry::linkage_t *destdnl = destdn->get_linkage();
-  CDentry::linkage_t *straydnl = straydn ? straydn->get_linkage() : 0;
 
   CInode *oldin = destdnl->get_inode();
   
@@ -5432,7 +5431,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->get_dir()->unlink_inode(destdn);
 
       if (straydn->is_auth())
-	straydnl = straydn->pop_projected_linkage();
+	straydn->pop_projected_linkage();
       else
 	straydn->get_dir()->link_primary_inode(straydn, oldin);
 
@@ -6157,7 +6156,6 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   map<snapid_t,SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
 
-  utime_t now = ceph_clock_now(g_ceph_context);
   __u32 num = 0;
   bufferlist dnbl;
   for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();

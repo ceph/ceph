@@ -2144,7 +2144,6 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
   int op = m->get_op();
-  bool can_issue = true;
 
   // flushsnap?
   if (op == CEPH_CAP_OP_FLUSHSNAP) {
@@ -2245,8 +2244,6 @@ void Locker::handle_client_caps(MClientCaps *m)
 
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
-    if (m->get_op() == CEPH_CAP_OP_DROP)
-      can_issue = false;
       
     if (in->is_auth() &&
 	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {

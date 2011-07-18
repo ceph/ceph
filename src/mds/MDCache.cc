@@ -1835,8 +1835,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     return;
   }
 
-  inode_t *curi = in->get_projected_inode();
-
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
@@ -2061,7 +2059,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     parent->check_rstats();
     // next parent!
     cur = pin;
-    curi = pi;
     parent = parentdn->get_dir();
     linkunlink = 0;
     do_parent_mtime = false;
@@ -7380,7 +7377,6 @@ void MDCache::request_drop_locks(MDRequest *mdr)
 void MDCache::request_cleanup(MDRequest *mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
-  metareqid_t ri = mdr->reqid;
 
   request_drop_locks(mdr);
 
