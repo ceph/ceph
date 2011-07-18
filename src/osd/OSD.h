@@ -127,7 +127,6 @@ protected:
   Messenger   *client_messenger;
   MonClient   *monc;
   ProfLogger      *logger;
-  bool         logger_started;
   ObjectStore *store;
 
   // cover OSDMap update data when using multiple msgrs
@@ -151,8 +150,7 @@ protected:
   Cond dispatch_cond;
   int dispatch_running;
 
-  void open_logger();
-  void start_logger();
+  void create_logger();
   void tick();
   void _dispatch(Message *m);
 

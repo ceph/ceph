@@ -61,7 +61,7 @@ public:
     delete logger;
   }
 
-  void open_logger();
+  void create_logger();
 
   // message handler
   void dispatch(Message *m);

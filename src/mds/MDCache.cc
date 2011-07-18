@@ -85,6 +85,7 @@
 #include "common/Timer.h"
 
 #include <errno.h>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -5423,7 +5424,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       mds->logger->inc("outt");
     else {
       mds->logger->inc("outut");
-      mds->logger->favg("oututl", ceph_clock_now(g_ceph_context) - in->hack_load_stamp);
+      mds->logger->fset("oututl", ceph_clock_now(g_ceph_context) - in->hack_load_stamp);
     }
   }
   */

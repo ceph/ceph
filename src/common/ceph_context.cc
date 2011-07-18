@@ -46,7 +46,6 @@ public:
       }
       if (_reopen_logs) {
 	_cct->_doss->reopen_logs(_cct->_conf);
-	_cct->_prof_logger_collection->logger_reopen_all();
 	_reopen_logs = false;
       }
     }
@@ -79,14 +78,12 @@ CephContext(uint32_t module_type_)
     _dout(_doss),
     _module_type(module_type_),
     _service_thread(NULL),
-    _prof_logger_collection(NULL),
-    _prof_logger_conf_obs(NULL)
+    _prof_logger_collection(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
   _prof_logger_collection = new ProfLoggerCollection(this);
-  _prof_logger_conf_obs = new ProfLoggerConfObs(_prof_logger_collection);
   _conf->add_observer(_doss);
-  _conf->add_observer(_prof_logger_conf_obs);
+  _conf->add_observer(_prof_logger_collection);
 }
 
 CephContext::
@@ -94,7 +91,7 @@ CephContext::
 {
   join_service_thread();
 
-  _conf->remove_observer(_prof_logger_conf_obs);
+  _conf->remove_observer(_prof_logger_collection);
   _conf->remove_observer(_doss);
 
   delete _prof_logger_collection;

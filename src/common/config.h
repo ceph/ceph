@@ -139,11 +139,7 @@ public:
   bool daemonize;
 
   // profiling logger
-  bool profiling_logger;
-  int profiling_logger_interval;
-  bool profiling_logger_calc_variance;
-  std::string profiling_logger_subdir;
-  std::string profiling_logger_dir;
+  std::string profiling_logger_uri;
 
   std::string log_file;
   std::string log_dir;

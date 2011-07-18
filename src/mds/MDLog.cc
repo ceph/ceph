@@ -44,7 +44,7 @@ MDLog::~MDLog()
 }
 
 
-void MDLog::open_logger()
+void MDLog::create_logger()
 {
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());

@@ -48,7 +48,6 @@
 #include "include/filepath.h"
 #include "common/Timer.h"
 #include "common/ProfLogger.h"
-#include "common/ProfLogType.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -64,7 +63,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".server "
 
-void Server::open_logger()
+void Server::create_logger()
 {
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
@@ -824,7 +823,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   mds->logger->inc(l_mds_reply);
   double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-  mds->logger->favg(l_mds_replyl, lat);
+  mds->logger->fset(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
 }
 
@@ -866,7 +865,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
     mds->logger->inc(l_mds_reply);
     double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-    mds->logger->favg(l_mds_replyl, lat);
+    mds->logger->fset(l_mds_replyl, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)

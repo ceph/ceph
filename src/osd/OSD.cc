@@ -84,6 +84,7 @@
 
 #include "common/errno.h"
 
+#include <fstream>
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
@@ -406,7 +407,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
-  logger(NULL), logger_started(false),
+  logger(NULL),
   store(NULL),
   map_in_progress(false),
   clog(hbm->cct, client_messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
@@ -574,7 +575,7 @@ int OSD::init()
     return -EINVAL;
   }
 
-  open_logger();
+  create_logger();
     
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
@@ -621,9 +622,9 @@ int OSD::init()
   return 0;
 }
 
-void OSD::open_logger()
+void OSD::create_logger()
 {
-  dout(10) << "open_logger" << dendl;
+  dout(10) << "create_logger" << dendl;
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
@@ -684,20 +685,6 @@ void OSD::open_logger()
 
   logger = osd_plb.create_proflogger();
   g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
-
-  if (osdmap->get_epoch() > 0)
-    start_logger();
-}
-
-void OSD::start_logger()
-{
-  ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
-  coll->logger_tare(osdmap->get_created());
-  coll->logger_start();
-  logger_started = true;
-
-  // start the objectstore logger too
-  store->start_logger(whoami, osdmap->get_created());
 }
 
 int OSD::shutdown()
@@ -2216,10 +2203,6 @@ void OSD::handle_command(MMonCommand *m)
       clog.error() << "cannot parse pgid from command '" << m->cmd << "'\n";
 
     }
-  } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
-    g_ceph_context->GetProfLoggerCollection()->logger_reset_all();
-  } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
-    g_ceph_context->reopen_logs();
   } else if (m->cmd[0] == "heap") {
     if (ceph_using_tcmalloc())
       ceph_heap_profiler_handle_command(m->cmd, clog);
@@ -3076,9 +3059,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  (!newmap->exists(*p) || !newmap->is_up(*p)))    // but not the new one
 	note_down_osd(*p);
     
-    if (!logger_started)
-      g_ceph_context->GetProfLoggerCollection()->logger_start();
-
     osdmap = newmap;
 
     superblock.current_epoch = cur;

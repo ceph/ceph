@@ -1909,12 +1909,7 @@ void FileStore::start_logger(int whoami, utime_t tare)
   logger = plb.create_proflogger();
   if (journal)
     journal->logger = logger;
-  {
-    ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
-    coll->logger_add(logger);
-    coll->logger_tare(tare);
-    coll->logger_start();
-  }
+  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
 }
 
 void FileStore::stop_logger()

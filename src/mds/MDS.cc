@@ -186,9 +186,9 @@ MDS::~MDS() {
     messenger->destroy();
 }
 
-void MDS::open_logger()
+void MDS::create_logger()
 {
-  dout(10) << "open_logger" << dendl;
+  dout(10) << "create_logger" << dendl;
   {
     char name[80];
     snprintf(name, sizeof(name), "mds.%s.%llu.log",
@@ -283,14 +283,8 @@ void MDS::open_logger()
     g_ceph_context->GetProfLoggerCollection()->logger_add(mlogger);
   }
 
-  mdlog->open_logger();
-  server->open_logger();
-
-  {
-    ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
-    coll->logger_tare(mdsmap->get_created());
-    coll->logger_start();
-  }
+  mdlog->create_logger();
+  server->create_logger();
 }
 
 
@@ -519,7 +513,7 @@ int MDS::init(int wanted_state)
   // schedule tick
   reset_tick();
 
-  open_logger();
+  create_logger();
 
   mds_lock.Unlock();
 

@@ -873,7 +873,6 @@ noinst_HEADERS = \
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
-        common/ProfLogType.h\
         common/ProfLogger.h\
         common/MemoryModel.h\
         common/Mutex.h\

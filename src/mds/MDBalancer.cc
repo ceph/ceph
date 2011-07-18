@@ -28,6 +28,8 @@
 #include "messages/MHeartbeat.h"
 #include "messages/MMDSLoadTargets.h"
 
+#include <fstream>
+#include <iostream>
 #include <vector>
 #include <map>
 using std::map;

@@ -394,7 +394,7 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
   if (logger) {
     utime_t lat = ceph_clock_now(cct);
     lat -= stamp;
-    logger->favg(logger_key_lat, lat);
+    logger->fset(logger_key_lat, lat);
   }
 
   // adjust safe_pos

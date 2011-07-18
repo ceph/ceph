@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -13,141 +13,120 @@
  */
 
 
-#ifndef CEPH_LOGGER_H
-#define CEPH_LOGGER_H
+#ifndef CEPH_PROF_LOG_H
+#define CEPH_PROF_LOG_H
 
-#include "common/config.h"
-#include "common/Clock.h"
-#include "common/ProfLogType.h"
-#include "common/Timer.h"
-#include "include/types.h"
+#include "common/config_obs.h"
+#include "common/Mutex.h"
 
+#include <stdint.h>
 #include <string>
-#include <fstream>
 #include <vector>
 
-class ProfLogger;
+class ProfLoggerBuilder;
+class CephContext;
+class Thread;
 
-class ProfLoggerCollection
+/*
+ * ProfLog manages the profiler logging for a Ceph process.
+ */
+class ProfLoggerCollection : public md_config_obs_t
 {
 public:
-  ProfLoggerCollection(CephContext *cct_);
+  ProfLoggerCollection(CephContext *cct);
   ~ProfLoggerCollection();
-  void logger_reopen_all();
-  void logger_reset_all();
-  void logger_add(class ProfLogger *l);
-  void logger_remove(class ProfLogger *l);
-  void flush_all_loggers();
-  void logger_tare(utime_t when);
-  void logger_start();
-private:
-  Mutex lock; // big lock.  lame, but this way I protect ProfLogType too!
-  SafeTimer logger_timer;
-  Context *logger_event;
-  list<ProfLogger*> logger_list;
-  utime_t start;
-  int last_flush; // in seconds since start
-  bool need_reopen;
-  bool need_reset;
-  CephContext *cct;
-};
-
-class ProfLoggerConfObs : public md_config_obs_t {
-public:
-  ProfLoggerConfObs(ProfLoggerCollection *coll_);
-  ~ProfLoggerConfObs();
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const md_config_t *conf,
 			  const std::set <std::string> &changed);
+  void logger_add(class ProfLogger *l);
+  void logger_remove(class ProfLogger *l);
 private:
-  ProfLoggerCollection *coll;
+  bool init(const std::string &uri);
+  void shutdown();
+
+  CephContext *m_cct;
+  Thread* m_thread;
+
+  /** Protects m_loggers */
+  Mutex m_lock;
+
+  int m_shutdown_fd;
+  std::set <ProfLogger*> m_loggers;
+
+  friend class ProfLogThread;
 };
 
-class ProfLogger {
- protected:
-   CephContext *cct;
-  // my type
-  std::string name, filename;
-  ProfLogType *type;
-
-  bool need_open;
-  bool need_reset;
-  bool need_close;
-
-  // values for this instance
-  std::vector<int64_t> vals;
-  std::vector<double> fvals;
-  std::vector< std::vector<double> > vals_to_avg;  // for calculating variance
-
-  std::ofstream out;
-
-  // what i've written
-  //int last_logged;
-  int wrote_header_last;
-
-  void _open_log();
-
- private:
-  Mutex *lock;
-
- public:
-  ProfLogger(CephContext *cct_, const std::string &n, ProfLogType *t) :
-    cct(cct_), name(n), type(t),
-    need_open(true), need_reset(false), need_close(false),
-    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
-    wrote_header_last(10000), lock(NULL) { }
+class ProfLogger
+{
+public:
   ~ProfLogger();
 
-  void inc(int f, int64_t v = 1);
-  void set(int f, int64_t v);
-  int64_t get(int f);
+  void inc(int idx, uint64_t v = 1);
+  void set(int idx, uint64_t v);
+  uint64_t get(int idx);
 
-  void fset(int f, double v);
-  void finc(int f, double v);
-  void favg(int f, double v);
+  void fset(int idx, double v);
+  void finc(int idx, double v);
+  double fget(int idx);
 
-  void _flush(bool need_reopen, bool need_reset, int last_flush);
+  void write_json_to_fp(FILE *fp);
 
-  void reopen();
-  void reset();
-  void close();
+private:
+  ProfLogger(CephContext *cct, const std::string &name,
+	     int lower_bound, int upper_bound);
+  ProfLogger(const ProfLogger &rhs);
+  ProfLogger& operator=(const ProfLogger &rhs);
 
-  friend class ProfLoggerCollection;
+  /** Represents a ProfLogger data element. */
+  struct prof_log_data_any_d {
+    prof_log_data_any_d();
+    const char *name;
+    int type;
+    union {
+      uint64_t u64;
+      double dbl;
+    } u;
+    uint64_t count;
+  };
+  typedef std::vector<prof_log_data_any_d> prof_log_data_vec_t;
+
+  CephContext *m_cct;
+  int m_lower_bound;
+  int m_upper_bound;
+  const std::string m_name;
+
+  /** Protects m_data */
+  Mutex m_lock;
+
+  prof_log_data_vec_t m_data;
+
+  friend class ProfLoggerBuilder;
 };
 
+/* Class for constructing ProfLoggers.
+ *
+ * This class peforms some validation that the parameters we have supplied are
+ * correct in create_proflogger().
+ *
+ * In the future, we will probably get rid of the first/last arguments, since
+ * ProfLoggerBuilder can deduce them itself.
+ */
 class ProfLoggerBuilder
 {
 public:
   ProfLoggerBuilder(CephContext *cct, const std::string &name,
-		    int first, int last)
-      : m_cct(cct),
-        m_name(name)
-  {
-    m_plt = new ProfLogType(first, last);
-  }
-
-  void add_u64(int key, const char *name) {
-    m_plt->add_inc(key, name);
-  }
-  void add_fl(int key, const char *name) {
-    m_plt->add_inc(key, name);
-  }
-  void add_fl_avg(int key, const char *name) {
-    m_plt->add_avg(key, name);
-  }
-  ProfLogger* create_proflogger() {
-    // TODO: remove m_plt
-    m_plt->validate();
-    return new ProfLogger(m_cct, m_name, m_plt);
-  }
-
+		    int first, int last);
+  ~ProfLoggerBuilder();
+  void add_u64(int key, const char *name);
+  void add_fl(int key, const char *name);
+  void add_fl_avg(int key, const char *name);
+  ProfLogger* create_proflogger();
 private:
   ProfLoggerBuilder(const ProfLoggerBuilder &rhs);
   ProfLoggerBuilder& operator=(const ProfLoggerBuilder &rhs);
+  void add_impl(int idx, const char *name, int ty, uint64_t count);
 
-  CephContext *m_cct;
-  std::string m_name;
-  ProfLogType *m_plt;
+  ProfLogger *m_prof_logger;
 };
 
 #endif
