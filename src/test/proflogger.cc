@@ -193,12 +193,22 @@ static ProfLogger* setup_fake_proflogger1(CephContext *cct)
 
 TEST(ProfLogger, FakeProflogger1) {
   ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
-  coll->logger_add(setup_fake_proflogger1(g_ceph_context));
+  ProfLogger* fake_pf = setup_fake_proflogger1(g_ceph_context);
+  coll->logger_add(fake_pf);
   ProfLoggerCollectionTest plct(coll);
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ProfLoggerTestClient test_client(get_socket_path());
-  std::string message;
-  ASSERT_EQ("", test_client.get_message(&message));
-  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},}", message);
+  std::string msg;
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},}", msg);
+  fake_pf->inc(FAKE_PROFLOGGER1_ELEMENT_1);
+  fake_pf->fset(FAKE_PROFLOGGER1_ELEMENT_2, 0.5);
+  fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 100.0);
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':1,'element2':0.5,'element3':{'count':1,'sum':100},}", msg);
+  fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 0.0);
+  fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 25.0);
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':1,'element2':0.5,'element3':{'count':3,'sum':125},}", msg);
 }
