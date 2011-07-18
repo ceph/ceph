@@ -827,6 +827,11 @@ int main(int argc, char **argv)
     struct rgw_log_entry entry;
     const char *delim = " ";
 
+    if (format) {
+      formatter->init();
+      formatter->open_array_section("Log");
+    }
+
     while (!iter.end()) {
       ::decode(entry, iter);
 
@@ -847,7 +852,6 @@ int main(int argc, char **argv)
              << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
              << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
       } else {
-        formatter->init();
         formatter->open_obj_section("LogEntry");
         formatter->dump_value_str("Bucket", "%s", entry.bucket.c_str());
 
@@ -872,6 +876,12 @@ int main(int argc, char **argv)
         formatter->flush(cout);
       }
     }
+
+    if (format) {
+      formatter->close_section("Log");
+      formatter->flush(cout);
+    }
+
   }
 
   if (opt_cmd == OPT_USER_RM) {
