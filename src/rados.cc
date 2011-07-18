@@ -416,18 +416,17 @@ int LoadGen::bootstrap(const char *pool)
 void LoadGen::run_op(LoadGenOp *op)
 {
   op->completion = rados->aio_create_completion(op, _load_gen_cb, NULL);
-  int ret;
 
   switch (op->type) {
   case OP_READ:
-    ret = io_ctx.aio_read(op->oid, op->completion, &op->bl, op->len, op->off);
+    io_ctx.aio_read(op->oid, op->completion, &op->bl, op->len, op->off);
     break;
   case OP_WRITE:
     bufferptr p = buffer::create(op->len);
     memset(p.c_str(), 0, op->len);
     op->bl.push_back(p);
     
-    ret = io_ctx.aio_write(op->oid, op->completion, op->bl, op->len, op->off);
+    io_ctx.aio_write(op->oid, op->completion, op->bl, op->len, op->off);
     break;
   }
 

@@ -996,16 +996,6 @@ int Client::make_request(MetaRequest *request,
 			 int use_mds,
 			 bufferlist *pdirbl)
 {
-  // time the call
-  utime_t start = ceph_clock_now(cct);
-  
-  bool nojournal = false;
-  int op = request->get_op();
-  if (op == CEPH_MDS_OP_GETATTR ||
-      op == CEPH_MDS_OP_READDIR ||
-      op == CEPH_MDS_OP_OPEN)
-    nojournal = true;
-
   // assign a unique tid
   tid_t tid = ++last_tid;
   request->set_tid(tid);
@@ -1529,10 +1519,6 @@ bool Client::ms_dispatch(Message *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  int frommds = -1;
-  if (m->get_source().is_mds())
-    frommds = m->get_source().num();
-
   if (m->get_epoch() < mdsmap->get_epoch()) {
     ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
 	    << mdsmap->get_epoch() << dendl;
@@ -3013,7 +2999,6 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), issued);
 
   // max_size
-  bool kick_writers = false;
   if (cap == in->auth_cap &&
       m->get_max_size() != in->max_size) {
     ldout(cct, 10) << "max_size " << in->max_size << " -> " << m->get_max_size() << dendl;
@@ -3022,7 +3007,6 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
     }
-    kick_writers = true;
   }
 
   check_cap_issue(in, cap, issued);

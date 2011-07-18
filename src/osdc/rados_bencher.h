@@ -294,9 +294,6 @@ int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
        << "Min latency:           " << data->min_latency << std::endl;
 
   //write object size/number data for read benchmarks
-  int written_objects[2];
-  written_objects[0] = data->object_size;
-  written_objects[1] = data->finished;
   ::encode(data->object_size, b_write);
   ::encode(data->finished, b_write);
   ::encode(getpid(), b_write);
