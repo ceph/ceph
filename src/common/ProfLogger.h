@@ -71,7 +71,7 @@ public:
   void finc(int idx, double v);
   double fget(int idx);
 
-  void write_json_to_fp(FILE *fp);
+  void write_json_to_buf(std::vector <char> &buffer);
 
 private:
   ProfLogger(CephContext *cct, const std::string &name,

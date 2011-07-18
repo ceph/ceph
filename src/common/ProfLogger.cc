@@ -151,8 +151,7 @@ public:
 
       if (fds[0].revents & POLLOUT) {
 	// Send out some data
-	if (!do_accept())
-	  return PFL_FAIL;
+	do_accept();
       }
       if (fds[1].revents & POLLIN) {
 	// Parent wants us to shut down
@@ -166,6 +165,7 @@ private:
 
   bool do_accept()
   {
+    int ret;
     struct sockaddr_un address;
     socklen_t address_length;
     int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
@@ -176,30 +176,39 @@ private:
 	  << cpp_strerror(err) << dendl;
       return false;
     }
-    FILE *fp = fdopen(m_sock_fd, "w");
-    if (!fp) {
-      int err = errno;
-      lderr(m_parent->m_cct) << "ProfLogThread: failed to fdopen '"
-	  << m_sock_fd << "'. error " << cpp_strerror(err) << dendl;
+
+    std::vector<char> buffer;
+    buffer.reserve(512);
+    {
+      Mutex::Locker lck(m_parent->m_lock); // Take lock to access m_loggers
+      buffer.push_back('{');
+      buffer.push_back(' ');
+      for (std::set <ProfLogger*>::iterator l = m_parent->m_loggers.begin();
+	   l != m_parent->m_loggers.end(); ++l)
+      {
+	(*l)->write_json_to_buf(buffer);
+      }
+      buffer.push_back('}');
+      buffer.push_back('\0');
+    }
+
+    uint32_t len = htonl(buffer.size());
+    ret = safe_write(connection_fd, &len, sizeof(len));
+    if (ret < 0) {
+      lderr(m_parent->m_cct) << "ProfLogThread: error writing message size: "
+	  << cpp_strerror(ret) << dendl;
       close(connection_fd);
       return false;
     }
-    fprintf(fp, "{");
-
-    {
-      Mutex::Locker lck(m_parent->m_lock); // Take lock to access m_loggers
-      for (std::set <ProfLogger*>::iterator log = m_parent->m_loggers.begin();
-	   log != m_parent->m_loggers.end(); ++log)
-      {
-	// This will take the logger's lock for short period of time,
-	// then release it.
-	(*log)->write_json_to_fp(fp);
-      }
+    ret = safe_write(connection_fd, &buffer[0], buffer.size());
+    if (ret < 0) {
+      lderr(m_parent->m_cct) << "ProfLogThread: error writing message: "
+	  << cpp_strerror(ret) << dendl;
+      close(connection_fd);
+      return false;
     }
 
-    fprintf(fp, "}");
-    fflush(fp);
-    fclose(fp); // calls close(connection_fd)
+    close(connection_fd);
     return true;
   }
 
@@ -417,23 +426,25 @@ fget(int idx)
 }
 
 void ProfLogger::
-write_json_to_fp(FILE *fp)
+write_json_to_buf(std::vector <char> &buffer)
 {
+  char buf[512];
   Mutex::Locker lck(m_lock);
 
   prof_log_data_vec_t::const_iterator d = m_data.begin();
   prof_log_data_vec_t::const_iterator d_end = m_data.end();
   for (; d != d_end; ++d) {
     const prof_log_data_any_d &data(*d);
+    buf[0] = '\0';
     if (d->count != COUNT_DISABLED) {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  fprintf(fp, "\"%s\" : { \"count\" : %" PRId64 ", "
+	  snprintf(buf, sizeof(buf), "\"%s\" : { \"count\" : %" PRId64 ", "
 		  "\"sum\" : %" PRId64 " },\n", 
 		  data.name, data.count, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  fprintf(fp, "\"%s\" : { \"count\" : %" PRId64 ", "
+	  snprintf(buf, sizeof(buf), "\"%s\" : { \"count\" : %" PRId64 ", "
 		  "\"sum\" : %g },\n",
 		  data.name, data.count, data.u.dbl);
 	  break;
@@ -445,16 +456,21 @@ write_json_to_fp(FILE *fp)
     else {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  fprintf(fp, "\"%s\" : %" PRId64 ",\n", data.name, data.u.u64);
+	  snprintf(buf, sizeof(buf), "\"%s\" : %" PRId64 ",\n",
+		   data.name, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  fprintf(fp, "\"%s\" : %g,\n", data.name, data.u.dbl);
+	  snprintf(buf, sizeof(buf), "\"%s\" : %g,\n", data.name, data.u.dbl);
 	  break;
 	default:
 	  assert(0);
 	  break;
       }
     }
+    size_t strlen_buf = strlen(buf);
+    std::vector<char>::size_type sz = buffer.size();
+    buffer.resize(sz + strlen_buf);
+    memcpy(&buffer[sz], buf, strlen_buf);
   }
 }
 
