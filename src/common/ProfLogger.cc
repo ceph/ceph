@@ -71,6 +71,14 @@ public:
 
   static std::string bind_and_listen(const std::string &sock_path, int *fd)
   {
+    if (sock_path.size() > sizeof(sockaddr_un::sun_path) - 1) {
+      ostringstream oss;
+      oss << "ProfLogThread::bind_and_listen: "
+	  << "The UNIX domain socket path " << sock_path << " is too long! The "
+	  << "maximum length on this system is "
+	  << (sizeof(sockaddr_un::sun_path) - 1);
+      return oss.str();
+    }
     int sock_fd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (sock_fd < 0) {
       int err = errno;
@@ -82,13 +90,14 @@ public:
     struct sockaddr_un address;
     memset(&address, 0, sizeof(struct sockaddr_un));
     address.sun_family = AF_UNIX;
-    snprintf(address.sun_path, sizeof(address.sun_path), sock_path.c_str());
+    snprintf(address.sun_path, sizeof(sockaddr_un::sun_path), sock_path.c_str());
     if (bind(sock_fd, (struct sockaddr*)&address,
 	     sizeof(struct sockaddr_un)) != 0) {
       int err = errno;
       ostringstream oss;
       oss << "ProfLogThread::bind_and_listen: "
-	  << "failed to bind socket: " << cpp_strerror(err);
+	  << "failed to bind the UNIX domain socket to '" << sock_path
+	  << "': " << cpp_strerror(err);
       close(sock_fd);
       return oss.str();
     }

@@ -12,10 +12,42 @@
  *
  */
 
-#include "common/ceph_context.h"
 #include "common/ProfLogger.h"
-
+#include "common/ceph_context.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
 #include "test/unit.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <map>
+#include <poll.h>
+#include <sstream>
+#include <stdint.h>
+#include <string.h>
+#include <string>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
+
+static char g_socket_path[sizeof(sockaddr_un::sun_path)] = { 0 };
+
+static const char* get_socket_path()
+{
+  if (g_socket_path[0] == '\0') {
+    const char *tdir = getenv("TMPDIR");
+    if (tdir == NULL) {
+      tdir = "/tmp";
+    }
+    snprintf(g_socket_path, sizeof(sockaddr_un::sun_path),
+	     "%s/proflogger_test_socket.%ld.%ld",
+	     tdir, (long int)getpid(), time(NULL));
+  }
+  return g_socket_path;
+}
 
 class ProfLoggerCollectionTest
 {
@@ -40,8 +72,89 @@ private:
   ProfLoggerCollection *m_coll;
 };
 
-TEST(ProfLogger, SetupTeardown) {
+class Alarm
+{
+public:
+  Alarm(int s) {
+    alarm(s);
+  }
+  ~Alarm() {
+    alarm(0);
+  }
+};
+
+class ProfLoggerTestClient
+{
+public:
+  ProfLoggerTestClient(const std::string &uri)
+    : m_uri(uri)
+  {
+  }
+
+  std::string get_message(std::string *message)
+  {
+    //Alarm my_alarm(300);
+
+    int socket_fd = socket(PF_UNIX, SOCK_STREAM, 0);
+    if(socket_fd < 0) {
+      int err = errno;
+      ostringstream oss;
+      oss << "socket(PF_UNIX, SOCK_STREAM, 0) failed: " << cpp_strerror(err);
+      return oss.str();
+    }
+
+    struct sockaddr_un address;
+    memset(&address, 0, sizeof(struct sockaddr_un));
+    address.sun_family = AF_UNIX;
+    snprintf(address.sun_path, sizeof(address.sun_path), m_uri.c_str());
+
+    if (connect(socket_fd, (struct sockaddr *) &address, 
+	  sizeof(struct sockaddr_un)) != 0) {
+      int err = errno;
+      ostringstream oss;
+      oss << "connect(" << socket_fd << ") failed: " << cpp_strerror(err);
+      close(socket_fd);
+      return oss.str();
+    }
+
+    std::vector<uint8_t> vec(65536, 0);
+    uint8_t *buffer = &vec[0];
+
+    ssize_t res = safe_read(socket_fd, buffer, vec.size() - 1);
+    if (res < 0) {
+      int err = res;
+      ostringstream oss;
+      oss << "safe_read(" << socket_fd << ") failed: " << cpp_strerror(err);
+      close(socket_fd);
+      return oss.str();
+    }
+
+    printf("MESSAGE FROM SERVER: %s\n", buffer);
+    message->assign((const char*)buffer);
+    close(socket_fd);
+    return "";
+  }
+
+private:
+  std::string m_uri;
+};
+
+TEST(ProfLogger, Teardown) {
   ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
-  int ret = plct.shutdown();
-  ASSERT_EQ(ret, true);
+  ASSERT_EQ(true, plct.shutdown());
+}
+
+TEST(ProfLogger, TeardownSetup) {
+  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  ASSERT_EQ(true, plct.shutdown());
+  ASSERT_EQ(true, plct.init(get_socket_path()));
+}
+
+TEST(ProfLogger, SimpleTest) {
+  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  ASSERT_EQ(true, plct.shutdown());
+  ASSERT_EQ(true, plct.init(get_socket_path()));
+  ProfLoggerTestClient test_client(get_socket_path());
+  std::string message;
+  ASSERT_EQ("", test_client.get_message(&message));
 }
