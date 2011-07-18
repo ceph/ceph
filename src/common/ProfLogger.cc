@@ -48,10 +48,70 @@ enum prof_log_data_any_t {
   PROF_LOG_DATA_ANY_DOUBLE
 };
 
+/*
+ * UNIX domain sockets created by an application persist even after that
+ * application closes, unless they're explicitly unlinked. This is because the
+ * directory containing the socket keeps a reference to the socket.
+ *
+ * This code makes things a little nicer by unlinking those dead sockets when
+ * the application exits normally.
+ */
+static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
+static std::vector <const char*> cleanup_files;
+static bool cleanup_atexit = false;
+
+static void remove_cleanup_file(const char *file)
+{
+  pthread_mutex_lock(&cleanup_lock);
+  TEMP_FAILURE_RETRY(unlink(file));
+  for (std::vector <const char*>::iterator i = cleanup_files.begin();
+       i != cleanup_files.end(); ++i) {
+    if (strcmp(file, *i) == 0) {
+      free((void*)*i);
+      cleanup_files.erase(i);
+      break;
+    }
+  }
+  pthread_mutex_unlock(&cleanup_lock);
+}
+
+static void remove_all_cleanup_files()
+{
+  pthread_mutex_lock(&cleanup_lock);
+  for (std::vector <const char*>::iterator i = cleanup_files.begin();
+       i != cleanup_files.end(); ++i) {
+    TEMP_FAILURE_RETRY(unlink(*i));
+    free((void*)*i);
+  }
+  cleanup_files.clear();
+  pthread_mutex_unlock(&cleanup_lock);
+}
+
+static void add_cleanup_file(const char *file)
+{
+  char *fname = strdup(file);
+  if (!fname)
+    return;
+  pthread_mutex_lock(&cleanup_lock);
+  cleanup_files.push_back(fname);
+  if (!cleanup_atexit) {
+    atexit(remove_all_cleanup_files);
+    cleanup_atexit = true;
+  }
+  pthread_mutex_unlock(&cleanup_lock);
+}
+
+/*
+ * This thread listens on the UNIX domain socket for incoming connections. When
+ * it gets one, it writes out the ProfLogger data using blocking I/O.
+ *
+ * It also listens to m_shutdown_fd. If there is any data sent to this pipe,
+ * the thread terminates itself gracefully, allowing the parent class to join()
+ * it.
+ */
 class ProfLogThread : public Thread
 {
 public:
-
   static std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
   {
     int pipefd[2];
@@ -92,14 +152,28 @@ public:
     address.sun_family = AF_UNIX;
     snprintf(address.sun_path, sizeof(sockaddr_un::sun_path), sock_path.c_str());
     if (bind(sock_fd, (struct sockaddr*)&address,
-	     sizeof(struct sockaddr_un)) != 0) {
+	       sizeof(struct sockaddr_un)) != 0) {
       int err = errno;
-      ostringstream oss;
-      oss << "ProfLogThread::bind_and_listen: "
-	  << "failed to bind the UNIX domain socket to '" << sock_path
-	  << "': " << cpp_strerror(err);
-      close(sock_fd);
-      return oss.str();
+      if (err == EADDRINUSE) {
+	// The old UNIX domain socket must still be there.
+	// Let's unlink it and try again.
+	TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+	if (bind(sock_fd, (struct sockaddr*)&address,
+		   sizeof(struct sockaddr_un)) == 0) {
+	  err = 0;
+	}
+	else {
+	  err = errno;
+	}
+      }
+      if (err != 0) {
+	ostringstream oss;
+	oss << "ProfLogThread::bind_and_listen: "
+	    << "failed to bind the UNIX domain socket to '" << sock_path
+	    << "': " << cpp_strerror(err);
+	close(sock_fd);
+	return oss.str();
+      }
     }
     if (listen(sock_fd, 5) != 0) {
       int err = errno;
@@ -107,6 +181,7 @@ public:
       oss << "ProfLogThread::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
       close(sock_fd);
+      TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
       return oss.str();
     }
     *fd = sock_fd;
@@ -134,7 +209,7 @@ public:
       struct pollfd fds[2];
       memset(fds, 0, sizeof(fds));
       fds[0].fd = m_sock_fd;
-      fds[0].events = POLLOUT | POLLWRBAND;
+      fds[0].events = POLLIN | POLLRDBAND;
       fds[1].fd = m_shutdown_fd;
       fds[1].events = POLLIN | POLLRDBAND;
 
@@ -149,7 +224,7 @@ public:
 	return PFL_FAIL;
       }
 
-      if (fds[0].revents & POLLOUT) {
+      if (fds[0].revents & POLLIN) {
 	// Send out some data
 	do_accept();
       }
@@ -168,8 +243,10 @@ private:
     int ret;
     struct sockaddr_un address;
     socklen_t address_length;
+    ldout(m_parent->m_cct, 30) << "ProfLogThread: calling accept" << dendl;
     int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
 				   &address_length);
+    ldout(m_parent->m_cct, 30) << "ProfLogThread: finished accept" << dendl;
     if (connection_fd < 0) {
       int err = errno;
       lderr(m_parent->m_cct) << "ProfLogThread: do_accept error: '"
@@ -209,6 +286,7 @@ private:
     }
 
     close(connection_fd);
+    ldout(m_parent->m_cct, 30) << "ProfLogThread: do_accept succeeded." << dendl;
     return true;
   }
 
@@ -308,13 +386,16 @@ init(const std::string &uri)
   /* Create new thread */
   m_thread = new (std::nothrow) ProfLogThread(sock_fd, pipe_rd, this);
   if (!m_thread) {
+    TEMP_FAILURE_RETRY(unlink(uri.c_str()));
     close(sock_fd);
     close(pipe_rd);
     close(pipe_wr);
     return false;
   }
+  m_uri = uri;
   m_thread->create();
   m_shutdown_fd = pipe_wr;
+  add_cleanup_file(m_uri.c_str());
   return true;
 }
 
@@ -337,6 +418,8 @@ shutdown()
 	      "to thread shutdown pipe: error " << ret << dendl;
     }
     m_thread = NULL;
+    remove_cleanup_file(m_uri.c_str());
+    m_uri.clear();
   }
 }
 

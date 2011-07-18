@@ -53,6 +53,7 @@ private:
 
   int m_shutdown_fd;
   std::set <ProfLogger*> m_loggers;
+  std::string m_uri;
 
   friend class ProfLogThread;
   friend class ProfLoggerCollectionTest;

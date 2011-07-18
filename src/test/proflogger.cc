@@ -151,16 +151,17 @@ private:
   std::string m_uri;
 };
 
-//TEST(ProfLogger, Teardown) {
-//  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
-//  ASSERT_EQ(true, plct.shutdown());
-//}
-//
-//TEST(ProfLogger, TeardownSetup) {
-//  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
-//  ASSERT_EQ(true, plct.shutdown());
-//  ASSERT_EQ(true, plct.init(get_socket_path()));
-//}
+TEST(ProfLogger, Teardown) {
+  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  ASSERT_EQ(true, plct.shutdown());
+}
+
+TEST(ProfLogger, TeardownSetup) {
+  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  ASSERT_EQ(true, plct.shutdown());
+  ASSERT_EQ(true, plct.init(get_socket_path()));
+  ASSERT_EQ(true, plct.shutdown());
+}
 
 TEST(ProfLogger, SimpleTest) {
 
