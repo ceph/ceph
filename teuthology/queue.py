@@ -60,7 +60,6 @@ describe. One job is run at a time.
     while True:
         job = beanstalk.reserve(timeout=60)
         if job is None:
-            log.debug('no jobs to run in 60 seconds')
             continue
 
         # bury the job so it won't be re-run if it fails
