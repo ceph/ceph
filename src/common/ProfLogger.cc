@@ -540,7 +540,7 @@ write_json_to_buf(std::vector <char> &buffer)
   char buf[512];
   Mutex::Locker lck(m_lock);
 
-  snprintf(buf, sizeof(buf), "'%s':{", m_name.c_str());
+  snprintf(buf, sizeof(buf), "\"%s\":{", m_name.c_str());
   append_to_vector(buffer, buf);
 
   prof_log_data_vec_t::const_iterator d = m_data.begin();
@@ -551,13 +551,13 @@ write_json_to_buf(std::vector <char> &buffer)
     if (d->count != COUNT_DISABLED) {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "'%s':{'count':%" PRId64 ","
-		  "'sum':%" PRId64 "},", 
+	  snprintf(buf, sizeof(buf), "\"%s\":{\"count\":%" PRId64 ","
+		  "\"sum\":%" PRId64 "},", 
 		  data.name, data.count, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "'%s':{'count':%" PRId64 ","
-		  "'sum':%g},",
+	  snprintf(buf, sizeof(buf), "\"%s\":{\"count\":%" PRId64 ","
+		  "\"sum\":%g},",
 		  data.name, data.count, data.u.dbl);
 	  break;
 	default:
@@ -568,11 +568,11 @@ write_json_to_buf(std::vector <char> &buffer)
     else {
       switch (d->type) {
 	case PROF_LOG_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "'%s':%" PRId64 ",",
+	  snprintf(buf, sizeof(buf), "\"%s\":%" PRId64 ",",
 		   data.name, data.u.u64);
 	  break;
 	case PROF_LOG_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "'%s':%g,", data.name, data.u.dbl);
+	  snprintf(buf, sizeof(buf), "\"%s\":%g,", data.name, data.u.dbl);
 	  break;
 	default:
 	  assert(0);
@@ -583,6 +583,7 @@ write_json_to_buf(std::vector <char> &buffer)
   }
 
   buffer.push_back('}');
+  buffer.push_back(',');
 }
 
 const std::string &ProfLogger::
