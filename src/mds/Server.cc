@@ -2325,6 +2325,11 @@ void Server::handle_client_open(MDRequest *mdr)
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
   dout(7) << "open on " << req->get_filepath() << dendl;
+
+  if (cmode < 0) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
   
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, need_auth);
@@ -2489,6 +2494,12 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
 
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  if (cmode < 0) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
   bool excl = (req->head.args.open.flags & O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   ceph_file_layout *dir_layout = NULL;
@@ -2541,18 +2552,13 @@ void Server::handle_client_openc(MDRequest *mdr)
     return;
   }
 
-  
-
   // created null dn.
-
     
   // create inode.
   mdr->now = ceph_clock_now(g_ceph_context);
 
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
-
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
 
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				 req->head.args.open.mode | S_IFREG, &layout);
