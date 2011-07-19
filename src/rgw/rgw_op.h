@@ -55,8 +55,8 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   off_t ofs;
-  size_t len;
-  size_t total_len;
+  uint64_t len;
+  uint64_t total_len;
   off_t start;
   off_t end;
   time_t mod_time;

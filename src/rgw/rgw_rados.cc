@@ -471,7 +471,7 @@ int RGWRados::copy_obj(std::string& id, rgw_obj& dest_obj,
   int ret, r;
   char *data;
   off_t end = -1;
-  size_t total_len, obj_size;
+  uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
   rgw_obj tmp_obj = dest_obj;
@@ -791,8 +791,8 @@ int RGWRados::prepare_get_obj(rgw_obj& obj,
             time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
-            size_t *total_size,
-            size_t *obj_size,
+            uint64_t *total_size,
+            uint64_t *obj_size,
             void **handle,
             struct rgw_err *err)
 {
@@ -903,7 +903,7 @@ done_err:
 }
 
 int RGWRados::clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, size_t size)
+                          rgw_obj& src_obj, off_t src_ofs, uint64_t size)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;

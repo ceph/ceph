@@ -24,7 +24,7 @@ public:
   int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t size);
   int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                  rgw_obj& src_obj, off_t src_ofs, size_t size) { return -ENOTSUP; }
+                  rgw_obj& src_obj, off_t src_ofs, uint64_t size) { return -ENOTSUP; }
   int copy_obj(std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
@@ -50,8 +50,8 @@ public:
             time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
-            size_t *size,
-            size_t *obj_size,
+            uint64_t *size,
+            uint64_t *obj_size,
             void **handle,
             struct rgw_err *err);
 

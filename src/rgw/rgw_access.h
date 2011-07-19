@@ -21,7 +21,7 @@ struct RGWCloneRangeInfo {
   rgw_obj src;
   off_t src_ofs;
   off_t dst_ofs;
-  size_t len;
+  uint64_t len;
 };
 
 /**
@@ -160,8 +160,8 @@ public:
             time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
-            size_t *total_size,
-            size_t *obj_size,
+            uint64_t *total_size,
+            uint64_t *obj_size,
             void **handle,
             struct rgw_err *err) = 0;
 
@@ -172,11 +172,11 @@ public:
 
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
-                          size_t size) = 0;
+                          uint64_t size) = 0;
 
   virtual int clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
-                          size_t size, map<string, bufferlist> attrs) {
+                          uint64_t size, map<string, bufferlist> attrs) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;

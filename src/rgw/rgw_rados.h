@@ -62,7 +62,7 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, size_t size);
+                          rgw_obj& src_obj, off_t src_ofs, uint64_t size);
   virtual int clone_objs(rgw_obj& dst_obj, 
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs, bool truncate_dest);
@@ -103,8 +103,8 @@ public:
             time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
-            size_t *total_size,
-            size_t *obj_size,
+            uint64_t *total_size,
+            uint64_t *obj_size,
             void **handle,
             struct rgw_err *err);
 
