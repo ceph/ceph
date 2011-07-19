@@ -322,8 +322,10 @@ ProfLoggerCollection::
 const char** ProfLoggerCollection::
 get_tracked_conf_keys() const
 {
-  static const char *KEYS[] =
-	{ "profiling_logger_uri", NULL };
+  static const char *KEYS[] = { "profiling_logger_uri",
+	  "internal_safe_to_start_threads", 
+	  NULL
+  };
   return KEYS;
 }
 
@@ -331,6 +333,9 @@ void ProfLoggerCollection::
 handle_conf_change(const md_config_t *conf,
 		   const std::set <std::string> &changed)
 {
+  // Wait for safe_to_start_threads to become true before starting our thread.
+  if (!conf->internal_safe_to_start_threads)
+    return;
   Mutex::Locker lck(m_lock);
   if (conf->profiling_logger_uri.empty()) {
     shutdown();

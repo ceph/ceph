@@ -413,6 +413,9 @@ struct config_option config_optionsp[] = {
   OPTION(bdev_fake_max_mb, OPT_INT, 0),
   OPTION(rgw_log, OPT_INT, 20),                 // log level for the Rados gateway
   OPTION(rgw_cache_enabled, OPT_BOOL, false),   // rgw cache enabled
+
+  // see config.h
+  OPTION(internal_safe_to_start_threads, OPT_BOOL, false),
 };
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
@@ -636,7 +639,6 @@ parse_argv(std::vector<const char*>& args)
       }
     }
   }
-
 }
 
 void md_config_t::

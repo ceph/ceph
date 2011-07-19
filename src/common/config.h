@@ -505,6 +505,10 @@ public:
   // rgw
   int   rgw_log;
   bool  rgw_cache_enabled;
+
+  // This will be set to true when it is safe to start threads.
+  // Once it is true, it will never change.
+  bool internal_safe_to_start_threads;
 };
 
 typedef enum {
