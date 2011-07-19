@@ -120,8 +120,19 @@ public:
     std::vector<uint8_t> vec(65536, 0);
     uint8_t *buffer = &vec[0];
 
+    uint32_t request = htonl(0x1);
+    ssize_t res = safe_write(socket_fd, &request, sizeof(request));
+    if (res < 0) {
+      int err = res;
+      ostringstream oss;
+      oss << "safe_write(" << socket_fd << ") failed to write request code: "
+  	  << cpp_strerror(err);
+      close(socket_fd);
+      return oss.str();
+    }
+
     uint32_t message_size_raw;
-    ssize_t res = safe_read_exact(socket_fd, &message_size_raw,
+    res = safe_read_exact(socket_fd, &message_size_raw,
 				  sizeof(message_size_raw));
     if (res < 0) {
       int err = res;

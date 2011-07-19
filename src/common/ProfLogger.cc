@@ -255,6 +255,28 @@ private:
       return false;
     }
 
+    uint32_t request_raw;
+    ret = safe_read(connection_fd, &request_raw, sizeof(request_raw));
+    if (ret < 0) {
+      lderr(m_parent->m_cct) << "ProfLogThread: error reading request code: "
+	  << cpp_strerror(ret) << dendl;
+      close(connection_fd);
+      return false;
+    }
+    uint32_t request = ntohl(request_raw);
+    if (request == 0x0) {
+      // Request 0 does nothing.
+      close(connection_fd);
+      return true;
+    }
+    if (request != 0x1) {
+      // The only other request we know about now is requesting all counter data.
+      lderr(m_parent->m_cct) << "ProfLogThread: unknown request "
+          << "code " << request << dendl;
+      close(connection_fd);
+      return false;
+    }
+
     std::vector<char> buffer;
     buffer.reserve(512);
     {
