@@ -106,7 +106,7 @@ public:
     struct sockaddr_un address;
     memset(&address, 0, sizeof(struct sockaddr_un));
     address.sun_family = AF_UNIX;
-    snprintf(address.sun_path, sizeof(address.sun_path), m_uri.c_str());
+    snprintf(address.sun_path, sizeof(address.sun_path), "%s", m_uri.c_str());
 
     if (connect(socket_fd, (struct sockaddr *) &address, 
 	  sizeof(struct sockaddr_un)) != 0) {

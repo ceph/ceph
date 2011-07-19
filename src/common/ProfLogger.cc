@@ -150,7 +150,8 @@ public:
     struct sockaddr_un address;
     memset(&address, 0, sizeof(struct sockaddr_un));
     address.sun_family = AF_UNIX;
-    snprintf(address.sun_path, sizeof(sockaddr_un::sun_path), sock_path.c_str());
+    snprintf(address.sun_path, sizeof(sockaddr_un::sun_path),
+	     "%s", sock_path.c_str());
     if (bind(sock_fd, (struct sockaddr*)&address,
 	       sizeof(struct sockaddr_un)) != 0) {
       int err = errno;
@@ -380,7 +381,7 @@ init(const std::string &uri)
 
   /* Set up things for the new thread */
   std::string err;
-  int pipe_rd, pipe_wr;
+  int pipe_rd = -1, pipe_wr = -1;
   err = ProfLogThread::create_shutdown_pipe(&pipe_rd, &pipe_wr);
   if (!err.empty()) {
     lderr(m_cct) << "ProfLoggerCollection::init: error: " << err << dendl;
