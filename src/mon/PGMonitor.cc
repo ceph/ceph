@@ -770,6 +770,13 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       pg_map.dump(ds);
       rdata.append(ds);
     }
+    else if (m->cmd[1] == "dump_json") {
+      ss << "ok";
+      r = 0;
+      stringstream ds;
+      pg_map.dump_json(ds);
+      rdata.append(ds);
+    }
     else if (m->cmd[1] == "map" && m->cmd.size() == 3) {
       pg_t pgid;
       r = -EINVAL;

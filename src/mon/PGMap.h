@@ -277,6 +277,46 @@ public:
     redo_full_sets();
   }
 
+  void dump_json(ostream& ss) const {
+    ss << "{ \"version\": " << version << ",\n";
+    ss << "  \"last_osdmap_epoch\": " << last_osdmap_epoch << ",\n";
+    ss << "  \"last_pg_scan\": " << last_pg_scan << ",\n";
+    ss << "  \"full_ratio\": " << full_ratio << ",\n";
+    ss << "  \"nearfull_ratio\": " << nearfull_ratio << ",\n";
+    
+    ss << "  \"pg_stat\": [\n";
+    hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
+    while (i != pg_stat.end()) {
+      i->second.dump_json(ss, i->first, "    ");
+      if (++i == pg_stat.end())
+	break;
+      ss << ",\n";
+    }
+    ss << "\n  ],\n";
+
+    ss << "  \"pool_stat\": [\n";
+    hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
+    while (p != pg_pool_sum.end()) {
+      p->second.dump_json(ss, p->first, "    ");
+      if (++p == pg_pool_sum.end())
+	break;
+      ss << ",\n";
+    }
+    ss << "\n  ],\n";
+
+    ss << "  \"osd_stat\": [\n";
+    hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
+    while (q != osd_stat.end()) {
+      q->second.dump_json(ss, q->first, "    ");
+      if (++q == osd_stat.end())
+	break;
+      ss << ",\n";
+    }
+    ss << "\n  ]\n";
+    ss << "}\n";
+  }
+
+
   void dump(ostream& ss) const
   {
     ss << "version " << version << std::endl;
