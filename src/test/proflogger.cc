@@ -201,16 +201,19 @@ TEST(ProfLogger, SingleProfLogger) {
   ProfLoggerTestClient test_client(get_socket_path());
   std::string msg;
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':0,"
+	    "'element2':0,'element3':{'count':0,'sum':0},}}", msg);
   fake_pf->inc(FAKE_PROFLOGGER1_ELEMENT_1);
   fake_pf->fset(FAKE_PROFLOGGER1_ELEMENT_2, 0.5);
   fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 100.0);
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':1,'element2':0.5,'element3':{'count':1,'sum':100},}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':1,"
+	    "'element2':0.5,'element3':{'count':1,'sum':100},}}", msg);
   fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 0.0);
   fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 25.0);
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':1,'element2':0.5,'element3':{'count':3,'sum':125},}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':1,'element2':0.5,"
+	    "'element3':{'count':3,'sum':125},}}", msg);
 }
 
 enum {
@@ -243,16 +246,19 @@ TEST(ProfLogger, MultipleProfloggers) {
   std::string msg;
 
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},'foo':0,'bar':0,}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':0,'element2':0,'element3':"
+	    "{'count':0,'sum':0},}'fake_proflogger_2':{'foo':0,'bar':0,}}", msg);
 
   fake_pf1->inc(FAKE_PROFLOGGER1_ELEMENT_1);
   fake_pf1->inc(FAKE_PROFLOGGER1_ELEMENT_1, 5);
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':6,'element2':0,'element3':{'count':0,'sum':0},'foo':0,'bar':0,}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':6,'element2':0,'element3':"
+	    "{'count':0,'sum':0},}'fake_proflogger_2':{'foo':0,'bar':0,}}", msg);
 
   coll->logger_remove(fake_pf2);
   ASSERT_EQ("", test_client.get_message(&msg));
-  ASSERT_EQ("{'element1':6,'element2':0,'element3':{'count':0,'sum':0},}", msg);
+  ASSERT_EQ("{'fake_proflogger_1':{'element1':6,'element2':0,"
+	    "'element3':{'count':0,'sum':0},}}", msg);
 
   coll->logger_clear();
   ASSERT_EQ("", test_client.get_message(&msg));

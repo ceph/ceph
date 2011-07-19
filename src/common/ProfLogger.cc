@@ -526,11 +526,22 @@ fget(int idx) const
   return data.u.dbl;
 }
 
+static inline void append_to_vector(std::vector <char> &buffer, char *buf)
+{
+  size_t strlen_buf = strlen(buf);
+  std::vector<char>::size_type sz = buffer.size();
+  buffer.resize(sz + strlen_buf);
+  memcpy(&buffer[sz], buf, strlen_buf);
+}
+
 void ProfLogger::
 write_json_to_buf(std::vector <char> &buffer)
 {
   char buf[512];
   Mutex::Locker lck(m_lock);
+
+  snprintf(buf, sizeof(buf), "'%s':{", m_name.c_str());
+  append_to_vector(buffer, buf);
 
   prof_log_data_vec_t::const_iterator d = m_data.begin();
   prof_log_data_vec_t::const_iterator d_end = m_data.end();
@@ -568,11 +579,10 @@ write_json_to_buf(std::vector <char> &buffer)
 	  break;
       }
     }
-    size_t strlen_buf = strlen(buf);
-    std::vector<char>::size_type sz = buffer.size();
-    buffer.resize(sz + strlen_buf);
-    memcpy(&buffer[sz], buf, strlen_buf);
+    append_to_vector(buffer, buf);
   }
+
+  buffer.push_back('}');
 }
 
 const std::string &ProfLogger::
@@ -587,8 +597,9 @@ ProfLogger(CephContext *cct, const std::string &name,
   : m_cct(cct),
     m_lower_bound(lower_bound),
     m_upper_bound(upper_bound),
-    m_name(std::string("ProfLogger::") + name.c_str()),
-    m_lock(m_name.c_str())
+    m_name(name.c_str()),
+    m_lock_name(std::string("ProfLogger::") + name.c_str()),
+    m_lock(m_lock_name.c_str())
 {
   m_data.resize(upper_bound - lower_bound - 1);
 }

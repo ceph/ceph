@@ -76,6 +76,7 @@ private:
   int m_lower_bound;
   int m_upper_bound;
   const std::string m_name;
+  const std::string m_lock_name;
 
   /** Protects m_data */
   mutable Mutex m_lock;
