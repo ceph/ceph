@@ -41,7 +41,8 @@ int ceph_flags_to_mode(int flags)
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
 #endif
-	if ((flags & O_APPEND) == O_APPEND)
+	if ((flags & O_APPEND) &&
+	    (flags & O_ACCMODE) == 0)
 		flags |= O_WRONLY;
 
 	if ((flags & O_ACCMODE) == O_RDWR)
