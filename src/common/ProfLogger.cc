@@ -259,7 +259,7 @@ private:
     {
       Mutex::Locker lck(m_parent->m_lock); // Take lock to access m_loggers
       buffer.push_back('{');
-      for (std::set <ProfLogger*>::iterator l = m_parent->m_loggers.begin();
+      for (prof_logger_set_t::iterator l = m_parent->m_loggers.begin();
 	   l != m_parent->m_loggers.end(); ++l)
       {
 	(*l)->write_json_to_buf(buffer);
@@ -311,7 +311,7 @@ ProfLoggerCollection::
 {
   Mutex::Locker lck(m_lock);
   shutdown();
-  for (std::set <ProfLogger*>::iterator l = m_loggers.begin();
+  for (prof_logger_set_t::iterator l = m_loggers.begin();
 	l != m_loggers.end(); ++l) {
     delete *l;
   }
@@ -345,7 +345,7 @@ void ProfLoggerCollection::
 logger_add(class ProfLogger *l)
 {
   Mutex::Locker lck(m_lock);
-  std::set<ProfLogger*>::iterator i = m_loggers.find(l);
+  prof_logger_set_t::iterator i = m_loggers.find(l);
   assert(i == m_loggers.end());
   m_loggers.insert(l);
 }
@@ -354,9 +354,22 @@ void ProfLoggerCollection::
 logger_remove(class ProfLogger *l)
 {
   Mutex::Locker lck(m_lock);
-  std::set<ProfLogger*>::iterator i = m_loggers.find(l);
+  prof_logger_set_t::iterator i = m_loggers.find(l);
   assert(i != m_loggers.end());
+  delete *i;
   m_loggers.erase(i);
+}
+
+void ProfLoggerCollection::
+logger_clear()
+{
+  Mutex::Locker lck(m_lock);
+  prof_logger_set_t::iterator i = m_loggers.begin();
+  prof_logger_set_t::iterator i_end = m_loggers.end();
+  for (; i != i_end; ) {
+    delete *i;
+    m_loggers.erase(i++);
+  }
 }
 
 bool ProfLoggerCollection::
@@ -456,12 +469,12 @@ set(int idx, uint64_t amt)
 }
 
 uint64_t ProfLogger::
-get(int idx)
+get(int idx) const
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
-  prof_log_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  const prof_log_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (data.type != PROF_LOG_DATA_ANY_DOUBLE)
     return 0;
   return data.u.u64;
@@ -496,12 +509,12 @@ fset(int idx, double amt)
 }
 
 double ProfLogger::
-fget(int idx)
+fget(int idx) const
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
-  prof_log_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  const prof_log_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (data.type != PROF_LOG_DATA_ANY_DOUBLE)
     return 0.0;
   return data.u.dbl;
@@ -554,6 +567,12 @@ write_json_to_buf(std::vector <char> &buffer)
     buffer.resize(sz + strlen_buf);
     memcpy(&buffer[sz], buf, strlen_buf);
   }
+}
+
+const std::string &ProfLogger::
+get_name() const
+{
+  return m_name;
 }
 
 ProfLogger::

@@ -23,42 +23,19 @@
 #include <string>
 #include <vector>
 
+class CephContext;
 class ProfLoggerBuilder;
 class ProfLoggerCollectionTest;
-class CephContext;
 class Thread;
 
 /*
- * ProfLog manages the profiler logging for a Ceph process.
+ * A ProfLogger is usually associated with a single subsystem.
+ * It contains counters which we modify to track performance and throughput
+ * over time. 
+ *
+ * ProfLogger is thread-safe. However, it is better to avoid sharing
+ * ProfLoggers between multiple threads to avoid cacheline ping-pong.
  */
-class ProfLoggerCollection : public md_config_obs_t
-{
-public:
-  ProfLoggerCollection(CephContext *cct);
-  ~ProfLoggerCollection();
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed);
-  void logger_add(class ProfLogger *l);
-  void logger_remove(class ProfLogger *l);
-private:
-  bool init(const std::string &uri);
-  void shutdown();
-
-  CephContext *m_cct;
-  Thread* m_thread;
-
-  /** Protects m_loggers */
-  Mutex m_lock;
-
-  int m_shutdown_fd;
-  std::set <ProfLogger*> m_loggers;
-  std::string m_uri;
-
-  friend class ProfLogThread;
-  friend class ProfLoggerCollectionTest;
-};
-
 class ProfLogger
 {
 public:
@@ -66,13 +43,15 @@ public:
 
   void inc(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
-  uint64_t get(int idx);
+  uint64_t get(int idx) const;
 
   void fset(int idx, double v);
   void finc(int idx, double v);
-  double fget(int idx);
+  double fget(int idx) const;
 
   void write_json_to_buf(std::vector <char> &buffer);
+
+  const std::string& get_name() const;
 
 private:
   ProfLogger(CephContext *cct, const std::string &name,
@@ -99,11 +78,52 @@ private:
   const std::string m_name;
 
   /** Protects m_data */
-  Mutex m_lock;
+  mutable Mutex m_lock;
 
   prof_log_data_vec_t m_data;
 
   friend class ProfLoggerBuilder;
+};
+
+class SortProfLoggersByName {
+public:
+  bool operator()(const ProfLogger* lhs, const ProfLogger* rhs) const {
+    return (lhs->get_name() < rhs->get_name());
+  }
+};
+
+typedef std::set <ProfLogger*, SortProfLoggersByName> prof_logger_set_t;
+
+/*
+ * ProfLoggerCollection manages the set of ProfLoggers for a Ceph process.
+ */
+class ProfLoggerCollection : public md_config_obs_t
+{
+public:
+  ProfLoggerCollection(CephContext *cct);
+  ~ProfLoggerCollection();
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed);
+  void logger_add(class ProfLogger *l);
+  void logger_remove(class ProfLogger *l);
+  void logger_clear();
+private:
+  bool init(const std::string &uri);
+  void shutdown();
+
+  CephContext *m_cct;
+  Thread* m_thread;
+
+  /** Protects m_loggers */
+  mutable Mutex m_lock;
+
+  int m_shutdown_fd;
+  prof_logger_set_t m_loggers;
+  std::string m_uri;
+
+  friend class ProfLogThread;
+  friend class ProfLoggerCollectionTest;
 };
 
 /* Class for constructing ProfLoggers.

@@ -191,7 +191,7 @@ static ProfLogger* setup_fake_proflogger1(CephContext *cct)
   return bld.create_proflogger();
 }
 
-TEST(ProfLogger, FakeProflogger1) {
+TEST(ProfLogger, SingleProfLogger) {
   ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
   ProfLogger* fake_pf = setup_fake_proflogger1(g_ceph_context);
   coll->logger_add(fake_pf);
@@ -211,4 +211,50 @@ TEST(ProfLogger, FakeProflogger1) {
   fake_pf->finc(FAKE_PROFLOGGER1_ELEMENT_3, 25.0);
   ASSERT_EQ("", test_client.get_message(&msg));
   ASSERT_EQ("{'element1':1,'element2':0.5,'element3':{'count':3,'sum':125},}", msg);
+}
+
+enum {
+  FAKE_PROFLOGGER2_ELEMENT_FIRST = 400,
+  FAKE_PROFLOGGER2_ELEMENT_FOO,
+  FAKE_PROFLOGGER2_ELEMENT_BAR,
+  FAKE_PROFLOGGER2_ELEMENT_LAST,
+};
+
+static ProfLogger* setup_fake_proflogger2(CephContext *cct)
+{
+  ProfLoggerBuilder bld(cct, "fake_proflogger_2",
+	  FAKE_PROFLOGGER2_ELEMENT_FIRST, FAKE_PROFLOGGER2_ELEMENT_LAST);
+  bld.add_u64(FAKE_PROFLOGGER2_ELEMENT_FOO, "foo");
+  bld.add_fl(FAKE_PROFLOGGER2_ELEMENT_BAR, "bar");
+  return bld.create_proflogger();
+}
+
+TEST(ProfLogger, MultipleProfloggers) {
+  ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
+  coll->logger_clear();
+  ProfLogger* fake_pf1 = setup_fake_proflogger1(g_ceph_context);
+  ProfLogger* fake_pf2 = setup_fake_proflogger2(g_ceph_context);
+  coll->logger_add(fake_pf1);
+  coll->logger_add(fake_pf2);
+  ProfLoggerCollectionTest plct(coll);
+  ASSERT_EQ(true, plct.shutdown());
+  ASSERT_EQ(true, plct.init(get_socket_path()));
+  ProfLoggerTestClient test_client(get_socket_path());
+  std::string msg;
+
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':0,'element2':0,'element3':{'count':0,'sum':0},'foo':0,'bar':0,}", msg);
+
+  fake_pf1->inc(FAKE_PROFLOGGER1_ELEMENT_1);
+  fake_pf1->inc(FAKE_PROFLOGGER1_ELEMENT_1, 5);
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':6,'element2':0,'element3':{'count':0,'sum':0},'foo':0,'bar':0,}", msg);
+
+  coll->logger_remove(fake_pf2);
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{'element1':6,'element2':0,'element3':{'count':0,'sum':0},}", msg);
+
+  coll->logger_clear();
+  ASSERT_EQ("", test_client.get_message(&msg));
+  ASSERT_EQ("{}", msg);
 }
