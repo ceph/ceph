@@ -1387,8 +1387,10 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
-  if (rgwconf->log_level >= 0)
-    g_conf->rgw_log = rgwconf->log_level;
+  RGWConf *conf = s->env->conf;
+
+  if (conf->log_level >= 0)
+    g_conf->rgw_log = conf->log_level;
 
   if (g_conf->rgw_log >= 20) {
     char *p;

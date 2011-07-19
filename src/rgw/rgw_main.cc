@@ -125,9 +125,11 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   RGWRESTMgr rest;
   int ret;
 
-  rgw_env.reinit(fcgx->envp);
+  RGWEnv rgw_env;
 
-  struct req_state *s = new req_state;
+  rgw_env.init(fcgx->envp);
+
+  struct req_state *s = new req_state(&rgw_env);
 
   RGWOp *op = NULL;
   int init_error = 0;

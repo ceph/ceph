@@ -199,11 +199,11 @@ void dump_range(struct req_state *s, off_t ofs, off_t end)
 
 int RGWGetObj_REST::get_params()
 {
-  range_str = rgw_env.get("HTTP_RANGE");
-  if_mod = rgw_env.get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = rgw_env.get("HTTP_IF_UNMODIFIED_SINCE");
-  if_match = rgw_env.get("HTTP_IF_MATCH");
-  if_nomatch = rgw_env.get("HTTP_IF_NONE_MATCH");
+  range_str = s->env->get("HTTP_RANGE");
+  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
 
   return 0;
 }
@@ -211,7 +211,7 @@ int RGWGetObj_REST::get_params()
 
 int RGWPutObj_REST::get_params()
 {
-  supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
+  supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -237,17 +237,17 @@ int RGWPutObj_REST::get_data()
   }
 
   if (!ofs)
-    supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
+    supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
 
 int RGWCopyObj_REST::get_params()
 {
-  if_mod = rgw_env.get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
-  if_unmod = rgw_env.get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
-  if_match = rgw_env.get("HTTP_X_AMZ_COPY_IF_MATCH");
-  if_nomatch = rgw_env.get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
+  if_mod = s->env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_X_AMZ_COPY_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   return 0;
 }
@@ -367,7 +367,7 @@ void init_entities_from_header(struct req_state *s)
   string req;
   string first;
 
-  gateway_dns_name = rgw_env.get("RGW_DNS_NAME", "s3.");
+  gateway_dns_name = s->env->get("RGW_DNS_NAME", "s3.");
 
   RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
@@ -426,7 +426,7 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *openstack_url_prefix = rgw_env.get("RGW_OPENSTACK_URL_PREFIX");
+    const char *openstack_url_prefix = s->env->get("RGW_OPENSTACK_URL_PREFIX");
     bool cut_url = (openstack_url_prefix != NULL);
     if (!openstack_url_prefix)
       openstack_url_prefix = "v1";
@@ -462,7 +462,7 @@ void init_entities_from_header(struct req_state *s)
     RGW_LOG(10) << "ver=" << ver << dendl;
     next_tok(req, auth_key, '/');
     RGW_LOG(10) << "auth_key=" << auth_key << dendl;
-    s->os_auth_token = rgw_env.get("HTTP_X_AUTH_TOKEN");
+    s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
     next_tok(req, first, '/');
 
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
@@ -667,16 +667,16 @@ static int validate_object_name(const char *object)
 int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 {
   s->fcgx = fcgx;
-  s->path_name = rgw_env.get("SCRIPT_NAME");
-  s->path_name_url = rgw_env.get("REQUEST_URI");
+  s->path_name = s->env->get("SCRIPT_NAME");
+  s->path_name_url = s->env->get("REQUEST_URI");
   int pos = s->path_name_url.find('?');
   if (pos >= 0)
     s->path_name_url = s->path_name_url.substr(0, pos);
-  s->method = rgw_env.get("REQUEST_METHOD");
-  s->host = rgw_env.get("HTTP_HOST");
-  s->query = rgw_env.get("QUERY_STRING");
-  s->length = rgw_env.get("CONTENT_LENGTH");
-  s->content_type = rgw_env.get("CONTENT_TYPE");
+  s->method = s->env->get("REQUEST_METHOD");
+  s->host = s->env->get("HTTP_HOST");
+  s->query = s->env->get("QUERY_STRING");
+  s->length = s->env->get("CONTENT_LENGTH");
+  s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;
 
   if (!s->method)
@@ -705,16 +705,16 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 
   init_auth_info(s);
 
-  const char *cacl = rgw_env.get("HTTP_X_AMZ_ACL");
+  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
   if (cacl)
     s->canned_acl = cacl;
 
-  s->copy_source = rgw_env.get("HTTP_X_AMZ_COPY_SOURCE");
-  s->http_auth = rgw_env.get("HTTP_AUTHORIZATION");
+  s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
+  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
 
-  const char *cgi_env_continue = rgw_env.get("RGW_PRINT_CONTINUE");
+  const char *cgi_env_continue = s->env->get("RGW_PRINT_CONTINUE");
   if (rgw_str_to_bool(cgi_env_continue, 0)) {
-    const char *expect = rgw_env.get("HTTP_EXPECT");
+    const char *expect = s->env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
   return ret;

@@ -509,6 +509,7 @@ public:
   // rgw
   int   rgw_log;
   bool  rgw_cache_enabled;
+  int   rgw_cache_lru_size;
 };
 
 typedef enum {

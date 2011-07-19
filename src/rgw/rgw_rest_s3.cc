@@ -270,7 +270,7 @@ void RGWCompleteMultipart_REST_S3::send_response()
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_obj_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
-    const char *gateway_dns_name = rgw_env.get("RGW_DNS_NAME");
+    const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
     if (gateway_dns_name)
       s->formatter->dump_value_str("Location", "%s.%s", s->bucket, gateway_dns_name);
     s->formatter->dump_value_str("Bucket", s->bucket);
@@ -532,12 +532,12 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
     dest = s->method;
   dest.append("\n");
   
-  const char *md5 = rgw_env.get("HTTP_CONTENT_MD5");
+  const char *md5 = s->env->get("HTTP_CONTENT_MD5");
   if (md5)
     dest.append(md5);
   dest.append("\n");
 
-  const char *type = rgw_env.get("CONTENT_TYPE");
+  const char *type = s->env->get("CONTENT_TYPE");
   if (type)
     dest.append(type);
   dest.append("\n");
@@ -546,7 +546,7 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (qsr) {
     date = s->args.get("Expires");
   } else {
-    const char *str = rgw_env.get("HTTP_DATE");
+    const char *str = s->env->get("HTTP_DATE");
     if (str)
       date = str;
   }

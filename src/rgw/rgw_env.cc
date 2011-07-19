@@ -4,8 +4,6 @@
 #include <string>
 #include <map>
 
-RGWEnv rgw_env;
-
 RGWEnv::RGWEnv()
 {
   conf = new RGWConf;
@@ -16,7 +14,7 @@ RGWEnv::~RGWEnv()
   delete conf;
 }
 
-void RGWEnv::reinit(char **envp)
+void RGWEnv::init(char **envp)
 {
   const char *p;
 
@@ -76,7 +74,6 @@ size_t RGWEnv::get_size(const char *name, size_t def_val)
 
 void RGWConf::init(RGWEnv *env)
 {
-  max_cache_lru = env->get_size("RGW_MAX_CACHE_LRU", 10000);
   log_level = env->get_int("RGW_LOG_LEVEL", g_conf->rgw_log);
   should_log = env->get_bool("RGW_SHOULD_LOG", RGW_SHOULD_LOG_DEFAULT);
 }

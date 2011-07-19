@@ -6,7 +6,7 @@
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
-  const char *p = rgw_env.get(name);
+  const char *p = s->env->get(name);
   if (p)
     str = p;
 }

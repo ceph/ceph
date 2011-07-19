@@ -44,9 +44,9 @@ is_err() const
 }
 
 
-req_state::req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL)
+req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL), env(e)
 {
-  should_log = rgwconf->should_log;
+  should_log = env->conf->should_log;
   content_started = false;
   format = 0;
   acl = new RGWAccessControlPolicy;

@@ -417,6 +417,7 @@ struct config_option config_optionsp[] = {
   OPTION(bdev_fake_max_mb, OPT_INT, 0),
   OPTION(rgw_log, OPT_INT, 20),                 // log level for the Rados gateway
   OPTION(rgw_cache_enabled, OPT_BOOL, false),   // rgw cache enabled
+  OPTION(rgw_cache_lru_size, OPT_INT, 10000),   // num of entries in rgw cache
 };
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);

@@ -123,10 +123,10 @@ void RGW_OS_Auth_Get::execute()
 
   RGW_LOG(0) << "RGW_OS_Auth_Get::execute()" << dendl;
 
-  const char *key = rgw_env.get("HTTP_X_AUTH_KEY");
-  const char *user = rgw_env.get("HTTP_X_AUTH_USER");
-  const char *url_prefix = rgw_env.get("RGW_OPENSTACK_URL_PREFIX");
-  const char *os_url = rgw_env.get("RGW_OPENSTACK_URL");
+  const char *key = s->env->get("HTTP_X_AUTH_KEY");
+  const char *user = s->env->get("HTTP_X_AUTH_USER");
+  const char *url_prefix = s->env->get("RGW_OPENSTACK_URL_PREFIX");
+  const char *os_url = s->env->get("RGW_OPENSTACK_URL");
 
   string user_str = user;
   RGWUserInfo info;
