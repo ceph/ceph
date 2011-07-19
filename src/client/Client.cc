@@ -4677,6 +4677,8 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
 {
   int cmode = ceph_flags_to_mode(flags);
+  if (cmode < 0)
+    return -EINVAL;
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
 
@@ -6016,6 +6018,10 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  
+  int cmode = ceph_flags_to_mode(flags);
+  if (cmode < 0)
+    return -EINVAL;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
@@ -6044,7 +6050,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   if (res >= 0) {
     res = _lookup(dir, name, inp);
     if (res >= 0) {
-      int cmode = ceph_flags_to_mode(flags);
       (*inp)->get_open_ref(cmode);
       *fhp = _create_fh(*inp, flags, cmode);
     }
