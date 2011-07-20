@@ -121,7 +121,7 @@ public:
 /*
  * C_Gather
  *
- * BUG: does not report errors.
+ * BUG:? only reports error from last sub to have an error return
  */
 class C_Gather : public Context {
 private:
