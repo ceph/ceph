@@ -744,16 +744,8 @@ public:
   SnapRealm *find_snaprealm();
   void encode_snap_blob(bufferlist &bl);
   void decode_snap_blob(bufferlist &bl);
-  void encode_snap(bufferlist& bl) {
-    bufferlist snapbl;
-    encode_snap_blob(snapbl);
-    ::encode(snapbl, bl);
-  }    
-  void decode_snap(bufferlist::iterator& p) {
-    bufferlist snapbl;
-    ::decode(snapbl, p);
-    decode_snap_blob(snapbl);
-  }
+  void encode_snap(bufferlist& bl);
+  void decode_snap(bufferlist::iterator& p);
 
   // -- caps -- (new)
   // client caps
@@ -770,95 +762,15 @@ public:
       return -1;
   }
 
-  client_t calc_ideal_loner() {
-    if (!mds_caps_wanted.empty())
-      return -1;
-
-    int n = 0;
-    client_t loner = -1;
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) 
-      if (!it->second->is_stale() &&
-	  ((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
-	   (inode.is_dir() && !has_subtree_root_dirfrag()))) {
-	if (n)
-	  return -1;
-	n++;
-	loner = it->first;
-      }
-    return loner;
-  }
-  client_t choose_ideal_loner() {
-    want_loner_cap = calc_ideal_loner();
-    return want_loner_cap;
-  }
-  bool try_set_loner() {
-    assert(want_loner_cap >= 0);
-    if (loner_cap >= 0 && loner_cap != want_loner_cap)
-      return false;
-    set_loner_cap(want_loner_cap);
-    return true;
-  }
-  void set_loner_cap(client_t l) {
-    loner_cap = l;
-    authlock.set_excl_client(loner_cap);
-    filelock.set_excl_client(loner_cap);
-    linklock.set_excl_client(loner_cap);
-    xattrlock.set_excl_client(loner_cap);
-  }
-  bool try_drop_loner() {
-    if (loner_cap < 0)
-      return true;
-
-    int other_allowed = get_caps_allowed_by_type(CAP_ANY);
-    Capability *cap = get_client_cap(loner_cap);
-    if (!cap ||
-	(cap->issued() & ~other_allowed) == 0) {
-      set_loner_cap(-1);
-      return true;
-    }
-    return false;
-  }
+  client_t calc_ideal_loner();
+  client_t choose_ideal_loner();
+  bool try_set_loner();
+  void set_loner_cap(client_t l);
+  bool try_drop_loner();
 
   // choose new lock state during recovery, based on issued caps
-  void choose_lock_state(SimpleLock *lock, int allissued) {
-    int shift = lock->get_cap_shift();
-    int issued = (allissued >> shift) & lock->get_cap_mask();
-    if (is_auth()) {
-      if (lock->is_xlocked()) {
-	// do nothing here
-      } else {
-	if (issued & CEPH_CAP_GEXCL)
-	  lock->set_state(LOCK_EXCL);
-	else if (issued & CEPH_CAP_GWR)
-	  lock->set_state(LOCK_MIX);
-	else if (lock->is_dirty()) {
-	  if (is_replicated())
-	    lock->set_state(LOCK_MIX);
-	  else
-	    lock->set_state(LOCK_LOCK);
-	} else
-	  lock->set_state(LOCK_SYNC);
-      }
-    } else {
-      // our states have already been chosen during rejoin.
-      if (lock->is_xlocked())
-	assert(lock->get_state() == LOCK_LOCK);
-    }
-  }
-  void choose_lock_states() {
-    int issued = get_caps_issued();
-    if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
-	choose_ideal_loner() >= 0)
-      try_set_loner();
-    choose_lock_state(&filelock, issued);
-    choose_lock_state(&nestlock, issued);
-    choose_lock_state(&dirfragtreelock, issued);
-    choose_lock_state(&authlock, issued);
-    choose_lock_state(&xattrlock, issued);
-    choose_lock_state(&linklock, issued);
-  }
+  void choose_lock_state(SimpleLock *lock, int allissued);
+  void choose_lock_states();
 
   int count_nonstale_caps() {
     int n = 0;
