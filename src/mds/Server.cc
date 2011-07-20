@@ -1887,6 +1887,18 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     if (ref->is_frozen() || (ref->is_freezing() && !mdr->is_auth_pinned(ref))) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      /* If we have any auth pins, this will deadlock.
+       * But the only way to get here if we've already got auth pins
+       * is because we're on an inode with snapshots that got updated
+       * between dispatches of this request. So we're going to drop
+       * our locks and our auth pins and reacquire them later.
+       *
+       * This is safe since we're only in this function when working on
+       * a single MDS request; otherwise we'd be in
+       * rdlock_path_xlock_dentry.
+       */
+      mds->locker->drop_locks(mdr, NULL);
+      mdr->drop_local_auth_pins();
       return 0;
     }
 
