@@ -5049,6 +5049,13 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
   dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
 	   << " for " << *in << dendl;
 
+  if (r != 0) {
+    dout(0) << "recovery error! " << r << dendl;
+    if (r == -EBLACKLISTED)
+      mds->suicide();
+    assert(0);
+  }
+
   file_recovering.erase(in);
   in->state_clear(CInode::STATE_RECOVERING);
 
