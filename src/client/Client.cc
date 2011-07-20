@@ -2134,10 +2134,9 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
   assert(in->cap_snaps.size());
 
   // pick auth mds
-  int mds = -1;
-  int mseq = 0;
   assert(in->auth_cap);
-  mds = in->auth_cap->session->inst.name.num();
+  int mds = in->auth_cap->session->inst.name.num();
+  int mseq = in->auth_cap->mseq;
   assert(mds >= 0);
 
   for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); p++) {
