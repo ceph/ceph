@@ -279,6 +279,7 @@ $DAEMONOPTS
 $CMDSDEBUG
         mds debug frag = true
         mds debug auth pins = true
+        mds debug subtrees = true
 [osd]
 $DAEMONOPTS
         osd class tmp = out

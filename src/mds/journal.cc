@@ -1099,7 +1099,92 @@ void ESubtreeMap::replay(MDS *mds)
 
   // suck up the subtree map?
   if (mds->mdcache->is_subtrees()) {
-    dout(10) << "ESubtreeMap.replay -- ignoring, already have import map" << dendl;
+    dout(10) << "ESubtreeMap.replay -- i already have import map; verifying" << dendl;
+    int errors = 0;
+
+    for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
+	 p != subtrees.end();
+	 ++p) {
+      CDir *dir = mds->mdcache->get_dirfrag(p->first);
+      if (!dir) {
+	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			  << " subtree root " << p->first << " not in cache";
+	++errors;
+	continue;
+      }
+      
+      if (!mds->mdcache->is_subtree(dir)) {
+	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			  << " subtree root " << p->first << " not a subtree in cache";
+	++errors;
+	continue;
+      }
+      if (dir->get_dir_auth().first != mds->whoami) {
+	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			  << " subtree root " << p->first
+			  << " is not mine in cache (it's " << dir->get_dir_auth() << ")";
+	++errors;
+	continue;
+      }
+
+      set<CDir*> bounds;
+      mds->mdcache->get_subtree_bounds(dir, bounds);
+      for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	CDir *b = mds->mdcache->get_dirfrag(*q);
+	if (!b) {
+	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			    << " subtree " << p->first << " bound " << *q << " not in cache";
+	++errors;
+	  continue;
+	}
+	if (bounds.count(b) == 0) {
+	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			    << " subtree " << p->first << " bound " << *q << " not a bound in cache";
+	++errors;
+	  continue;
+	}
+	bounds.erase(b);
+      }
+      for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q) {
+	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			  << " subtree " << p->first << " has extra bound in cache " << (*q)->dirfrag();
+	++errors;
+      }
+      
+      if (ambiguous_subtrees.count(p->first)) {
+	if (!mds->mdcache->have_ambiguous_import(p->first)) {
+	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			    << " subtree " << p->first << " is ambiguous but is not in our cache";
+	  ++errors;
+	}
+      } else {
+	if (mds->mdcache->have_ambiguous_import(p->first)) {
+	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			    << " subtree " << p->first << " is not ambiguous but is in our cache";
+	  ++errors;
+	}
+      }
+    }
+    
+    list<CDir*> subs;
+    mds->mdcache->list_subtrees(subs);
+    for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
+      CDir *dir = *p;
+      if (dir->get_dir_auth().first != mds->whoami)
+	continue;
+      if (subtrees.count(dir->dirfrag()) == 0) {
+	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+			  << " does not include cache subtree " << dir->dirfrag();
+	++errors;
+      }
+    }
+
+    if (errors) {
+      dout(0) << "journal subtrees: " << subtrees << dendl;
+      dout(0) << "journal ambig_subtrees: " << ambiguous_subtrees << dendl;
+      mds->mdcache->show_subtrees();
+      assert(!g_conf->mds_debug_subtrees || errors == 0);
+    }
     return;
   }
 

@@ -568,6 +568,9 @@ public:
     return subtrees[dir].empty();
   }
   void remove_subtree(CDir *dir);
+  bool is_subtree(CDir *root) {
+    return subtrees.count(root);
+  }
   void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
