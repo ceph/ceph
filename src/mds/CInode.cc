@@ -1933,9 +1933,11 @@ void CInode::add_waiter(uint64_t tag, Context *c)
   //  make sure its not the inode that is explicitly ambiguous|freezing|frozen
   if (((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH)) ||
       ((tag & WAIT_UNFREEZE) && !is_frozen_inode() && !is_freezing_inode())) {
+    dout(15) << "passing waiter up tree" << dendl;
     parent->dir->add_waiter(tag, c);
     return;
   }
+  dout(15) << "taking waiter here" << dendl;
   MDSCacheObject::add_waiter(tag, c);
 }
 
@@ -2018,7 +2020,7 @@ void CInode::auth_unpin(void *by)
   assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins(-1, -1, this);
+    parent->adjust_nested_auth_pins(-1, -1, by);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
