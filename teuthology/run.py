@@ -245,7 +245,7 @@ def schedule():
 
     from teuthology.misc import read_config, get_user
     if ctx.owner is None:
-        ctx.owner = get_user()
+        ctx.owner = 'scheduled_{user}'.format(user=get_user())
     read_config(ctx)
 
     import teuthology.queue
