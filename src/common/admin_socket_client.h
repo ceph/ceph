@@ -30,4 +30,6 @@ private:
   std::string m_path;
 };
 
+const char* get_rand_socket_path();
+
 #endif

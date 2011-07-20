@@ -27,6 +27,7 @@
 #include <sstream>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 #include <sys/socket.h>
@@ -37,6 +38,24 @@
 #include <vector>
 
 using std::ostringstream;
+
+const char* get_rand_socket_path()
+{
+  static char *g_socket_path = NULL;
+
+  if (g_socket_path == NULL) {
+    char buf[512];
+    const char *tdir = getenv("TMPDIR");
+    if (tdir == NULL) {
+      tdir = "/tmp";
+    }
+    snprintf(buf, sizeof(sockaddr_un::sun_path),
+	     "%s/proflogger_test_socket.%ld.%ld",
+	     tdir, (long int)getpid(), time(NULL));
+    g_socket_path = (char*)strdup(buf);
+  }
+  return g_socket_path;
+}
 
 static std::string asok_connect(const std::string &path, int *fd)
 {

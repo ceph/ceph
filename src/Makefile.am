@@ -475,11 +475,11 @@ unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
-#unittest_proflogger_SOURCES = test/proflogger.cc
-#unittest_proflogger_LDFLAGS = -lrt ${AM_LDFLAGS}
-#unittest_proflogger_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
-#unittest_proflogger_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_PROGRAMS += unittest_proflogger
+unittest_proflogger_SOURCES = test/proflogger.cc
+unittest_proflogger_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_proflogger_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_proflogger_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_proflogger
 
 unittest_admin_socket_SOURCES = test/admin_socket.cc
 unittest_admin_socket_LDFLAGS = -lrt ${AM_LDFLAGS}

@@ -23,22 +23,6 @@
 #include <string>
 #include <sys/un.h>
 
-static char g_socket_path[sizeof(sockaddr_un::sun_path)] = { 0 };
-
-static const char* get_socket_path()
-{
-  if (g_socket_path[0] == '\0') {
-    const char *tdir = getenv("TMPDIR");
-    if (tdir == NULL) {
-      tdir = "/tmp";
-    }
-    snprintf(g_socket_path, sizeof(sockaddr_un::sun_path),
-	     "%s/proflogger_test_socket.%ld.%ld",
-	     tdir, (long int)getpid(), time(NULL));
-  }
-  return g_socket_path;
-}
-
 class AdminSocketTest
 {
 public:
@@ -72,7 +56,7 @@ TEST(AdminSocket, TeardownSetup) {
       asokc(new AdminSocketConfigObs(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
-  ASSERT_EQ(true, asoct.init(get_socket_path()));
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   ASSERT_EQ(true, asoct.shutdown());
 }
 
@@ -81,8 +65,8 @@ TEST(AdminSocket, SendNoOp) {
       asokc(new AdminSocketConfigObs(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
-  ASSERT_EQ(true, asoct.init(get_socket_path()));
-  AdminSocketClient client(get_socket_path());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
   ASSERT_EQ("", client.send_noop());
   ASSERT_EQ(true, asoct.shutdown());
 }
