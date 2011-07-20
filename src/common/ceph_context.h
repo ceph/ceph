@@ -59,9 +59,6 @@ public:
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
 
-  /* Set module type (TODO: remove) */
-  void set_module_type(uint32_t module_type_);
-
   /* Get the PerfCountersCollection of this CephContext */
   PerfCountersCollection *GetPerfCountersCollection();
 

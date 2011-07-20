@@ -180,12 +180,6 @@ get_module_type() const
   return _module_type;
 }
 
-void CephContext::
-set_module_type(uint32_t module_type_)
-{
-  _module_type = module_type_;
-}
-
 PerfCountersCollection *CephContext::
 GetPerfCountersCollection()
 {
