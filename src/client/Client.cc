@@ -73,7 +73,7 @@ using namespace std;
 
 // static logger
 Mutex client_logger_lock("client_logger_lock");
-ProfLogger  *client_logger = 0;
+PerfCounters  *client_logger = 0;
 
 
 
@@ -309,7 +309,7 @@ void Client::init()
   char hostname[80];
   gethostname(hostname, 79);
   snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-  ProfLoggerBuilder plb(cct, s, l_c_first, l_c_last);
+  PerfCountersBuilder plb(cct, s, l_c_first, l_c_last);
   if (client_logger == 0) {
     plb.add_fl_avg(l_c_reply, "reply");
     plb.add_fl_avg(l_c_lat, "lat");
@@ -317,7 +317,7 @@ void Client::init()
     plb.add_fl_avg(l_c_owrlat, "owrlat");
     plb.add_fl_avg(l_c_ordlat, "ordlat");
     
-    client_logger = plb.create_proflogger();
+    client_logger = plb.create_perf_counters();
   }
   client_logger_lock.Unlock();
 }

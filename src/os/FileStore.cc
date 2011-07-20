@@ -1883,7 +1883,7 @@ void FileStore::start_logger(int whoami, utime_t tare)
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  ProfLoggerBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
 
   plb.add_u64(l_os_in_ops, "in_o");
   //plb.add_u64(l_os_in_bytes, "in_b");
@@ -1906,10 +1906,10 @@ void FileStore::start_logger(int whoami, utime_t tare)
   plb.add_u64(l_os_bytes, "b");
   plb.add_u64(l_os_committing, "comitng");
 
-  logger = plb.create_proflogger();
+  logger = plb.create_perf_counters();
   if (journal)
     journal->logger = logger;
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 void FileStore::stop_logger()
@@ -1918,7 +1918,7 @@ void FileStore::stop_logger()
   if (logger) {
     if (journal)
       journal->logger = NULL;
-    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
     delete logger;
     logger = NULL;
   }

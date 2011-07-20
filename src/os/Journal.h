@@ -20,14 +20,14 @@
 #include "include/Context.h"
 #include "common/Finisher.h"
 
-class ProfLogger;
+class PerfCounters;
 
 class Journal {
 protected:
   uint64_t fsid;
   Finisher *finisher;
 public:
-  ProfLogger *logger;
+  PerfCounters *logger;
 protected:
   Cond *do_sync_cond;
   bool wait_on_full;

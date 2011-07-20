@@ -468,7 +468,7 @@ OSD::~OSD()
 {
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
+  g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
   delete logger;
   delete store;
 }
@@ -628,7 +628,7 @@ void OSD::create_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  ProfLoggerBuilder osd_plb(g_ceph_context, name, l_osd_first, l_osd_last);
+  PerfCountersBuilder osd_plb(g_ceph_context, name, l_osd_first, l_osd_last);
 
   osd_plb.add_u64(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
   osd_plb.add_u64(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
@@ -683,8 +683,8 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_mape, "mape");         // osdmap epochs
   osd_plb.add_u64(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
 
-  logger = osd_plb.create_proflogger();
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
+  logger = osd_plb.create_perf_counters();
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 int OSD::shutdown()

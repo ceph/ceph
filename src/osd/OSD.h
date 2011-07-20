@@ -103,7 +103,7 @@ enum {
 class Messenger;
 class Message;
 class MonClient;
-class ProfLogger;
+class PerfCounters;
 class ObjectStore;
 class OSDMap;
 class MLog;
@@ -126,7 +126,7 @@ protected:
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
   MonClient   *monc;
-  ProfLogger      *logger;
+  PerfCounters      *logger;
   ObjectStore *store;
 
   // cover OSDMap update data when using multiple msgrs

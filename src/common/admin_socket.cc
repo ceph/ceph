@@ -273,7 +273,7 @@ private:
     std::vector<char> buffer;
     buffer.reserve(512);
 
-    ProfLoggerCollection *coll = m_parent->m_cct->GetProfLoggerCollection();
+    PerfCountersCollection *coll = m_parent->m_cct->GetPerfCountersCollection();
     if (coll) {
       coll->write_json_to_buf(buffer);
     }

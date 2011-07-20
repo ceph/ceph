@@ -29,7 +29,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
 
-class ProfLogger;
+class PerfCounters;
 
 class MDS;
 class Session;

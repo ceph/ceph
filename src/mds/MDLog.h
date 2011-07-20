@@ -53,7 +53,7 @@ class MDS;
 class LogSegment;
 class ESubtreeMap;
 
-class ProfLogger;
+class PerfCounters;
 
 #include <map>
 using std::map;
@@ -72,7 +72,7 @@ protected:
   inodeno_t ino;
   Journaler *journaler;
 
-  ProfLogger *logger;
+  PerfCounters *logger;
 
 
   // -- replay --

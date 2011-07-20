@@ -24,21 +24,21 @@
 #include <vector>
 
 class CephContext;
-class ProfLoggerBuilder;
-class ProfLoggerCollectionTest;
+class PerfCountersBuilder;
+class PerfCountersCollectionTest;
 
 /*
- * A ProfLogger is usually associated with a single subsystem.
+ * A PerfCounters object is usually associated with a single subsystem.
  * It contains counters which we modify to track performance and throughput
  * over time. 
  *
- * ProfLogger is thread-safe. However, it is better to avoid sharing
- * ProfLoggers between multiple threads to avoid cacheline ping-pong.
+ * This object is thread-safe. However, it is better to avoid sharing
+ * a PerfCounters object between multiple threads to avoid cacheline ping-pong.
  */
-class ProfLogger
+class PerfCounters
 {
 public:
-  ~ProfLogger();
+  ~PerfCounters();
 
   void inc(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
@@ -53,14 +53,14 @@ public:
   const std::string& get_name() const;
 
 private:
-  ProfLogger(CephContext *cct, const std::string &name,
+  PerfCounters(CephContext *cct, const std::string &name,
 	     int lower_bound, int upper_bound);
-  ProfLogger(const ProfLogger &rhs);
-  ProfLogger& operator=(const ProfLogger &rhs);
+  PerfCounters(const PerfCounters &rhs);
+  PerfCounters& operator=(const PerfCounters &rhs);
 
-  /** Represents a ProfLogger data element. */
-  struct prof_log_data_any_d {
-    prof_log_data_any_d();
+  /** Represents a PerfCounters data element. */
+  struct perf_counter_data_any_d {
+    perf_counter_data_any_d();
     const char *name;
     int type;
     union {
@@ -69,7 +69,7 @@ private:
     } u;
     uint64_t count;
   };
-  typedef std::vector<prof_log_data_any_d> prof_log_data_vec_t;
+  typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
   CephContext *m_cct;
   int m_lower_bound;
@@ -80,30 +80,30 @@ private:
   /** Protects m_data */
   mutable Mutex m_lock;
 
-  prof_log_data_vec_t m_data;
+  perf_counter_data_vec_t m_data;
 
-  friend class ProfLoggerBuilder;
+  friend class PerfCountersBuilder;
 };
 
-class SortProfLoggersByName {
+class SortPerfCountersByName {
 public:
-  bool operator()(const ProfLogger* lhs, const ProfLogger* rhs) const {
+  bool operator()(const PerfCounters* lhs, const PerfCounters* rhs) const {
     return (lhs->get_name() < rhs->get_name());
   }
 };
 
-typedef std::set <ProfLogger*, SortProfLoggersByName> prof_logger_set_t;
+typedef std::set <PerfCounters*, SortPerfCountersByName> perf_counters_set_t;
 
 /*
- * ProfLoggerCollection manages the set of ProfLoggers for a Ceph process.
+ * PerfCountersCollection manages PerfCounters objects for a Ceph process.
  */
-class ProfLoggerCollection
+class PerfCountersCollection
 {
 public:
-  ProfLoggerCollection(CephContext *cct);
-  ~ProfLoggerCollection();
-  void logger_add(class ProfLogger *l);
-  void logger_remove(class ProfLogger *l);
+  PerfCountersCollection(CephContext *cct);
+  ~PerfCountersCollection();
+  void logger_add(class PerfCounters *l);
+  void logger_remove(class PerfCounters *l);
   void logger_clear();
   void write_json_to_buf(std::vector <char> &buffer);
 private:
@@ -116,35 +116,35 @@ private:
   mutable Mutex m_lock;
 
   int m_shutdown_fd;
-  prof_logger_set_t m_loggers;
+  perf_counters_set_t m_loggers;
 
-  friend class ProfLoggerCollectionTest;
+  friend class PerfCountersCollectionTest;
 };
 
-/* Class for constructing ProfLoggers.
+/* Class for constructing a PerfCounters object.
  *
  * This class peforms some validation that the parameters we have supplied are
- * correct in create_proflogger().
+ * correct in create_perf_counters().
  *
  * In the future, we will probably get rid of the first/last arguments, since
- * ProfLoggerBuilder can deduce them itself.
+ * PerfCountersBuilder can deduce them itself.
  */
-class ProfLoggerBuilder
+class PerfCountersBuilder
 {
 public:
-  ProfLoggerBuilder(CephContext *cct, const std::string &name,
+  PerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
-  ~ProfLoggerBuilder();
+  ~PerfCountersBuilder();
   void add_u64(int key, const char *name);
   void add_fl(int key, const char *name);
   void add_fl_avg(int key, const char *name);
-  ProfLogger* create_proflogger();
+  PerfCounters* create_perf_counters();
 private:
-  ProfLoggerBuilder(const ProfLoggerBuilder &rhs);
-  ProfLoggerBuilder& operator=(const ProfLoggerBuilder &rhs);
+  PerfCountersBuilder(const PerfCountersBuilder &rhs);
+  PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name, int ty, uint64_t count);
 
-  ProfLogger *m_prof_logger;
+  PerfCounters *m_perf_counters;
 };
 
 #endif

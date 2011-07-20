@@ -67,14 +67,14 @@ void Server::create_logger()
 {
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
-  ProfLoggerBuilder plb(g_ceph_context, name, l_mdss_first, l_mdss_last);
+  PerfCountersBuilder plb(g_ceph_context, name, l_mdss_first, l_mdss_last);
   plb.add_u64(l_mdss_hcreq,"hcreq"); // handle client req
   plb.add_u64(l_mdss_hsreq, "hsreq"); // slave
   plb.add_u64(l_mdss_hcsess, "hcsess");    // client session
   plb.add_u64(l_mdss_dcreq, "dcreq"); // dispatch client req
   plb.add_u64(l_mdss_dsreq, "dsreq"); // slave
-  logger = plb.create_proflogger();
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
+  logger = plb.create_perf_counters();
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 

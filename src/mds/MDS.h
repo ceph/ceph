@@ -177,7 +177,7 @@ class MDS : public Dispatcher {
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);
 
-  ProfLogger       *logger, *mlogger;
+  PerfCounters       *logger, *mlogger;
 
   int orig_argc;
   const char **orig_argv;
