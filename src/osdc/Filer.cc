@@ -45,7 +45,8 @@ public:
     }
 
     // TODO: handle this error.
-    assert(r == 0);
+    if (r != 0)
+      probe->err = r;
 
     filer->_probed(probe, oid, size, mtime);
   }  
@@ -127,6 +128,12 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
 
   if (!probe->ops.empty()) 
     return;  // waiting for more!
+
+  if (probe->err) { // we hit an error, propagate back up
+    probe->onfinish->finish(probe->err);
+    delete probe->onfinish;
+    delete probe;
+  }
 
   // analyze!
   uint64_t end = 0;
