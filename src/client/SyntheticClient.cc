@@ -802,12 +802,12 @@ int SyntheticClient::run()
             lat -= start;
             
             dout(0) << " trace " << tfile << " loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << dendl;
-            if (client_logger 
+            if (client_counters 
                 && i > 0
                 && i < iarg1-1
                 ) {
-              //client_logger->finc("trsum", (double)lat);
-              //client_logger->inc("trnum");
+              //client_counters->finc("trsum", (double)lat);
+              //client_counters->inc("trnum");
             }
           }
 	  dout(1) << "done " << dendl;
@@ -2348,11 +2348,11 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
     utime_t lat = ceph_clock_now(g_ceph_context);
     lat -= start;
-    if (client_logger) {
+    if (client_counters) {
       if (write) 
-	client_logger->fset(l_c_owrlat, lat);
+	client_counters->fset(l_c_owrlat, lat);
       else 
-	client_logger->fset(l_c_ordlat, lat);
+	client_counters->fset(l_c_ordlat, lat);
     }
   }
 

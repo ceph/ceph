@@ -73,7 +73,7 @@ using namespace std;
 
 // static logger
 Mutex client_logger_lock("client_logger_lock");
-PerfCounters  *client_logger = 0;
+PerfCounters  *client_counters = 0;
 
 
 
@@ -310,14 +310,14 @@ void Client::init()
   gethostname(hostname, 79);
   snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
   PerfCountersBuilder plb(cct, s, l_c_first, l_c_last);
-  if (client_logger == 0) {
+  if (client_counters == 0) {
     plb.add_fl_avg(l_c_reply, "reply");
     plb.add_fl_avg(l_c_lat, "lat");
     plb.add_fl_avg(l_c_wrlat, "wrlat");
     plb.add_fl_avg(l_c_owrlat, "owrlat");
     plb.add_fl_avg(l_c_ordlat, "ordlat");
     
-    client_logger = plb.create_perf_counters();
+    client_counters = plb.create_perf_counters();
   }
   client_logger_lock.Unlock();
 }
@@ -1100,12 +1100,12 @@ int Client::make_request(MetaRequest *request,
   request->dispatch_cond = 0;
   
   // -- log times --
-  if (client_logger) {
+  if (client_counters) {
     utime_t lat = ceph_clock_now(cct);
     lat -= request->sent_stamp;
     ldout(cct, 20) << "lat " << lat << dendl;
-    client_logger->fset(l_c_lat,(double)lat);
-    client_logger->fset(l_c_reply,(double)lat);
+    client_counters->fset(l_c_lat,(double)lat);
+    client_counters->fset(l_c_reply,(double)lat);
   }
 
   request->put();
@@ -5202,8 +5202,8 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   // time
   utime_t lat = ceph_clock_now(cct);
   lat -= start;
-  if (client_logger)
-    client_logger->fset(l_c_wrlat,(double)lat);
+  if (client_counters)
+    client_counters->fset(l_c_wrlat,(double)lat);
     
   // assume success for now.  FIXME.
   uint64_t totalwritten = size;
