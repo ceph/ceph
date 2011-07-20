@@ -2233,6 +2233,28 @@ ESubtreeMap *MDCache::create_subtree_map()
     }
   }
 
+  // simplify the journaled map.  our in memory map may have more
+  // subtrees than needed due to migrations that are just getting
+  // started or just completing.  but on replay, the "live" map will
+  // be simple and we can do a straight comparison.
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
+    if (le->ambiguous_subtrees.count(p->first))
+      continue;
+    for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+      if (le->subtrees.count(*q) &&
+	  le->ambiguous_subtrees.count(*q) == 0) {
+	vector<dirfrag_t>& b = le->subtrees[*q];
+	dout(10) << "simplify: " << p->first << " swallowing " << *q << " with bounds " << b << dendl;
+	for (vector<dirfrag_t>::iterator r = b.begin(); r != b.end(); ++r)
+	  p->second.push_back(*r);
+	le->subtrees.erase(*q);
+	p->second.erase(q--);
+      }	  
+    }
+  }
+  dout(15) << " subtrees " << le->subtrees << dendl;
+  dout(15) << " ambiguous_subtrees " << le->ambiguous_subtrees << dendl;
+
   if (mydir) {
     // include my dir
     le->metablob.add_dir_context(mydir, EMetaBlob::TO_ROOT);
