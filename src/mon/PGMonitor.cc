@@ -868,12 +868,40 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 bool PGMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
+  pg_t pgid;
+  epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
   string rs;
+
+  if (m->cmd.size() <= 1 || m->cmd[1] != "force_create_pg") {
+    // nothing here yet
+    ss << "unrecognized command";
+    goto out;
+  }
+  if (m->cmd.size() <= 2) {
+    ss << "usage: pg force_create_pg <pg>";
+    goto out;
+  }
+  if (!pgid.parse(m->cmd[2].c_str())) {
+    ss << "pg " << m->cmd[2] << " invalid";
+    goto out;
+  }
+  if (!pg_map.pg_stat.count(pgid)) {
+    ss << "pg " << pgid << " dne";
+    goto out;
+  }
+  if (pg_map.creating_pgs.count(pgid)) {
+    ss << "pg " << pgid << " already creating";
+    goto out;
+  }
+  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
+  pending_inc.pg_stat_updates[pgid].created = epoch;
+  ss << "pg " << m->cmd[2] << " now creating, ok";
+  getline(ss, rs);
+  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+  return true;
+
+ out:
   int err = -EINVAL;
-
-  // nothing here yet
-  ss << "unrecognized command";
-
   getline(ss, rs);
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
