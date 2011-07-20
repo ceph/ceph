@@ -510,6 +510,7 @@ public:
   int   rgw_log;
   bool  rgw_cache_enabled;
   int   rgw_cache_lru_size;
+  string rgw_socket_path;
 };
 
 typedef enum {

@@ -41,7 +41,7 @@ static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
 
 
-#define SOCKET_NAME "/tmp/.radosgw.sock"
+#define SOCKET_NAME ".radosgw.sock"
 #define SOCKET_BACKLOG 20
 
 static void godown_handler(int signum)
@@ -112,14 +112,20 @@ public:
 
 void RGWProcess::run()
 {
-  const char *sock = SOCKET_NAME;
-  int s = FCGX_OpenSocket(sock, SOCKET_BACKLOG);
-  if (s < 0) {
-    RGW_LOG(0) << "ERROR: FCGX_OpenSocket (" << sock << ") returned " << s << dendl;
-    return;
-  }
-  if (chmod(sock, 0777) < 0) {
-    RGW_LOG(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
+  int s = 0;
+  if (!g_conf->rgw_socket_path.empty()) {
+    string path_str = g_conf->rgw_socket_path;
+    path_str.append("/");
+    path_str.append(SOCKET_NAME);
+    const char *path = path_str.c_str();
+    s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
+    if (s < 0) {
+      RGW_LOG(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << s << dendl;
+      return;
+    }
+    if (chmod(path, 0777) < 0) {
+      RGW_LOG(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
+    }
   }
 
   m_tp.start();

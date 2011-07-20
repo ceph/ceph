@@ -418,6 +418,7 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_log, OPT_INT, 20),                 // log level for the Rados gateway
   OPTION(rgw_cache_enabled, OPT_BOOL, false),   // rgw cache enabled
   OPTION(rgw_cache_lru_size, OPT_INT, 10000),   // num of entries in rgw cache
+  OPTION(rgw_socket_path, OPT_STR, NULL),   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 };
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
