@@ -76,4 +76,13 @@ TEST(AdminSocket, TeardownSetup) {
   ASSERT_EQ(true, asoct.shutdown());
 }
 
-// TODO: test sending message 0
+TEST(AdminSocket, SendNoOp) {
+  std::auto_ptr<AdminSocketConfigObs>
+      asokc(new AdminSocketConfigObs(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_socket_path()));
+  AdminSocketClient client(get_socket_path());
+  ASSERT_EQ("", client.send_noop());
+  ASSERT_EQ(true, asoct.shutdown());
+}

@@ -17,11 +17,14 @@
 
 #include <string>
 
-// TODO: restructure in terms of open/send
+/* This is a simple client that talks to an AdminSocket using blocking I/O.
+ * We put a 5-second timeout on send and recv operations.
+ */
 class AdminSocketClient
 {
 public:
   AdminSocketClient(const std::string &path);
+  std::string send_noop();
   std::string get_message(std::string *message);
 private:
   std::string m_path;
