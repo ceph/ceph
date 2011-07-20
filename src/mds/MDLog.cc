@@ -151,6 +151,13 @@ void MDLog::append()
 
 // -------------------------------------------------
 
+void MDLog::start_entry(LogEvent *e)
+{
+  assert(cur_event == NULL);
+  cur_event = e;
+  e->set_start_off(get_write_pos());
+}
+
 void MDLog::submit_entry(LogEvent *le, Context *c) 
 {
   assert(!mds->is_any_replay());
@@ -534,6 +541,7 @@ void MDLog::_replay_thread()
       assert(!!"corrupt log event" == g_conf->mds_log_skip_corrupt_events);
       continue;
     }
+    le->set_start_off(pos);
 
     // new segment?
     if (le->get_type() == EVENT_SUBTREEMAP ||

@@ -51,7 +51,7 @@ class LogSegment;
 class LogEvent {
  private:
   __u32 _type;
-  loff_t _start_off,_end_off;
+  uint64_t _start_off;
 
 protected:
   utime_t stamp;
@@ -61,13 +61,13 @@ protected:
  public:
   LogSegment *_segment;
 
-  LogEvent(int t) : 
-    _type(t), _start_off(0), _end_off(0), _segment(0) { }
+  LogEvent(int t)
+    : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
   int get_type() { return _type; }
-  loff_t get_start_off() { return _start_off; }
-  loff_t get_end_off() { return _end_off; }
+  uint64_t get_start_off() const { return _start_off; }
+  void set_start_off(uint64_t o) { _start_off = o; }
   utime_t get_stamp() const { return stamp; }
 
   void set_stamp(utime_t t) { stamp = t; }
