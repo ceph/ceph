@@ -22,11 +22,12 @@
 template <typename T, typename U>
 class DoutStreambuf;
 
-class md_config_t;
-class md_config_obs_t;
+class AdminSocketConfigObs;
 class CephContextServiceThread;
 class DoutLocker;
 class ProfLoggerCollection;
+class md_config_obs_t;
+class md_config_t;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -77,6 +78,9 @@ private:
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
+
+  /* The collection of profiling loggers associated with this context */
+  AdminSocketConfigObs *_admin_socket_config_obs;
 
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;

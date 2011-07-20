@@ -249,7 +249,7 @@ DAEMONOPTS="
 	log file = out/\$host
 	log per instance = true
 	log sym history = 100
-        profiling logger uri = out/proflog.\$name
+        admin socket = out/asok.\$name
 	chdir = \"\"
 	pid file = out/\$name.pid
 "

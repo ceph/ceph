@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/admin_socket.h"
 #include "common/DoutStreambuf.h"
 #include "common/ProfLogger.h"
 #include "common/Thread.h"
@@ -78,12 +79,14 @@ CephContext(uint32_t module_type_)
     _dout(_doss),
     _module_type(module_type_),
     _service_thread(NULL),
+    _admin_socket_config_obs(NULL),
     _prof_logger_collection(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
   _prof_logger_collection = new ProfLoggerCollection(this);
   _conf->add_observer(_doss);
-  _conf->add_observer(_prof_logger_collection);
+  _admin_socket_config_obs = new AdminSocketConfigObs(this);
+  _conf->add_observer(_admin_socket_config_obs);
 }
 
 CephContext::
@@ -91,7 +94,7 @@ CephContext::
 {
   join_service_thread();
 
-  _conf->remove_observer(_prof_logger_collection);
+  _conf->remove_observer(_admin_socket_config_obs);
   _conf->remove_observer(_doss);
 
   delete _prof_logger_collection;

@@ -26,7 +26,6 @@
 class CephContext;
 class ProfLoggerBuilder;
 class ProfLoggerCollectionTest;
-class Thread;
 
 /*
  * A ProfLogger is usually associated with a single subsystem.
@@ -98,32 +97,27 @@ typedef std::set <ProfLogger*, SortProfLoggersByName> prof_logger_set_t;
 /*
  * ProfLoggerCollection manages the set of ProfLoggers for a Ceph process.
  */
-class ProfLoggerCollection : public md_config_obs_t
+class ProfLoggerCollection
 {
 public:
   ProfLoggerCollection(CephContext *cct);
   ~ProfLoggerCollection();
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed);
   void logger_add(class ProfLogger *l);
   void logger_remove(class ProfLogger *l);
   void logger_clear();
+  void write_json_to_buf(std::vector <char> &buffer);
 private:
   bool init(const std::string &uri);
   void shutdown();
 
   CephContext *m_cct;
-  Thread* m_thread;
 
   /** Protects m_loggers */
   mutable Mutex m_lock;
 
   int m_shutdown_fd;
   prof_logger_set_t m_loggers;
-  std::string m_uri;
 
-  friend class ProfLogThread;
   friend class ProfLoggerCollectionTest;
 };
 

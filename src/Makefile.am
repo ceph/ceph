@@ -475,11 +475,17 @@ unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
-unittest_proflogger_SOURCES = test/proflogger.cc
-unittest_proflogger_LDFLAGS = -lrt ${AM_LDFLAGS}
-unittest_proflogger_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
-unittest_proflogger_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_proflogger
+#unittest_proflogger_SOURCES = test/proflogger.cc
+#unittest_proflogger_LDFLAGS = -lrt ${AM_LDFLAGS}
+#unittest_proflogger_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+#unittest_proflogger_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+#check_PROGRAMS += unittest_proflogger
+
+unittest_admin_socket_SOURCES = test/admin_socket.cc
+unittest_admin_socket_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_admin_socket_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_admin_socket
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
@@ -685,6 +691,8 @@ libcommon_files = \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
 	common/ProfLogger.cc \
+	common/admin_socket.cc \
+	common/admin_socket_client.cc \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
@@ -880,6 +888,8 @@ noinst_HEADERS = \
         common/DecayCounter.h\
         common/Finisher.h\
         common/ProfLogger.h\
+	common/admin_socket.h \
+	common/admin_socket_client.h \
         common/MemoryModel.h\
         common/Mutex.h\
         common/RWLock.h\

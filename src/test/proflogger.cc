@@ -49,29 +49,6 @@ static const char* get_socket_path()
   return g_socket_path;
 }
 
-class ProfLoggerCollectionTest
-{
-public:
-  ProfLoggerCollectionTest(ProfLoggerCollection *coll)
-    : m_coll(coll)
-  {
-  }
-  bool init(const std::string &uri) {
-    Mutex::Locker lock(m_coll->m_lock);
-    if (m_coll->m_thread != NULL) {
-      return false;
-    }
-    return m_coll->init(uri);
-  }
-  bool shutdown() {
-    Mutex::Locker lock(m_coll->m_lock);
-    m_coll->shutdown();
-    return (m_coll->m_thread == NULL);
-  }
-private:
-  ProfLoggerCollection *m_coll;
-};
-
 class Alarm
 {
 public:
@@ -163,19 +140,19 @@ private:
 };
 
 TEST(ProfLogger, Teardown) {
-  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  AdminSocketTest plct(g_ceph_context->GetProfLoggerCollection());
   ASSERT_EQ(true, plct.shutdown());
 }
 
 TEST(ProfLogger, TeardownSetup) {
-  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  AdminSocketTest plct(g_ceph_context->GetProfLoggerCollection());
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ASSERT_EQ(true, plct.shutdown());
 }
 
 TEST(ProfLogger, SimpleTest) {
-  ProfLoggerCollectionTest plct(g_ceph_context->GetProfLoggerCollection());
+  AdminSocketTest plct(g_ceph_context->GetProfLoggerCollection());
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ProfLoggerTestClient test_client(get_socket_path());
@@ -218,7 +195,7 @@ TEST(ProfLogger, SingleProfLogger) {
   ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
   ProfLogger* fake_pf = setup_fake_proflogger1(g_ceph_context);
   coll->logger_add(fake_pf);
-  ProfLoggerCollectionTest plct(coll);
+  AdminSocketTest plct(coll);
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ProfLoggerTestClient test_client(get_socket_path());
@@ -262,7 +239,7 @@ TEST(ProfLogger, MultipleProfloggers) {
   ProfLogger* fake_pf2 = setup_fake_proflogger2(g_ceph_context);
   coll->logger_add(fake_pf1);
   coll->logger_add(fake_pf2);
-  ProfLoggerCollectionTest plct(coll);
+  AdminSocketTest plct(coll);
   ASSERT_EQ(true, plct.shutdown());
   ASSERT_EQ(true, plct.init(get_socket_path()));
   ProfLoggerTestClient test_client(get_socket_path());

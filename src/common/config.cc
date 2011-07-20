@@ -132,7 +132,7 @@ struct config_option config_optionsp[] = {
   OPTION(monmap, OPT_STR, 0),
   OPTION(mon_host, OPT_STR, 0),
   OPTION(daemonize, OPT_BOOL, false),
-  OPTION(profiling_logger_uri, OPT_STR, ""),
+  OPTION(admin_socket, OPT_STR, ""),
   OPTION(log_file, OPT_STR, 0),
   OPTION(log_dir, OPT_STR, 0),
   OPTION(log_sym_dir, OPT_STR, 0),

@@ -138,8 +138,7 @@ public:
   std::string mon_host;
   bool daemonize;
 
-  // profiling logger
-  std::string profiling_logger_uri;
+  std::string admin_socket;
 
   std::string log_file;
   std::string log_dir;
