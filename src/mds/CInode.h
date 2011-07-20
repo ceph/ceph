@@ -815,177 +815,25 @@ public:
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session) {
-    Capability *cap = get_client_cap(client);
-    if (cap) {
-      // FIXME?
-      cap->merge(icr.wanted, icr.issued);
-    } else {
-      cap = add_client_cap(client, session);
-      cap->set_wanted(icr.wanted);
-      cap->issue_norevoke(icr.issued);
-      cap->reset_seq();
-    }
-    cap->set_cap_id(icr.cap_id);
-    cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
-    return cap;
-  }
-  void clear_client_caps_after_export() {
-    while (!client_caps.empty())
-      remove_client_cap(client_caps.begin()->first);
-    loner_cap = -1;
-    want_loner_cap = -1;
-    mds_caps_wanted.clear();
-  }
-  void export_client_caps(map<client_t,Capability::Export>& cl) {
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) {
-      cl[it->first] = it->second->make_export();
-    }
-  }
+  Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session);
+  void clear_client_caps_after_export();
+  void export_client_caps(map<client_t,Capability::Export>& cl);
 
   // caps allowed
-  int get_caps_liked() {
-    if (is_dir())
-      return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
-    else
-      return CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO;
-  }
-  int get_caps_allowed_ever() {
-    int allowed;
-    if (is_dir())
-      allowed = CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;
-    else
-      allowed = CEPH_CAP_ANY;
-    return allowed & 
-      (CEPH_CAP_PIN |
-       (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
-       (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
-       (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
-       (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
-  }
-  int get_caps_allowed_by_type(int type) {
-    return 
-      CEPH_CAP_PIN |
-      (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
-      (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
-      (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-      (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
-  }
-  int get_caps_careful() {
-    return 
-      (filelock.gcaps_careful() << filelock.get_cap_shift()) |
-      (authlock.gcaps_careful() << authlock.get_cap_shift()) |
-      (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-      (linklock.gcaps_careful() << linklock.get_cap_shift());
-  }
-  int get_xlocker_mask(client_t client) {
-    return 
-      (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
-      (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
-      (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-      (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
-  }
-  int get_caps_allowed_for_client(client_t client) {
-    int allowed;
-    if (client == get_loner()) {
-      // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
-      allowed =
-	get_caps_allowed_by_type(CAP_LONER) |
-	(get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client));
-    } else {
-      allowed = get_caps_allowed_by_type(CAP_ANY);
-    }
-    return allowed;
-  }
+  int get_caps_liked();
+  int get_caps_allowed_ever();
+  int get_caps_allowed_by_type(int type);
+  int get_caps_careful();
+  int get_xlocker_mask(client_t client);
+  int get_caps_allowed_for_client(client_t client);
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
-		      int shift = 0, int mask = 0xffff) {
-    int c = 0;
-    int loner = 0, other = 0, xlocker = 0;
-    if (!is_auth())
-      loner_cap = -1;
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) {
-      int i = it->second->issued();
-      c |= i;
-      if (it->first == loner_cap)
-	loner |= i;
-      else
-	other |= i;
-      xlocker |= get_xlocker_mask(it->first) & i;
-    }
-    if (ploner) *ploner = (loner >> shift) & mask;
-    if (pother) *pother = (other >> shift) & mask;
-    if (pxlocker) *pxlocker = (xlocker >> shift) & mask;
-    return (c >> shift) & mask;
-  }
-  bool is_any_caps_wanted() {
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++)
-      if (it->second->wanted())
-	return true;
-    return false;
-  }
-  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
-    int w = 0;
-    int loner = 0, other = 0;
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) {
-      if (!it->second->is_stale()) {
-	int t = it->second->wanted();
-	w |= t;
-	if (it->first == loner_cap)
-	  loner |= t;
-	else
-	  other |= t;	
-      }
-      //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
-    }
-    if (is_auth())
-      for (map<int,int>::iterator it = mds_caps_wanted.begin();
-           it != mds_caps_wanted.end();
-           it++) {
-        w |= it->second;
-	other |= it->second;
-        //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
-      }
-    if (ploner) *ploner = (loner >> shift) & mask;
-    if (pother) *pother = (other >> shift) & mask;
-    return (w >> shift) & mask;
-  }
-
-  bool issued_caps_need_gather(SimpleLock *lock) {
-    int loner_issued, other_issued, xlocker_issued;
-    get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
-		    lock->get_cap_shift(), lock->get_cap_mask());
-    if ((loner_issued & ~lock->gcaps_allowed(CAP_LONER)) ||
-	(other_issued & ~lock->gcaps_allowed(CAP_ANY)) ||
-	(xlocker_issued & ~lock->gcaps_allowed(CAP_XLOCKER)))
-      return true;
-    return false;
-  }
-
-  void replicate_relax_locks() {
-    //dout(10) << " relaxing locks on " << *this << dendl;
-    assert(is_auth());
-    assert(!is_replicated());
-
-    authlock.replicate_relax();
-    linklock.replicate_relax();
-    dirfragtreelock.replicate_relax();
-    filelock.replicate_relax();
-    xattrlock.replicate_relax();
-    snaplock.replicate_relax();
-    nestlock.replicate_relax();
-    flocklock.replicate_relax();
-    policylock.replicate_relax();
-  }
+		      int shift = 0, int mask = 0xffff);
+  bool is_any_caps_wanted();
+  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff);
+  bool issued_caps_need_gather(SimpleLock *lock);
+  void replicate_relax_locks();
 
 
   // -- authority --
