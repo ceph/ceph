@@ -13,9 +13,9 @@ log = logging.getLogger(__name__)
 def _lock_url(ctx):
     return ctx.teuthology_config['lock_server']
 
-def send_request(method, url, body=None):
+def send_request(method, url, body=None, headers=None):
     http = httplib2.Http()
-    resp, content = http.request(url, method=method, body=body)
+    resp, content = http.request(url, method=method, body=body, headers=headers)
     if resp.status == 200:
         return (True, content)
     log.info("%s request to '%s' with body '%s' failed with response code %d",
@@ -78,8 +78,9 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
         updated['sshpubkey'] = sshpubkey
 
     if updated:
-        success, _ = send_request('PUT', _lock_url(ctx) + '/' + name + '?' + \
-                                      urllib.urlencode(updated))
+        success, _ = send_request('PUT', _lock_url(ctx) + '/' + name,
+                                  body=urllib.urlencode(updated),
+                                  headers={'Content-type': 'application/x-www-form-urlencoded'})
         return success
     return True
 
