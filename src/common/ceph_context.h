@@ -22,11 +22,12 @@
 template <typename T, typename U>
 class DoutStreambuf;
 
-class md_config_t;
-class md_config_obs_t;
+class AdminSocketConfigObs;
 class CephContextServiceThread;
 class DoutLocker;
-class ProfLoggerCollection;
+class PerfCountersCollection;
+class md_config_obs_t;
+class md_config_t;
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -61,8 +62,8 @@ public:
   /* Set module type (TODO: remove) */
   void set_module_type(uint32_t module_type_);
 
-  /* Get the ProfLoggerCollection of this CephContext */
-  ProfLoggerCollection *GetProfLoggerCollection();
+  /* Get the PerfCountersCollection of this CephContext */
+  PerfCountersCollection *GetPerfCountersCollection();
 
 private:
   CephContext(const CephContext &rhs);
@@ -78,13 +79,16 @@ private:
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
 
+  /* The collection of profiling loggers associated with this context */
+  AdminSocketConfigObs *_admin_socket_config_obs;
+
   /* lock which protects service thread creation, destruction, etc. */
   pthread_spinlock_t _service_thread_lock;
 
   /* The collection of profiling loggers associated with this context */
-  ProfLoggerCollection *_prof_logger_collection;
+  PerfCountersCollection *_perf_counters_collection;
 
-  md_config_obs_t *_prof_logger_conf_obs;
+  md_config_obs_t *_perf_counters_conf_obs;
 };
 
 #endif

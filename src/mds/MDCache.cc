@@ -36,7 +36,7 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/MemoryModel.h"
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
@@ -85,6 +85,7 @@
 #include "common/Timer.h"
 
 #include <errno.h>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -5456,7 +5457,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       mds->logger->inc("outt");
     else {
       mds->logger->inc("outut");
-      mds->logger->favg("oututl", ceph_clock_now(g_ceph_context) - in->hack_load_stamp);
+      mds->logger->fset("oututl", ceph_clock_now(g_ceph_context) - in->hack_load_stamp);
     }
   }
   */

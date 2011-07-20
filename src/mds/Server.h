@@ -17,7 +17,7 @@
 
 #include "MDS.h"
 
-class ProfLogger;
+class PerfCounters;
 class LogEvent;
 class MDRequest;
 class Mutation;
@@ -41,7 +41,7 @@ class Server {
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
-  ProfLogger *logger;
+  PerfCounters *logger;
 
 public:
   int failed_reconnects;
@@ -57,11 +57,11 @@ public:
     terminating_sessions(false) {
   }
   ~Server() {
-    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
     delete logger;
   }
 
-  void open_logger();
+  void create_logger();
 
   // message handler
   void dispatch(Message *m);

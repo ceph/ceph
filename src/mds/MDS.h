@@ -24,7 +24,7 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/DecayCounter.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Timer.h"
@@ -177,7 +177,7 @@ class MDS : public Dispatcher {
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);
 
-  ProfLogger       *logger, *mlogger;
+  PerfCounters       *logger, *mlogger;
 
   int orig_argc;
   const char **orig_argv;
@@ -346,7 +346,7 @@ class MDS : public Dispatcher {
   // start up, shutdown
   int init(int wanted_state=MDSMap::STATE_BOOT);
 
-  void open_logger();
+  void create_logger();
 
   void bcast_mds_map();  // to mounted clients
 

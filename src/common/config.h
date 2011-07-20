@@ -138,12 +138,7 @@ public:
   std::string mon_host;
   bool daemonize;
 
-  // profiling logger
-  bool profiling_logger;
-  int profiling_logger_interval;
-  bool profiling_logger_calc_variance;
-  std::string profiling_logger_subdir;
-  std::string profiling_logger_dir;
+  std::string admin_socket;
 
   std::string log_file;
   std::string log_dir;
@@ -512,6 +507,10 @@ public:
   bool  rgw_cache_enabled;
   int   rgw_cache_lru_size;
   string rgw_socket_path;
+
+  // This will be set to true when it is safe to start threads.
+  // Once it is true, it will never change.
+  bool internal_safe_to_start_threads;
 };
 
 typedef enum {

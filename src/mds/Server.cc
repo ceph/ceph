@@ -47,8 +47,7 @@
 
 #include "include/filepath.h"
 #include "common/Timer.h"
-#include "common/ProfLogger.h"
-#include "common/ProfLogType.h"
+#include "common/perf_counters.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -64,25 +63,18 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".server "
 
-
-void Server::open_logger()
+void Server::create_logger()
 {
-  static ProfLogType mdserver_logtype(l_mdss_first, l_mdss_last);
-  static bool didit = false;
-  if (!didit) {
-    didit = true;
-    mdserver_logtype.add_inc(l_mdss_hcreq,"hcreq"); // handle client req
-    mdserver_logtype.add_inc(l_mdss_hsreq, "hsreq"); // slave
-    mdserver_logtype.add_inc(l_mdss_hcsess, "hcsess");    // client session
-    mdserver_logtype.add_inc(l_mdss_dcreq, "dcreq"); // dispatch client req
-    mdserver_logtype.add_inc(l_mdss_dsreq, "dsreq"); // slave
-    mdserver_logtype.validate();
-  }
-
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
-  logger = new ProfLogger(g_ceph_context, name, &mdserver_logtype);
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
+  PerfCountersBuilder plb(g_ceph_context, name, l_mdss_first, l_mdss_last);
+  plb.add_u64(l_mdss_hcreq,"hcreq"); // handle client req
+  plb.add_u64(l_mdss_hsreq, "hsreq"); // slave
+  plb.add_u64(l_mdss_hcsess, "hcsess");    // client session
+  plb.add_u64(l_mdss_dcreq, "dcreq"); // dispatch client req
+  plb.add_u64(l_mdss_dsreq, "dsreq"); // slave
+  logger = plb.create_perf_counters();
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 
@@ -831,7 +823,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   mds->logger->inc(l_mds_reply);
   double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-  mds->logger->favg(l_mds_replyl, lat);
+  mds->logger->fset(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
 }
 
@@ -873,7 +865,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
     mds->logger->inc(l_mds_reply);
     double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-    mds->logger->favg(l_mds_replyl, lat);
+    mds->logger->fset(l_mds_replyl, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)

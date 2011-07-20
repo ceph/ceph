@@ -475,6 +475,18 @@ unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
+unittest_perf_counters_SOURCES = test/perf_counters.cc
+unittest_perf_counters_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_perf_counters_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_perf_counters_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_perf_counters
+
+unittest_admin_socket_SOURCES = test/admin_socket.cc
+unittest_admin_socket_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_admin_socket_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_admin_socket
+
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 unittest_ceph_crypto_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
@@ -678,7 +690,9 @@ libcommon_files = \
 	msg/Message.cc \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
-	common/ProfLogger.cc \
+	common/perf_counters.cc \
+	common/admin_socket.cc \
+	common/admin_socket_client.cc \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
@@ -873,8 +887,9 @@ noinst_HEADERS = \
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
-        common/ProfLogType.h\
-        common/ProfLogger.h\
+        common/perf_counters.h\
+	common/admin_socket.h \
+	common/admin_socket_client.h \
         common/MemoryModel.h\
         common/Mutex.h\
         common/RWLock.h\

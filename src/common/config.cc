@@ -17,7 +17,7 @@
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
 #include "common/DoutStreambuf.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/config.h"
@@ -132,11 +132,7 @@ struct config_option config_optionsp[] = {
   OPTION(monmap, OPT_STR, 0),
   OPTION(mon_host, OPT_STR, 0),
   OPTION(daemonize, OPT_BOOL, false),
-  OPTION(profiling_logger, OPT_BOOL, false),
-  OPTION(profiling_logger_interval, OPT_INT, 1),
-  OPTION(profiling_logger_calc_variance, OPT_BOOL, false),
-  OPTION(profiling_logger_subdir, OPT_STR, 0),
-  OPTION(profiling_logger_dir, OPT_STR, "/var/log/ceph/stat"),
+  OPTION(admin_socket, OPT_STR, ""),
   OPTION(log_file, OPT_STR, 0),
   OPTION(log_dir, OPT_STR, 0),
   OPTION(log_sym_dir, OPT_STR, 0),
@@ -420,6 +416,9 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_cache_enabled, OPT_BOOL, false),   // rgw cache enabled
   OPTION(rgw_cache_lru_size, OPT_INT, 10000),   // num of entries in rgw cache
   OPTION(rgw_socket_path, OPT_STR, NULL),   // path to unix domain socket, if not specified, rgw will not run as external fcgi
+
+  // see config.h
+  OPTION(internal_safe_to_start_threads, OPT_BOOL, false),
 };
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
@@ -643,7 +642,6 @@ parse_argv(std::vector<const char*>& args)
       }
     }
   }
-
 }
 
 void md_config_t::

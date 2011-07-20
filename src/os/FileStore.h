@@ -231,7 +231,7 @@ class FileStore : public JournalingObjectStore {
   int open_journal();
 
 
-  ProfLogger *logger;
+  PerfCounters *logger;
 
 public:
   void start_logger(int whoami, utime_t tare);

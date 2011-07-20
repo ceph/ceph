@@ -20,8 +20,7 @@
 #include "osdc/Journaler.h"
 
 #include "common/entity_name.h"
-#include "common/ProfLogType.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 
 #include "events/ESubtreeMap.h"
 
@@ -34,52 +33,45 @@
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".log "
 
 // cons/des
-
-ProfLogType mdlog_logtype(l_mdl_first, l_mdl_last);
-
-
 MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
   if (logger) {
-    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
     delete logger;
     logger = 0;
   }
 }
 
 
-void MDLog::open_logger()
+void MDLog::create_logger()
 {
-  static bool didit = false;
-  if (!didit) {
-    didit = true;
-    mdlog_logtype.add_inc(l_mdl_evadd, "evadd");
-    mdlog_logtype.add_inc(l_mdl_evex, "evex");
-    mdlog_logtype.add_inc(l_mdl_evtrm, "evtrm");
-    mdlog_logtype.add_set(l_mdl_ev, "ev");
-    mdlog_logtype.add_set(l_mdl_evexg, "evexg");
-    mdlog_logtype.add_set(l_mdl_evexd, "evexd");
-
-    mdlog_logtype.add_inc(l_mdl_segadd, "segadd");
-    mdlog_logtype.add_inc(l_mdl_segex, "segex");
-    mdlog_logtype.add_inc(l_mdl_segtrm, "segtrm");    
-    mdlog_logtype.add_set(l_mdl_seg, "seg");
-    mdlog_logtype.add_set(l_mdl_segexg, "segexg");
-    mdlog_logtype.add_set(l_mdl_segexd, "segexd");
-
-    mdlog_logtype.add_set(l_mdl_expos, "expos");
-    mdlog_logtype.add_set(l_mdl_wrpos, "wrpos");
-    mdlog_logtype.add_set(l_mdl_rdpos, "rdpos");
-    mdlog_logtype.add_avg(l_mdl_jlat, "jlat");
-    mdlog_logtype.validate();
-  }
-
-  // logger
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
-  logger = new ProfLogger(g_ceph_context, name, &mdlog_logtype);
-  g_ceph_context->GetProfLoggerCollection()->logger_add(logger);
+  PerfCountersBuilder plb(g_ceph_context, name, l_mdl_first, l_mdl_last);
+
+  plb.add_u64(l_mdl_evadd, "evadd");
+  plb.add_u64(l_mdl_evex, "evex");
+  plb.add_u64(l_mdl_evtrm, "evtrm");
+  plb.add_u64(l_mdl_ev, "ev");
+  plb.add_u64(l_mdl_evexg, "evexg");
+  plb.add_u64(l_mdl_evexd, "evexd");
+
+  plb.add_u64(l_mdl_segadd, "segadd");
+  plb.add_u64(l_mdl_segex, "segex");
+  plb.add_u64(l_mdl_segtrm, "segtrm");
+  plb.add_u64(l_mdl_seg, "seg");
+  plb.add_u64(l_mdl_segexg, "segexg");
+  plb.add_u64(l_mdl_segexd, "segexd");
+
+  plb.add_u64(l_mdl_expos, "expos");
+  plb.add_u64(l_mdl_wrpos, "wrpos");
+  plb.add_u64(l_mdl_rdpos, "rdpos");
+  plb.add_u64(l_mdl_jlat, "jlat");
+
+  // logger
+  logger = plb.create_perf_counters();
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 void MDLog::init_journaler()

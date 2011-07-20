@@ -77,8 +77,7 @@ class Filer;
 class Objecter;
 class ObjectCacher;
 
-extern class ProfLogType client_logtype;
-extern class ProfLogger  *client_logger;
+extern class PerfCounters  *client_counters;
 
 
 // ============================================

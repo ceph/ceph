@@ -12,8 +12,9 @@
  *
  */
 
+#include "common/admin_socket.h"
 #include "common/DoutStreambuf.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/Thread.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
@@ -46,7 +47,6 @@ public:
       }
       if (_reopen_logs) {
 	_cct->_doss->reopen_logs(_cct->_conf);
-	_cct->_prof_logger_collection->logger_reopen_all();
 	_reopen_logs = false;
       }
     }
@@ -79,14 +79,14 @@ CephContext(uint32_t module_type_)
     _dout(_doss),
     _module_type(module_type_),
     _service_thread(NULL),
-    _prof_logger_collection(NULL),
-    _prof_logger_conf_obs(NULL)
+    _admin_socket_config_obs(NULL),
+    _perf_counters_collection(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
-  _prof_logger_collection = new ProfLoggerCollection(this);
-  _prof_logger_conf_obs = new ProfLoggerConfObs(_prof_logger_collection);
+  _perf_counters_collection = new PerfCountersCollection(this);
   _conf->add_observer(_doss);
-  _conf->add_observer(_prof_logger_conf_obs);
+  _admin_socket_config_obs = new AdminSocketConfigObs(this);
+  _conf->add_observer(_admin_socket_config_obs);
 }
 
 CephContext::
@@ -94,14 +94,14 @@ CephContext::
 {
   join_service_thread();
 
-  _conf->remove_observer(_prof_logger_conf_obs);
+  _conf->remove_observer(_admin_socket_config_obs);
   _conf->remove_observer(_doss);
 
-  delete _prof_logger_collection;
-  _prof_logger_collection = NULL;
+  delete _perf_counters_collection;
+  _perf_counters_collection = NULL;
 
-  delete _prof_logger_conf_obs;
-  _prof_logger_conf_obs = NULL;
+  delete _perf_counters_conf_obs;
+  _perf_counters_conf_obs = NULL;
 
   delete _doss;
   _doss = NULL;
@@ -186,8 +186,8 @@ set_module_type(uint32_t module_type_)
   _module_type = module_type_;
 }
 
-ProfLoggerCollection *CephContext::
-GetProfLoggerCollection()
+PerfCountersCollection *CephContext::
+GetPerfCountersCollection()
 {
-  return _prof_logger_collection;
+  return _perf_counters_collection;
 }

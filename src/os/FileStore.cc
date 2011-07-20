@@ -29,7 +29,7 @@
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 
 #define __STDC_FORMAT_MACROS
@@ -1876,50 +1876,40 @@ int FileStore::get_max_object_name_length()
   return ret;
 }
 
-
 void FileStore::start_logger(int whoami, utime_t tare)
 {
   dout(10) << "start_logger" << dendl;
   assert(!logger);
 
-  static ProfLogType fs_logtype(l_os_first, l_os_last);
-  static bool didit = false;
-  if (!didit) {
-    didit = true;
-
-    fs_logtype.add_inc(l_os_in_ops, "in_o");
-    //fs_logtype.add_inc(l_os_in_bytes, "in_b");
-    fs_logtype.add_inc(l_os_readable_ops, "or_o");
-    fs_logtype.add_inc(l_os_readable_bytes, "or_b");
-    //fs_logtype.add_inc(l_os_commit_bytes, "com_o");
-    //fs_logtype.add_inc(l_os_commit_bytes, "com_b");
-
-    fs_logtype.add_set(l_os_jq_max_ops, "jq_mo");
-    fs_logtype.add_set(l_os_jq_ops, "jq_o");
-    fs_logtype.add_inc(l_os_j_ops, "j_o");
-    fs_logtype.add_set(l_os_jq_max_bytes, "jq_mb");
-    fs_logtype.add_set(l_os_jq_bytes, "jq_b");
-    fs_logtype.add_inc(l_os_j_bytes, "j_b");
-    fs_logtype.add_set(l_os_oq_max_ops, "oq_mo");
-    fs_logtype.add_set(l_os_oq_ops, "oq_o");
-    fs_logtype.add_inc(l_os_ops, "o");
-    fs_logtype.add_set(l_os_oq_max_bytes, "oq_mb");
-    fs_logtype.add_set(l_os_oq_bytes, "oq_b");
-    fs_logtype.add_inc(l_os_bytes, "b");
-    fs_logtype.add_set(l_os_committing, "comitng");
-  }
-
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  logger = new ProfLogger(g_ceph_context, name, (ProfLogType*)&fs_logtype);
+  PerfCountersBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
+
+  plb.add_u64(l_os_in_ops, "in_o");
+  //plb.add_u64(l_os_in_bytes, "in_b");
+  plb.add_u64(l_os_readable_ops, "or_o");
+  plb.add_u64(l_os_readable_bytes, "or_b");
+  //plb.add_u64(l_os_commit_bytes, "com_o");
+  //plb.add_u64(l_os_commit_bytes, "com_b");
+
+  plb.add_u64(l_os_jq_max_ops, "jq_mo");
+  plb.add_u64(l_os_jq_ops, "jq_o");
+  plb.add_u64(l_os_j_ops, "j_o");
+  plb.add_u64(l_os_jq_max_bytes, "jq_mb");
+  plb.add_u64(l_os_jq_bytes, "jq_b");
+  plb.add_u64(l_os_j_bytes, "j_b");
+  plb.add_u64(l_os_oq_max_ops, "oq_mo");
+  plb.add_u64(l_os_oq_ops, "oq_o");
+  plb.add_u64(l_os_ops, "o");
+  plb.add_u64(l_os_oq_max_bytes, "oq_mb");
+  plb.add_u64(l_os_oq_bytes, "oq_b");
+  plb.add_u64(l_os_bytes, "b");
+  plb.add_u64(l_os_committing, "comitng");
+
+  logger = plb.create_perf_counters();
   if (journal)
     journal->logger = logger;
-  {
-    ProfLoggerCollection *coll = g_ceph_context->GetProfLoggerCollection();
-    coll->logger_add(logger);
-    coll->logger_tare(tare);
-    coll->logger_start();
-  }
+  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
 }
 
 void FileStore::stop_logger()
@@ -1928,7 +1918,7 @@ void FileStore::stop_logger()
   if (logger) {
     if (journal)
       journal->logger = NULL;
-    g_ceph_context->GetProfLoggerCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
     delete logger;
     logger = NULL;
   }
