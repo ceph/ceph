@@ -194,9 +194,9 @@ public:
 			    version_t);
   void _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequest *mdr);
-  void _rmdir_logged_witness(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
+  void _logged_slave_rmdir(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
+  void _commit_slave_rmdir(MDRequest *mdr, int r);
   void handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
-  void _commit_slave_rmdir(MDRequest *mdr, int r, CDentry *dn, CDentry *straydn);
   void do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr);
   void _rmdir_rollback_finish(MDRequest *mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 

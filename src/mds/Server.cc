@@ -4601,7 +4601,7 @@ struct C_MDS_SlaveRmdirPrep : public Context {
   C_MDS_SlaveRmdirPrep(Server *s, MDRequest *r, CDentry *d, CDentry *st)
     : server(s), mdr(r), dn(d), straydn(st) {}
   void finish(int r) {
-    server->_rmdir_logged_witness(mdr, dn, straydn);
+    server->_logged_slave_rmdir(mdr, dn, straydn);
   }
 };
 
@@ -4656,9 +4656,19 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
   mdlog->flush();
 }
 
-void Server::_rmdir_logged_witness(MDRequest *mdr, CDentry *dn, CDentry *straydn)
+struct C_MDS_SlaveRmdirCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_SlaveRmdirCommit(Server *s, MDRequest *r)
+    : server(s), mdr(r) { }
+  void finish(int r) {
+    server->_commit_slave_rmdir(mdr, r);
+  }
+};
+
+void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
-  dout(10) << "_rmdir_logged_witness " << *mdr << " on " << *dn << dendl;
+  dout(10) << "_logged_slave_rmdir " << *mdr << " on " << *dn << dendl;
 
   // update our cache now, so we are consistent with what is in the journal
   // when we journal a subtree map
@@ -4669,6 +4679,9 @@ void Server::_rmdir_logged_witness(MDRequest *mdr, CDentry *dn, CDentry *straydn
 
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RMDIRPREPACK);
   mds->send_message_mds(reply, mdr->slave_to_mds);
+
+  // set up commit waiter
+  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
 
   // done.
   mdr->slave_request->put();
@@ -4695,7 +4708,7 @@ void Server::handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
-void Server::_commit_slave_rmdir(MDRequest *mdr, int r, CDentry *dn, CDentry *straydn)
+void Server::_commit_slave_rmdir(MDRequest *mdr, int r)
 {
   dout(10) << "_commit_slave_rmdir " << *mdr << " r=" << r << dendl;
   
