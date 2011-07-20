@@ -57,7 +57,7 @@ static void godown_alarm(int signum)
 }
 
 class RGWProcess {
-  deque<FCGX_Request*> m_fcgx_queue;
+  deque<FCGX_Request *> m_fcgx_queue;
   ThreadPool m_tp;
 
   struct RGWWQ : public ThreadPool::WorkQueue<FCGX_Request> {
@@ -66,6 +66,8 @@ class RGWProcess {
 
     bool _enqueue(FCGX_Request *req) {
       process->m_fcgx_queue.push_back(req);
+      RGW_LOG(0) << "enqueued request fcgx=" << hex << req << dec << dendl;
+      _dump_queue();
       return true;
     }
     void _dequeue(FCGX_Request *req) {
@@ -79,10 +81,23 @@ class RGWProcess {
 	return NULL;
       FCGX_Request *req = process->m_fcgx_queue.front();
       process->m_fcgx_queue.pop_front();
+      RGW_LOG(0) << "dequeued request fcgx=" << hex << req << dec << dendl;
+      _dump_queue();
       return req;
     }
     void _process(FCGX_Request *fcgx) {
       process->handle_request(fcgx);
+    }
+    void _dump_queue() {
+      deque<FCGX_Request *>::iterator iter;
+      if (process->m_fcgx_queue.size() == 0) {
+        RGW_LOG(0) << "RGWWQ: empty" << dendl;
+        return;
+      }
+      RGW_LOG(0) << "RGWWQ:" << dendl;
+      for (iter = process->m_fcgx_queue.begin(); iter != process->m_fcgx_queue.end(); ++iter) {
+        RGW_LOG(0) << "fcgx: " << hex << *iter << dec << dendl;
+      }
     }
     void _clear() {
       assert(process->m_fcgx_queue.empty());
@@ -111,6 +126,7 @@ void RGWProcess::run()
 
   for (;;) {
     FCGX_Request *fcgx = new FCGX_Request;
+    RGW_LOG(0) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
     FCGX_InitRequest(fcgx, s, 0);
     int ret = FCGX_Accept_r(fcgx);
     if (ret < 0)
@@ -124,8 +140,9 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
 {
   RGWRESTMgr rest;
   int ret;
-
   RGWEnv rgw_env;
+
+  RGW_LOG(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
 
   rgw_env.init(fcgx->envp);
 
@@ -174,10 +191,14 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
 done:
   rgw_log_op(s);
 
+  int http_ret = s->err.http_ret;
+
   handler->put_op(op);
   delete s;
   FCGX_Finish_r(fcgx);
   delete fcgx;
+
+  RGW_LOG(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
 }
 
 /*
