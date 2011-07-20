@@ -500,10 +500,16 @@ void MDLog::_replay_thread()
           Mutex mylock("MDLog::_replay_thread lock");
           Cond cond;
           bool done = false;
-          journaler->reread_head(new C_SafeCond(&mylock, &cond, &done));
+          int err = 0;
+          journaler->reread_head(new C_SafeCond(&mylock, &cond, &done, &err));
           mds->mds_lock.Unlock();
           while (!done)
             cond.Wait(mylock);
+          if (err) { // well, crap
+            dout(0) << "got error while reading head: " << strerror(err)
+                    << dendl;
+            mds->suicide();
+          }
           mds->mds_lock.Lock();
 	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {

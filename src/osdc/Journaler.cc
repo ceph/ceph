@@ -169,7 +169,7 @@ void Journaler::reread_head(Context *onfinish)
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   //read on-disk header into
-  assert(bl.length());
+  assert(bl.length() || r < 0 );
 
   // unpack header
   Header h;
@@ -254,7 +254,7 @@ void Journaler::reprobe(Context *finish)
 
 
 void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
-  assert(new_end >= write_pos);
+  assert(new_end >= write_pos || r < 0);
   ldout(cct, 1) << "_finish_reprobe new_end = " << new_end 
 	  << " (header had " << write_pos << ")."
 	  << dendl;
