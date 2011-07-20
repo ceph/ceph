@@ -255,7 +255,6 @@ void Journaler::reprobe(Context *finish)
 
 void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   assert(new_end >= write_pos);
-  assert(r >= 0);
   ldout(cct, 1) << "_finish_reprobe new_end = " << new_end 
 	  << " (header had " << write_pos << ")."
 	  << dendl;
@@ -268,7 +267,9 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
 void Journaler::_finish_probe_end(int r, uint64_t end)
 {
   assert(state == STATE_PROBING);
-  
+  if (r < 0) { // error in probing
+    goto out;
+  }
   if (((int64_t)end) == -1) {
     end = write_pos;
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end 
@@ -277,7 +278,6 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
     assert(0); // hrm.
   } else {
     assert(end >= write_pos);
-    assert(r >= 0);
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end 
 	    << " (header had " << write_pos << "). recovered."
 	    << dendl;
@@ -287,10 +287,11 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = end;
   
+out:
   // done.
   list<Context*> ls;
   ls.swap(waitfor_recover);
-  finish_contexts(cct, ls, 0);
+  finish_contexts(cct, ls, r);
 }
 
 class Journaler::C_RereadHeadProbe : public Context

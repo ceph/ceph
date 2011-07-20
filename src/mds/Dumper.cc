@@ -84,14 +84,23 @@ void Dumper::dump(const char *dump_file)
 {
   bool done = false;
   Cond cond;
+  int r = 0;
   int rank = strtol(g_conf->name.get_id().c_str(), 0, 0);
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   lock.Lock();
-  journaler->recover(new C_SafeCond(&lock, &cond, &done));
+  journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
+
+  if (r < 0) { // Error
+    derr << "error on recovery: " << cpp_strerror(r) << dendl;
+    messenger->shutdown();
+    // wait for messenger to finish
+    messenger->wait();
+    shutdown();
+  }
 
   uint64_t start = journaler->get_read_pos();
   uint64_t end = journaler->get_write_pos();
@@ -136,6 +145,7 @@ void Dumper::dump(const char *dump_file)
     int err = errno;
     derr << "unable to open " << dump_file << ": " << cpp_strerror(err) << dendl;
   }
+
   messenger->shutdown();
 
   // wait for messenger to finish
