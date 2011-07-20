@@ -137,6 +137,7 @@ protected:
 
   string limit_opt_name;
   int default_max;
+  bool is_truncated;
 
 public:
   RGWListBucket() {}
@@ -151,6 +152,7 @@ public:
     ret = 0;
     objs.clear();
     common_prefixes.clear();
+    is_truncated = false;
   }
   int verify_permission();
   void execute();

@@ -394,7 +394,7 @@ void RGWListBucket::execute()
   }
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns, NULL, NULL);
+                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns, &is_truncated, NULL);
 
 done:
   send_response();

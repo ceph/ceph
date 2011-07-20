@@ -136,6 +136,8 @@ void RGWListBucket_REST_S3::send_response()
   if (!delimiter.empty())
     s->formatter->dump_value_str("Delimiter", delimiter.c_str());
 
+  s->formatter->dump_value_str("IsTruncated", (is_truncated ? "true" : "false"));
+
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
