@@ -98,31 +98,19 @@ public:
 
 
 class RGWHandler_REST_OS : public RGWHandler_REST {
-  RGWGetObj_REST_OS get_obj_op;
-  RGWListBuckets_REST_OS list_buckets_op;
-  RGWListBucket_REST_OS list_bucket_op;
-  RGWStatBucket_REST_OS stat_bucket_op;
-  RGWCreateBucket_REST_OS create_bucket_op;
-  RGWDeleteBucket_REST_OS delete_bucket_op;
-  RGWPutObj_REST_OS put_obj_op;
-  RGWDeleteObj_REST_OS delete_obj_op;
-  RGWCopyObj_REST_OS copy_obj_op;
-  RGWGetACLs_REST_OS get_acls_op;
-  RGWPutACLs_REST_OS put_acls_op;
-
 protected:
 
-  RGWOp *get_retrieve_obj_op(struct req_state *s, bool get_data);
-  RGWOp *get_retrieve_op(struct req_state *s, bool get_data);
-  RGWOp *get_create_op(struct req_state *s);
-  RGWOp *get_delete_op(struct req_state *s);
-  RGWOp *get_post_op(struct req_state *s) { return NULL; }
+  RGWOp *get_retrieve_obj_op(bool get_data);
+  RGWOp *get_retrieve_op(bool get_data);
+  RGWOp *get_create_op();
+  RGWOp *get_delete_op();
+  RGWOp *get_post_op() { return NULL; }
 
 public:
   RGWHandler_REST_OS() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_OS() {}
 
-  bool authorize(struct req_state *s);
+  bool authorize();
 };
 
 #endif

@@ -12,16 +12,6 @@
 #include "rgw_formats.h"
 
 
-
-static RGWHandler_REST_S3 rgwhandler_s3;
-static RGWHandler_REST_OS rgwhandler_os;
-static RGWHandler_OS_Auth rgwhandler_os_auth;
-
-static RGWFormatter_Plain formatter_plain;
-static RGWFormatter_XML formatter_xml;
-static RGWFormatter_JSON formatter_json;
-
-
 static void dump_status(struct req_state *s, const char *status)
 {
   CGI_PRINTF(s,"Status: %s\n", status);
@@ -209,11 +199,11 @@ void dump_range(struct req_state *s, off_t ofs, off_t end, size_t total)
 
 int RGWGetObj_REST::get_params()
 {
-  range_str = rgw_env.get("HTTP_RANGE");
-  if_mod = rgw_env.get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = rgw_env.get("HTTP_IF_UNMODIFIED_SINCE");
-  if_match = rgw_env.get("HTTP_IF_MATCH");
-  if_nomatch = rgw_env.get("HTTP_IF_NONE_MATCH");
+  range_str = s->env->get("HTTP_RANGE");
+  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
 
   return 0;
 }
@@ -221,7 +211,7 @@ int RGWGetObj_REST::get_params()
 
 int RGWPutObj_REST::get_params()
 {
-  supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
+  supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -247,17 +237,17 @@ int RGWPutObj_REST::get_data()
   }
 
   if (!ofs)
-    supplied_md5_b64 = rgw_env.get("HTTP_CONTENT_MD5");
+    supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
 
 int RGWCopyObj_REST::get_params()
 {
-  if_mod = rgw_env.get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
-  if_unmod = rgw_env.get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
-  if_match = rgw_env.get("HTTP_X_AMZ_COPY_IF_MATCH");
-  if_nomatch = rgw_env.get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
+  if_mod = s->env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_X_AMZ_COPY_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   return 0;
 }
@@ -377,7 +367,7 @@ void init_entities_from_header(struct req_state *s)
   string req;
   string first;
 
-  gateway_dns_name = rgw_env.get("RGW_DNS_NAME", "s3.");
+  gateway_dns_name = s->env->get("RGW_DNS_NAME", "s3.");
 
   RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
@@ -393,7 +383,7 @@ void init_entities_from_header(struct req_state *s)
 
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;
-  s->formatter = &formatter_xml;
+  s->formatter = new RGWFormatter_XML;
 
   int pos;
   if (s->host) {
@@ -436,7 +426,7 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *openstack_url_prefix = rgw_env.get("RGW_OPENSTACK_URL_PREFIX");
+    const char *openstack_url_prefix = s->env->get("RGW_OPENSTACK_URL_PREFIX");
     bool cut_url = (openstack_url_prefix != NULL);
     if (!openstack_url_prefix)
       openstack_url_prefix = "v1";
@@ -453,14 +443,14 @@ void init_entities_from_header(struct req_state *s)
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     s->format = 0;
-    s->formatter = &formatter_plain;
+    s->formatter = new RGWFormatter_Plain;
     string format_str = s->args.get("format");
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
-      s->formatter = &formatter_xml;
+      s->formatter = new RGWFormatter_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
-      s->formatter = &formatter_json;
+      s->formatter = new RGWFormatter_JSON;
     }
   }
 
@@ -472,7 +462,7 @@ void init_entities_from_header(struct req_state *s)
     RGW_LOG(10) << "ver=" << ver << dendl;
     next_tok(req, auth_key, '/');
     RGW_LOG(10) << "auth_key=" << auth_key << dendl;
-    s->os_auth_token = rgw_env.get("HTTP_X_AUTH_TOKEN");
+    s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
     next_tok(req, first, '/');
 
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
@@ -675,21 +665,19 @@ static int validate_object_name(const char *object)
   return 0;
 }
 
-int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
+int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 {
-  int ret = 0;
-  RGWHandler::init_state(s, fcgx);
-
-  s->path_name = rgw_env.get("SCRIPT_NAME");
-  s->path_name_url = rgw_env.get("REQUEST_URI");
+  s->fcgx = fcgx;
+  s->path_name = s->env->get("SCRIPT_NAME");
+  s->path_name_url = s->env->get("REQUEST_URI");
   int pos = s->path_name_url.find('?');
   if (pos >= 0)
     s->path_name_url = s->path_name_url.substr(0, pos);
-  s->method = rgw_env.get("REQUEST_METHOD");
-  s->host = rgw_env.get("HTTP_HOST");
-  s->query = rgw_env.get("QUERY_STRING");
-  s->length = rgw_env.get("CONTENT_LENGTH");
-  s->content_type = rgw_env.get("CONTENT_TYPE");
+  s->method = s->env->get("REQUEST_METHOD");
+  s->host = s->env->get("HTTP_HOST");
+  s->query = s->env->get("QUERY_STRING");
+  s->length = s->env->get("CONTENT_LENGTH");
+  s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;
 
   if (!s->method)
@@ -708,7 +696,7 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
-  ret = validate_bucket_name(s->bucket_str.c_str());
+  int ret = validate_bucket_name(s->bucket_str.c_str());
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());
@@ -718,16 +706,16 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
 
   init_auth_info(s);
 
-  const char *cacl = rgw_env.get("HTTP_X_AMZ_ACL");
+  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
   if (cacl)
     s->canned_acl = cacl;
 
-  s->copy_source = rgw_env.get("HTTP_X_AMZ_COPY_SOURCE");
-  s->http_auth = rgw_env.get("HTTP_AUTHORIZATION");
+  s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
+  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
 
-  const char *cgi_env_continue = rgw_env.get("RGW_PRINT_CONTINUE");
+  const char *cgi_env_continue = s->env->get("RGW_PRINT_CONTINUE");
   if (rgw_str_to_bool(cgi_env_continue, 0)) {
-    const char *expect = rgw_env.get("HTTP_EXPECT");
+    const char *expect = s->env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
   return ret;
@@ -745,7 +733,7 @@ int RGWHandler_REST::read_permissions()
   case OP_PUT:
   case OP_POST:
     /* is it a 'create bucket' request? */
-    if (is_acl_op(s)) {
+    if (is_acl_op()) {
       only_bucket = false;
       break;
     }
@@ -766,19 +754,19 @@ RGWOp *RGWHandler_REST::get_op()
   RGWOp *op;
   switch (s->op) {
    case OP_GET:
-     op = get_retrieve_op(s, true);
+     op = get_retrieve_op(true);
      break;
    case OP_PUT:
-     op = get_create_op(s);
+     op = get_create_op();
      break;
    case OP_DELETE:
-     op = get_delete_op(s);
+     op = get_delete_op();
      break;
    case OP_HEAD:
-     op = get_retrieve_op(s, false);
+     op = get_retrieve_op(false);
      break;
    case OP_POST:
-     op = get_post_op(s);
+     op = get_post_op();
      break;
    default:
      return NULL;
@@ -791,22 +779,41 @@ RGWOp *RGWHandler_REST::get_op()
 }
 
 
-RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx,
-					  int *init_error)
+RGWRESTMgr::RGWRESTMgr()
+{
+  m_os_handler = new RGWHandler_REST_OS;
+  m_os_auth_handler = new RGWHandler_OS_Auth;
+  m_s3_handler = new RGWHandler_REST_S3;
+}
+
+RGWRESTMgr::~RGWRESTMgr()
+{
+  delete m_os_handler;
+  delete m_os_auth_handler;
+  delete m_s3_handler;
+}
+
+RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
+				    int *init_error)
 {
   RGWHandler *handler;
 
-  *init_error = init_rest(s, fcgx);
+  *init_error = RGWHandler_REST::preprocess(s, fcgx);
 
   if (s->prot_flags & RGW_REST_OPENSTACK)
-    handler = &rgwhandler_os;
+    handler = m_os_handler;
   else if (s->prot_flags & RGW_REST_OPENSTACK_AUTH)
-    handler = &rgwhandler_os_auth;
+    handler = m_os_auth_handler;
   else
-    handler = &rgwhandler_s3;
+    handler = m_s3_handler;
 
-  handler->set_state(s);
+  handler->init(s, fcgx);
 
   return handler;
+}
+
+void RGWHandler_REST::put_op(RGWOp *op)
+{
+  delete op;
 }
 

@@ -477,8 +477,13 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (s->bucket)
-    ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, true);
+  if (s->bucket) {
+    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
+
+    if (ret == 0) {
+      ret = rgw_remove_bucket(s->user.user_id, s->bucket_str, false);
+    }
+  }
 
   send_response();
 }
@@ -1403,12 +1408,14 @@ done:
   send_response();
 }
 
-void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
+int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
-  if (rgwconf->log_level >= 0)
-    g_conf->rgw_log = rgwconf->log_level;
+  s = _s;
 
-  s->should_log = rgwconf->should_log;
+  RGWConf *conf = s->env->conf;
+
+  if (conf->log_level >= 0)
+    g_conf->rgw_log = conf->log_level;
 
   if (g_conf->rgw_log >= 20) {
     char *p;
@@ -1416,25 +1423,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
       RGW_LOG(20) << p << dendl;
     }
   }
-  s->fcgx = fcgx;
-  s->content_started = false;
-  s->err.clear();
-  s->format = 0;
-  if (s->acl) {
-     delete s->acl;
-     s->acl = new RGWAccessControlPolicy;
-  }
-  s->canned_acl.clear();
-  s->expect_cont = false;
-
-  free(s->os_user);
-  free(s->os_groups);
-  s->os_auth_token = NULL;
-  s->os_user = NULL;
-  s->os_groups = NULL;
-  s->time = ceph_clock_now(g_ceph_context);
-  s->user.clear();
-  s->perm_mask = 0;
+  return 0;
 }
 
 int RGWHandler::do_read_permissions(bool only_bucket)

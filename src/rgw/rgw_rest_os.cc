@@ -231,64 +231,65 @@ send_data:
   return 0;
 }
 
-RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(bool get_data)
 {
-  if (is_acl_op(s)) {
-    return &get_acls_op;
+  if (is_acl_op()) {
+    return new RGWGetACLs_REST_OS;
   }
 
   if (s->object) {
-    get_obj_op.set_get_data(get_data);
-    return &get_obj_op;
+    RGWGetObj_REST_OS *get_obj_op = new RGWGetObj_REST_OS;
+    get_obj_op->set_get_data(get_data);
+    return get_obj_op;
   } else if (!s->bucket) {
     return NULL;
   }
 
   if (get_data)
-    return &list_bucket_op;
+    return new RGWListBucket_REST_OS;
   else
-    return &stat_bucket_op;
+    return new RGWStatBucket_REST_OS;
 }
 
-RGWOp *RGWHandler_REST_OS::get_retrieve_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST_OS::get_retrieve_op(bool get_data)
 {
   if (s->bucket) {
-    if (is_acl_op(s)) {
-      return &get_acls_op;
+    if (is_acl_op()) {
+      return new RGWGetACLs_REST_OS;
     }
-    return get_retrieve_obj_op(s, get_data);
+    return get_retrieve_obj_op(get_data);
   }
 
-  return &list_buckets_op;
+  return new RGWListBuckets_REST_OS;
 }
 
-RGWOp *RGWHandler_REST_OS::get_create_op(struct req_state *s)
+RGWOp *RGWHandler_REST_OS::get_create_op()
 {
-  if (is_acl_op(s)) {
-    return &put_acls_op;
+  if (is_acl_op()) {
+    return new RGWPutACLs_REST_OS;
   } else if (s->object) {
     if (!s->copy_source)
-      return &put_obj_op;
+      return new RGWPutObj_REST_OS;
     else
-      return &copy_obj_op;
+      return new RGWCopyObj_REST_OS;
   } else if (s->bucket) {
-    return &create_bucket_op;
+    return new RGWCreateBucket_REST_OS;
   }
 
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_OS::get_delete_op(struct req_state *s)
+RGWOp *RGWHandler_REST_OS::get_delete_op()
 {
   if (s->object)
-    return &delete_obj_op;
+    return new RGWDeleteObj_REST_OS;
   else if (s->bucket)
-    return &delete_bucket_op;
+    return new RGWDeleteBucket_REST_OS;
 
   return NULL;
 }
 
-bool RGWHandler_REST_OS::authorize(struct req_state *s)
+bool RGWHandler_REST_OS::authorize()
 {
   return rgw_verify_os_token(s);
 }

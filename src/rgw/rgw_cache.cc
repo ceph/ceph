@@ -79,7 +79,7 @@ void ObjectCache::remove(string& name)
 
 void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
 {
-  while (lru.size() > (size_t)rgwconf->max_cache_lru) {
+  while (lru.size() > (size_t)g_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
     map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
     RGW_LOG(10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;

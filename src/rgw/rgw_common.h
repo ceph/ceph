@@ -164,9 +164,10 @@ public:
 
   RGWEnv();
   ~RGWEnv();
-  void reinit(char **envp);
+  void init(char **envp);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
+  bool get_bool(const char *name, bool def_val = 0);
   size_t get_size(const char *name, size_t def_val = 0);
 };
 
@@ -176,18 +177,12 @@ protected:
   void init(RGWEnv * env);
 public:
   RGWConf() :
-    max_cache_lru(10000),
     log_level(0),
     should_log(1) {}
 
-  size_t max_cache_lru;
   int log_level;
   int should_log;
 };
-
-extern RGWEnv rgw_env;
-
-#define rgwconf rgw_env.conf
 
 enum http_op {
   OP_GET,
@@ -196,13 +191,6 @@ enum http_op {
   OP_HEAD,
   OP_POST,
   OP_UNKNOWN,
-};
-
-struct fcgx_state {
-   FCGX_ParamArray envp;
-   FCGX_Stream *in;
-   FCGX_Stream *out;
-   FCGX_Stream *err;
 };
 
 class RGWAccessControlPolicy;
@@ -386,9 +374,11 @@ public:
   virtual void dump_value_str(const char *name, const char *fmt, ...) = 0;
 };
 
+struct RGWEnv;
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
-   struct fcgx_state *fcgx;
+   FCGX_Request *fcgx;
    http_op op;
    bool content_started;
    int format;
@@ -438,7 +428,10 @@ struct req_state {
 
    int pool_id;
 
-   req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL) {}
+   struct RGWEnv *env;
+
+   req_state(struct RGWEnv *e);
+   ~req_state();
 };
 
 /** Store basic data on an object */

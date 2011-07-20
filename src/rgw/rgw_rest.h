@@ -128,25 +128,39 @@ public:
 
 class RGWHandler_REST : public RGWHandler {
 protected:
-  bool is_acl_op(struct req_state *s) {
+  bool is_acl_op() {
     return s->args.exists("acl");
   }
 
-  virtual RGWOp *get_retrieve_obj_op(struct req_state *s, bool get_data) = 0;
-  virtual RGWOp *get_retrieve_op(struct req_state *s, bool get_data) = 0;
-  virtual RGWOp *get_create_op(struct req_state *s) = 0;
-  virtual RGWOp *get_delete_op(struct req_state *s) = 0;
-  virtual RGWOp *get_post_op(struct req_state *s) = 0;
+  virtual RGWOp *get_retrieve_obj_op(bool get_data) = 0;
+  virtual RGWOp *get_retrieve_op(bool get_data) = 0;
+  virtual RGWOp *get_create_op() = 0;
+  virtual RGWOp *get_delete_op() = 0;
+  virtual RGWOp *get_post_op() = 0;
 
-  static int init_rest(struct req_state *s, struct fcgx_state *fcgx);
 public:
   int read_permissions();
   RGWOp *get_op();
+  void put_op(RGWOp *op);
 
-  virtual bool authorize(struct req_state *s) = 0;
+  static int preprocess(struct req_state *s, FCGX_Request *fcgx);
+  virtual bool authorize() = 0;
+};
 
-  static RGWHandler *init_handler(struct req_state *s, struct fcgx_state *fcgx,
-				  int *init_error);
+class RGWHandler_REST_OS;
+class RGWHandler_OS_Auth;
+class RGWHandler_REST_S3;
+
+class RGWRESTMgr {
+  RGWHandler_REST_OS *m_os_handler;
+  RGWHandler_OS_Auth *m_os_auth_handler;
+  RGWHandler_REST_S3 *m_s3_handler;
+
+public:
+  RGWRESTMgr();
+  ~RGWRESTMgr();
+  RGWHandler *get_handler(struct req_state *s, FCGX_Request *fcgx,
+			  int *init_error);
 };
 
 extern void set_req_state_err(struct req_state *s, int err_no);

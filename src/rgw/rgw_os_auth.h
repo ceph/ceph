@@ -21,8 +21,9 @@ public:
   RGWHandler_OS_Auth() {}
   ~RGWHandler_OS_Auth() {}
   RGWOp *get_op();
+  void put_op(RGWOp *op);
 
-  bool authorize(struct req_state *s);
+  bool authorize();
   int read_permissions() { return 0; }
 };
 

@@ -16,6 +16,7 @@
 #include "global/global_init.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
@@ -39,6 +40,10 @@ using namespace std;
 static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
 
+
+#define SOCKET_NAME ".radosgw.sock"
+#define SOCKET_BACKLOG 20
+
 static void godown_handler(int signum)
 {
   FCGX_ShutdownPending();
@@ -51,14 +56,162 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
+class RGWProcess {
+  deque<FCGX_Request *> m_fcgx_queue;
+  ThreadPool m_tp;
+
+  struct RGWWQ : public ThreadPool::WorkQueue<FCGX_Request> {
+    RGWProcess *process;
+    RGWWQ(RGWProcess *p, ThreadPool *tp) : ThreadPool::WorkQueue<FCGX_Request>("RGWWQ", tp), process(p) {}
+
+    bool _enqueue(FCGX_Request *req) {
+      process->m_fcgx_queue.push_back(req);
+      RGW_LOG(0) << "enqueued request fcgx=" << hex << req << dec << dendl;
+      _dump_queue();
+      return true;
+    }
+    void _dequeue(FCGX_Request *req) {
+      assert(0);
+    }
+    bool _empty() {
+      return process->m_fcgx_queue.empty();
+    }
+    FCGX_Request *_dequeue() {
+      if (process->m_fcgx_queue.empty())
+	return NULL;
+      FCGX_Request *req = process->m_fcgx_queue.front();
+      process->m_fcgx_queue.pop_front();
+      RGW_LOG(0) << "dequeued request fcgx=" << hex << req << dec << dendl;
+      _dump_queue();
+      return req;
+    }
+    void _process(FCGX_Request *fcgx) {
+      process->handle_request(fcgx);
+    }
+    void _dump_queue() {
+      deque<FCGX_Request *>::iterator iter;
+      if (process->m_fcgx_queue.size() == 0) {
+        RGW_LOG(0) << "RGWWQ: empty" << dendl;
+        return;
+      }
+      RGW_LOG(0) << "RGWWQ:" << dendl;
+      for (iter = process->m_fcgx_queue.begin(); iter != process->m_fcgx_queue.end(); ++iter) {
+        RGW_LOG(0) << "fcgx: " << hex << *iter << dec << dendl;
+      }
+    }
+    void _clear() {
+      assert(process->m_fcgx_queue.empty());
+    }
+  } req_wq;
+
+public:
+  RGWProcess(CephContext *cct, int num_threads) : m_tp(cct, "RGWProcess::m_tp", num_threads), req_wq(this, &m_tp) {}
+  void run();
+  void handle_request(FCGX_Request *fcgx);
+};
+
+void RGWProcess::run()
+{
+  int s = 0;
+  if (!g_conf->rgw_socket_path.empty()) {
+    string path_str = g_conf->rgw_socket_path;
+    path_str.append("/");
+    path_str.append(SOCKET_NAME);
+    const char *path = path_str.c_str();
+    s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
+    if (s < 0) {
+      RGW_LOG(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << s << dendl;
+      return;
+    }
+    if (chmod(path, 0777) < 0) {
+      RGW_LOG(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
+    }
+  }
+
+  m_tp.start();
+
+  for (;;) {
+    FCGX_Request *fcgx = new FCGX_Request;
+    RGW_LOG(0) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
+    FCGX_InitRequest(fcgx, s, 0);
+    int ret = FCGX_Accept_r(fcgx);
+    if (ret < 0)
+      return;
+
+    req_wq.queue(fcgx);
+  }
+}
+
+void RGWProcess::handle_request(FCGX_Request *fcgx)
+{
+  RGWRESTMgr rest;
+  int ret;
+  RGWEnv rgw_env;
+
+  RGW_LOG(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
+
+  rgw_env.init(fcgx->envp);
+
+  struct req_state *s = new req_state(&rgw_env);
+
+  RGWOp *op = NULL;
+  int init_error = 0;
+  RGWHandler *handler = rest.get_handler(s, fcgx, &init_error);
+
+  if (init_error != 0) {
+    abort_early(s, init_error);
+    goto done;
+  }
+
+  if (!handler->authorize()) {
+    RGW_LOG(10) << "failed to authorize request" << dendl;
+    abort_early(s, -EPERM);
+    goto done;
+  }
+  if (s->user.suspended) {
+    RGW_LOG(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+    abort_early(s, -ERR_USER_SUSPENDED);
+    goto done;
+  }
+  ret = handler->read_permissions();
+  if (ret < 0) {
+    abort_early(s, ret);
+    goto done;
+  }
+
+  op = handler->get_op();
+  if (op) {
+    ret = op->verify_permission();
+    if (ret < 0) {
+      abort_early(s, ret);
+      goto done;
+    }
+
+    if (s->expect_cont)
+      dump_continue(s);
+
+    op->execute();
+  } else {
+    abort_early(s, -ERR_METHOD_NOT_ALLOWED);
+  }
+done:
+  rgw_log_op(s);
+
+  int http_ret = s->err.http_ret;
+
+  handler->put_op(op);
+  delete s;
+  FCGX_Finish_r(fcgx);
+  delete fcgx;
+
+  RGW_LOG(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
+}
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
 int main(int argc, const char **argv)
 {
-  struct req_state s;
-  struct fcgx_state fcgx;
-
   curl_global_init(CURL_GLOBAL_ALL);
 
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
@@ -77,6 +230,11 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  sighandler_usr1 = signal(SIGUSR1, godown_handler);
+  sighandler_alrm = signal(SIGALRM, godown_alarm);
+
+  FCGX_Init();
+
   RGWStoreManager store_manager;
 
   if (!store_manager.init("rados", g_ceph_context)) {
@@ -84,57 +242,10 @@ int main(int argc, const char **argv)
     return EIO;
   }
 
-  sighandler_usr1 = signal(SIGUSR1, godown_handler);
-  sighandler_alrm = signal(SIGALRM, godown_alarm);
+  RGWProcess process(g_ceph_context, 20);
 
-  while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
-  {
-    rgw_env.reinit(fcgx.envp);
+  process.run();
 
-    RGWOp *op;
-    int init_error = 0;
-    RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx, &init_error);
-    int ret;
-    
-    if (init_error != 0) {
-      abort_early(&s, init_error);
-      goto done;
-    }
-
-    if (!handler->authorize(&s)) {
-      RGW_LOG(10) << "failed to authorize request" << dendl;
-      abort_early(&s, -EPERM);
-      goto done;
-    }
-    if (s.user.suspended) {
-      RGW_LOG(10) << "user is suspended, uid=" << s.user.user_id << dendl;
-      abort_early(&s, -ERR_USER_SUSPENDED);
-      goto done;
-    }
-    ret = handler->read_permissions();
-    if (ret < 0) {
-      abort_early(&s, ret);
-      goto done;
-    }
-
-    op = handler->get_op();
-    if (op) {
-      ret = op->verify_permission();
-      if (ret < 0) {
-        abort_early(&s, ret);
-        goto done;
-      }
-
-      if (s.expect_cont)
-        dump_continue(&s);
-
-      op->execute();
-    } else {
-      abort_early(&s, -ERR_METHOD_NOT_ALLOWED);
-    }
-done:
-    rgw_log_op(&s);
-  }
   return 0;
 }
 
