@@ -20,7 +20,7 @@
 #include "osdc/Journaler.h"
 
 #include "common/entity_name.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 
 #include "events/ESubtreeMap.h"
 

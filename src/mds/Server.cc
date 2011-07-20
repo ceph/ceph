@@ -47,7 +47,7 @@
 
 #include "include/filepath.h"
 #include "common/Timer.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 
 #include <errno.h>
 #include <fcntl.h>

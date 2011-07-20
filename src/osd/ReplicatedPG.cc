@@ -17,7 +17,7 @@
 #include "PGLS.h"
 
 #include "common/errno.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"

@@ -14,7 +14,7 @@
 
 #define __STDC_FORMAT_MACROS // for PRId64, etc.
 
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/errno.h"
 

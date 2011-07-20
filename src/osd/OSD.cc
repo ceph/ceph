@@ -70,7 +70,7 @@
 #include "messages/MWatchNotify.h"
 
 #include "common/DoutStreambuf.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/safe_io.h"

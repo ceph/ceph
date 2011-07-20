@@ -17,7 +17,7 @@
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
 #include "common/DoutStreambuf.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/config.h"

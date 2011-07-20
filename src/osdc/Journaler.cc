@@ -12,7 +12,7 @@
  * 
  */
 
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/dout.h"
 #include "include/Context.h"
 #include "msg/Messenger.h"

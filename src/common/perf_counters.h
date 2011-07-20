@@ -13,8 +13,8 @@
  */
 
 
-#ifndef CEPH_PROF_LOG_H
-#define CEPH_PROF_LOG_H
+#ifndef CEPH_COMMON_PERF_COUNTERS_H
+#define CEPH_COMMON_PERF_COUNTERS_H
 
 #include "common/config_obs.h"
 #include "common/Mutex.h"

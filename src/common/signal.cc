@@ -14,7 +14,7 @@
 
 #include "common/BackTrace.h"
 #include "common/DoutStreambuf.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "global/pidfile.h"
 #include "common/debug.h"
 #include "common/signal.h"

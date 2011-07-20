@@ -24,7 +24,7 @@ using namespace std;
 
 
 #include "include/filepath.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

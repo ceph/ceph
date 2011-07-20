@@ -24,7 +24,7 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/DecayCounter.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Timer.h"

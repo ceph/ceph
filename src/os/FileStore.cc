@@ -29,7 +29,7 @@
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 
 #define __STDC_FORMAT_MACROS

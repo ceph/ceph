@@ -17,7 +17,7 @@
 #include "common/safe_io.h"
 #include "FileJournal.h"
 #include "include/color.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "os/ObjectStore.h"
 
 #include <fcntl.h>

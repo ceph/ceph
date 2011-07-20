@@ -13,7 +13,7 @@
  */
 
 #include "common/admin_socket.h"
-#include "common/ProfLogger.h"
+#include "common/perf_counters.h"
 #include "common/Thread.h"
 #include "common/config.h"
 #include "common/config_obs.h"
