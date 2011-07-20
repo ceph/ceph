@@ -4474,6 +4474,12 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
+  if (!mdr->more()->slaves.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+    le->reqid = mdr->reqid;
+    le->had_slaves = true;
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+  }
 
   if (straydn) {
     assert(dnl->is_primary());
