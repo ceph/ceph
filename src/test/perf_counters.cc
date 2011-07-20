@@ -64,7 +64,7 @@ std::string sd(const char *c)
   return ret;
 }
 
-static PerfCounters* setup_fake_proflogger1(CephContext *cct)
+static PerfCounters* setup_test_perfcounters1(CephContext *cct)
 {
   PerfCountersBuilder bld(cct, "test_perfcounter_1",
 	  TEST_PERFCOUNTERS1_ELEMENT_FIRST, TEST_PERFCOUNTERS1_ELEMENT_LAST);
@@ -74,9 +74,9 @@ static PerfCounters* setup_fake_proflogger1(CephContext *cct)
   return bld.create_perf_counters();
 }
 
-TEST(PerfCounters, SingleProfLogger) {
+TEST(PerfCounters, SinglePerfCounters) {
   PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
-  PerfCounters* fake_pf = setup_fake_proflogger1(g_ceph_context);
+  PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
   coll->logger_add(fake_pf);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
   g_ceph_context->_conf->apply_changes();
@@ -105,7 +105,7 @@ enum {
   TEST_PERFCOUNTERS2_ELEMENT_LAST,
 };
 
-static PerfCounters* setup_fake_proflogger2(CephContext *cct)
+static PerfCounters* setup_test_perfcounter2(CephContext *cct)
 {
   PerfCountersBuilder bld(cct, "test_perfcounter_2",
 	  TEST_PERFCOUNTERS2_ELEMENT_FIRST, TEST_PERFCOUNTERS2_ELEMENT_LAST);
@@ -114,11 +114,11 @@ static PerfCounters* setup_fake_proflogger2(CephContext *cct)
   return bld.create_perf_counters();
 }
 
-TEST(PerfCounters, MultipleProfloggers) {
+TEST(PerfCounters, MultiplePerfCounters) {
   PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
   coll->logger_clear();
-  PerfCounters* fake_pf1 = setup_fake_proflogger1(g_ceph_context);
-  PerfCounters* fake_pf2 = setup_fake_proflogger2(g_ceph_context);
+  PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
+  PerfCounters* fake_pf2 = setup_test_perfcounter2(g_ceph_context);
   coll->logger_add(fake_pf1);
   coll->logger_add(fake_pf2);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());

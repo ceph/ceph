@@ -49,8 +49,8 @@ const char* get_rand_socket_path()
     if (tdir == NULL) {
       tdir = "/tmp";
     }
-    snprintf(buf, sizeof(sockaddr_un::sun_path),
-	     "%s/proflogger_test_socket.%ld.%ld",
+    snprintf(buf, sizeof(((struct sockaddr_un*)0)->sun_path),
+	     "%s/perfcounters_test_socket.%ld.%ld",
 	     tdir, (long int)getpid(), time(NULL));
     g_socket_path = (char*)strdup(buf);
   }
