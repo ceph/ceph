@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
+import os
+import sys
 import web
+
+abspath = os.path.dirname(__file__)
+if abspath not in sys.path:
+    sys.path.append(abspath)
 
 from api import Lock, MachineLock
 
@@ -10,6 +16,4 @@ urls = (
     )
 
 app = web.application(urls, globals())
-
-if __name__ == "__main__":
-    app.run()
+application = app.wsgifunc()
