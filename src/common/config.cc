@@ -573,7 +573,7 @@ parse_env()
 void md_config_t::
 parse_argv(std::vector<const char*>& args)
 {
-  // In this function, don't change any parts of g_conf directly.
+  // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
   std::string val;
@@ -858,13 +858,8 @@ set_val_from_default(const config_option *opt)
       std::string *str = (std::string *)opt->conf_ptr(this);
       *str = opt->def_str ? opt->def_str : "";
       if (expand_meta(*str)) {
-	// We don't allow metavariables in default values.  The reason for this
-	// is that default values take effect at global constructor time.  At
-	// global constructor time, we don't have valid values for $host,
-	// $name, $id and so forth. So trying to set default variables would
-	// inevitably lead to the wrong behavior.  Once g_conf is
-	// de-globalized, and we don't have to worry about global constructor
-	// time, this restriction can be eased.
+	// We currently don't allow metavariables in default values at the moment.
+        // This restriction will probably be eased soon.
 	ostringstream oss;
 	oss << "found metavariables in the default value for '"
 	    << opt->name << "'. " << "metavariables cannot be "
