@@ -67,9 +67,9 @@ the nodes & use the live cluster ad hoc), might look like this::
 	- [mon.1, osd.1]
 	- [mon.2, client.0]
 	targets:
-	- ubuntu@host07.example.com
-	- ubuntu@host08.example.com
-	- ubuntu@host09.example.com
+	  ubuntu@host07.example.com: ssh-rsa long_key_here
+	  ubuntu@host08.example.com: ssh-rsa other_key
+	  ubuntu@host09.example.com: ssh-rsa third_key
 	tasks:
 	- ceph:
 	- cfuse: [client.0]
