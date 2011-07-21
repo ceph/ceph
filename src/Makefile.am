@@ -721,6 +721,7 @@ libcommon_files = \
 	common/signal.cc \
 	common/simple_spin.cc \
 	common/Thread.cc \
+	common/Formatter.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
 	include/ceph_strings.cc \
@@ -887,6 +888,7 @@ noinst_HEADERS = \
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
+	common/Formatter.h\
         common/perf_counters.h\
 	common/admin_socket.h \
 	common/admin_socket_client.h \
