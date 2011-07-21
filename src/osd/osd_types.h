@@ -23,7 +23,7 @@
 #include "include/types.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
-
+#include "common/Formatter.h"
 
 
 
@@ -611,6 +611,12 @@ struct pool_snap_info_t {
   utime_t stamp;
   string name;
 
+  void dump(Formatter *f) const {
+    f->dump_unsigned("snapid", snapid);
+    f->dump_stream("stamp") << stamp;
+    f->dump_string("name", name);
+  }
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -660,6 +666,30 @@ struct pg_pool_t {
     memset(&v, 0, sizeof(v));
   }
 
+  void dump(Formatter *f) const {
+    f->dump_int("type", get_type());
+    f->dump_int("size", get_size());
+    f->dump_int("crush_ruleset", get_crush_ruleset());
+    f->dump_int("object_hash", get_object_hash());
+    f->dump_int("pg_num", get_pg_num());
+    f->dump_int("pg_placement_num", get_pgp_num());
+    f->dump_int("localized_pg_num", get_lpg_num());
+    f->dump_int("localized_pg_placement_num", get_lpgp_num());
+    f->dump_stream("last_change") << get_last_change();
+    f->dump_unsigned("auid", get_auid());
+    f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
+    f->dump_unsigned("snap_seq", get_snap_seq());
+    f->dump_unsigned("snap_epoch", get_snap_epoch());
+    f->open_object_section("pool_snaps");
+    for (map<snapid_t, pool_snap_info_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
+      f->open_object_section("pool_snap_info");
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+    f->dump_stream("removed_snaps") << removed_snaps;
+  }
+
   unsigned get_type() const { return v.type; }
   unsigned get_size() const { return v.size; }
   int get_crush_ruleset() const { return v.crush_ruleset; }
@@ -670,6 +700,7 @@ struct pg_pool_t {
   epoch_t get_last_change() const { return v.last_change; }
   epoch_t get_snap_epoch() const { return v.snap_epoch; }
   snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
+  uint64_t get_auid() const { return v.auid; }
 
   void set_snap_seq(snapid_t s) { v.snap_seq = s; }
   void set_snap_epoch(epoch_t e) { v.snap_epoch = e; }

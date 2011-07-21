@@ -15,7 +15,96 @@
 #include "OSDMap.h"
 
 #include "common/config.h"
+#include "common/Formatter.h"
 
+
+void osd_info_t::dump(Formatter *f) const
+{
+  f->dump_int("last_clean_first", last_clean_first);
+  f->dump_int("last_clean_last", last_clean_last);
+  f->dump_int("up_from", up_from);
+  f->dump_int("up_thru", up_thru);
+  f->dump_int("down_at", down_at);
+  f->dump_int("lost_at", lost_at);
+}
+
+void OSDMap::dump_json(ostream& out) const
+{
+  JSONFormatter jsf(true);
+  jsf.open_object_section("osdmap");
+  dump(&jsf);
+  jsf.close_section();
+  jsf.flush(out);
+}
+
+void OSDMap::dump(Formatter *f) const
+{
+  f->dump_int("epoch", get_epoch());
+  f->dump_stream("fsid") << get_fsid();
+  f->dump_stream("created") << get_created();
+  f->dump_stream("modified") << get_modified();
+  f->dump_string("flags", get_flag_string());
+  f->dump_string("cluster_snapshot", get_cluster_snapshot());
+  f->dump_int("max_osd", get_max_osd());
+
+  f->open_array_section("pools");
+  for (map<int,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p->first);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("osds");
+  for (int i=0; i<get_max_osd(); i++)
+    if (exists(i)) {
+      f->open_object_section("osd_info");
+      f->dump_int("osd", i);
+      get_info(i).dump(f);
+      f->close_section();
+    }
+  f->close_section();
+
+  f->open_array_section("pg_temp");
+  for (map<pg_t,vector<int> >::const_iterator p = pg_temp.begin();
+       p != pg_temp.end();
+       p++) {
+    f->open_array_section("osds");
+    for (vector<int>::const_iterator q = p->second.begin(); q != p->second.end(); ++q)
+      f->dump_int("osd", *q);
+    f->close_section();
+  }
+  f->close_section();
+  
+  f->open_array_section("blacklist");
+  for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
+       p != blacklist.end();
+       p++) {
+    stringstream ss;
+    ss << p->first;
+    f->dump_stream(ss.str().c_str()) << p->second;
+  }
+  f->close_section();
+}
+
+string OSDMap::get_flag_string() const
+{
+  string s;
+  if (test_flag(CEPH_OSDMAP_NEARFULL))
+    s += ",nearfull";
+  if (test_flag(CEPH_OSDMAP_FULL))
+    s += ",full";
+  if (test_flag(CEPH_OSDMAP_PAUSERD))
+    s += ",pauserd";
+  if (test_flag(CEPH_OSDMAP_PAUSEWR))
+    s += ",pausewr";
+  if (test_flag(CEPH_OSDMAP_PAUSEREC))
+    s += ",pauserec";
+  if (s.length())
+    s = s.erase(0, 1);
+  return s;
+}
 
 struct qi {
   int item;
@@ -25,7 +114,6 @@ struct qi {
   qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
 };
 
-
 void OSDMap::print(ostream& out) const
 {
   out << "epoch " << get_epoch() << "\n"
@@ -33,18 +121,7 @@ void OSDMap::print(ostream& out) const
       << "created " << get_created() << "\n"
       << "modifed " << get_modified() << "\n";
 
-  out << "flags";
-  if (test_flag(CEPH_OSDMAP_NEARFULL))
-    out << " nearfull";
-  if (test_flag(CEPH_OSDMAP_FULL))
-    out << " full";
-  if (test_flag(CEPH_OSDMAP_PAUSERD))
-    out << " pauserd";
-  if (test_flag(CEPH_OSDMAP_PAUSEWR))
-    out << " pausewr";
-  if (test_flag(CEPH_OSDMAP_PAUSEREC))
-    out << " pauserec";
-  out << "\n";
+  out << "flags " << get_flag_string() << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";

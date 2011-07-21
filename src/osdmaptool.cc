@@ -57,6 +57,7 @@ int main(int argc, const char **argv)
 
   const char *fn = 0;
   bool print = false;
+  bool print_json = false;
   bool tree = false;
   bool createsimple = false;
   int num_osd = 0, num_dom = 0;
@@ -77,6 +78,8 @@ int main(int argc, const char **argv)
       usage();
     } else if (CEPH_ARGPARSE_EQ("print", 'p')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("dump_json", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&print_json, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("tree", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&tree, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("createsimple", '\0')) {
@@ -253,7 +256,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !tree && !modified && !export_crush && !import_crush && !test_map_pg && !test_map_object) {
+  if (!print && !print_json && !tree && !modified && !export_crush && !import_crush && !test_map_pg && !test_map_object) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
@@ -263,6 +266,8 @@ int main(int argc, const char **argv)
 
   if (print) 
     osdmap.print(cout);
+  if (print_json)
+    osdmap.dump_json(cout);
   if (tree) 
     osdmap.print_tree(cout);
 

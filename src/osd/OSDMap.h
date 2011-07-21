@@ -88,6 +88,9 @@ struct osd_info_t {
   
   osd_info_t() : last_clean_first(0), last_clean_last(0),
 		 up_from(0), up_thru(0), down_at(0), lost_at(0) {}
+
+  void dump(Formatter *f) const;
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -1026,6 +1029,10 @@ public:
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void print_tree(ostream& out) const;
+
+  string get_flag_string() const;
+  void dump_json(ostream& out) const;
+  void dump(Formatter *f) const;
 
 };
 
