@@ -5747,6 +5747,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       
       if (!con->is_auth() ||
 	  (con->is_auth() && con->is_exporting() &&
+	   // this person has acked that we're exporting
 	   migrator->get_export_state(con) == Migrator::EXPORT_WARNING &&
 	   migrator->export_has_warned(con,from))) {
 	// not auth.
@@ -5761,6 +5762,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	delayed_expire[con][from]->add_realm(p->first, p->second);
 	continue;
       }
+      assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
+             (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
+                 !migrator->export_has_warned(parent_dir, from)));
+
       dout(7) << "expires for " << *con << dendl;
     } else {
       dout(7) << "containerless expires (root, stray inodes)" << dendl;

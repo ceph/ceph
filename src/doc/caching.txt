@@ -193,12 +193,23 @@ range of resulting implementation complications relating metadata
 migration.
 
 
-CACHE EXPIRATION FOR FROZEN SUBTREES
+CACHE EXPIRATION FOR EXPORTING SUBTREES
 
 Cache expiration messages that are received for a subtree that is
-frozen are temporarily set aside instead of being processed.  Only
-when the subtree is unfrozen are the expirations either processed (if
-the MDS is authoritative) or discarded (if it is not).  Because either
+being exported are either deferred or handled immediately, based on
+the sender and reciever states. The importing MDS will always defer until
+after the export finishes, because the import could fail. The exporting MDS
+processes the expire UNLESS the expiring MDS does not know about the export or
+the exporting MDS is no longer auth.
+Because MDSes get witness notifications on export, this is safe. Either:
+a) The expiring MDS knows about the export, and has sent messages to both
+MDSes involved, or
+b) The expiring MDS did not know about the export at the time the message
+was sent, and so only sent it to the exporting MDS. (This implies that the
+exporting MDS hasn't yet encoded the state to send to the replica MDS.)
+
+When the subtree export completes, deferred expirations are either processed
+(if the MDS is authoritative) or discarded (if it is not).  Because either
 the exporting or importing metadata can fail during the migration
 process, the MDS cannot tell whether it will be authoritative or not
 until the process completes.
@@ -208,7 +219,6 @@ exporter and importer, and then all other replicas will be informed of
 a subtrees ambiguous authority.  This ensures that all expirations
 during migration will go to both parties, and nothing will be lost in
 the event of a failure.
-
 
 
 
