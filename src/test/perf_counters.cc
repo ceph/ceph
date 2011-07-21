@@ -84,18 +84,18 @@ TEST(PerfCounters, SinglePerfCounters) {
   std::string msg;
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':0,"
-	    "'element2':0,'element3':{'count':0,'sum':0},},}"), msg);
+	    "'element2':0,'element3':{'count':0,'sum':0}}}"), msg);
   fake_pf->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
   fake_pf->fset(TEST_PERFCOUNTERS1_ELEMENT_2, 0.5);
   fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 100.0);
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':1,"
-	    "'element2':0.5,'element3':{'count':1,'sum':100},},}"), msg);
+	    "'element2':0.5,'element3':{'count':1,'sum':100}}}"), msg);
   fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 0.0);
   fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 25.0);
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':1,'element2':0.5,"
-	    "'element3':{'count':3,'sum':125},},}"), msg);
+	    "'element3':{'count':3,'sum':125}}}"), msg);
 }
 
 enum {
@@ -128,18 +128,18 @@ TEST(PerfCounters, MultiplePerfCounters) {
 
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':0,'element2':0,'element3':"
-	    "{'count':0,'sum':0},},'test_perfcounter_2':{'foo':0,'bar':0,},}"), msg);
+	    "{'count':0,'sum':0}},'test_perfcounter_2':{'foo':0,'bar':0}}"), msg);
 
   fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
   fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1, 5);
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,'element3':"
-	    "{'count':0,'sum':0},},'test_perfcounter_2':{'foo':0,'bar':0,},}"), msg);
+	    "{'count':0,'sum':0}},'test_perfcounter_2':{'foo':0,'bar':0}}"), msg);
 
   coll->logger_remove(fake_pf2);
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,"
-	    "'element3':{'count':0,'sum':0},},}"), msg);
+	    "'element3':{'count':0,'sum':0}}}"), msg);
 
   coll->logger_clear();
   ASSERT_EQ("", client.get_message(&msg));
