@@ -236,7 +236,7 @@ private:
   {
     int ret;
     struct sockaddr_un address;
-    socklen_t address_length;
+    socklen_t address_length = sizeof(address);
     ldout(m_parent->m_cct, 30) << "AdminSocket: calling accept" << dendl;
     int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
 				   &address_length);
