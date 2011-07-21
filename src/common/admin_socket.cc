@@ -142,6 +142,7 @@ public:
 	  << "failed to create socket: " << cpp_strerror(err);
       return oss.str();
     }
+    fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
     memset(&address, 0, sizeof(struct sockaddr_un));
     address.sun_family = AF_UNIX;
     snprintf(address.sun_path, sizeof(address.sun_path),
