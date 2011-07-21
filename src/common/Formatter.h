@@ -58,6 +58,7 @@ class JSONFormatter : public Formatter {
  private:
   bool m_pretty;
   void open_section(const char *name, bool is_array);
+  void print_quoted_string(const char *s);
   void print_name(const char *name);
   void print_comma(formatter_stack_entry_d& entry);
   void finish_pending_string();

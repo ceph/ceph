@@ -50,6 +50,40 @@ void JSONFormatter::print_comma(formatter_stack_entry_d& entry)
     m_ss << "    ";
 }
 
+void JSONFormatter::print_quoted_string(const char *s)
+{
+  m_ss << '\"';
+  while (*s) {
+    if (*s == '\\')
+      m_ss << "\\";
+    else if (*s == '\"')
+      m_ss << "\\\"";
+    else if (*s < 32) {
+      // do a few common control characters
+      switch (*s) {
+      case '\n':
+	m_ss << "\\n";
+	break;
+      case '\r':
+	m_ss << "\\r";
+	break;
+      case '\t':
+	m_ss << "\\t";
+	break;
+      default:
+	{
+	  // otherwise...
+	  char s[10];
+	  sprintf(s, "\\u%04x", (int)*s);
+	}
+      }
+    } else
+      m_ss << *s;
+    s++;
+  }
+  m_ss << '\"';
+}
+
 void JSONFormatter::print_name(const char *name)
 {
   finish_pending_string();
@@ -64,7 +98,11 @@ void JSONFormatter::print_name(const char *name)
       else
 	m_ss << " ";
     }
-    m_ss << "\"" << name << "\": ";
+    print_quoted_string(name);
+    if (m_pretty)
+      m_ss << ": ";
+    else
+      m_ss << ':';
   }
   ++entry.size;
 }
@@ -105,8 +143,7 @@ void JSONFormatter::close_section()
 void JSONFormatter::finish_pending_string()
 {
   if (m_is_pending_string) {
-    // FIXME: escape this properly
-    m_ss << "\"" << m_pending_string.str() << "\"";
+    print_quoted_string(m_pending_string.str().c_str());
     m_pending_string.str(std::string());
     m_is_pending_string = false;
   }
@@ -134,7 +171,7 @@ void JSONFormatter::dump_float(const char *name, double d)
 void JSONFormatter::dump_string(const char *name, std::string s)
 {
   print_name(name);
-  m_ss << "\"" << s << "\"";
+  print_quoted_string(s.c_str());
 }
 
 std::ostream& JSONFormatter::dump_stream(const char *name)
@@ -153,7 +190,7 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   va_end(ap);
 
   print_name(name);
-  m_ss << "\"" << buf << "\"";
+  print_quoted_string(buf);
 }
 
 }
