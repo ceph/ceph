@@ -7,6 +7,7 @@
 
 #include <iostream>
 
+#include "assert.h"
 #include "Formatter.h"
 
 // -----------------------
@@ -22,6 +23,7 @@ void Formatter::reset()
 void Formatter::flush(std::ostream& os)
 {
   finish_pending_string();
+  assert(m_stack.empty());
   os << m_ss.str();
   m_ss.clear();
 }
@@ -44,12 +46,13 @@ void JSONFormatter::print_comma(formatter_stack_entry_d& entry)
     for (unsigned i=1; i < m_stack.size(); i++)
       m_ss << "    ";
   }
-  if (entry.is_array)
+  if (m_pretty && entry.is_array)
     m_ss << "    ";
 }
 
 void JSONFormatter::print_name(const char *name)
 {
+  finish_pending_string();
   if (m_stack.empty())
     return;
   struct formatter_stack_entry_d& entry = m_stack.back();
@@ -81,18 +84,17 @@ void JSONFormatter::open_section(const char *name, bool is_array)
 
 void JSONFormatter::open_array_section(const char *name)
 {
-  finish_pending_string();
   open_section(name, true);
 }
 
 void JSONFormatter::open_object_section(const char *name)
 {
-  finish_pending_string();
   open_section(name, false);
 }
 
 void JSONFormatter::close_section()
 {
+  assert(!m_stack.empty());
   finish_pending_string();
 
   struct formatter_stack_entry_d& entry = m_stack.back();
@@ -102,41 +104,43 @@ void JSONFormatter::close_section()
 
 void JSONFormatter::finish_pending_string()
 {
-  struct formatter_stack_entry_d& entry = m_stack.back();
-  if (entry.pending_string) {
+  if (m_is_pending_string) {
     // FIXME: escape this properly
     m_ss << "\"" << m_pending_string.str() << "\"";
     m_pending_string.str(std::string());
-    entry.pending_string = false;
+    m_is_pending_string = false;
   }
 }
 
 void JSONFormatter::dump_unsigned(const char *name, uint64_t u)
 {
-  finish_pending_string();
   print_name(name);
   m_ss << u;
 }
 
 void JSONFormatter::dump_int(const char *name, int64_t s)
 {
-  finish_pending_string();
   print_name(name);
   m_ss << s;
 }
 
+void JSONFormatter::dump_float(const char *name, double d)
+{
+  char foo[30];
+  snprintf(foo, sizeof(foo), "%lf", d);
+  dump_string(name, foo);
+}
+
 void JSONFormatter::dump_string(const char *name, std::string s)
 {
-  finish_pending_string();
   print_name(name);
   m_ss << "\"" << s << "\"";
 }
 
 std::ostream& JSONFormatter::dump_stream(const char *name)
 {
-  finish_pending_string();
   print_name(name);
-  m_stack.back().pending_string = true;
+  m_is_pending_string = true;
   return m_pending_string;
 }
 
@@ -148,7 +152,6 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
 
-  finish_pending_string();
   print_name(name);
   m_ss << "\"" << buf << "\"";
 }
