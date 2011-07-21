@@ -69,6 +69,10 @@ static void parse_cmd_args(const vector<const char*> &args,
       *mode = CEPH_TOOL_MODE_OBSERVER;
     } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
+    } else if (strcmp(args[i], "--") == 0) {
+      for (++i; i < args.size(); i++)
+	nargs->push_back(args[i]);
+      break;
     } else if (args[i][0] == '-' && nargs->empty()) {
       derr << "unrecognized option " << args[i] << dendl;
       usage();
