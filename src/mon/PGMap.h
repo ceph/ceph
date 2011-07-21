@@ -277,43 +277,44 @@ public:
     redo_full_sets();
   }
 
-  void dump_json(ostream& ss) const {
-    ss << "{ \"version\": " << version << ",\n";
-    ss << "  \"last_osdmap_epoch\": " << last_osdmap_epoch << ",\n";
-    ss << "  \"last_pg_scan\": " << last_pg_scan << ",\n";
-    ss << "  \"full_ratio\": " << full_ratio << ",\n";
-    ss << "  \"nearfull_ratio\": " << nearfull_ratio << ",\n";
-    
-    ss << "  \"pg_stat\": [\n";
-    hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
-    while (i != pg_stat.end()) {
-      i->second.dump_json(ss, i->first, "    ");
-      if (++i == pg_stat.end())
-	break;
-      ss << ",\n";
+  void dump(Formatter *f) const {
+    f->dump_unsigned("version", version);
+    f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
+    f->dump_unsigned("last_pg_scan", last_pg_scan);
+    f->dump_float("full_ratio", full_ratio);
+    f->dump_float("near_full_ratio", nearfull_ratio);
+    f->open_array_section("pg_stats");
+        for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
+	 i != pg_stat.end();
+	 ++i) {
+      f->open_object_section("pg_stat");
+      f->dump_stream("pgid") << i->first;
+      i->second.dump(f);
+      f->close_section();
     }
-    ss << "\n  ],\n";
+    f->close_section();
 
-    ss << "  \"pool_stat\": [\n";
-    hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
-    while (p != pg_pool_sum.end()) {
-      p->second.dump_json(ss, p->first, "    ");
-      if (++p == pg_pool_sum.end())
-	break;
-      ss << ",\n";
+    f->open_array_section("pool_stats");
+    for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
+	 p != pg_pool_sum.end();
+	 ++p) {
+      f->open_object_section("pool_stat");
+      f->dump_int("poolid", p->first);
+      p->second.dump(f);
+      f->close_section();
     }
-    ss << "\n  ],\n";
+    f->close_section();
 
-    ss << "  \"osd_stat\": [\n";
-    hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
-    while (q != osd_stat.end()) {
-      q->second.dump_json(ss, q->first, "    ");
-      if (++q == osd_stat.end())
-	break;
-      ss << ",\n";
+    f->open_array_section("osd_stats");
+    for (hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
+	 q != osd_stat.end();
+	 ++q) {
+      f->open_object_section("osd_stat");
+      f->dump_int("osd", q->first);
+      q->second.dump(f);
+      f->close_section();
     }
-    ss << "\n  ]\n";
-    ss << "}\n";
+    f->close_section();
   }
 
 

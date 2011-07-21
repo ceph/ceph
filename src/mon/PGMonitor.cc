@@ -31,6 +31,7 @@
 #include "messages/MOSDScrub.h"
 
 #include "common/Timer.h"
+#include "common/Formatter.h"
 
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
@@ -773,8 +774,12 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd[1] == "dump_json") {
       ss << "ok";
       r = 0;
+      JSONFormatter jsf(true);
+      jsf.open_object_section("pg_map");
+      pg_map.dump(&jsf);
+      jsf.close_section();
       stringstream ds;
-      pg_map.dump_json(ds);
+      jsf.flush(ds);
       rdata.append(ds);
     }
     else if (m->cmd[1] == "map" && m->cmd.size() == 3) {

@@ -465,15 +465,20 @@ struct osd_stat_t {
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
-  void dump_json(ostream& o, int osd, string prefix) const {
-    o << prefix << "{ \"osd\": " << osd << ",\n"
-      << prefix << "  \"kb\": " << kb << ",\n"
-      << prefix << "  \"kb_used\": " << kb_used << ",\n"
-      << prefix << "  \"kb_avail\": " << kb_avail << ",\n"
-      << prefix << "  \"hb_in\": [" << hb_in << "],\n"
-      << prefix << "  \"hb_out\": [" << hb_out << "],\n"
-      << prefix << "  \"snap_trim_queue_len\": " << snap_trim_queue_len << ",\n"
-      << prefix << "  \"num_snap_trimming\": " << num_snap_trimming << "}";
+  void dump(Formatter *f) const {
+    f->dump_unsigned("kb", kb);
+    f->dump_unsigned("kb_used", kb_used);
+    f->dump_unsigned("kb_avail", kb_avail);
+    f->open_array_section("hb_in");
+    for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
+    f->open_array_section("hb_out");
+    for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
+    f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
+    f->dump_int("num_snap_trimming", num_snap_trimming);
   }
 
   void encode(bufferlist &bl) const {
@@ -919,34 +924,39 @@ struct pg_stat_t {
 		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
-  void dump_json(ostream& o, pg_t pgid, string prefix) const {
-    o << prefix << "{ \"pgid\": \"" << pgid << "\",\n"
-      << prefix << "  \"version\": \"" << version << "\",\n"
-      << prefix << "  \"reported\": \"" << reported << "\",\n"
-      << prefix << "  \"state\": \"" << pg_state_string(state) << "\",\n"
-      << prefix << "  \"log_start\": \"" << log_start << "\",\n"
-      << prefix << "  \"ondisk_log_start\": \"" << ondisk_log_start << "\",\n"
-      << prefix << "  \"created\": " << created << ",\n"
-      << prefix << "  \"parent\": \"" << parent << "\",\n"
-      << prefix << "  \"parent_split_bits\": " << parent_split_bits << ",\n"
-      << prefix << "  \"last_scrub\": \"" << last_scrub << "\",\n"
-      << prefix << "  \"last_scrub_stamp\": \"" << last_scrub_stamp << "\",\n"
-      << prefix << "  \"num_bytes\": " << num_bytes << ",\n"
-      << prefix << "  \"num_kb\": " << num_kb << ",\n"
-      << prefix << "  \"num_objects\": " << num_objects << ",\n"
-      << prefix << "  \"num_object_clones\": " << num_object_clones << ",\n"
-      << prefix << "  \"num_object_copies\": " << num_object_copies << ",\n"
-      << prefix << "  \"num_objects_missing_on_primary\": " << num_objects_missing_on_primary << ",\n"
-      << prefix << "  \"num_objects_degraded\": " << num_objects_degraded << ",\n"
-      << prefix << "  \"num_objects_unfound\": " << num_objects_unfound << ",\n"
-      << prefix << "  \"log_size\": " << log_size << ",\n"
-      << prefix << "  \"ondisk_log_size\": " << ondisk_log_size << ",\n"
-      << prefix << "  \"num_read\": " << num_rd << ",\n"
-      << prefix << "  \"num_read_kb\": " << num_rd_kb << ",\n"
-      << prefix << "  \"num_write\": " << num_wr << ",\n"
-      << prefix << "  \"num_write_kb\": " << num_wr_kb << ",\n"
-      << prefix << "  \"up\": " << up << ",\n"
-      << prefix << "  \"acting\": " << acting << " }";
+  void dump(Formatter *f) const {
+    f->dump_stream("version") << version;
+    f->dump_stream("reported") << reported;
+    f->dump_string("state", pg_state_string(state));
+    f->dump_stream("log_start") << log_start;
+    f->dump_stream("ondisk_log_start") << ondisk_log_start;
+    f->dump_unsigned("created", created);
+    f->dump_stream("parent") << parent;
+    f->dump_unsigned("parent_split_bits", parent_split_bits);
+    f->dump_stream("last_scrub") << last_scrub;
+    f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+    f->dump_unsigned("num_bytes", num_bytes);
+    f->dump_unsigned("num_kb", num_kb);
+    f->dump_unsigned("num_objects", num_objects);
+    f->dump_unsigned("num_object_clones", num_object_clones);
+    f->dump_unsigned("num_object_copies", num_object_copies);
+    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
+    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
+    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
+    f->dump_unsigned("log_size", log_size);
+    f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+    f->dump_unsigned("num_read", num_rd);
+    f->dump_unsigned("num_read_kb", num_rd_kb);
+    f->dump_unsigned("num_write", num_wr);
+    f->dump_unsigned("num_write_kb", num_wr_kb);
+    f->open_array_section("up");
+    for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
+    f->open_array_section("acting");
+    for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
   }
 
   void encode(bufferlist &bl) const {
@@ -1077,22 +1087,21 @@ struct pool_stat_t {
 		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
-  void dump_json(ostream& o, int pool, string prefix) const {
-    o << prefix << "{ \"pool\": " << pool << ",\n"
-      << prefix << "  \"num_bytes\": " << num_bytes << ",\n"
-      << prefix << "  \"num_kb\": " << num_kb << ",\n"
-      << prefix << "  \"num_objects\": " << num_objects << ",\n"
-      << prefix << "  \"num_object_clones\": " << num_object_clones << ",\n"
-      << prefix << "  \"num_object_copies\": " << num_object_copies << ",\n"
-      << prefix << "  \"num_objects_missing_on_primary\": " << num_objects_missing_on_primary << ",\n"
-      << prefix << "  \"num_objects_degraded\": " << num_objects_degraded << ",\n"
-      << prefix << "  \"num_objects_unfound\": " << num_objects_unfound << ",\n"
-      << prefix << "  \"log_size\": " << log_size << ",\n"
-      << prefix << "  \"ondisk_log_size\": " << ondisk_log_size << ",\n"
-      << prefix << "  \"num_read\": " << num_rd << ",\n"
-      << prefix << "  \"num_read_kb\": " << num_rd_kb << ",\n"
-      << prefix << "  \"num_write\": " << num_wr << ",\n"
-      << prefix << "  \"num_write_kb\": " << num_wr_kb << "}";
+  void dump(Formatter *f) const {
+    f->dump_unsigned("num_bytes", num_bytes);
+    f->dump_unsigned("num_kb", num_kb);
+    f->dump_unsigned("num_objects", num_objects);
+    f->dump_unsigned("num_object_clones", num_object_clones);
+    f->dump_unsigned("num_object_copies", num_object_copies);
+    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
+    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
+    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
+    f->dump_unsigned("log_size", log_size);
+    f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+    f->dump_unsigned("num_read", num_rd);
+    f->dump_unsigned("num_read_kb", num_rd_kb);
+    f->dump_unsigned("num_write", num_wr);
+    f->dump_unsigned("num_write_kb", num_wr_kb);
   }
 
   void encode(bufferlist &bl) const {
