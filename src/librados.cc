@@ -524,6 +524,7 @@ public:
   int get_fs_stats(ceph_statfs& result);
 
   int pool_create(string& name, unsigned long long auid=0, __u8 crush_rule=0);
+  int pool_create_async(string& name, PoolAsyncCompletionImpl *c, unsigned long long auid=0, __u8 crush_rule=0);
   int pool_delete(const char *name);
   int pool_change_auid(rados_ioctx_t io, unsigned long long auid);
   int pool_get_auid(rados_ioctx_t io, unsigned long long *auid);
@@ -1194,6 +1195,17 @@ pool_create(string& name, unsigned long long auid,
     cond.Wait(mylock);
   mylock.Unlock();
   return reply;
+}
+
+int librados::RadosClient::
+pool_create_async(string& name, PoolAsyncCompletionImpl *c, unsigned long long auid,
+                  __u8 crush_rule)
+{
+  Mutex::Locker l(lock);
+  objecter->create_pool(name,
+			new C_PoolAsync_Safe(c),
+			auid, crush_rule);
+  return 0;
 }
 
 int librados::RadosClient::
@@ -3054,6 +3066,27 @@ pool_create(const char *name, uint64_t auid, __u8 crush_rule)
 {
   string str(name);
   return client->pool_create(str, auid, crush_rule);
+}
+
+int librados::Rados::
+pool_create_async(const char *name, PoolAsyncCompletion *c)
+{
+  string str(name);
+  return client->pool_create_async(str, c->pc);
+}
+
+int librados::Rados::
+pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c)
+{
+  string str(name);
+  return client->pool_create_async(str, c->pc, auid);
+}
+
+int librados::Rados::
+pool_create_async(const char *name, uint64_t auid, __u8 crush_rule, PoolAsyncCompletion *c)
+{
+  string str(name);
+  return client->pool_create_async(str, c->pc, auid, crush_rule);
 }
 
 int librados::Rados::
