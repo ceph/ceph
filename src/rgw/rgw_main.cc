@@ -41,7 +41,6 @@ static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
 
 
-#define SOCKET_NAME ".radosgw.sock"
 #define SOCKET_BACKLOG 20
 
 static void godown_handler(int signum)
@@ -115,8 +114,6 @@ void RGWProcess::run()
   int s = 0;
   if (!g_conf->rgw_socket_path.empty()) {
     string path_str = g_conf->rgw_socket_path;
-    path_str.append("/");
-    path_str.append(SOCKET_NAME);
     const char *path = path_str.c_str();
     s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
     if (s < 0) {
