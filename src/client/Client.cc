@@ -2860,9 +2860,6 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
       in->exporting_issued = cap->issued;
       in->exporting_mseq = m->get_mseq();
       in->exporting_mds = mds;
-
-      // open export targets, so we'll get the matching IMPORT
-      connect_mds_targets(mds);
     } else 
       ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
 	      << " EXPORT from mds" << mds
@@ -2871,6 +2868,11 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
     remove_cap(in, mds);
   }
   // else we already released it
+
+  // open export targets, so we'll get the matching IMPORT, even if we
+  // have seen a newer import (or have released the cap entirely), as there
+  // may be an intervening revocation that will otherwise get blocked up.
+  connect_mds_targets(mds);
 
   m->put();
 }
