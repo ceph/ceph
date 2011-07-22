@@ -1727,25 +1727,25 @@ void Locker::request_inode_file_caps(CInode *in)
   if (wanted != in->replica_caps_wanted) {
 
     if (wanted == 0) {
-      if (in->replica_caps_wanted_keep_until < ceph_clock_now(g_ceph_context)) {
-        // ok, release them finally!
-        in->replica_caps_wanted_keep_until.sec_ref() = 0;
-        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
-                 << " was " << ccap_string(in->replica_caps_wanted) 
-                 << " no keeping anymore " 
-                 << " on " << *in 
-                 << dendl;
-      }
-      else if (in->replica_caps_wanted_keep_until.sec() == 0) {
+      if (in->replica_caps_wanted_keep_until.sec() == 0) {
         in->replica_caps_wanted_keep_until = ceph_clock_now(g_ceph_context);
         in->replica_caps_wanted_keep_until.sec_ref() += 2;
         
         dout(7) << "request_inode_file_caps " << ccap_string(wanted)
-                 << " was " << ccap_string(in->replica_caps_wanted) 
-                 << " keeping until " << in->replica_caps_wanted_keep_until
-                 << " on " << *in 
-                 << dendl;
+                           << " was " << ccap_string(in->replica_caps_wanted)
+                           << " keeping until " << in->replica_caps_wanted_keep_until
+                           << " on " << *in
+                           << dendl;
         return;
+      } else if (in->replica_caps_wanted_keep_until <
+          ceph_clock_now(g_ceph_context)) {
+        // ok, release them finally!
+        in->replica_caps_wanted_keep_until.sec_ref() = 0;
+        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
+                     << " was " << ccap_string(in->replica_caps_wanted)
+                     << " no keeping anymore "
+                     << " on " << *in
+                     << dendl;
       } else {
         // wait longer
         return;
