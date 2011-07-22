@@ -34,6 +34,7 @@
 #include "messages/MOSDScrub.h"
 
 #include "common/Timer.h"
+#include "common/ceph_argparse.h"
 
 #include "common/config.h"
 
@@ -1157,21 +1158,36 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  vector<const char*> args;
+  for (unsigned i = 1; i < m->cmd.size(); i++)
+    args.push_back(m->cmd[i].c_str());
+
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       osdmap.print_summary(ss);
       r = 0;
     }
     else if (m->cmd[1] == "dump" ||
-	     m->cmd[1] == "dump_json" ||
 	     m->cmd[1] == "tree" ||
 	     m->cmd[1] == "getmap" ||
 	     m->cmd[1] == "getcrushmap") {
+      string format = "plain";
+      string val;
+      epoch_t epoch = 0;
+      string cmd = args[0];
+      for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
+	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
+	  format = val;
+	else if (!epoch)
+	  epoch = atoi(*i++);
+	else
+	  i++;
+      }
+
       OSDMap *p = &osdmap;
-      if (m->cmd.size() > 2) {
-	epoch_t e = atoi(m->cmd[2].c_str());
+      if (epoch) {
 	bufferlist b;
-	mon->store->get_bl_sn(b,"osdmap_full", e);
+	mon->store->get_bl_sn(b,"osdmap_full", epoch);
 	if (!b.length()) {
 	  p = 0;
 	  r = -ENOENT;
@@ -1181,31 +1197,39 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
       }
       if (p) {
-	if (m->cmd[1] == "dump") {
+	if (cmd == "dump") {
 	  stringstream ds;
-	  p->print(ds);
-	  rdata.append(ds);
-	  ss << "dumped osdmap epoch " << p->get_epoch();
-	} else if (m->cmd[1] == "dump_json") {
-	  stringstream ds;
-	  p->dump_json(ds);
-	  rdata.append(ds);
-	  ss << "dumped osdmap tree epoch " << p->get_epoch();
-	} else if (m->cmd[1] == "tree") {
+	  if (format == "json") {
+	    p->dump_json(ds);
+	    r = 0;
+	  } else if (format == "plain") {
+	    p->print(ds);
+	    r = 0;
+	  } else {
+	    ss << "unrecognized format '" << format << "'";
+	    r = -EINVAL;
+	  }
+	  if (r == 0) {
+	    rdata.append(ds);
+	    ss << "dumped osdmap epoch " << p->get_epoch();
+	  }
+	} else if (cmd == "tree") {
 	  stringstream ds;
 	  p->print_tree(ds);
 	  rdata.append(ds);
 	  ss << "dumped osdmap tree epoch " << p->get_epoch();
-	} else if (m->cmd[1] == "getmap") {
+	  r = 0;
+	} else if (cmd == "getmap") {
 	  p->encode(rdata);
 	  ss << "got osdmap epoch " << p->get_epoch();
-	} else if (m->cmd[1] == "getcrushmap") {
+	  r = 0;
+	} else if (cmd == "getcrushmap") {
 	  p->crush.encode(rdata);
 	  ss << "got crush map from osdmap epoch " << p->get_epoch();
+	  r = 0;
 	}
 	if (p != &osdmap)
 	  delete p;
-	r = 0;
       }
     }
     else if (m->cmd[1] == "getmaxosd") {
