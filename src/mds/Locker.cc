@@ -3345,7 +3345,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   int gather = 0;
-  if (lock->get_num_client_lease()) {
+  if (lock->is_leased()) {
     gather++;
     revoke_client_leases(lock);
   }
@@ -4013,7 +4013,7 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
 	gather++;
       }
     }
-    if (lock->get_num_client_lease()) {
+    if (lock->is_leased()) {
       revoke_client_leases(lock);
       gather++;
     }
@@ -4081,7 +4081,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
     lock->init_gather();
     gather++;
   }
-  if (lock->get_num_client_lease()) {
+  if (lock->is_leased()) {
     revoke_client_leases(lock);
     gather++;
   }

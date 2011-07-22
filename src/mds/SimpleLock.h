@@ -530,8 +530,10 @@ public:
       try_clear_more();
     }
   }
-  bool is_leased() const { return num_client_lease > 0; }
-  int get_num_client_lease() {
+  bool is_leased() const {
+    return num_client_lease > 0;
+  }
+  int get_num_client_lease() const {
     return num_client_lease;
   }
 
