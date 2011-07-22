@@ -3060,6 +3060,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
   case LOCK_AC_LOCK:
     assert(lock->get_state() == LOCK_SYNC);
     lock->set_state(LOCK_SYNC_LOCK);
+    if (lock->is_leased())
+      revoke_client_leases(lock);
     eval_gather(lock, true);
     break;
 
