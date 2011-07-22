@@ -5740,33 +5740,33 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
        ++p) {
     // check container?
     if (p->first.ino > 0) {
-      CInode *coni = get_inode(p->first.ino);
-      assert(coni);  // we had better have this.
-      CDir *con = coni->get_approx_dirfrag(p->first.frag);
-      assert(con);
+      CInode *expired_inode = get_inode(p->first.ino);
+      assert(expired_inode);  // we had better have this.
+      CDir *parent_dir = expired_inode->get_approx_dirfrag(p->first.frag);
+      assert(parent_dir);
       
-      if (!con->is_auth() ||
-	  (con->is_auth() && con->is_exporting() &&
+      if (!parent_dir->is_auth() ||
+	  (parent_dir->is_auth() && parent_dir->is_exporting() &&
 	   // this person has acked that we're exporting
-	   migrator->get_export_state(con) == Migrator::EXPORT_WARNING &&
-	   migrator->export_has_warned(con,from))) {
+	   migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
+	   migrator->export_has_warned(parent_dir,from))) {
 	// not auth.
-	dout(7) << "delaying nonauth|warned expires for " << *con << dendl;
-	assert(con->is_frozen_tree_root());
+	dout(7) << "delaying nonauth|warned expires for " << *parent_dir << dendl;
+	assert(parent_dir->is_frozen_tree_root());
 	
-	// make a message container
-	if (delayed_expire[con].count(from) == 0) 
-	  delayed_expire[con][from] = new MCacheExpire(from);
+	// make a message parent_dirtainer
+	if (delayed_expire[parent_dir].count(from) == 0)
+	  delayed_expire[parent_dir][from] = new MCacheExpire(from);
 	
 	// merge these expires into it
-	delayed_expire[con][from]->add_realm(p->first, p->second);
+	delayed_expire[parent_dir][from]->add_realm(p->first, p->second);
 	continue;
       }
       assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
              (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
                  !migrator->export_has_warned(parent_dir, from)));
 
-      dout(7) << "expires for " << *con << dendl;
+      dout(7) << "expires for " << *parent_dir << dendl;
     } else {
       dout(7) << "containerless expires (root, stray inodes)" << dendl;
     }
