@@ -1768,11 +1768,12 @@ void Locker::request_inode_file_caps(CInode *in)
             << " on " << *in << " to mds" << auth << dendl;
     assert(!in->is_auth());
 
-    in->replica_caps_wanted = wanted;
 
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
+    if (mds->mdsmap->get_state(auth) > MDSMap::STATE_REJOIN) {
       mds->send_message_mds(new MInodeFileCaps(in->ino(), in->replica_caps_wanted),
 			    auth);
+      in->replica_caps_wanted = wanted;
+    }
   } else {
     in->replica_caps_wanted_keep_until.sec_ref() = 0;
   }
