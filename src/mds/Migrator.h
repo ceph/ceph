@@ -143,6 +143,16 @@ public:
   }
   bool is_importing() { return !import_state.empty(); }
 
+  bool is_ambiguous_import(dirfrag_t df) {
+    map<dirfrag_t,int>::iterator p = import_state.find(df);
+    if (p == import_state.end())
+      return false;
+    if (p->second >= IMPORT_LOGGINGSTART &&
+	p->second < IMPORT_ABORTING)
+      return true;
+    return false;
+  }
+
   int get_import_state(dirfrag_t df) {
     assert(import_state.count(df));
     return import_state[df];

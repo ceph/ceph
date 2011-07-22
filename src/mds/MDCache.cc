@@ -2207,8 +2207,7 @@ ESubtreeMap *MDCache::create_subtree_map()
     if (dir->get_dir_auth().first != mds->whoami)
       continue;
 
-    if (dir->is_ambiguous_dir_auth() &&
-	migrator->is_importing(dir->dirfrag())) {
+    if (migrator->is_ambiguous_import(dir->dirfrag())) {
       dout(15) << " ambig subtree " << *dir << dendl;
       le->ambiguous_subtrees.insert(dir->dirfrag());
     } else {
@@ -2360,10 +2359,8 @@ void MDCache::send_resolve_now(int who)
     if (mds->is_resolve() && my_ambiguous_imports.count(dir->dirfrag()))
       continue;  // we'll add it below
     
-    if (migrator->is_importing(dir->dirfrag())) {
+    if (migrator->is_ambiguous_import(dir->dirfrag())) {
       // ambiguous (mid-import)
-      //  NOTE: because we are first authority, import state is at least IMPORT_LOGGINSTART.
-      assert(migrator->get_import_state(dir->dirfrag()) >= Migrator::IMPORT_LOGGINGSTART);
       set<CDir*> bounds;
       get_subtree_bounds(dir, bounds);
       vector<dirfrag_t> dfls;
