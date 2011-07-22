@@ -215,6 +215,7 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
  err_slot:
   PK11_FreeSlot(slot);
  err:
+  ;
 }
 
 #else
