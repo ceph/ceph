@@ -410,7 +410,6 @@ protected:
   map<client_t, Capability*> client_caps;         // client -> caps
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
-  utime_t               replica_caps_wanted_keep_until;
 
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:

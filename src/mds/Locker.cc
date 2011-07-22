@@ -1725,40 +1725,10 @@ void Locker::request_inode_file_caps(CInode *in)
 
   int wanted = in->get_caps_wanted();
   if (wanted != in->replica_caps_wanted) {
-
-    if (wanted == 0) {
-      if (in->replica_caps_wanted_keep_until.sec() == 0) {
-        in->replica_caps_wanted_keep_until = ceph_clock_now(g_ceph_context);
-        in->replica_caps_wanted_keep_until.sec_ref() += 2;
-        
-        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
-                           << " was " << ccap_string(in->replica_caps_wanted)
-                           << " keeping until " << in->replica_caps_wanted_keep_until
-                           << " on " << *in
-                           << dendl;
-        return;
-      } else if (in->replica_caps_wanted_keep_until <
-          ceph_clock_now(g_ceph_context)) {
-        // ok, release them finally!
-        in->replica_caps_wanted_keep_until.sec_ref() = 0;
-        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
-                     << " was " << ccap_string(in->replica_caps_wanted)
-                     << " no keeping anymore "
-                     << " on " << *in
-                     << dendl;
-      } else {
-        // wait longer
-        return;
-      }
-    } else {
-      in->replica_caps_wanted_keep_until.sec_ref() = 0;
-    }
-    assert(!in->is_auth());
-
     // wait for single auth
     if (in->is_ambiguous_auth()) {
       in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
-		     new C_MDL_RequestInodeFileCaps(this, in));
+                     new C_MDL_RequestInodeFileCaps(this, in));
       return;
     }
 
@@ -1766,15 +1736,12 @@ void Locker::request_inode_file_caps(CInode *in)
     dout(7) << "request_inode_file_caps " << ccap_string(wanted)
             << " was " << ccap_string(in->replica_caps_wanted) 
             << " on " << *in << " to mds" << auth << dendl;
-    assert(!in->is_auth());
 
     in->replica_caps_wanted = wanted;
 
     if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
       mds->send_message_mds(new MInodeFileCaps(in->ino(), in->replica_caps_wanted),
 			    auth);
-  } else {
-    in->replica_caps_wanted_keep_until.sec_ref() = 0;
   }
 }
 
