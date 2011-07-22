@@ -32,6 +32,7 @@
 
 #include "common/Timer.h"
 #include "common/Formatter.h"
+#include "common/ceph_argparse.h"
 
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
@@ -749,6 +750,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  vector<const char*> args;
+  for (unsigned i = 1; i < m->cmd.size(); i++)
+    args.push_back(m->cmd[i].c_str());
+
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       ss << pg_map;
@@ -765,13 +770,73 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "dump") {
-      ss << "ok";
+      string format = "plain";
+      string what = "all";
+      string val;
+      for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
+	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
+	  format = val;
+	} else {
+	  what = *i++;
+	}
+      }
+      Formatter *f = 0;
       r = 0;
-      stringstream ds;
-      pg_map.dump(ds);
-      rdata.append(ds);
+      if (format == "json")
+	f = new JSONFormatter(true);
+      else if (format == "plain")
+	f = 0; //new PlainFormatter();
+      else {
+	r = -EINVAL;
+	ss << "unknown format '" << format << "'";
+      }
+
+      if (r == 0) {
+	stringstream ds;
+	if (f) {
+	  if (what == "all") {
+	    f->open_object_section("pg_map");
+	    pg_map.dump(f);
+	    f->close_section();
+	  } else if (what == "summary" || what == "sum") {
+	    f->open_object_section("pg_map");
+	    pg_map.dump_basic(f);
+	    f->close_section();
+	  } else if (what == "pools") {
+	    pg_map.dump_pool_stats(f);
+	  } else if (what == "osds") {
+	    pg_map.dump_osd_stats(f);
+	  } else if (what == "pgs") {
+	    pg_map.dump_pg_stats(f);
+	  } else {
+	    r = -EINVAL;
+	    ss << "i don't know how to dump '" << what << "' is";
+	  }
+	  if (r == 0)
+	    f->flush(ds);
+	  delete f;
+	} else {
+	  pg_map.dump(ds);
+	}
+	if (r == 0) {
+	  rdata.append(ds);
+	  ss << "dumped " << what << " in format " << format;
+	}
+	r = 0;
+      }
     }
     else if (m->cmd[1] == "dump_json") {
+      ss << "ok";
+      r = 0;
+      JSONFormatter jsf(true);
+      jsf.open_object_section("pg_map");
+      pg_map.dump(&jsf);
+      jsf.close_section();
+      stringstream ds;
+      jsf.flush(ds);
+      rdata.append(ds);
+    }
+    else if (m->cmd[1] == "dump_pools_json") {
       ss << "ok";
       r = 0;
       JSONFormatter jsf(true);

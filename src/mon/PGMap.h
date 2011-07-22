@@ -278,11 +278,29 @@ public:
   }
 
   void dump(Formatter *f) const {
+    dump_basic(f);
+    dump_pg_stats(f);
+    dump_pool_stats(f);
+    dump_osd_stats(f);
+  }
+
+  void dump_basic(Formatter *f) const {
     f->dump_unsigned("version", version);
     f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
     f->dump_unsigned("last_pg_scan", last_pg_scan);
     f->dump_float("full_ratio", full_ratio);
     f->dump_float("near_full_ratio", nearfull_ratio);
+
+    f->open_object_section("pg_stats_sum");
+    pg_sum.dump(f);
+    f->close_section();
+
+    f->open_object_section("osd_stats_sum");
+    osd_sum.dump(f);
+    f->close_section();
+  }
+
+  void dump_pg_stats(Formatter *f) const {
     f->open_array_section("pg_stats");
         for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
 	 i != pg_stat.end();
@@ -293,7 +311,9 @@ public:
       f->close_section();
     }
     f->close_section();
+  }
 
+  void dump_pool_stats(Formatter *f) const {
     f->open_array_section("pool_stats");
     for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
 	 p != pg_pool_sum.end();
@@ -304,7 +324,9 @@ public:
       f->close_section();
     }
     f->close_section();
+  }
 
+  void dump_osd_stats(Formatter *f) const {
     f->open_array_section("osd_stats");
     for (hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
 	 q != osd_stat.end();
