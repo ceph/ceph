@@ -1625,11 +1625,6 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
       break;
-    case CEPH_OSD_OP_CLONERANGE:
-      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
-	  << " from " << op.soid
-	  << " offset " << op.op.clonerange.src_offset;
-      break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
@@ -1657,6 +1652,14 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_PGLS_FILTER:
       out << " cookie " << op.op.pgls.cookie;
       out << " start_epoch " << op.op.pgls.start_epoch;
+      break;
+    }
+  } else if (ceph_osd_op_type_multi(op.op.op)) {
+    switch (op.op.op) {
+    case CEPH_OSD_OP_CLONERANGE:
+      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
+	  << " from " << op.soid
+	  << " offset " << op.op.clonerange.src_offset;
       break;
     }
   }
