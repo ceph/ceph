@@ -209,7 +209,7 @@ public:
       fds[1].fd = m_shutdown_fd;
       fds[1].events = POLLIN | POLLRDBAND;
 
-      int ret = poll(fds, 2, NULL);
+      int ret = poll(fds, 2, -1);
       if (ret < 0) {
 	if (ret == -EINTR) {
 	  continue;
