@@ -207,6 +207,10 @@ Client::~Client()
 }
 
 
+
+
+
+
 void Client::tear_down_cache()
 {
   // fd's
@@ -377,7 +381,7 @@ void Client::trim_dentry(Dentry *dn)
     dn->dir->parent_inode->flags &= ~I_COMPLETE;
     dn->dir->release_count++;
   }
-  unlink(dn);
+  unlink(dn, false);
 }
 
 
@@ -1753,6 +1757,129 @@ void Client::put_inode(Inode *in, int n)
   }
 }
 
+void Client::close_dir(Dir *dir)
+{
+  assert(dir->is_empty());
+  
+  Inode *in = dir->parent_inode;
+  assert (in->dn_set.size() < 2); //dirs can't be hard-linked
+  if (!in->dn_set.empty())
+    dentry_of(in)->put();   // unpin dentry
+  
+  delete in->dir;
+  in->dir = 0;
+  put_inode(in);               // unpin inode
+}
+
+  /**
+   * Don't call this with in==NULL, use get_or_create for that
+   * leave dn set to default NULL unless you're trying to add
+   * a new inode to a pre-created Dentry
+   */
+Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
+{
+  if (!dn) { //create a new Dentry
+    dn = new Dentry;
+    dn->name = name;
+    
+    // link to dir
+    dn->dir = dir;
+    //cout << "link dir " << dir->parent_inode->ino << " '" << name
+    //<< "' -> inode " << in->ino << endl;
+    dir->dentries[dn->name] = dn;
+    dir->dentry_map[dn->name] = dn;
+    lru.lru_insert_mid(dn);    // mid or top?
+  }
+
+  if (in) {    // link to inode
+    dn->inode = in;
+    if (!in->dn_set.empty())
+      ldout(cct, 5) << "adding new hard link to " << in->vino()
+		    << " from " << dn << dendl;
+    in->dn_set.insert(dn);
+    in->get();
+    
+    if (in->dir)
+      dn->get();  // dir -> dn pin
+  }
+  
+  return dn;
+}
+
+void Client::unlink(Dentry *dn, bool keepdir)
+{
+  Inode *in = dn->inode;
+
+  // unlink from inode
+  if (in) {
+    if (in->dir)
+      dn->put();        // dir -> dn pin
+    dn->inode = 0;
+    in->dn_set.erase(dn);
+    put_inode(in);
+  }
+        
+  // unlink from dir
+  dn->dir->dentries.erase(dn->name);
+  dn->dir->dentry_map.erase(dn->name);
+  if (dn->dir->is_empty() && !keepdir) 
+    close_dir(dn->dir);
+  dn->dir = 0;
+
+  // delete den
+  lru.lru_remove(dn);
+  dn->put();
+}
+
+/* If an inode's been moved from one dentry to another
+ * (via rename, for instance), call this function to move it */
+Dentry *Client::relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
+			     Dentry *newdn)
+{
+  Dir *olddir = olddn->dir;  // note: might == dir!
+  bool made_new = false;
+
+  // newdn, attach to inode.  don't touch inode ref.
+  if (!newdn) {
+    made_new = true;
+    newdn = new Dentry;
+    newdn->dir = dir;
+    newdn->name = name;
+  } else {
+    assert(newdn->inode == NULL);
+  }
+  newdn->inode = in;
+  in->dn_set.erase(olddn);
+  in->dn_set.insert(newdn);
+
+  if (in->dir) { // dir -> dn pin
+    newdn->get();
+    olddn->put();
+  }
+
+  // unlink old dn from dir
+  olddir->dentries.erase(olddn->name);
+  olddir->dentry_map.erase(olddn->name);
+  olddn->inode = 0;
+  olddn->dir = 0;
+  lru.lru_remove(olddn);
+  olddn->put();
+    
+  // link new dn to dir
+  dir->dentries[name] = newdn;
+  dir->dentry_map[name] = newdn;
+  if (made_new)
+    lru.lru_insert_mid(newdn);
+  else
+    lru.lru_midtouch(newdn);
+    
+  // olddir now empty?  (remember, olddir might == dir)
+  if (olddir->is_empty()) 
+    close_dir(olddir);
+
+  return newdn;
+}
+
 
 /****
  * caps
@@ -2563,6 +2690,32 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 	 p != realm->pchildren.end(); 
 	 p++)
       q.push_back(*p);
+  }
+}
+
+SnapRealm *Client::get_snap_realm(inodeno_t r)
+{
+  SnapRealm *realm = snap_realms[r];
+  if (!realm)
+    snap_realms[r] = realm = new SnapRealm(r);
+  realm->nref++;
+  return realm;
+}
+
+SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
+{
+  if (snap_realms.count(r) == 0)
+    return NULL;
+  SnapRealm *realm = snap_realms[r];
+  realm->nref++;
+  return realm;
+}
+
+void Client::put_snap_realm(SnapRealm *realm)
+{
+  if (--realm->nref == 0) {
+    snap_realms.erase(realm->ino);
+    delete realm;
   }
 }
 
@@ -3411,7 +3564,7 @@ int Client::get_or_create(Inode *dir, const char* name,
     *pdn = dn;
   } else {
     // otherwise link up a new one
-    *pdn = link(dir->dir, name, NULL);
+    *pdn = link(dir->dir, name, NULL, NULL);
   }
 
   // success
@@ -6196,7 +6349,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
-      unlink(dn);
+      unlink(dn, false);
     }
   }
   ldout(cct, 10) << "unlink result is " << res << dendl;
@@ -6253,7 +6406,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
       if (dn->inode->dir && dn->inode->dir->is_empty() &&
           (dn->inode->dn_set.size() == 1))
 	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
-      unlink(dn);
+      unlink(dn, false);
     }
   }
 

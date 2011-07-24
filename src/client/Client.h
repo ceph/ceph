@@ -42,6 +42,7 @@ enum {
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
+#include "include/lru.h"
 
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -272,26 +273,9 @@ protected:
   int num_flushing_caps;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
-  SnapRealm *get_snap_realm(inodeno_t r) {
-    SnapRealm *realm = snap_realms[r];
-    if (!realm)
-      snap_realms[r] = realm = new SnapRealm(r);
-    realm->nref++;
-    return realm;
-  }
-  SnapRealm *get_snap_realm_maybe(inodeno_t r) {
-    if (snap_realms.count(r) == 0)
-      return NULL;
-    SnapRealm *realm = snap_realms[r];
-    realm->nref++;
-    return realm;
-  }
-  void put_snap_realm(SnapRealm *realm) {
-    if (--realm->nref == 0) {
-      snap_realms.erase(realm->ino);
-      delete realm;
-    }
-  }
+  SnapRealm *get_snap_realm(inodeno_t r);
+  SnapRealm *get_snap_realm_maybe(inodeno_t r);
+  void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
   inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
   inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
@@ -328,18 +312,7 @@ protected:
 
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in, int n=1);
-
-  void close_dir(Dir *dir) {
-    assert(dir->is_empty());
-    
-    Inode *in = dir->parent_inode;
-    assert (in->dn_set.size() < 2); //dirs can't be hard-linked
-    if (!in->dn_set.empty()) dentry_of(in)->put();   // unpin dentry
-    
-    delete in->dir;
-    in->dir = 0;
-    put_inode(in);               // unpin inode
-  }
+  void close_dir(Dir *dir);
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -349,103 +322,13 @@ protected:
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn=NULL) {
-    if (!dn) { //create a new Dentry
-      dn = new Dentry;
-      dn->name = name;
-      
-      // link to dir
-      dn->dir = dir;
-      //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
-      dir->dentries[dn->name] = dn;
-      dir->dentry_map[dn->name] = dn;
-      lru.lru_insert_mid(dn);    // mid or top?
-    }
-
-    if (in) {    // link to inode
-      dn->inode = in;
-      if(!in->dn_set.empty())
-        ldout(cct, 5) << "adding new hard link to " << in->vino()
-                << " from " << dn << dendl;
-      in->dn_set.insert(dn);
-      in->get();
-      
-      if (in->dir) dn->get();  // dir -> dn pin
-    }
-
-    return dn;
-  }
-
-  void unlink(Dentry *dn, bool keepdir = false) {
-    Inode *in = dn->inode;
-
-    // unlink from inode
-    if (in) {
-      if (in->dir) dn->put();        // dir -> dn pin
-      dn->inode = 0;
-      in->dn_set.erase(dn);
-      put_inode(in);
-    }
-        
-    // unlink from dir
-    dn->dir->dentries.erase(dn->name);
-    dn->dir->dentry_map.erase(dn->name);
-    if (dn->dir->is_empty() && !keepdir) 
-      close_dir(dn->dir);
-    dn->dir = 0;
-
-    // delete den
-    lru.lru_remove(dn);
-    dn->put();
-  }
+  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
+  void unlink(Dentry *dn, bool keepdir);
 
   /* If an inode's been moved from one dentry to another
    * (via rename, for instance), call this function to move it */
   Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
-                       Dentry *newdn=NULL) {
-    Dir *olddir = olddn->dir;  // note: might == dir!
-    bool made_new = false;
-
-    // newdn, attach to inode.  don't touch inode ref.
-    if (!newdn) {
-      made_new = true;
-      newdn = new Dentry;
-      newdn->dir = dir;
-      newdn->name = name;
-    } else {
-      assert(newdn->inode == NULL);
-    }
-    newdn->inode = in;
-    in->dn_set.erase(olddn);
-    in->dn_set.insert(newdn);
-
-    if (in->dir) { // dir -> dn pin
-      newdn->get();
-      olddn->put();
-    }
-
-    // unlink old dn from dir
-    olddir->dentries.erase(olddn->name);
-    olddir->dentry_map.erase(olddn->name);
-    olddn->inode = 0;
-    olddn->dir = 0;
-    lru.lru_remove(olddn);
-    olddn->put();
-    
-    // link new dn to dir
-    dir->dentries[name] = newdn;
-    dir->dentry_map[name] = newdn;
-    if (made_new)
-      lru.lru_insert_mid(newdn);
-    else
-      lru.lru_midtouch(newdn);
-    
-    // olddir now empty?  (remember, olddir might == dir)
-    if (olddir->is_empty()) 
-      close_dir(olddir);
-
-    return newdn;
-  }
+                       Dentry *newdn);
 
   // path traversal for high-level interface
   Inode *cwd;
