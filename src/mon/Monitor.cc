@@ -358,7 +358,7 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
 
-    if (m->cmd[0] == "_injectargs") {
+    if (m->cmd[0] == "injectargs") {
       if (m->cmd.size() == 2) {
 	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
 	g_conf->injectargs(m->cmd[1]);
@@ -693,24 +693,6 @@ void Monitor::handle_observe(MMonObserve *m)
     paxos[m->machine_id]->register_observer(m->get_orig_source_inst(), m->ver);
   }
   messenger->send_message(m, m->get_orig_source_inst());
-}
-
-
-void Monitor::inject_args(const entity_inst_t& inst, string& args)
-{
-  dout(10) << "inject_args " << inst << " " << args << dendl;
-
-  if (inst.name.is_mon()) {
-    MMonCommand *c = new MMonCommand(monmap->fsid, 0);
-    c->cmd.push_back("_injectargs");
-    c->cmd.push_back(args);
-    messenger->send_message(c, inst);
-  } else {
-    vector<string> v;
-    v.push_back("injectargs");
-    v.push_back(args);
-    send_command(inst, v, 0);
-  }
 }
 
 void Monitor::send_command(const entity_inst_t& inst,

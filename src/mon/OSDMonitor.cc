@@ -1236,29 +1236,6 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       r = 0;
     }
-    else if (m->cmd[1] == "injectargs") {
-      if (m->cmd.size() != 4) {
-	r = -EINVAL;
-	ss << "usage: osd injectargs <who> <args>";
-	goto out;
-      }
-      if (m->cmd[2] == "*") {
-	for (int i=0; i<osdmap.get_max_osd(); i++)
-	  if (osdmap.is_up(i))
-	    mon->inject_args(osdmap.get_inst(i), m->cmd[3]);
-	r = 0;
-	ss << "ok bcast";
-      } else {
-	errno = 0;
-	int who = strtol(m->cmd[2].c_str(), 0, 10);
-	if (!errno && who >= 0 && osdmap.is_up(who)) {
-	  mon->inject_args(osdmap.get_inst(who), m->cmd[3]);
-	  r = 0;
-	  ss << "ok";
-	} else 
-	  ss << "specify osd number or *";
-      }
-    }
     else if (m->cmd[1] == "tell") {
       if (m->cmd.size() < 4) {
 	r = -EINVAL;

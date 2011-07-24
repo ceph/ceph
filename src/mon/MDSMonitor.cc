@@ -532,29 +532,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       }
       r = 0;
     }
-    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
-      if (m->cmd[2] == "*") {
-	for (unsigned i=0; i<mdsmap.get_max_mds(); i++)
-	  if (mdsmap.is_active(i))
-	    mon->inject_args(mdsmap.get_inst(i), m->cmd[3]);
-	r = 0;
-	ss << "ok bcast";
-      } else {
-	errno = 0;
-	int who = strtol(m->cmd[2].c_str(), 0, 10);
-	if (!errno && who >= 0) {
-	  if (mdsmap.is_up(who)) {
-	    mon->inject_args(mdsmap.get_inst(who), m->cmd[3]);
-	    r = 0;
-	    ss << "ok";
-	  } else {
-	    ss << "mds" << who << " not up";
-	    r = -ENOENT;
-	  }
-	} else
-	  ss << "specify mds number or *";
-      }
-    }
     else if (m->cmd[1] == "tell") {
       m->cmd.erase(m->cmd.begin()); //take out first two args; don't need them
       m->cmd.erase(m->cmd.begin());

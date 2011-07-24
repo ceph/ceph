@@ -177,7 +177,6 @@ public:
   void resend_routed_requests();
   void remove_session(MonSession *s);
 
-  void inject_args(const entity_inst_t& inst, string& args);
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com, version_t version);
 
