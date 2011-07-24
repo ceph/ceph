@@ -2240,7 +2240,8 @@ ESubtreeMap *MDCache::create_subtree_map()
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
     if (le->ambiguous_subtrees.count(p->first))
       continue;
-    for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+    vector<dirfrag_t>::iterator q = p->second.begin();
+    while (q != p->second.end()) {
       if (le->subtrees.count(*q) &&
 	  le->ambiguous_subtrees.count(*q) == 0) {
 	vector<dirfrag_t>& b = le->subtrees[*q];
@@ -2248,8 +2249,16 @@ ESubtreeMap *MDCache::create_subtree_map()
 	for (vector<dirfrag_t>::iterator r = b.begin(); r != b.end(); ++r)
 	  p->second.push_back(*r);
 	le->subtrees.erase(*q);
-	p->second.erase(q--);
-      }	  
+	if (q == p->second.begin()) {
+	  p->second.erase(q);
+	  q = p->second.begin();
+	} else {
+	  p->second.erase(q--);
+	  ++q;
+	}
+      } else {
+	++q;
+      }
     }
   }
   dout(15) << " subtrees " << le->subtrees << dendl;
