@@ -21,15 +21,10 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <map>
-#include <poll.h>
 #include <sstream>
 #include <stdint.h>
 #include <string.h>
 #include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <unistd.h>
 
 #define COUNT_DISABLED ((uint64_t)(int64_t)-1)
 
