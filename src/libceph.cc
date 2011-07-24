@@ -19,6 +19,7 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "mon/MonClient.h"
 #include "include/str_list.h"
 #include "messages/MMonMap.h"
 #include "msg/SimpleMessenger.h"

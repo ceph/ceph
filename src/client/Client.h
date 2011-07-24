@@ -16,39 +16,7 @@
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
 
-enum {
-  l_c_first = 20000,
-  l_c_reply,
-  l_c_lat,
-  l_c_owrlat,
-  l_c_ordlat,
-  l_c_wrlat,
-  l_c_last,
-};
-
-#include "mds/MDSMap.h"
-#include "osd/OSDMap.h"
-#include "mon/MonMap.h"
-
-#include "mon/MonClient.h"
-
-#include "msg/Message.h"
-#include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
-
-#include "messages/MClientReply.h"
-#include "messages/MClientRequest.h"
-
 #include "include/types.h"
-#include "include/filepath.h"
-#include "include/interval_set.h"
-#include "include/lru.h"
-
-#include "common/Mutex.h"
-#include "common/Timer.h"
-
-//#include "FileCache.h"
-
 
 // stl
 #include <string>
@@ -62,10 +30,28 @@ using std::fstream;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "include/filepath.h"
+#include "include/interval_set.h"
+#include "include/lru.h"
+
+#include "mds/mdstypes.h"
+
+#include "msg/Message.h"
+#include "msg/Dispatcher.h"
+#include "msg/Messenger.h"
+
+#include "common/Mutex.h"
+#include "common/Timer.h"
 
 #include "osdc/ObjectCacher.h"
 
+class MDSMap;
+class OSDMap;
+class MonClient;
+
 class CephContext;
+class MClientReply;
+class MClientRequest;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
@@ -73,11 +59,26 @@ class MClientLease;
 class MClientCaps;
 class MClientCapRelease;
 
+class DirStat;
+class LeaseStat;
+class InodeStat;
+
 class Filer;
 class Objecter;
 class ObjectCacher;
 
-extern class PerfCounters  *client_counters;
+extern class PerfCounters *client_counters;
+
+enum {
+  l_c_first = 20000,
+  l_c_reply,
+  l_c_lat,
+  l_c_owrlat,
+  l_c_ordlat,
+  l_c_wrlat,
+  l_c_last,
+};
+
 
 
 // ============================================
@@ -91,9 +92,6 @@ extern class PerfCounters  *client_counters;
  - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
-struct Cap;
-class Inode;
-class Dentry;
 
 /* getdir result */
 struct DirEntry {
@@ -104,12 +102,11 @@ struct DirEntry {
   DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
-
-#include "Inode.h"
-#include "Dir.h"
-#include "Dentry.h"
-#include "SnapRealm.h"
-
+class Inode;
+struct Cap;
+class Dir;
+class Dentry;
+class SnapRealm;
 class Fh;
 class CapSnap;
 
@@ -153,11 +150,7 @@ struct dir_result_t {
 
   string at_cache_name;  // last entry we successfully returned
 
-  dir_result_t(Inode *in) : inode(in), offset(0), next_offset(2),
-			 release_count(0),
-			 buffer(0) { 
-    inode->get();
-  }
+  dir_result_t(Inode *in);
 
   frag_t frag() { return frag_t(offset >> SHIFT); }
   unsigned fragpos() { return offset & MASK; }
@@ -334,7 +327,7 @@ protected:
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-  void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
+  void touch_dn(Dentry *dn);
 
   // trim cache.
   void trim_cache();
@@ -370,7 +363,8 @@ protected:
   void tear_down_cache();   
 
   client_t get_nodeid() { return whoami; }
-  inodeno_t get_root_ino() { return root->ino; }
+
+  inodeno_t get_root_ino();
 
   void init();
   void shutdown();

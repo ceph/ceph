@@ -48,6 +48,12 @@ using namespace std;
 
 #include "messages/MMDSMap.h"
 
+#include "mon/MonClient.h"
+
+#include "mds/MDSMap.h"
+#include "osd/OSDMap.h"
+#include "mon/MonMap.h"
+
 #include "osdc/Filer.h"
 #include "osdc/Objecter.h"
 #include "osdc/ObjectCacher.h"
@@ -126,6 +132,17 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
   Client *client = (Client*)p;
   client->flush_set_callback(oset);
 }
+
+
+// -------------
+
+dir_result_t::dir_result_t(Inode *in)
+  : inode(in), offset(0), next_offset(2),
+    release_count(0),
+    buffer(0) { 
+  inode->get();
+}
+
 
 
 // cons/des
@@ -243,6 +260,10 @@ void Client::tear_down_cache()
   assert(inode_map.empty());
 }
 
+inodeno_t Client::get_root_ino()
+{
+  return root->ino;
+}
 
 
 // debug crapola
@@ -284,7 +305,6 @@ void Client::dump_cache()
   }
  
 }
-
 
 void Client::init() 
 {
@@ -4036,6 +4056,11 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     *rstat = in->rstat;
 
   return in->caps_issued();
+}
+
+void Client::touch_dn(Dentry *dn)
+{
+  lru.lru_touch(dn);
 }
 
 int Client::chmod(const char *relpath, mode_t mode)
