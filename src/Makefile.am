@@ -218,7 +218,8 @@ noinst_LIBRARIES =
 libceph_la_SOURCES = \
 	libceph.cc \
 	client/Client.cc \
-	client/Inode.cc
+	client/Inode.cc \
+	client/MetaRequest.cc
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libceph_la_LIBADD = libosdc.la
@@ -825,6 +826,7 @@ noinst_LTLIBRARIES += libosdc.la
 libclient_la_SOURCES = \
 	client/Client.cc \
 	client/Inode.cc \
+	client/MetaRequest.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libclient.la

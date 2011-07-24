@@ -61,6 +61,11 @@ using namespace std;
 #define DOUT_SUBSYS client
 
 #include "Client.h"
+#include "Inode.h"
+#include "Dentry.h"
+#include "Dir.h"
+#include "SnapRealm.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "MetaRequest.h"
 
@@ -120,14 +125,6 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
   client->flush_set_callback(oset);
 }
 
-
-MetaRequest::~MetaRequest()
-{
-  if (dentry)
-    dentry->put();
-  if (old_dentry)
-    old_dentry->put();
-}
 
 // cons/des
 
