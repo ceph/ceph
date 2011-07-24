@@ -2171,7 +2171,6 @@ void Migrator::import_finish(CDir *dir)
   dout(7) << "import_finish on " << *dir << dendl;
 
   // log finish
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
   assert(g_conf->mds_kill_import_at != 9);
 
   // clear updated scatterlocks
@@ -2204,6 +2203,8 @@ void Migrator::import_finish(CDir *dir)
 
   // process delayed expires
   cache->process_delayed_expire(dir);
+
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
   // ok now unfreeze (and thus kick waiters)
   dir->unfreeze_tree();
