@@ -60,6 +60,8 @@ using namespace std;
 
 #define DOUT_SUBSYS client
 
+#include "include/lru.h"
+
 #include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"

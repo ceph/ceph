@@ -40,7 +40,6 @@ enum {
 #include "messages/MClientRequest.h"
 
 #include "include/types.h"
-#include "include/lru.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
 
@@ -105,13 +104,13 @@ struct DirEntry {
 };
 
 
-class CapSnap;
-
 #include "Inode.h"
 #include "Dir.h"
 #include "Dentry.h"
 #include "SnapRealm.h"
-#include "Fh.h"
+
+class Fh;
+class CapSnap;
 
 class MetaSession;
 class MetaRequest;

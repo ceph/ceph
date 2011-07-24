@@ -1,6 +1,8 @@
 #ifndef CEPH_CLIENT_DENTRY_H
 #define CEPH_CLIENT_DENTRY_H
 
+#include "include/lru.h"
+
 class Dir;
 class Inode;
 
