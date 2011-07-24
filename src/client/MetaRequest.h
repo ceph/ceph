@@ -15,8 +15,6 @@
 class MClientReply;
 class Inode;
 class Dentry;
-class InodeCap;
-class CapSnap;
 
 struct MetaRequest {
   uint64_t tid;

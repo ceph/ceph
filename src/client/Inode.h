@@ -15,10 +15,10 @@ class Dir;
 class SnapRealm;
 class Inode;
 
-struct InodeCap {
+struct Cap {
   MetaSession *session;
   Inode *inode;
-  xlist<InodeCap*>::item cap_item;
+  xlist<Cap*>::item cap_item;
 
   uint64_t cap_id;
   unsigned issued;
@@ -28,7 +28,7 @@ struct InodeCap {
   __u32 mseq;  // migration seq
   __u32 gen;
 
-  InodeCap() : session(NULL), inode(NULL), cap_item(this), issued(0),
+  Cap() : session(NULL), inode(NULL), cap_item(this), issued(0),
 	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
 };
 
@@ -114,8 +114,8 @@ class Inode {
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<int,InodeCap*> caps;            // mds -> InodeCap
-  InodeCap *auth_cap;
+  map<int,Cap*> caps;            // mds -> Cap
+  Cap *auth_cap;
   unsigned dirty_caps, flushing_caps;
   uint64_t flushing_cap_seq;
   __u16 flushing_cap_tid[CEPH_CAP_BITS];
@@ -208,9 +208,9 @@ class Inode {
   void get_cap_ref(int cap);
   bool put_cap_ref(int cap);
   bool is_any_caps();
-  bool cap_is_valid(InodeCap* cap);
+  bool cap_is_valid(Cap* cap);
   int caps_issued(int *implemented = 0);
-  void touch_cap(InodeCap *cap);
+  void touch_cap(Cap *cap);
   void try_touch_cap(int mds);
   bool caps_issued_mask(unsigned mask);
   int caps_used();

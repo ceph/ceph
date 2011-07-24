@@ -91,7 +91,7 @@ extern class PerfCounters  *client_counters;
  - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
-struct InodeCap;
+struct Cap;
 class Inode;
 class Dentry;
 
@@ -501,7 +501,7 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void check_cap_issue(Inode *in, InodeCap *cap, unsigned issued);
+  void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, int mds, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
@@ -523,11 +523,11 @@ protected:
   void handle_cap_import(Inode *in, class MClientCaps *m);
   void handle_cap_export(Inode *in, class MClientCaps *m);
   void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
+  void handle_cap_flush_ack(Inode *in, int mds, Cap *cap, class MClientCaps *m);
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
-  void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
+  void handle_cap_grant(Inode *in, int mds, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush);
+  void send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);

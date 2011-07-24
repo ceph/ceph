@@ -89,7 +89,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
-    for (map<int,InodeCap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
+    for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
       if (p != in.caps.begin())
 	out << ',';
       out << p->first << '=' << ccap_string(p->second->issued);
@@ -875,7 +875,7 @@ int Client::choose_target_mds(MetaRequest *req)
   bool is_hash = false;
 
   Inode *in = NULL;
-  InodeCap *cap = NULL;
+  Cap *cap = NULL;
 
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
@@ -1115,7 +1115,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  InodeCap *caps = NULL;
+  Cap *caps = NULL;
   if (in->caps.count(mds))
     caps = in->caps[mds];
   if (caps &&
@@ -1846,7 +1846,7 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_item);
 }
 
-void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush)
+void Client::send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -1961,10 +1961,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   utime_t now = ceph_clock_now(cct);
 
-  map<int,InodeCap*>::iterator it = in->caps.begin();
+  map<int,Cap*>::iterator it = in->caps.begin();
   while (it != in->caps.end()) {
     int mds = it->first;
-    InodeCap *cap = it->second;
+    Cap *cap = it->second;
     it++;
 
     int revoking = cap->implemented & ~cap->issued;
@@ -2176,7 +2176,7 @@ void Client::signal_cond_list(list<Cond*>& ls)
 void Client::wake_inode_waiters(int mds_num)
 {
   MetaSession * mds = mds_sessions[mds_num];
-  xlist<InodeCap*>::iterator iter = mds->caps.begin();
+  xlist<Cap*>::iterator iter = mds->caps.begin();
   while (!iter.end()){
     signal_cond_list((*iter)->inode->waitfor_caps);
     ++iter;
@@ -2241,7 +2241,7 @@ void Client::_flushed(Inode *in)
 
 
 // checks common to add_update_cap, handle_cap_grant
-void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
+void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
 {
   unsigned had = in->caps_issued();
 
@@ -2264,7 +2264,7 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 			    int flags)
 {
-  InodeCap *cap = 0;
+  Cap *cap = 0;
   MetaSession *mds_session = mds_sessions[mds];
   if (in->caps.count(mds)) {
     cap = in->caps[mds];
@@ -2282,7 +2282,7 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
     }
-    in->caps[mds] = cap = new InodeCap;
+    in->caps[mds] = cap = new Cap;
     mds_session->caps.push_back(&cap->cap_item);
     cap->session = mds_session;
     cap->inode = in;
@@ -2327,7 +2327,7 @@ void Client::remove_cap(Inode *in, int mds)
 	     << "remove_cap returning" << dendl;
     return;
   }
-  InodeCap *cap = in->caps[mds];
+  Cap *cap = in->caps[mds];
   MetaSession *session = mds_sessions[mds];
   
   if (!session->release)
@@ -2380,9 +2380,9 @@ void Client::trim_caps(int mds, int max)
   MetaSession *s = mds_sessions[mds];
 
   int trimmed = 0;
-  xlist<InodeCap*>::iterator p = s->caps.begin();
+  xlist<Cap*>::iterator p = s->caps.begin();
   while (s->caps.size() > max && !p.end()) {
-    InodeCap *cap = *p;
+    Cap *cap = *p;
     ++p;
     Inode *in = cap->inode;
     if (in->caps.size() > 1 && cap != in->auth_cap) {
@@ -2468,7 +2468,7 @@ void Client::flush_caps()
 void Client::flush_caps(Inode *in, int mds)
 {
   ldout(cct, 10) << "flush_caps " << in << " mds" << mds << dendl;
-  InodeCap *cap = in->auth_cap;
+  Cap *cap = in->auth_cap;
   assert(cap->session->mds_num == mds);
 
   int wanted = in->caps_wanted();
@@ -2756,7 +2756,7 @@ void Client::handle_caps(MClientCaps *m)
     return;
   }
 
-  InodeCap *cap = in->caps[mds];
+  Cap *cap = in->caps[mds];
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
@@ -2804,11 +2804,11 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 void Client::handle_cap_export(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
-  InodeCap *cap = NULL;
+  Cap *cap = NULL;
 
   // note?
   bool found_higher_mseq = false;
-  for (map<int,InodeCap*>::iterator p = in->caps.begin();
+  for (map<int,Cap*>::iterator p = in->caps.begin();
        p != in->caps.end();
        p++) {
     if (p->first == mds)
@@ -2864,7 +2864,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   m->put();
 }
 
-void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
+void Client::handle_cap_flush_ack(Inode *in, int mds, Cap *cap, MClientCaps *m)
 {
   int dirty = m->get_dirty();
   int cleaned = 0;
@@ -2929,7 +2929,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 }
 
 
-void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
+void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
 {
   int used = in->caps_used();
 
@@ -5243,7 +5243,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     _flush(in);
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    for (map<int, InodeCap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
+    for (map<int, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
       if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
         flush_caps(in, iter->first);
       }

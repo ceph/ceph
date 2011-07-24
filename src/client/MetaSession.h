@@ -5,7 +5,7 @@
 #include "msg/msg_types.h"
 #include "include/xlist.h"
 
-class InodeCap;
+class Cap;
 class Inode;
 class CapSnap;
 class MetaRequest;
@@ -22,7 +22,7 @@ struct MetaSession {
   bool closing;
   bool was_stale;
 
-  xlist<InodeCap*> caps;
+  xlist<Cap*> caps;
   xlist<Inode*> flushing_caps;
   xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
