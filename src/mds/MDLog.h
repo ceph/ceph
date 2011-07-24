@@ -105,21 +105,7 @@ protected:
   int expiring_events;
   int expired_events;
 
-  class C_MDL_WroteSubtreeMap : public Context {
-    MDLog *mdlog;
-    uint64_t off;
-  public:
-    C_MDL_WroteSubtreeMap(MDLog *l, loff_t o) : mdlog(l), off(o) { }
-    void finish(int r) {
-      mdlog->_logged_subtree_map(off);
-    }
-  };
-  void _logged_subtree_map(uint64_t off);
-
-
   // -- subtreemaps --
-  bool writing_subtree_map;  // one is being written now
-
   friend class ESubtreeMap;
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
@@ -160,7 +146,6 @@ public:
 		  replay_thread(this),
 		  already_replayed(false),
 		  expiring_events(0), expired_events(0),
-		  writing_subtree_map(false),
 		  cur_event(NULL) { }		  
   ~MDLog();
 

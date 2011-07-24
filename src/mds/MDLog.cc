@@ -208,7 +208,6 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   uint64_t last_seg = get_last_segment_offset();
   uint64_t period = journaler->get_layout_period();
   if (!segments.empty() && 
-      !writing_subtree_map &&
       (journaler->get_write_pos()/period != last_seg/period &&
        journaler->get_write_pos() - last_seg > period/2)) {
     dout(10) << "submit_entry also starting new segment: last = " << last_seg
@@ -249,14 +248,11 @@ void MDLog::cap()
 void MDLog::start_new_segment(Context *onsync)
 {
   dout(7) << "start_new_segment at " << journaler->get_write_pos() << dendl;
-  assert(!writing_subtree_map);
 
   segments[journaler->get_write_pos()] = new LogSegment(journaler->get_write_pos());
 
-  writing_subtree_map = true;
-
   ESubtreeMap *le = mds->mdcache->create_subtree_map();
-  submit_entry(le, new C_MDL_WroteSubtreeMap(this, mds->mdlog->get_write_pos()));
+  submit_entry(le);
   if (onsync) {
     wait_for_safe(onsync);  
     flush();
@@ -270,20 +266,6 @@ void MDLog::start_new_segment(Context *onsync)
 	   << dendl;
   mds->mdcache->advance_stray();
 }
-
-void MDLog::_logged_subtree_map(uint64_t off)
-{
-  dout(10) << "_logged_subtree_map at " << off << dendl;
-  writing_subtree_map = false;
-
-  /*
-  list<Context*> ls;
-  take_subtree_map_expire_waiters(ls);
-  mds->queue_waiters(ls);
-  */
-}
-
-
 
 void MDLog::trim(int m)
 {
