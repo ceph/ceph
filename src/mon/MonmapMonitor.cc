@@ -130,6 +130,32 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       r = 0;
       ss << "got latest monmap";
     }
+    else if (m->cmd.size() >= 3 && m->cmd[1] == "tell") {
+      dout(20) << "got tell: " << m->cmd << dendl;
+      if (m->cmd[2] == "*") { // send to all mons and do myself
+        for (unsigned i = 0; i < mon->monmap->size(); ++i) {
+	  MMonCommand *newm = new MMonCommand(m->fsid, m->version);
+	  newm->cmd.insert(newm->cmd.begin(), m->cmd.begin() + 3, m->cmd.end());
+	  mon->messenger->send_message(newm, mon->monmap->get_inst(i));
+        }
+        ss << "bcast to all mons";
+        r = 0;
+      } else {
+        // find target
+        int target = atoi(m->cmd[2].c_str());
+        stringstream ss;
+        if (target == 0 && m->cmd[2] != "0") {
+          ss << "could not parse target " << m->cmd[2];
+        } else {
+          // send to target, or handle if it's me
+   	  MMonCommand *newm = new MMonCommand(m->fsid, m->version);
+	  newm->cmd.insert(newm->cmd.begin(), m->cmd.begin() + 3, m->cmd.end());
+	  mon->messenger->send_message(newm, mon->monmap->get_inst(target));
+	  ss << "fw to mon." << target;
+	  r = 0;
+        }
+      }
+    }
     else if (m->cmd[1] == "add")
       return false;
     else if (m->cmd[1] == "remove")

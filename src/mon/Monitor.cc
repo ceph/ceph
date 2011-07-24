@@ -330,8 +330,7 @@ void Monitor::handle_command(MMonCommand *m)
       pgmon()->dispatch(m);
       return;
     }
-    if (m->cmd[0] == "mon" &&
-        ((m->cmd.size() < 3 ) || m->cmd[1] != "tell")) {
+    if (m->cmd[0] == "mon") {
       monmon()->dispatch(m);
       return;
     }
@@ -362,11 +361,12 @@ void Monitor::handle_command(MMonCommand *m)
       if (m->cmd.size() == 2) {
 	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
 	g_conf->injectargs(m->cmd[1]);
-	reply_command(m, 0, "parsed options", 0);
+	rs = "parsed options";
+	r = 0;
       } else {
-	reply_command(m, -EINVAL, "must supply options to be parsed in a single string!", 0);
+	rs = "must supply options to be parsed in a single string";
+	r = -EINVAL;
       }
-      return;
     } 
     if (m->cmd[0] == "class") {
       reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
@@ -401,84 +401,20 @@ void Monitor::handle_command(MMonCommand *m)
 	ss << " " << combined;
       rs = ss.str();
       r = 0;
-    } else if (m->cmd[0] == "mon" && m->cmd.size() >= 3 && m->cmd[1] == "tell") {
-      dout(20) << "got tell: " << m->cmd << dendl;
-      if (m->cmd[2] == "*") { // send to all mons and do myself
-        char *num = new char[8];
-        for (unsigned i = 0; i < monmap->size(); ++i) {
-          if (monmap->get_inst(i) != messenger->get_myinst()) {
-            MMonCommand *newm = new MMonCommand(m->fsid, m->version);
-	    newm->cmd = m->cmd;
-            sprintf(num, "%d", i);
-	    dout(20) << "sending to mon " << i << " with tell command filled in for " << num << dendl;
-            newm->cmd[2] = num;
-            messenger->send_message(newm, monmap->get_inst(i));
-          }
-        }
-        handle_mon_tell(m);
-        rs = "delivered command to all mons";
-        r = 0;
-      } else {
-        // find target
-        int target = atoi(m->cmd[2].c_str());
-        stringstream ss;
-        if (target == 0 && m->cmd[2] != "0") {
-          ss << "could not parse target " << m->cmd[2];
-          rs = ss.str();
-        } else {
-          // send to target, or handle if it's me
-          if (monmap->get_inst(target) != messenger->get_myinst()) {
-            messenger->send_message(m, monmap->get_inst(target));
-            ss << "forwarded to target mon" << m->cmd[2];
-            rs = ss.str();
-            r = 0;
-	    dout(20) << "sent to target mon" << dendl;
-          }
-          else {
-            handle_mon_tell(m);
-            rs = "interpreting...(see clog for more information)";
-            r = 0;
-          }
-        }
-        if (m->get_source().is_mon()) {
-          // don't respond directly to sender, just put in log and back out
-          m->put();
-          return;
-        }
-      }
+    }
+    if (m->cmd[0] == "heap") {
+      if (!ceph_using_tcmalloc())
+	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
+      else
+	ceph_heap_profiler_handle_command(m->cmd, clog);
     }
   } else 
     rs = "no command";
 
-  reply_command(m, r, rs, rdata, 0);
-}
-
-/**
- * Handle commands of the format "ceph mon tell x", where x
- * is a mon number. This function presumes it's supposed
- * to execute the actual command; delivery is handled by
- */
-void Monitor::handle_mon_tell(MMonCommand *m)
-{
-  dout(10) << "handle_tell " << *m << dendl;
-  stringstream ss;
-
-  // remove monitor direction instructions
-  m->cmd.erase(m->cmd.begin());
-  m->cmd.erase(m->cmd.begin());
-  m->cmd.erase(m->cmd.begin());
-
-  if ((m->cmd.size()) && (m->cmd[0] == "heap")) {
-    if (!ceph_using_tcmalloc())
-      ss << "tcmalloc not enabled, can't use heap profiler commands\n";
-    else
-      ceph_heap_profiler_handle_command(m->cmd, clog);
-  } else {
-    ss << "unrecognized command " << m->cmd;
-  }
-
-  if (!ss.eof())
-    clog.error(ss);
+  if (!m->get_source().is_mon())  // don't reply to mon->mon commands
+    reply_command(m, r, rs, rdata, 0);
+  else
+    m->put();
 }
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)
