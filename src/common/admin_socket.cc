@@ -211,10 +211,10 @@ public:
 
       int ret = poll(fds, 2, -1);
       if (ret < 0) {
-	if (ret == -EINTR) {
+	int err = errno;
+	if (err == EINTR) {
 	  continue;
 	}
-	int err = errno;
 	lderr(m_parent->m_cct) << "AdminSocket: poll(2) error: '"
 	    << cpp_strerror(err) << dendl;
 	return PFL_FAIL;
