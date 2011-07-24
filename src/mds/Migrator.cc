@@ -1912,14 +1912,14 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   dout(7) << "handle_export_dir did " << *dir << dendl;
 
+  // note state
+  import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
+  assert (g_conf->mds_kill_import_at != 6);
+
   // log it
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(onlogged);
   mds->mdlog->flush();
-
-  // note state
-  import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
-  assert (g_conf->mds_kill_import_at != 6);
 
   // some stats
   if (mds->logger) {
