@@ -272,10 +272,10 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	  }
 	}
 	dir->unfreeze_tree();
-	cache->adjust_subtree_auth(dir, mds->get_nodeid());
-	cache->try_subtree_merge(dir);
-	export_unlock(dir);
 	export_state.erase(dir); // clean up
+	cache->adjust_subtree_auth(dir, mds->get_nodeid());
+	cache->try_subtree_merge(dir);  // NOTE: this may journal subtree_map as side effect
+	export_unlock(dir);
 	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
@@ -396,8 +396,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	  
 	  // adjust auth back to me
 	  cache->adjust_subtree_auth(dir, import_peer[df]);
-	  cache->try_subtree_merge(dir);
-	  
+	  cache->try_subtree_merge(dir);   // NOTE: may journal subtree_map as side-effect
+
 	  // bystanders?
 	  if (import_bystanders[dir].empty()) {
 	    import_reverse_unfreeze(dir);
@@ -1308,7 +1308,7 @@ void Migrator::export_reverse(CDir *dir)
 
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
-  cache->try_subtree_merge(dir);
+  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as side-effect
 
   // remove exporting pins
   list<CDir*> rq;
@@ -1503,8 +1503,8 @@ void Migrator::export_finish(CDir *dir)
   // adjust auth, with possible subtree merge.
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)
   cache->adjust_subtree_auth(dir, export_peer[dir]);
-  cache->try_subtree_merge(dir);
-  
+  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as sideeffect
+
   // unpin path
   export_unlock(dir);
 
@@ -1987,7 +1987,6 @@ void Migrator::import_reverse(CDir *dir)
   if (mds->is_resolve())
     cache->trim_non_auth_subtree(dir);
   cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
-  cache->try_subtree_merge(dir);
 
   // adjust auth bits.
   list<CDir*> q;
@@ -2053,7 +2052,9 @@ void Migrator::import_reverse(CDir *dir)
 	 
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
-       
+
+  cache->try_subtree_merge(dir);  // NOTE: this may journal subtree map as side effect
+
   // bystanders?
   if (import_bystanders[dir].empty()) {
     dout(7) << "no bystanders, finishing reverse now" << dendl;
@@ -2186,10 +2187,6 @@ void Migrator::import_finish(CDir *dir)
   cache->get_subtree_bounds(dir, bounds);
   import_remove_pins(dir, bounds);
 
-  // adjust auth, with possible subtree merge.
-  cache->adjust_subtree_auth(dir, mds->get_nodeid());
-  cache->try_subtree_merge(dir);
-
   map<CInode*, map<client_t,Capability::Export> > cap_imports;
   import_caps[dir].swap(cap_imports);
 
@@ -2201,10 +2198,14 @@ void Migrator::import_finish(CDir *dir)
   import_caps.erase(dir);
   import_updated_scatterlocks.erase(dir);
 
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+
+  // adjust auth, with possible subtree merge.
+  cache->adjust_subtree_auth(dir, mds->get_nodeid());
+  cache->try_subtree_merge(dir);   // NOTE: this may journal subtree_map as sideffect
+
   // process delayed expires
   cache->process_delayed_expire(dir);
-
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
   // ok now unfreeze (and thus kick waiters)
   dir->unfreeze_tree();
