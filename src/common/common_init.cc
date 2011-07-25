@@ -52,9 +52,9 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->daemonize = true;
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
 	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
+	conf->set_val_or_die("admin_socket", "/var/run/ceph/$name.asok");
       }
       conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
-      conf->set_val_or_die("admin_socket", "/var/run/ceph/$name.profsock");
       break;
     default:
       conf->set_val_or_die("daemonize", "false");
