@@ -578,7 +578,7 @@ int Objecter::recalc_op_target(Op *op)
   pg_t pgid = op->pgid;
   if (op->oid.name.length()) {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
-    if (ret == ENOENT)
+    if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DISAPPEARED;
   }
   osdmap->pg_to_acting_osds(pgid, acting);
