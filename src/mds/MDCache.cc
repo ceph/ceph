@@ -2240,24 +2240,19 @@ ESubtreeMap *MDCache::create_subtree_map()
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
     if (le->ambiguous_subtrees.count(p->first))
       continue;
-    vector<dirfrag_t>::iterator q = p->second.begin();
-    while (q != p->second.end()) {
-      if (le->subtrees.count(*q) &&
-	  le->ambiguous_subtrees.count(*q) == 0) {
-	vector<dirfrag_t>& b = le->subtrees[*q];
-	dout(10) << "simplify: " << p->first << " swallowing " << *q << " with bounds " << b << dendl;
-	for (vector<dirfrag_t>::iterator r = b.begin(); r != b.end(); ++r)
+    unsigned i = 0;
+    while (i < p->second.size()) {
+      dirfrag_t b = p->second[i];
+      if (le->subtrees.count(b) &&
+	  le->ambiguous_subtrees.count(b) == 0) {
+	vector<dirfrag_t>& bb = le->subtrees[b];
+	dout(10) << "simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
+	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
 	  p->second.push_back(*r);
-	le->subtrees.erase(*q);
-	if (q == p->second.begin()) {
-	  p->second.erase(q);
-	  q = p->second.begin();
-	} else {
-	  p->second.erase(q--);
-	  ++q;
-	}
+	le->subtrees.erase(b);
+	p->second.erase(p->second.begin() + i);
       } else {
-	++q;
+	++i;
       }
     }
   }
