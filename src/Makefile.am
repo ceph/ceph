@@ -1249,12 +1249,12 @@ endif
 
 install-data-local: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
-	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 uninstall-local: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
-	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 # if we are doing a debug build, tell make to actually build the debug
