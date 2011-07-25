@@ -264,13 +264,13 @@ private:
 	ret = handle_version_request(connection_fd);
 	break;
       case 1:
+      case 2:
 	/* data request */
 	ret = handle_data_request(connection_fd);
 	break;
-      case 2:
-	/* schema request */
-	ret = handle_schema_request(connection_fd);
-	break;
+//	/* schema request */
+//	ret = handle_schema_request(connection_fd);
+//	break;
       default:
 	lderr(m_parent->m_cct) << "AdminSocket: unknown request "
 	    << "code " << request << dendl;
