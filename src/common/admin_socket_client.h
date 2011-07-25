@@ -15,6 +15,7 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_CLIENT_H
 #define CEPH_COMMON_ADMIN_SOCKET_CLIENT_H
 
+#include <stdint.h>
 #include <string>
 
 /* This is a simple client that talks to an AdminSocket using blocking I/O.
@@ -24,7 +25,7 @@ class AdminSocketClient
 {
 public:
   AdminSocketClient(const std::string &path);
-  std::string send_noop();
+  std::string get_version(uint32_t *version);
   std::string get_message(std::string *message);
 private:
   std::string m_path;

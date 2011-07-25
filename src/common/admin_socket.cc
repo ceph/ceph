@@ -249,7 +249,7 @@ private:
       return false;
     }
 
-    uint32_t request_raw;
+    uint32_t request, request_raw;
     ret = safe_read(connection_fd, &request_raw, sizeof(request_raw));
     if (ret < 0) {
       lderr(m_parent->m_cct) << "AdminSocket: error reading request code: "
@@ -257,20 +257,44 @@ private:
       close(connection_fd);
       return false;
     }
-    uint32_t request = ntohl(request_raw);
-    if (request == 0x0) {
-      // Request 0 does nothing.
-      close(connection_fd);
-      return true;
+    request = ntohl(request_raw);
+    switch (request) {
+      case 0:
+	/* version request */
+	ret = handle_version_request(connection_fd);
+	break;
+      case 1:
+	/* data request */
+	ret = handle_data_request(connection_fd);
+	break;
+      case 2:
+	/* schema request */
+	ret = handle_schema_request(connection_fd);
+	break;
+      default:
+	lderr(m_parent->m_cct) << "AdminSocket: unknown request "
+	    << "code " << request << dendl;
+	ret = false;
+	break;
     }
-    if (request != 0x1) {
-      // The only other request we know about now is requesting all counter data.
-      lderr(m_parent->m_cct) << "AdminSocket: unknown request "
-          << "code " << request << dendl;
-      close(connection_fd);
+    TEMP_FAILURE_RETRY(close(connection_fd));
+    return ret;
+  }
+
+  bool handle_version_request(int connection_fd)
+  {
+    uint32_t version_raw = htonl(CEPH_ADMIN_SOCK_VERSION);
+    int ret = safe_write(connection_fd, &version_raw, sizeof(version_raw));
+    if (ret < 0) {
+      lderr(m_parent->m_cct) << "AdminSocket: error writing version_raw: "
+	  << cpp_strerror(ret) << dendl;
       return false;
     }
+    return true;
+  }
 
+  bool handle_data_request(int connection_fd)
+  {
     std::vector<char> buffer;
     buffer.reserve(512);
 
@@ -280,24 +304,27 @@ private:
     }
 
     uint32_t len = htonl(buffer.size());
-    ret = safe_write(connection_fd, &len, sizeof(len));
+    int ret = safe_write(connection_fd, &len, sizeof(len));
     if (ret < 0) {
       lderr(m_parent->m_cct) << "AdminSocket: error writing message size: "
 	  << cpp_strerror(ret) << dendl;
-      close(connection_fd);
       return false;
     }
     ret = safe_write(connection_fd, &buffer[0], buffer.size());
     if (ret < 0) {
       lderr(m_parent->m_cct) << "AdminSocket: error writing message: "
 	  << cpp_strerror(ret) << dendl;
-      close(connection_fd);
       return false;
     }
-
-    close(connection_fd);
-    ldout(m_parent->m_cct, 30) << "AdminSocket: do_accept succeeded." << dendl;
+    ldout(m_parent->m_cct, 30) << "AdminSocket: handle_data_request succeeded."
+	 << dendl;
     return true;
+  }
+
+  bool handle_schema_request(int connection_fd)
+  {
+    // TODO: implement!
+    return false;
   }
 
   AdminSocket(AdminSocket &rhs);

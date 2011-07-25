@@ -67,6 +67,8 @@ TEST(AdminSocket, SendNoOp) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ("", client.send_noop());
+  uint32_t version;
+  ASSERT_EQ("", client.get_version(&version));
+  ASSERT_EQ(CEPH_ADMIN_SOCK_VERSION, version);
   ASSERT_EQ(true, asoct.shutdown());
 }

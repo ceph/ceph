@@ -19,6 +19,8 @@
 class AdminSocket;
 class CephContext;
 
+#define CEPH_ADMIN_SOCK_VERSION 1U
+
 class AdminSocketConfigObs : public md_config_obs_t
 {
 public:
