@@ -324,15 +324,6 @@ static inline bool file_mode_is_readonly(int mode) {
   return (mode & CEPH_FILE_MODE_WR) == 0;
 }
 
-inline int DT_TO_MODE(int dt) {
-  return dt << 12;
-}
-
-inline unsigned char MODE_TO_DT(int mode) {
-  return mode >> 12;
-}
-
-
 
 struct SnapRealmInfo {
   mutable ceph_mds_snap_realm h;

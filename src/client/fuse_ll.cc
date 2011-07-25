@@ -387,7 +387,7 @@ static int ceph_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int s
   struct readdir_context *c = (struct readdir_context *)p;
 
   st->st_ino = make_fake_ino(de->d_ino, c->snap);
-  st->st_mode = DT_TO_MODE(de->d_type);
+  st->st_mode = DTTOIF(de->d_type);
   st->st_rdev = new_encode_dev(st->st_rdev);
 
   size_t room = c->size - c->pos;

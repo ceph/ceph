@@ -468,7 +468,7 @@ void CDir::remove_dentry(CDentry *dn)
 
 void CDir::link_remote_inode(CDentry *dn, CInode *in)
 {
-  link_remote_inode(dn, in->ino(), MODE_TO_DT(in->get_projected_inode()->mode));
+  link_remote_inode(dn, in->ino(), IFTODT(in->get_projected_inode()->mode));
 }
 
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
@@ -728,7 +728,7 @@ void CDir::steal_dentry(CDentry *dn)
       if (in->is_dirty_rstat())
 	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
     } else if (dn->get_linkage()->is_remote()) {
-      if (dn->get_linkage()->get_remote_d_type() == (S_IFDIR >> 12))
+      if (dn->get_linkage()->get_remote_d_type() == DT_DIR)
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
@@ -2390,7 +2390,7 @@ void CDir::verify_fragstat()
 	c.nfiles++;
     }
     if (dn->is_remote()) {
-      if (dn->get_remote_d_type() == (S_IFDIR >> 12))
+      if (dn->get_remote_d_type() == DT_DIR)
 	c.nsubdirs++;
       else
 	c.nfiles++;

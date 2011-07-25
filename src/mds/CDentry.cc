@@ -72,7 +72,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.get_linkage()->is_null()) out << " NULL";
   if (dn.get_linkage()->is_remote()) {
     out << " REMOTE(";
-    switch (dn.get_linkage()->get_remote_d_type() << 12) {
+    switch (DTTOIF(dn.get_linkage()->get_remote_d_type())) {
     case S_IFSOCK: out << "sock"; break;
     case S_IFLNK: out << "lnk"; break;
     case S_IFREG: out << "reg"; break;
