@@ -143,7 +143,13 @@ void Thread::
 create(size_t stacksize)
 {
   int ret = try_create(stacksize);
-  assert(ret == 0);
+  if (ret != 0) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Thread::try_create(): pthread_create "
+	     "failed with error %d", ret);
+    dout_emergency(buf);
+    assert(ret == 0);
+  }
 }
 
 int Thread::
