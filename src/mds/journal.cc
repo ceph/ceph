@@ -646,17 +646,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     }
 
     // if we are the srci importer, we'll also have some dirfrags we have to open up...
-    for (list<frag_t>::iterator p = renamed_dir_frags.begin(); p != renamed_dir_frags.end(); ++p) {
-      CDir *dir = renamed_diri->get_dirfrag(*p);
-      if (dir) {
-	// we already had the inode before, and we already adjusted this subtree accordingly.
-	dout(10) << " already had+adjusted rename import bound " << *dir << dendl;
-	assert(olddir); 
-	continue;
+    if (renamed_diri->authority() != CDIR_AUTH_UNDEF) {
+      for (list<frag_t>::iterator p = renamed_dir_frags.begin(); p != renamed_dir_frags.end(); ++p) {
+	CDir *dir = renamed_diri->get_dirfrag(*p);
+	if (dir) {
+	  // we already had the inode before, and we already adjusted this subtree accordingly.
+	  dout(10) << " already had+adjusted rename import bound " << *dir << dendl;
+	  assert(olddir); 
+	  continue;
+	}
+	dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+	dout(10) << " creating new rename import bound " << *dir << dendl;
+	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
       }
-      dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
-      dout(10) << " creating new rename import bound " << *dir << dendl;
-      mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
     }
   }
 
