@@ -40,7 +40,7 @@ is_clear() const
 bool rgw_err::
 is_err() const
 {
-  return (http_ret != 200 && http_ret != 204);
+  return !(http_ret >= 200 && http_ret <= 299);
 }
 
 

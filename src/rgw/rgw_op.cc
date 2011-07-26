@@ -69,11 +69,11 @@ static int parse_range(const char *range, off_t& ofs, off_t& end)
     ofs = atoll(ofs_str.c_str());
 
   if (end_str.length())
-  end = atoll(end_str.c_str());
+    end = atoll(end_str.c_str());
 
   RGW_LOG(10) << "parse_range ofs=" << ofs << " end=" << end << dendl;
 
-  if (end < ofs)
+  if (end >= 0 && end < ofs)
     goto done;
 
   r = 0;

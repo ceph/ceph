@@ -71,8 +71,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
   if (range_str && !ret)
     ret = 206; /* partial content */
 done:
-  if (orig_ret)
-    set_req_state_err(s, ret);
+  set_req_state_err(s, ret);
 
   dump_errno(s);
   if (!content_type)
