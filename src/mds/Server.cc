@@ -6307,15 +6307,6 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   dout(0) << " destdn back to " << *destdn << dendl;
   if (destdnl->get_inode()) dout(0) << "  desti back to " << *destdnl->get_inode() << dendl;
   
-  // new subtree?
-  if (srcdnl->is_primary() && srcdnl->get_inode()->is_dir()) {
-    list<CDir*> ls;
-    srcdnl->get_inode()->get_nested_dirfrags(ls);
-    int auth = srcdn->authority().first;
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
-      mdcache->adjust_subtree_auth(*p, auth, auth, false);
-  }
-
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
