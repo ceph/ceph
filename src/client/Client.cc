@@ -1117,7 +1117,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
   if (in->caps.count(mds))
     caps = in->caps[mds];
   if (caps &&
-      drop & caps->issued &&
+      (drop & caps->issued) &&
       !(unless & caps->issued)) {
     ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
     caps->issued &= ~drop;
@@ -1270,9 +1270,8 @@ void Client::send_request(MetaRequest *request, int mds)
     r->set_replayed_op();
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
-  if (request->cap_releases.empty())
-    encode_cap_releases(request, mds);
-  r->releases = request->cap_releases;
+  encode_cap_releases(request, mds);
+  r->releases.swap(request->cap_releases);
 
   if (request->mds == -1) {
     request->sent_stamp = ceph_clock_now(cct);
