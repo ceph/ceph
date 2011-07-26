@@ -2283,8 +2283,9 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
   if (client_caps.empty())
     mdcache->num_inodes_with_caps++;
   
+  Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
   assert(client_caps.count(client) == 0);
-  Capability *cap = client_caps[client] = new Capability(this, ++mdcache->last_cap_id, client);
+  client_caps[client] = cap;
   if (session)
     session->add_cap(cap);
   

@@ -2294,7 +2294,7 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
   }
 
   if (cap->get_cap_id() != cap_id) {
-    dout(7) << " cap_id " << cap_id << " < " << cap->get_cap_id() << ", dropping" << dendl;
+    dout(7) << " cap_id " << cap_id << " != " << cap->get_cap_id() << ", dropping" << dendl;
     return;
   }
 
