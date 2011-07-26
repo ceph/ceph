@@ -216,7 +216,6 @@ public:
 class RGWPutObj : public RGWOp {
 protected:
   int ret;
-  size_t len;
   off_t ofs;
   char *data;
   const char *supplied_md5_b64;
@@ -228,7 +227,6 @@ public:
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
     ret = 0;
-    len = 0;
     ofs = 0;
     data = NULL;
     supplied_md5_b64 = NULL;

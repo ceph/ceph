@@ -184,11 +184,12 @@ void RGWDeleteBucket_REST_S3::send_response()
 
 void RGWPutObj_REST_S3::send_response()
 {
-  dump_etag(s, etag.c_str());
-  if (ret)
+  if (ret) {
     set_req_state_err(s, ret);
-  else
+  } else {
+    dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
+  }
   dump_errno(s);
   end_header(s);
 }

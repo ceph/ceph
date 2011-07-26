@@ -562,7 +562,6 @@ void RGWPutObj::execute()
        ret = -EINVAL;
        goto done;
     }
-
     char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
     char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -609,8 +608,13 @@ void RGWPutObj::execute()
       obj.set_ns(mp_ns);
     }
     obj.init(s->bucket_str, oid, s->object_str);
+    int len;
     do {
-      get_data();
+      len = get_data();
+      if (len < 0) {
+        ret = len;
+        goto done;
+      }
       if (len > 0) {
         struct put_obj_aio_info info;
         size_t orig_size;
@@ -651,6 +655,10 @@ void RGWPutObj::execute()
     } while ( len > 0);
     drain_pending(pending);
 
+    if (ofs != s->content_length) {
+      ret = -ERR_REQUEST_TIMEOUT;
+      goto done_err;
+    }
     s->obj_size = ofs;
 
     hash.Final(m);

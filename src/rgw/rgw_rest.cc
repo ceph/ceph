@@ -36,6 +36,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_UNRESOLVABLE_EMAIL, 400, "UnresolvableGrantByEmailAddress" },
     { ERR_INVALID_PART, 400, "InvalidPart" },
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
+    { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
     { ERR_USER_SUSPENDED, 403, "UserSuspended" },
@@ -227,7 +228,7 @@ int RGWPutObj_REST::get_data()
     cl = RGW_MAX_CHUNK_SIZE;
   }
 
-  len = 0;
+  int len = 0;
   if (cl) {
     data = (char *)malloc(cl);
     if (!data)
@@ -239,7 +240,7 @@ int RGWPutObj_REST::get_data()
   if (!ofs)
     supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
-  return 0;
+  return len;
 }
 
 int RGWCopyObj_REST::get_params()
@@ -705,6 +706,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     default:
       break;
   }
+  s->content_length = atoll(s->length);
 
   init_entities_from_header(s);
   if (ret)

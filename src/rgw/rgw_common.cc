@@ -57,6 +57,7 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
   os_groups = NULL;
   time = ceph_clock_now(g_ceph_context);
   perm_mask = 0;
+  content_length = 0;
 }
 
 req_state::~req_state() {
