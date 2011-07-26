@@ -608,6 +608,12 @@ sample.fetch_config: fetch_config
 shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
 
+bash_completiondir = /etc/bash_completion.d
+bash_completion_DATA = $(srcdir)/bash_completion/ceph \
+               $(srcdir)/bash_completion/rados \
+               $(srcdir)/bash_completion/rbd \
+               $(srcdir)/bash_completion/radosgw_admin
+
 libceph_includedir = $(includedir)/ceph
 libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
 
@@ -858,7 +864,11 @@ noinst_HEADERS = \
 	auth/KeyRing.h\
 	auth/RotatingKeyRing.h\
 	auth/Crypto.h\
-        client/Client.h\
+	bash_completion/ceph\
+	bash_completion/rados\
+	bash_completion/rbd\
+	bash_completion/radosgw_admin
+	client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\
         client/fuse_ll.h\
