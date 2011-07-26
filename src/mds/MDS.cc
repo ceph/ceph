@@ -197,29 +197,29 @@ void MDS::create_logger()
     PerfCountersBuilder mds_plb(g_ceph_context, name,
 			      l_mds_first, l_mds_last);
 
-    mds_plb.add_u64(l_mds_req, "req"); // FIXME: nobody is actually setting this
-    mds_plb.add_u64(l_mds_reply, "reply");
+    mds_plb.add_u64_counter(l_mds_req, "req"); // FIXME: nobody is actually setting this
+    mds_plb.add_u64_counter(l_mds_reply, "reply");
     mds_plb.add_fl_avg(l_mds_replyl, "replyl");
-    mds_plb.add_u64(l_mds_fw, "fw");
+    mds_plb.add_u64_counter(l_mds_fw, "fw");
     
-    mds_plb.add_u64(l_mds_dir_f, "dir_f");
-    mds_plb.add_u64(l_mds_dir_c, "dir_c");
-    mds_plb.add_u64(l_mds_dir_sp, "dir_sp");
-    mds_plb.add_u64(l_mds_dir_ffc, "dir_ffc");
-    //mds_plb.add_u64("mkdir");
+    mds_plb.add_u64_counter(l_mds_dir_f, "dir_f");
+    mds_plb.add_u64_counter(l_mds_dir_c, "dir_c");
+    mds_plb.add_u64_counter(l_mds_dir_sp, "dir_sp");
+    mds_plb.add_u64_counter(l_mds_dir_ffc, "dir_ffc");
+    //mds_plb.add_u64_counter("mkdir");
 
     /*
-    mds_plb.add_u64("newin"); // new inodes (pre)loaded
-    mds_plb.add_u64("newt");  // inodes first touched/used
-    mds_plb.add_u64("outt");  // trimmed touched
-    mds_plb.add_u64("outut"); // trimmed untouched (wasted effort)
+    mds_plb.add_u64_counter("newin"); // new inodes (pre)loaded
+    mds_plb.add_u64_counter("newt");  // inodes first touched/used
+    mds_plb.add_u64_counter("outt");  // trimmed touched
+    mds_plb.add_u64_counter("outut"); // trimmed untouched (wasted effort)
     mds_plb.add_fl_avg("oututl"); // avg trim latency for untouched
 
-    mds_plb.add_u64("dirt1");
-    mds_plb.add_u64("dirt2");
-    mds_plb.add_u64("dirt3");
-    mds_plb.add_u64("dirt4");
-    mds_plb.add_u64("dirt5");
+    mds_plb.add_u64_counter("dirt1");
+    mds_plb.add_u64_counter("dirt2");
+    mds_plb.add_u64_counter("dirt3");
+    mds_plb.add_u64_counter("dirt4");
+    mds_plb.add_u64_counter("dirt5");
     */
 
     mds_plb.add_u64(l_mds_imax, "imax");
@@ -228,19 +228,19 @@ void MDS::create_logger()
     mds_plb.add_u64(l_mds_ibot, "ibot");
     mds_plb.add_u64(l_mds_iptail, "iptail");  
     mds_plb.add_u64(l_mds_ipin, "ipin");
-    mds_plb.add_u64(l_mds_iex, "iex");
-    mds_plb.add_u64(l_mds_icap, "icap");
-    mds_plb.add_u64(l_mds_cap, "cap");
+    mds_plb.add_u64_counter(l_mds_iex, "iex");
+    mds_plb.add_u64_counter(l_mds_icap, "icap");
+    mds_plb.add_u64_counter(l_mds_cap, "cap");
     
-    mds_plb.add_u64(l_mds_dis, "dis"); // FIXME: unused
+    mds_plb.add_u64_counter(l_mds_dis, "dis"); // FIXME: unused
 
-    mds_plb.add_u64(l_mds_t, "t"); 
-    mds_plb.add_u64(l_mds_thit, "thit");
-    mds_plb.add_u64(l_mds_tfw, "tfw");
-    mds_plb.add_u64(l_mds_tdis, "tdis");
-    mds_plb.add_u64(l_mds_tdirf, "tdirf");
-    mds_plb.add_u64(l_mds_trino, "trino");
-    mds_plb.add_u64(l_mds_tlock, "tlock");
+    mds_plb.add_u64_counter(l_mds_t, "t"); 
+    mds_plb.add_u64_counter(l_mds_thit, "thit");
+    mds_plb.add_u64_counter(l_mds_tfw, "tfw");
+    mds_plb.add_u64_counter(l_mds_tdis, "tdis");
+    mds_plb.add_u64_counter(l_mds_tdirf, "tdirf");
+    mds_plb.add_u64_counter(l_mds_trino, "trino");
+    mds_plb.add_u64_counter(l_mds_tlock, "tlock");
     
     mds_plb.add_fl(l_mds_l, "l");
     mds_plb.add_u64(l_mds_q, "q");
@@ -248,10 +248,10 @@ void MDS::create_logger()
     mds_plb.add_u64(l_mds_popnest, "popnest");
     
     mds_plb.add_u64(l_mds_sm, "sm");
-    mds_plb.add_u64(l_mds_ex, "ex");
-    mds_plb.add_u64(l_mds_iexp, "iexp");
-    mds_plb.add_u64(l_mds_im, "im");
-    mds_plb.add_u64(l_mds_iim, "iim");
+    mds_plb.add_u64_counter(l_mds_ex, "ex");
+    mds_plb.add_u64_counter(l_mds_iexp, "iexp");
+    mds_plb.add_u64_counter(l_mds_im, "im");
+    mds_plb.add_u64_counter(l_mds_iim, "iim");
     logger = mds_plb.create_perf_counters();
     g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
   }
@@ -264,17 +264,17 @@ void MDS::create_logger()
     PerfCountersBuilder mdm_plb(g_ceph_context, name,
 			      l_mdm_first, l_mdm_last);
     mdm_plb.add_u64(l_mdm_ino, "ino");
-    mdm_plb.add_u64(l_mdm_inoa, "ino+");
-    mdm_plb.add_u64(l_mdm_inos, "ino-");
+    mdm_plb.add_u64_counter(l_mdm_inoa, "ino+");
+    mdm_plb.add_u64_counter(l_mdm_inos, "ino-");
     mdm_plb.add_u64(l_mdm_dir, "dir");
-    mdm_plb.add_u64(l_mdm_dira, "dir+");
-    mdm_plb.add_u64(l_mdm_dirs, "dir-");
+    mdm_plb.add_u64_counter(l_mdm_dira, "dir+");
+    mdm_plb.add_u64_counter(l_mdm_dirs, "dir-");
     mdm_plb.add_u64(l_mdm_dn, "dn");
-    mdm_plb.add_u64(l_mdm_dna, "dn+");
-    mdm_plb.add_u64(l_mdm_dns, "dn-");
+    mdm_plb.add_u64_counter(l_mdm_dna, "dn+");
+    mdm_plb.add_u64_counter(l_mdm_dns, "dn-");
     mdm_plb.add_u64(l_mdm_cap, "cap");
-    mdm_plb.add_u64(l_mdm_capa, "cap+");
-    mdm_plb.add_u64(l_mdm_caps, "cap-");
+    mdm_plb.add_u64_counter(l_mdm_capa, "cap+");
+    mdm_plb.add_u64_counter(l_mdm_caps, "cap-");
     mdm_plb.add_u64(l_mdm_rss, "rss");
     mdm_plb.add_u64(l_mdm_heap, "heap");
     mdm_plb.add_u64(l_mdm_malloc, "malloc");

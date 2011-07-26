@@ -26,15 +26,7 @@
 #include <string.h>
 #include <string>
 
-#define COUNT_DISABLED ((uint64_t)(int64_t)-1)
-
 using std::ostringstream;
-
-enum perf_counters_data_any_t {
-  PERF_COUNTERS_DATA_ANY_NONE,
-  PERF_COUNTERS_DATA_ANY_U64,
-  PERF_COUNTERS_DATA_ANY_DOUBLE
-};
 
 PerfCountersCollection::
 PerfCountersCollection(CephContext *cct)
@@ -116,11 +108,11 @@ inc(int idx, uint64_t amt)
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_U64)
+  if (!(data.type & PERFCOUNTER_U64))
     return;
   data.u.u64 += amt;
-  if (data.count != COUNT_DISABLED)
-    data.count++;
+  if (data.type & PERFCOUNTER_LONGRUNAVG)
+    data.avgcount++;
 }
 
 void PerfCounters::
@@ -130,11 +122,11 @@ set(int idx, uint64_t amt)
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_U64)
+  if (!(data.type & PERFCOUNTER_U64))
     return;
   data.u.u64 = amt;
-  if (data.count != COUNT_DISABLED)
-    data.count++;
+  if (data.type & PERFCOUNTER_LONGRUNAVG)
+    data.avgcount++;
 }
 
 uint64_t PerfCounters::
@@ -144,7 +136,7 @@ get(int idx) const
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_DOUBLE)
+  if (!(data.type & PERFCOUNTER_U64))
     return 0;
   return data.u.u64;
 }
@@ -156,11 +148,11 @@ finc(int idx, double amt)
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_DOUBLE)
+  if (!(data.type & PERFCOUNTER_FLOAT))
     return;
   data.u.dbl += amt;
-  if (data.count != COUNT_DISABLED)
-    data.count++;
+  if (data.type & PERFCOUNTER_LONGRUNAVG)
+    data.avgcount++;
 }
 
 void PerfCounters::
@@ -170,11 +162,11 @@ fset(int idx, double amt)
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_DOUBLE)
+  if (!(data.type & PERFCOUNTER_FLOAT))
     return;
   data.u.dbl = amt;
-  if (data.count != COUNT_DISABLED)
-    data.count++;
+  if (data.type & PERFCOUNTER_LONGRUNAVG)
+    data.avgcount++;
 }
 
 double PerfCounters::
@@ -184,7 +176,7 @@ fget(int idx) const
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (data.type != PERF_COUNTERS_DATA_ANY_DOUBLE)
+  if (!(data.type & PERFCOUNTER_FLOAT))
     return 0.0;
   return data.u.dbl;
 }
@@ -215,37 +207,8 @@ write_json_to_buf(std::vector <char> &buffer)
   while (true) {
     const perf_counter_data_any_d &data(*d);
     buf[0] = '\0';
-    if (d->count != COUNT_DISABLED) {
-      switch (d->type) {
-	case PERF_COUNTERS_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "\"%s\":{\"count\":%" PRId64 ","
-		  "\"sum\":%" PRId64 "}", 
-		  data.name, data.count, data.u.u64);
-	  break;
-	case PERF_COUNTERS_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "\"%s\":{\"count\":%" PRId64 ","
-		  "\"sum\":%g}",
-		  data.name, data.count, data.u.dbl);
-	  break;
-	default:
-	  assert(0);
-	  break;
-      }
-    }
-    else {
-      switch (d->type) {
-	case PERF_COUNTERS_DATA_ANY_U64:
-	  snprintf(buf, sizeof(buf), "\"%s\":%" PRId64,
-		   data.name, data.u.u64);
-	  break;
-	case PERF_COUNTERS_DATA_ANY_DOUBLE:
-	  snprintf(buf, sizeof(buf), "\"%s\":%g", data.name, data.u.dbl);
-	  break;
-	default:
-	  assert(0);
-	  break;
-      }
-    }
+    data.write_json(buf, sizeof(buf));
+
     append_to_vector(buffer, buf);
     if (++d == d_end)
       break;
@@ -276,10 +239,42 @@ PerfCounters(CephContext *cct, const std::string &name,
 PerfCounters::perf_counter_data_any_d::
 perf_counter_data_any_d()
   : name(NULL),
-    type(PERF_COUNTERS_DATA_ANY_NONE),
-    count(COUNT_DISABLED)
+    type(PERFCOUNTER_NONE),
+    avgcount(0)
 {
   memset(&u, 0, sizeof(u));
+}
+
+void  PerfCounters::perf_counter_data_any_d::
+write_json(char *buf, size_t buf_sz) const
+{
+  if (type & PERFCOUNTER_LONGRUNAVG) {
+    if (type & PERFCOUNTER_U64) {
+      snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
+	      "\"sum\":%" PRId64 "}", 
+	      name, avgcount, u.u64);
+    }
+    else if (type & PERFCOUNTER_FLOAT) {
+      snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
+	      "\"sum\":%g}",
+	      name, avgcount, u.dbl);
+    }
+    else {
+      assert(0);
+    }
+  }
+  else {
+    if (type & PERFCOUNTER_U64) {
+      snprintf(buf, buf_sz, "\"%s\":%" PRId64,
+	       name, u.u64);
+    }
+    else if (type & PERFCOUNTER_FLOAT) {
+      snprintf(buf, buf_sz, "\"%s\":%g", name, u.dbl);
+    }
+    else {
+      assert(0);
+    }
+  }
 }
 
 PerfCountersBuilder::
@@ -298,25 +293,31 @@ PerfCountersBuilder::
 }
 
 void PerfCountersBuilder::
+add_u64_counter(int idx, const char *name)
+{
+  add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
+}
+
+void PerfCountersBuilder::
 add_u64(int idx, const char *name)
 {
-  add_impl(idx, name, PERF_COUNTERS_DATA_ANY_U64, COUNT_DISABLED);
+  add_impl(idx, name, PERFCOUNTER_U64);
 }
 
 void PerfCountersBuilder::
 add_fl(int idx, const char *name)
 {
-  add_impl(idx, name, PERF_COUNTERS_DATA_ANY_DOUBLE, COUNT_DISABLED);
+  add_impl(idx, name, PERFCOUNTER_FLOAT);
 }
 
 void PerfCountersBuilder::
 add_fl_avg(int idx, const char *name)
 {
-  add_impl(idx, name, PERF_COUNTERS_DATA_ANY_DOUBLE, 0);
+  add_impl(idx, name, PERFCOUNTER_FLOAT | PERFCOUNTER_LONGRUNAVG);
 }
 
 void PerfCountersBuilder::
-add_impl(int idx, const char *name, int ty, uint64_t count)
+add_impl(int idx, const char *name, int ty)
 {
   assert(idx > m_perf_counters->m_lower_bound);
   assert(idx < m_perf_counters->m_upper_bound);
@@ -324,8 +325,8 @@ add_impl(int idx, const char *name, int ty, uint64_t count)
   PerfCounters::perf_counter_data_any_d
     &data(vec[idx - m_perf_counters->m_lower_bound - 1]);
   data.name = name;
-  data.type = ty;
-  data.count = count;
+  data.type = (enum perfcounter_type_d)ty;
+  data.avgcount = 0;
 }
 
 PerfCounters *PerfCountersBuilder::
@@ -334,7 +335,7 @@ create_perf_counters()
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
   for (; d != d_end; ++d) {
-    assert(d->type != PERF_COUNTERS_DATA_ANY_NONE);
+    assert(d->type != PERFCOUNTER_NONE);
   }
   PerfCounters *ret = m_perf_counters;
   m_perf_counters = NULL;

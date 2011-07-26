@@ -27,6 +27,15 @@ class CephContext;
 class PerfCountersBuilder;
 class PerfCountersCollectionTest;
 
+enum perfcounter_type_d
+{
+  PERFCOUNTER_NONE = 0,
+  PERFCOUNTER_FLOAT = 0x1,
+  PERFCOUNTER_U64 = 0x2,
+  PERFCOUNTER_LONGRUNAVG = 0x4,
+  PERFCOUNTER_COUNTER = 0x8,
+};
+
 /*
  * A PerfCounters object is usually associated with a single subsystem.
  * It contains counters which we modify to track performance and throughput
@@ -61,13 +70,15 @@ private:
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
     perf_counter_data_any_d();
+    void  write_json(char *buf, size_t buf_sz) const;
+
     const char *name;
-    int type;
+    enum perfcounter_type_d type;
     union {
       uint64_t u64;
       double dbl;
     } u;
-    uint64_t count;
+    uint64_t avgcount;
   };
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -136,13 +147,14 @@ public:
 		    int first, int last);
   ~PerfCountersBuilder();
   void add_u64(int key, const char *name);
+  void add_u64_counter(int key, const char *name);
   void add_fl(int key, const char *name);
   void add_fl_avg(int key, const char *name);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
-  void add_impl(int idx, const char *name, int ty, uint64_t count);
+  void add_impl(int idx, const char *name, int ty);
 
   PerfCounters *m_perf_counters;
 };
