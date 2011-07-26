@@ -67,7 +67,15 @@ extern string rgw_root_bucket;
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
    if (state->header_ended) \
      state->bytes_sent += __ret; \
-   printf(">" format, __VA_ARGS__); \
+   int l = 32, n; \
+   while (1) { \
+     char __buf[l]; \
+     n = snprintf(__buf, sizeof(__buf), format, __VA_ARGS__); \
+     if (n != l) \
+       RGW_LOG(0) << "--> " << __buf << dendl; \
+       break; \
+     l *= 2; \
+   } \
 } while (0)
 
 #define CGI_PutStr(state, buf, len) do { \
@@ -91,6 +99,7 @@ extern string rgw_root_bucket;
 #define ERR_INVALID_PART        2007
 #define ERR_INVALID_PART_ORDER  2008
 #define ERR_NO_SUCH_UPLOAD      2009
+#define ERR_REQUEST_TIMEOUT     2010
 
 #define ERR_USER_SUSPENDED      2100
 
@@ -389,6 +398,7 @@ struct req_state {
    const char *method;
    const char *query;
    const char *length;
+   uint64_t content_length;
    const char *content_type;
    struct rgw_err err;
    bool expect_cont;
