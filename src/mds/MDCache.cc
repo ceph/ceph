@@ -1209,12 +1209,28 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
   assert(failed == 0);
 }
 
+void MDCache::project_subtree_rename(CInode *diri, CDir *newdir)
+{
+  dout(10) << "project_subtree_rename " << *diri << " to " << *newdir << dendl;
+  projected_subtree_renames[diri] = newdir;
+}
+
 void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
                                           bool imported)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
   //show_subtrees();
+
+  CDir *newdir = diri->get_parent_dir();
+
+  map<CInode*,CDir*>::iterator p = projected_subtree_renames.find(diri);
+  if (p != projected_subtree_renames.end()) {
+    assert(p->second == newdir);
+    projected_subtree_renames.erase(p);
+  } else {
+    //assert(mds->is_any_replay());  or unlink notification
+  }
 
   // adjust subtree
   list<CDir*> dfls;
@@ -1225,7 +1241,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
     dout(10) << "dirfrag " << *dir << dendl;
     CDir *oldparent = get_subtree_root(olddir);
     dout(10) << " old parent " << *oldparent << dendl;
-    CDir *newparent = get_subtree_root(diri->get_parent_dir());
+    CDir *newparent = get_subtree_root(newdir);
     dout(10) << " new parent " << *newparent << dendl;
 
     if (oldparent == newparent) {
@@ -2173,16 +2189,35 @@ void MDCache::_logged_slave_commit(int from, metareqid_t reqid)
 // ====================================================================
 // import map, recovery
 
+void MDCache::_move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
+				      map<dirfrag_t,vector<dirfrag_t> >& subtrees)
+{
+  if (subtrees.count(oldparent)) {
+      vector<dirfrag_t>& v = subtrees[oldparent];
+      dout(10) << " removing " << df << " from " << oldparent << " bounds " << v << dendl;
+      for (vector<dirfrag_t>::iterator it = v.begin(); it != v.end(); ++it)
+	if (*it == df) {
+	  v.erase(it);
+	  break;
+	}
+    }
+  if (subtrees.count(newparent)) {
+    vector<dirfrag_t>& v = subtrees[newparent];
+    dout(10) << " adding " << df << " to " << newparent << " bounds " << v << dendl;
+    v.push_back(df);
+  }
+}
 
 ESubtreeMap *MDCache::create_subtree_map() 
 {
   dout(10) << "create_subtree_map " << num_subtrees() << " subtrees, " 
 	   << num_subtrees_fullauth() << " fullauth"
 	   << dendl;
-  
+
+  show_subtrees();
+
   ESubtreeMap *le = new ESubtreeMap();
   mds->mdlog->start_entry(le);
-
   
   CDir *mydir = 0;
   if (myin) {
@@ -2230,6 +2265,62 @@ ESubtreeMap *MDCache::create_subtree_map()
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
       le->metablob.add_dir_context(bound, EMetaBlob::TO_ROOT);
       le->metablob.add_dir(bound, false);
+    }
+  }
+
+  // apply projected renames
+  for (map<CInode*,CDir*>::iterator p = projected_subtree_renames.begin();
+       p != projected_subtree_renames.end();
+       ++p) {
+    CInode *diri = p->first;
+    CDir *olddir = diri->get_parent_dir();
+    CDir *newdir = p->second;
+    dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
+
+    list<CDir*> dfls;
+    diri->get_dirfrags(dfls);
+    for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
+      CDir *dir = *p;
+      dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
+      CDir *oldparent = get_subtree_root(olddir);
+      dout(10) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
+      CDir *newparent = get_subtree_root(newdir);
+      dout(10) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
+
+      if (oldparent == newparent) {
+	dout(10) << "parent unchanged for " << dir->dirfrag() << " at "
+		 << oldparent->dirfrag() << dendl;
+	continue;
+      }
+
+      if (dir->is_subtree_root()) {
+	// children are fine.  change parent.
+	_move_subtree_map_bound(dir->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
+				le->subtrees);
+      } else {
+	// mid-subtree.
+
+	if (oldparent->get_dir_auth() != newparent->get_dir_auth() &&
+	    oldparent->get_dir_auth().first == mds->whoami) {
+	  dout(10) << " creating subtree for " << dir->dirfrag() << dendl;
+	  if (le->subtrees.count(newparent->dirfrag()))
+	    le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());
+	  le->subtrees[dir->dirfrag()].clear();
+	  newparent = dir;
+	}
+
+	// see if any old bounds move to the new parent.
+	for (set<CDir*>::iterator p = subtrees[oldparent].begin();
+	     p != subtrees[oldparent].end();
+	     ++p) {
+	  CDir *bound = *p;
+	  CDir *broot = get_subtree_root(bound->get_parent_dir());
+	  if (broot != oldparent) {
+	    _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
+				    le->subtrees);
+	  }
+	}
+      }
     }
   }
 

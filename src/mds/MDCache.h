@@ -536,6 +536,7 @@ public:
   // -- subtrees --
 protected:
   map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
+  map<CInode*,CDir*> projected_subtree_renames;  // renamed ino -> target dir
   
   // adjust subtree auth specification
   //  dir->dir_auth
@@ -576,6 +577,7 @@ public:
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
+  void project_subtree_rename(CInode *diri, CDir *olddir);
   void adjust_subtree_after_rename(CInode *diri, CDir *olddir,
                                    bool imported = false);
 
@@ -723,6 +725,8 @@ public:
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
   
+  void _move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
+			       map<dirfrag_t,vector<dirfrag_t> >& subtrees);
   ESubtreeMap *create_subtree_map();
 
 

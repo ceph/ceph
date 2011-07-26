@@ -4531,6 +4531,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   dn->push_projected_linkage();
 
+  if (in->is_dir())
+    mds->mdcache->project_subtree_rename(in, straydn->get_dir());
+
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
 
@@ -4662,6 +4665,8 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
   le->commit.renamed_dirino = in->ino();
 
+  mds->mdcache->project_subtree_rename(in, straydn->get_dir());
+
   mdlog->submit_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn));
   mdlog->flush();
 }
@@ -4783,6 +4788,8 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
   le->commit.renamed_dirino = in->ino();
+
+  mdcache->project_subtree_rename(in, dn->get_dir());
 
   mdlog->submit_entry(le, new C_MDS_LoggedRmdirRollback(this, mdr, rollback.reqid, dn, straydn));
   mdlog->flush();
@@ -5672,6 +5679,9 @@ void Server::_rename_prepare(MDRequest *mdr,
     metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->src_reanchor_atid);
   if (mdr->more()->dst_reanchor_atid)
     metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
+
+  if (srci->is_dir())
+    mdcache->project_subtree_rename(srci, destdn->get_dir());
 }
 
 
@@ -6324,9 +6334,12 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     le->commit.add_dir_context(straydir);
     le->commit.add_null_dentry(straydn, true);
   }
+
+  if (in->is_dir())
+    mdcache->project_subtree_rename(in, srcdir);
   
   mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr,
-							 srcdnl->get_inode(), destdn->get_dir()));
+							 srcdnl->get_inode(), destdir));
   mdlog->flush();
 }
 
