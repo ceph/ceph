@@ -2293,12 +2293,14 @@ ESubtreeMap *MDCache::create_subtree_map()
       } else {
 	// mid-subtree.
 
-	if (oldparent->get_dir_auth() != newparent->get_dir_auth() &&
-	    oldparent->get_dir_auth().first == mds->whoami) {
+	if (oldparent->get_dir_auth() != newparent->get_dir_auth()) {
 	  dout(10) << " creating subtree for " << dir->dirfrag() << dendl;
+	  // if oldparent is auth, subtree is mine; include it.
+	  if (oldparent->get_dir_auth().first == mds->whoami)
+	    le->subtrees[dir->dirfrag()].clear();
+	  // if newparent is auth, subtree is a new bound
 	  if (le->subtrees.count(newparent->dirfrag()))
-	    le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());
-	  le->subtrees[dir->dirfrag()].clear();
+	    le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());  // newparent is auth; new bound
 	  newparent = dir;
 	}
 
@@ -2307,11 +2309,9 @@ ESubtreeMap *MDCache::create_subtree_map()
 	     p != subtrees[oldparent].end();
 	     ++p) {
 	  CDir *bound = *p;
-	  CDir *broot = get_subtree_root(bound->get_parent_dir());
-	  if (broot != oldparent) {
+	  if (dir->contains(bound->get_parent_dir()))
 	    _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				    le->subtrees);
-	  }
 	}
       }
     }
