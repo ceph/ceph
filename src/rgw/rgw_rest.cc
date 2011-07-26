@@ -667,6 +667,8 @@ static int validate_object_name(const char *object)
 
 int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 {
+  int ret = 0;
+
   s->fcgx = fcgx;
   s->path_name = s->env->get("SCRIPT_NAME");
   s->path_name_url = s->env->get("REQUEST_URI");
@@ -695,8 +697,20 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   else
     s->op = OP_UNKNOWN;
 
+  switch (s->op) {
+  case OP_PUT:
+    if (!s->length || *s->length == '\0')
+      ret = -EINVAL;
+      break;
+    default:
+      break;
+  }
+
   init_entities_from_header(s);
-  int ret = validate_bucket_name(s->bucket_str.c_str());
+  if (ret)
+    return ret;
+
+  ret = validate_bucket_name(s->bucket_str.c_str());
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());
