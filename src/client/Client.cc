@@ -1090,13 +1090,11 @@ int Client::make_request(MetaRequest *request,
   request->dispatch_cond = 0;
   
   // -- log times --
-  if (client_counters) {
-    utime_t lat = ceph_clock_now(cct);
-    lat -= request->sent_stamp;
-    ldout(cct, 20) << "lat " << lat << dendl;
-    client_counters->fset(l_c_lat,(double)lat);
-    client_counters->fset(l_c_reply,(double)lat);
-  }
+  utime_t lat = ceph_clock_now(cct);
+  lat -= request->sent_stamp;
+  ldout(cct, 20) << "lat " << lat << dendl;
+  client_counters->fset(l_c_lat,(double)lat);
+  client_counters->fset(l_c_reply,(double)lat);
 
   request->put();
 
@@ -5189,8 +5187,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   // time
   utime_t lat = ceph_clock_now(cct);
   lat -= start;
-  if (client_counters)
-    client_counters->fset(l_c_wrlat,(double)lat);
+  client_counters->fset(l_c_wrlat,(double)lat);
     
   // assume success for now.  FIXME.
   uint64_t totalwritten = size;
