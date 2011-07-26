@@ -702,11 +702,11 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   case OP_PUT:
     if (!s->length || *s->length == '\0')
       ret = -EINVAL;
-      break;
-    default:
-      break;
+    s->content_length = atoll(s->length);
+    break;
+  default:
+    break;
   }
-  s->content_length = atoll(s->length);
 
   init_entities_from_header(s);
   if (ret)
