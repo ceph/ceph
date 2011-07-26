@@ -867,7 +867,7 @@ noinst_HEADERS = \
 	bash_completion/ceph\
 	bash_completion/rados\
 	bash_completion/rbd\
-	bash_completion/radosgw_admin
+	bash_completion/radosgw_admin\
 	client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\

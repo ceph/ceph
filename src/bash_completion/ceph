@@ -40,15 +40,15 @@ _ceph()
                 return 0
                 ;;
             osd)
-                COMPREPLY=( $(compgen -W "tell stat injectargs pool dump getmaxosd tree getmap getcrushmap lspools" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "tell stat pool dump getmaxosd tree getmap getcrushmap lspools" -- ${cur}) )
                 return 0
                 ;;
             mon)
-                COMPREPLY=( $(compgen -W "tell stat injectargs getmap" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "tell stat getmap" -- ${cur}) )
                 return 0
                 ;;
             mds)
-                COMPREPLY=( $(compgen -W "tell stat injectargs stat getmap dump compat" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "tell stat stat getmap dump compat" -- ${cur}) )
                 return 0
                 ;;
             *)
