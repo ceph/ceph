@@ -77,7 +77,9 @@ void Objecter::send_linger(LingerOp *info)
 
     if (info->session) {
       int r = recalc_op_target(o);
-      assert(r != RECALC_OP_TARGET_POOL_DISAPPEARED); // FIXME: have to handle this! Bug #1231
+      if (r == RECALC_OP_TARGET_POOL_DISAPPEARED) {
+	linger_check_for_latest_map(info);
+      }
     }
     op_submit(o, info->session);
     info->registering = true;
@@ -230,31 +232,37 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != linger_ops.end();
 	     p++) {
 	  LingerOp *op = p->second;
-	  if (recalc_linger_op_target(op))
+	  int r = recalc_linger_op_target(op);
+	  switch (r) {
+	  case RECALC_OP_TARGET_NO_ACTION:
+	    // do nothing
+	    break;
+	  case RECALC_OP_TARGET_NEED_RESEND:
 	    need_resend_linger.push_back(op);
+	    linger_cancel_map_check(op);
+	    break;
+	  case RECALC_OP_TARGET_POOL_DISAPPEARED:
+	    linger_check_for_latest_map(op);
+	    break;
+	  }
 	}
 
 	// check for changed request mappings
 	for (hash_map<tid_t,Op*>::iterator p = ops.begin();
 	     p != ops.end();
-	     ) {
+	     ++p) {
 	  Op *op = p->second;
 	  int r = recalc_op_target(op);
 	  switch (r) {
 	  case RECALC_OP_TARGET_NO_ACTION:
 	    // do nothing
-	    ++p;
 	    break;
 	  case RECALC_OP_TARGET_NEED_RESEND:
 	    need_resend[op->tid] = op;
-	    ++p;
+	    op_cancel_map_check(op);
 	    break;
 	  case RECALC_OP_TARGET_POOL_DISAPPEARED:
-	    op->onack->finish(-ENOENT);
-	    delete op->onack;
-	    op->onack = NULL;
-	    delete op;
-	    ops.erase(p++);
+	    op_check_for_latest_map(op);
 	    break;
 	  }
 	}
@@ -339,6 +347,84 @@ void Objecter::handle_osd_map(MOSDMap *m)
   m->put();
 
   monc->sub_got("osdmap", osdmap->get_epoch());
+}
+
+void Objecter::C_Op_Map_Latest::finish(int r)
+{
+  map<tid_t, Op*>::iterator iter =
+    objecter->check_latest_map_ops.find(tid);
+  if (iter == objecter->check_latest_map_ops.end()) {
+    return;
+  }
+
+  Op *op = iter->second;
+  objecter->check_latest_map_ops.erase(iter);
+
+  if (r == 0) { // we had the latest map
+    if (op->onack) {
+      op->onack->complete(-ENOENT);
+    }
+    if (op->oncommit) {
+      op->oncommit->complete(-ENOENT);
+    }
+    op->session_item.remove_myself();
+    objecter->ops.erase(op->tid);
+    delete op;
+  }
+}
+
+void Objecter::C_Linger_Map_Latest::finish(int r)
+{
+  map<uint64_t, LingerOp*>::iterator iter =
+    objecter->check_latest_map_lingers.find(linger_id);
+  if (iter == objecter->check_latest_map_lingers.end()) {
+    return;
+  }
+
+  LingerOp *op = iter->second;
+  objecter->check_latest_map_lingers.erase(iter);
+
+  if (r == 0) { // we had the latest map
+    if (op->on_reg_ack) {
+      op->on_reg_ack->complete(-ENOENT);
+    }
+    if (op->on_reg_commit) {
+      op->on_reg_commit->complete(-ENOENT);
+    }
+    objecter->unregister_linger(op->linger_id);
+  }
+}
+
+void Objecter::op_check_for_latest_map(Op *op)
+{
+  check_latest_map_ops[op->tid] = op;
+  monc->is_latest_map("osdmap", osdmap->get_epoch(),
+		      new C_Op_Map_Latest(this, op->tid));
+}
+
+void Objecter::linger_check_for_latest_map(LingerOp *op)
+{
+  check_latest_map_lingers[op->linger_id] = op;
+  monc->is_latest_map("osdmap", osdmap->get_epoch(),
+		      new C_Linger_Map_Latest(this, op->linger_id));
+}
+
+void Objecter::op_cancel_map_check(Op *op)
+{
+  map<tid_t, Op*>::iterator iter =
+    check_latest_map_ops.find(op->tid);
+  if (iter != check_latest_map_ops.end()) {
+    check_latest_map_ops.erase(iter);
+  }
+}
+
+void Objecter::linger_cancel_map_check(LingerOp *op)
+{
+  map<uint64_t, LingerOp*>::iterator iter =
+    check_latest_map_lingers.find(op->linger_id);
+  if (iter != check_latest_map_lingers.end()) {
+    check_latest_map_lingers.erase(iter);
+  }
 }
 
 Objecter::OSDSession *Objecter::get_session(int osd)
@@ -494,21 +580,16 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   assert(client_inc >= 0);
 
   // pick target
+  bool check_for_latest_map = false;
   if (s) {
     op->session = s;
     s->ops.push_back(&op->session_item);
   } else {
     int r = recalc_op_target(op);
-    if (r == RECALC_OP_TARGET_POOL_DISAPPEARED) {
-      op->onack->finish(-ENOENT);
-      delete op->onack;
-      op->onack = NULL;
-      delete op;
-      return mytid;
-    }
+    check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DISAPPEARED);
     num_homeless_ops++;  // initially!
   }
-    
+
   // add to gather set(s)
   int flags = op->flags;
   if (op->onack) {
@@ -544,16 +625,21 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
     ldout(cct, 10) << " paused read " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
- } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
-	    osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+  } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+	     osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
   } else if (op->session) {
     send_op(op);
-  } else 
+  } else {
     maybe_request_map();
-  
+  }
+
+  if (check_for_latest_map) {
+    op_check_for_latest_map(op);
+  }
+
   ldout(cct, 5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   
   return op->tid;
@@ -635,7 +721,9 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   vector<int> acting;
   pg_t pgid;
   int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc, pgid);
-  assert(ret == 0); // FIXME: have to handle this! Bug #1231
+  if (ret == -ENOENT) {
+    return RECALC_OP_TARGET_POOL_DISAPPEARED;
+  }
   osdmap->pg_to_acting_osds(pgid, acting);
 
   if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {
@@ -651,9 +739,9 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
       if (s)
 	s->linger_ops.push_back(&linger_op->session_item);
     }
-    return true;
+    return RECALC_OP_TARGET_NEED_RESEND;
   }
-  return false;
+  return RECALC_OP_TARGET_NO_ACTION;
 }
 
 void Objecter::send_op(Op *op)
