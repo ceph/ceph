@@ -1097,6 +1097,8 @@ noinst_HEADERS = \
         messages/MMonCommandAck.h\
         messages/MMonElection.h\
         messages/MMonGetMap.h\
+        messages/MMonGetVersion.h\
+        messages/MMonGetVersionReply.h\
 	messages/MMonGlobalID.h\
         messages/MMonMap.h\
         messages/MMonObserve.h\

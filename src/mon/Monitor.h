@@ -48,6 +48,7 @@ class MonitorStore;
 class PaxosService;
 
 class MMonGetMap;
+class MMonGetVersion;
 class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
@@ -146,6 +147,7 @@ public:
   
 
   // messages
+  void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   void handle_command(class MMonCommand *m);
