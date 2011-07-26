@@ -78,7 +78,7 @@ logger_clear()
 }
 
 void PerfCountersCollection::
-write_json_to_buf(std::vector <char> &buffer)
+write_json_to_buf(std::vector <char> &buffer, bool schema)
 {
   Mutex::Locker lck(m_lock);
   buffer.push_back('{');
@@ -86,7 +86,7 @@ write_json_to_buf(std::vector <char> &buffer)
   perf_counters_set_t::iterator l_end = m_loggers.end();
   if (l != l_end) {
     while (true) {
-      (*l)->write_json_to_buf(buffer);
+      (*l)->write_json_to_buf(buffer, schema);
       if (++l == l_end)
 	break;
       buffer.push_back(',');
@@ -190,7 +190,7 @@ static inline void append_to_vector(std::vector <char> &buffer, char *buf)
 }
 
 void PerfCounters::
-write_json_to_buf(std::vector <char> &buffer)
+write_json_to_buf(std::vector <char> &buffer, bool schema)
 {
   char buf[512];
   Mutex::Locker lck(m_lock);
@@ -207,7 +207,10 @@ write_json_to_buf(std::vector <char> &buffer)
   while (true) {
     const perf_counter_data_any_d &data(*d);
     buf[0] = '\0';
-    data.write_json(buf, sizeof(buf));
+    if (schema)
+      data.write_schema_json(buf, sizeof(buf));
+    else
+      data.write_json(buf, sizeof(buf));
 
     append_to_vector(buffer, buf);
     if (++d == d_end)
@@ -243,6 +246,12 @@ perf_counter_data_any_d()
     avgcount(0)
 {
   memset(&u, 0, sizeof(u));
+}
+
+void  PerfCounters::perf_counter_data_any_d::
+write_schema_json(char *buf, size_t buf_sz) const
+{
+  snprintf(buf, buf_sz, "\"%s\":{\"type\":%d}", name, type);
 }
 
 void  PerfCounters::perf_counter_data_any_d::

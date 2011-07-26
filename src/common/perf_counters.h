@@ -57,7 +57,7 @@ public:
   void finc(int idx, double v);
   double fget(int idx) const;
 
-  void write_json_to_buf(std::vector <char> &buffer);
+  void write_json_to_buf(std::vector <char> &buffer, bool schema);
 
   const std::string& get_name() const;
 
@@ -70,6 +70,7 @@ private:
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
     perf_counter_data_any_d();
+    void write_schema_json(char *buf, size_t buf_sz) const;
     void  write_json(char *buf, size_t buf_sz) const;
 
     const char *name;
@@ -116,7 +117,7 @@ public:
   void logger_add(class PerfCounters *l);
   void logger_remove(class PerfCounters *l);
   void logger_clear();
-  void write_json_to_buf(std::vector <char> &buffer);
+  void write_json_to_buf(std::vector <char> &buffer, bool schema);
 private:
   bool init(const std::string &uri);
   void shutdown();

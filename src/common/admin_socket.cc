@@ -264,13 +264,13 @@ private:
 	ret = handle_version_request(connection_fd);
 	break;
       case 1:
-      case 2:
 	/* data request */
-	ret = handle_data_request(connection_fd);
+	ret = handle_json_request(connection_fd, false);
 	break;
-//	/* schema request */
-//	ret = handle_schema_request(connection_fd);
-//	break;
+      case 2:
+	/* schema request */
+	ret = handle_json_request(connection_fd, true);
+	break;
       default:
 	lderr(m_parent->m_cct) << "AdminSocket: unknown request "
 	    << "code " << request << dendl;
@@ -293,14 +293,14 @@ private:
     return true;
   }
 
-  bool handle_data_request(int connection_fd)
+  bool handle_json_request(int connection_fd, bool schema)
   {
     std::vector<char> buffer;
     buffer.reserve(512);
 
     PerfCountersCollection *coll = m_parent->m_cct->GetPerfCountersCollection();
     if (coll) {
-      coll->write_json_to_buf(buffer);
+      coll->write_json_to_buf(buffer, schema);
     }
 
     uint32_t len = htonl(buffer.size());
@@ -316,15 +316,9 @@ private:
 	  << cpp_strerror(ret) << dendl;
       return false;
     }
-    ldout(m_parent->m_cct, 30) << "AdminSocket: handle_data_request succeeded."
+    ldout(m_parent->m_cct, 30) << "AdminSocket: handle_json_request succeeded."
 	 << dendl;
     return true;
-  }
-
-  bool handle_schema_request(int connection_fd)
-  {
-    // TODO: implement!
-    return false;
   }
 
   AdminSocket(AdminSocket &rhs);

@@ -157,7 +157,19 @@ done:
 }
 
 std::string AdminSocketClient::
+get_schema(std::string *message)
+{
+  return get_json(message, 0x2);
+}
+
+std::string AdminSocketClient::
 get_message(std::string *message)
+{
+  return get_json(message, 0x1);
+}
+
+std::string AdminSocketClient::
+get_json(std::string *message, uint32_t request_code)
 {
   int socket_fd, res;
   std::vector<uint8_t> vec(65536, 0);
@@ -168,7 +180,7 @@ get_message(std::string *message)
   if (!err.empty()) {
     goto done;
   }
-  err = asok_request(socket_fd, 0x1);
+  err = asok_request(socket_fd, request_code);
   if (!err.empty()) {
     goto done;
   }

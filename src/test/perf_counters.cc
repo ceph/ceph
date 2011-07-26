@@ -140,7 +140,9 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,"
 	    "'element3':{'avgcount':0,'sum':0}}}"), msg);
-
+  ASSERT_EQ("", client.get_schema(&msg));
+  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':{'type':2},"
+	       "'element2':{'type':1},'element3':{'type':5}}}"), msg);
   coll->logger_clear();
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ("{}", msg);
