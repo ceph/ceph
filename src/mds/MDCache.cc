@@ -1256,6 +1256,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
       subtrees[oldparent].erase(dir);
       assert(subtrees.count(newparent));
       subtrees[newparent].insert(dir);
+      try_subtree_merge_at(dir, !imported);
     } else {
       // mid-subtree.
 
@@ -1279,18 +1280,10 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
       }	   
 
       // did auth change?
-      if (oldparent->authority() != newparent->authority()) 
+      if (oldparent->authority() != newparent->authority()) {
 	adjust_subtree_auth(dir, oldparent->authority(), !imported);  // caller is responsible for *diri.
-    }
-  }
-
-  for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
-    CDir *dir = *p;
-
-    // un-force dir to subtree root
-    if (dir->dir_auth == pair<int,int>(dir->dir_auth.first, dir->dir_auth.first)) {
-      adjust_subtree_auth(dir, dir->dir_auth.first);
-      try_subtree_merge_at(dir, !imported);
+	try_subtree_merge_at(dir, !imported);
+      }
     }
   }
 
