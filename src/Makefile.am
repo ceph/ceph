@@ -608,7 +608,7 @@ sample.fetch_config: fetch_config
 shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
 
-bash_completiondir = /etc/bash_completion.d
+bash_completiondir = $(sysconfdir)/bash_completion.d
 bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rados \
                $(srcdir)/bash_completion/rbd \
