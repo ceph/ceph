@@ -655,7 +655,7 @@ void RGWPutObj::execute()
     } while ( len > 0);
     drain_pending(pending);
 
-    if (ofs != s->content_length) {
+    if ((uint64_t)ofs != s->content_length) {
       ret = -ERR_REQUEST_TIMEOUT;
       goto done_err;
     }
