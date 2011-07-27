@@ -1,4 +1,4 @@
 roles:
-- [mon.0, mds.0, osd.0]
-- [mon.1, osd.1]
-- [mon.2, client.0]
+- [mon.a, mds.a, osd.0]
+- [mon.b, osd.1]
+- [mon.c, client.0]
