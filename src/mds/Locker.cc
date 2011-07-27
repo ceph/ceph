@@ -3616,6 +3616,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
   }
 
   if (p->is_auth()) {
+    int count = 0;
     while (true) {
       if (lock->is_stable()) {
 	// can we do it now?
@@ -3659,8 +3660,9 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	default:
 	  assert(0);
 	}
-	if (lock->is_stable()) {
-	  dout(10) << "scatter_nudge oh, stable again already." << dendl;
+	++count;
+	if (lock->is_stable() && count == 2) {
+	  dout(10) << "scatter_nudge oh, stable after two cycles." << dendl;
 	  // this should only realy happen when called via
 	  // handle_file_lock due to AC_NUDGE, because the rest of the
 	  // time we are replicated or have dirty data and won't get
