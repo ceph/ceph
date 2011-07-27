@@ -75,7 +75,7 @@ def get_mons(roles, ips):
                 ip=ips[idx],
                 port=6789+mon_id,
                 )
-            ++mon_id
+            mon_id += 1
             mons[role] = addr
     assert mons
     return mons
