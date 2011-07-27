@@ -1112,6 +1112,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	ctx->user_modify = true;
     }
 
+    ObjectContext *src_obc = 0;
+    if (ceph_osd_op_type_multi(op.op)) {
+      src_obc = ctx->src_obc[osd_op.soid];
+      assert(src_obc);
+    }
+
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
 	obs.exists &&
@@ -1589,6 +1595,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (!obs.exists) {
 	  t.touch(coll, obs.oi.soid);
 	  maybe_created = true;
+	}
+	if (op.clonerange.src_offset + op.clonerange.length > src_obc->obs.oi.size) {
+	  dout(10) << " clonerange source " << osd_op.soid << " "
+		   << op.clonerange.src_offset << "~" << op.clonerange.length
+		   << " extends past size " << src_obc->obs.oi.size << dendl;
+	  result = -EINVAL;
+	  break;
 	}
 	t.clone_range(coll, osd_op.soid, obs.oi.soid,
 		      op.clonerange.src_offset, op.clonerange.length, op.clonerange.offset);

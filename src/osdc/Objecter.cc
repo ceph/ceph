@@ -1382,8 +1382,10 @@ void Objecter::ms_handle_reset(Connection *con)
 
 void Objecter::ms_handle_remote_reset(Connection *con)
 {
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
-    maybe_request_map();
+  /*
+   * treat these the same.
+   */
+  ms_handle_reset(con);
 }
 
 
