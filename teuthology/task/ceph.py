@@ -507,6 +507,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/ceph.keyring',
                     '/tmp/cephtest/data',
                     '/tmp/cephtest/monmap',
+                    run.Raw('/tmp/cephtest/asok.*')
                     ],
                 wait=False,
                 ),
