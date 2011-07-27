@@ -121,7 +121,8 @@ public:
   void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
 
   bool eval(CInode *in, int mask);
-  void try_eval(CInode *in, int mask);
+  void try_eval(MDSCacheObject *p, int mask);
+  void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);

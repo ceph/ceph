@@ -783,39 +783,72 @@ bool Locker::eval(CInode *in, int mask)
 
 class C_Locker_Eval : public Context {
   Locker *locker;
-  CInode *in;
+  MDSCacheObject *p;
   int mask;
 public:
-  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(i), mask(m) {
-    in->get(CInode::PIN_PTRWAITER);    
+  C_Locker_Eval(Locker *l, MDSCacheObject *pp, int m) : locker(l), p(pp), mask(m) {
+    p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) {
-    in->put(CInode::PIN_PTRWAITER);
-    locker->try_eval(in, mask);
+    p->put(MDSCacheObject::PIN_PTRWAITER);
+    locker->try_eval(p, mask);
   }
 };
 
-void Locker::try_eval(CInode *in, int mask)
+void Locker::try_eval(MDSCacheObject *p, int mask)
 {
   // unstable and ambiguous auth?
-  if (in->is_ambiguous_auth()) {
-    dout(7) << "try_eval not ambiguous auth, waiting on " << *in << dendl;
-    in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_Eval(this, in, mask));
+  if (p->is_ambiguous_auth()) {
+    dout(7) << "try_eval ambiguous auth, waiting on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_Eval(this, p, mask));
     return;
   }
 
-  if (!in->is_auth()) {
-    dout(7) << "try_eval not auth for " << *in << dendl;
+  if (!p->is_auth()) {
+    dout(7) << "try_eval not auth for " << *p << dendl;
     return;
   }
 
-  if (!in->can_auth_pin()) {
-    dout(7) << "try_eval can't auth_pin, waiting on " << *in << dendl;
-    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_Eval(this, in, mask));
+  if (!p->can_auth_pin()) {
+    dout(7) << "try_eval can't auth_pin, waiting on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, mask));
     return;
   }
 
-  eval(in, mask);
+  if (mask & CEPH_LOCK_DN) {
+    assert(mask == CEPH_LOCK_DN);
+    bool need_issue = false;  // ignore this, no caps on dentries
+    CDentry *dn = (CDentry *)p;
+    simple_eval(&dn->lock, &need_issue);
+  } else {
+    CInode *in = (CInode *)p;
+    eval(in, mask);
+  }
+}
+
+void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
+{
+  MDSCacheObject *p = lock->get_parent();
+
+  // unstable and ambiguous auth?
+  if (p->is_ambiguous_auth()) {
+    dout(7) << "try_eval " << *lock << " ambiguousauth, waiting on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_Eval(this, p, lock->get_type()));
+    return;
+  }
+  
+  if (!p->is_auth()) {
+    dout(7) << "try_eval " << *lock << " not auth for " << *p << dendl;
+    return;
+  }
+
+  if (!p->can_auth_pin()) {
+    dout(7) << "try_eval " << *lock << " can't auth_pin, waiting on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
+    return;
+  }
+
+  eval(lock, pneed_issue);
 }
 
 void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
