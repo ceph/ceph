@@ -208,6 +208,18 @@ def binaries(ctx, config):
                 ),
             )
 
+# return the "first" mon (alphanumerically, for lack of anything better)
+def get_first_mon(ctx, config):
+    mons = []
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in roles:
+            if not role.startswith('mon.'):
+                continue
+            mons.append(role)
+            break
+    firstmon = sorted(mons)[0]
+    assert firstmon
+    return firstmon
 
 @contextlib.contextmanager
 def cluster(ctx, config):
@@ -253,8 +265,10 @@ def cluster(ctx, config):
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
-    log.info('Setting up mon.0...')
-    ctx.cluster.only('mon.0').run(
+    firstmon = get_first_mon(ctx, config)
+
+    log.info('Setting up %s...' % firstmon)
+    ctx.cluster.only(firstmon).run(
         args=[
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
@@ -264,7 +278,7 @@ def cluster(ctx, config):
             '/tmp/cephtest/ceph.keyring',
             ],
         )
-    ctx.cluster.only('mon.0').run(
+    ctx.cluster.only(firstmon).run(
         args=[
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
@@ -275,14 +289,14 @@ def cluster(ctx, config):
             '/tmp/cephtest/ceph.keyring',
             ],
         )
-    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.create_simple_monmap(
         remote=mon0_remote,
         conf=conf,
         )
 
-    log.info('Creating admin key on mon.0...')
-    ctx.cluster.only('mon.0').run(
+    log.info('Creating admin key on %s...' % firstmon)
+    ctx.cluster.only(firstmon).run(
         args=[
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
@@ -601,6 +615,7 @@ def osd(ctx, config):
 @contextlib.contextmanager
 def mds(ctx, config):
     log.info('Starting mds daemons...')
+    firstmon = get_first_mon(ctx, config)
     mds_daemons = {}
     mdss = ctx.cluster.only(teuthology.is_type('mds'))
     coverage_dir = '/tmp/cephtest/archive/coverage'
@@ -631,7 +646,7 @@ def mds(ctx, config):
                 )
             mds_daemons[id_] = proc
 
-    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     mon0_remote.run(args=[
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
@@ -652,7 +667,8 @@ def mds(ctx, config):
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
-    (mon0_remote,) = ctx.cluster.only('mon.0').remotes.keys()
+    firstmon = get_first_mon(ctx, config)
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_healthy(
         remote=mon0_remote,
         )

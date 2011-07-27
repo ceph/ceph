@@ -66,15 +66,16 @@ def feed_many_stdins_and_close(fp, processes):
 
 def get_mons(roles, ips):
     mons = {}
+    mon_id = 0
     for idx, roles in enumerate(roles):
         for role in roles:
             if not role.startswith('mon.'):
                 continue
-            mon_id = int(role[len('mon.'):])
             addr = '{ip}:{port}'.format(
                 ip=ips[idx],
                 port=6789+mon_id,
                 )
+            ++mon_id
             mons[role] = addr
     assert mons
     return mons
