@@ -719,7 +719,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
     if (lock->get_parent()->is_auth() &&
 	lock->is_stable())
-      eval(lock, &need_issue);
+      try_eval(lock, &need_issue);
   }
 
   if (need_issue) {
@@ -1054,7 +1054,7 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     if (!lock->is_stable())
       eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock, pneed_issue);
+      try_eval(lock, pneed_issue);
   }
 }
 
@@ -1194,7 +1194,7 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     if (!lock->is_stable())
       eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
-      eval(lock, pneed_issue);
+      try_eval(lock, pneed_issue);
   }
 }
 
@@ -1360,7 +1360,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
   if (!lock->is_stable())
     eval_gather(lock, false, &do_issue);
   else if (lock->get_parent()->is_auth())
-    eval(lock, &do_issue);
+    try_eval(lock, &do_issue);
   
   if (do_issue) {
     if (pneed_issue)
@@ -1697,7 +1697,7 @@ void Locker::revoke_stale_caps(Session *session)
       if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
 
       if (in->is_auth()) {
-	eval(in, CEPH_CAP_LOCKS);
+	try_eval(in, CEPH_CAP_LOCKS);
       } else {
 	request_inode_file_caps(in);
       }
@@ -2755,7 +2755,7 @@ void Locker::remove_client_cap(CInode *in, client_t client)
     request_inode_file_caps(in);
   }
   
-  eval(in, CEPH_CAP_LOCKS);
+  try_eval(in, CEPH_CAP_LOCKS);
 
   mds->mdcache->maybe_eval_stray(in);
 }
