@@ -116,6 +116,12 @@ def skeleton_config(roles, ips):
     for role, addr in mons.iteritems():
         conf.setdefault(role, {})
         conf[role]['mon addr'] = addr
+    # set up standby mds's
+    for roles in roles:
+        for role in roles:
+            if role.startswith('mds.') and role.endswith('-s'):
+                conf.setdefault(role, {})
+                conf[role]['mds standby for name'] = role[:-2]
     return conf
 
 def roles_of_type(roles_for_host, type_):
