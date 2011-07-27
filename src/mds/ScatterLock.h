@@ -181,6 +181,8 @@ public:
       out << " flushing";
     if (is_flushed())
       out << " flushed";
+    if (get_scatter_wanted())
+      out << " scatter_wanted";
     out << ")";
   }
 };

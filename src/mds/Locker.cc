@@ -3524,8 +3524,10 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_parent()->is_freezing_or_frozen())
+  if (lock->get_parent()->is_freezing_or_frozen()) {
+    dout(20) << "  freezing|frozen" << dendl;
     return;
+  }
   
   if (!lock->is_rdlocked() &&
       !lock->is_xlocked() &&
@@ -4318,7 +4320,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
       if (lock->get_state() != LOCK_MIX)  // i.e., the reqscatter didn't race with an actual mix/scatter
 	scatter_mix(lock);
     } else {
-      dout(7) << "handle_file_lock ignoring scatter request on " << *lock
+      dout(7) << "handle_file_lock got scatter request, !stable, marking scatter_wanted on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       lock->set_scatter_wanted();
     }
