@@ -37,6 +37,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INVALID_PART, 400, "InvalidPart" },
     { ERR_INVALID_PART_ORDER, 400, "InvalidPartOrder" },
     { ERR_REQUEST_TIMEOUT, 400, "RequestTimeout" },
+    { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
     { ERR_USER_SUSPENDED, 403, "UserSuspended" },
@@ -700,9 +701,12 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 
   switch (s->op) {
   case OP_PUT:
-    if (!s->length || *s->length == '\0')
+    if (!s->length)
+      ret = -ERR_LENGTH_REQUIRED;
+    else if (*s->length == '\0')
       ret = -EINVAL;
-    s->content_length = atoll(s->length);
+    else
+      s->content_length = atoll(s->length);
     break;
   default:
     break;

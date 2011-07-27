@@ -100,6 +100,7 @@ extern string rgw_root_bucket;
 #define ERR_INVALID_PART_ORDER  2008
 #define ERR_NO_SUCH_UPLOAD      2009
 #define ERR_REQUEST_TIMEOUT     2010
+#define ERR_LENGTH_REQUIRED     2011
 
 #define ERR_USER_SUSPENDED      2100
 
