@@ -2672,6 +2672,7 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
+      assert(!o.negative);
       osd->store->getattrs(coll, poid, o.attrs);
       dout(25) << "_scan_list  " << poid << dendl;
     } else {
@@ -2876,7 +2877,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
       ls.push_back(p->soid);
     } else if (p->is_delete()) {
       map.objects[p->soid];
-      map.objects[p->soid].negative = 1;
+      map.objects[p->soid].negative = true;
     }
   }
 
