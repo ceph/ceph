@@ -842,8 +842,37 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
     return;
   }
 
-  if (!p->can_auth_pin()) {
-    dout(7) << "try_eval " << *lock << " can't auth_pin, waiting on " << *p << dendl;
+  if (p->is_frozen()) {
+    dout(7) << "try_eval " << *lock << " frozen, waiting on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
+    return;
+  }
+
+  /*
+   * We could have a situation like:
+   *
+   * - mds A authpins item on mds B
+   * - mds B starts to freeze tree containing item
+   * - mds A tries wrlock_start on A, sends REQSCATTER to B
+   * - mds B lock is unstable, sets scatter_wanted
+   * - mds B lock stabilizes, calls try_eval.
+   *
+   * We can defer while freezing without causing a deadlock.  Honor
+   * scatter_wanted flag here.  This will never get deferred by the
+   * checks above due to the auth_pin held by the master.
+   */
+  if (lock->is_scatterlock()) {
+    ScatterLock *slock = (ScatterLock *)lock;
+    if (slock->get_scatter_wanted() &&
+	slock->get_state() != LOCK_MIX) {
+      scatter_mix(slock, pneed_issue);
+      if (!lock->is_stable())
+	return;
+    }
+  }
+
+  if (p->is_freezing()) {
+    dout(7) << "try_eval " << *lock << " frozen, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
     return;
   }
