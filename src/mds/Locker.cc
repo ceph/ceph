@@ -3527,6 +3527,16 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   if (lock->get_parent()->is_freezing_or_frozen())
     return;
   
+  if (!lock->is_rdlocked() &&
+      !lock->is_xlocked() &&
+      lock->get_state() != LOCK_MIX &&
+      lock->get_scatter_wanted()) {
+    dout(10) << "scatter_eval scatter_wanted, bump to mix " << *lock
+	     << " on " << *lock->get_parent() << dendl;
+    scatter_mix(lock, need_issue);
+    return;
+  }
+
   if (lock->get_type() == CEPH_LOCK_INEST) {
     // in general, we want to keep INEST writable at all times.
     if (!lock->is_rdlocked() &&
