@@ -208,6 +208,7 @@ private:
   void try_expire(LogSegment *ls);
   void _maybe_expired(LogSegment *ls);
   void _expired(LogSegment *ls);
+  void _trim_expired_segments();
 
 public:
   void trim(int max=-1);
