@@ -5187,7 +5187,8 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 	   << dendl;
 
   ls->truncating_inodes.insert(in);
-  
+  in->get(CInode::PIN_TRUNCATING);
+
   _truncate_inode(in, ls);
 }
 
@@ -5209,7 +5210,6 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in << dendl;
 
-  in->get(CInode::PIN_TRUNCATING);
   in->auth_pin(this);
 
   SnapRealm *realm = in->find_snaprealm();
@@ -5289,6 +5289,16 @@ void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
   ls->truncating_inodes.insert(in);
+  in->get(CInode::PIN_TRUNCATING);
+}
+
+void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
+{
+  // if we have the logseg the truncate started in, it must be in our list.
+  set<CInode*>::iterator p = ls->truncating_inodes.find(in);
+  assert(p != ls->truncating_inodes.end());
+  ls->truncating_inodes.erase(p);
+  in->put(CInode::PIN_TRUNCATING);
 }
 
 void MDCache::start_recovered_truncates()

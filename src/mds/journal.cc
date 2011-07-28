@@ -764,7 +764,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p->first);
       assert(in);
-      ls->truncating_inodes.erase(in);
+      mds->mdcache->remove_recovered_truncate(in, ls);
     }
   }
 

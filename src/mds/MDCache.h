@@ -970,7 +970,7 @@ protected:
   void truncate_inode_logged(CInode *in, Mutation *mut);
 
   void add_recovered_truncate(CInode *in, LogSegment *ls);
-  void remove_recovered_truncate(CInode *in);
+  void remove_recovered_truncate(CInode *in, LogSegment *ls);
   void start_recovered_truncates();
 
 
