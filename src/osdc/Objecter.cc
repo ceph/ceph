@@ -77,7 +77,7 @@ void Objecter::send_linger(LingerOp *info)
 
     if (info->session) {
       int r = recalc_op_target(o);
-      if (r == RECALC_OP_TARGET_POOL_DISAPPEARED) {
+      if (r == RECALC_OP_TARGET_POOL_DNE) {
 	linger_check_for_latest_map(info);
       }
     }
@@ -241,7 +241,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	    need_resend_linger.push_back(op);
 	    linger_cancel_map_check(op);
 	    break;
-	  case RECALC_OP_TARGET_POOL_DISAPPEARED:
+	  case RECALC_OP_TARGET_POOL_DNE:
 	    linger_check_for_latest_map(op);
 	    break;
 	  }
@@ -261,7 +261,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	    need_resend[op->tid] = op;
 	    op_cancel_map_check(op);
 	    break;
-	  case RECALC_OP_TARGET_POOL_DISAPPEARED:
+	  case RECALC_OP_TARGET_POOL_DNE:
 	    op_check_for_latest_map(op);
 	    break;
 	  }
@@ -586,7 +586,7 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
     s->ops.push_back(&op->session_item);
   } else {
     int r = recalc_op_target(op);
-    check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DISAPPEARED);
+    check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
     num_homeless_ops++;  // initially!
   }
 
@@ -665,7 +665,7 @@ int Objecter::recalc_op_target(Op *op)
   if (op->oid.name.length()) {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
     if (ret == -ENOENT)
-      return RECALC_OP_TARGET_POOL_DISAPPEARED;
+      return RECALC_OP_TARGET_POOL_DNE;
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
@@ -722,7 +722,7 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   pg_t pgid;
   int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc, pgid);
   if (ret == -ENOENT) {
-    return RECALC_OP_TARGET_POOL_DISAPPEARED;
+    return RECALC_OP_TARGET_POOL_DNE;
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
