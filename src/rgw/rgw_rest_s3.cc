@@ -557,7 +557,7 @@ static bool parse_rfc2616(const char *s, struct tm *t)
 }
 
 static inline bool is_base64(unsigned char c) {
-  return (isalnum(c) || (c == '+') || (c == '/'));
+  return (isalnum(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
 /*
