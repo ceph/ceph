@@ -1704,11 +1704,6 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(5) << "tick" << dendl;
 
-  if (!cct->get_heartbeat_map()->is_healthy())
-    dout(0) << "tick internal heartbeat_map reports NOT HEALTHY" << dendl;
-  else
-    dout(20) << "tick internal heartbeat_map reports healthy" << dendl;
-
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
   if (got_sigterm) {
