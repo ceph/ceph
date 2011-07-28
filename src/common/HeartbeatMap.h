@@ -32,10 +32,11 @@ struct heartbeat_handle_d {
   pthread_t thread;
   std::string name;
   atomic_t timeout;
+  time_t grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
   heartbeat_handle_d(pthread_t t, const std::string& n)
-    : thread(t), name(n) 
+    : thread(t), name(n), grace(0)
   { }
 };
 

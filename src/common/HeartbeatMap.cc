@@ -65,13 +65,26 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
 
 void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace)
 {
-  ldout(m_cct, 20) << "reset_timeout " << h->thread << " grace " << grace << dendl;
-  h->timeout.set(time(NULL) + grace);
+  ldout(m_cct, 20) << "reset_timeout " << h->thread << " '" << h->name << "' grace " << grace << dendl;
+  time_t now = time(NULL);
+  time_t was = h->timeout.read();
+  if (was && was < now) {
+    ldout(m_cct, 1) << "reset_timeout " << h->thread << " '" << h->name << "'"
+		    << " had timed out after " << h->grace << dendl;
+  }
+  h->timeout.set(now + grace);
+  h->grace = grace;
 }
 
 void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 {
-  ldout(m_cct, 20) << "clear_timeout " << h->thread << dendl;
+  ldout(m_cct, 20) << "clear_timeout " << h->thread << " '" << h->name << "'" << dendl;
+  time_t now = time(NULL);
+  time_t was = h->timeout.read();
+  if (was && was < now) {
+    ldout(m_cct, 1) << "clear_timeout " << h->thread << " '" << h->name << "'"
+		    << " had timed out after " << g->grace << dendl;
+  }
   h->timeout.set(0);
 }
 
@@ -86,8 +99,8 @@ bool HeartbeatMap::is_healthy()
     heartbeat_handle_d *h = *p;
     time_t timeout = h->timeout.read();
     if (timeout && timeout < now) {
-      ldout(m_cct, 0) << "is_healthy " << h->thread << " '" << h->name << "'"
-		      << " timed out" << dendl;
+      ldout(m_cct, 1) << "is_healthy " << h->thread << " '" << h->name << "'" 
+		      << " timed out after " << h->grace << dendl;
       healthy = false;
     }
   }
@@ -101,7 +114,7 @@ void HeartbeatMap::check_touch_file()
   if (is_healthy()) {
     string path = m_cct->_conf->heartbeat_file;
     if (path.length()) {
-      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0755);
+      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0644);
       if (fd >= 0) {
 	::futimens(fd, NULL);
 	::close(fd);
