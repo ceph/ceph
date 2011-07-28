@@ -6133,7 +6133,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     }
 
     // abort
-    do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
+    //  rollback_bl may be empty if we froze the inode but had to provide an expanded
+    // witness list from the master, and they failed before we tried prep again.
+    if (mdr->more()->rollback_bl.length())
+      do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
+    else
+      dout(10) << " rollback_bl empty, not rollback back rename (master failed after getting extra witnesses?)" << dendl;
   }
 }
 
