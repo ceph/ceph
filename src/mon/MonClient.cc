@@ -14,6 +14,8 @@
 
 #include "msg/SimpleMessenger.h"
 #include "messages/MMonGetMap.h"
+#include "messages/MMonGetVersion.h"
+#include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
@@ -56,7 +58,8 @@ MonClient::MonClient(CephContext *cct_) :
   authenticate_err(0),
   auth(NULL),
   keyring(NULL),
-  rotating_secrets(NULL)
+  rotating_secrets(NULL),
+  version_req_id(0)
 {
 }
 
@@ -272,6 +275,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_MAP:
   case CEPH_MSG_AUTH_REPLY:
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
+  case CEPH_MSG_MON_GET_VERSION_REPLY:
     break;
   default:
     return false;
@@ -296,6 +300,8 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
     handle_subscribe_ack((MMonSubscribeAck*)m);
     break;
+  case CEPH_MSG_MON_GET_VERSION_REPLY:
+    handle_get_version_reply((MMonGetVersionReply*)m);
   }
   return true;
 }
@@ -740,4 +746,30 @@ int MonClient::wait_auth_rotating(double timeout)
   return 0;
 }
 
+// ---------
 
+void MonClient::is_latest_map(string map, version_t cur_ver, Context *onfinish)
+{
+  ldout(cct, 10) << "is_latest_map " << map << " current " << cur_ver << dendl;;
+  Mutex::Locker l(monc_lock);
+  MMonGetVersion *m = new MMonGetVersion();
+  m->what = map;
+  m->handle = ++version_req_id;
+  version_requests[m->handle] = new version_req_d(onfinish, cur_ver);
+  _send_mon_message(m);
+}
+
+void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
+{
+  assert(monc_lock.is_locked());
+  map<tid_t, version_req_d*>::iterator iter = version_requests.find(m->handle);
+  if (iter == version_requests.end()) {
+    ldout(cct, 0) << "version request with handle " << m->handle
+		  << " not found" << dendl;
+  } else {
+    version_req_d *req = iter->second;
+    req->context->complete(m->version != req->version);
+    version_requests.erase(iter);
+    delete req;
+  }
+}
