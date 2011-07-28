@@ -714,8 +714,12 @@ void MDS::beacon_kill(utime_t lab)
 void MDS::handle_command(MMonCommand *m)
 {
   dout(10) << "handle_command args: " << m->cmd << dendl;
-  if (m->cmd[0] == "injectargs")
-    g_conf->injectargs(m->cmd[1]);
+  if (m->cmd[0] == "injectargs") {
+    std::ostringstream oss;
+    g_conf->injectargs(m->cmd[1], &oss);
+    derr << "injectargs:" << dendl;
+    derr << oss.str() << dendl;
+  }
   else if (m->cmd[0] == "dumpcache") {
     if (m->cmd.size() > 1)
       mdcache->dump_cache(m->cmd[1].c_str());

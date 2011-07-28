@@ -34,7 +34,7 @@ int librgw_create(librgw_t *rgw, const char * const id)
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->log_to_stderr = 1; // quiet by default
   cct->_conf->parse_env(); // environment variables override
-  cct->_conf->apply_changes();
+  cct->_conf->apply_changes(NULL);
 
   common_init_finish(cct);
   *rgw = cct;

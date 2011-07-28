@@ -360,7 +360,10 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "injectargs") {
       if (m->cmd.size() == 2) {
 	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-	g_conf->injectargs(m->cmd[1]);
+	ostringstream oss;
+	g_conf->injectargs(m->cmd[1], &oss);
+	derr << "injectargs:" << dendl;
+	derr << oss.str() << dendl;
 	rs = "parsed options";
 	r = 0;
       } else {

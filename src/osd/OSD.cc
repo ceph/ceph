@@ -2131,8 +2131,12 @@ void OSD::handle_command(MMonCommand *m)
     return;
 
   dout(20) << "handle_command args: " << m->cmd << dendl;
-  if (m->cmd[0] == "injectargs")
-    g_conf->injectargs(m->cmd[1]);
+  if (m->cmd[0] == "injectargs") {
+    ostringstream oss;
+    g_conf->injectargs(m->cmd[1], &oss);
+    derr << "injectargs:" << dendl;
+    derr << oss.str() << dendl;
+  }
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
     shutdown();

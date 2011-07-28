@@ -37,7 +37,7 @@
 
 TEST(PerfCounters, SimpleTest) {
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes();
+  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string message;
   ASSERT_EQ("", client.get_message(&message));
@@ -79,7 +79,7 @@ TEST(PerfCounters, SinglePerfCounters) {
   PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
   coll->logger_add(fake_pf);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes();
+  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string msg;
   ASSERT_EQ("", client.get_message(&msg));
@@ -122,7 +122,7 @@ TEST(PerfCounters, MultiplePerfCounters) {
   coll->logger_add(fake_pf1);
   coll->logger_add(fake_pf2);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
-  g_ceph_context->_conf->apply_changes();
+  g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
   std::string msg;
 

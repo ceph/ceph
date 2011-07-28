@@ -94,7 +94,7 @@ void common_init_finish(CephContext *cct)
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.
   cct->_conf->set_val("internal_safe_to_start_threads", "true");
-  cct->_conf->apply_changes();
+  cct->_conf->apply_changes(NULL);
 }
 
 void common_destroy_context(CephContext *cct)

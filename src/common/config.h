@@ -17,6 +17,7 @@
 
 extern struct ceph_file_layout g_default_file_layout;
 
+#include <iosfwd>
 #include <vector>
 #include <map>
 #include <set>
@@ -33,6 +34,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_CHAIN   2
 
 class config_option;
+class CephContext;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
@@ -81,10 +83,10 @@ public:
   void parse_argv(std::vector<const char*>& args);
 
   // Expand all metavariables. Make any pending observer callbacks.
-  void apply_changes();
+  void apply_changes(std::ostringstream *oss);
 
   // Called by the Ceph daemons to make configuration changes at runtime
-  void injectargs(const std::string &s);
+  void injectargs(const std::string &s, std::ostringstream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.

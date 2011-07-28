@@ -45,8 +45,10 @@
  * initialization happens here.
  */
 #undef dout
+#undef ldout
 #undef pdout
 #undef derr
+#undef lderr
 #undef generic_dout
 #undef dendl
 
@@ -657,7 +659,7 @@ parse_argv(std::vector<const char*>& args)
 }
 
 void md_config_t::
-apply_changes()
+apply_changes(std::ostringstream *oss)
 {
   /* Maps observers to the configuration options that they care about which
    * have changed. */
@@ -676,9 +678,15 @@ apply_changes()
   // changed keys that they'll get.
   rev_obs_map_t robs;
   std::set <std::string> empty_set;
+  char buf[128];
+  char *bufptr = (char*)buf;
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
+    if ((oss) && (!get_val(key.c_str(), &bufptr, sizeof(buf)))) {
+      (*oss) << "applying configuration change: " << key << " = '"
+		     << buf << "'\n";
+    }
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
@@ -699,7 +707,7 @@ apply_changes()
 }
 
 void md_config_t::
-injectargs(const std::string& s)
+injectargs(const std::string& s, std::ostringstream *oss)
 {
   char b[s.length()+1];
   strcpy(b, s.c_str());
@@ -714,7 +722,7 @@ injectargs(const std::string& s)
     while (*p && *p == ' ') p++;
   }
   parse_argv(nargs);
-  apply_changes();
+  apply_changes(oss);
 }
 
 void md_config_t::

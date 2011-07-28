@@ -3204,7 +3204,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->parse_env(); // environment variables override
-  cct->_conf->apply_changes();
+  cct->_conf->apply_changes(NULL);
 
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
@@ -3257,7 +3257,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
     return ret;
   conf->parse_env(); // environment variables override
 
-  conf->apply_changes();
+  conf->apply_changes(NULL);
   complain_about_parse_errors(client->cct, &parse_errors);
   return 0;
 }
@@ -3269,7 +3269,7 @@ extern "C" void rados_conf_parse_argv(rados_t cluster, int argc, const char **ar
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   conf->parse_argv(args);
-  conf->apply_changes();
+  conf->apply_changes(NULL);
 }
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
@@ -3279,7 +3279,7 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
   int ret = conf->set_val(option, value);
   if (ret)
     return ret;
-  conf->apply_changes();
+  conf->apply_changes(NULL);
   return 0;
 }
 
