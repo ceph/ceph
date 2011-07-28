@@ -21,6 +21,10 @@
 #include "include/types.h"
 //#include "common/config.h"
 
+namespace ceph {
+  class Formatter;
+}
+
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
@@ -198,6 +202,7 @@ class MonMap {
 
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
+  void dump(ceph::Formatter *f) const;
 };
 
 inline void encode(MonMap &m, bufferlist &bl) {

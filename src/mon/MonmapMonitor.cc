@@ -18,6 +18,7 @@
 
 #include "messages/MMonCommand.h"
 #include "common/Timer.h"
+#include "common/ceph_argparse.h"
 #include "mon/MDSMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/PGMonitor.h"
@@ -119,6 +120,10 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  vector<const char*> args;
+  for (unsigned i = 1; i < m->cmd.size(); i++)
+    args.push_back(m->cmd[i].c_str());
+
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       mon->monmap->print_summary(ss);
@@ -129,6 +134,66 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       mon->monmap->encode(rdata);
       r = 0;
       ss << "got latest monmap";
+    }
+    else if (m->cmd[1] == "dump") {
+      string format = "plain";
+      string val;
+      epoch_t epoch = 0;
+      string cmd = args[0];
+      for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
+	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
+	  format = val;
+	else if (!epoch)
+	  epoch = atoi(*i++);
+	else
+	  i++;
+      }
+
+      MonMap *p = mon->monmap;
+      if (epoch) {
+	/*
+	bufferlist b;
+	mon->store->get_bl_sn(b,"osdmap_full", epoch);
+	if (!b.length()) {
+	  p = 0;
+	  r = -ENOENT;
+	} else {
+	  p = new OSDMap;
+	  p->decode(b);
+	}
+	*/
+      }
+      if (p) {
+	stringstream ds;
+	if (format == "json") {
+	  Formatter *f = new JSONFormatter(true);
+	  f->open_object_section("monmap");
+	  p->dump(f);
+	  f->open_array_section("quorum");
+	  for (set<int>::iterator q = mon->get_quorum().begin(); q != mon->get_quorum().end(); ++q)
+	    f->dump_int("mon", *q);
+	  f->close_section();
+	  f->close_section();
+	  f->flush(ds);
+	  delete f;
+	  r = 0;
+	} else if (format == "plain") {
+	  p->print(ds);
+	  r = 0;
+	} else {
+	  ss << "unrecognized format '" << format << "'";
+	  r = -EINVAL;
+	}
+	if (r == 0) {
+	  rdata.append(ds);
+	  ss << "dumped monmap epoch " << p->get_epoch();
+	}
+  	if (p != mon->monmap)
+	  delete p;
+      }
+
+      
+
     }
     else if (m->cmd.size() >= 3 && m->cmd[1] == "tell") {
       dout(20) << "got tell: " << m->cmd << dendl;
