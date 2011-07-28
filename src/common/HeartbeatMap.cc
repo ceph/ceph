@@ -43,11 +43,11 @@ HeartbeatMap::~HeartbeatMap()
 {
 }
 
-heartbeat_handle_d *HeartbeatMap::add_worker(pthread_t thread, string name)
+heartbeat_handle_d *HeartbeatMap::add_worker(string name)
 {
   m_rwlock.get_write();
-  ldout(m_cct, 10) << "add_worker " << thread << " '" << name << "'" << dendl;
-  heartbeat_handle_d *h = new heartbeat_handle_d(thread, name);
+  ldout(m_cct, 10) << "add_worker '" << name << "'" << dendl;
+  heartbeat_handle_d *h = new heartbeat_handle_d(name);
   m_workers.push_front(h);
   h->list_item = m_workers.begin();
   m_rwlock.put_write();
@@ -57,7 +57,7 @@ heartbeat_handle_d *HeartbeatMap::add_worker(pthread_t thread, string name)
 void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
 {
   m_rwlock.get_write();
-  ldout(m_cct, 10) << "remove_worker " << h->thread << " '" << h->name << "'" << dendl;
+  ldout(m_cct, 10) << "remove_worker '" << h->name << "'" << dendl;
   m_workers.erase(h->list_item);
   m_rwlock.put_write();
   delete h;
@@ -65,11 +65,11 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
 
 void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace)
 {
-  ldout(m_cct, 20) << "reset_timeout " << h->thread << " '" << h->name << "' grace " << grace << dendl;
+  ldout(m_cct, 20) << "reset_timeout '" << h->name << "' grace " << grace << dendl;
   time_t now = time(NULL);
   time_t was = h->timeout.read();
   if (was && was < now) {
-    ldout(m_cct, 1) << "reset_timeout " << h->thread << " '" << h->name << "'"
+    ldout(m_cct, 1) << "reset_timeout '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
   }
   h->timeout.set(now + grace);
@@ -78,11 +78,11 @@ void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace)
 
 void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 {
-  ldout(m_cct, 20) << "clear_timeout " << h->thread << " '" << h->name << "'" << dendl;
+  ldout(m_cct, 20) << "clear_timeout '" << h->name << "'" << dendl;
   time_t now = time(NULL);
   time_t was = h->timeout.read();
   if (was && was < now) {
-    ldout(m_cct, 1) << "clear_timeout " << h->thread << " '" << h->name << "'"
+    ldout(m_cct, 1) << "clear_timeout '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
   }
   h->timeout.set(0);
@@ -99,7 +99,7 @@ bool HeartbeatMap::is_healthy()
     heartbeat_handle_d *h = *p;
     time_t timeout = h->timeout.read();
     if (timeout && timeout < now) {
-      ldout(m_cct, 1) << "is_healthy " << h->thread << " '" << h->name << "'" 
+      ldout(m_cct, 1) << "is_healthy '" << h->name << "'" 
 		      << " timed out after " << h->grace << dendl;
       healthy = false;
     }

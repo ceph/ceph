@@ -28,27 +28,42 @@ class CephContext;
 
 namespace ceph {
 
+/*
+ * HeartbeatMap -
+ *
+ * Maintain a set of handles for internal subsystems to periodically
+ * check in with a health check and timeout.  Each user can register
+ * and get a handle they can use to set or reset a timeout.  
+ *
+ * A simple is_healthy() method will check for any users to failed to
+ * reset/clear the timeout before it expired.
+ */
+
 struct heartbeat_handle_d {
-  pthread_t thread;
   std::string name;
   atomic_t timeout;
   time_t grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
-  heartbeat_handle_d(pthread_t t, const std::string& n)
-    : thread(t), name(n), grace(0)
+  heartbeat_handle_d(const std::string& n)
+    : name(n), grace(0)
   { }
 };
 
 class HeartbeatMap {
  public:
-  heartbeat_handle_d *add_worker(pthread_t thread, std::string name);
+  // register/unregister
+  heartbeat_handle_d *add_worker(std::string name);
   void remove_worker(heartbeat_handle_d *h);
 
+  // set or clear a timeout
   void reset_timeout(heartbeat_handle_d *h, time_t grace);
   void clear_timeout(heartbeat_handle_d *h);
 
+  // return true if timeouts are currently expired.
   bool is_healthy();
+
+  // touch cct->_conf->heartbeat_file if is_healthy()
   void check_touch_file();
 
   HeartbeatMap(CephContext *cct);

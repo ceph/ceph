@@ -32,8 +32,8 @@ void ThreadPool::worker()
   ldout(cct,10) << "worker start" << dendl;
   
   std::stringstream ss;
-  ss << name << '@' << this;
-  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(pthread_self(), ss.str());
+  ss << name << " thread " << (void*)pthread_self();
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
 
   while (!_stop) {
     if (!_pause && work_queues.size()) {
