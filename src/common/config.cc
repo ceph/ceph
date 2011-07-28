@@ -722,6 +722,16 @@ injectargs(const std::string& s, std::ostringstream *oss)
     while (*p && *p == ' ') p++;
   }
   parse_argv(nargs);
+  if ((!nargs.empty()) && (oss)) {
+    *oss << "ERROR: failed to parse arguments: ";
+    std::string prefix;
+    for (std::vector<const char*>::const_iterator i = nargs.begin();
+	 i != nargs.end(); ++i) {
+      *oss << prefix << *i;
+      prefix = ",";
+    }
+    *oss << "\n";
+  }
   apply_changes(oss);
 }
 
