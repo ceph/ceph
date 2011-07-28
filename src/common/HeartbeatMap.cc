@@ -68,7 +68,8 @@ bool HeartbeatMap::is_healthy()
        p != m_workers.end();
        ++p) {
     heartbeat_handle_d *h = *p;
-    if (h->timeout && h->timeout < now) {
+    time_t timeout = h->timeout;
+    if (timeout && timeout < now) {
       ldout(m_cct, 0) << "is_healthy " << h->thread << " '" << h->name << "'"
 		      << " timed out" << dendl;
       healthy = false;
