@@ -868,6 +868,12 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
       scatter_mix(slock, pneed_issue);
       if (!lock->is_stable())
 	return;
+    } else if (slock->get_unscatter_wanted() &&
+        slock->get_state() != LOCK_LOCK) {
+      simple_lock(slock, pneed_issue);
+      if (!lock->is_stable()) {
+        return;
+      }
     }
   }
 
