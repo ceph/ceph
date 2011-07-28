@@ -41,6 +41,7 @@ HeartbeatMap::HeartbeatMap(CephContext *cct)
 
 HeartbeatMap::~HeartbeatMap()
 {
+  assert(m_workers.empty());
 }
 
 heartbeat_handle_d *HeartbeatMap::add_worker(string name)
