@@ -625,8 +625,11 @@ def mds(ctx, config):
         log.info('Recording coverage for this run.')
         daemon_signal = 'term'
 
+    num_active = 1
     for remote, roles_for_host in mdss.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
+            if not id_.endswith('-s'):
+                num_active += 1
             proc = remote.run(
                 args=[
                     '/tmp/cephtest/enable-coredump',
@@ -638,7 +641,6 @@ def mds(ctx, config):
                     '-f',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf',
-#                    '--debug-mds','20',
                     ],
                 logger=log.getChild('mds.{id}'.format(id=id_)),
                 stdin=run.PIPE,
@@ -653,7 +655,7 @@ def mds(ctx, config):
             '/tmp/cephtest/archive/coverage',
             '/tmp/cephtest/binary/usr/local/bin/ceph',
             '-c', '/tmp/cephtest/ceph.conf',
-            'mds', 'set_max_mds', str(len(mdss.remotes))])
+            'mds', 'set_max_mds', str(num_active)])
 
     try:
         yield
