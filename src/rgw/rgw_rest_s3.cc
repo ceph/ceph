@@ -556,8 +556,8 @@ static bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
 }
 
-static inline bool is_base64(unsigned char c) {
-  return (isalnum(c) || (c == '+') || (c == '/') || (c == '='));
+static inline bool is_base64_for_content_md5(unsigned char c) {
+  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
 /*
@@ -574,8 +574,8 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
   const char *md5 = s->env->get("HTTP_CONTENT_MD5");
   if (md5) {
     for (const char *p = md5; *p; p++) {
-      if (!is_base64(*p)) {
-        RGW_LOG(0) << "bad content-md5 provided (not base64), aborting request" << dendl;
+      if (!is_base64_for_content_md5(*p)) {
+        RGW_LOG(0) << "bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
     }

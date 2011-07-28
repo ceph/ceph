@@ -572,9 +572,6 @@ void RGWPutObj::execute()
       ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
 			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
       RGW_LOG(15) << "ceph_armor ret=" << ret << dendl;
-      if (ret < 0) {
-        goto done;
-      }
       if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
         ret = -ERR_INVALID_DIGEST;
         goto done;
