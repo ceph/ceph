@@ -40,7 +40,9 @@ class HeartbeatMap {
  public:
   heartbeat_handle_d *add_worker(pthread_t thread, std::string name);
   void remove_worker(heartbeat_handle_d *h);
-  void touch_worker(heartbeat_handle_d *h, time_t grace);
+
+  void reset_timeout(heartbeat_handle_d *h, time_t grace);
+  void clear_timeout(heartbeat_handle_d *h);
 
   bool is_healthy();
 
