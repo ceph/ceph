@@ -3368,7 +3368,9 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
       return;
     // fall-thru
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
-  case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
+  case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK);
+    ((ScatterLock *)lock)->clear_unscatter_wanted();
+    break;
   case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
   default: assert(0);
   }
@@ -4402,7 +4404,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     } else {
       dout(7) << "handle_file_lock ignoring unscatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      lock->set_scatter_wanted();
+      lock->set_unscatter_wanted();
     }
     break;
 

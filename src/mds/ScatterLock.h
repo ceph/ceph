@@ -22,6 +22,7 @@ class ScatterLock : public SimpleLock {
   struct more_bits_t {
     bool dirty, flushing, flushed;
     bool scatter_wanted;
+    bool unscatter_wanted;
     utime_t last_scatter;
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
@@ -29,7 +30,7 @@ class ScatterLock : public SimpleLock {
 
     more_bits_t(ScatterLock *lock) :
       dirty(false), flushing(false), flushed(false), scatter_wanted(false),
-      item_updated(lock), stale(false)
+      unscatter_wanted(false), item_updated(lock), stale(false)
     {}
 
     bool empty() const {
@@ -38,6 +39,7 @@ class ScatterLock : public SimpleLock {
 	flushing == false &&
 	flushed == false &&
 	scatter_wanted == false &&
+	unscatter_wanted == false &&
 	!item_updated.is_on_list() &&
 	!stale;
     }
@@ -104,12 +106,22 @@ public:
   void set_scatter_wanted() {
     more()->scatter_wanted = true;
   }
+  void set_unscatter_wanted() {
+    more()->unscatter_wanted = true;
+  }
   void clear_scatter_wanted() {
     if (have_more())
       _more->scatter_wanted = false;
   }
+  void clear_unscatter_wanted() {
+    if (have_more())
+      _more->unscatter_wanted = false;
+  }
   bool get_scatter_wanted() const {
     return have_more() ? _more->scatter_wanted : false; 
+  }
+  bool get_unscatter_wanted() const {
+    return have_more() ? _more->unscatter_wanted : false;
   }
 
   bool is_dirty() const {
