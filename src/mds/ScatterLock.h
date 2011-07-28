@@ -22,14 +22,14 @@ class ScatterLock : public SimpleLock {
 
   struct more_bits_t {
     bool dirty, flushing, flushed;
-    int scatter_flags;
+    int state_flags;
     utime_t last_scatter;
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
     bool stale;
 
     more_bits_t(ScatterLock *lock) :
-      dirty(false), flushing(false), flushed(false), scatter_flags(0),
+      dirty(false), flushing(false), flushed(false), state_flags(0),
       item_updated(lock), stale(false)
     {}
 
@@ -38,7 +38,7 @@ class ScatterLock : public SimpleLock {
 	dirty == false &&
 	flushing == false &&
 	flushed == false &&
-	!scatter_flags &&
+	!state_flags &&
 	!item_updated.is_on_list() &&
 	!stale;
     }
@@ -58,9 +58,13 @@ class ScatterLock : public SimpleLock {
     return _more;
   }
 
-  enum scatter_flag_values {  // the constants for handling [un]scatter_wanted
-    SCATTER_WANTED   = 1 << 0,// flags
-    UNSCATTER_WANTED = 1 << 1
+  enum flag_values {  // flag values for more_bits_t state
+    SCATTER_WANTED   = 1 << 0,
+    UNSCATTER_WANTED = 1 << 1,
+    DIRTY            = 1 << 2,
+    FLUSHING         = 1 << 3,
+    FLUSHED          = 1 << 4,
+    STALE            = 1 << 5
   };
 
 public:
@@ -108,24 +112,24 @@ public:
   void set_update_stamp(utime_t t) { more()->update_stamp = t; }
 
   void set_scatter_wanted() {
-    more()->scatter_flags &= SCATTER_WANTED;
+    more()->state_flags &= SCATTER_WANTED;
   }
   void set_unscatter_wanted() {
-    more()->scatter_flags &= UNSCATTER_WANTED;
+    more()->state_flags &= UNSCATTER_WANTED;
   }
   void clear_scatter_wanted() {
     if (have_more())
-      _more->scatter_flags &= ~SCATTER_WANTED;
+      _more->state_flags &= ~SCATTER_WANTED;
   }
   void clear_unscatter_wanted() {
     if (have_more())
-      _more->scatter_flags &= ~UNSCATTER_WANTED;
+      _more->state_flags &= ~UNSCATTER_WANTED;
   }
   bool get_scatter_wanted() const {
-    return have_more() ? _more->scatter_flags & SCATTER_WANTED : false;
+    return have_more() ? _more->state_flags & SCATTER_WANTED : false;
   }
   bool get_unscatter_wanted() const {
-    return have_more() ? _more->scatter_flags & UNSCATTER_WANTED : false;
+    return have_more() ? _more->state_flags & UNSCATTER_WANTED : false;
   }
 
   bool is_dirty() const {
