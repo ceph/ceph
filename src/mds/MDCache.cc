@@ -2235,7 +2235,8 @@ ESubtreeMap *MDCache::create_subtree_map()
     if (dir->get_dir_auth().first != mds->whoami)
       continue;
 
-    if (migrator->is_ambiguous_import(dir->dirfrag())) {
+    if (migrator->is_ambiguous_import(dir->dirfrag()) ||
+	my_ambiguous_imports.count(dir->dirfrag())) {
       dout(15) << " ambig subtree " << *dir << dendl;
       le->ambiguous_subtrees.insert(dir->dirfrag());
     } else {
