@@ -19,6 +19,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/HeartbeatMap.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -80,19 +81,23 @@ CephContext(uint32_t module_type_)
     _module_type(module_type_),
     _service_thread(NULL),
     _admin_socket_config_obs(NULL),
-    _perf_counters_collection(NULL)
+    _perf_counters_collection(NULL),
+    _heartbeat_map(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
   _perf_counters_collection = new PerfCountersCollection(this);
   _conf->add_observer(_doss);
   _admin_socket_config_obs = new AdminSocketConfigObs(this);
   _conf->add_observer(_admin_socket_config_obs);
+  _heartbeat_map = new HeartbeatMap(this);
 }
 
 CephContext::
 ~CephContext()
 {
   join_service_thread();
+
+  delete _heartbeat_map;
 
   _conf->remove_observer(_admin_socket_config_obs);
   _conf->remove_observer(_doss);

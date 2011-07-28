@@ -187,6 +187,7 @@ public:
   int debug_tp;
   int debug_auth;
   int debug_finisher;
+  int debug_heartbeatmap;
 
   // auth
   std::string key;

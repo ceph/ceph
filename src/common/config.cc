@@ -173,6 +173,7 @@ struct config_option config_optionsp[] = {
   OPTION(debug_tp, OPT_INT, 0),
   OPTION(debug_auth, OPT_INT, 1),
   OPTION(debug_finisher, OPT_INT, 1),
+  OPTION(debug_heartbeatmap, OPT_INT, 1),
   OPTION(key, OPT_STR, 0),
   OPTION(keyfile, OPT_STR, 0),
   OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),

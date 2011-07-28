@@ -726,6 +726,7 @@ libcommon_files = \
 	common/simple_spin.cc \
 	common/Thread.cc \
 	common/Formatter.cc \
+	common/HeartbeatMap.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
 	include/ceph_strings.cc \
