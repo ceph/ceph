@@ -37,9 +37,9 @@ heartbeat_handle_d *HeartbeatMap::add_worker(pthread_t thread, string name)
 {
   m_rwlock.get_write();
   ldout(m_cct, 10) << "add_worker " << thread << " '" << name << "'" << dendl;
-  assert(m_workers.count(thread) == 0);
   heartbeat_handle_d *h = new heartbeat_handle_d(thread, name);
-  m_workers[thread] = h;
+  m_workers.push_front(h);
+  h->list_item = m_workers.begin();
   m_rwlock.put_write();
   return h;
 }
@@ -48,9 +48,7 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
 {
   m_rwlock.get_write();
   ldout(m_cct, 10) << "remove_worker " << h->thread << " '" << h->name << "'" << dendl;
-  map<pthread_t, heartbeat_handle_d*>::iterator p = m_workers.find(h->thread);
-  assert(p != m_workers.end());
-  m_workers.erase(p);
+  m_workers.erase(h->list_item);
   m_rwlock.put_write();
   delete h;
 }
@@ -66,14 +64,16 @@ bool HeartbeatMap::is_healthy()
   m_rwlock.get_read();
   time_t now = time(NULL);
   bool healthy = true;
-  for (map<pthread_t, heartbeat_handle_d*>::iterator p = m_workers.begin();
+  for (list<heartbeat_handle_d*>::iterator p = m_workers.begin();
        p != m_workers.end();
-       ++p)
-    if (p->second->timeout && p->second->timeout < now) {
-      ldout(m_cct, 0) << "is_healthy " << p->first << " '" << p->second->name << "'"
+       ++p) {
+    heartbeat_handle_d *h = *p;
+    if (h->timeout && h->timeout < now) {
+      ldout(m_cct, 0) << "is_healthy " << h->thread << " '" << h->name << "'"
 		      << " timed out" << dendl;
       healthy = false;
     }
+  }
   m_rwlock.put_read();
   return healthy;
 }

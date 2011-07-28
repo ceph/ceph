@@ -18,7 +18,7 @@
 #include <pthread.h>
 
 #include <string>
-#include <map>
+#include <list>
 
 #include "RWLock.h"
 
@@ -28,6 +28,7 @@ struct heartbeat_handle_d {
   pthread_t thread;
   std::string name;
   time_t timeout;
+  std::list<heartbeat_handle_d*>::iterator list_item;
 
   heartbeat_handle_d(pthread_t t, const std::string& n)
     : thread(t), name(n),
@@ -49,7 +50,7 @@ class HeartbeatMap {
  private:
   CephContext *m_cct;
   RWLock m_rwlock;
-  std::map<unsigned long, heartbeat_handle_d*> m_workers;
+  std::list<heartbeat_handle_d*> m_workers;
 };
 
 #endif
