@@ -289,7 +289,11 @@ RGWOp *RGWHandler_REST_OS::get_delete_op()
   return NULL;
 }
 
-bool RGWHandler_REST_OS::authorize()
+int RGWHandler_REST_OS::authorize()
 {
-  return rgw_verify_os_token(s);
+  bool authorized = rgw_verify_os_token(s);
+  if (!authorized)
+    return -EPERM;
+
+  return 0;
 }

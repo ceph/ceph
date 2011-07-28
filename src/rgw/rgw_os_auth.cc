@@ -170,9 +170,9 @@ done:
   end_header(s);
 }
 
-bool RGWHandler_OS_Auth::authorize()
+int RGWHandler_OS_Auth::authorize()
 {
-  return true;
+  return 0;
 }
 
 RGWOp *RGWHandler_OS_Auth::get_op()

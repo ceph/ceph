@@ -4,6 +4,8 @@
 
 #include "rgw_op.h"
 
+#define RGW_AUTH_GRACE_MINS 15
+
 class RGWGetObj_REST_S3 : public RGWGetObj_REST
 {
 public:
@@ -145,7 +147,7 @@ public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
-  bool authorize();
+  int authorize();
 };
 
 #endif

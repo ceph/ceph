@@ -163,9 +163,10 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     goto done;
   }
 
-  if (!handler->authorize()) {
+  ret = handler->authorize();
+  if (ret < 0) {
     RGW_LOG(10) << "failed to authorize request" << dendl;
-    abort_early(s, -EPERM);
+    abort_early(s, ret);
     goto done;
   }
   if (s->user.suspended) {

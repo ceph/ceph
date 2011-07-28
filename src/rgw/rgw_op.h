@@ -561,7 +561,7 @@ public:
   virtual RGWOp *get_op() = 0;
   virtual void put_op(RGWOp *op) = 0;
   virtual int read_permissions() = 0;
-  virtual bool authorize() = 0;
+  virtual int authorize() = 0;
 };
 
 #endif

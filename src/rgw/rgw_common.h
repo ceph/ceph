@@ -101,7 +101,7 @@ extern string rgw_root_bucket;
 #define ERR_NO_SUCH_UPLOAD      2009
 #define ERR_REQUEST_TIMEOUT     2010
 #define ERR_LENGTH_REQUIRED     2011
-
+#define ERR_REQUEST_TIME_SKEWED 2012
 #define ERR_USER_SUSPENDED      2100
 
 typedef void *RGWAccessHandle;
@@ -409,6 +409,7 @@ struct req_state {
    uint64_t obj_size;
    bool should_log;
    uint32_t perm_mask;
+   utime_t header_time;
 
    XMLArgs args;
 

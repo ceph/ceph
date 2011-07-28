@@ -144,7 +144,7 @@ public:
   void put_op(RGWOp *op);
 
   static int preprocess(struct req_state *s, FCGX_Request *fcgx);
-  virtual bool authorize() = 0;
+  virtual int authorize() = 0;
 };
 
 class RGWHandler_REST_OS;

@@ -41,6 +41,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
     { ERR_USER_SUSPENDED, 403, "UserSuspended" },
+    { ERR_REQUEST_TIME_SKEWED, 403, "RequestTimeTooSkewed" },
     { ENOENT, 404, "NoSuchKey" },
     { ERR_NO_SUCH_BUCKET, 404, "NoSuchBucket" },
     { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },

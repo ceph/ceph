@@ -598,6 +598,11 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
       RGW_LOG(0) << "failed to parse date for auth header" << dendl;
       return false;
     }
+    if (t.tm_year < 70) {
+      RGW_LOG(0) << "bad date (predates epoch): " << req_date << dendl;
+      return false;
+    }
+    s->header_time = utime_t(mktime(&t) + t.tm_gmtoff, 0);
   }
 
   if (date.size())
@@ -619,11 +624,14 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
-bool RGWHandler_REST_S3::authorize()
+int RGWHandler_REST_S3::authorize()
 {
   bool qsr = false;
   string auth_id;
   string auth_sign;
+
+  time_t now;
+  time(&now);
 
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->args.get("AWSAccessKeyId");
@@ -632,25 +640,23 @@ bool RGWHandler_REST_S3::authorize()
 
       string date = s->args.get("Expires");
       time_t exp = atoll(date.c_str());
-      time_t now;
-      time(&now);
       if (now >= exp)
-        return false;
+        return -EPERM;
 
       qsr = true;
     } else {
       /* anonymous access */
       rgw_get_anon_user(s->user);
       s->perm_mask = RGW_PERM_FULL_CONTROL;
-      return true;
+      return 0;
     }
   } else {
     if (strncmp(s->http_auth, "AWS ", 4))
-      return false;
+      return -EPERM;
     string auth_str(s->http_auth + 4);
     int pos = auth_str.find(':');
     if (pos < 0)
-      return false;
+      return -EPERM;
 
     auth_id = auth_str.substr(0, pos);
     auth_sign = auth_str.substr(pos + 1);
@@ -659,7 +665,7 @@ bool RGWHandler_REST_S3::authorize()
   /* first get the user info */
   if (rgw_get_user_info_by_access_key(auth_id, s->user) < 0) {
     RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
-    return false;
+    return -EPERM;
   }
 
   /* now verify signature */
@@ -667,16 +673,22 @@ bool RGWHandler_REST_S3::authorize()
   string auth_hdr;
   if (!get_auth_header(s, auth_hdr, qsr)) {
     RGW_LOG(10) << "failed to create auth header\n" << auth_hdr << dendl;
-    return false;
+    return -EPERM;
   }
   RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
 
-  
+  time_t req_sec = s->header_time.sec();
+  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
+    RGW_LOG(0) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+    RGW_LOG(0) << "request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
+    return -ERR_REQUEST_TIME_SKEWED;
+  }
 
   map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
   if (iter == s->user.access_keys.end()) {
     RGW_LOG(0) << "ERROR: access key not encoded in user info" << dendl;
-    return false;
+    return -EPERM;
   }
   RGWAccessKey& k = iter->second;
   const char *key = k.key.c_str();
@@ -686,7 +698,7 @@ bool RGWHandler_REST_S3::authorize()
     map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
     if (uiter == s->user.subusers.end()) {
       RGW_LOG(0) << "ERROR: could not find subuser: " << k.subuser << dendl;
-      return false;
+      return -EPERM;
     }
     RGWSubUser& subuser = uiter->second;
     s->perm_mask = subuser.perm_mask;
@@ -701,14 +713,17 @@ bool RGWHandler_REST_S3::authorize()
 		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   if (ret < 0) {
     RGW_LOG(10) << "ceph_armor failed" << dendl;
-    return false;
+    return -EPERM;
   }
   b64[ret] = '\0';
 
   RGW_LOG(15) << "b64=" << b64 << dendl;
   RGW_LOG(15) << "auth_sign=" << auth_sign << dendl;
   RGW_LOG(15) << "compare=" << auth_sign.compare(b64) << dendl;
-  return (auth_sign.compare(b64) == 0);
+  if (auth_sign.compare(b64) != 0)
+    return -EPERM;
+
+  return  0;
 }
 
 

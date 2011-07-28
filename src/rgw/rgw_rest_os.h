@@ -110,7 +110,7 @@ public:
   RGWHandler_REST_OS() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_OS() {}
 
-  bool authorize();
+  int authorize();
 };
 
 #endif

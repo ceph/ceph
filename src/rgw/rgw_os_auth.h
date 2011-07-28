@@ -23,7 +23,7 @@ public:
   RGWOp *get_op();
   void put_op(RGWOp *op);
 
-  bool authorize();
+  int authorize();
   int read_permissions() { return 0; }
 };
 
