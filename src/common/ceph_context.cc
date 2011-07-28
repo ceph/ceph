@@ -46,11 +46,14 @@ public:
   void *entry()
   {
     while (1) {
-      struct timespec timeout;
-      clock_gettime(CLOCK_REALTIME, &timeout);
-      timeout.tv_sec += _cct->_conf->heartbeat_interval;
-
-      sem_timedwait(&_sem, &timeout);
+      if (_cct->_conf->heartbeat_interval) {
+	struct timespec timeout;
+	clock_gettime(CLOCK_REALTIME, &timeout);
+	timeout.tv_sec += _cct->_conf->heartbeat_interval;
+	sem_timedwait(&_sem, &timeout);
+      } else {
+	sem_wait(&_sem);
+      }
       if (_exit_thread) {
 	break;
       }
