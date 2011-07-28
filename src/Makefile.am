@@ -17,7 +17,7 @@ check_PROGRAMS =
 TESTS = $(check_PROGRAMS)
 
 
-EXTRALIBS =
+EXTRALIBS = -lrt
 if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif

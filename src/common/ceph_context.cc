@@ -12,6 +12,8 @@
  *
  */
 
+#include <time.h>
+
 #include "common/admin_socket.h"
 #include "common/DoutStreambuf.h"
 #include "common/perf_counters.h"
@@ -44,7 +46,11 @@ public:
   void *entry()
   {
     while (1) {
-      sem_wait(&_sem);
+      struct timespec timeout;
+      clock_gettime(CLOCK_REALTIME, &timeout);
+      timeout.tv_sec += _cct->_conf->heartbeat_interval;
+
+      sem_timedwait(&_sem, &timeout);
       if (_exit_thread) {
 	break;
       }
@@ -52,6 +58,7 @@ public:
 	_cct->_doss->reopen_logs(_cct->_conf);
 	_reopen_logs = false;
       }
+      _cct->_heartbeat_map->check_touch_file();
     }
     return NULL;
   }
