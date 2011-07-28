@@ -431,7 +431,7 @@ unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
 unittest_ceph_argparse_SOURCES = test/ceph_argparse.cc
-unittest_ceph_argparse_LDFLAGS = -lrt -pthread ${AM_LDFLAGS}
+unittest_ceph_argparse_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_ceph_argparse_LDADD = libglobal.la ${UNITTEST_LDADD}
 unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
@@ -468,19 +468,19 @@ unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
 unittest_crypto_SOURCES = test/crypto.cc
-unittest_crypto_LDFLAGS = -lrt ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
+unittest_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
 unittest_perf_counters_SOURCES = test/perf_counters.cc
-unittest_perf_counters_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_perf_counters_LDFLAGS = ${AM_LDFLAGS}
 unittest_perf_counters_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_perf_counters_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_perf_counters
 
 unittest_admin_socket_SOURCES = test/admin_socket.cc
-unittest_admin_socket_LDFLAGS = -lrt ${AM_LDFLAGS}
+unittest_admin_socket_LDFLAGS = ${AM_LDFLAGS}
 unittest_admin_socket_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_admin_socket_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_admin_socket
@@ -529,7 +529,7 @@ check_PROGRAMS += unittest_heartbeatmap
 
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
-unittest_librgw_LDFLAGS = -pthread -lcurl ${AM_LDFLAGS}
+unittest_librgw_LDFLAGS = -lrt -pthread -lcurl ${AM_LDFLAGS}
 unittest_librgw_LDADD =  librgw.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_LDA)
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
@@ -673,7 +673,7 @@ libglobal_la_SOURCES = \
 	global/signal_handler.cc
 libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libglobal_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libglobal_la_LIBADD= libcommon.la
+libglobal_la_LIBADD= libcommon.la -lrt
 noinst_LTLIBRARIES += libglobal.la
 
 crush_files = \
