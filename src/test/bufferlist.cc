@@ -1,10 +1,11 @@
+#include <tr1/memory>
+
 #include "include/buffer.h"
 #include "include/encoding.h"
 
 #include "gtest/gtest.h"
 #include "stdlib.h"
 
-#include <tr1/memory>
 
 #define MAX_TEST 1000000
 
