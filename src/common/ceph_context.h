@@ -28,7 +28,10 @@ class DoutLocker;
 class PerfCountersCollection;
 class md_config_obs_t;
 class md_config_t;
-class HeartbeatMap;
+
+namespace ceph {
+  class HeartbeatMap;
+}
 
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
@@ -63,7 +66,7 @@ public:
   /* Get the PerfCountersCollection of this CephContext */
   PerfCountersCollection *GetPerfCountersCollection();
 
-  HeartbeatMap *get_heartbeat_map() {
+  ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;
   }
 
@@ -92,7 +95,7 @@ private:
 
   md_config_obs_t *_perf_counters_conf_obs;
 
-  HeartbeatMap *_heartbeat_map;
+  ceph::HeartbeatMap *_heartbeat_map;
 };
 
 #endif

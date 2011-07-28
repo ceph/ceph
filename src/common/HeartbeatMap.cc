@@ -22,6 +22,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "heartbeat_map "
 
+namespace ceph {
 
 HeartbeatMap::HeartbeatMap(CephContext *cct)
   : m_cct(cct),
@@ -85,3 +86,4 @@ bool HeartbeatMap::is_healthy()
   return healthy;
 }
 
+}

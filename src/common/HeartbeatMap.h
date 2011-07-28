@@ -24,6 +24,8 @@
 
 class CephContext;
 
+namespace ceph {
+
 struct heartbeat_handle_d {
   pthread_t thread;
   std::string name;
@@ -55,4 +57,5 @@ class HeartbeatMap {
   std::list<heartbeat_handle_d*> m_workers;
 };
 
+}
 #endif

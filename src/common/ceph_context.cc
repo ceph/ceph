@@ -25,6 +25,8 @@
 #include <pthread.h>
 #include <semaphore.h>
 
+using ceph::HeartbeatMap;
+
 class CephContextServiceThread : public Thread
 {
 public:
