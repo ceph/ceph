@@ -252,6 +252,7 @@ DAEMONOPTS="
         admin socket = out/asok.\$name
 	chdir = \"\"
 	pid file = out/\$name.pid
+        heartbeat file = out/\$name.heartbeat
 "
 
 
