@@ -194,6 +194,10 @@ public:
   std::string keyfile;
   std::string keyring;
 
+  // heartbeat
+  int heartbeat_interval;  // seconds
+  std::string heartbeat_file;
+
   // messenger
 
   /*bool tcp_skip_rank0;

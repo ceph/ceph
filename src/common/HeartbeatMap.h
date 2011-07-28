@@ -48,6 +48,7 @@ class HeartbeatMap {
   void clear_timeout(heartbeat_handle_d *h);
 
   bool is_healthy();
+  void check_touch_file();
 
   HeartbeatMap(CephContext *cct);
   ~HeartbeatMap();

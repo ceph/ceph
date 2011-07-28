@@ -177,6 +177,8 @@ struct config_option config_optionsp[] = {
   OPTION(key, OPT_STR, 0),
   OPTION(keyfile, OPT_STR, 0),
   OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
+  OPTION(heartbeat_interval, OPT_INT, 5),
+  OPTION(heartbeat_file, OPT_STR, NULL),
   OPTION(ms_tcp_nodelay, OPT_BOOL, true),
   OPTION(ms_initial_backoff, OPT_DOUBLE, .2),
   OPTION(ms_max_backoff, OPT_DOUBLE, 15.0),

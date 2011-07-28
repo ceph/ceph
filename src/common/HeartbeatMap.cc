@@ -12,10 +12,19 @@
  * 
  */
 
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE
+#endif
+
 #include <time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
+#include "common/errno.h"
 
 #include "debug.h"
 #define DOUT_SUBSYS heartbeatmap
@@ -83,7 +92,25 @@ bool HeartbeatMap::is_healthy()
     }
   }
   m_rwlock.put_read();
+  ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTH") << dendl;
   return healthy;
+}
+
+void HeartbeatMap::check_touch_file()
+{
+  if (is_healthy()) {
+    string path = m_cct->_conf->heartbeat_file;
+    if (path.length()) {
+      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0755);
+      if (fd >= 0) {
+	::futimens(fd, NULL);
+	::close(fd);
+      } else {
+	ldout(m_cct, 0) << "unable to touch " << path << ": "
+			<< cpp_strerror(errno) << dendl;
+      }
+    }
+  }
 }
 
 }
