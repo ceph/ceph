@@ -212,9 +212,14 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
 	     << ", cur pos = " << journaler->get_write_pos() << dendl;
     start_new_segment();
   } else if (g_conf->mds_debug_subtrees &&
+	     le->get_type() != EVENT_SUBTREEMAP_TEST &&
 	     le->get_type() != EVENT_SUBTREEMAP) {
-    // debug: journal this every time to catch subtree replay bugs
-    submit_entry(mds->mdcache->create_subtree_map());
+    // debug: journal this every time to catch subtree replay bugs.
+    // use a different event id so it doesn't get interpreted as a
+    // LogSegment boundary on replay.
+    LogEvent *le = mds->mdcache->create_subtree_map();
+    le->set_type(EVENT_SUBTREEMAP_TEST);
+    submit_entry(le);
   }
 
   delete le;

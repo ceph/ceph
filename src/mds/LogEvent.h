@@ -36,6 +36,7 @@
 #define EVENT_TABLECLIENT  42
 #define EVENT_TABLESERVER  43
 
+#define EVENT_SUBTREEMAP_TEST   50
 
 
 #include <string>
@@ -65,11 +66,13 @@ protected:
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
-  int get_type() { return _type; }
+  int get_type() const { return _type; }
+  void set_type(int t) { _type = t; }
+
   uint64_t get_start_off() const { return _start_off; }
   void set_start_off(uint64_t o) { _start_off = o; }
-  utime_t get_stamp() const { return stamp; }
 
+  utime_t get_stamp() const { return stamp; }
   void set_stamp(utime_t t) { stamp = t; }
 
   // encoding

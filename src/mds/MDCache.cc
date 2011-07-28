@@ -5243,8 +5243,10 @@ struct C_MDC_TruncateLogged : public Context {
 void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 {
   dout(10) << "truncate_inode_finish " << *in << dendl;
-
-  ls->truncating_inodes.erase(in);
+  
+  set<CInode*>::iterator p = ls->truncating_inodes.find(in);
+  assert(p != ls->truncating_inodes.end());
+  ls->truncating_inodes.erase(p);
 
   // update
   inode_t *pi = in->project_inode();
@@ -5289,12 +5291,14 @@ void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
 
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
+  dout(20) << "add_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
 }
 
 void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 {
+  dout(20) << "remove_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   set<CInode*>::iterator p = ls->truncating_inodes.find(in);
   assert(p != ls->truncating_inodes.end());

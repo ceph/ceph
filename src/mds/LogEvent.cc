@@ -55,6 +55,10 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_STRING: le = new EString; break;
 
   case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
+  case EVENT_SUBTREEMAP_TEST: 
+    le = new ESubtreeMap;
+    le->set_type(type);
+    break;
   case EVENT_EXPORT: le = new EExport; break;
   case EVENT_IMPORTSTART: le = new EImportStart; break;
   case EVENT_IMPORTFINISH: le = new EImportFinish; break;
