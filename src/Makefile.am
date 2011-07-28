@@ -674,7 +674,7 @@ libglobal_la_SOURCES = \
 	global/signal_handler.cc
 libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libglobal_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libglobal_la_LIBADD= libcommon.la -lrt
+libglobal_la_LIBADD= libcommon.la
 noinst_LTLIBRARIES += libglobal.la
 
 crush_files = \
