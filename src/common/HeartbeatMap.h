@@ -20,6 +20,8 @@
 #include <string>
 #include <list>
 
+#include "include/atomic.h"
+
 #include "RWLock.h"
 
 class CephContext;
@@ -29,12 +31,11 @@ namespace ceph {
 struct heartbeat_handle_d {
   pthread_t thread;
   std::string name;
-  time_t timeout;
+  atomic_t timeout;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
   heartbeat_handle_d(pthread_t t, const std::string& n)
-    : thread(t), name(n),
-      timeout(0)
+    : thread(t), name(n) 
   { }
 };
 

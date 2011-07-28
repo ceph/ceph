@@ -29,6 +29,9 @@ namespace ceph {
     AO_t val;
   public:
     atomic_t(AO_t i=0) : val(i) {}
+    void set(size_t v) {
+      AO_store(&val, v);
+    }
     AO_t inc() {
       return AO_fetch_and_add1(&val) + 1;
     }

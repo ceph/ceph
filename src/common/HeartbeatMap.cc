@@ -57,13 +57,13 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
 void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace)
 {
   ldout(m_cct, 20) << "reset_timeout " << h->thread << " grace " << grace << dendl;
-  h->timeout = time(NULL) + grace;
+  h->timeout.set(time(NULL) + grace);
 }
 
 void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 {
   ldout(m_cct, 20) << "clear_timeout " << h->thread << dendl;
-  h->timeout = 0;
+  h->timeout.set(0);
 }
 
 bool HeartbeatMap::is_healthy()
@@ -75,7 +75,7 @@ bool HeartbeatMap::is_healthy()
        p != m_workers.end();
        ++p) {
     heartbeat_handle_d *h = *p;
-    time_t timeout = h->timeout;
+    time_t timeout = h->timeout.read();
     if (timeout && timeout < now) {
       ldout(m_cct, 0) << "is_healthy " << h->thread << " '" << h->name << "'"
 		      << " timed out" << dendl;
