@@ -556,6 +556,10 @@ static bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
 }
 
+static inline bool is_base64(unsigned char c) {
+  return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
 /*
  * get the header authentication  information required to
  * compute a request's signature
@@ -568,8 +572,15 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
   dest.append("\n");
   
   const char *md5 = s->env->get("HTTP_CONTENT_MD5");
-  if (md5)
+  if (md5) {
+    for (const char *p = md5; *p; p++) {
+      if (!is_base64(*p)) {
+        RGW_LOG(0) << "bad content-md5 provided (not base64), aborting request" << dendl;
+        return false;
+      }
+    }
     dest.append(md5);
+  }
   dest.append("\n");
 
   const char *type = s->env->get("CONTENT_TYPE");
