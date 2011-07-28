@@ -83,7 +83,7 @@ void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
   time_t was = h->timeout.read();
   if (was && was < now) {
     ldout(m_cct, 1) << "clear_timeout " << h->thread << " '" << h->name << "'"
-		    << " had timed out after " << g->grace << dendl;
+		    << " had timed out after " << h->grace << dendl;
   }
   h->timeout.set(0);
 }
