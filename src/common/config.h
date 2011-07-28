@@ -419,6 +419,14 @@ public:
   int   osd_disk_threads;
   int   osd_recovery_threads;
 
+  int   osd_op_thread_timeout;
+  int   osd_backlog_thread_timeout;
+  int   osd_recovery_thread_timeout;
+  int   osd_snap_trim_thread_timeout;
+  int   osd_scrub_thread_timeout;
+  int   osd_scrub_finalize_thread_timeout;
+  int   osd_remove_thread_timeout;
+
   float   osd_age;
   int   osd_age_time;
   int   osd_heartbeat_interval;
@@ -479,6 +487,7 @@ public:
   int filestore_queue_committing_max_ops;
   int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
+  int filestore_op_thread_timeout;
   float filestore_commit_timeout;
   int filestore_fiemap_threshold;
 
@@ -508,6 +517,7 @@ public:
   bool  rgw_cache_enabled;
   int   rgw_cache_lru_size;
   string rgw_socket_path;
+  int rgw_op_thread_timeout;
 
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.

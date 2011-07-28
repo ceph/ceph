@@ -344,6 +344,13 @@ struct config_option config_optionsp[] = {
   OPTION(osd_max_opq, OPT_INT, 10),
   OPTION(osd_disk_threads, OPT_INT, 1),
   OPTION(osd_recovery_threads, OPT_INT, 1),
+  OPTION(osd_op_thread_timeout, OPT_INT, 30),
+  OPTION(osd_backlog_thread_timeout, OPT_INT, 60*60*1),
+  OPTION(osd_recovery_thread_timeout, OPT_INT, 30),
+  OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1),
+  OPTION(osd_scrub_thread_timeout, OPT_INT, 60),
+  OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10),
+  OPTION(osd_remove_thread_timeout, OPT_INT, 60*60),
   OPTION(osd_age, OPT_FLOAT, .8),
   OPTION(osd_age_time, OPT_INT, 0),
   OPTION(osd_heartbeat_interval, OPT_INT, 1),
@@ -394,6 +401,7 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_queue_committing_max_ops, OPT_INT, 500),        // this is ON TOP of filestore_queue_max_*
   OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20), //  "
   OPTION(filestore_op_threads, OPT_INT, 2),
+  OPTION(filestore_op_thread_timeout, OPT_INT, 60),
   OPTION(filestore_commit_timeout, OPT_FLOAT, 600),
   OPTION(filestore_fiemap_threshold, OPT_INT, 4096),
   OPTION(journal_dio, OPT_BOOL, true),
@@ -417,6 +425,7 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_cache_enabled, OPT_BOOL, false),   // rgw cache enabled
   OPTION(rgw_cache_lru_size, OPT_INT, 10000),   // num of entries in rgw cache
   OPTION(rgw_socket_path, OPT_STR, NULL),   // path to unix domain socket, if not specified, rgw will not run as external fcgi
+  OPTION(rgw_op_thread_timeout, OPT_INT, 10*60),
 
   // see config.h
   OPTION(internal_safe_to_start_threads, OPT_BOOL, false),

@@ -172,7 +172,8 @@ class FileStore : public JournalingObjectStore {
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
     FileStore *store;
-    OpWQ(FileStore *fs, ThreadPool *tp) : ThreadPool::WorkQueue<OpSequencer>("FileStore::OpWQ", tp), store(fs) {}
+    OpWQ(FileStore *fs, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<OpSequencer>("FileStore::OpWQ", ti, tp), store(fs) {}
 
     bool _enqueue(OpSequencer *osr) {
       store->op_queue.push_back(osr);

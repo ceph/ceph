@@ -74,6 +74,8 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/safe_io.h"
+#include "common/HeartbeatMap.h"
+
 #include "include/color.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
@@ -428,7 +430,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  op_wq(this, &op_tp),
+  op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
@@ -438,19 +440,19 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osd_stat_updated(false),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
-  backlog_wq(this, &disk_tp),
+  backlog_wq(this, g_conf->osd_backlog_thread_timeout, &disk_tp),
   recovery_ops_active(0),
-  recovery_wq(this, &recovery_tp),
+  recovery_wq(this, g_conf->osd_recovery_thread_timeout, &recovery_tp),
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
-  snap_trim_wq(this, &disk_tp),
+  snap_trim_wq(this, g_conf->osd_snap_trim_thread_timeout, &disk_tp),
   sched_scrub_lock("OSD::sched_scrub_lock"),
   scrubs_pending(0),
   scrubs_active(0),
-  scrub_wq(this, &disk_tp),
-  scrub_finalize_wq(this, &op_tp),
-  rep_scrub_wq(this, &disk_tp),
-  remove_wq(this, &disk_tp),
+  scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
+  scrub_finalize_wq(this, g_conf->osd_scrub_finalize_thread_timeout, &op_tp),
+  rep_scrub_wq(this, g_conf->osd_scrub_thread_timeout, &disk_tp),
+  remove_wq(this, g_conf->osd_remove_thread_timeout, &disk_tp),
   watch_lock("OSD::watch_lock"),
   watch_timer(hbm->cct, watch_lock)
 {
@@ -1701,6 +1703,11 @@ void OSD::tick()
 {
   assert(osd_lock.is_locked());
   dout(5) << "tick" << dendl;
+
+  if (!cct->get_heartbeat_map()->is_healthy())
+    dout(0) << "tick internal heartbeat_map reports NOT HEALTHY" << dendl;
+  else
+    dout(20) << "tick internal heartbeat_map reports healthy" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 

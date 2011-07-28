@@ -315,7 +315,8 @@ private:
   
   struct OpWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    OpWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::OpWQ", tp), osd(o) {}
+    OpWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::OpWQ", ti, tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       pg->get();
@@ -591,7 +592,8 @@ protected:
 
   struct BacklogWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    BacklogWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", tp), osd(o) {}
+    BacklogWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return osd->backlog_queue.empty();
@@ -642,7 +644,8 @@ protected:
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    RecoveryWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", tp), osd(o) {}
+    RecoveryWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return osd->recovery_queue.empty();
@@ -716,7 +719,8 @@ protected:
   
   struct SnapTrimWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    SnapTrimWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", tp), osd(o) {}
+    SnapTrimWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return osd->snap_trim_queue.empty();
@@ -775,7 +779,8 @@ protected:
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    ScrubWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", tp), osd(o) {}
+    ScrubWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return osd->scrub_queue.empty();
@@ -818,8 +823,8 @@ protected:
     xlist<PG*> scrub_finalize_queue;
 
   public:
-    ScrubFinalizeWQ(OSD *o, ThreadPool *tp) : 
-      ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", tp), osd(o) {}
+    ScrubFinalizeWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return scrub_finalize_queue.empty();
@@ -863,8 +868,8 @@ protected:
     list<MOSDRepScrub*> rep_scrub_queue;
 
   public:
-    RepScrubWQ(OSD *o, ThreadPool *tp) : 
-      ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", tp), osd(o) {}
+    RepScrubWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return rep_scrub_queue.empty();
@@ -910,7 +915,8 @@ protected:
 
   struct RemoveWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    RemoveWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RemoveWQ", tp), osd(o) {}
+    RemoveWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::RemoveWQ", ti, tp), osd(o) {}
 
     bool _empty() {
       return osd->remove_queue.empty();
