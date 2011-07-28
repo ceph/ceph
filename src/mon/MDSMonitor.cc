@@ -349,14 +349,16 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.standby_for_name = m->get_standby_for_name();
 
     if (!info.standby_for_name.empty()) {
-      if (mdsmap.find_by_name(info.standby_for_name))
+      const MDSMap::mds_info_t *leaderinfo = mdsmap.find_by_name(info.standby_for_name);
+      if (leaderinfo && (leaderinfo->rank >= 0)) {
         info.standby_for_rank =
             mdsmap.find_by_name(info.standby_for_name)->rank;
+        if (mdsmap.is_followable(info.standby_for_rank)) {
+          info.state = MDSMap::STATE_STANDBY_REPLAY;
+        }
+      }
     }
-    if (info.standby_for_rank >= 0 && 
-	mdsmap.is_followable(info.standby_for_rank)) {
-      info.state = MDSMap::STATE_STANDBY_REPLAY;
-    }
+
 
     // initialize the beacon timer
     last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
