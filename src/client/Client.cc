@@ -1219,6 +1219,8 @@ void Client::handle_client_session(MClientSession *m)
       mds_session->closing = true;
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, mds_session->seq),
                               mdsmap->get_inst(from));
+    } else {
+      connect_mds_targets(from);
     }
     break;
 
@@ -1546,10 +1548,12 @@ void Client::handle_mds_map(MMDSMap* m)
 	mds_sessions.count(p->first))
       send_reconnect(p->first);
 
-    if (oldstate < MDSMap::STATE_ACTIVE &&
-	newstate >= MDSMap::STATE_ACTIVE) {
-      kick_requests(p->first, false);
-      kick_flushing_caps(p->first);
+    if (newstate >= MDSMap::STATE_ACTIVE) {
+      if (oldstate < MDSMap::STATE_ACTIVE) {
+	kick_requests(p->first, false);
+	kick_flushing_caps(p->first);
+      }
+      connect_mds_targets(p->first);
     }
   }
 
