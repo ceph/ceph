@@ -523,11 +523,44 @@ static void get_canon_resource(struct req_state *s, string& dest)
   RGW_LOG(10) << "get_canon_resource(): dest=" << dest << dendl;
 }
 
+static bool check_str_end(const char *s)
+{
+  if (!s)
+    return false;
+
+  while (*s) {
+    if (!isspace(*s))
+      return false;
+    s++;
+  }
+  return true;
+}
+
+static bool parse_rfc850(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
+}
+
+static bool parse_asctime(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
+}
+
+static bool parse_rfc1123(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
+}
+
+static bool parse_rfc2616(const char *s, struct tm *t)
+{
+  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
+}
+
 /*
  * get the header authentication  information required to
  * compute a request's signature
  */
-static void get_auth_header(struct req_state *s, string& dest, bool qsr)
+static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
 {
   dest = "";
   if (s->method)
@@ -548,9 +581,20 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (qsr) {
     date = s->args.get("Expires");
   } else {
-    const char *str = s->env->get("HTTP_DATE");
-    if (str)
-      date = str;
+    const char *str = s->env->get("HTTP_X_AMZ_DATE");
+    if (!str)
+      str = s->env->get("HTTP_DATE");
+    if (!str) {
+      RGW_LOG(0) << "missing date for auth header" << dendl;
+      return false;
+    }
+
+    date = str;
+    struct tm t;
+    if (!parse_rfc2616(str, &t)) {
+      RGW_LOG(0) << "failed to parse date for auth header" << dendl;
+      return false;
+    }
   }
 
   if (date.size())
@@ -564,6 +608,8 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
   string canon_resource;
   get_canon_resource(s, canon_resource);
   dest.append(canon_resource);
+
+  return true;
 }
 
 /*
@@ -616,8 +662,13 @@ bool RGWHandler_REST_S3::authorize()
   /* now verify signature */
    
   string auth_hdr;
-  get_auth_header(s, auth_hdr, qsr);
+  if (!get_auth_header(s, auth_hdr, qsr)) {
+    RGW_LOG(10) << "failed to create auth header\n" << auth_hdr << dendl;
+    return false;
+  }
   RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
+
+  
 
   map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
   if (iter == s->user.access_keys.end()) {
