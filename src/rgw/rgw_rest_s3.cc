@@ -581,17 +581,20 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (qsr) {
     date = s->args.get("Expires");
   } else {
-    const char *str = s->env->get("HTTP_X_AMZ_DATE");
-    if (!str)
-      str = s->env->get("HTTP_DATE");
-    if (!str) {
-      RGW_LOG(0) << "missing date for auth header" << dendl;
-      return false;
+    const char *str = s->env->get("HTTP_DATE");
+    const char *req_date = str;
+    if (str) {
+      date = str;
+    } else {
+      req_date = s->env->get("HTTP_X_AMZ_DATE");
+      if (!req_date) {
+        RGW_LOG(0) << "missing date for auth header" << dendl;
+        return false;
+      }
     }
 
-    date = str;
     struct tm t;
-    if (!parse_rfc2616(str, &t)) {
+    if (!parse_rfc2616(req_date, &t)) {
       RGW_LOG(0) << "failed to parse date for auth header" << dendl;
       return false;
     }
