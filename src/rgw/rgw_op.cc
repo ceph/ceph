@@ -939,6 +939,7 @@ static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAcces
     
         if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(id, grant_user) < 0) {
           RGW_LOG(10) << "grant user does not exist:" << id << dendl;
+          return -EINVAL;
         } else {
           ACLPermission& perm = src_grant->get_permission();
           new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
@@ -955,6 +956,9 @@ static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAcces
           new_grant = *src_grant;
           grant_ok = true;
           RGW_LOG(10) << "new grant: " << new_grant.get_id() << dendl;
+        } else {
+          RGW_LOG(10) << "grant group does not exist:" << group << dendl;
+          return -EINVAL;
         }
       }
     default:
