@@ -105,10 +105,10 @@ public:
   void set_update_stamp(utime_t t) { more()->update_stamp = t; }
 
   void set_scatter_wanted() {
-    more()->state_flags &= SCATTER_WANTED;
+    more()->state_flags |= SCATTER_WANTED;
   }
   void set_unscatter_wanted() {
-    more()->state_flags &= UNSCATTER_WANTED;
+    more()->state_flags |= UNSCATTER_WANTED;
   }
   void clear_scatter_wanted() {
     if (have_more())
@@ -205,7 +205,7 @@ public:
 
 private:
   void set_flushing() {
-    more()->state_flags &= FLUSHING;
+    more()->state_flags |= FLUSHING;
   }
   void clear_flushing() {
     if (have_more()) {
@@ -213,10 +213,10 @@ private:
     }
   }
   void set_flushed() {
-    more()->state_flags &= FLUSHED;
+    more()->state_flags |= FLUSHED;
   }
   void set_dirty() {
-    more()->state_flags &= DIRTY;
+    more()->state_flags |= DIRTY;
   }
   void clear_dirty() {
     if (have_more()) {
