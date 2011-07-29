@@ -884,6 +884,7 @@ noinst_HEADERS = \
 	cls_crypto.cc\
 	common/BackTrace.h\
 	common/DoutStreambuf.h\
+	common/HeartbeatMap.h\
 	common/LogClient.h\
 	common/LogEntry.h\
 	common/WorkQueue.h\
