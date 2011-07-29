@@ -603,7 +603,9 @@ protected:
   int recover_replicas(int max);
 
   void dump_watchers(ObjectContext *obc);
+  void remove_watcher(ObjectContext *obc, entity_name_t entity);
   void do_complete_notify(Watch::Notification *notif, ObjectContext *obc);
+  void remove_watchers();
 
   struct RepModify {
     ReplicatedPG *pg;

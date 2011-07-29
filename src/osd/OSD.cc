@@ -4487,7 +4487,9 @@ void OSD::_remove_pg(PG *pg)
     int tr = store->queue_transaction(NULL, rmt);
     assert(tr == 0);
   }
-  
+
+  pg->remove_watchers();
+
   // remove from map
   pg_map.erase(pgid);
   unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
