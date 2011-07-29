@@ -82,6 +82,7 @@ class MMDSSlaveRequest : public Message {
 
  private:
   metareqid_t reqid;
+  __u32 attempt;
   __s16 op;
 
   // for locking
@@ -105,6 +106,7 @@ class MMDSSlaveRequest : public Message {
 
 public:
   metareqid_t get_reqid() { return reqid; }
+  __u32 get_attempt() const { return attempt; }
   int get_op() { return op; }
   bool is_reply() { return op < 0; }
 
@@ -115,17 +117,19 @@ public:
 
   void set_lock_type(int t) { lock_type = t; }
 
+
   // ----
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
-  MMDSSlaveRequest(metareqid_t ri, int o) : 
+  MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
     Message(MSG_MDS_SLAVE_REQUEST),
-    reqid(ri), op(o) { }
+    reqid(ri), attempt(att), op(o) { }
 private:
   ~MMDSSlaveRequest() {}
 
 public:
   void encode_payload(CephContext *cct) {
     ::encode(reqid, payload);
+    ::encode(attempt, payload);
     ::encode(op, payload);
     ::encode(lock_type, payload);
     ::encode(object_info, payload);
@@ -142,6 +146,7 @@ public:
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
+    ::decode(attempt, p);
     ::decode(op, p);
     ::decode(lock_type, p);
     ::decode(object_info, p);
@@ -159,6 +164,7 @@ public:
   const char *get_type_name() { return "slave_request"; }
   void print(ostream& out) {
     out << "slave_request(" << reqid
+	<< "." << attempt
 	<< " " << get_opname(op) 
 	<< ")";
   }  

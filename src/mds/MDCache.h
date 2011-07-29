@@ -68,6 +68,7 @@ class ESubtreeMap;
 
 struct Mutation {
   metareqid_t reqid;
+  __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
   utime_t now;
 
@@ -105,11 +106,12 @@ struct Mutation {
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   Mutation() : 
+    attempt(0),
     ls(0),
     slave_to_mds(-1),
     done_locking(false), committing(false), aborted(false) { }
-  Mutation(metareqid_t ri, int slave_to=-1) : 
-    reqid(ri),
+  Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1) : 
+    reqid(ri), attempt(att),
     ls(0),
     slave_to_mds(slave_to), 
     done_locking(false), committing(false), aborted(false) { }
@@ -339,8 +341,8 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, MClientRequest *req) : 
-    Mutation(ri),
+  MDRequest(metareqid_t ri, __u32 attempt, MClientRequest *req) : 
+    Mutation(ri, attempt),
     ref(1),
     session(0), item_session_request(this),
     client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
@@ -350,8 +352,8 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, int by) : 
-    Mutation(ri, by),
+  MDRequest(metareqid_t ri, __u32 attempt, int by) : 
+    Mutation(ri, attempt, by),
     ref(1),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
@@ -602,7 +604,7 @@ public:
   int get_num_active_requests() { return active_requests.size(); }
 
   MDRequest* request_start(MClientRequest *req);
-  MDRequest* request_start_slave(metareqid_t rid, int by);
+  MDRequest* request_start_slave(metareqid_t rid, __u32 attempt, int by);
   MDRequest* request_start_internal(int op);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);

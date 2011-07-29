@@ -1322,7 +1322,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	m->put();
 	return;
       }
-      mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
+      mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m->get_source().num());
     }
     assert(mdr->slave_request == 0);     // only one at a time, please!  
     mdr->slave_request = m;
@@ -1384,7 +1384,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	  return;
 	
 	// ack
-	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, replycode);
+	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, replycode);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
 	mds->send_message(r, mdr->slave_request->get_connection());
@@ -1503,7 +1503,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   }
 
   // ack!
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPINACK);
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
   
   // return list of my auth_pins (if any)
   for (set<MDSCacheObject*>::iterator p = mdr->auth_pins.begin();
@@ -3901,7 +3901,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
       op = MMDSSlaveRequest::OP_LINKPREP;
     else 
       op = MMDSSlaveRequest::OP_UNLINKPREP;
-    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, op);
+    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->now = mdr->now;
     mds->send_message_mds(req, linkauth);
@@ -4108,7 +4108,8 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
 
   // ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREPACK);
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						 MMDSSlaveRequest::OP_LINKPREPACK);
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // set up commit waiter
@@ -4152,7 +4153,8 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
 void Server::_committed_slave(MDRequest *mdr)
 {
   dout(10) << "_committed_slave " << *mdr << dendl;
-  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_COMMITTED);
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, 
+					       MMDSSlaveRequest::OP_COMMITTED);
   mds->send_message_mds(req, mdr->slave_to_mds);
   mds->mdcache->request_finish(mdr);
 }
@@ -4594,7 +4596,8 @@ void Server::_rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentr
 {
   dout(10) << "_rmdir_prepare_witness mds" << who << " for " << *mdr << dendl;
   
-  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RMDIRPREP);
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+					       MMDSSlaveRequest::OP_RMDIRPREP);
   dn->make_path(req->srcdnpath);
   straydn->make_path(req->destdnpath);
   req->now = mdr->now;
@@ -4692,7 +4695,8 @@ void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   straydn->get_dir()->link_primary_inode(straydn, in);
   mdcache->adjust_subtree_after_rename(in, dn->get_dir());
 
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RMDIRPREPACK);
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						 MMDSSlaveRequest::OP_RMDIRPREPACK);
   mds->send_message_mds(reply, mdr->slave_to_mds);
 
   // set up commit waiter
@@ -5350,7 +5354,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare_witness mds" << who << dendl;
-  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREP);
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+					       MMDSSlaveRequest::OP_RENAMEPREP);
   srcdn->make_path(req->srcdnpath);
   destdn->make_path(req->destdnpath);
   req->now = mdr->now;
@@ -5949,7 +5954,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       if (*p == mdr->slave_to_mds ||
 	  mdr->slave_request->witnesses.count(*p)) continue;
       dout(10) << " witness list insufficient; providing srcdn replica list" << dendl;
-      MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
+      MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						     MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
       mds->send_message_mds(reply, mdr->slave_to_mds);
       mdr->slave_request->put();
@@ -6016,7 +6022,8 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   dout(10) << "_logged_slave_rename " << *mdr << dendl;
 
   // prepare ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
+  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						 MMDSSlaveRequest::OP_RENAMEPREPACK);
   
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
   CDentry::linkage_t *destdnl = destdn->get_linkage();

@@ -320,7 +320,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	 ++p) {
       dout(10) << "requesting remote auth_pins from mds" << p->first << dendl;
       
-      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_AUTHPIN);
+      MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						   MMDSSlaveRequest::OP_AUTHPIN);
       for (set<MDSCacheObject*>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
@@ -1249,7 +1250,8 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
     
   // send lock request
   mut->more()->slaves.insert(target);
-  MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_WRLOCK);
+  MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					     MMDSSlaveRequest::OP_WRLOCK);
   r->set_lock_type(lock->get_type());
   lock->get_parent()->set_object_info(r->get_object_info());
   mds->send_message_mds(r, target);
@@ -1267,7 +1269,8 @@ void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
   dout(7) << "remote_wrlock_finish releasing remote wrlock on mds" << target
 	  << " " << *lock->get_parent()  << dendl;
   if (mds->mdsmap->get_state(target) >= MDSMap::STATE_REJOIN) {
-    MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_UNWRLOCK);
+    MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+						      MMDSSlaveRequest::OP_UNWRLOCK);
     slavereq->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(slavereq->get_object_info());
     mds->send_message_mds(slavereq, target);
@@ -1326,7 +1329,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     // send lock request
     int auth = lock->get_parent()->authority().first;
     mut->more()->slaves.insert(auth);
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_XLOCK);
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					       MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
     mds->send_message_mds(r, auth);
@@ -1361,7 +1365,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     dout(7) << "xlock_finish releasing remote xlock on " << *lock->get_parent()  << dendl;
     int auth = lock->get_parent()->authority().first;
     if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
-      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_UNXLOCK);
+      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+							MMDSSlaveRequest::OP_UNXLOCK);
       slavereq->set_lock_type(lock->get_type());
       lock->get_parent()->set_object_info(slavereq->get_object_info());
       mds->send_message_mds(slavereq, auth);

@@ -168,11 +168,26 @@ class MMDSCacheRejoin : public Message {
   bufferlist inode_locks;
 
   // authpins, xlocks
-  map<vinodeno_t, metareqid_t> authpinned_inodes;
-  map<vinodeno_t, map<__s32, metareqid_t> > xlocked_inodes;
-  map<dirfrag_t, map<string_snap_t, metareqid_t> > authpinned_dentries;
-  map<dirfrag_t, map<string_snap_t, metareqid_t> > xlocked_dentries;
-
+  struct slave_reqid {
+    metareqid_t reqid;
+    __u32 attempt;
+    slave_reqid() : attempt(0) {}
+    slave_reqid(const metareqid_t& r, __u32 a)
+      : reqid(r), attempt(a) {}
+    void encode(bufferlist& bl) const {
+      ::encode(reqid, bl);
+      ::encode(attempt, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(reqid, bl);
+      ::decode(attempt, bl);
+    }
+  };
+  map<vinodeno_t, slave_reqid> authpinned_inodes;
+  map<vinodeno_t, map<__s32, slave_reqid> > xlocked_inodes;
+  map<dirfrag_t, map<string_snap_t, slave_reqid> > authpinned_dentries;
+  map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
+  
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
   MMDSCacheRejoin(int o) : 
     Message(MSG_MDS_CACHEREJOIN),
@@ -209,11 +224,11 @@ public:
     in->_encode_base(bl);
     ::encode(bl, inode_base);
   }
-  void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri) {
-    authpinned_inodes[ino] = ri;
+  void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
+    authpinned_inodes[ino] = slave_reqid(ri, attempt);
   }
-  void add_inode_xlock(vinodeno_t ino, int lt, const metareqid_t& ri) {
-    xlocked_inodes[ino][lt] = ri;
+  void add_inode_xlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
+    xlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
   }
 
   void add_scatterlock_state(CInode *in) {
@@ -246,11 +261,13 @@ public:
   void add_strong_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);
   }
-  void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last, const metareqid_t& ri) {
-    authpinned_dentries[df][string_snap_t(dname, last)] = ri;
+  void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last,
+			  const metareqid_t& ri, __u32 attempt) {
+    authpinned_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
   }
-  void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last, const metareqid_t& ri) {
-    xlocked_dentries[df][string_snap_t(dname, last)] = ri;
+  void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last,
+			const metareqid_t& ri, __u32 attempt) {
+    xlocked_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
   }
 
   // -- encoding --
@@ -302,5 +319,10 @@ WRITE_CLASS_ENCODER(MMDSCacheRejoin::dirfrag_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_weak)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::lock_bls)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::slave_reqid)
+
+inline ostream& operator<<(ostream& out, const MMDSCacheRejoin::slave_reqid& r) {
+  return out << r.reqid << '.' << r.attempt;
+}
 
 #endif
