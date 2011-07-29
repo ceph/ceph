@@ -1227,108 +1227,127 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   if (logger) logger->inc(l_mdss_hsreq);
 
   // reply?
-  if (m->is_reply()) {
+  if (m->is_reply())
+    return handle_slave_request_reply(m);
 
-    switch (m->get_op()) {
-    case MMDSSlaveRequest::OP_XLOCKACK:
-      {
-	// identify lock, master request
-	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
-						 m->get_object_info());
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	mdr->more()->slaves.insert(from);
-	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
-	mdr->xlocks.insert(lock);
-	mdr->locks.insert(lock);
-	lock->get_xlock(mdr, mdr->get_client());
-	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
-      }
-      break;
+  // am i a new slave?
+  MDRequest *mdr = NULL;
+  if (mdcache->have_request(m->get_reqid())) {
+    // existing?
+    mdr = mdcache->request_get(m->get_reqid());
 
-    case MMDSSlaveRequest::OP_WRLOCKACK:
-      {
-	// identify lock, master request
-	SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
-						 m->get_object_info());
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	mdr->more()->slaves.insert(from);
-	dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
-	mdr->remote_wrlocks[lock] = from;
-	mdr->locks.insert(lock);
-	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
-      }
-      break;
-
-    case MMDSSlaveRequest::OP_AUTHPINACK:
-      {
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	handle_slave_auth_pin_ack(mdr, m);
-      }
-      break;
-
-    case MMDSSlaveRequest::OP_LINKPREPACK:
-      {
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	handle_slave_link_prep_ack(mdr, m);
-      }
-      break;
-
-    case MMDSSlaveRequest::OP_RMDIRPREPACK:
-      {
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	handle_slave_rmdir_prep_ack(mdr, m);
-      }
-      break;
-
-    case MMDSSlaveRequest::OP_RENAMEPREPACK:
-      {
-	MDRequest *mdr = mdcache->request_get(m->get_reqid());
-	handle_slave_rename_prep_ack(mdr, m);
-      }
-      break;
-
-    case MMDSSlaveRequest::OP_COMMITTED:
-      {
-	metareqid_t r = m->get_reqid();
-	mds->mdcache->committed_master_slave(r, from);
-      }
-      break;
-
-    default:
-      assert(0);
+    // is my request newer?
+    if (mdr->attempt > m->get_attempt()) {
+      dout(10) << "local request " << *mdr << " attempt " << mdr->attempt << " > " << m->get_attempt()
+	       << ", dropping " << *m << dendl;
+      m->put();
+      return;
     }
 
-    // done with reply.
+
+    if (mdr->attempt < m->get_attempt()) {
+      // mine is old, close it out
+      dout(10) << "local request " << *mdr << " attempt " << mdr->attempt << " < " << m->get_attempt()
+	       << ", closing out" << dendl;
+      mdcache->request_finish(mdr);
+      mdr = NULL;
+    } else if (mdr->slave_to_mds != from) {
+      dout(10) << "local request " << *mdr << " not slave to mds" << from << dendl;
+      m->put();
+      return;
+    }
+  }
+  if (!mdr) {
+    // new?
+    if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
+      dout(10) << "missing slave request for " << m->get_reqid() 
+	       << " OP_FINISH, must have lost race with a forward" << dendl;
+      m->put();
+      return;
+    }
+    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m->get_source().num());
+  }
+  assert(mdr->slave_request == 0);     // only one at a time, please!  
+  mdr->slave_request = m;
+  
+  dispatch_slave_request(mdr);
+}
+
+/* This function DOES put the passed message before returning*/
+void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
+{
+  int from = m->get_source().num();
+  
+  if (m->get_op() == MMDSSlaveRequest::OP_COMMITTED) {
+    metareqid_t r = m->get_reqid();
+    mds->mdcache->committed_master_slave(r, from);
     m->put();
     return;
-
-  } else {
-    // am i a new slave?
-    MDRequest *mdr;
-    if (mdcache->have_request(m->get_reqid())) {
-      // existing?
-      mdr = mdcache->request_get(m->get_reqid());
-      if (mdr->slave_to_mds != from) {   // may not even be a slave! (e.g. forward race)
-	dout(10) << "local request " << *mdr << " not slave to mds" << from
-		 << ", ignoring " << *m << dendl;
-	m->put();
-	return;
-      }
-    } else {
-      // new?
-      if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
-	dout(10) << "missing slave request for " << m->get_reqid() 
-		 << " OP_FINISH, must have lost race with a forward" << dendl;
-	m->put();
-	return;
-      }
-      mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m->get_source().num());
-    }
-    assert(mdr->slave_request == 0);     // only one at a time, please!  
-    mdr->slave_request = m;
-    
-    dispatch_slave_request(mdr);
   }
+
+  MDRequest *mdr = mdcache->request_get(m->get_reqid());
+  if (!mdr) {
+    dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << m->get_reqid() << dendl;
+    m->put();
+    return;
+  }
+  if (m->get_attempt() != mdr->attempt) {
+    dout(10) << "handle_slave_request_reply " << *mdr << " ignoring reply from other attempt "
+	     << m->get_attempt() << dendl;
+    m->put();
+    return;
+  }
+
+  switch (m->get_op()) {
+  case MMDSSlaveRequest::OP_XLOCKACK:
+    {
+      // identify lock, master request
+      SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
+					       m->get_object_info());
+      mdr->more()->slaves.insert(from);
+      dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
+      mdr->xlocks.insert(lock);
+      mdr->locks.insert(lock);
+      lock->get_xlock(mdr, mdr->get_client());
+      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+    }
+    break;
+    
+  case MMDSSlaveRequest::OP_WRLOCKACK:
+    {
+      // identify lock, master request
+      SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
+					       m->get_object_info());
+      mdr->more()->slaves.insert(from);
+      dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
+      mdr->remote_wrlocks[lock] = from;
+      mdr->locks.insert(lock);
+      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+    }
+    break;
+
+  case MMDSSlaveRequest::OP_AUTHPINACK:
+    handle_slave_auth_pin_ack(mdr, m);
+    break;
+
+  case MMDSSlaveRequest::OP_LINKPREPACK:
+    handle_slave_link_prep_ack(mdr, m);
+    break;
+
+  case MMDSSlaveRequest::OP_RMDIRPREPACK:
+    handle_slave_rmdir_prep_ack(mdr, m);
+    break;
+
+  case MMDSSlaveRequest::OP_RENAMEPREPACK:
+    handle_slave_rename_prep_ack(mdr, m);
+    break;
+
+  default:
+    assert(0);
+  }
+  
+  // done with reply.
+  m->put();
 }
 
 /* This function DOES put the mdr->slave_request before returning*/

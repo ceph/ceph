@@ -110,6 +110,7 @@ public:
   void encode_null_lease(bufferlist& bl);
 
   void handle_slave_request(MMDSSlaveRequest *m);
+  void handle_slave_request_reply(MMDSSlaveRequest *m);
   void dispatch_slave_request(MDRequest *mdr);
   void handle_slave_auth_pin(MDRequest *mdr);
   void handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
