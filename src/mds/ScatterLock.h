@@ -21,26 +21,20 @@
 class ScatterLock : public SimpleLock {
 
   struct more_bits_t {
-    bool dirty, flushing, flushed;
     int state_flags;
     utime_t last_scatter;
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
-    bool stale;
 
     more_bits_t(ScatterLock *lock) :
-      dirty(false), flushing(false), flushed(false), state_flags(0),
-      item_updated(lock), stale(false)
+      state_flags(0),
+      item_updated(lock)
     {}
 
     bool empty() const {
       return
-	dirty == false &&
-	flushing == false &&
-	flushed == false &&
 	!state_flags &&
-	!item_updated.is_on_list() &&
-	!stale;
+	!item_updated.is_on_list();
     }
   };
   more_bits_t *_more;
@@ -64,7 +58,6 @@ class ScatterLock : public SimpleLock {
     DIRTY            = 1 << 2,
     FLUSHING         = 1 << 3,
     FLUSHED          = 1 << 4,
-    STALE            = 1 << 5
   };
 
 public:
@@ -120,10 +113,12 @@ public:
   void clear_scatter_wanted() {
     if (have_more())
       _more->state_flags &= ~SCATTER_WANTED;
+    try_clear_more();
   }
   void clear_unscatter_wanted() {
     if (have_more())
       _more->state_flags &= ~UNSCATTER_WANTED;
+    try_clear_more();
   }
   bool get_scatter_wanted() const {
     return have_more() ? _more->state_flags & SCATTER_WANTED : false;
@@ -133,46 +128,48 @@ public:
   }
 
   bool is_dirty() const {
-    return have_more() ? _more->dirty : false;
+    return have_more() ? _more->state_flags & DIRTY : false;
   }
   bool is_flushing() const {
-    return have_more() ? _more->flushing : false;
+    return have_more() ? _more->state_flags & FLUSHING: false;
   }
   bool is_flushed() const {
-    return have_more() ? _more->flushed : false;
+    return have_more() ? _more->state_flags & FLUSHED: false;
   }
   bool is_dirty_or_flushing() const {
-    return have_more() ? (_more->dirty || _more->flushing) : false;
+    return have_more() ? (is_dirty() || is_flushing()) : false;
   }
 
   void mark_dirty() { 
-    if (!more()->dirty) {
-      if (!_more->flushing) 
+    if (!is_dirty()) {
+      if (!is_flushing())
 	parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
-      _more->dirty = true;
+      set_dirty();
     }
   }
   void start_flush() {
-    more()->flushing |= more()->dirty;
-    more()->dirty = false;
+    if (is_dirty()) {
+      set_flushing();
+      clear_dirty();
+    }
   }
   void finish_flush() {
-    if (more()->flushing) {
-      _more->flushing = false;
-      _more->flushed = true;
-      if (!_more->dirty) {
+    if (is_flushing()) {
+      clear_flushing();
+      set_flushed();
+      if (!is_dirty()) {
 	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
 	parent->clear_dirty_scattered(get_type());
       }
     }
   }
-  void clear_dirty() {
+  void remove_dirty() {
     start_flush();
     finish_flush();
   }
   void clear_flushed() {
-    if (_more) {
-      _more->flushed = false;
+    if (have_more()) {
+      _more->state_flags &= ~FLUSHED;
       try_clear_more();
     }
   }
@@ -204,6 +201,27 @@ public:
     if (get_scatter_wanted())
       out << " scatter_wanted";
     out << ")";
+  }
+
+private:
+  void set_flushing() {
+    more()->state_flags &= FLUSHING;
+  }
+  void clear_flushing() {
+    if (have_more()) {
+      _more->state_flags &= ~FLUSHING;
+    }
+  }
+  void set_flushed() {
+    more()->state_flags &= FLUSHED;
+  }
+  void set_dirty() {
+    more()->state_flags &= DIRTY;
+  }
+  void clear_dirty() {
+    if (have_more()) {
+      _more->state_flags &= ~DIRTY;
+    }
   }
 };
 

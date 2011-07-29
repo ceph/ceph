@@ -1461,9 +1461,9 @@ bool CInode::is_dirty_scattered()
 
 void CInode::clear_scatter_dirty()
 {
-  filelock.clear_dirty();
-  nestlock.clear_dirty();
-  dirfragtreelock.clear_dirty();
+  filelock.remove_dirty();
+  nestlock.remove_dirty();
+  dirfragtreelock.remove_dirty();
 }
 
 void CInode::clear_dirty_scattered(int type)

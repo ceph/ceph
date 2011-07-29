@@ -231,9 +231,9 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty())
     o->mark_clean();
 
-  o->filelock.clear_dirty();
-  o->nestlock.clear_dirty();
-  o->dirfragtreelock.clear_dirty();
+  o->filelock.remove_dirty();
+  o->nestlock.remove_dirty();
+  o->dirfragtreelock.remove_dirty();
 
   o->item_open_file.remove_myself();
 
@@ -3140,9 +3140,9 @@ void MDCache::recalc_auth_bits()
 	      dnl->get_inode()->mark_clean();
 	    // avoid touching scatterlocks for our subtree roots!
 	    if (subtree_inodes.count(dnl->get_inode()) == 0) {
-	      dnl->get_inode()->filelock.clear_dirty();
-	      dnl->get_inode()->nestlock.clear_dirty();
-	      dnl->get_inode()->dirfragtreelock.clear_dirty();
+	      dnl->get_inode()->filelock.remove_dirty();
+	      dnl->get_inode()->nestlock.remove_dirty();
+	      dnl->get_inode()->dirfragtreelock.remove_dirty();
 	    }
 	  }
 
