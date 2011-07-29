@@ -842,6 +842,8 @@ int main(int argc, char **argv)
     while (!iter.end()) {
       ::decode(entry, iter);
 
+      uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+
       if (!format) { // for now, keeping backward compatibility a bit
         cout << (entry.owner.size() ? entry.owner : "-" ) << delim
              << entry.bucket << delim
@@ -855,7 +857,7 @@ int main(int argc, char **argv)
              << entry.bytes_sent << delim
              << entry.bytes_received << delim
              << entry.obj_size << delim
-             << entry.total_time.usec() << delim
+             << total_time << delim
              << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
              << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
       } else {
@@ -876,7 +878,7 @@ int main(int argc, char **argv)
         formatter->dump_value_str("BytesSent", "%lld", entry.bytes_sent);
         formatter->dump_value_str("BytesReceived", "%lld", entry.bytes_received);
         formatter->dump_value_str("ObjectSize", "%lld", entry.obj_size);
-        formatter->dump_value_str("TotalTime", "%lld", (uint64_t)entry.total_time.usec());
+        formatter->dump_value_str("TotalTime", "%lld", total_time);
         formatter->dump_value_str("UserAgent", "%s",  entry.user_agent.c_str());
         formatter->dump_value_str("Referrer", "%s",  entry.referrer.c_str());
         formatter->close_section("LogEntry");
