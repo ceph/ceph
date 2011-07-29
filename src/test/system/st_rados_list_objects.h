@@ -32,12 +32,16 @@ class StRadosListObjects : public SysTestRunnable
 {
 public:
   static std::string get_random_buf(int sz);
-  StRadosListObjects(int argc, const char **argv, bool accept_list_errors,
-	int midway_cnt,
-	CrossProcessSem *pool_setup_sem, CrossProcessSem *midway_sem);
+  StRadosListObjects(int argc, const char **argv,
+		     const std::string &pool_name,
+		     bool accept_list_errors,
+		     int midway_cnt,
+		     CrossProcessSem *pool_setup_sem,
+		     CrossProcessSem *midway_sem);
   ~StRadosListObjects();
   virtual int run();
 private:
+  std::string m_pool_name;
   bool m_accept_list_errors;
   int m_midway_cnt;
   CrossProcessSem *m_pool_setup_sem;

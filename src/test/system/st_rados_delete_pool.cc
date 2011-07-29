@@ -20,23 +20,22 @@
 
 #include <errno.h>
 
-StRadosDeletePool::
-StRadosDeletePool(int argc, const char **argv,
-		  CrossProcessSem *pool_setup_sem, CrossProcessSem *delete_pool_sem,
-		  const std::string &pool_name)
+StRadosDeletePool::StRadosDeletePool(int argc, const char **argv,
+				     CrossProcessSem *pool_setup_sem,
+				     CrossProcessSem *delete_pool_sem,
+				     const std::string &pool_name)
     : SysTestRunnable(argc, argv),
-      m_pool_setup_sem(pool_setup_sem), m_delete_pool_sem(delete_pool_sem),
+      m_pool_setup_sem(pool_setup_sem),
+      m_delete_pool_sem(delete_pool_sem),
       m_pool_name(pool_name)
 {
 }
 
-StRadosDeletePool::
-~StRadosDeletePool()
+StRadosDeletePool::~StRadosDeletePool()
 {
 }
 
-int StRadosDeletePool::
-run()
+int StRadosDeletePool::run()
 {
   rados_t cl;
   RETURN1_IF_NONZERO(rados_create(&cl, NULL));

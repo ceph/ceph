@@ -29,8 +29,11 @@ using std::ostringstream;
 
 StRadosListObjects::
 StRadosListObjects(int argc, const char **argv,
-		   bool accept_list_errors, int midway_cnt,
-	CrossProcessSem *pool_setup_sem, CrossProcessSem *midway_sem)
+		   const std::string &pool_name,
+		   bool accept_list_errors,
+		   int midway_cnt,
+		   CrossProcessSem *pool_setup_sem,
+		   CrossProcessSem *midway_sem)
   : SysTestRunnable(argc, argv),
     m_accept_list_errors(accept_list_errors),
     m_midway_cnt(midway_cnt),

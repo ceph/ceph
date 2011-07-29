@@ -57,6 +57,7 @@ const char *get_id_str()
 int main(int argc, const char **argv)
 {
   const char *num_objects = getenv("NUM_OBJECTS");
+  std::string pool = "foo";
   if (num_objects) {
     g_num_objects = atoi(num_objects); 
     if (g_num_objects == 0)
@@ -70,8 +71,9 @@ int main(int argc, const char **argv)
 
   // first test: create a pool, then delete that pool
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, 50, ".obj");
-    StRadosDeletePool r2(argc, argv, pool_setup_sem, NULL, "foo");
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+			 pool, 50, ".obj");
+    StRadosDeletePool r2(argc, argv, pool_setup_sem, NULL, pool);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
@@ -87,10 +89,10 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(delete_pool_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, g_num_objects, ".obj");
-    StRadosDeletePool r2(argc, argv,
-			 pool_setup_sem, delete_pool_sem, "foo");
-    StRadosListObjects r3(argc, argv, true, g_num_objects / 2,
+    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+			 pool, g_num_objects, ".obj");
+    StRadosDeletePool r2(argc, argv, pool_setup_sem, delete_pool_sem, pool);
+    StRadosListObjects r3(argc, argv, pool, true, g_num_objects / 2,
 			  pool_setup_sem, delete_pool_sem);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);

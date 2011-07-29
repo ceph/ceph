@@ -29,8 +29,9 @@ class StRadosDeletePool : public SysTestRunnable
 {
 public:
   StRadosDeletePool(int argc, const char **argv,
-	CrossProcessSem *pool_setup_sem, CrossProcessSem *delete_pool_sem,
-	const std::string &pool_name);
+		    CrossProcessSem *pool_setup_sem,
+		    CrossProcessSem *delete_pool_sem,
+		    const std::string &pool_name);
   ~StRadosDeletePool();
   virtual int run();
 private:

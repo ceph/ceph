@@ -40,10 +40,15 @@ get_random_buf(int sz)
 
 StRadosCreatePool::
 StRadosCreatePool(int argc, const char **argv,
-		  CrossProcessSem *pool_setup_sem, CrossProcessSem *close_create_pool,
-		  int num_objects, const std::string &suffix)
+		  CrossProcessSem *pool_setup_sem,
+		  CrossProcessSem *close_create_pool,
+		  const std::string &pool_name,
+		  int num_objects,
+		  const std::string &suffix)
   : SysTestRunnable(argc, argv),
-    m_pool_setup_sem(pool_setup_sem), m_close_create_pool(close_create_pool),
+    m_pool_setup_sem(pool_setup_sem),
+    m_close_create_pool(close_create_pool),
+    m_pool_name(pool_name),
     m_num_objects(num_objects),
     m_suffix(suffix)
 {
@@ -66,14 +71,14 @@ run()
   if (!log_name.empty())
     rados_conf_set(cl, "log_file", log_name.c_str());
   RETURN1_IF_NONZERO(rados_connect(cl));
-  int ret = rados_pool_delete(cl, "foo");
+  int ret = rados_pool_delete(cl, m_pool_name.c_str());
   if (!((ret == 0) || (ret == -ENOENT))) {
     printf("%s: rados_pool_delete error %d\n", get_id_str(), ret);
     return ret;
   }
-  RETURN1_IF_NONZERO(rados_pool_create(cl, "foo"));
+  RETURN1_IF_NONZERO(rados_pool_create(cl, m_pool_name.c_str()));
   rados_ioctx_t io_ctx;
-  RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+  RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
   for (int i = 0; i < m_num_objects; ++i) {
     char oid[128];
