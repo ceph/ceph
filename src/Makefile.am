@@ -404,6 +404,16 @@ testrados_delete_pools_parallel_SOURCES = \
 testrados_delete_pools_parallel_LDADD = libsystest.la librados.la
 bin_DEBUGPROGRAMS += testrados_delete_pools_parallel
 
+testrados_watch_notify_SOURCES = \
+	test/system/rados_watch_notify.cc \
+	test/system/st_rados_create_pool.cc \
+	test/system/st_rados_delete_pool.cc \
+	test/system/st_rados_delete_objs.cc \
+	test/system/st_rados_watch.cc \
+	test/system/st_rados_notify.cc
+testrados_watch_notify_LDADD = libsystest.la librados.la
+bin_DEBUGPROGRAMS += testrados_watch_notify
+
 ## unit tests
 
 # target to build but not run the unit tests

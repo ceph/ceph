@@ -32,6 +32,7 @@
 /testmsgr
 /testrados
 /testrados_delete_pool_while_open
+/testrados_watch_notify
 /testradospp
 /testdout_streambuf
 /testsignal_handlers
