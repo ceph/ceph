@@ -613,7 +613,7 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
       RGW_LOG(0) << "bad date (predates epoch): " << req_date << dendl;
       return false;
     }
-    s->header_time = utime_t(mktime(&t) + t.tm_gmtoff, 0);
+    s->header_time = utime_t(timegm(&t), 0);
   }
 
   if (date.size())
