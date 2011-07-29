@@ -35,8 +35,8 @@ namespace ceph {
  * check in with a health check and timeout.  Each user can register
  * and get a handle they can use to set or reset a timeout.  
  *
- * A simple is_healthy() method will check for any users to failed to
- * reset/clear the timeout before it expired.
+ * A simple is_healthy() method checks for any users who are not within
+ * their grace period for a heartbeat.
  */
 
 struct heartbeat_handle_d {
@@ -56,11 +56,12 @@ class HeartbeatMap {
   heartbeat_handle_d *add_worker(std::string name);
   void remove_worker(heartbeat_handle_d *h);
 
-  // set or clear a timeout
+  // reset the timeout so that it expects another touch within grace amount of time
   void reset_timeout(heartbeat_handle_d *h, time_t grace);
+  // clear the timeout so that it's not checked on
   void clear_timeout(heartbeat_handle_d *h);
 
-  // return true if timeouts are currently expired.
+  // return false if any of the timeouts are currently expired.
   bool is_healthy();
 
   // touch cct->_conf->heartbeat_file if is_healthy()
