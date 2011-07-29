@@ -485,10 +485,10 @@ void init_entities_from_header(struct req_state *s)
 
   if (!s->bucket) {
     url_decode(first, s->bucket_str);
-    s->bucket = s->bucket_str.c_str();
+    s->bucket = strdup(s->bucket_str.c_str());
   } else {
     url_decode(req, s->object_str);
-    s->object = s->object_str.c_str();
+    s->object = strdup(s->object_str.c_str());
     goto done;
   }
 
@@ -500,7 +500,7 @@ void init_entities_from_header(struct req_state *s)
     url_decode(encoded_obj_str, s->object_str);
 
     if (s->object_str.size() > 0) {
-      s->object = s->object_str.c_str();
+      s->object = strdup(s->object_str.c_str());
     }
   }
 done:

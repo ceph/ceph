@@ -58,6 +58,8 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
   time = ceph_clock_now(g_ceph_context);
   perm_mask = 0;
   content_length = 0;
+  object = NULL;
+  bucket = NULL;
 }
 
 req_state::~req_state() {
@@ -65,6 +67,8 @@ req_state::~req_state() {
   delete formatter;
   free(os_user);
   free(os_groups);
+  free((void *)object);
+  free((void *)bucket);
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
