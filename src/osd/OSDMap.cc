@@ -61,6 +61,8 @@ void OSDMap::dump(Formatter *f) const
     if (exists(i)) {
       f->open_object_section("osd_info");
       f->dump_int("osd", i);
+      f->dump_int("up", is_up(i));
+      f->dump_int("in", is_in(i));
       get_info(i).dump(f);
       f->close_section();
     }
