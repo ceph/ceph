@@ -7379,7 +7379,7 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   }
 
   // register new client request
-  MDRequest *mdr = new MDRequest(req->get_reqid(), req->get_retry_attempt(), req);
+  MDRequest *mdr = new MDRequest(req->get_reqid(), req->get_num_fwd(), req);
   active_requests[req->get_reqid()] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
