@@ -409,7 +409,7 @@ EOF
 		fi
 		if [ "$standby" -eq 1 ]; then
 		    cat <<EOF >> $conf
-       mds standby for name = ${name}s
+       mds standby for rank = $mds
 [mds.${name}s]
         keyring = dev/mds.${name}s.keyring
         mds standby replay = true
