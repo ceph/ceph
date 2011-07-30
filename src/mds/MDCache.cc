@@ -1209,10 +1209,11 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
   assert(failed == 0);
 }
 
-void MDCache::project_subtree_rename(CInode *diri, CDir *newdir)
+void MDCache::project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir)
 {
-  dout(10) << "project_subtree_rename " << *diri << " to " << *newdir << dendl;
-  projected_subtree_renames[diri] = newdir;
+  dout(10) << "project_subtree_rename " << *diri << " from " << *olddir
+	   << " to " << *newdir << dendl;
+  projected_subtree_renames[diri] = pair<CDir*,CDir*>(olddir, newdir);
 }
 
 void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
@@ -1224,9 +1225,10 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
 
   CDir *newdir = diri->get_parent_dir();
 
-  map<CInode*,CDir*>::iterator p = projected_subtree_renames.find(diri);
+  map<CInode*,pair<CDir*,CDir*> >::iterator p = projected_subtree_renames.find(diri);
   if (p != projected_subtree_renames.end()) {
-    assert(p->second == newdir);
+    assert(p->second.first == olddir);
+    assert(p->second.second == newdir);
     projected_subtree_renames.erase(p);
   } else {
     //assert(mds->is_any_replay());  or unlink notification
@@ -2263,12 +2265,12 @@ ESubtreeMap *MDCache::create_subtree_map()
   }
 
   // apply projected renames
-  for (map<CInode*,CDir*>::iterator p = projected_subtree_renames.begin();
+  for (map<CInode*,pair<CDir*,CDir*> >::iterator p = projected_subtree_renames.begin();
        p != projected_subtree_renames.end();
        ++p) {
     CInode *diri = p->first;
-    CDir *olddir = diri->get_parent_dir();
-    CDir *newdir = p->second;
+    CDir *olddir = p->second.first;
+    CDir *newdir = p->second.second;
     dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
 
     list<CDir*> dfls;
@@ -2276,9 +2278,9 @@ ESubtreeMap *MDCache::create_subtree_map()
     for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
       CDir *dir = *p;
       dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
-      CDir *oldparent = get_subtree_root(olddir);
+      CDir *oldparent = get_projected_subtree_root(olddir);
       dout(10) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
-      CDir *newparent = get_subtree_root(newdir);
+      CDir *newparent = get_projected_subtree_root(newdir);
       dout(10) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
 
       if (oldparent == newparent) {
