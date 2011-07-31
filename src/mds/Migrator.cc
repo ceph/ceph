@@ -514,6 +514,11 @@ void Migrator::audit()
     assert(dir);
     if (p->second == IMPORT_PREPPING) 
       continue;
+    if (p->second == IMPORT_ABORTING) {
+      assert(!dir->is_ambiguous_dir_auth());
+      assert(dir->get_dir_auth().first != mds->get_nodeid());
+      continue;
+    }
     assert(dir->is_ambiguous_dir_auth());
     assert(dir->authority().first  == mds->get_nodeid() ||
 	   dir->authority().second == mds->get_nodeid());
