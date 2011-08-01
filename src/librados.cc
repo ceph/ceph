@@ -84,6 +84,7 @@ struct librados::IoCtxImpl {
   snapid_t snap_seq;
   ::SnapContext snapc;
   uint64_t assert_ver;
+  map<object_t, uint64_t> assert_src_version;
   eversion_t last_objver;
   uint32_t notify_timeout;
   object_locator_t oloc;
@@ -104,6 +105,7 @@ struct librados::IoCtxImpl {
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
     assert_ver = rhs.assert_ver;
+    assert_src_version = rhs.assert_src_version;
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
     oloc = rhs.oloc;
@@ -483,6 +485,8 @@ public:
     return osdmap.get_pool_name(poolid_);
   }
 
+  ::ObjectOperation *prepare_assert_ops(IoCtxImpl *io, ::ObjectOperation *op);
+
   // snaps
   int snap_list(IoCtxImpl *io, vector<uint64_t> *snaps);
   int snap_lookup(IoCtxImpl *io, const char *name, uint64_t *snapid);
@@ -767,6 +771,9 @@ public:
   }
   void set_assert_version(IoCtxImpl& io, uint64_t ver) {
     io.assert_ver = ver;
+  }
+  void set_assert_src_version(IoCtxImpl& io, const object_t& oid, uint64_t ver) {
+    io.assert_src_version[oid] = ver;
   }
 
   void set_notify_timeout(IoCtxImpl& io, uint32_t timeout) {
@@ -1409,6 +1416,33 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
   return r;
 }
 
+/*
+ * add any version assert operations that are appropriate given the
+ * stat in the IoCtx, either the target version assert or any src
+ * object asserts.  these affect a single ioctx operation, so clear
+ * the ioctx state when we're doing.
+ *
+ * return a pointer to the ObjectOperation if we added any events;
+ * this is convenient for passing the extra_ops argument into Objecter
+ * methods.
+ */
+::ObjectOperation *librados::RadosClient::prepare_assert_ops(IoCtxImpl *io, ::ObjectOperation *op)
+{
+  ::ObjectOperation *pop = NULL;
+  if (io->assert_ver) {
+    op->assert_version(io->assert_ver);
+    io->assert_ver = 0;
+    pop = op;
+  }
+  while (!io->assert_src_version.empty()) {
+    map<object_t,uint64_t>::iterator p = io->assert_src_version.begin();
+    op->assert_src_version(p->first, CEPH_NOSNAP, p->second);
+    io->assert_src_version.erase(p);
+    pop = op;
+  }
+  return pop;
+}
+
 int librados::RadosClient::
 write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off)
 {
@@ -1426,13 +1460,10 @@ write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t o
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
-
+  // extra ops?
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+  
   lock.Lock();
   objecter->write(oid, io.oloc,
 		  off, len, io.snapc, bl, ut, 0,
@@ -1469,12 +1500,8 @@ append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
 
   lock.Lock();
   objecter->append(oid, io.oloc,
@@ -1512,12 +1539,9 @@ write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   eversion_t ver;
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
 
   lock.Lock();
   objecter->write_full(oid, io.oloc,
@@ -1556,10 +1580,7 @@ clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const o
   lock.Lock();
   ::SnapContext snapc;
   ::ObjectOperation wr;
-  if (io.assert_ver) {
-    wr.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &wr);
   wr.clone_range(src_oid, src_offset, len, dst_offset);
   objecter->mutate(dst_oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
@@ -1765,12 +1786,8 @@ remove(IoCtxImpl& io, const object_t& oid)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
 
   lock.Lock();
   objecter->remove(oid, io.oloc,
@@ -1805,12 +1822,8 @@ trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
 
   lock.Lock();
   objecter->trunc(oid, io.oloc,
@@ -1850,10 +1863,7 @@ tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
   lock.Lock();
   ::SnapContext snapc;
   ::ObjectOperation wr;
-  if (io.assert_ver) {
-    wr.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &wr);
   wr.tmap_update(cmdbl);
   objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
@@ -1885,10 +1895,7 @@ exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method,
 
   lock.Lock();
   ::ObjectOperation rd;
-  if (io.assert_ver) {
-    rd.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &rd);
   rd.call(cls, method, inbl);
   objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
@@ -1915,12 +1922,9 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   lock.Lock();
   objecter->read(oid, io.oloc,
 	      off, len, io.snap_seq, &bl, 0,
@@ -2030,12 +2034,9 @@ stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
   if (!psize)
     psize = &size;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   lock.Lock();
   objecter->stat(oid, io.oloc,
 	      io.snap_seq, psize, &mtime, 0,
@@ -2068,12 +2069,9 @@ getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   lock.Lock();
   objecter->getxattr(oid, io.oloc,
 	      name, io.snap_seq, &bl, 0,
@@ -2111,12 +2109,9 @@ rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   lock.Lock();
   objecter->removexattr(oid, io.oloc, name,
 		  io.snapc, ut, 0,
@@ -2153,12 +2148,9 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   lock.Lock();
   objecter->setxattr(oid, io.oloc, name,
 		  io.snapc, bl, ut, 0,
@@ -2188,12 +2180,9 @@ getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attr
   int r;
   eversion_t ver;
 
-  ::ObjectOperation op, *pop = NULL;
-  if (io.assert_ver) {
-    op.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-    pop = &op;
-  }
+  ::ObjectOperation op;
+  ::ObjectOperation *pop = prepare_assert_ops(&io, &op);
+
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
@@ -2254,11 +2243,7 @@ watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
 
   WatchContext *wc;
   register_watcher(io, oid, ctx, cookie, &wc);
-
-  if (io.assert_ver) {
-    rd.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &rd);
   rd.watch(*cookie, ver, 1);
   bufferlist bl;
   wc->linger_id = objecter->linger(oid, io.oloc, rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
@@ -2292,10 +2277,7 @@ _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver
   eversion_t objver;
 
   ::ObjectOperation rd;
-  if (io.assert_ver) {
-    rd.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &rd);
   rd.notify_ack(notify_id, ver);
   objecter->read(oid, io.oloc, rd, io.snap_seq, NULL, 0, 0, 0);
 
@@ -2319,10 +2301,7 @@ unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
   unregister_watcher(cookie);
 
   ::ObjectOperation rd;
-  if (io.assert_ver) {
-    rd.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  prepare_assert_ops(&io, &rd);
   rd.watch(cookie, 0, 0);
   objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
@@ -2352,12 +2331,10 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver, bufferlist& bl)
   eversion_t objver;
   uint64_t cookie;
   C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
-  ::ObjectOperation rd;
 
-  if (io.assert_ver) {
-    rd.assert_version(io.assert_ver);
-    io.assert_ver = 0;
-  }
+  ::ObjectOperation rd;
+  prepare_assert_ops(&io, &rd);
+
   lock.Lock();
   register_watcher(io, oid, ctx, &cookie);
   uint32_t prot_ver = 1;
@@ -2938,6 +2915,13 @@ void librados::IoCtx::
 set_assert_version(uint64_t ver)
 {
   io_ctx_impl->client->set_assert_version(*io_ctx_impl, ver);
+}
+
+void librados::IoCtx::
+set_assert_src_version(const std::string& oid, uint64_t ver)
+{
+  object_t obj(oid);
+  io_ctx_impl->client->set_assert_src_version(*io_ctx_impl, obj, ver);
 }
 
 const std::string& librados::IoCtx::
