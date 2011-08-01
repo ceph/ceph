@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "rgw/rgw_escape.h"
+#include "common/escape.h"
 #include "gtest/gtest.h"
 #include <stdint.h>
 

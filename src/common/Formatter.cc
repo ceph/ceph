@@ -1,14 +1,28 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2011 New Dream Network
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
 #define LARGE_SIZE 8192
 
-#include <stdarg.h>
-#include <stdio.h>
-#include <inttypes.h>
-
-#include <iostream>
-
 #include "assert.h"
 #include "Formatter.h"
+#include "common/escape.h"
+
+#include <inttypes.h>
+#include <iostream>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // -----------------------
 namespace ceph {
@@ -52,36 +66,11 @@ void JSONFormatter::print_comma(formatter_stack_entry_d& entry)
 
 void JSONFormatter::print_quoted_string(const char *s)
 {
-  m_ss << '\"';
-  while (*s) {
-    if (*s == '\\')
-      m_ss << "\\";
-    else if (*s == '\"')
-      m_ss << "\\\"";
-    else if (*s < 32) {
-      // do a few common control characters
-      switch (*s) {
-      case '\n':
-	m_ss << "\\n";
-	break;
-      case '\r':
-	m_ss << "\\r";
-	break;
-      case '\t':
-	m_ss << "\\t";
-	break;
-      default:
-	{
-	  // otherwise...
-	  char s[10];
-	  sprintf(s, "\\u%04x", (int)*s);
-	}
-      }
-    } else
-      m_ss << *s;
-    s++;
-  }
-  m_ss << '\"';
+  int len = escape_json_attr_len(s);
+  char *escaped = (char*)malloc(len);
+  escape_json_attr(s, escaped);
+  m_ss << '\"' << escaped << '\"';
+  free(escaped);
 }
 
 void JSONFormatter::print_name(const char *name)

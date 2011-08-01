@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #include "FileStore.h"
 #include "common/BackTrace.h"
 #include "include/types.h"

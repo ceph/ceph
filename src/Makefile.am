@@ -320,7 +320,6 @@ my_radosgw_src = \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
-	rgw/rgw_escape.c \
 	rgw/rgw_env.cc
 
 my_radosgw_ldadd = \
@@ -503,11 +502,11 @@ unittest_mime_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_mime_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_mime
 
-unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
-unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_rgw_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_rgw_escape
+unittest_escape_SOURCES = test/escape.cc
+unittest_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = -pthread ${AM_LDFLAGS}
@@ -705,6 +704,7 @@ libcommon_files = \
 	common/perf_counters.cc \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
+	common/escape.c \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
@@ -894,6 +894,7 @@ noinst_HEADERS = \
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\
+	common/escape.h\
 	common/version.h\
 	common/hex.h\
 	common/entity_name.h\
@@ -1217,7 +1218,6 @@ noinst_HEADERS = \
 	rgw/rgw_rest_os.h\
 	rgw/rgw_rest_s3.h\
 	rgw/rgw_user.h\
-	rgw/rgw_escape.h\
 	sample.ceph.conf\
 	tools/common.h\
 	tools/gui.h\

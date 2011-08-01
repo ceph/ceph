@@ -1,10 +1,13 @@
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
+#include <inttypes.h>
+#include <iostream>
+#include <list>
 #include <ostream>
 #include <sstream>
+#include <stdarg.h>
 #include <string>
-#include <list>
 
 namespace ceph {
 
