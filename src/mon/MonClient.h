@@ -31,6 +31,8 @@
 
 class MonMap;
 class MMonMap;
+class MMonGetVersion;
+class MMonGetVersionReply;
 class MMonSubscribeAck;
 class MAuthReply;
 class MAuthRotating;
@@ -236,7 +238,23 @@ public:
     if (auth)
       auth->add_want_keys(want);
   }
+
+  // version requests
+public:
+  void is_latest_map(string map, version_t cur_ver, Context *onfinish);
+
 private:
+  struct version_req_d {
+    Context *context;
+    version_t version;
+    version_req_d(Context *con, version_t ver) : context(con), version(ver) {}
+  };
+
+  map<tid_t, version_req_d*> version_requests;
+  tid_t version_req_id;
+  void handle_get_version_reply(MMonGetVersionReply* m);
+
+
   MonClient(const MonClient &rhs);
   MonClient& operator=(const MonClient &rhs);
 };

@@ -346,6 +346,13 @@ public:
     }
   };
 
+  struct C_Op_Map_Latest : public Context {
+    Objecter *objecter;
+    tid_t tid;
+    C_Op_Map_Latest(Objecter *o, tid_t t) : objecter(o), tid(t) {}
+    void finish(int r);
+  };
+
   struct C_Stat : public Context {
     bufferlist bl;
     uint64_t *psize;
@@ -512,6 +519,13 @@ public:
     }
   };
 
+  struct C_Linger_Map_Latest : public Context {
+    Objecter *objecter;
+    uint64_t linger_id;
+    C_Linger_Map_Latest(Objecter *o, uint64_t id) :
+      objecter(o), linger_id(id) {}
+    void finish(int r);
+  };
 
   // -- osd sessions --
   struct OSDSession {
@@ -535,6 +549,11 @@ public:
   map<tid_t,StatfsOp*>      statfs_ops;
   map<tid_t,PoolOp*>        pool_ops;
 
+  // ops waiting for an osdmap with a new pool or confirmation that
+  // the pool does not exist (may be expanded to other uses later)
+  map<uint64_t, LingerOp*>  check_latest_map_lingers;
+  map<tid_t, Op*>           check_latest_map_ops;
+
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   void send_op(Op *op);
@@ -542,7 +561,7 @@ public:
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,
-    RECALC_OP_TARGET_POOL_DISAPPEARED,
+    RECALC_OP_TARGET_POOL_DNE,
   };
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
@@ -550,6 +569,11 @@ public:
   void send_linger(LingerOp *info);
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
+
+  void op_check_for_latest_map(Op *op);
+  void op_cancel_map_check(Op *op);
+  void linger_check_for_latest_map(LingerOp *op);
+  void linger_cancel_map_check(LingerOp *op);
 
   void kick_requests(OSDSession *session);
 

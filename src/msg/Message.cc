@@ -64,6 +64,8 @@ using namespace std;
 
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
+#include "messages/MMonGetVersion.h"
+#include "messages/MMonGetVersionReply.h"
 
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
@@ -254,6 +256,12 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case CEPH_MSG_MON_GET_MAP:
     m = new MMonGetMap;
+    break;
+  case CEPH_MSG_MON_GET_VERSION:
+    m = new MMonGetVersion();
+    break;
+  case CEPH_MSG_MON_GET_VERSION_REPLY:
+    m = new MMonGetVersionReply();
     break;
 
   case MSG_OSD_BOOT:
