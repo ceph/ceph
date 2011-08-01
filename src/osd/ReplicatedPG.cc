@@ -2413,8 +2413,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   ctx->bytes_read = ctx->outdata.length();
 
   // read-op?  done?
-  if (ctx->op_t.empty() && !ctx->modify)
+  if (ctx->op_t.empty() && !ctx->modify) {
+    ctx->reply_version = ctx->obs->oi.user_version;
     return result;
+  }
 
 
   // there was a modification!
