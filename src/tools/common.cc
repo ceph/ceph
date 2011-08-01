@@ -25,6 +25,7 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 #include "tools/common.h"
 
+#include "common/errno.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -516,10 +517,27 @@ int ceph_tool_cli_input(CephToolCtx *ctx, std::vector<std::string> &cmd,
     return 0;
   }
 
-  // write to file
-  odata.write_file(outfile);
-  derr << " wrote " << len << " byte payload to "
-       << outfile << dendl;
+  // Write to a file. Don't truncate the file.
+  int fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT, 0644));
+  if (fd < 0) {
+    int err = errno;
+    derr << " failed to create file '" << outfile << "': "
+	 << cpp_strerror(err) << dendl;
+    return 1;
+  }
+  ret = odata.write_fd(fd);
+  if (ret) {
+    derr << " error writing file: " << cpp_strerror(ret) << dendl;
+    close(fd);
+    return 1;
+  }
+  derr << " wrote " << len << " byte payload to " << outfile << dendl;
+  if (close(fd)) {
+    int err = errno;
+    derr << " error while closing file '" << outfile << "': "
+	 << cpp_strerror(err) << dendl;
+    return 1;
+  }
   return 0;
 }
 

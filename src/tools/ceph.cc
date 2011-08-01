@@ -162,17 +162,25 @@ int main(int argc, const char **argv)
     }
 
     case CEPH_TOOL_MODE_CLI_INPUT: {
-      vector<string> cmd;
-      for (unsigned int i = 0; i < nargs.size(); ++i) {
-	cmd.push_back(string(nargs[i]));
-      }
-      if (cmd.empty()) {
+      if (nargs.empty()) {
 	if (ceph_tool_do_cli(ctx))
 	  ret = 1;
       }
       else {
-	if (ceph_tool_cli_input(ctx, cmd, out_file, indata))
-	  ret = 1;
+	while (!nargs.empty()) {
+	  vector<string> cmd;
+	  for (vector<const char*>::iterator n = nargs.begin();
+	       n != nargs.end(); ) {
+	    std::string np(*n);
+	    n = nargs.erase(n);
+	    if (np == ";")
+	      break;
+	    cmd.push_back(np);
+	  }
+
+	  if (ceph_tool_cli_input(ctx, cmd, out_file, indata))
+	    ret = 1;
+	}
       }
       if (ceph_tool_messenger_shutdown())
 	ret = 1;
