@@ -76,7 +76,7 @@ TEST(EscapeJson, Escapes1) {
       "JSON calls a slash / backslash a solidus / reverse solidus"),
       "JSON calls a slash \\/ backslash a solidus \\/ reverse solidus");
   ASSERT_EQ(escape_json_attrs("Some 'single' \"quotes\" here"),
-      "Some \\'single\\' \\\"quotes\\\" here");
+      "Some 'single' \\\"quotes\\\" here");
   ASSERT_EQ(escape_json_attrs("tabs\tand\tnewlines\n, oh my"),
       "tabs\\tand\\tnewlines\\n, oh my");
 }

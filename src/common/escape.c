@@ -112,7 +112,6 @@ void escape_xml_attr(const char *buf, char *out)
 	*o = '\0';
 }
 
-#define SGL_QUOTE_JESCAPE "\\'"
 #define DBL_QUOTE_JESCAPE "\\\""
 #define BACKSLASH_JESCAPE "\\\\"
 #define SLASH_JESCAPE "\\/"
@@ -126,9 +125,6 @@ int escape_json_attr_len(const char *buf)
 	for (b = buf; *b; ++b) {
 		unsigned char c = *b;
 		switch (c) {
-		case '\'':
-			ret += SSTRL(SGL_QUOTE_JESCAPE);
-			break;
 		case '"':
 			ret += SSTRL(DBL_QUOTE_JESCAPE);
 			break;
@@ -166,10 +162,6 @@ void escape_json_attr(const char *buf, char *out)
 	for (b = buf; *b; ++b) {
 		unsigned char c = *b;
 		switch (c) {
-		case '\'':
-			memcpy(o, SGL_QUOTE_JESCAPE, SSTRL(SGL_QUOTE_JESCAPE));
-			o += SSTRL(SGL_QUOTE_JESCAPE);
-			break;
 		case '"':
 			memcpy(o, DBL_QUOTE_JESCAPE, SSTRL(DBL_QUOTE_JESCAPE));
 			o += SSTRL(DBL_QUOTE_JESCAPE);
