@@ -1661,6 +1661,10 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
 	  << " from " << op.soid
 	  << " offset " << op.op.clonerange.src_offset;
       break;
+    case CEPH_OSD_OP_ASSERT_SRC_VERSION:
+      out << " v" << op.op.watch.ver
+	  << " of " << op.soid;
+      break;
     }
   }
   return out;

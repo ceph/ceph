@@ -1398,6 +1398,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	break;
       }
 
+    case CEPH_OSD_OP_ASSERT_SRC_VERSION:
+      {
+	uint64_t ver = op.watch.ver;
+	if (!ver)
+	  result = -EINVAL;
+        else if (ver < src_obc->obs.oi.user_version.version)
+	  result = -ERANGE;
+	else if (ver > src_obc->obs.oi.user_version.version)
+	  result = -EOVERFLOW;
+	break;
+      }
+
    case CEPH_OSD_OP_NOTIFY:
       {
 	uint32_t ver;
