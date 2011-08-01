@@ -19,6 +19,7 @@ using namespace librados;
 
 #include <iostream>
 
+#include <errno.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -56,6 +57,7 @@ int main(int argc, const char **argv)
      cerr << "couldn't read configuration file." << std::endl;
      exit(1);
   }
+  rados.conf_parse_argv(argc, argv);
 
   if (!rados.conf_set("config option that doesn't exist",
                      "some random value")) {
@@ -101,6 +103,7 @@ int main(int argc, const char **argv)
 
   r = io_ctx.write(oid, bl, bl.length(), 0);
   uint64_t objver = io_ctx.get_last_version();
+  assert(objver > 0);
   cout << "io_ctx.write returned " << r << " last_ver=" << objver << std::endl;
 
   uint64_t stat_size;
@@ -162,6 +165,38 @@ int main(int argc, const char **argv)
   buf_to_hex(md5, bl2.length(), md5_str);
   cout << "md5 result=" << md5_str << std::endl;
 
+  // test assert_version
+  r = io_ctx.read(oid, bl, 0, 1);
+  assert(r >= 0);
+  uint64_t v = io_ctx.get_last_version();
+  cout << oid << " version is " << v << std::endl;
+  assert(v > 0);
+  io_ctx.set_assert_version(v);
+  r = io_ctx.read(oid, bl, 0, 1);
+  assert(r >= 0);
+  io_ctx.set_assert_version(v - 1);
+  r = io_ctx.read(oid, bl, 0, 1);
+  assert(r == -ERANGE);
+  io_ctx.set_assert_version(v + 1);
+  r = io_ctx.read(oid, bl, 0, 1);
+  assert(r == -EOVERFLOW);
+
+  // test assert_src_version
+  const char *dest = "baz";
+  r = io_ctx.read(oid, bl, 0, 1);
+  assert(r >= 0);
+  v = io_ctx.get_last_version();
+  cout << oid << " version is " << v << std::endl;
+  io_ctx.set_assert_src_version(oid, v);
+  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
+  assert(r >= 0);
+  io_ctx.set_assert_src_version(oid, v-1);
+  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
+  assert(r == -ERANGE);
+  io_ctx.set_assert_src_version(oid, v+1);
+  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
+  assert(r == -EOVERFLOW);
+  
   r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
   cout << "exec returned " << r << std::endl;
   const unsigned char *sha1 = (const unsigned char *)bl2.c_str();
