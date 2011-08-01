@@ -2352,8 +2352,11 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver, bufferlist& bl)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  while (!done_all)
-    cond_all.Wait(mylock_all);
+  if (r == 0) {
+    while (!done_all)
+      cond_all.Wait(mylock_all);
+  }
+
   mylock_all.Unlock();
 
   lock.Lock();
