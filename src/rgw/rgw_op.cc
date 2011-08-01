@@ -907,8 +907,8 @@ static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAcces
   dest_owner.set_id(owner->get_id());
   dest_owner.set_name(owner_info.display_name);
 
-  RGW_LOG(0) << "owner id=" << owner->get_id() << dendl;
-  RGW_LOG(0) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  RGW_LOG(20) << "owner id=" << owner->get_id() << dendl;
+  RGW_LOG(20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& src_acl = src.get_acl();
   RGWAccessControlList& acl = dest.get_acl();
@@ -1242,7 +1242,7 @@ void RGWCompleteMultipart::execute()
       goto done;
     }
     if (iter->second.compare(obj_iter->second.etag) != 0) {
-      RGW_LOG(0) << "part: " << iter->first << " etag: " << iter->second << dendl;
+      RGW_LOG(0) << "etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
       ret = -ERR_INVALID_PART;
       goto done;
     }
@@ -1255,7 +1255,7 @@ void RGWCompleteMultipart::execute()
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
-  RGW_LOG(0) << "calculated etag: " << final_etag_str << dendl;
+  RGW_LOG(10) << "calculated etag: " << final_etag_str << dendl;
 
   etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
 

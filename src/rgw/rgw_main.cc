@@ -66,7 +66,7 @@ class RGWProcess {
 
     bool _enqueue(FCGX_Request *req) {
       process->m_fcgx_queue.push_back(req);
-      RGW_LOG(0) << "enqueued request fcgx=" << hex << req << dec << dendl;
+      RGW_LOG(20) << "enqueued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
       return true;
     }
@@ -81,7 +81,7 @@ class RGWProcess {
 	return NULL;
       FCGX_Request *req = process->m_fcgx_queue.front();
       process->m_fcgx_queue.pop_front();
-      RGW_LOG(0) << "dequeued request fcgx=" << hex << req << dec << dendl;
+      RGW_LOG(20) << "dequeued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
       return req;
     }
@@ -91,12 +91,12 @@ class RGWProcess {
     void _dump_queue() {
       deque<FCGX_Request *>::iterator iter;
       if (process->m_fcgx_queue.size() == 0) {
-        RGW_LOG(0) << "RGWWQ: empty" << dendl;
+        RGW_LOG(20) << "RGWWQ: empty" << dendl;
         return;
       }
-      RGW_LOG(0) << "RGWWQ:" << dendl;
+      RGW_LOG(20) << "RGWWQ:" << dendl;
       for (iter = process->m_fcgx_queue.begin(); iter != process->m_fcgx_queue.end(); ++iter) {
-        RGW_LOG(0) << "fcgx: " << hex << *iter << dec << dendl;
+        RGW_LOG(20) << "fcgx: " << hex << *iter << dec << dendl;
       }
     }
     void _clear() {
@@ -132,7 +132,7 @@ void RGWProcess::run()
 
   for (;;) {
     FCGX_Request *fcgx = new FCGX_Request;
-    RGW_LOG(0) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
+    RGW_LOG(10) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
     FCGX_InitRequest(fcgx, s, 0);
     int ret = FCGX_Accept_r(fcgx);
     if (ret < 0)

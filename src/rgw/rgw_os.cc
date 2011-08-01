@@ -110,14 +110,14 @@ bool rgw_verify_os_token(req_state *s)
 
   string openstack_user = s->os_user;
 
-  RGW_LOG(0) << "openstack user=" << s->os_user << dendl;
+  RGW_LOG(10) << "openstack user=" << s->os_user << dendl;
 
   if (rgw_get_user_info_by_openstack(openstack_user, s->user) < 0) {
     RGW_LOG(0) << "couldn't map openstack user" << dendl;
     return false;
   }
 
-  RGW_LOG(0) << "user_id=" << s->user.user_id << dendl;
+  RGW_LOG(10) << "user_id=" << s->user.user_id << dendl;
 
   return true;
 }

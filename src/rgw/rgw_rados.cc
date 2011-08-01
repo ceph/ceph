@@ -1173,7 +1173,7 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
 
 int RGWRados::distribute(bufferlist& bl)
 {
-  RGW_LOG(0) << "sending notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
+  RGW_LOG(10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
 }

@@ -306,7 +306,7 @@ static int create_bucket(string& bucket, string& user_id, string& display_name, 
 
   ret = rgw_add_bucket(user_id, bucket);
 
-  RGW_LOG(0) << "ret=" << ret << dendl;
+  RGW_LOG(20) << "ret=" << ret << dendl;
 
   if (ret == -EEXIST)
     ret = 0;

@@ -61,7 +61,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
 
   int len = strlen(token);
   if (len & 1) {
-    RGW_LOG(0) << "invalid token length" << dendl;
+    RGW_LOG(0) << "failed to verify token: invalid token length len=" << len << dendl;
     return -EINVAL;
   }
 
@@ -84,7 +84,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     ::decode(nonce, iter);
     ::decode(expiration, iter);
   } catch (buffer::error *err) {
-    RGW_LOG(0) << "failed to decode token" << dendl;
+    RGW_LOG(0) << "failed to decode token: caught exception" << dendl;
     return -EINVAL;
   }
   if (expiration < ceph_clock_now(g_ceph_context)) {
@@ -95,7 +95,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
   if ((ret = rgw_get_user_info_by_openstack(os_user, info)) < 0)
     return ret;
 
-  RGW_LOG(0) << "os_user=" << os_user << dendl;
+  RGW_LOG(10) << "os_user=" << os_user << dendl;
 
   bufferlist tok;
   ret = build_token(os_user, info.openstack_key, nonce, expiration, tok);
@@ -110,7 +110,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
   if (memcmp(tok.c_str(), bl.c_str(), tok.length()) != 0) {
     char buf[tok.length() * 2 + 1];
     buf_to_hex((const unsigned char *)tok.c_str(), tok.length(), buf);
-    RGW_LOG(0) << "tokens mismatch tok=" << buf << dendl;
+    RGW_LOG(0) << "WARNING: tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
 
@@ -121,7 +121,7 @@ void RGW_OS_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  RGW_LOG(0) << "RGW_OS_Auth_Get::execute()" << dendl;
+  RGW_LOG(20) << "RGW_OS_Auth_Get::execute()" << dendl;
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
