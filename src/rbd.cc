@@ -12,7 +12,6 @@
  *
  */
 
-#define __STDC_FORMAT_MACROS
 #include "mon/MonClient.h"
 #include "mon/MonMap.h"
 #include "common/config.h"

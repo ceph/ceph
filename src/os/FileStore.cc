@@ -32,7 +32,6 @@
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 
-#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>

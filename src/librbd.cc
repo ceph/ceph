@@ -12,7 +12,6 @@
  *
  */
 
-#define __STDC_FORMAT_MACROS
 #include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"

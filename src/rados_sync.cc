@@ -12,8 +12,6 @@
  *
  */
 
-#define __STDC_FORMAT_MACROS
-
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>

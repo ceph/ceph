@@ -12,9 +12,6 @@
  * 
  */
 
-
-#define __STDC_FORMAT_MACROS
-
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"

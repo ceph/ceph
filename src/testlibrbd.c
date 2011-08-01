@@ -12,7 +12,6 @@
  *
  */
 
-#define __STDC_FORMAT_MACROS
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
 
