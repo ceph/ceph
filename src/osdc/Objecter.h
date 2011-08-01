@@ -248,6 +248,11 @@ struct ObjectOperation {
     bufferlist bl;
     add_watch(CEPH_OSD_OP_ASSERT_VER, 0, ver, 0, bl);
   }
+  void assert_src_version(const object_t& srcoid, snapid_t srcsnapid, uint64_t ver) {
+    bufferlist bl;
+    add_watch(CEPH_OSD_OP_ASSERT_SRC_VERSION, 0, ver, 0, bl);
+    ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
+  }
 };
 
 
