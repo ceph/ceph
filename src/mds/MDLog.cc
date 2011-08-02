@@ -445,6 +445,7 @@ void MDLog::replay(Context *c)
   already_replayed = true;
 
   replay_thread.create();
+  replay_thread.detach();
 }
 
 class C_MDL_Replay : public Context {
