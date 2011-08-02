@@ -27,14 +27,18 @@
 // -----------------------
 namespace ceph {
 
-void Formatter::reset()
+Formatter::
+Formatter()
 {
-  m_stack.clear();
-  m_ss.clear();
-  m_pending_string.clear();
 }
 
-void Formatter::flush(std::ostream& os)
+Formatter::
+~Formatter()
+{
+}
+
+// -----------------------
+void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   assert(m_stack.empty());
@@ -42,10 +46,14 @@ void Formatter::flush(std::ostream& os)
   m_ss.clear();
 }
 
-// -----------------------
+void JSONFormatter::reset()
+{
+  m_stack.clear();
+  m_ss.clear();
+  m_pending_string.clear();
+}
 
-
-void JSONFormatter::print_comma(formatter_stack_entry_d& entry)
+void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 {
   if (entry.size) {
     if (m_pretty) {
@@ -78,7 +86,7 @@ void JSONFormatter::print_name(const char *name)
   finish_pending_string();
   if (m_stack.empty())
     return;
-  struct formatter_stack_entry_d& entry = m_stack.back();
+  struct json_formatter_stack_entry_d& entry = m_stack.back();
   print_comma(entry);
   if (!entry.is_array) {
     if (m_pretty) {
@@ -104,9 +112,15 @@ void JSONFormatter::open_section(const char *name, bool is_array)
   else
     m_ss << '{';
 
-  formatter_stack_entry_d n;
+  json_formatter_stack_entry_d n;
   n.is_array = is_array;
   m_stack.push_back(n);
+}
+
+JSONFormatter::
+JSONFormatter(bool p) 
+  : m_pretty(p), m_is_pending_string(false)
+{
 }
 
 void JSONFormatter::open_array_section(const char *name)
@@ -124,7 +138,7 @@ void JSONFormatter::close_section()
   assert(!m_stack.empty());
   finish_pending_string();
 
-  struct formatter_stack_entry_d& entry = m_stack.back();
+  struct json_formatter_stack_entry_d& entry = m_stack.back();
   m_ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
 }

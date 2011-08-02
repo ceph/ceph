@@ -11,17 +11,12 @@
 
 namespace ceph {
 
-struct formatter_stack_entry_d {
-  int size;
-  bool is_array;
-  formatter_stack_entry_d() : size(0), is_array(false) {}
-};
-  
 class Formatter {
  public:
-  virtual void reset();
+  Formatter();
+  virtual ~Formatter();
 
-  virtual void flush(std::ostream& os);
+  virtual void flush(std::ostream& os) = 0;
 
   virtual void open_array_section(const char *name) = 0;
   virtual void open_object_section(const char *name) = 0;
@@ -32,20 +27,15 @@ class Formatter {
   virtual void dump_string(const char *name, std::string s) = 0;
   virtual std::ostream& dump_stream(const char *name) = 0;
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
-
-  Formatter() : m_is_pending_string(false) {}
-  virtual ~Formatter() {}
-
- protected:
-  std::stringstream m_ss, m_pending_string;
-  std::list<formatter_stack_entry_d> m_stack;
-  bool m_is_pending_string;
-  virtual void finish_pending_string() = 0;
 };
 
 
 class JSONFormatter : public Formatter {
  public:
+  JSONFormatter(bool p=false);
+
+  void flush(std::ostream& os);
+  void reset();
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section();
@@ -56,15 +46,23 @@ class JSONFormatter : public Formatter {
   std::ostream& dump_stream(const char *name);
   void dump_format(const char *name, const char *fmt, ...);
 
-
-  JSONFormatter(bool p=false) : m_pretty(p) {}
  private:
+  struct json_formatter_stack_entry_d {
+    int size;
+    bool is_array;
+    json_formatter_stack_entry_d() : size(0), is_array(false) {}
+  };
+  
   bool m_pretty;
   void open_section(const char *name, bool is_array);
   void print_quoted_string(const char *s);
   void print_name(const char *name);
-  void print_comma(formatter_stack_entry_d& entry);
+  void print_comma(json_formatter_stack_entry_d& entry);
   void finish_pending_string();
+
+  std::stringstream m_ss, m_pending_string;
+  std::list<json_formatter_stack_entry_d> m_stack;
+  bool m_is_pending_string;
 };
 
 }
