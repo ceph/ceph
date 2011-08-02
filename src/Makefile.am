@@ -526,6 +526,12 @@ unittest_heartbeatmap_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_heartbeatmap_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_heartbeatmap
 
+unittest_formatter_SOURCES = test/formatter.cc
+unittest_formatter_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_formatter
+
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -lrt -pthread -lcurl ${AM_LDFLAGS}
