@@ -266,6 +266,29 @@ int main(int argc, const char **argv)
     assert(r == -ECANCELED);
   }
 
+  cout << "src_cmpxattr" << std::endl;
+  const char *oidb = "bar-clone";
+  {
+    ObjectOperation o;
+    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    io_ctx.locator_set_key(oid);
+    o.write_full(val);
+    r = io_ctx.operate(oidb, &o, &bl2);
+    cout << " got " << r << " wanted ECANCELED" << std::endl;
+    assert(r == -ECANCELED);
+  }
+  {
+    ObjectOperation o;
+    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_NE, CEPH_OSD_CMPXATTR_MODE_STRING);
+    io_ctx.locator_set_key(oid);
+    o.write_full(val);
+    r = io_ctx.operate(oidb, &o, &bl2);
+    cout << " got " << r << " wanted >= 0" << std::endl;
+    assert(r >= 0);
+  }
+  io_ctx.locator_set_key(string());
+
+
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;
   for (ObjectIterator iter = io_ctx.objects_begin();

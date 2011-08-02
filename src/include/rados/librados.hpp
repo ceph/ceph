@@ -126,6 +126,8 @@ namespace librados
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len);
+    void src_cmpxattr(const std::string& src_oid,
+		      const char *name, const bufferlist& val, int op, int mode);
 
     void exec(const char *cls, const char *method, bufferlist& bl);
 

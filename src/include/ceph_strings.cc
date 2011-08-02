@@ -48,6 +48,7 @@ const char *ceph_osd_op_name(int op)
 
 	case CEPH_OSD_OP_CLONERANGE: return "clonerange";
 	case CEPH_OSD_OP_ASSERT_SRC_VERSION: return "assert-src-version";
+	case CEPH_OSD_OP_SRC_CMPXATTR: return "src-cmpxattr";
 
 	case CEPH_OSD_OP_GETXATTR: return "getxattr";
 	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";

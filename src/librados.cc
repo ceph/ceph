@@ -211,6 +211,14 @@ void librados::ObjectOperation::clone_range(uint64_t dst_off,
   o->clone_range(src_oid, src_off, len, dst_off);
 }
 
+void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
+					 const char *name, const bufferlist& v, int op, int mode)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  object_t oid(src_oid);
+  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, mode);
+}
+
 
 librados::WatchCtx::
 ~WatchCtx()

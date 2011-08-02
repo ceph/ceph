@@ -261,6 +261,15 @@ struct ObjectOperation {
     o.op.xattr.cmp_op = op;
     o.op.xattr.cmp_mode = mode;
   }
+  void src_cmpxattr(const object_t& srcoid, snapid_t srcsnapid,
+		    const char *name, const bufferlist& val,
+		    int op, int mode) {
+    add_xattr(CEPH_OSD_OP_SRC_CMPXATTR, name, val);
+    OSDOp& o = *ops.rbegin();
+    o.soid = sobject_t(srcoid, srcsnapid);
+    o.op.xattr.cmp_op = op;
+    o.op.xattr.cmp_mode = mode;
+  }
 
 };
 

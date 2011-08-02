@@ -1667,6 +1667,17 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       out << " v" << op.op.watch.ver
 	  << " of " << op.soid;
       break;
+    case CEPH_OSD_OP_SRC_CMPXATTR:
+      out << " " << op.soid;
+      if (op.op.xattr.name_len && op.data.length()) {
+	out << " ";
+	op.data.write(0, op.op.xattr.name_len, out);
+      }
+      if (op.op.xattr.value_len)
+	out << " (" << op.op.xattr.value_len << ")";
+      if (op.op.op == CEPH_OSD_OP_CMPXATTR)
+	out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
+      break;
     }
   }
   return out;
