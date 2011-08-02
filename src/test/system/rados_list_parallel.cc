@@ -224,7 +224,7 @@ int main(int argc, const char **argv)
 
   // Test 1... list objects
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+    StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects,
 			  pool_setup_sem, modify_sem);
@@ -242,7 +242,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+    StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
@@ -262,7 +262,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+    StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
@@ -282,7 +282,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+    StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);
@@ -306,7 +306,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(pool_setup_sem->reinit(0));
   RETURN1_IF_NONZERO(modify_sem->reinit(0));
   {
-    StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL,
+    StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
 			  pool_setup_sem, modify_sem);

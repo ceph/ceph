@@ -100,7 +100,8 @@ int main(int argc, const char **argv)
   // pool in a different process.
   CrossProcessSem *pool_setup_sem = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
-  StRadosCreatePool r1(argc, argv, pool_setup_sem, NULL, "foo", 50, ".obj");
+  StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
+					   "foo", 50, ".obj");
   StRadosOpenPool r2(argc, argv, pool_setup_sem, NULL);
   vector < SysTestRunnable* > vec;
   vec.push_back(&r1);
@@ -117,7 +118,7 @@ int main(int argc, const char **argv)
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem2));
   CrossProcessSem *open_pool_sem2 = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &open_pool_sem2));
-  StRadosCreatePool r3(argc, argv, pool_setup_sem2, open_pool_sem2,
+  StRadosCreatePool r3(argc, argv, NULL, pool_setup_sem2, open_pool_sem2,
 					   "foo", 50, ".obj");
   StRadosOpenPool r4(argc, argv, pool_setup_sem2, open_pool_sem2);
   vector < SysTestRunnable* > vec2;

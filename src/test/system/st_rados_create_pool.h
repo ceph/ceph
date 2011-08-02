@@ -22,6 +22,7 @@ class CrossProcessSem;
 /*
  * st_rados_create_pool
  *
+ * Waits, then posts to setup_sem.
  * Creates a pool and populates it with some objects.
  * Then, calls pool_setup_sem->post()
  */
@@ -30,6 +31,7 @@ class StRadosCreatePool : public SysTestRunnable
 public:
   static std::string get_random_buf(int sz);
   StRadosCreatePool(int argc, const char **argv,
+		    CrossProcessSem *setup_sem,
 		    CrossProcessSem *pool_setup_sem,
 		    CrossProcessSem *close_create_pool_sem,
 		    const std::string &pool_name,
@@ -38,6 +40,7 @@ public:
   ~StRadosCreatePool();
   virtual int run();
 private:
+  CrossProcessSem *m_setup_sem;
   CrossProcessSem *m_pool_setup_sem;
   CrossProcessSem *m_close_create_pool;
   std::string m_pool_name;

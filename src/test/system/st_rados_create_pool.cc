@@ -40,12 +40,14 @@ get_random_buf(int sz)
 
 StRadosCreatePool::
 StRadosCreatePool(int argc, const char **argv,
+		  CrossProcessSem *setup_sem,
 		  CrossProcessSem *pool_setup_sem,
 		  CrossProcessSem *close_create_pool,
 		  const std::string &pool_name,
 		  int num_objects,
 		  const std::string &suffix)
   : SysTestRunnable(argc, argv),
+    m_setup_sem(setup_sem),
     m_pool_setup_sem(pool_setup_sem),
     m_close_create_pool(close_create_pool),
     m_pool_name(pool_name),
@@ -70,12 +72,19 @@ run()
   std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
   if (!log_name.empty())
     rados_conf_set(cl, "log_file", log_name.c_str());
+
+  if (m_setup_sem) {
+    m_setup_sem->wait();
+    m_setup_sem->post();
+  }
+
   RETURN1_IF_NONZERO(rados_connect(cl));
   int ret = rados_pool_delete(cl, m_pool_name.c_str());
   if (!((ret == 0) || (ret == -ENOENT))) {
     printf("%s: rados_pool_delete error %d\n", get_id_str(), ret);
     return ret;
   }
+  printf("%s: creating pool %s\n", get_id_str(), m_pool_name.c_str());
   RETURN1_IF_NONZERO(rados_pool_create(cl, m_pool_name.c_str()));
   rados_ioctx_t io_ctx;
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
