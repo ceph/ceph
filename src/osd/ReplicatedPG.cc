@@ -1031,9 +1031,11 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
   const char *v1, *v2;
   v1 = v1s.data();
-  if (xattr.length())
-    v2 = xattr.c_str();
-  else
+  string v2s;
+  if (xattr.length()) {
+    v2s = string(xattr.c_str(), xattr.length());
+    v2 = v2s.c_str();
+  } else
     v2 = "";
 
   dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2 << "' op " << op << dendl;
