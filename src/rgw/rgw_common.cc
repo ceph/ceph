@@ -66,7 +66,6 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
 }
 
 req_state::~req_state() {
-  delete acl;
   delete formatter;
   free(os_user);
   free(os_groups);

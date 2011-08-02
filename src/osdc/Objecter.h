@@ -198,6 +198,9 @@ struct ObjectOperation {
     bl.append(s);
     add_xattr(CEPH_OSD_OP_SETXATTR, name, bl);
   }
+  void cmpxattr(const char *name, const bufferlist& bl) {
+    add_xattr(CEPH_OSD_OP_CMPXATTR, name, bl);
+  }
   void rmxattr(const char *name) {
     bufferlist bl;
     add_xattr(CEPH_OSD_OP_RMXATTR, name, bl);

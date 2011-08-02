@@ -190,10 +190,10 @@ void librados::ObjectOperation::setxattr(const char *name, const bufferlist& v)
   o->setxattr(name, v);
 }
 
-void librados::ObjectOperation::cmpxattr(const char *name, const bufferlist& v, int op, int mode)
+void librados::ObjectOperation::cmpxattr(const char *name, const bufferlist& v)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->cmpxattr(name, v, op, mode);
+  o->cmpxattr(name, v);
 }
 
 void librados::ObjectOperation::tmap_update(const bufferlist& cmdbl)

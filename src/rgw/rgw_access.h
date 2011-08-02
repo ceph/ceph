@@ -60,18 +60,18 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
                       map<std::string, bufferlist>& attrs, bool exclusive) = 0;
-  virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+  virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
-  virtual int aio_put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+  virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
 
-  int put_obj(std::string& id, rgw_obj& obj, const char *data, size_t len,
+  int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_data(id, obj, data, -1, len);
+    int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
-      ret = put_obj_meta(id, obj, mtime, attrs, false);
+      ret = put_obj_meta(ctx, id, obj, mtime, attrs, false);
     }
     return ret;
   }
@@ -96,7 +96,7 @@ public:
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
+  virtual int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                       rgw_obj& src_obj,
                       time_t *mtime,
                       const time_t *mod_ptr,
@@ -128,7 +128,7 @@ public:
    * obj: name of the object to delete
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int delete_obj(std::string& id, rgw_obj& obj, bool sync = true) = 0;
+  virtual int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync = true) = 0;
 
 /**
  * Get data about an object out of RADOS and into memory.
@@ -152,7 +152,8 @@ public:
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-  virtual int prepare_get_obj(rgw_obj& obj,
+  virtual int prepare_get_obj(void *ctx,
+            rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -165,16 +166,16 @@ public:
             void **handle,
             struct rgw_err *err) = 0;
 
-  virtual int get_obj(void **handle, rgw_obj& obj,
+  virtual int get_obj(void *ctx, void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end) = 0;
 
   virtual void finish_get_obj(void **handle) = 0;
 
-  virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
+  virtual int clone_range(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size) = 0;
 
-  virtual int clone_obj(rgw_obj& dst_obj, off_t dst_ofs,
+  virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size, map<string, bufferlist> attrs) {
     RGWCloneRangeInfo info;
@@ -184,16 +185,16 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(dst_obj, v, attrs, true);
+    return clone_objs(ctx, dst_obj, v, attrs, true);
   }
 
-  virtual int clone_objs(rgw_obj& dst_obj,
+  virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs, bool truncate_dest) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state
    */
-  virtual int read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl) = 0;
+  virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl) = 0;
 
   /**
    * Get the attributes for an object.
@@ -203,7 +204,7 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest) = 0;
+  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest) = 0;
 
   /**
    * Set an attr on an object.
@@ -213,14 +214,14 @@ public:
    * bl: the contents of the attr
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int set_attr(rgw_obj& obj, const char *name, bufferlist& bl) = 0;
+  virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
 
   virtual int get_bucket_id(std::string& bucket) { return -ENOTSUP; }
 
  /**
   * stat an object
   */
-  virtual int obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime) = 0;
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime) = 0;
 
   virtual bool supports_tmap() { return false; }
 
@@ -240,6 +241,9 @@ public:
   static RGWAccess *init_storage_provider(const char *type, CephContext *cct);
   static void close_storage();
   static RGWAccess *store;
+
+  virtual void *create_context() { return NULL; }
+  virtual void destroy_context(void *ctx) {}
 };
 
 class RGWStoreManager {
