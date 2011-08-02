@@ -24,7 +24,7 @@ void list_all_buckets_end(struct req_state *s)
 
 void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
-  s->formatter->open_obj_section("Bucket");
+  s->formatter->open_object_section("Bucket");
   s->formatter->dump_value_str("Name", obj.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
   s->formatter->close_section("Bucket");
@@ -123,7 +123,7 @@ void RGWListBucket_REST_S3::send_response()
   if (ret < 0)
     return;
 
-  s->formatter->open_obj_section("ListBucketResult");
+  s->formatter->open_object_section("ListBucketResult");
   s->formatter->dump_value_str("Name", s->bucket);
   if (!prefix.empty())
     s->formatter->dump_value_str("Prefix", prefix.c_str());
@@ -212,7 +212,7 @@ void RGWCopyObj_REST_S3::send_response()
 
   end_header(s, "binary/octet-stream");
   if (ret == 0) {
-    s->formatter->open_obj_section("CopyObjectResult");
+    s->formatter->open_object_section("CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -254,7 +254,7 @@ void RGWInitMultipart_REST_S3::send_response()
   end_header(s, "application/xml");
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_obj_section("InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section("InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
     s->formatter->dump_value_str("Bucket", s->bucket);
     s->formatter->dump_value_str("Key", s->object);
     s->formatter->dump_value_str("UploadId", upload_id.c_str());
@@ -271,7 +271,7 @@ void RGWCompleteMultipart_REST_S3::send_response()
   end_header(s, "application/xml");
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_obj_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
     const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
     if (gateway_dns_name)
       s->formatter->dump_value_str("Location", "%s.%s", s->bucket, gateway_dns_name);
@@ -303,7 +303,7 @@ void RGWListMultipart_REST_S3::send_response()
 
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_obj_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
     map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
     int i, cur_max = 0;
 
@@ -334,7 +334,7 @@ void RGWListMultipart_REST_S3::send_response()
         s->formatter->dump_value_str("LastModified", buf);
       }
 
-      s->formatter->open_obj_section("Part");
+      s->formatter->open_object_section("Part");
       s->formatter->dump_value_int("PartNumber", "%u", info.num);
       s->formatter->dump_value_str("ETag", "%s", info.etag.c_str());
       s->formatter->dump_value_int("Size", "%llu", info.size);
@@ -356,7 +356,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
   if (ret < 0)
     return;
 
-  s->formatter->open_obj_section("ListMultipartUploadsResult");
+  s->formatter->open_object_section("ListMultipartUploadsResult");
   s->formatter->dump_value_str("Bucket", s->bucket);
   if (!prefix.empty())
     s->formatter->dump_value_str("ListMultipartUploadsResult.Prefix", prefix.c_str());

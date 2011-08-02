@@ -17,7 +17,7 @@ public:
   ~RGWFormatter_Plain() {}
 
   void open_array_section(const char *name);
-  void open_obj_section(const char *name);
+  void open_object_section(const char *name);
   void close_section(const char *name);
   void dump_value_int(const char *name, const char *fmt, ...);
   void dump_value_str(const char *name, const char *fmt, ...);
@@ -38,7 +38,7 @@ public:
   void open_array_section(const char *name) {
     open_section(name);
   }
-  void open_obj_section(const char *name) {
+  void open_object_section(const char *name) {
     open_section(name);
   }
   void close_section(const char *name);
@@ -63,7 +63,7 @@ public:
   ~RGWFormatter_JSON() {}
 
   void open_array_section(const char *name);
-  void open_obj_section(const char *name);
+  void open_object_section(const char *name);
   void close_section(const char *name);
   void dump_value_int(const char *name, const char *fmt, ...);
   void dump_value_str(const char *name, const char *fmt, ...);

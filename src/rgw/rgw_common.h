@@ -378,7 +378,7 @@ public:
   virtual void flush(ostream& os);
   virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
   virtual void open_array_section(const char *name) = 0;
-  virtual void open_obj_section(const char *name) = 0;
+  virtual void open_object_section(const char *name) = 0;
   virtual void close_section(const char *name) = 0;
   virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
   virtual void dump_value_str(const char *name, const char *fmt, ...) = 0;

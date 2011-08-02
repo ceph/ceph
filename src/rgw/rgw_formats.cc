@@ -23,7 +23,7 @@ void RGWFormatter_Plain::formatter_init()
   min_stack_level = 0;
 }
 
-void RGWFormatter_Plain::open_obj_section(const char *name)
+void RGWFormatter_Plain::open_object_section(const char *name)
 {
   struct plain_stack_entry new_entry;
   new_entry.is_array = false;
@@ -155,7 +155,7 @@ void RGWFormatter_JSON::open_section(bool is_array)
   stack.push_back(new_entry);
 }
 
-void RGWFormatter_JSON::open_obj_section(const char *name)
+void RGWFormatter_JSON::open_object_section(const char *name)
 {
   open_section(false);
 }

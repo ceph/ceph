@@ -861,7 +861,7 @@ int main(int argc, char **argv)
              << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
              << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
       } else {
-        formatter->open_obj_section("LogEntry");
+        formatter->open_object_section("LogEntry");
         formatter->dump_value_str("Bucket", "%s", entry.bucket.c_str());
 
         stringstream ss;
@@ -905,7 +905,7 @@ int main(int argc, char **argv)
       return ret;
     }
     formatter->init();
-    formatter->open_obj_section("Pool");
+    formatter->open_object_section("Pool");
     formatter->dump_value_int("ID", "%d", pool_id);
     formatter->dump_value_str("Bucket", "%s", info.bucket.c_str());
     formatter->dump_value_str("Owner", "%s", info.owner.c_str());

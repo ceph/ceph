@@ -136,7 +136,7 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
 {
   if (!section)
     section = "Owner";
-  s->formatter->open_obj_section(section);
+  s->formatter->open_object_section(section);
   s->formatter->dump_value_str("ID", id.c_str());
   s->formatter->dump_value_str("DisplayName", name.c_str());
   s->formatter->close_section(section);
@@ -168,7 +168,7 @@ void end_header(struct req_state *s, const char *content_type)
   }
   if (s->err.is_err()) {
     dump_start(s);
-    s->formatter->open_obj_section("Error");
+    s->formatter->open_object_section("Error");
     if (!s->err.s3_code.empty())
       s->formatter->dump_value_int("Code", "%s", s->err.s3_code.c_str());
     if (!s->err.message.empty())
