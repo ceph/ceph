@@ -1,6 +1,7 @@
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
+#include <deque>
 #include <inttypes.h>
 #include <iostream>
 #include <list>
@@ -63,6 +64,33 @@ class JSONFormatter : public Formatter {
   std::stringstream m_ss, m_pending_string;
   std::list<json_formatter_stack_entry_d> m_stack;
   bool m_is_pending_string;
+};
+
+class XMLFormatter : public Formatter {
+ public:
+  XMLFormatter(bool p=false);
+
+  void flush(std::ostream& os);
+  void open_array_section(const char *name);
+  void open_object_section(const char *name);
+  void close_section();
+  void dump_unsigned(const char *name, uint64_t u);
+  void dump_int(const char *name, int64_t u);
+  void dump_float(const char *name, double d);
+  void dump_string(const char *name, std::string s);
+  std::ostream& dump_stream(const char *name);
+  void dump_format(const char *name, const char *fmt, ...);
+
+ private:
+  void open_section(const char *name);
+  void finish_pending_string();
+  void print_spaces(bool extra_space);
+  static std::string escape_xml_str(const char *str);
+
+  std::stringstream m_ss, m_pending_string;
+  std::deque<std::string> m_sections;
+  bool m_pretty;
+  std::string m_pending_string_name;
 };
 
 }

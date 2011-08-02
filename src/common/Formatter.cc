@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 // -----------------------
 namespace ceph {
@@ -194,6 +195,152 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
 
   print_name(name);
   print_quoted_string(buf);
+}
+
+XMLFormatter::
+XMLFormatter(bool p)
+  : m_pretty(p)
+{
+}
+
+void XMLFormatter::
+flush(std::ostream& os)
+{
+  finish_pending_string();
+  assert(m_sections.empty());
+  os << m_ss.str();
+  m_ss.clear();
+}
+
+void XMLFormatter::
+open_array_section(const char *name)
+{
+  open_section(name);
+}
+
+void XMLFormatter::
+open_object_section(const char *name)
+{
+  open_section(name);
+}
+
+void XMLFormatter::
+close_section()
+{
+  assert(!m_sections.empty());
+
+  print_spaces(false);
+  m_ss << "</" << m_sections.back() << ">";
+  m_sections.pop_back();
+}
+
+void XMLFormatter::
+dump_unsigned(const char *name, uint64_t u)
+{
+  std::string e(escape_xml_str(name));
+  print_spaces(true);
+  m_ss << "<" << e << ">" << u << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::
+dump_int(const char *name, int64_t u)
+{
+  std::string e(escape_xml_str(name));
+  print_spaces(true);
+  m_ss << "<" << e << ">" << u << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::
+dump_float(const char *name, double d)
+{
+  std::string e(escape_xml_str(name));
+  print_spaces(true);
+  m_ss << "<" << e << ">" << d << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::
+dump_string(const char *name, std::string s)
+{
+  std::string e(escape_xml_str(name));
+  print_spaces(true);
+  m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+std::ostream& XMLFormatter::
+dump_stream(const char *name)
+{
+  assert(m_pending_string_name.empty());
+  m_pending_string_name = escape_xml_str(name);
+  m_ss << "<" << m_pending_string_name << ">";
+  return m_pending_string;
+}
+
+void XMLFormatter::
+dump_format(const char *name, const char *fmt, ...)
+{
+  char buf[LARGE_SIZE];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+
+  std::string e(escape_xml_str(name));
+  print_spaces(true);
+  m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::
+open_section(const char *name)
+{
+  print_spaces(false);
+  std::string escaped_name(escape_xml_str(name));
+  m_sections.push_back(escaped_name);
+  m_ss << "<" << escaped_name << ">";
+}
+
+void XMLFormatter::
+finish_pending_string()
+{
+  if (!m_pending_string_name.empty()) {
+    m_ss << escape_xml_str(m_pending_string.str().c_str())
+         << "</" << m_pending_string_name << ">";
+    m_pending_string_name.clear();
+    if (m_pretty) {
+      m_ss << "\n";
+    }
+  }
+}
+
+void XMLFormatter::
+print_spaces(bool extra_space)
+{
+  finish_pending_string();
+  if (m_pretty) {
+    std::vector<char> spaces(m_sections.size(), ' ');
+    if (extra_space)
+      spaces.push_back(' ');
+    spaces.push_back('\0');
+    m_ss << &spaces[0];
+  }
+}
+
+std::string XMLFormatter:: 
+escape_xml_str(const char *str)
+{
+  int len = escape_xml_attr_len(str);
+  std::vector<char> escaped(len, '\0');
+  escape_xml_attr(str, &escaped[0]);
+  return std::string(&escaped[0]);
 }
 
 }
