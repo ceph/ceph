@@ -1070,11 +1070,6 @@ void ReplicatedPG::dump_watchers(ObjectContext *obc)
   }
 }
 
-void ReplicatedPG::do_complete_notify(Watch::Notification *notif, ObjectContext *obc)
-{
-  osd->complete_notify((void *)notif, obc);
-}
-
 void ReplicatedPG::remove_watcher(ObjectContext *obc, entity_name_t entity)
 {
   dout(10) << "remove_watcher " << *obc << " " << entity << dendl;
@@ -2401,7 +2396,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 
       notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE, notif->bl);
       if (notif->watchers.empty()) {
-	do_complete_notify(notif, obc);
+	osd->complete_notify(notif, obc);
       } else {
 	obc->notifs[notif] = true;
 	obc->ref++;
