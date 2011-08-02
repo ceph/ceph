@@ -4494,6 +4494,11 @@ void OSD::_remove_pg(PG *pg)
     assert(tr == 0);
   }
 
+
+  // remove_watchers and the erasure from the pg_map
+  // must be done together without unlocking the pg lock,
+  // to avoid racing with watcher cleanup in ms_handle_reset
+  // and handle_notify_timeout
   pg->remove_watchers();
 
   // remove from map
