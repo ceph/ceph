@@ -381,7 +381,7 @@ public:
   virtual void open_object_section(const char *name) = 0;
   virtual void close_section(const char *name) = 0;
   virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
-  virtual void dump_value_str(const char *name, const char *fmt, ...) = 0;
+  virtual void dump_format(const char *name, const char *fmt, ...) = 0;
 };
 
 struct RGWEnv;

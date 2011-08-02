@@ -862,25 +862,25 @@ int main(int argc, char **argv)
              << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
       } else {
         formatter->open_object_section("LogEntry");
-        formatter->dump_value_str("Bucket", "%s", entry.bucket.c_str());
+        formatter->dump_format("Bucket", "%s", entry.bucket.c_str());
 
         stringstream ss;
         ss << entry.time;
         string s = ss.str();
 
-        formatter->dump_value_str("Time", "%s", s.c_str());
-        formatter->dump_value_str("RemoteAddr", "%s", entry.remote_addr.c_str());
-        formatter->dump_value_str("User", "%s", entry.user.c_str());
-        formatter->dump_value_str("Operation", "%s", entry.op.c_str());
-        formatter->dump_value_str("URI", "%s", entry.uri.c_str());
-        formatter->dump_value_str("HttpStatus", "%s", entry.http_status.c_str());
-        formatter->dump_value_str("ErrorCode", "%s", entry.error_code.c_str());
-        formatter->dump_value_str("BytesSent", "%lld", entry.bytes_sent);
-        formatter->dump_value_str("BytesReceived", "%lld", entry.bytes_received);
-        formatter->dump_value_str("ObjectSize", "%lld", entry.obj_size);
-        formatter->dump_value_str("TotalTime", "%lld", total_time);
-        formatter->dump_value_str("UserAgent", "%s",  entry.user_agent.c_str());
-        formatter->dump_value_str("Referrer", "%s",  entry.referrer.c_str());
+        formatter->dump_format("Time", "%s", s.c_str());
+        formatter->dump_format("RemoteAddr", "%s", entry.remote_addr.c_str());
+        formatter->dump_format("User", "%s", entry.user.c_str());
+        formatter->dump_format("Operation", "%s", entry.op.c_str());
+        formatter->dump_format("URI", "%s", entry.uri.c_str());
+        formatter->dump_format("HttpStatus", "%s", entry.http_status.c_str());
+        formatter->dump_format("ErrorCode", "%s", entry.error_code.c_str());
+        formatter->dump_format("BytesSent", "%lld", entry.bytes_sent);
+        formatter->dump_format("BytesReceived", "%lld", entry.bytes_received);
+        formatter->dump_format("ObjectSize", "%lld", entry.obj_size);
+        formatter->dump_format("TotalTime", "%lld", total_time);
+        formatter->dump_format("UserAgent", "%s",  entry.user_agent.c_str());
+        formatter->dump_format("Referrer", "%s",  entry.referrer.c_str());
         formatter->close_section("LogEntry");
         formatter->flush(cout);
       }
@@ -907,8 +907,8 @@ int main(int argc, char **argv)
     formatter->init();
     formatter->open_object_section("Pool");
     formatter->dump_value_int("ID", "%d", pool_id);
-    formatter->dump_value_str("Bucket", "%s", info.bucket.c_str());
-    formatter->dump_value_str("Owner", "%s", info.owner.c_str());
+    formatter->dump_format("Bucket", "%s", info.bucket.c_str());
+    formatter->dump_format("Owner", "%s", info.owner.c_str());
     formatter->close_section("Pool");
     formatter->flush(cout);
   }

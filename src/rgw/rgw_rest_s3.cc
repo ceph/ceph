@@ -25,7 +25,7 @@ void list_all_buckets_end(struct req_state *s)
 void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_object_section("Bucket");
-  s->formatter->dump_value_str("Name", obj.name.c_str());
+  s->formatter->dump_format("Name", obj.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
   s->formatter->close_section("Bucket");
 }
@@ -124,28 +124,28 @@ void RGWListBucket_REST_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListBucketResult");
-  s->formatter->dump_value_str("Name", s->bucket);
+  s->formatter->dump_format("Name", s->bucket);
   if (!prefix.empty())
-    s->formatter->dump_value_str("Prefix", prefix.c_str());
+    s->formatter->dump_format("Prefix", prefix.c_str());
   if (!marker.empty())
-    s->formatter->dump_value_str("Marker", marker.c_str());
+    s->formatter->dump_format("Marker", marker.c_str());
   if (!max_keys.empty()) {
-    s->formatter->dump_value_str("MaxKeys", max_keys.c_str());
+    s->formatter->dump_format("MaxKeys", max_keys.c_str());
   }
   if (!delimiter.empty())
-    s->formatter->dump_value_str("Delimiter", delimiter.c_str());
+    s->formatter->dump_format("Delimiter", delimiter.c_str());
 
-  s->formatter->dump_value_str("IsTruncated", (is_truncated ? "true" : "false"));
+  s->formatter->dump_format("IsTruncated", (is_truncated ? "true" : "false"));
 
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
-      s->formatter->dump_value_str("Key", iter->name.c_str());
+      s->formatter->dump_format("Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
-      s->formatter->dump_value_str("ETag", "\"%s\"", iter->etag);
+      s->formatter->dump_format("ETag", "\"%s\"", iter->etag);
       s->formatter->dump_value_int("Size", "%lld", iter->size);
-      s->formatter->dump_value_str("StorageClass", "STANDARD");
+      s->formatter->dump_format("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section("Contents");
     }
@@ -153,7 +153,7 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->open_array_section("CommonPrefixes");
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        s->formatter->dump_value_str("Prefix", pref_iter->first.c_str());
+        s->formatter->dump_format("Prefix", pref_iter->first.c_str());
       }
       s->formatter->close_section("CommonPrefixes");
     }
@@ -219,7 +219,7 @@ void RGWCopyObj_REST_S3::send_response()
       bufferlist& bl = iter->second;
       if (bl.length()) {
         char *etag = bl.c_str();
-        s->formatter->dump_value_str("ETag", etag);
+        s->formatter->dump_format("ETag", etag);
       }
     }
     s->formatter->close_section("CopyObjectResult");
@@ -255,9 +255,9 @@ void RGWInitMultipart_REST_S3::send_response()
   if (ret == 0) { 
     dump_start(s);
     s->formatter->open_object_section("InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
-    s->formatter->dump_value_str("Bucket", s->bucket);
-    s->formatter->dump_value_str("Key", s->object);
-    s->formatter->dump_value_str("UploadId", upload_id.c_str());
+    s->formatter->dump_format("Bucket", s->bucket);
+    s->formatter->dump_format("Key", s->object);
+    s->formatter->dump_format("UploadId", upload_id.c_str());
     s->formatter->close_section("InitiateMultipartUploadResult");
     s->formatter->flush(s);
   }
@@ -274,10 +274,10 @@ void RGWCompleteMultipart_REST_S3::send_response()
     s->formatter->open_object_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
     const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
     if (gateway_dns_name)
-      s->formatter->dump_value_str("Location", "%s.%s", s->bucket, gateway_dns_name);
-    s->formatter->dump_value_str("Bucket", s->bucket);
-    s->formatter->dump_value_str("Key", s->object);
-    s->formatter->dump_value_str("ETag", etag.c_str());
+      s->formatter->dump_format("Location", "%s.%s", s->bucket, gateway_dns_name);
+    s->formatter->dump_format("Bucket", s->bucket);
+    s->formatter->dump_format("Key", s->object);
+    s->formatter->dump_format("ETag", etag.c_str());
     s->formatter->close_section("CompleteMultipartUploadResult");
     s->formatter->flush(s);
   }
@@ -311,14 +311,14 @@ void RGWListMultipart_REST_S3::send_response()
     for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
       cur_max = test_iter->first;
     }
-    s->formatter->dump_value_str("Bucket", s->bucket);
-    s->formatter->dump_value_str("Key", s->object);
-    s->formatter->dump_value_str("UploadId", upload_id.c_str());
-    s->formatter->dump_value_str("StorageClass", "STANDARD");
-    s->formatter->dump_value_str("PartNumberMarker", "%d", marker);
-    s->formatter->dump_value_str("NextPartNumberMarker", "%d", cur_max + 1);
-    s->formatter->dump_value_str("MaxParts", "%d", max_parts);
-    s->formatter->dump_value_str("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
+    s->formatter->dump_format("Bucket", s->bucket);
+    s->formatter->dump_format("Key", s->object);
+    s->formatter->dump_format("UploadId", upload_id.c_str());
+    s->formatter->dump_format("StorageClass", "STANDARD");
+    s->formatter->dump_format("PartNumberMarker", "%d", marker);
+    s->formatter->dump_format("NextPartNumberMarker", "%d", cur_max + 1);
+    s->formatter->dump_format("MaxParts", "%d", max_parts);
+    s->formatter->dump_format("IsTruncated", "%s", (test_iter == parts.end() ? "false" : "true"));
 
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.get_id(), owner.get_display_name());
@@ -331,12 +331,12 @@ void RGWListMultipart_REST_S3::send_response()
       localtime_r(&sec, &tmp);
       char buf[TIME_BUF_SIZE];
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
-        s->formatter->dump_value_str("LastModified", buf);
+        s->formatter->dump_format("LastModified", buf);
       }
 
       s->formatter->open_object_section("Part");
       s->formatter->dump_value_int("PartNumber", "%u", info.num);
-      s->formatter->dump_value_str("ETag", "%s", info.etag.c_str());
+      s->formatter->dump_format("ETag", "%s", info.etag.c_str());
       s->formatter->dump_value_int("Size", "%llu", info.size);
       s->formatter->close_section("Part");
     }
@@ -357,36 +357,36 @@ void RGWListBucketMultiparts_REST_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
-  s->formatter->dump_value_str("Bucket", s->bucket);
+  s->formatter->dump_format("Bucket", s->bucket);
   if (!prefix.empty())
-    s->formatter->dump_value_str("ListMultipartUploadsResult.Prefix", prefix.c_str());
+    s->formatter->dump_format("ListMultipartUploadsResult.Prefix", prefix.c_str());
   string& key_marker = marker.get_key();
   if (!key_marker.empty())
-    s->formatter->dump_value_str("KeyMarker", key_marker.c_str());
+    s->formatter->dump_format("KeyMarker", key_marker.c_str());
   string& upload_id_marker = marker.get_upload_id();
   if (!upload_id_marker.empty())
-    s->formatter->dump_value_str("UploadIdMarker", upload_id_marker.c_str());
+    s->formatter->dump_format("UploadIdMarker", upload_id_marker.c_str());
   string next_key = next_marker.mp.get_key();
   if (!next_key.empty())
-    s->formatter->dump_value_str("NextKeyMarker", next_key.c_str());
+    s->formatter->dump_format("NextKeyMarker", next_key.c_str());
   string next_upload_id = next_marker.mp.get_upload_id();
   if (!next_upload_id.empty())
-    s->formatter->dump_value_str("NextUploadIdMarker", next_upload_id.c_str());
-  s->formatter->dump_value_str("MaxUploads", "%d", max_uploads);
+    s->formatter->dump_format("NextUploadIdMarker", next_upload_id.c_str());
+  s->formatter->dump_format("MaxUploads", "%d", max_uploads);
   if (!delimiter.empty())
-    s->formatter->dump_value_str("Delimiter", delimiter.c_str());
-  s->formatter->dump_value_str("IsTruncated", (is_truncated ? "true" : "false"));
+    s->formatter->dump_format("Delimiter", delimiter.c_str());
+  s->formatter->dump_format("IsTruncated", (is_truncated ? "true" : "false"));
 
   if (ret >= 0) {
     vector<RGWMultipartUploadEntry>::iterator iter;
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
       RGWMPObj& mp = iter->mp;
       s->formatter->open_array_section("Upload");
-      s->formatter->dump_value_str("Key", mp.get_key().c_str());
-      s->formatter->dump_value_str("UploadId", mp.get_upload_id().c_str());
+      s->formatter->dump_format("Key", mp.get_key().c_str());
+      s->formatter->dump_format("UploadId", mp.get_upload_id().c_str());
       dump_owner(s, s->user.user_id, s->user.display_name, "Initiator");
       dump_owner(s, s->user.user_id, s->user.display_name);
-      s->formatter->dump_value_str("StorageClass", "STANDARD");
+      s->formatter->dump_format("StorageClass", "STANDARD");
       dump_time(s, "Initiated", &iter->obj.mtime);
       s->formatter->close_section("Upload");
     }
@@ -394,7 +394,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
       s->formatter->open_array_section("CommonPrefixes");
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        s->formatter->dump_value_str("CommonPrefixes.Prefix", pref_iter->first.c_str());
+        s->formatter->dump_format("CommonPrefixes.Prefix", pref_iter->first.c_str());
       }
       s->formatter->close_section("CommonPrefixes");
     }

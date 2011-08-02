@@ -66,7 +66,7 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   write_data("%s\n", buf);
 }
 
-void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
+void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
@@ -119,7 +119,7 @@ void RGWFormatter_XML::dump_value_int(const char *name, const char *fmt, ...)
   write_data("<%s>%s</%s>", name, buf, name);
 }
 
-void RGWFormatter_XML::dump_value_str(const char *name, const char *fmt, ...)
+void RGWFormatter_XML::dump_format(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
@@ -189,7 +189,7 @@ void RGWFormatter_JSON::dump_value_int(const char *name, const char *fmt, ...)
   entry.size++;
 }
 
-void RGWFormatter_JSON::dump_value_str(const char *name, const char *fmt, ...)
+void RGWFormatter_JSON::dump_format(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
