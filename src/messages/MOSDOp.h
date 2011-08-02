@@ -174,11 +174,9 @@ public:
 
     for (unsigned i = 0; i < ops.size(); i++) {
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	bufferlist bl;
-	::encode(ops[i].soid, bl);
-	ops[i].op.payload_len = bl.length();
-	data.append(bl);
-      } else {
+	::encode(ops[i].soid, data);
+      }
+      if (ops[i].data.length()) {
 	ops[i].op.payload_len = ops[i].data.length();
 	data.append(ops[i].data);
       }
@@ -325,19 +323,13 @@ struct ceph_osd_request_head {
 	::decode(peer_stat, p);
     }
 
-    unsigned off = 0;
+    bufferlist::iterator datap = data.begin();
     for (unsigned i = 0; i < ops.size(); i++) {
       if (ceph_osd_op_type_multi(ops[i].op.op)) {
-	bufferlist t;
-	t.substr_of(data, off, ops[i].op.payload_len);
-	off += ops[i].op.payload_len;
-        if (t.length()) {
-	  bufferlist::iterator p = t.begin();
-	  ::decode(ops[i].soid, p);
-	}
-      } else {
-	ops[i].data.substr_of(data, off, ops[i].op.payload_len);
-	off += ops[i].op.payload_len;
+	::decode(ops[i].soid, datap);
+      }
+      if (ops[i].op.payload_len) {
+	datap.copy(ops[i].op.payload_len, ops[i].data);
       }
     }
   }
