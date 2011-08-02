@@ -1343,7 +1343,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule);
   else
     return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
 }
