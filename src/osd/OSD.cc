@@ -1032,7 +1032,11 @@ PG *OSD::lookup_lock_pg(pg_t pgid)
 PG *OSD::lookup_lock_raw_pg(pg_t pgid)
 {
   osd_lock.Lock();
-  pgid = osdmap->raw_pg_to_pg(pgid);
+  if (osdmap->have_pg_pool(pgid.pool())) {
+    pgid = osdmap->raw_pg_to_pg(pgid);
+  } else if (!_have_pg(pgid)) {
+    return NULL;
+  }
   PG *pg = _lookup_lock_pg(pgid);
   osd_lock.Unlock();
   return pg;
@@ -1803,8 +1807,12 @@ void OSD::put_object_context(void *_obc, pg_t pgid)
 {
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
   ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(pgid);
-  pg->put_object_context(obc);
-  pg->unlock();
+  // If pg is being deleted, (which is the only case in which
+  // it will be NULL) it will clean up its object contexts itself
+  if (pg) {
+    pg->put_object_context(obc);
+    pg->unlock();
+  }
 }
 
 void OSD::complete_notify(void *_notif, void *_obc)
@@ -1931,12 +1939,10 @@ void OSD::handle_notify_timeout(void *_notif)
   }
   obc->lock.Unlock();
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
-  
-  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
-  pg->do_complete_notify(notif, obc);
-  pg->put_object_context(obc);
-  pg->unlock();
-  
+
+  complete_notify(_notif, obc);
+  put_object_context(obc, notif->pgid);
+
   watch_lock.Lock();
   /* exiting with watch_lock held */
 }
