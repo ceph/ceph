@@ -9,6 +9,8 @@
 #include "common/Clock.h"
 #include "auth/Crypto.h"
 
+#include <sstream>
+
 using namespace ceph::crypto;
 
 rgw_err::
@@ -69,6 +71,17 @@ req_state::~req_state() {
   free(os_groups);
   free((void *)object);
   free((void *)bucket);
+}
+
+void flush_formatter_to_req_state(struct req_state *s, RGWFormatter *formatter)
+{
+  std::ostringstream oss;
+  formatter->flush(oss);
+  std::string outs(oss.str());
+  if (!outs.empty()) {
+    CGI_PutStr(s, outs.c_str(), outs.size());
+  }
+  s->formatter->reset();
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
@@ -377,16 +390,6 @@ void RGWFormatter::reset()
   buf = NULL;
   len = 0;
   max_len = 0;
-}
-
-void RGWFormatter::flush(struct req_state *s)
-{
-  if (!buf)
-    return;
-
-  RGW_LOG(10) << "flush(): buf='" << buf << "'  strlen(buf)=" << strlen(buf) << dendl;
-  CGI_PutStr(s, buf, len - 1);
-  reset();
 }
 
 void RGWFormatter::flush(ostream& os)

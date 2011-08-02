@@ -109,7 +109,7 @@ void RGWListBuckets_REST_S3::send_response()
   list_all_buckets_end(s);
   dump_content_length(s, s->formatter->get_len());
   end_header(s, "application/xml");
-  s->formatter->flush(s);
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 void RGWListBucket_REST_S3::send_response()
@@ -159,7 +159,7 @@ void RGWListBucket_REST_S3::send_response()
     }
   }
   s->formatter->close_section("ListBucketResult");
-  s->formatter->flush(s);
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 void RGWCreateBucket_REST_S3::send_response()
@@ -223,7 +223,7 @@ void RGWCopyObj_REST_S3::send_response()
       }
     }
     s->formatter->close_section("CopyObjectResult");
-    s->formatter->flush(s);
+    flush_formatter_to_req_state(s, s->formatter);
   }
 }
 
@@ -259,7 +259,7 @@ void RGWInitMultipart_REST_S3::send_response()
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("UploadId", upload_id.c_str());
     s->formatter->close_section("InitiateMultipartUploadResult");
-    s->formatter->flush(s);
+    flush_formatter_to_req_state(s, s->formatter);
   }
 }
 
@@ -279,7 +279,7 @@ void RGWCompleteMultipart_REST_S3::send_response()
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("ETag", etag.c_str());
     s->formatter->close_section("CompleteMultipartUploadResult");
-    s->formatter->flush(s);
+    flush_formatter_to_req_state(s, s->formatter);
   }
 }
 
@@ -341,7 +341,7 @@ void RGWListMultipart_REST_S3::send_response()
       s->formatter->close_section("Part");
     }
     s->formatter->close_section("ListMultipartUploadResult");
-    s->formatter->flush(s);
+    flush_formatter_to_req_state(s, s->formatter);
   }
 }
 
@@ -400,7 +400,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
     }
   }
   s->formatter->close_section("ListMultipartUploadsResult");
-  s->formatter->flush(s);
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(bool get_data)

@@ -376,7 +376,6 @@ public:
   }
   void reset();
   void write_data(const char *fmt, ...);
-  virtual void flush(struct req_state *s);
   virtual void flush(ostream& os);
   virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
   virtual void open_array_section(const char *name) = 0;
@@ -457,6 +456,9 @@ struct req_state {
    req_state(struct RGWEnv *e);
    ~req_state();
 };
+
+extern void flush_formatter_to_req_state(struct req_state *s,
+					 RGWFormatter *formatter);
 
 /** Store basic data on an object */
 struct RGWObjEnt {
