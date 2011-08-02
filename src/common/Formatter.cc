@@ -28,13 +28,11 @@
 // -----------------------
 namespace ceph {
 
-Formatter::
-Formatter()
+Formatter::Formatter()
 {
 }
 
-Formatter::
-~Formatter()
+Formatter::~Formatter()
 {
 }
 
@@ -104,7 +102,7 @@ void JSONFormatter::print_name(const char *name)
   }
   ++entry.size;
 }
-  
+
 void JSONFormatter::open_section(const char *name, bool is_array)
 {
   print_name(name);
@@ -118,8 +116,7 @@ void JSONFormatter::open_section(const char *name, bool is_array)
   m_stack.push_back(n);
 }
 
-JSONFormatter::
-JSONFormatter(bool p) 
+JSONFormatter::JSONFormatter(bool p)
   : m_pretty(p), m_is_pending_string(false)
 {
 }
@@ -197,14 +194,12 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   print_quoted_string(buf);
 }
 
-XMLFormatter::
-XMLFormatter(bool p)
+XMLFormatter::XMLFormatter(bool p)
   : m_pretty(p)
 {
 }
 
-void XMLFormatter::
-flush(std::ostream& os)
+void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   assert(m_sections.empty());
@@ -212,20 +207,17 @@ flush(std::ostream& os)
   m_ss.clear();
 }
 
-void XMLFormatter::
-open_array_section(const char *name)
+void XMLFormatter::open_array_section(const char *name)
 {
   open_section(name);
 }
 
-void XMLFormatter::
-open_object_section(const char *name)
+void XMLFormatter::open_object_section(const char *name)
 {
   open_section(name);
 }
 
-void XMLFormatter::
-close_section()
+void XMLFormatter::close_section()
 {
   assert(!m_sections.empty());
 
@@ -234,8 +226,7 @@ close_section()
   m_sections.pop_back();
 }
 
-void XMLFormatter::
-dump_unsigned(const char *name, uint64_t u)
+void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
   std::string e(escape_xml_str(name));
   print_spaces(true);
@@ -244,8 +235,7 @@ dump_unsigned(const char *name, uint64_t u)
     m_ss << "\n";
 }
 
-void XMLFormatter::
-dump_int(const char *name, int64_t u)
+void XMLFormatter::dump_int(const char *name, int64_t u)
 {
   std::string e(escape_xml_str(name));
   print_spaces(true);
@@ -254,8 +244,7 @@ dump_int(const char *name, int64_t u)
     m_ss << "\n";
 }
 
-void XMLFormatter::
-dump_float(const char *name, double d)
+void XMLFormatter::dump_float(const char *name, double d)
 {
   std::string e(escape_xml_str(name));
   print_spaces(true);
@@ -264,8 +253,7 @@ dump_float(const char *name, double d)
     m_ss << "\n";
 }
 
-void XMLFormatter::
-dump_string(const char *name, std::string s)
+void XMLFormatter::dump_string(const char *name, std::string s)
 {
   std::string e(escape_xml_str(name));
   print_spaces(true);
@@ -274,8 +262,7 @@ dump_string(const char *name, std::string s)
     m_ss << "\n";
 }
 
-std::ostream& XMLFormatter::
-dump_stream(const char *name)
+std::ostream& XMLFormatter::dump_stream(const char *name)
 {
   assert(m_pending_string_name.empty());
   m_pending_string_name = escape_xml_str(name);
@@ -283,8 +270,7 @@ dump_stream(const char *name)
   return m_pending_string;
 }
 
-void XMLFormatter::
-dump_format(const char *name, const char *fmt, ...)
+void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
@@ -299,8 +285,7 @@ dump_format(const char *name, const char *fmt, ...)
     m_ss << "\n";
 }
 
-void XMLFormatter::
-open_section(const char *name)
+void XMLFormatter::open_section(const char *name)
 {
   print_spaces(false);
   std::string escaped_name(escape_xml_str(name));
@@ -308,8 +293,7 @@ open_section(const char *name)
   m_ss << "<" << escaped_name << ">";
 }
 
-void XMLFormatter::
-finish_pending_string()
+void XMLFormatter::finish_pending_string()
 {
   if (!m_pending_string_name.empty()) {
     m_ss << escape_xml_str(m_pending_string.str().c_str())
@@ -321,8 +305,7 @@ finish_pending_string()
   }
 }
 
-void XMLFormatter::
-print_spaces(bool extra_space)
+void XMLFormatter::print_spaces(bool extra_space)
 {
   finish_pending_string();
   if (m_pretty) {
@@ -334,8 +317,7 @@ print_spaces(bool extra_space)
   }
 }
 
-std::string XMLFormatter:: 
-escape_xml_str(const char *str)
+std::string XMLFormatter::escape_xml_str(const char *str)
 {
   int len = escape_xml_attr_len(str);
   std::vector<char> escaped(len, '\0');
