@@ -245,6 +245,27 @@ int main(int argc, const char **argv)
   r = io_ctx.operate(oid, &o, &bl2);
   cout << "operate result=" << r << std::endl;
 
+  cout << "cmpxattr" << std::endl;
+  bufferlist val;
+  val.append("foo");
+  r = io_ctx.setxattr(oid, "foo", val);
+  assert(r >= 0);
+  {
+    ObjectOperation o;
+    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    r = io_ctx.operate(oid, &o, &bl2);
+    cout << " got " << r << " wanted >= 0" << std::endl;
+    assert(r >= 0);
+  }
+  val.append("...");
+  {
+    ObjectOperation o;
+    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    r = io_ctx.operate(oid, &o, &bl2);
+    cout << " got " << r << " wanted ECANCELED" << std::endl;
+    assert(r == -ECANCELED);
+  }
+
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;
   for (ObjectIterator iter = io_ctx.objects_begin();
