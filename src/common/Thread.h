@@ -44,6 +44,7 @@ class Thread {
   int try_create(size_t stacksize);
   void create(size_t stacksize = 0);
   int join(void **prval = 0);
+  int detach();
 };
 
 #endif

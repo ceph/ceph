@@ -165,3 +165,8 @@ join(void **prval)
   thread_id = 0;
   return status;
 }
+
+int Thread::detach()
+{
+  return pthread_detach(thread_id);
+}
