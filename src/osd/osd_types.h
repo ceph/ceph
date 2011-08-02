@@ -1638,6 +1638,8 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     }
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
+    if (op.op.op == CEPH_OSD_OP_CMPXATTR)
+      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
     if (op.op.cls.class_len && op.data.length()) {

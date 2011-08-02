@@ -253,6 +253,15 @@ struct ObjectOperation {
     add_watch(CEPH_OSD_OP_ASSERT_SRC_VERSION, 0, ver, 0, bl);
     ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
   }
+
+  void cmpxattr(const char *name, const bufferlist& val,
+		int op, int mode) {
+    add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
+    OSDOp& o = *ops.rbegin();
+    o.op.xattr.cmp_op = op;
+    o.op.xattr.cmp_mode = mode;
+  }
+
 };
 
 

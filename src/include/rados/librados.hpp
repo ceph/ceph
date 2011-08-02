@@ -121,6 +121,7 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
+    void cmpxattr(const char *name, const bufferlist& val, int op, int mode);
     void tmap_update(const bufferlist& cmdbl);
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,

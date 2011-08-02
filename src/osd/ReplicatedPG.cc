@@ -1007,6 +1007,8 @@ int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
   else
     v2 = 0;
 
+  dout(20) << "do_xattr_cmp_u64 '" << v1 << "' vs '" << v2 << "' op " << op << dendl;
+
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
     return (v1 == v2);
@@ -1033,6 +1035,8 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
     v2 = xattr.c_str();
   else
     v2 = "";
+
+  dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2 << "' op " << op << dendl;
 
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
@@ -1362,6 +1366,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
       
     case CEPH_OSD_OP_CMPXATTR:
+    case CEPH_OSD_OP_SRC_CMPXATTR:
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -1369,7 +1374,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	name[op.xattr.name_len + 1] = 0;
 	
 	bufferlist xattr;
-	result = osd->store->getattr(coll, soid, name.c_str(), xattr);
+	if (op.op == CEPH_OSD_OP_CMPXATTR)
+	  result = osd->store->getattr(coll, soid, name.c_str(), xattr);
+	else
+	  result = osd->store->getattr(coll, src_obc->obs.oi.soid, name.c_str(), xattr);
 	if (result < 0 && result != -EEXIST && result !=-ENODATA)
 	  break;
 	
@@ -1396,6 +1404,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  break;
 
 	default:
+	  dout(10) << "bad cmp mode " << (int)op.xattr.cmp_mode << dendl;
 	  result = -EINVAL;
 	}
 
