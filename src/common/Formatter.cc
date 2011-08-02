@@ -37,6 +37,12 @@ Formatter::~Formatter()
 }
 
 // -----------------------
+JSONFormatter::JSONFormatter(bool p)
+  : m_pretty(p), m_is_pending_string(false)
+{
+  reset();
+}
+
 void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
@@ -116,11 +122,6 @@ void JSONFormatter::open_section(const char *name, bool is_array)
   m_stack.push_back(n);
 }
 
-JSONFormatter::JSONFormatter(bool p)
-  : m_pretty(p), m_is_pending_string(false)
-{
-}
-
 void JSONFormatter::open_array_section(const char *name)
 {
   open_section(name, true);
@@ -197,6 +198,7 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
 XMLFormatter::XMLFormatter(bool p)
   : m_pretty(p)
 {
+  reset();
 }
 
 void XMLFormatter::flush(std::ostream& os)
@@ -205,6 +207,14 @@ void XMLFormatter::flush(std::ostream& os)
   assert(m_sections.empty());
   os << m_ss.str();
   m_ss.clear();
+}
+
+void XMLFormatter::reset()
+{
+  m_ss.clear();
+  m_pending_string.clear();
+  m_sections.clear();
+  m_pending_string_name.clear();
 }
 
 void XMLFormatter::open_array_section(const char *name)

@@ -18,6 +18,7 @@ class Formatter {
   virtual ~Formatter();
 
   virtual void flush(std::ostream& os) = 0;
+  virtual void reset() = 0;
 
   virtual void open_array_section(const char *name) = 0;
   virtual void open_object_section(const char *name) = 0;
@@ -71,6 +72,7 @@ class XMLFormatter : public Formatter {
   XMLFormatter(bool p=false);
 
   void flush(std::ostream& os);
+  void reset();
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section();
