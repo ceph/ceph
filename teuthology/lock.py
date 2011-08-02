@@ -207,9 +207,7 @@ Lock, unlock, or query lock status of machines.
             'machines must be specified for that operation'
 
     if ctx.list:
-        assert ctx.status is None and ctx.desc is None, \
-            '--status and --desc do nothing with --list'
-        assert ctx.owner is None, 'the owner option does nothing with --list'
+        assert ctx.desc is None, '--desc does nothing with --list'
 
         if machines:
             statuses = [get_status(ctx, machine) for machine in machines]
@@ -217,6 +215,12 @@ Lock, unlock, or query lock status of machines.
             statuses = list_locks(ctx)
 
         if statuses:
+            if ctx.owner is not None:
+                statuses = [status for status in statuses \
+                                if status['locked_by'] == ctx.owner]
+            if ctx.status is not None:
+                statuses = [status for status in statuses \
+                                if status['up'] == (ctx.status == 'up')]
             print json.dumps(statuses, indent=4)
         else:
             log.error('error retrieving lock statuses')
