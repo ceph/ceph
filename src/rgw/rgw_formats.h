@@ -19,8 +19,9 @@ public:
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section(const char *name);
-  void dump_value_int(const char *name, const char *fmt, ...);
   void dump_format(const char *name, const char *fmt, ...);
+private:
+  void dump_value_int(const char *name, const char *fmt, ...);
 };
 
 class RGWFormatter_XML : public RGWFormatter {
@@ -42,8 +43,9 @@ public:
     open_section(name);
   }
   void close_section(const char *name);
-  void dump_value_int(const char *name, const char *fmt, ...);
   void dump_format(const char *name, const char *fmt, ...);
+private:
+  void dump_value_int(const char *name, const char *fmt, ...);
 };
 
 struct json_stack_entry {
@@ -65,8 +67,9 @@ public:
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section(const char *name);
-  void dump_value_int(const char *name, const char *fmt, ...);
   void dump_format(const char *name, const char *fmt, ...);
+private:
+  void dump_value_int(const char *name, const char *fmt, ...);
 };
 
 #endif

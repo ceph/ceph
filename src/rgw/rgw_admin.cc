@@ -906,7 +906,7 @@ int main(int argc, char **argv)
     }
     formatter->init();
     formatter->open_object_section("Pool");
-    formatter->dump_value_int("ID", "%d", pool_id);
+    formatter->dump_int("ID", pool_id);
     formatter->dump_format("Bucket", "%s", info.bucket.c_str());
     formatter->dump_format("Owner", "%s", info.owner.c_str());
     formatter->close_section("Pool");

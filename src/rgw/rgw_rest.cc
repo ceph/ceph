@@ -170,7 +170,7 @@ void end_header(struct req_state *s, const char *content_type)
     dump_start(s);
     s->formatter->open_object_section("Error");
     if (!s->err.s3_code.empty())
-      s->formatter->dump_value_int("Code", "%s", s->err.s3_code.c_str());
+      s->formatter->dump_format("Code", "%s", s->err.s3_code.c_str());
     if (!s->err.message.empty())
       s->formatter->dump_format("Message", s->err.message.c_str());
     s->formatter->close_section("Error");

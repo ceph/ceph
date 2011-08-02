@@ -36,8 +36,8 @@ void RGWListBuckets_REST_OS::send_response()
     RGWBucketEnt obj = iter->second;
     s->formatter->open_object_section("container");
     s->formatter->dump_format("name", obj.name.c_str());
-    s->formatter->dump_value_int("count", "%lld", obj.count);
-    s->formatter->dump_value_int("bytes", "%lld", obj.size);
+    s->formatter->dump_int("count", obj.count);
+    s->formatter->dump_int("bytes", obj.size);
     s->formatter->close_section("container");
   }
   s->formatter->close_section("account");
@@ -84,7 +84,7 @@ void RGWListBucket_REST_OS::send_response()
       s->formatter->open_object_section("object");
       s->formatter->dump_format("name", iter->name.c_str());
       s->formatter->dump_format("hash", "\"%s\"", iter->etag);
-      s->formatter->dump_value_int("bytes", "%lld", iter->size);
+      s->formatter->dump_int("bytes", iter->size);
       if (iter->content_type.size())
         s->formatter->dump_format("content_type", iter->content_type.c_str());
       dump_time(s, "last_modified", &iter->mtime);

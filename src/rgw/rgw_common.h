@@ -354,6 +354,8 @@ WRITE_CLASS_ENCODER(RGWPoolInfo)
 
 struct req_state;
 
+#include <inttypes.h> // for PRIu64, etc
+
 class RGWFormatter {
 protected:
   char *buf;
@@ -380,8 +382,18 @@ public:
   virtual void open_array_section(const char *name) = 0;
   virtual void open_object_section(const char *name) = 0;
   virtual void close_section(const char *name) = 0;
-  virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
+  void dump_unsigned(const char *name, uint64_t u) {
+    dump_value_int(name, "%"PRIu64, u);
+  }
+  void dump_int(const char *name, int64_t u) {
+    dump_value_int(name, "%"PRId64, u);
+  }
+  void dump_float(const char *name, double d) {
+    dump_value_int(name, "%f", d);
+  }
+private:
+  virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
 };
 
 struct RGWEnv;

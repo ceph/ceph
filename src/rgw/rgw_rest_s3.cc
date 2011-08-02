@@ -144,7 +144,7 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->dump_format("Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag);
-      s->formatter->dump_value_int("Size", "%lld", iter->size);
+      s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_format("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section("Contents");
@@ -335,9 +335,9 @@ void RGWListMultipart_REST_S3::send_response()
       }
 
       s->formatter->open_object_section("Part");
-      s->formatter->dump_value_int("PartNumber", "%u", info.num);
+      s->formatter->dump_unsigned("PartNumber", info.num);
       s->formatter->dump_format("ETag", "%s", info.etag.c_str());
-      s->formatter->dump_value_int("Size", "%llu", info.size);
+      s->formatter->dump_unsigned("Size", info.size);
       s->formatter->close_section("Part");
     }
     s->formatter->close_section("ListMultipartUploadResult");
