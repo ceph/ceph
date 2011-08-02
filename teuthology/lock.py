@@ -106,7 +106,7 @@ Lock, unlock, or query lock status of machines.
         '--list',
         action='store_true',
         default=False,
-        help='show lock info for all machines, or only machines specified',
+        help='Show lock info for all machines, or only machines specified. Can be restricted by --owner and --status.',
         )
     group.add_argument(
         '--lock',
@@ -135,7 +135,7 @@ Lock, unlock, or query lock status of machines.
     parser.add_argument(
         '--owner',
         default=None,
-        help='who will own locked machines',
+        help='owner of the lock(s) (must match to unlock a machine)',
         )
     parser.add_argument(
         '-f',
@@ -152,7 +152,7 @@ Lock, unlock, or query lock status of machines.
         '--status',
         default=None,
         choices=['up', 'down'],
-        help='update status',
+        help='whether a machine is usable for testing',
         )
     parser.add_argument(
         '-t', '--targets',
