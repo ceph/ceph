@@ -195,6 +195,11 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   print_quoted_string(buf);
 }
 
+int JSONFormatter::get_len() const
+{
+  return m_ss.str().size();
+}
+
 XMLFormatter::XMLFormatter(bool p)
   : m_pretty(p)
 {
@@ -293,6 +298,11 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
   m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
+}
+
+int XMLFormatter::get_len() const
+{
+  return m_ss.str().size();
 }
 
 void XMLFormatter::open_section(const char *name)
