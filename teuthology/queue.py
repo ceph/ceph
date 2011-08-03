@@ -33,6 +33,11 @@ describe. One job is run at a time.
         help='path under which to archive results',
         required=True,
         )
+    parser.add_argument(
+        '-l', '--log-dir',
+        help='path in which to store logs',
+        required=True,
+        )
 
     ctx = parser.parse_args()
 
@@ -42,6 +47,9 @@ describe. One job is run at a time.
 
     logging.basicConfig(
         level=loglevel,
+        filename=os.path.join(ctx.log_dir, 'worker.{pid}'.format(pid=os.getpid())),
+        format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
         )
 
     if not os.path.isdir(ctx.archive_dir):
