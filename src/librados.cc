@@ -3134,18 +3134,18 @@ get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
        p != rawresult.end();
        p++) {
     pool_stat_t& v = result[p->first];
-    v.num_kb = p->second.num_kb;
-    v.num_bytes = p->second.num_bytes;
-    v.num_objects = p->second.num_objects;
-    v.num_object_clones = p->second.num_object_clones;
-    v.num_object_copies = p->second.num_object_copies;
-    v.num_objects_missing_on_primary = p->second.num_objects_missing_on_primary;
-    v.num_objects_unfound = p->second.num_objects_unfound;
-    v.num_objects_degraded = p->second.num_objects_degraded;
-    v.num_rd = p->second.num_rd;
-    v.num_rd_kb = p->second.num_rd_kb;
-    v.num_wr = p->second.num_wr;
-    v.num_wr_kb = p->second.num_wr_kb;
+    v.num_kb = p->second.stats.sum.num_kb;
+    v.num_bytes = p->second.stats.sum.num_bytes;
+    v.num_objects = p->second.stats.sum.num_objects;
+    v.num_object_clones = p->second.stats.sum.num_object_clones;
+    v.num_object_copies = p->second.stats.sum.num_object_copies;
+    v.num_objects_missing_on_primary = p->second.stats.sum.num_objects_missing_on_primary;
+    v.num_objects_unfound = p->second.stats.sum.num_objects_unfound;
+    v.num_objects_degraded = p->second.stats.sum.num_objects_degraded;
+    v.num_rd = p->second.stats.sum.num_rd;
+    v.num_rd_kb = p->second.stats.sum.num_rd_kb;
+    v.num_wr = p->second.stats.sum.num_wr;
+    v.num_wr_kb = p->second.stats.sum.num_wr_kb;
   }
   return r;
 }
@@ -3373,18 +3373,18 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
     return err;
 
   ::pool_stat_t& r = rawresult[io_ctx_impl->pool_name];
-  stats->num_kb = r.num_kb;
-  stats->num_bytes = r.num_bytes;
-  stats->num_objects = r.num_objects;
-  stats->num_object_clones = r.num_object_clones;
-  stats->num_object_copies = r.num_object_copies;
-  stats->num_objects_missing_on_primary = r.num_objects_missing_on_primary;
-  stats->num_objects_unfound = r.num_objects_unfound;
-  stats->num_objects_degraded = r.num_objects_degraded;
-  stats->num_rd = r.num_rd;
-  stats->num_rd_kb = r.num_rd_kb;
-  stats->num_wr = r.num_wr;
-  stats->num_wr_kb = r.num_wr_kb;
+  stats->num_kb = r.stats.sum.num_kb;
+  stats->num_bytes = r.stats.sum.num_bytes;
+  stats->num_objects = r.stats.sum.num_objects;
+  stats->num_object_clones = r.stats.sum.num_object_clones;
+  stats->num_object_copies = r.stats.sum.num_object_copies;
+  stats->num_objects_missing_on_primary = r.stats.sum.num_objects_missing_on_primary;
+  stats->num_objects_unfound = r.stats.sum.num_objects_unfound;
+  stats->num_objects_degraded = r.stats.sum.num_objects_degraded;
+  stats->num_rd = r.stats.sum.num_rd;
+  stats->num_rd_kb = r.stats.sum.num_rd_kb;
+  stats->num_wr = r.stats.sum.num_wr;
+  stats->num_wr_kb = r.stats.sum.num_wr_kb;
   return 0;
 }
 

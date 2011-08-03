@@ -2082,6 +2082,14 @@ void OSD::send_pg_stats(const utime_t &now)
       if (pg->pg_stats_valid) {
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
 	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+  JSONFormatter jf(false);
+  jf.open_object_section("stats");
+  pg->pg_stats_stable.dump(&jf);
+  jf.close_section();
+  stringstream ss;
+  jf.flush(ss);
+  dout(20) << " sending " << pg->info.pgid << " " << ss.str() << dendl;
+
       } else {
 	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << ", not valid" << dendl;
       }
@@ -3776,11 +3784,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       }
 
       // add to child stats
-      child->info.stats.num_bytes += st.st_size;
-      child->info.stats.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
-      child->info.stats.num_objects++;
+      child->info.stats.stats.sum.num_bytes += st.st_size;
+      child->info.stats.stats.sum.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
+      child->info.stats.stats.sum.num_objects++;
       if (poid.snap && poid.snap != CEPH_NOSNAP)
-	child->info.stats.num_object_clones++;
+	child->info.stats.stats.sum.num_object_clones++;
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
     }

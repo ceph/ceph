@@ -543,7 +543,7 @@ void GuiMonitor::update_pg_cluster_view()
 
   ostringstream oss;
   oss << ctx->pgmap.pg_stat.size() << " Placement Groups\n"
-      << kb_t(ctx->pgmap.pg_sum.num_kb) << " Data, "
+      << kb_t(ctx->pgmap.pg_sum.stats.sum.num_kb) << " Data, "
       << kb_t(ctx->pgmap.osd_sum.kb_used) << " Used, "
       << kb_t(ctx->pgmap.osd_sum.kb_avail) << " / "
       << kb_t(ctx->pgmap.osd_sum.kb) << " Available";
@@ -1544,7 +1544,7 @@ void GuiMonitor::StatsWindowInfo::gen_pg_cluster_columns()
 
   {
     ostringstream oss;
-    oss << kb_t(ctx->pgmap.pg_sum.num_kb);
+    oss << kb_t(ctx->pgmap.pg_sum.stats.sum.num_kb);
     insert_stats("Data ", oss.str());
   }
 
@@ -1655,15 +1655,15 @@ void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
   stats_info_label->set_label(label);
 
   insert_stats("Number of Objects",
-    str(boost::format("%llu") % stat.num_objects));
+    str(boost::format("%llu") % stat.stats.sum.num_objects));
   insert_stats("Number of Objects Missing on Primary",
-    str(boost::format("%llu") % stat.num_objects_missing_on_primary));
+    str(boost::format("%llu") % stat.stats.sum.num_objects_missing_on_primary));
   insert_stats("Number of Objects Degraded",
-    str(boost::format("%llu") % stat.num_objects_degraded));
+    str(boost::format("%llu") % stat.stats.sum.num_objects_degraded));
   insert_stats("Number of Objects Unfound",
-    str(boost::format("%llu") % stat.num_objects_unfound));
-  insert_stats("KB", str(boost::format("%llu") % stat.num_kb));
-  insert_stats("Bytes", str(boost::format("%llu") % stat.num_bytes));
+    str(boost::format("%llu") % stat.stats.sum.num_objects_unfound));
+  insert_stats("KB", str(boost::format("%llu") % stat.stats.sum.num_kb));
+  insert_stats("Bytes", str(boost::format("%llu") % stat.stats.sum.num_bytes));
   insert_stats("Log Size", str(boost::format("%llu") % stat.log_size));
   insert_stats("On-Disk Log Size", str(boost::format("%llu") %
   stat.ondisk_log_size));

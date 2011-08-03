@@ -47,7 +47,8 @@ cmds_CXXFLAGS = ${AM_CXXFLAGS}
 # admin tools
 ceph_SOURCES = \
 	tools/ceph.cc \
-	tools/common.cc
+	tools/common.cc \
+	mon/PGMap.cc
 ceph_LDADD = $(LIBGLOBAL_LDA) -ledit
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -73,6 +74,7 @@ ceph_tool_gui_DATA = \
 	tools/gui_resources/stopped_mds.svg
 gceph_SOURCES = \
 	tools/common.cc \
+	mon/PGMap.cc \
 	tools/gceph.cc \
 	tools/gui.cc
 gceph_LDADD = $(LIBGLOBAL_LDA) -ledit $(GTKMM_LIBS)
@@ -789,6 +791,7 @@ libmon_la_SOURCES = \
 	mon/MDSMonitor.cc \
 	mon/MonmapMonitor.cc \
 	mon/PGMonitor.cc \
+	mon/PGMap.cc \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
