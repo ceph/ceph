@@ -193,30 +193,38 @@ def nuke():
     log.info('Killing daemons, unmounting, and removing data...')
 
     from orchestra import run
-    ctx.cluster.run(
-        args=[
-            'killall',
-            '--quiet',
-            '/tmp/cephtest/binary/usr/local/bin/cmon',
-            '/tmp/cephtest/binary/usr/local/bin/cosd',
-            '/tmp/cephtest/binary/usr/local/bin/cmds',
-            '/tmp/cephtest/binary/usr/local/bin/cfuse',
-            run.Raw(';'),
-            'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
-            run.Raw(';'),
-            'then',
-            'sudo', 'rm', '-f', '--', '/etc/rsyslog.d/80-cephtest.conf',
-            run.Raw('&&'),
-            'sudo', 'initctl', 'restart', 'rsyslog',
-            run.Raw(';'),
-            'fi',
-            run.Raw(';'),
-            'find', '/tmp/cephtest', '-maxdepth', '1', '-name', 'mnt.*',
-            '-execdir', 'fusermount', '-u', '{}', ';',
-            run.Raw(';'),
-            'sudo', 'rm', '-rf', '/tmp/cephtest',
-            ])
+    nodes = {}
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
+                'killall',
+                '--quiet',
+                '/tmp/cephtest/binary/usr/local/bin/cmon',
+                '/tmp/cephtest/binary/usr/local/bin/cosd',
+                '/tmp/cephtest/binary/usr/local/bin/cmds',
+                '/tmp/cephtest/binary/usr/local/bin/cfuse',
+                run.Raw(';'),
+                'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
+                run.Raw(';'),
+                'then',
+                'sudo', 'rm', '-f', '--', '/etc/rsyslog.d/80-cephtest.conf',
+                run.Raw('&&'),
+                'sudo', 'initctl', 'restart', 'rsyslog',
+                run.Raw(';'),
+                'fi',
+                run.Raw(';'),
+                'find', '/tmp/cephtest', '-maxdepth', '1', '-name', 'mnt.*',
+                '-execdir', 'fusermount', '-u', '{}', ';',
+                run.Raw(';'),
+                'sudo', 'rm', '-rf', '/tmp/cephtest',
+                ],
+            wait=False,
+            )
+        nodes[remote.name] = proc
 
+    for name, proc in nodes.iteritems():
+        log.info('Waiting for %s to be nuked...', name)
+        proc.exitstatus.get()
     log.info('Done.')
 
 def schedule():
