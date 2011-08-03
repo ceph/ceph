@@ -1478,6 +1478,7 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;
+  string category;
 
   eversion_t version, prior_version;
   eversion_t user_version;
@@ -1500,15 +1501,17 @@ struct object_info_t {
     truncate_seq = other.truncate_seq;
     truncate_size = other.truncate_size;
     lost = other.lost;
+    category = other.category;
   }
 
   map<entity_name_t, watch_info_t> watchers;
 
   void encode(bufferlist& bl) const {
-    const __u8 v = 4;
+    const __u8 v = 5;
     ::encode(v, bl);
     ::encode(soid, bl);
     ::encode(oloc, bl);
+    ::encode(category, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
@@ -1530,6 +1533,8 @@ struct object_info_t {
     ::decode(soid, bl);
     if (v >= 2)
       ::decode(oloc, bl);
+    if (v >= 5)
+      ::decode(category, bl);
     ::decode(version, bl);
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);

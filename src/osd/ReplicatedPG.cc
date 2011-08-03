@@ -880,7 +880,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const sobject_t &coid,
     delta.num_object_clones--;
     delta.num_bytes -= snapset.clone_size[last];
     delta.num_kb -= SHIFT_ROUND_UP(snapset.clone_size[last], 10);
-    info.stats.stats.add(delta, string());
+    info.stats.stats.add(delta, obc->obs.oi.category);
 
     snapset.clones.erase(p);
     snapset.clone_overlap.erase(last);
@@ -1588,6 +1588,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           t.touch(coll, soid);
           maybe_created = true;
         }
+	if (osd_op.data.length()) {
+	  bufferlist::iterator p = osd_op.data.begin();
+	  string category;
+	  ::decode(category, p);
+	  if (obs.exists) {
+	    if (obs.oi.category != category)
+	      result = -EEXIST;
+	  } else {
+	    obs.oi.category = category;
+	  }
+	}
       }
       break;
       
@@ -2562,8 +2573,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
   ctx->obc->ssc->snapset = ctx->new_snapset;
-  string cat;
-  info.stats.stats.add(ctx->delta_stats, cat);
+  info.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
 
   return result;
 }

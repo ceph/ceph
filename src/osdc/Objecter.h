@@ -141,6 +141,11 @@ struct ObjectOperation {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
     o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
   }
+  void create(bool excl, const string& category) {
+    OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
+    o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
+    ::encode(category, o.data);
+  }
 
   // object data
   void read(uint64_t off, uint64_t len) {
