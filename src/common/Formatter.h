@@ -71,7 +71,8 @@ class JSONFormatter : public Formatter {
 
 class XMLFormatter : public Formatter {
  public:
-  XMLFormatter(bool p=false);
+  static const char *XML_1_DTD;
+  XMLFormatter(const char *dtd, bool p=false);
 
   void flush(std::ostream& os);
   void reset();
@@ -96,6 +97,7 @@ class XMLFormatter : public Formatter {
   std::deque<std::string> m_sections;
   bool m_pretty;
   std::string m_pending_string_name;
+  std::string m_dtd;
 };
 
 }
