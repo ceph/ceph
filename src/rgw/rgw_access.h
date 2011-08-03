@@ -244,6 +244,7 @@ public:
 
   virtual void *create_context() { return NULL; }
   virtual void destroy_context(void *ctx) {}
+  virtual void set_atomic(void *ctx, rgw_obj& obj) {}
 };
 
 class RGWStoreManager {

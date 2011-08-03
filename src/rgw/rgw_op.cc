@@ -689,6 +689,7 @@ void RGWPutObj::execute()
 
     if (!multipart) {
       rgw_obj dst_obj(s->bucket_str, s->object_str);
+      rgwstore->set_atomic(s->obj_ctx, dst_obj);
       ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, attrs);
       if (ret < 0)
         goto done_err;

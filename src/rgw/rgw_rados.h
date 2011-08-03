@@ -9,12 +9,14 @@ class RGWWatcher;
 
 struct RGWObjState {
   bool is_atomic;
-  uint64_t ver;
   bool has_attrs;
+  uint64_t size;
+  time_t mtime;
   bufferlist obj_tag;
+  string shadow_obj;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), ver(0), has_attrs(0) {}
+  RGWObjState() : is_atomic(false), has_attrs(0) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -30,6 +32,9 @@ struct RGWRadosCtx {
   map<rgw_obj, RGWObjState> objs_state;
   RGWObjState *get_state(rgw_obj& obj) {
     return &objs_state[obj];
+  }
+  void set_atomic(rgw_obj& obj) {
+    objs_state[obj].is_atomic = true;
   }
 };
   
@@ -55,6 +60,10 @@ class RGWRados  : public RGWAccess
   librados::IoCtx control_pool_ctx;
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
+  int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
+  int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectOperation& op, RGWObjState **pstate);
 public:
   RGWRados() : watcher(NULL), watch_handle(0) {}
 
@@ -164,8 +173,11 @@ public:
   void destroy_context(void *ctx) {
     delete (RGWRadosCtx *)ctx;
   }
+  void set_atomic(void *ctx, rgw_obj& obj) {
+    RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+    rctx->set_atomic(obj);
+  }
 
-  void set_atomic_ops(void *ctx, rgw_obj& obj);
 };
 
 #endif
