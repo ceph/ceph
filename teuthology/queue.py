@@ -85,6 +85,7 @@ def run_job(job, archive_dir):
     arg.extend([
             '--lock',
             '--block',
+            '--keep-locked-on-error',
             '--owner', job_config['owner'],
             '--archive', archive_path,
             ])
