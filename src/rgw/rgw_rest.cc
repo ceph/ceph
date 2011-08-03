@@ -446,13 +446,16 @@ void init_entities_from_header(struct req_state *s)
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     s->format = 0;
+    delete s->formatter;
     s->formatter = new RGWFormatter_Plain;
     string format_str = s->args.get("format");
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
+      delete s->formatter;
       s->formatter = new RGWFormatter_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
+      delete s->formatter;
       s->formatter = new RGWFormatter_JSON;
     }
   }
