@@ -121,7 +121,8 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
-    void cmpxattr(const char *name, const bufferlist& bl);
+    void cmpxattr(const char *name, uint8_t op, const bufferlist& bl);
+    void cmpxattr(const char *name, uint8_t op, uint64_t v);
     void tmap_update(const bufferlist& cmdbl);
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
@@ -139,7 +140,28 @@ namespace librados
     friend class Rados;
   };
 
-  /* IoCtx : This is a context in which we can perform I/O.
+  /*
+   * ObjectReadOperation : compount object operation that return value
+   * Batch multiple object operations into a single request, to be applied
+   * atomically.
+   */
+  class ObjectReadOperation
+  {
+  public:
+    ObjectReadOperation();
+    ~ObjectReadOperation();
+
+    void stat();
+    void getxattr(const char *name);
+    void getxattrs();
+
+  private:
+    ObjectOperationImpl *impl;
+    ObjectReadOperation(const ObjectReadOperation& rhs);
+    ObjectReadOperation& operator=(const ObjectReadOperation& rhs);
+    friend class IoCtx;
+    friend class Rados;
+  };  /* IoCtx : This is a context in which we can perform I/O.
    * It includes a Pool,
    *
    * Typical use (error checking omitted):
@@ -245,6 +267,7 @@ namespace librados
 
     // compound object operations
     int operate(const std::string& oid, ObjectOperation *op, bufferlist *pbl);
+    int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectOperation *op, bufferlist *pbl);
 
     // watch/notify

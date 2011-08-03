@@ -26,6 +26,17 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 
+/* xattr comparison */
+enum {
+	LIBRADOS_CMPXATTR_OP_NOP = 0,
+	LIBRADOS_CMPXATTR_OP_EQ  = 1,
+	LIBRADOS_CMPXATTR_OP_NE  = 2,
+	LIBRADOS_CMPXATTR_OP_GT  = 3,
+	LIBRADOS_CMPXATTR_OP_GTE = 4,
+	LIBRADOS_CMPXATTR_OP_LT  = 5,
+	LIBRADOS_CMPXATTR_OP_LTE = 6
+};
+
 struct CephContext;
 
 typedef void *rados_t;
