@@ -120,6 +120,7 @@ const struct CompatSet::Feature ceph_osd_feature_incompat[] = {
   CEPH_OSD_FEATURE_INCOMPAT_PGINFO,
   CEPH_OSD_FEATURE_INCOMPAT_OLOC,
   CEPH_OSD_FEATURE_INCOMPAT_LEC,
+  CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES, // stat categories
   END_FEATURE
 };
 const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
