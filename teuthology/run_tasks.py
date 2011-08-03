@@ -51,4 +51,3 @@ def run_tasks(tasks, ctx):
         finally:
             # be careful about cyclic references
             del exc_info
-            ctx.summary.setdefault('success', True)

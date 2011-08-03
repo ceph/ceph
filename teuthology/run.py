@@ -115,7 +115,7 @@ def main():
 
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
 
-    ctx.summary = {}
+    ctx.summary = dict(success=True)
 
     if ctx.owner is None:
         from teuthology.misc import get_user
