@@ -139,6 +139,12 @@ void librados::ObjectOperation::create(bool exclusive)
   o->create(exclusive);
 }
 
+void librados::ObjectOperation::create(bool exclusive, const std::string& category)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->create(exclusive, category);
+}
+
 void librados::ObjectOperation::write(uint64_t off, const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -516,6 +522,7 @@ public:
 
   // io
   int create(IoCtxImpl& io, const object_t& oid, bool exclusive);
+  int create(IoCtxImpl& io, const object_t& oid, bool exclusive, const std::string& category);
   int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len);
   int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
@@ -1418,6 +1425,39 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
   objecter->create(oid, io.oloc,
 		  io.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
 		  onack, NULL, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::create(IoCtxImpl& io, const object_t& oid, bool exclusive, const std::string& category)
+{
+  utime_t ut = ceph_clock_now(cct);
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  Mutex mylock("RadosClient::create::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  eversion_t ver;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  ::ObjectOperation o;
+  o.create(exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0, category);
+
+  lock.Lock();
+  objecter->mutate(oid, io.oloc, o, io.snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2618,11 +2658,16 @@ get_auid(uint64_t *auid_)
   return io_ctx_impl->client->pool_get_auid(io_ctx_impl, (unsigned long long *)auid_);
 }
 
-int librados::IoCtx::
-create(const std::string& oid, bool exclusive)
+int librados::IoCtx::create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);
   return io_ctx_impl->client->create(*io_ctx_impl, obj, exclusive);
+}
+
+int librados::IoCtx::create(const std::string& oid, bool exclusive, const std::string& category)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->create(*io_ctx_impl, obj, exclusive, category);
 }
 
 int librados::IoCtx::

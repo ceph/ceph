@@ -113,6 +113,7 @@ namespace librados
     ~ObjectOperation();
 
     void create(bool exclusive);
+    void create(bool exclusive, const std::string& category);
     void write(uint64_t off, const bufferlist& bl);
     void write_full(const bufferlist& bl);
     void append(const bufferlist& bl);
@@ -175,6 +176,7 @@ namespace librados
 
     // create an object
     int create(const std::string& oid, bool exclusive);
+    int create(const std::string& oid, bool exclusive, const std::string& category);
 
     int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int append(const std::string& oid, bufferlist& bl, size_t len);
