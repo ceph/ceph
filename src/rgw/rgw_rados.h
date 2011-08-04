@@ -10,13 +10,14 @@ class RGWWatcher;
 struct RGWObjState {
   bool is_atomic;
   bool has_attrs;
+  bool exists;
   uint64_t size;
   time_t mtime;
   bufferlist obj_tag;
   string shadow_obj;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);

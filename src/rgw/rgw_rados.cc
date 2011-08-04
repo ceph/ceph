@@ -706,8 +706,15 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   op.stat();
   bufferlist outbl;
   int r = io_ctx.operate(actual_obj, &op, &outbl);
+  if (r == -ENOENT) {
+    s->exists = false;
+    s->has_attrs = true;
+    return 0;
+  }
   if (r < 0)
     return r;
+
+  s->exists = true;
 
   RGW_LOG(0) << "outbl.length()=" << outbl.length() << dendl;
 
@@ -721,7 +728,8 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   if (iter != s->attrset.end()) {
     bufferlist bl = iter->second;
     bufferlist::iterator it = bl.begin();
-    ::decode(s->shadow_obj, it);
+    it.copy(bl.length(), s->shadow_obj);
+    s->shadow_obj[bl.length()] = '\0';
   }
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
   return 0;
@@ -827,22 +835,21 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
     }
   }
 
-  if (state->obj_tag.length() > 0) {// check for backward compatibility
-    string tag;
-    append_rand_alpha(tag, tag, 32);
-    bufferlist bl;
-    bl.append(tag);
-    
-    op.setxattr(RGW_ATTR_ID_TAG, bl);
+  string tag;
+  append_rand_alpha(tag, tag, 32);
+  bufferlist bl;
+  bl.append(tag);
 
-    string shadow = obj.object;
-    shadow.append(".");
-    shadow.append(tag);
+  op.setxattr(RGW_ATTR_ID_TAG, bl);
 
-    bufferlist shadow_bl;
-    shadow_bl.append(shadow);
-    op.setxattr(RGW_ATTR_SHADOW_OBJ, bl);
-  }
+  string shadow = obj.object;
+  shadow.append(".");
+  shadow.append(tag);
+
+  bufferlist shadow_bl;
+  shadow_bl.append(shadow);
+  op.setxattr(RGW_ATTR_SHADOW_OBJ, shadow_bl);
+
   return 0;
 }
 
