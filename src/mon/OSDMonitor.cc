@@ -1726,7 +1726,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       }
       else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
-        int ret = prepare_new_pool(m->cmd[3]);
+        int ret = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT, -1);
+        // that's the default auid owner (ie, none) and the default crush rule
         if (ret < 0) {
           if (ret == -EEXIST)
             ss << "pool '" << m->cmd[3] << "' exists";
