@@ -114,6 +114,8 @@ namespace librados
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& bl);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
+    void src_cmpxattr(const std::string& src_oid,
+		      const char *name, const bufferlist& val, int op, int mode);
 
   protected:
     ObjectOperationImpl *impl;
@@ -147,9 +149,6 @@ namespace librados
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, const bufferlist& val, int op, int mode);
-
   };
 
   /*
