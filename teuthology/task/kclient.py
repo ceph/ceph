@@ -43,8 +43,8 @@ def task(ctx, config):
     for id_, remote in clients:
         log.debug('Mounting client client.{id}...'.format(id=id_))
         remotes_and_roles = ctx.cluster.remotes.items()
-        roles = [roles for (remote, roles) in remotes_and_roles]
-        ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
+        roles = [roles for (remote_, roles) in remotes_and_roles]
+        ips = [host for (host, port) in (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
         mons = teuthology.get_mons(roles, ips).values()
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         secret = '/tmp/cephtest/data/client.{id}.secret'.format(id=id_)
