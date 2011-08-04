@@ -110,7 +110,29 @@ namespace librados
   {
   public:
     ObjectOperation();
-    ~ObjectOperation();
+    virtual ~ObjectOperation();
+
+    void cmpxattr(const char *name, uint8_t op, const bufferlist& bl);
+    void cmpxattr(const char *name, uint8_t op, uint64_t v);
+
+  protected:
+    ObjectOperationImpl *impl;
+    ObjectOperation(const ObjectOperation& rhs);
+    ObjectOperation& operator=(const ObjectOperation& rhs);
+    friend class IoCtx;
+    friend class Rados;
+  };
+
+  /*
+   * ObjectWriteOperation : compount object write operation
+   * Batch multiple object operations into a single request, to be applied
+   * atomically.
+   */
+  class ObjectWriteOperation : public ObjectOperation
+  {
+  public:
+    ObjectWriteOperation() {}
+    ~ObjectWriteOperation() {}
 
     void create(bool exclusive);
     void write(uint64_t off, const bufferlist& bl);
@@ -121,8 +143,6 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
-    void cmpxattr(const char *name, uint8_t op, const bufferlist& bl);
-    void cmpxattr(const char *name, uint8_t op, uint64_t v);
     void tmap_update(const bufferlist& cmdbl);
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
@@ -130,14 +150,6 @@ namespace librados
     void src_cmpxattr(const std::string& src_oid,
 		      const char *name, const bufferlist& val, int op, int mode);
 
-    void exec(const char *cls, const char *method, bufferlist& bl);
-
-  private:
-    ObjectOperationImpl *impl;
-    ObjectOperation(const ObjectOperation& rhs);
-    ObjectOperation& operator=(const ObjectOperation& rhs);
-    friend class IoCtx;
-    friend class Rados;
   };
 
   /*
@@ -145,23 +157,19 @@ namespace librados
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
-  class ObjectReadOperation
+  class ObjectReadOperation : public ObjectOperation
   {
   public:
-    ObjectReadOperation();
-    ~ObjectReadOperation();
+    ObjectReadOperation() {}
+    ~ObjectReadOperation() {}
 
     void stat();
     void getxattr(const char *name);
     void getxattrs();
+  };
 
-  private:
-    ObjectOperationImpl *impl;
-    ObjectReadOperation(const ObjectReadOperation& rhs);
-    ObjectReadOperation& operator=(const ObjectReadOperation& rhs);
-    friend class IoCtx;
-    friend class Rados;
-  };  /* IoCtx : This is a context in which we can perform I/O.
+
+  /* IoCtx : This is a context in which we can perform I/O.
    * It includes a Pool,
    *
    * Typical use (error checking omitted):
@@ -266,9 +274,9 @@ namespace librados
     int aio_flush();
 
     // compound object operations
-    int operate(const std::string& oid, ObjectOperation *op, bufferlist *pbl);
+    int operate(const std::string& oid, ObjectWriteOperation *op, bufferlist *pbl);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectOperation *op, bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, bufferlist *pbl);
 
     // watch/notify
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,

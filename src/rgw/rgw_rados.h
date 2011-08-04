@@ -64,7 +64,7 @@ class RGWRados  : public RGWAccess
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                         string& actual_obj, librados::ObjectOperation& op, RGWObjState **pstate);
+                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
 public:
   RGWRados() : watcher(NULL), watch_handle(0) {}
 

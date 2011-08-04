@@ -304,7 +304,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  */
 int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
-  librados::ObjectOperation op;
+  librados::ObjectWriteOperation op;
   op.create(exclusive);
 
   for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
@@ -347,7 +347,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
 
   io_ctx.locator_set_key(obj.key);
 
-  ObjectOperation op;
+  ObjectWriteOperation op;
 
   if (exclusive) {
     op.create(true);
@@ -682,7 +682,7 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 
   io_ctx.locator_set_key(obj.key);
 
-  ObjectOperation op;
+  ObjectWriteOperation op;
 
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
@@ -810,16 +810,14 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCt
 }
 
 int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
-                            string& actual_obj, ObjectOperation& op, RGWObjState **pstate)
+                            string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
 {
   if (!rctx)
     return 0;
 
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   int r = get_obj_state(rctx, obj, io_ctx, actual_obj, pstate);
   if (r < 0)
     return r;
-RGW_LOG(0) << __FILE__ << ":" << __LINE__ << " r=" << r << dendl;
 
   RGWObjState *state = *pstate;
 
@@ -891,7 +889,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
 
   io_ctx.locator_set_key(obj.key);
 
-  ObjectOperation op;
+  ObjectWriteOperation op;
   RGWObjState *state = NULL;
 
   string shadow_name;
@@ -1083,7 +1081,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
     return r;
 
   io_ctx.locator_set_key(dst_obj.key);
-  ObjectOperation op;
+  ObjectWriteOperation op;
   op.create(false);
   if (truncate_dest)
     op.truncate(0);

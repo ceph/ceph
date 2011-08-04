@@ -239,7 +239,7 @@ int main(int argc, const char **argv)
   }
 
   cout << "compound operation..." << std::endl;
-  ObjectOperation o;
+  ObjectWriteOperation o;
   o.write(0, bl);
   o.setxattr("foo", bl2);
   r = io_ctx.operate(oid, &o, &bl2);

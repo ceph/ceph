@@ -132,6 +132,20 @@ struct librados::IoCtxImpl {
   }
 };
 
+void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_STRING, v);
+}
+
+void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  bufferlist bl;
+  ::encode(v, bl);
+  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
+}
+
 void librados::ObjectReadOperation::stat()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -150,85 +164,71 @@ void librados::ObjectReadOperation::getxattrs()
   o->getxattrs();
 }
 
-void librados::ObjectOperation::create(bool exclusive)
+void librados::ObjectWriteOperation::create(bool exclusive)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->create(exclusive);
 }
 
-void librados::ObjectOperation::write(uint64_t off, const bufferlist& bl)
+void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->write(off, c);
 }
 
-void librados::ObjectOperation::write_full(const bufferlist& bl)
+void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->write_full(c);
 }
 
-void librados::ObjectOperation::append(const bufferlist& bl)
+void librados::ObjectWriteOperation::append(const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->append(c);
 }
 
-void librados::ObjectOperation::remove()
+void librados::ObjectWriteOperation::remove()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->remove();
 }
 
-void librados::ObjectOperation::truncate(uint64_t off)
+void librados::ObjectWriteOperation::truncate(uint64_t off)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->truncate(off);
 }
 
-void librados::ObjectOperation::zero(uint64_t off, uint64_t len)
+void librados::ObjectWriteOperation::zero(uint64_t off, uint64_t len)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->zero(off, len);
 }
 
-void librados::ObjectOperation::rmxattr(const char *name)
+void librados::ObjectWriteOperation::rmxattr(const char *name)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->rmxattr(name);
 }
 
-void librados::ObjectOperation::setxattr(const char *name, const bufferlist& v)
+void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist& v)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->setxattr(name, v);
 }
 
-void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_STRING, v);
-}
-
-void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t v)
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  bufferlist bl;
-  ::encode(v, bl);
-  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
-}
-
-void librados::ObjectOperation::tmap_update(const bufferlist& cmdbl)
+void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = cmdbl;
   o->tmap_update(c);
 }
 
-void librados::ObjectOperation::clone_range(uint64_t dst_off,
+void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len)
 {
@@ -2800,7 +2800,7 @@ tmap_update(const std::string& oid, bufferlist& cmdbl)
   return io_ctx_impl->client->tmap_update(*io_ctx_impl, obj, cmdbl);
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
@@ -2812,7 +2812,7 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
   return io_ctx_impl->client->operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
@@ -3255,17 +3255,6 @@ librados::ObjectOperation::ObjectOperation()
 }
 
 librados::ObjectOperation::~ObjectOperation()
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  delete o;
-}
-
-librados::ObjectReadOperation::ObjectReadOperation()
-{
-  impl = (ObjectOperationImpl *)new ::ObjectOperation;
-}
-
-librados::ObjectReadOperation::~ObjectReadOperation()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   delete o;

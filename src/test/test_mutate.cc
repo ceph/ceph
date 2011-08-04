@@ -81,7 +81,7 @@ int main(int argc, const char **argv)
      return 1;
   }
 
-  librados::ObjectOperation o;
+  librados::ObjectWriteOperation o;
   IoCtx ioctx;
   if (rados.pool_lookup(pool_name.c_str()) <= 0) {
     ret = rados.pool_create(pool_name.c_str());
@@ -97,7 +97,7 @@ int main(int argc, const char **argv)
 	  << "': error " << ret << std::endl;
      return 1;
   }
-  librados::ObjectOperation op;
+  librados::ObjectWriteOperation op;
   op.create(true);
   bufferlist outbl;
   ret = ioctx.operate(oid, &op, &outbl);
