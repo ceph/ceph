@@ -223,8 +223,11 @@ int read_acls(struct req_state *s, bool only_bucket)
 
   /* we're passed only_bucket = true when we specifically need the bucket's
      acls, that happens on write operations */
-  if (!only_bucket)
+  if (!only_bucket) {
     obj_str = s->object_str;
+    rgw_obj obj(s->bucket_str, obj_str);
+    rgwstore->set_atomic(s->obj_ctx, obj);
+  }
 
   ret = read_acls(s, s->acl, s->bucket_str, obj_str);
 
@@ -251,6 +254,7 @@ void RGWGetObj::execute()
   init_common();
 
   obj.init(s->bucket_str, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, obj);
   ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
@@ -745,6 +749,7 @@ void RGWDeleteObj::execute()
   ret = -EINVAL;
   rgw_obj obj(s->bucket_str, s->object_str);
   if (s->object) {
+    rgwstore->set_atomic(s->obj_ctx, obj);
     ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
   }
 
@@ -851,6 +856,9 @@ void RGWCopyObj::execute()
 
   src_obj.init(src_bucket, src_object);
   dst_obj.init(s->bucket_str, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, src_obj);
+  rgwstore->set_atomic(s->obj_ctx, dst_obj);
+
   ret = rgwstore->copy_obj(s->obj_ctx, s->user.user_id,
                         dst_obj,
                         src_obj,
@@ -885,7 +893,6 @@ void RGWGetACLs::execute()
   stringstream ss;
   s->acl->to_xml(ss);
   acls = ss.str(); 
-
   send_response();
 }
 
@@ -1065,6 +1072,7 @@ void RGWPutACLs::execute()
 
   new_policy.encode(bl);
   obj.init(s->bucket_str, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, obj);
   ret = rgwstore->set_attr(s->obj_ctx, obj, RGW_ATTR_ACL, bl);
 
 done:
@@ -1263,6 +1271,7 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket_str, s->object_str);
+  rgwstore->set_atomic(s->obj_ctx, target_obj);
   ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, NULL, attrs, false);
   if (ret < 0)
     goto done;
