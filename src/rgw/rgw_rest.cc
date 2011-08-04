@@ -4,6 +4,7 @@
 #include "common/utf8.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
+#include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_os.h"
@@ -134,7 +135,7 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
   s->formatter->open_object_section(section);
   s->formatter->dump_format("ID", id.c_str());
   s->formatter->dump_format("DisplayName", name.c_str());
-  s->formatter->close_section(section);
+  s->formatter->close_section();
 }
 
 void dump_start(struct req_state *s)
@@ -168,7 +169,7 @@ void end_header(struct req_state *s, const char *content_type)
       s->formatter->dump_format("Code", "%s", s->err.s3_code.c_str());
     if (!s->err.message.empty())
       s->formatter->dump_format("Message", s->err.message.c_str());
-    s->formatter->close_section("Error");
+    s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   }
   CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
@@ -381,7 +382,7 @@ void init_entities_from_header(struct req_state *s)
 
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;
-  s->formatter = new RGWFormatter_XML;
+  s->formatter = new XMLFormatter(false);
 
   int pos;
   if (s->host) {
@@ -447,11 +448,11 @@ void init_entities_from_header(struct req_state *s)
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
       delete s->formatter;
-      s->formatter = new RGWFormatter_XML;
+      s->formatter = new XMLFormatter(false);
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
       delete s->formatter;
-      s->formatter = new RGWFormatter_JSON;
+      s->formatter = new JSONFormatter(false);
     }
   }
 

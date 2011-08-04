@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "common/ceph_crypto.h"
+#include "common/Formatter.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -14,12 +15,13 @@ using namespace ceph::crypto;
 
 void list_all_buckets_start(struct req_state *s)
 {
-  s->formatter->open_array_section("ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
+  s->formatter->open_array_section_in_ns("ListAllMyBucketsResult",
+			      "http://doc.s3.amazonaws.com/2006-03-01");
 }
 
 void list_all_buckets_end(struct req_state *s)
 {
-  s->formatter->close_section("ListAllMyBucketsResult");
+  s->formatter->close_section();
 }
 
 void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
@@ -27,7 +29,7 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_format("Name", obj.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
-  s->formatter->close_section("Bucket");
+  s->formatter->close_section();
 }
 
 int RGWGetObj_REST_S3::send_response(void *handle)
@@ -105,7 +107,7 @@ void RGWListBuckets_REST_S3::send_response()
     RGWBucketEnt obj = iter->second;
     dump_bucket(s, obj);
   }
-  s->formatter->close_section("Buckets");
+  s->formatter->close_section();
   list_all_buckets_end(s);
   dump_content_length(s, s->formatter->get_len());
   end_header(s, "application/xml");
@@ -147,7 +149,7 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_format("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
-      s->formatter->close_section("Contents");
+      s->formatter->close_section();
     }
     if (common_prefixes.size() > 0) {
       s->formatter->open_array_section("CommonPrefixes");
@@ -155,10 +157,10 @@ void RGWListBucket_REST_S3::send_response()
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
         s->formatter->dump_format("Prefix", pref_iter->first.c_str());
       }
-      s->formatter->close_section("CommonPrefixes");
+      s->formatter->close_section();
     }
   }
-  s->formatter->close_section("ListBucketResult");
+  s->formatter->close_section();
   flush_formatter_to_req_state(s, s->formatter);
 }
 
@@ -222,7 +224,7 @@ void RGWCopyObj_REST_S3::send_response()
         s->formatter->dump_format("ETag", etag);
       }
     }
-    s->formatter->close_section("CopyObjectResult");
+    s->formatter->close_section();
     flush_formatter_to_req_state(s, s->formatter);
   }
 }
@@ -254,11 +256,12 @@ void RGWInitMultipart_REST_S3::send_response()
   end_header(s, "application/xml");
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_object_section("InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
+		  "http://s3.amazonaws.com/doc/2006-03-01/");
     s->formatter->dump_format("Bucket", s->bucket);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("UploadId", upload_id.c_str());
-    s->formatter->close_section("InitiateMultipartUploadResult");
+    s->formatter->close_section();
     flush_formatter_to_req_state(s, s->formatter);
   }
 }
@@ -271,14 +274,15 @@ void RGWCompleteMultipart_REST_S3::send_response()
   end_header(s, "application/xml");
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_object_section("CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
+			  "http://s3.amazonaws.com/doc/2006-03-01/");
     const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
     if (gateway_dns_name)
       s->formatter->dump_format("Location", "%s.%s", s->bucket, gateway_dns_name);
     s->formatter->dump_format("Bucket", s->bucket);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("ETag", etag.c_str());
-    s->formatter->close_section("CompleteMultipartUploadResult");
+    s->formatter->close_section();
     flush_formatter_to_req_state(s, s->formatter);
   }
 }
@@ -303,7 +307,8 @@ void RGWListMultipart_REST_S3::send_response()
 
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_object_section("ListMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"");
+    s->formatter->open_object_section_in_ns("ListMultipartUploadResult",
+		    "http://s3.amazonaws.com/doc/2006-03-01/");
     map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
     int i, cur_max = 0;
 
@@ -338,9 +343,9 @@ void RGWListMultipart_REST_S3::send_response()
       s->formatter->dump_unsigned("PartNumber", info.num);
       s->formatter->dump_format("ETag", "%s", info.etag.c_str());
       s->formatter->dump_unsigned("Size", info.size);
-      s->formatter->close_section("Part");
+      s->formatter->close_section();
     }
-    s->formatter->close_section("ListMultipartUploadResult");
+    s->formatter->close_section();
     flush_formatter_to_req_state(s, s->formatter);
   }
 }
@@ -388,7 +393,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
       dump_owner(s, s->user.user_id, s->user.display_name);
       s->formatter->dump_format("StorageClass", "STANDARD");
       dump_time(s, "Initiated", &iter->obj.mtime);
-      s->formatter->close_section("Upload");
+      s->formatter->close_section();
     }
     if (common_prefixes.size() > 0) {
       s->formatter->open_array_section("CommonPrefixes");
@@ -396,10 +401,10 @@ void RGWListBucketMultiparts_REST_S3::send_response()
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
         s->formatter->dump_format("CommonPrefixes.Prefix", pref_iter->first.c_str());
       }
-      s->formatter->close_section("CommonPrefixes");
+      s->formatter->close_section();
     }
   }
-  s->formatter->close_section("ListMultipartUploadsResult");
+  s->formatter->close_section();
   flush_formatter_to_req_state(s, s->formatter);
 }
 

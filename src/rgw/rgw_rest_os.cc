@@ -1,4 +1,5 @@
 
+#include "common/Formatter.h"
 #include "rgw_os.h"
 #include "rgw_rest_os.h"
 
@@ -40,9 +41,9 @@ void RGWListBuckets_REST_OS::send_response()
     s->formatter->dump_format("name", obj.name.c_str());
     s->formatter->dump_int("count", obj.count);
     s->formatter->dump_int("bytes", obj.size);
-    s->formatter->close_section("container");
+    s->formatter->close_section();
   }
-  s->formatter->close_section("account");
+  s->formatter->close_section();
 
   ostringstream oss;
   s->formatter->flush(oss);
@@ -95,13 +96,13 @@ void RGWListBucket_REST_OS::send_response()
       if (iter->content_type.size())
         s->formatter->dump_format("content_type", iter->content_type.c_str());
       dump_time(s, "last_modified", &iter->mtime);
-      s->formatter->close_section("object");
+      s->formatter->close_section();
     }
 
     if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
       s->formatter->open_object_section("object");
       s->formatter->dump_format("name", pref_iter->first.c_str());
-      s->formatter->close_section("object");
+      s->formatter->close_section();
     }
     if (do_objs)
       iter++;
@@ -109,7 +110,7 @@ void RGWListBucket_REST_OS::send_response()
       pref_iter++;
   }
 
-  s->formatter->close_section("container");
+  s->formatter->close_section();
 
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
