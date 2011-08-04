@@ -96,10 +96,12 @@ def connect(ctx, config):
     log.info('Opening connections...')
     from orchestra import connection, remote
     import orchestra.cluster
-
-    remotes = [remote.Remote(name=t,
-                             ssh=connection.connect(user_at_host=t, host_key=key))
-               for t, key in ctx.config['targets'].iteritems()]
+    remotes = []
+    for t, key in ctx.config['targets'].iteritems():
+        log.debug('connecting to %s', t)
+        remotes.append(
+            remote.Remote(name=t,
+                          ssh=connection.connect(user_at_host=t, host_key=key)))
     ctx.cluster = orchestra.cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):
