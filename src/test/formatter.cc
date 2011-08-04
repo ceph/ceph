@@ -139,3 +139,26 @@ TEST(XmlFormatter, DTD) {
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
 }
+
+TEST(XmlFormatter, Clear) {
+  ostringstream oss;
+  XMLFormatter fmt(false);
+
+  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.open_array_section("foo");
+  fmt.dump_stream("blah") << "hithere";
+  fmt.dump_float("pi", 3.14);
+  fmt.close_section();
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+
+  ostringstream oss2;
+  fmt.flush(oss2);
+  ASSERT_EQ(oss2.str(), "");
+
+  ostringstream oss3;
+  fmt.reset();
+  fmt.flush(oss3);
+  ASSERT_EQ(oss3.str(), "");
+}
