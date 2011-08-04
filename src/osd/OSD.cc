@@ -975,7 +975,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 }
 
 PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
-                             epoch_t created)
+                             PG::Info::History history)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -990,11 +990,7 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->set_role(0);
   pg->acting.swap(acting);
   pg->up = pg->acting;
-  pg->info.history.epoch_created = 
-    pg->info.history.same_up_since =
-    pg->info.history.same_acting_since =
-    pg->info.history.same_primary_since = created;
-
+  pg->info.history = history;
   pg->info.history.last_epoch_started = osdmap->get_epoch() - 1; // FIXME: Really? It's a brand new PG!
 
   pg->write_info(t);
@@ -1153,7 +1149,17 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
     if (create) {
-      pg = _create_lock_new_pg(info.pgid, acting, **pt);
+      /* generate a new history since the one passed in might be old --
+       * specifically, the only caller which lets us get into this
+       * code path is passing in a history that it got out of an
+       * MOSDPGNotify.
+       */
+      PG::Info::History new_history;
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
+      project_pg_history(info.pgid, new_history, info.history.epoch_created, up, acting);
+      new_history.epoch_created = info.history.epoch_created;
+      pg = _create_lock_new_pg(info.pgid, acting, **pt, new_history);
     } else {
       pg = _create_lock_pg(info.pgid, **pt);
       pg->acting.swap(acting);
@@ -3695,7 +3701,11 @@ void OSD::kick_pg_split_queue()
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, osdmap->get_epoch());
+      PG::Info::History history;
+      history.epoch_created = history.same_up_since =
+          history.same_acting_since = history.same_primary_since =
+          osdmap->get_epoch();
+      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, history);
       children[*q] = pg;
     }
 
@@ -3912,7 +3922,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     project_pg_history(pgid, history, created, up, acting);
     
     // register.
-    creating_pgs[pgid].created = created;
+    creating_pgs[pgid].history = history;
     creating_pgs[pgid].parent = parent;
     creating_pgs[pgid].split_bits = split_bits;
     creating_pgs[pgid].acting.swap(acting);
@@ -3932,7 +3942,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t, created);
+      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t, history);
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);
