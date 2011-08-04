@@ -1154,17 +1154,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
     if (create) {
-      /* generate a new history since the one passed in might be old --
-       * specifically, the only caller which lets us get into this
-       * code path is passing in a history that it got out of an
-       * MOSDPGNotify.
-       */
-      PG::Info::History new_history;
-      vector<int> up, acting;
-      osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
-      project_pg_history(info.pgid, new_history, info.history.epoch_created, up, acting);
-      new_history.epoch_created = info.history.epoch_created;
-      pg = _create_lock_new_pg(info.pgid, acting, **pt, new_history);
+      pg = _create_lock_new_pg(info.pgid, acting, **pt, history);
     } else {
       pg = _create_lock_pg(info.pgid, **pt);
       pg->acting.swap(acting);
