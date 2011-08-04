@@ -58,7 +58,7 @@ TEST(JsonFormatter, Empty) {
 
 TEST(XmlFormatter, Simple1) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.dump_int("a", 1);
   fmt.dump_int("b", 2);
@@ -70,7 +70,7 @@ TEST(XmlFormatter, Simple1) {
 
 TEST(XmlFormatter, Simple2) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.open_object_section("bar");
   fmt.dump_int("int", 0xf00000000000ll);
@@ -90,14 +90,14 @@ TEST(XmlFormatter, Simple2) {
 
 TEST(XmlFormatter, Empty) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "");
 }
 
 TEST(XmlFormatter, DumpStream1) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
   fmt.dump_stream("blah") << "hithere";
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<blah>hithere</blah>");
@@ -105,7 +105,7 @@ TEST(XmlFormatter, DumpStream1) {
 
 TEST(XmlFormatter, DumpStream2) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
 
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
@@ -116,7 +116,7 @@ TEST(XmlFormatter, DumpStream2) {
 
 TEST(XmlFormatter, DumpStream3) {
   ostringstream oss;
-  XMLFormatter fmt(NULL, false);
+  XMLFormatter fmt(false);
 
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
@@ -128,13 +128,53 @@ TEST(XmlFormatter, DumpStream3) {
 
 TEST(XmlFormatter, DTD) {
   ostringstream oss;
-  XMLFormatter fmt(XMLFormatter::XML_1_DTD, false);
+  XMLFormatter fmt(false);
 
+  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+}
+
+TEST(XmlFormatter, Clear) {
+  ostringstream oss;
+  XMLFormatter fmt(false);
+
+  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.open_array_section("foo");
+  fmt.dump_stream("blah") << "hithere";
+  fmt.dump_float("pi", 3.14);
+  fmt.close_section();
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+
+  ostringstream oss2;
+  fmt.flush(oss2);
+  ASSERT_EQ(oss2.str(), "");
+
+  ostringstream oss3;
+  fmt.reset();
+  fmt.flush(oss3);
+  ASSERT_EQ(oss3.str(), "");
+}
+
+TEST(XmlFormatter, NamespaceTest) {
+  ostringstream oss;
+  XMLFormatter fmt(false);
+
+  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.open_array_section_in_ns("foo",
+			   "http://s3.amazonaws.com/doc/2006-03-01/");
+  fmt.dump_stream("blah") << "hithere";
+  fmt.dump_float("pi", 3.14);
+  fmt.close_section();
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+    "<blah>hithere</blah><pi>3.14</pi></foo>");
 }

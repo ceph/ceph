@@ -8,6 +8,7 @@ using namespace std;
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
+#include "common/Formatter.h"
 #include "global/global_init.h"
 #include "common/errno.h"
 
@@ -23,8 +24,8 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static RGWFormatter_XML formatter_xml;
-static RGWFormatter_JSON formatter_json;
+static XMLFormatter formatter_xml;
+static JSONFormatter formatter_json;
 
 void _usage() 
 {
@@ -389,7 +390,7 @@ int main(int argc, char **argv)
   bool user_modify_op;
   int pool_id = -1;
   const char *format = 0;
-  RGWFormatter *formatter = &formatter_xml;
+  Formatter *formatter = &formatter_xml;
   bool purge_data = false;
 
   FOR_EACH_ARG(args) {
@@ -835,7 +836,7 @@ int main(int argc, char **argv)
     const char *delim = " ";
 
     if (format) {
-      formatter->init();
+      formatter->reset();
       formatter->open_array_section("Log");
     }
 
@@ -881,13 +882,13 @@ int main(int argc, char **argv)
         formatter->dump_format("TotalTime", "%lld", total_time);
         formatter->dump_format("UserAgent", "%s",  entry.user_agent.c_str());
         formatter->dump_format("Referrer", "%s",  entry.referrer.c_str());
-        formatter->close_section("LogEntry");
+        formatter->close_section();
         formatter->flush(cout);
       }
     }
 
     if (format) {
-      formatter->close_section("Log");
+      formatter->close_section();
       formatter->flush(cout);
     }
 
@@ -904,12 +905,12 @@ int main(int argc, char **argv)
       cerr << "could not retrieve pool info for pool_id=" << pool_id << std::endl;
       return ret;
     }
-    formatter->init();
+    formatter->reset();
     formatter->open_object_section("Pool");
     formatter->dump_int("ID", pool_id);
     formatter->dump_format("Bucket", "%s", info.bucket.c_str());
     formatter->dump_format("Owner", "%s", info.owner.c_str());
-    formatter->close_section("Pool");
+    formatter->close_section();
     formatter->flush(cout);
   }
 

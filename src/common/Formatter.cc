@@ -20,6 +20,7 @@
 
 #include <inttypes.h>
 #include <iostream>
+#include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,13 +50,16 @@ void JSONFormatter::flush(std::ostream& os)
   assert(m_stack.empty());
   os << m_ss.str();
   m_ss.clear();
+  m_ss.str("");
 }
 
 void JSONFormatter::reset()
 {
   m_stack.clear();
   m_ss.clear();
+  m_ss.str("");
   m_pending_string.clear();
+  m_pending_string.str("");
 }
 
 void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
@@ -100,7 +104,7 @@ void JSONFormatter::print_name(const char *name)
       else
 	m_ss << " ";
     }
-    print_quoted_string(name);
+    m_ss << "\"" << name << "\"";
     if (m_pretty)
       m_ss << ": ";
     else
@@ -127,9 +131,23 @@ void JSONFormatter::open_array_section(const char *name)
   open_section(name, true);
 }
 
+void JSONFormatter::open_array_section_in_ns(const char *name, const char *ns)
+{
+  std::ostringstream oss;
+  oss << name << " " << ns;
+  open_section(oss.str().c_str(), true);
+}
+
 void JSONFormatter::open_object_section(const char *name)
 {
   open_section(name, false);
+}
+
+void JSONFormatter::open_object_section_in_ns(const char *name, const char *ns)
+{
+  std::ostringstream oss;
+  oss << name << " " << ns;
+  open_section(oss.str().c_str(), false);
 }
 
 void JSONFormatter::close_section()
@@ -200,14 +218,17 @@ int JSONFormatter::get_len() const
   return m_ss.str().size();
 }
 
-const char *XMLFormatter::XML_1_DTD = 
-  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-
-XMLFormatter::XMLFormatter(const char *dtd, bool p)
-  : m_pretty(p)
+void JSONFormatter::write_raw_data(const char *data)
 {
-  if (dtd)
-    m_dtd = dtd;
+  m_ss << data;
+}
+
+const char *XMLFormatter::XML_1_DTD = 
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+
+XMLFormatter::XMLFormatter(bool pretty)
+  : m_pretty(pretty)
+{
   reset();
 }
 
@@ -217,28 +238,37 @@ void XMLFormatter::flush(std::ostream& os)
   assert(m_sections.empty());
   os << m_ss.str();
   m_ss.clear();
+  m_ss.str("");
 }
 
 void XMLFormatter::reset()
 {
   m_ss.clear();
-  m_ss << m_dtd;
-  if (m_pretty) {
-    m_ss << "\n";
-  }
+  m_ss.str("");
   m_pending_string.clear();
+  m_pending_string.str("");
   m_sections.clear();
   m_pending_string_name.clear();
 }
 
-void XMLFormatter::open_array_section(const char *name)
-{
-  open_section(name);
-}
-
 void XMLFormatter::open_object_section(const char *name)
 {
-  open_section(name);
+  open_section_in_ns(name, NULL);
+}
+
+void XMLFormatter::open_object_section_in_ns(const char *name, const char *ns)
+{
+  open_section_in_ns(name, ns);
+}
+
+void XMLFormatter::open_array_section(const char *name)
+{
+  open_section_in_ns(name, NULL);
+}
+
+void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
+{
+  open_section_in_ns(name, ns);
 }
 
 void XMLFormatter::close_section()
@@ -252,7 +282,7 @@ void XMLFormatter::close_section()
 
 void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
-  std::string e(escape_xml_str(name));
+  std::string e(name);
   print_spaces(true);
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -261,7 +291,7 @@ void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 
 void XMLFormatter::dump_int(const char *name, int64_t u)
 {
-  std::string e(escape_xml_str(name));
+  std::string e(name);
   print_spaces(true);
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -270,7 +300,7 @@ void XMLFormatter::dump_int(const char *name, int64_t u)
 
 void XMLFormatter::dump_float(const char *name, double d)
 {
-  std::string e(escape_xml_str(name));
+  std::string e(name);
   print_spaces(true);
   m_ss << "<" << e << ">" << d << "</" << e << ">";
   if (m_pretty)
@@ -279,7 +309,7 @@ void XMLFormatter::dump_float(const char *name, double d)
 
 void XMLFormatter::dump_string(const char *name, std::string s)
 {
-  std::string e(escape_xml_str(name));
+  std::string e(name);
   print_spaces(true);
   m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
@@ -289,7 +319,7 @@ void XMLFormatter::dump_string(const char *name, std::string s)
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
   assert(m_pending_string_name.empty());
-  m_pending_string_name = escape_xml_str(name);
+  m_pending_string_name = name;
   m_ss << "<" << m_pending_string_name << ">";
   return m_pending_string;
 }
@@ -302,7 +332,7 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
 
-  std::string e(escape_xml_str(name));
+  std::string e(name);
   print_spaces(true);
   m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
   if (m_pretty)
@@ -314,12 +344,21 @@ int XMLFormatter::get_len() const
   return m_ss.str().size();
 }
 
-void XMLFormatter::open_section(const char *name)
+void XMLFormatter::write_raw_data(const char *data)
+{
+  m_ss << data;
+}
+
+void XMLFormatter::open_section_in_ns(const char *name, const char *ns)
 {
   print_spaces(false);
-  std::string escaped_name(escape_xml_str(name));
-  m_sections.push_back(escaped_name);
-  m_ss << "<" << escaped_name << ">";
+  if (ns) {
+    m_ss << "<" << name << " xmlns=\"" << ns << "\">";
+  }
+  else {
+    m_ss << "<" << name << ">";
+  }
+  m_sections.push_back(name);
 }
 
 void XMLFormatter::finish_pending_string()

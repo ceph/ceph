@@ -21,7 +21,9 @@ class Formatter {
   virtual void reset() = 0;
 
   virtual void open_array_section(const char *name) = 0;
+  virtual void open_array_section_in_ns(const char *name, const char *ns) = 0;
   virtual void open_object_section(const char *name) = 0;
+  virtual void open_object_section_in_ns(const char *name, const char *ns) = 0;
   virtual void close_section() = 0;
   virtual void dump_unsigned(const char *name, uint64_t u) = 0;
   virtual void dump_int(const char *name, int64_t s) = 0;
@@ -30,6 +32,7 @@ class Formatter {
   virtual std::ostream& dump_stream(const char *name) = 0;
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
   virtual int get_len() const = 0;
+  virtual void write_raw_data(const char *data) = 0;
 };
 
 
@@ -40,7 +43,9 @@ class JSONFormatter : public Formatter {
   void flush(std::ostream& os);
   void reset();
   void open_array_section(const char *name);
+  void open_array_section_in_ns(const char *name, const char *ns);
   void open_object_section(const char *name);
+  void open_object_section_in_ns(const char *name, const char *ns);
   void close_section();
   void dump_unsigned(const char *name, uint64_t u);
   void dump_int(const char *name, int64_t u);
@@ -49,6 +54,7 @@ class JSONFormatter : public Formatter {
   std::ostream& dump_stream(const char *name);
   void dump_format(const char *name, const char *fmt, ...);
   int get_len() const;
+  void write_raw_data(const char *data);
 
  private:
   struct json_formatter_stack_entry_d {
@@ -72,12 +78,14 @@ class JSONFormatter : public Formatter {
 class XMLFormatter : public Formatter {
  public:
   static const char *XML_1_DTD;
-  XMLFormatter(const char *dtd, bool p=false);
+  XMLFormatter(bool pretty = false);
 
   void flush(std::ostream& os);
   void reset();
   void open_array_section(const char *name);
+  void open_array_section_in_ns(const char *name, const char *ns);
   void open_object_section(const char *name);
+  void open_object_section_in_ns(const char *name, const char *ns);
   void close_section();
   void dump_unsigned(const char *name, uint64_t u);
   void dump_int(const char *name, int64_t u);
@@ -86,9 +94,10 @@ class XMLFormatter : public Formatter {
   std::ostream& dump_stream(const char *name);
   void dump_format(const char *name, const char *fmt, ...);
   int get_len() const;
+  void write_raw_data(const char *data);
 
  private:
-  void open_section(const char *name);
+  void open_section_in_ns(const char *name, const char *ns);
   void finish_pending_string();
   void print_spaces(bool extra_space);
   static std::string escape_xml_str(const char *str);
@@ -97,7 +106,6 @@ class XMLFormatter : public Formatter {
   std::deque<std::string> m_sections;
   bool m_pretty;
   std::string m_pending_string_name;
-  std::string m_dtd;
 };
 
 }

@@ -28,6 +28,10 @@
 
 using namespace std;
 
+namespace ceph {
+  class Formatter;
+}
+
 using ceph::crypto::MD5;
 
 extern string rgw_root_bucket;
@@ -354,47 +358,6 @@ WRITE_CLASS_ENCODER(RGWPoolInfo)
 
 struct req_state;
 
-#include <inttypes.h> // for PRIu64, etc
-
-class RGWFormatter {
-protected:
-  char *buf;
-  int len;
-  int max_len;
-
-  virtual void formatter_init() = 0;
-public:
-  RGWFormatter() : buf(NULL), len(0), max_len(0) {}
-  virtual ~RGWFormatter() {}
-  void init() {
-    if (buf)
-      free(buf);
-    buf = NULL;
-    len = 0;
-    max_len = 0;
-    formatter_init();
-  }
-  void reset();
-  void write_data(const char *fmt, ...);
-  virtual void flush(ostream& os);
-  virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
-  virtual void open_array_section(const char *name) = 0;
-  virtual void open_object_section(const char *name) = 0;
-  virtual void close_section(const char *name) = 0;
-  virtual void dump_format(const char *name, const char *fmt, ...) = 0;
-  void dump_unsigned(const char *name, uint64_t u) {
-    dump_value_int(name, "%"PRIu64, u);
-  }
-  void dump_int(const char *name, int64_t u) {
-    dump_value_int(name, "%"PRId64, u);
-  }
-  void dump_float(const char *name, double d) {
-    dump_value_int(name, "%f", d);
-  }
-private:
-  virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
-};
-
 struct RGWEnv;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
@@ -403,7 +366,7 @@ struct req_state {
    http_op op;
    bool content_started;
    int format;
-   RGWFormatter *formatter;
+   ceph::Formatter *formatter;
    const char *path_name;
    string path_name_url;
    const char *host;
@@ -458,7 +421,7 @@ struct req_state {
 };
 
 extern void flush_formatter_to_req_state(struct req_state *s,
-					 RGWFormatter *formatter);
+					 ceph::Formatter *formatter);
 
 /** Store basic data on an object */
 struct RGWObjEnt {
