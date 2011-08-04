@@ -44,6 +44,9 @@ def task(ctx, config):
     clients = teuthology.get_clients(ctx=ctx, config=config)
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        log.info('Mounting cfuse client.{id} at {remote} {mnt}...'.format(
+                id=id_, remote=remote,mnt=mnt))
+
         remote.run(
             args=[
                 'mkdir',

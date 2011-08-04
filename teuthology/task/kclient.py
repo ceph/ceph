@@ -41,12 +41,16 @@ def task(ctx, config):
 
     clients = teuthology.get_clients(ctx=ctx, config=config)
     for id_, remote in clients:
-        log.debug('Mounting client client.{id}...'.format(id=id_))
+        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
+                id=id_, remote=remote, mnt=mnt))
+
+        # figure mon ips
         remotes_and_roles = ctx.cluster.remotes.items()
         roles = [roles for (remote_, roles) in remotes_and_roles]
         ips = [host for (host, port) in (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
         mons = teuthology.get_mons(roles, ips).values()
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+
         secret = '/tmp/cephtest/data/client.{id}.secret'.format(id=id_)
         teuthology.write_secret_file(remote, 'client.{id}'.format(id=id_), secret)
 
