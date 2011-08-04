@@ -20,6 +20,7 @@
 
 #include <inttypes.h>
 #include <iostream>
+#include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,13 +50,16 @@ void JSONFormatter::flush(std::ostream& os)
   assert(m_stack.empty());
   os << m_ss.str();
   m_ss.clear();
+  m_ss.str("");
 }
 
 void JSONFormatter::reset()
 {
   m_stack.clear();
   m_ss.clear();
+  m_ss.str("");
   m_pending_string.clear();
+  m_pending_string.str("");
 }
 
 void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
@@ -220,12 +224,15 @@ void XMLFormatter::flush(std::ostream& os)
   assert(m_sections.empty());
   os << m_ss.str();
   m_ss.clear();
+  m_ss.str("");
 }
 
 void XMLFormatter::reset()
 {
   m_ss.clear();
+  m_ss.str("");
   m_pending_string.clear();
+  m_pending_string.str("");
   m_sections.clear();
   m_pending_string_name.clear();
 }
