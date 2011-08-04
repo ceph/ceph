@@ -347,10 +347,10 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
 
   io_ctx.locator_set_key(obj.key);
 
+  ObjectOperation op;
+
   if (exclusive) {
-    r = io_ctx.create(oid, true);
-    if (r < 0)
-      return r;
+    op.create(true);
   }
 
   map<string, bufferlist>::iterator iter;
@@ -359,11 +359,13 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
     bufferlist& bl = iter->second;
 
     if (bl.length()) {
-      r = io_ctx.setxattr(oid, name.c_str(), bl);
-      if (r < 0)
-        return r;
+      op.setxattr(name.c_str(), bl);
     }
   }
+
+  r = io_ctx.operate(oid, &op, NULL);
+  if (r < 0)
+    return r;
 
   if (mtime) {
     r = io_ctx.stat(oid, NULL, mtime);
@@ -673,16 +675,24 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
   librados::IoCtx io_ctx;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
 
   io_ctx.locator_set_key(obj.key);
+
+  ObjectOperation op;
+
+  RGWObjState *state;
+  r = prepare_atomic_for_write(rctx, obj, io_ctx, oid, op, &state);
+  if (r < 0)
+    return r;
+
+  op.remove();
   if (sync) {
-    r = io_ctx.remove(oid);
+    r = io_ctx.operate(oid, &op, NULL);
   } else {
-    ObjectOperation op;
-    op.remove();
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
     r = io_ctx.aio_operate(obj.object, completion, &op, NULL);
     completion->release();
@@ -715,8 +725,6 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     return r;
 
   s->exists = true;
-
-  RGW_LOG(0) << "outbl.length()=" << outbl.length() << dendl;
 
   bufferlist::iterator oiter = outbl.begin();
   ::decode(s->attrset, oiter);
@@ -807,9 +815,11 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   if (!rctx)
     return 0;
 
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << dendl;
   int r = get_obj_state(rctx, obj, io_ctx, actual_obj, pstate);
   if (r < 0)
     return r;
+RGW_LOG(0) << __FILE__ << ":" << __LINE__ << " r=" << r << dendl;
 
   RGWObjState *state = *pstate;
 
@@ -821,7 +831,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
     RGW_LOG(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
   } else {
     RGW_LOG(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
-    rgw_obj dest_obj(state->shadow_obj, obj.bucket);
+    rgw_obj dest_obj(obj.bucket, state->shadow_obj);
     if (obj.key.size())
       dest_obj.set_key(obj.key);
     else
@@ -949,10 +959,12 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
   int r = -EINVAL;
-  uint64_t size;
   bufferlist etag;
-  time_t mtime;
   time_t ctime;
+  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *new_ctx = NULL;
+  RGWObjState *astate = NULL;
+
 
   map<string, bufferlist>::iterator iter;
 
@@ -970,14 +982,17 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
   state->io_ctx.locator_set_key(obj.key);
 
-  if (total_size || end) {
-    r = state->io_ctx.stat(oid, &size, &mtime);
-    if (r < 0)
-      goto done_err;
+  if (!rctx) {
+    new_ctx = new RGWRadosCtx;
+    rctx = new_ctx;
   }
 
+  r = get_obj_state(rctx, obj, state->io_ctx, oid, &astate);
+  if (r < 0)
+    goto done_err;
+
   if (attrs) {
-    r = state->io_ctx.getxattrs(oid, *attrs); /* FIXME: should be get_xattrs(), using ctx */
+    *attrs = astate->attrset;
     if (g_conf->rgw_log >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         RGW_LOG(20) << "Read xattr: " << iter->first << dendl;
@@ -988,7 +1003,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   }
 
   /* Convert all times go GMT to make them compatible */
-  ctime = mktime(gmtime(&mtime));
+  ctime = mktime(gmtime(&astate->mtime));
 
   r = -ECANCELED;
   if (mod_ptr) {
@@ -1010,7 +1025,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(ctx, obj, RGW_ATTR_ETAG, etag);
+    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
@@ -1035,38 +1050,22 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   }
 
   if (end && *end < 0)
-    *end = size - 1;
+    *end = astate->size - 1;
 
   if (total_size)
     *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
   if (obj_size)
-    *obj_size = size;
+    *obj_size = astate->size;
   if (lastmod)
-    *lastmod = mtime;
+    *lastmod = astate->mtime;
 
   return 0;
 
 done_err:
+  delete new_ctx;
   delete state;
   *handle = NULL;
   return r;
-}
-
-int RGWRados::clone_range(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, uint64_t size)
-{
-  std::string& bucket = dst_obj.bucket;
-  std::string& dst_oid = dst_obj.object;
-  std::string& src_oid = src_obj.object;
-  librados::IoCtx io_ctx;
-
-  int r = open_bucket_ctx(bucket, io_ctx);
-  if (r < 0)
-    return r;
-
-  io_ctx.locator_set_key(dst_obj.key);
-
-  return io_ctx.clone_range(dst_oid, dst_ofs, src_oid, src_ofs, size);
 }
 
 int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,

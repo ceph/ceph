@@ -98,8 +98,6 @@ public:
                                off_t ofs, size_t len, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
-  virtual int clone_range(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, uint64_t size);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs, bool truncate_dest);

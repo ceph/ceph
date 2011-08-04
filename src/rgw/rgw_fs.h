@@ -23,8 +23,6 @@ public:
 	      map<std::string, bufferlist>& attrs, bool exclusive);
   int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t size);
-  int clone_range(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                  rgw_obj& src_obj, off_t src_ofs, uint64_t size) { return -ENOTSUP; }
   int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,

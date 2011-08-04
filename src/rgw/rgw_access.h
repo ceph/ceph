@@ -171,10 +171,6 @@ public:
 
   virtual void finish_get_obj(void **handle) = 0;
 
-  virtual int clone_range(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs,
-                          uint64_t size) = 0;
-
   virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size, map<string, bufferlist> attrs) {
