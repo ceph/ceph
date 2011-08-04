@@ -991,7 +991,12 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->acting.swap(acting);
   pg->up = pg->acting;
   pg->info.history = history;
-  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1; // FIXME: Really? It's a brand new PG!
+  /* This is weird, but all the peering code needs last_epoch_start
+   * to be less than same_acting_since. Make it so!
+   * This is easier to deal with if you remember that the PG, while
+   * now created in memory, still hasn't peered and started -- and
+   * the map epoch could change before that happens! */
+  pg->info.history.last_epoch_started = history.epoch_created - 1;
 
   pg->write_info(t);
   pg->write_log(t);
