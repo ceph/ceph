@@ -52,6 +52,15 @@ public:
     ::decode(epoch, p);
     ::decode(pg_list, p);
   }
+  void print(ostream& out) {
+    out << "osd pg notify(" << "epoch " << epoch << "; ";
+    for (vector<PG::Info>::iterator i = pg_list.begin();
+         i != pg_list.end();
+         ++i) {
+      out << "pg" << i->pgid << "; ";
+    }
+    out << ")";
+  }
 };
 
 #endif
