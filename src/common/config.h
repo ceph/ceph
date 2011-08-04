@@ -379,6 +379,7 @@ public:
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;
+  int mds_kill_link_at;
   int mds_kill_rename_at;
 
   bool mds_wipe_sessions;

@@ -3796,6 +3796,7 @@ void Server::handle_client_link(MDRequest *mdr)
   }
 
   // go!
+  assert(g_conf->mds_kill_link_at != 1);
 
   // local or remote?
   if (targeti->is_auth()) 
@@ -3931,7 +3932,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   }
   dout(10) << " targeti auth has prepared nlink++/--" << dendl;
 
-  //assert(0);  // test hack: verify that remote slave can do a live rollback.
+  assert(g_conf->mds_kill_link_at != 2);
 
   // add to event
   mdr->ls = mdlog->get_current_segment();
@@ -3973,6 +3974,8 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
   dout(10) << "_link_remote_finish "
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
+
+  assert(g_conf->mds_kill_link_at != 3);
 
   if (inc) {
     // link the new dentry
@@ -4031,6 +4034,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 	   << " on " << mdr->slave_request->get_object_info() 
 	   << dendl;
 
+  assert(g_conf->mds_kill_link_at != 4);
+
   CInode *targeti = mdcache->get_inode(mdr->slave_request->get_object_info().ino);
   assert(targeti);
   dout(10) << "targeti " << *targeti << dendl;
@@ -4059,6 +4064,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
       return;
     }
   }
+
+  assert(g_conf->mds_kill_link_at != 5);
 
   // journal it
   mdr->ls = mdlog->get_current_segment();
@@ -4119,6 +4126,8 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   dout(10) << "_logged_slave_link " << *mdr
 	   << " " << *targeti << dendl;
 
+  assert(g_conf->mds_kill_link_at != 6);
+
   // update the target
   targeti->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
@@ -4155,6 +4164,8 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
 	   << " r=" << r
 	   << " " << *targeti << dendl;
 
+  assert(g_conf->mds_kill_link_at != 7);
+
   if (r == 0) {
     // drop our pins, etc.
     mdr->cleanup();
@@ -4172,6 +4183,9 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
 void Server::_committed_slave(MDRequest *mdr)
 {
   dout(10) << "_committed_slave " << *mdr << dendl;
+
+  assert(g_conf->mds_kill_link_at != 8);
+
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, 
 					       MMDSSlaveRequest::OP_COMMITTED);
   mds->send_message_mds(req, mdr->slave_to_mds);
@@ -4198,6 +4212,8 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 	   << (rollback.was_inc ? " inc":" dec") 
 	   << " ino " << rollback.ino
 	   << dendl;
+
+  assert(g_conf->mds_kill_link_at != 9);
 
   Mutation *mut = mdr;
   if (!mut) {
@@ -4252,6 +4268,9 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
 {
   dout(10) << "_link_rollback_finish" << dendl;
+
+  assert(g_conf->mds_kill_link_at != 10);
+
   mut->apply();
   if (mdr)
     mds->mdcache->request_finish(mdr);
@@ -4268,6 +4287,8 @@ void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
   dout(10) << "handle_slave_link_prep_ack " << *mdr 
 	   << " " << *m << dendl;
   int from = m->get_source().num();
+
+  assert(g_conf->mds_kill_link_at != 11);
 
   // note slave
   mdr->more()->slaves.insert(from);

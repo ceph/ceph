@@ -313,6 +313,7 @@ struct config_option config_optionsp[] = {
   OPTION(mds_kill_mdstable_at, OPT_INT, 0),
   OPTION(mds_kill_export_at, OPT_INT, 0),
   OPTION(mds_kill_import_at, OPT_INT, 0),
+  OPTION(mds_kill_link_at, OPT_INT, 0),
   OPTION(mds_kill_rename_at, OPT_INT, 0),
   OPTION(mds_wipe_sessions, OPT_BOOL, 0),
   OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0),
