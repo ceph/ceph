@@ -112,10 +112,12 @@ namespace librados
     ObjectOperation();
     virtual ~ObjectOperation();
 
-    void cmpxattr(const char *name, uint8_t op, const bufferlist& bl);
+    void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
     void src_cmpxattr(const std::string& src_oid,
-		      const char *name, const bufferlist& val, int op, int mode);
+		      const char *name, int op, const bufferlist& val);
+    void src_cmpxattr(const std::string& src_oid,
+		      const char *name, int op, uint64_t v);
 
   protected:
     ObjectOperationImpl *impl;

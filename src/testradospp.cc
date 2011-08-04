@@ -270,7 +270,7 @@ int main(int argc, const char **argv)
   const char *oidb = "bar-clone";
   {
     ObjectWriteOperation o;
-    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
     r = io_ctx.operate(oidb, &o, &bl2);
@@ -279,7 +279,7 @@ int main(int argc, const char **argv)
   }
   {
     ObjectWriteOperation o;
-    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_NE, CEPH_OSD_CMPXATTR_MODE_STRING);
+    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_NE, val);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
     r = io_ctx.operate(oidb, &o, &bl2);

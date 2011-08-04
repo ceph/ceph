@@ -146,6 +146,24 @@ void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t 
   o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
 }
 
+void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
+					 const char *name, int op, const bufferlist& v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  object_t oid(src_oid);
+  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, CEPH_OSD_CMPXATTR_MODE_STRING);
+}
+
+void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
+					 const char *name, int op, uint64_t val)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  object_t oid(src_oid);
+  bufferlist bl;
+  ::encode(val, bl);
+  o->src_cmpxattr(oid, CEPH_NOSNAP, name, bl, op, CEPH_OSD_CMPXATTR_MODE_U64);
+}
+
 void librados::ObjectReadOperation::stat()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -241,15 +259,6 @@ void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->clone_range(src_oid, src_off, len, dst_off);
 }
-
-void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
-					 const char *name, const bufferlist& v, int op, int mode)
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  object_t oid(src_oid);
-  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, mode);
-}
-
 
 librados::WatchCtx::
 ~WatchCtx()
