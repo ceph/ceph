@@ -99,8 +99,29 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
-                        vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs, bool truncate_dest);
+                         vector<RGWCloneRangeInfo>& ranges,
+                         map<string, bufferlist> attrs, bool truncate_dest) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, truncate_dest, NULL);
+  }
+
+  int clone_objs(void *ctx, rgw_obj& dst_obj, 
+                 vector<RGWCloneRangeInfo>& ranges,
+                 map<string, bufferlist> attrs, bool truncate_dest,
+                 pair<string, bufferlist> *cmp_xattr);
+
+  int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
+                rgw_obj& src_obj, off_t src_ofs,
+                uint64_t size, map<string, bufferlist> attrs,
+                pair<string, bufferlist> *cmp_xattr) {
+    RGWCloneRangeInfo info;
+    vector<RGWCloneRangeInfo> v;
+    info.src = src_obj;
+    info.src_ofs = src_ofs;
+    info.dst_ofs = dst_ofs;
+    info.len = size;
+    v.push_back(info);
+    return clone_objs(ctx, dst_obj, v, attrs, true, cmp_xattr);
+  }
 
   /** Copy an object, with many extra options */
   virtual int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,

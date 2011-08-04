@@ -836,7 +836,14 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
       dest_obj.set_key(obj.object);
 
     /* FIXME: clone obj should be conditional, should check src object id-tag */
-    r = clone_obj(NULL, dest_obj, 0, obj, 0, state->size, state->attrset);
+    pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
+    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, &cond);
+    if (r == -ECANCELED) {
+      /* we lost in a race here, original object was replaced, we assume it was cloned
+         as required */
+      RGW_LOG(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
+      r = 0;
+    }
     if (r < 0) {
       RGW_LOG(0) << "ERROR: failed to clone object r=" << r << dendl;
       return r;
@@ -1067,7 +1074,8 @@ done_err:
 int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
-                        bool truncate_dest)
+                        bool truncate_dest,
+                        pair<string, bufferlist> *cmp_xattr)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;
