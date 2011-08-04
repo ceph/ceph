@@ -166,6 +166,7 @@ namespace librados
     void stat();
     void getxattr(const char *name);
     void getxattrs();
+    void read(size_t len, uint64_t off);
   };
 
 

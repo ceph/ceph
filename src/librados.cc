@@ -152,6 +152,12 @@ void librados::ObjectReadOperation::stat()
   o->add_op(CEPH_OSD_OP_STAT);
 }
 
+void librados::ObjectReadOperation::read(size_t len, uint64_t off)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->read(len, off);
+}
+
 void librados::ObjectReadOperation::getxattr(const char *name)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
