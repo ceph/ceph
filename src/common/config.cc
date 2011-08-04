@@ -126,6 +126,8 @@ const void *config_option::conf_ptr(const md_config_t *conf) const
   return v;
 }
 
+/* All options must appear here, or else they won't be initialized
+ * when md_config_t is created. */
 struct config_option config_optionsp[] = {
   OPTION(host, OPT_STR, "localhost"),
   OPTION(public_addr, OPT_ADDR, NULL),
@@ -460,15 +462,8 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 
 md_config_t::
 md_config_t()
+  : lock("md_config_t", true)
 {
-  //
-  // Note: because our md_config_t structure is a global, the memory used to
-  // store it will start out zeroed. So there is no need to manually initialize
-  // everything to 0 here.
-  //
-  // However, it's good practice to add your new config option to config_optionsp
-  // so that its default value is explicit rather than implicit.
-  //
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     set_val_from_default(opt);
@@ -484,6 +479,7 @@ md_config_t::
 void md_config_t::
 add_observer(md_config_obs_t* observer_)
 {
+  Mutex::Locker l(lock);
   const char **keys = observer_->get_tracked_conf_keys();
   for (const char ** k = keys; *k; ++k) {
     obs_map_t::value_type val(*k, observer_);
@@ -494,6 +490,7 @@ add_observer(md_config_obs_t* observer_)
 void md_config_t::
 remove_observer(md_config_obs_t* observer_)
 {
+  Mutex::Locker l(lock);
   bool found_obs = false;
   for (obs_map_t::iterator o = observers.begin(); o != observers.end(); ) {
     if (o->second == observer_) {
@@ -511,6 +508,7 @@ int md_config_t::
 parse_config_files(const char *conf_files,
 		   std::deque<std::string> *parse_errors, int flags)
 {
+  Mutex::Locker l(lock);
   if (!conf_files) {
     const char *c = getenv("CEPH_CONF");
     if (c) {
@@ -531,6 +529,7 @@ int md_config_t::
 parse_config_files_impl(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors)
 {
+  Mutex::Locker l(lock);
   // open new conf
   list<string>::const_iterator c;
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
@@ -583,6 +582,7 @@ parse_config_files_impl(const std::list<std::string> &conf_files,
 void md_config_t::
 parse_env()
 {
+  Mutex::Locker l(lock);
   if (getenv("CEPH_KEYRING"))
     keyring = getenv("CEPH_KEYRING");
 }
@@ -590,6 +590,7 @@ parse_env()
 void md_config_t::
 parse_argv(std::vector<const char*>& args)
 {
+  Mutex::Locker l(lock);
   // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
@@ -662,6 +663,7 @@ parse_argv(std::vector<const char*>& args)
 void md_config_t::
 apply_changes(std::ostringstream *oss)
 {
+  Mutex::Locker l(lock);
   /* Maps observers to the configuration options that they care about which
    * have changed. */
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
@@ -710,6 +712,7 @@ apply_changes(std::ostringstream *oss)
 void md_config_t::
 injectargs(const std::string& s, std::ostringstream *oss)
 {
+  Mutex::Locker l(lock);
   char b[s.length()+1];
   strcpy(b, s.c_str());
   std::vector<const char*> nargs;
@@ -746,6 +749,7 @@ set_val_or_die(const char *key, const char *val)
 int md_config_t::
 set_val(const char *key, const char *val)
 {
+  Mutex::Locker l(lock);
   if (!key)
     return -EINVAL;
   if (!val)
@@ -770,6 +774,7 @@ set_val(const char *key, const char *val)
 int md_config_t::
 get_val(const char *key, char **buf, int len) const
 {
+  Mutex::Locker l(lock);
   if (!key)
     return -EINVAL;
 
@@ -834,6 +839,7 @@ get_val(const char *key, char **buf, int len) const
 void md_config_t::
 get_my_sections(std::vector <std::string> &sections) const
 {
+  Mutex::Locker l(lock);
   sections.push_back(name.to_str());
 
   sections.push_back(name.get_type_name());
@@ -845,6 +851,7 @@ get_my_sections(std::vector <std::string> &sections) const
 int md_config_t::
 get_all_sections(std::vector <std::string> &sections) const
 {
+  Mutex::Locker l(lock);
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
        s != cf.sections_end(); ++s) {
     sections.push_back(s->first);
@@ -856,6 +863,7 @@ int md_config_t::
 get_val_from_conf_file(const std::vector <std::string> &sections,
 		    const char *key, std::string &out, bool emeta) const
 {
+  Mutex::Locker l(lock);
   std::vector <std::string>::const_iterator s = sections.begin();
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
@@ -874,6 +882,7 @@ get_val_from_conf_file(const std::vector <std::string> &sections,
 void md_config_t::
 set_val_from_default(const config_option *opt)
 {
+  Mutex::Locker l(lock);
   // set_val_from_default can't fail! Unless the programmer screwed up, and
   // in that case we'll abort.
   // Anyway, we know that this function changed something.

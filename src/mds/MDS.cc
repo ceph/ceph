@@ -716,7 +716,9 @@ void MDS::handle_command(MMonCommand *m)
   dout(10) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs") {
     std::ostringstream oss;
+    mds_lock.Unlock();
     g_conf->injectargs(m->cmd[1], &oss);
+    mds_lock.Lock();
     derr << "injectargs:" << dendl;
     derr << oss.str() << dendl;
   }
