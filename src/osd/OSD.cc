@@ -1223,8 +1223,8 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
 
 
 /**
- * check epochs starting from start to verify the pg acting set hasn't changed
- * up until now
+ * Fill in the passed history so you know same_acting_since, same_up_since,
+ * and same_primary_since.
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			     vector<int>& lastup, vector<int>& lastacting)
