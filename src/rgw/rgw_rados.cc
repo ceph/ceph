@@ -1075,7 +1075,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
                         bool truncate_dest,
-                        pair<string, bufferlist> *cmp_xattr)
+                        pair<string, bufferlist> *xattr_cond)
 {
   std::string& bucket = dst_obj.bucket;
   std::string& dst_oid = dst_obj.object;
@@ -1118,6 +1118,10 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
     }
     if (range.len) {
       RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
+      if (xattr_cond) {
+        op.src_cmpxattr(range.src.object, xattr_cond->first.c_str(),
+                        LIBRADOS_CMPXATTR_OP_EQ, xattr_cond->second);
+      }
       op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
     }
   }

@@ -112,7 +112,7 @@ public:
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                 rgw_obj& src_obj, off_t src_ofs,
                 uint64_t size, map<string, bufferlist> attrs,
-                pair<string, bufferlist> *cmp_xattr) {
+                pair<string, bufferlist> *xattr_cond) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
@@ -120,7 +120,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, true, cmp_xattr);
+    return clone_objs(ctx, dst_obj, v, attrs, true, xattr_cond);
   }
 
   /** Copy an object, with many extra options */
