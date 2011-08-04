@@ -21,7 +21,9 @@ class Formatter {
   virtual void reset() = 0;
 
   virtual void open_array_section(const char *name) = 0;
+  virtual void open_array_section_in_ns(const char *name, const char *ns) = 0;
   virtual void open_object_section(const char *name) = 0;
+  virtual void open_object_section_in_ns(const char *name, const char *ns) = 0;
   virtual void close_section() = 0;
   virtual void dump_unsigned(const char *name, uint64_t u) = 0;
   virtual void dump_int(const char *name, int64_t s) = 0;
@@ -41,7 +43,9 @@ class JSONFormatter : public Formatter {
   void flush(std::ostream& os);
   void reset();
   void open_array_section(const char *name);
+  void open_array_section_in_ns(const char *name, const char *ns);
   void open_object_section(const char *name);
+  void open_object_section_in_ns(const char *name, const char *ns);
   void close_section();
   void dump_unsigned(const char *name, uint64_t u);
   void dump_int(const char *name, int64_t u);
@@ -79,7 +83,9 @@ class XMLFormatter : public Formatter {
   void flush(std::ostream& os);
   void reset();
   void open_array_section(const char *name);
+  void open_array_section_in_ns(const char *name, const char *ns);
   void open_object_section(const char *name);
+  void open_object_section_in_ns(const char *name, const char *ns);
   void close_section();
   void dump_unsigned(const char *name, uint64_t u);
   void dump_int(const char *name, int64_t u);
@@ -91,7 +97,7 @@ class XMLFormatter : public Formatter {
   void write_raw_data(const char *data);
 
  private:
-  void open_section(const char *name);
+  void open_section_in_ns(const char *name, const char *ns);
   void finish_pending_string();
   void print_spaces(bool extra_space);
   static std::string escape_xml_str(const char *str);

@@ -136,7 +136,7 @@ TEST(XmlFormatter, DTD) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
 }
 
@@ -150,7 +150,7 @@ TEST(XmlFormatter, Clear) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
 
   ostringstream oss2;
@@ -161,4 +161,20 @@ TEST(XmlFormatter, Clear) {
   fmt.reset();
   fmt.flush(oss3);
   ASSERT_EQ(oss3.str(), "");
+}
+
+TEST(XmlFormatter, NamespaceTest) {
+  ostringstream oss;
+  XMLFormatter fmt(false);
+
+  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.open_array_section_in_ns("foo",
+			   "http://s3.amazonaws.com/doc/2006-03-01/");
+  fmt.dump_stream("blah") << "hithere";
+  fmt.dump_float("pi", 3.14);
+  fmt.close_section();
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+    "<blah>hithere</blah><pi>3.14</pi></foo>");
 }
