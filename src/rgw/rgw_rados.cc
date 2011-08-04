@@ -711,15 +711,9 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
 
   RGW_LOG(0) << "outbl.length()=" << outbl.length() << dendl;
 
-  /* argh for this whole block */
   bufferlist::iterator oiter = outbl.begin();
-  bufferlist bl;
-  ::decode(bl, oiter);
-  bufferlist::iterator bliter = bl.begin();
-  ::decode(s->attrset, bliter);
-  ::decode(s->size, bliter);
-  ::decode(bl, oiter);
-  bliter = bl.begin();
+  ::decode(s->attrset, oiter);
+  ::decode(s->size, oiter);
   ::decode(s->mtime, oiter);
 
   s->has_attrs = true;
