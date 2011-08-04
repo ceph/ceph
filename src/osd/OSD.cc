@@ -1233,7 +1233,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
  * and same_primary_since.
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
-			     vector<int>& lastup, vector<int>& lastacting)
+			     vector<int>& currentup, vector<int>& currentacting)
 {
   dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
@@ -1251,20 +1251,20 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     oldmap->pg_to_up_acting_osds(pgid, up, acting);
 
     // acting set change?
-    if (acting != lastacting && e > h.same_acting_since) {
+    if (acting != currentacting && e > h.same_acting_since) {
       dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << acting << " -> " << lastacting << dendl;
+                << " from " << acting << " -> " << currentacting << dendl;
       h.same_acting_since = e;
     }
     // up set change?
-    if (up != lastup && e > h.same_up_since) {
+    if (up != currentup && e > h.same_up_since) {
       dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << up << " -> " << lastup << dendl;
+                << " from " << up << " -> " << currentup << dendl;
       h.same_up_since = e;
     }
 
     // primary change?
-    if (!(!acting.empty() && !lastacting.empty() && acting[0] == lastacting[0]) &&
+    if (!(!acting.empty() && !currentacting.empty() && acting[0] == currentacting[0]) &&
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
