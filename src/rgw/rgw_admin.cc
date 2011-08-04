@@ -8,6 +8,7 @@ using namespace std;
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
+#include "common/Formatter.h"
 #include "global/global_init.h"
 #include "common/errno.h"
 
@@ -835,7 +836,7 @@ int main(int argc, char **argv)
     const char *delim = " ";
 
     if (format) {
-      formatter->init();
+      formatter->reset();
       formatter->open_array_section("Log");
     }
 
@@ -904,7 +905,7 @@ int main(int argc, char **argv)
       cerr << "could not retrieve pool info for pool_id=" << pool_id << std::endl;
       return ret;
     }
-    formatter->init();
+    formatter->reset();
     formatter->open_object_section("Pool");
     formatter->dump_int("ID", pool_id);
     formatter->dump_format("Bucket", "%s", info.bucket.c_str());

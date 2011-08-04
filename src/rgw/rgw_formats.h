@@ -9,13 +9,12 @@ struct plain_stack_entry {
 class RGWFormatter_Plain : public RGWFormatter {
   std::list<struct plain_stack_entry> stack;
   size_t min_stack_level;
-protected:
-  void formatter_init();
 
 public:
   RGWFormatter_Plain() : RGWFormatter() {}
   ~RGWFormatter_Plain() {}
 
+  void reset();
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section(const char *name);
@@ -29,13 +28,13 @@ class RGWFormatter_XML : public RGWFormatter {
 
   void open_section(const char *name);
 
-protected:
-  void formatter_init();
-
 public:
-  RGWFormatter_XML() : RGWFormatter() {}
+  RGWFormatter_XML()
+    : RGWFormatter()
+  {}
   ~RGWFormatter_XML() {}
 
+  void reset();
   void open_array_section(const char *name) {
     open_section(name);
   }
@@ -57,13 +56,11 @@ class RGWFormatter_JSON : public RGWFormatter {
   std::list<struct json_stack_entry> stack;
 
   void open_section(bool is_array);
-protected:
-  void formatter_init();
-
 public:
   RGWFormatter_JSON() : RGWFormatter() {}
   ~RGWFormatter_JSON() {}
 
+  void reset();
   void open_array_section(const char *name);
   void open_object_section(const char *name);
   void close_section(const char *name);

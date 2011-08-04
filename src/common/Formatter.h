@@ -30,6 +30,7 @@ class Formatter {
   virtual std::ostream& dump_stream(const char *name) = 0;
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
   virtual int get_len() const = 0;
+  virtual void write_raw_data(const char *data) = 0;
 };
 
 
@@ -49,6 +50,7 @@ class JSONFormatter : public Formatter {
   std::ostream& dump_stream(const char *name);
   void dump_format(const char *name, const char *fmt, ...);
   int get_len() const;
+  void write_raw_data(const char *data);
 
  private:
   struct json_formatter_stack_entry_d {
@@ -72,7 +74,7 @@ class JSONFormatter : public Formatter {
 class XMLFormatter : public Formatter {
  public:
   static const char *XML_1_DTD;
-  XMLFormatter(const char *dtd, bool p=false);
+  XMLFormatter(bool pretty = false);
 
   void flush(std::ostream& os);
   void reset();
@@ -86,6 +88,7 @@ class XMLFormatter : public Formatter {
   std::ostream& dump_stream(const char *name);
   void dump_format(const char *name, const char *fmt, ...);
   int get_len() const;
+  void write_raw_data(const char *data);
 
  private:
   void open_section(const char *name);
@@ -97,7 +100,6 @@ class XMLFormatter : public Formatter {
   std::deque<std::string> m_sections;
   bool m_pretty;
   std::string m_pending_string_name;
-  std::string m_dtd;
 };
 
 }

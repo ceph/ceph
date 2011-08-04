@@ -324,6 +324,11 @@ bool url_decode(string& src_str, string& dest_str)
   return true;
 }
 
+void RGWFormatter::write_raw_data(const char *data)
+{
+  write_data("%s", data);
+}
+
 void RGWFormatter::write_data(const char *fmt, ...)
 {
 #define LARGE_ENOUGH_LEN 128
@@ -384,7 +389,7 @@ done_free:
     free(p);
 }
 
-void RGWFormatter::reset()
+void RGWFormatter::base_reset()
 {
   free(buf);
   buf = NULL;

@@ -362,20 +362,11 @@ protected:
   int len;
   int max_len;
 
-  virtual void formatter_init() = 0;
+  void base_reset();
 public:
   RGWFormatter() : buf(NULL), len(0), max_len(0) {}
   virtual ~RGWFormatter() {}
-  void init() {
-    if (buf)
-      free(buf);
-    buf = NULL;
-    len = 0;
-    max_len = 0;
-    formatter_init();
-  }
-  void reset();
-  void write_data(const char *fmt, ...);
+  virtual void reset() = 0;
   virtual void flush(ostream& os);
   virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
   virtual void open_array_section(const char *name) = 0;
@@ -391,6 +382,9 @@ public:
   void dump_float(const char *name, double d) {
     dump_value_int(name, "%f", d);
   }
+  void write_raw_data(const char *data);
+protected:
+  void write_data(const char *fmt, ...);
 private:
   virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
 };

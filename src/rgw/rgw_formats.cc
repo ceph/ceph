@@ -17,8 +17,9 @@
 #include "rgw/rgw_formats.h"
 
 /* Plain */
-void RGWFormatter_Plain::formatter_init()
+void RGWFormatter_Plain::reset()
 {
+  base_reset();
   stack.clear();
   min_stack_level = 0;
 }
@@ -90,8 +91,9 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
 
 /* XML */
 
-void RGWFormatter_XML::formatter_init()
+void RGWFormatter_XML::reset()
 {
+  base_reset();
   indent = 0;
 }
 
@@ -135,8 +137,9 @@ void RGWFormatter_XML::dump_format(const char *name, const char *fmt, ...)
 
 /* JSON */
 
-void RGWFormatter_JSON::formatter_init()
+void RGWFormatter_JSON::reset()
 {
+  base_reset();
   stack.clear();
 }
 

@@ -1,5 +1,6 @@
 #include <errno.h>
 
+#include "common/Formatter.h"
 #include "common/utf8.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
@@ -113,12 +114,6 @@ void dump_last_modified(struct req_state *s, time_t t)
   CGI_PRINTF(s, "Last-Modified: %s\n", timestr);
 }
 
-static void dump_entry(struct req_state *s, const char *val)
-{
-  s->formatter->write_data("<?%s?>", val);
-}
-
-
 void dump_time(struct req_state *s, const char *name, time_t *t)
 {
   char buf[TIME_BUF_SIZE];
@@ -146,7 +141,7 @@ void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
     if (s->format == RGW_FORMAT_XML)
-      dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
+      s->formatter->write_raw_data(XMLFormatter::XML_1_DTD);
     s->content_started = true;
   }
 }
@@ -507,7 +502,7 @@ void init_entities_from_header(struct req_state *s)
     }
   }
 done:
-  s->formatter->init();
+  s->formatter->reset();
 }
 
 static void line_unfold(const char *line, string& sdest)

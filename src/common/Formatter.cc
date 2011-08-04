@@ -200,14 +200,17 @@ int JSONFormatter::get_len() const
   return m_ss.str().size();
 }
 
+void JSONFormatter::write_raw_data(const char *data)
+{
+  m_ss << data;
+}
+
 const char *XMLFormatter::XML_1_DTD = 
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
-XMLFormatter::XMLFormatter(const char *dtd, bool p)
-  : m_pretty(p)
+XMLFormatter::XMLFormatter(bool pretty)
+  : m_pretty(pretty)
 {
-  if (dtd)
-    m_dtd = dtd;
   reset();
 }
 
@@ -222,10 +225,6 @@ void XMLFormatter::flush(std::ostream& os)
 void XMLFormatter::reset()
 {
   m_ss.clear();
-  m_ss << m_dtd;
-  if (m_pretty) {
-    m_ss << "\n";
-  }
   m_pending_string.clear();
   m_sections.clear();
   m_pending_string_name.clear();
@@ -312,6 +311,11 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
 int XMLFormatter::get_len() const
 {
   return m_ss.str().size();
+}
+
+void XMLFormatter::write_raw_data(const char *data)
+{
+  m_ss << data;
 }
 
 void XMLFormatter::open_section(const char *name)
