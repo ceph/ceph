@@ -430,7 +430,8 @@ protected:
   PG   *_lookup_lock_pg(pg_t pgid);
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
-  PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
+  PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
+                            epoch_t created);
   //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
   PG *lookup_lock_pg(pg_t pgid);

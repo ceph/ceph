@@ -974,7 +974,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   return pg;
 }
 
-PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
+PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
+                             epoch_t created)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -992,9 +993,9 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->info.history.epoch_created = 
     pg->info.history.same_up_since =
     pg->info.history.same_acting_since =
-    pg->info.history.same_primary_since = osdmap->get_epoch();
+    pg->info.history.same_primary_since = created;
 
-  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1;
+  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1; // FIXME: Really? It's a brand new PG!
 
   pg->write_info(t);
   pg->write_log(t);
@@ -3694,7 +3695,7 @@ void OSD::kick_pg_split_queue()
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t);
+      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, osdmap->get_epoch());
       children[*q] = pg;
     }
 
@@ -3931,7 +3932,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
+      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t, created);
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);
