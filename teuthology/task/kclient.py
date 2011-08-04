@@ -38,8 +38,8 @@ def task(ctx, config):
     if config is None:
         config = ['client.{id}'.format(id=id_)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-    clients = list(teuthology.get_clients(ctx=ctx, roles=config))
 
+    clients = teuthology.get_clients(ctx=ctx, config=config)
     for id_, remote in clients:
         log.debug('Mounting client client.{id}...'.format(id=id_))
         remotes_and_roles = ctx.cluster.remotes.items()

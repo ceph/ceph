@@ -294,14 +294,17 @@ def write_secret_file(remote, role, filename):
             ],
         )
 
-def get_clients(ctx, roles):
-    for role in roles:
-        assert isinstance(role, basestring)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        yield (id_, remote)
+# return id, remote dictionary for the clients listed in config
+def get_clients(ctx, config):
+    clients = []
+    crem = ctx.cluster.only(is_type('client'))
+    for client in config:
+        assert client.startswith('client.')
+        id = client[len('client.'):]
+        for remote, roles in crem.remotes.iteritems():
+            if client in roles:
+                clients.append((id, remote))
+    return clients
 
 def get_user():
     return getpass.getuser() + '@' + socket.gethostname()

@@ -391,9 +391,11 @@ def cluster(ctx, config):
                 )
 
     log.info('Setting up client nodes...')
+
     clients = ctx.cluster.only(teuthology.is_type('client'))
     for remote, roles_for_host in clients.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
+            log.info('id %s remote %s' % (id_, remote))
             remote.run(
                 args=[
                     '/tmp/cephtest/enable-coredump',
