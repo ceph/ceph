@@ -3170,7 +3170,6 @@ void FileStore::sync_entry()
 
 	  dout(10) << "taking snap '" << vol_args.name << "'" << dendl;
 	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
-	  char buf[100];
 	  if (r != 0) {
 	    int err = errno;
 	    derr << "snap create '" << vol_args.name << "' got error " << err << dendl;
