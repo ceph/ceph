@@ -252,6 +252,8 @@ private:
   utime_t last_mon_heartbeat;
   Messenger *hbin_messenger, *hbout_messenger;
   
+  void _add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, utime_t>& old_from_stamp,
+			     map<int,Connection*>& old_con);
   void update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();

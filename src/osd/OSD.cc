@@ -1305,6 +1305,30 @@ void OSD::update_osd_stat()
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
 
+void OSD::_add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, utime_t>& old_from_stamp,
+				map<int,Connection*>& old_con)
+{
+  if (p == whoami)
+    return;
+  if (heartbeat_from.count(p))
+    return;
+
+  heartbeat_from[p] = osdmap->get_epoch();
+  Connection *con = hbin_messenger->get_connection(osdmap->get_hb_inst(p));
+  heartbeat_from_con[p] = con;
+  if (old_from_stamp.count(p) && old_from.count(p) && old_con[p] == con) {
+    // have a stamp _AND_ i'm not new to the set
+    heartbeat_from_stamp[p] = old_from_stamp[p];
+  } else {
+    dout(10) << "update_heartbeat_peers: new _from osd" << p
+	     << " " << con->get_peer_addr() << dendl;
+    heartbeat_from_stamp[p] = ceph_clock_now(g_ceph_context);  
+    MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
+			       MOSDPing::START_HEARTBEAT);
+    hbin_messenger->send_message(m, con);
+  }
+}
+
 void OSD::update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
@@ -1330,29 +1354,15 @@ void OSD::update_heartbeat_peers()
        i++) {
     PG *pg = i->second;
 
-    // replicas ping primary.
+    // replicas (new and old) ping primary.
     if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
-      for (unsigned i=1; i<pg->acting.size(); i++) {
-	int p = pg->acting[i]; // peer
-	assert(p != whoami);
-	if (heartbeat_from.count(p))
-	  continue;
-	heartbeat_from[p] = osdmap->get_epoch();
-	Connection *con = hbin_messenger->get_connection(osdmap->get_hb_inst(p));
-	heartbeat_from_con[p] = con;
-	if (old_from_stamp.count(p) && old_from.count(p) && old_con[p] == con) {
-	  // have a stamp _AND_ i'm not new to the set
-	  heartbeat_from_stamp[p] = old_from_stamp[p];
-	} else {
-	  dout(10) << "update_heartbeat_peers: new _from osd" << p
-		   << " " << con->get_peer_addr() << dendl;
-	  heartbeat_from_stamp[p] = now;  
-	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
-				     MOSDPing::START_HEARTBEAT);
-	  hbin_messenger->send_message(m, con);
-	}
-      }
+      for (unsigned i=0; i<pg->acting.size(); i++)
+	_add_heartbeat_source(pg->acting[i], old_from, old_from_stamp, old_con);
+      for (unsigned i=0; i<pg->up.size(); i++)
+	_add_heartbeat_source(pg->up[i], old_from, old_from_stamp, old_con);
+      for (map<int,PG::Info>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
+	_add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
     }
   }
 
