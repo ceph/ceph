@@ -649,7 +649,7 @@ bool PGMonitor::register_new_pgs()
 	  continue;
 	}
 	created++;
-	register_pg(pool, pgid, epoch, new_pool);
+	register_pg(pool, pgid, pool.get_last_change(), new_pool);
       }
     }
   } 
