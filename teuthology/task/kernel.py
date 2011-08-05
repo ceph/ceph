@@ -94,7 +94,7 @@ def need_to_install(ctx, role, sha1):
     version_fp.close()
     return ret
 
-def install(ctx, config):
+def install_and_reboot(ctx, config):
     for role, sha1 in config.iteritems():
         log.info('Installing kernel version {sha1} on {role}...'.format(sha1=sha1,
                                                                         role=role))
@@ -120,15 +120,7 @@ def install(ctx, config):
                 run.Raw('&&'),
                 'rm',
                 '/tmp/linux-image.deb',
-                ],
-            )
-
-def reboot(ctx, config):
-    for role in config:
-        log.info('Rebooting {role}...'.format(role=role))
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        role_remote.run(
-            args=[
+                run.Raw('&&'),
                 'sudo',
                 'shutdown',
                 '-r',
@@ -228,8 +220,7 @@ def task(ctx, config):
             need_install[role] = sha1
 
     if len(need_install) > 0:
-        install(ctx, need_install)
-        reboot(ctx, need_install.keys())
+        install_and_reboot(ctx, need_install)
         reconnect(ctx, timeout)
 
     for client, sha1 in need_install.iteritems():
