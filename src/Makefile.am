@@ -543,11 +543,23 @@ unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
-unittest_config_SOURCES = test/config.cc
-unittest_config_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_config_LDADD =  librados.la ${UNITTEST_LDADD}
-unittest_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_config
+unittest_libceph_config_SOURCES = test/libceph_config.cc
+unittest_libceph_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_libceph_config_LDADD =  libceph.la ${UNITTEST_LDADD}
+unittest_libceph_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_libceph_config
+
+unittest_librados_config_SOURCES = test/librados_config.cc
+unittest_librados_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
+unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_librados_config
+
+unittest_daemon_config_SOURCES = test/daemon_config.cc
+unittest_daemon_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
+unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_daemon_config
 
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc

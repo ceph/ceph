@@ -13,7 +13,7 @@
  */
 
 #include "gtest/gtest.h"
-#include "include/rados/librados.h"
+#include "include/ceph/libceph.h"
 
 #include <sstream>
 #include <string>
@@ -21,43 +21,43 @@
 
 using std::string;
 
-TEST(RadosConfig, SimpleSet) {
-  rados_t cl;
-  int ret = rados_create(&cl, NULL);
+TEST(LibCephConfig, SimpleSet) {
+  struct ceph_mount_info *cmount;
+  int ret = ceph_create(&cmount, NULL);
   ASSERT_EQ(ret, 0);
 
-  ret = rados_conf_set(cl, "debug", "21");
+  ret = ceph_conf_set(cmount, "debug", "21");
   ASSERT_EQ(ret, 0);
 
   char buf[128];
   memset(buf, 0, sizeof(buf));
-  ret = rados_conf_get(cl, "debug", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "debug", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("21"), string(buf));
 
-  rados_shutdown(cl);
+  ceph_shutdown(cmount);
 }
 
-TEST(RadosConfig, ArgV) {
-  rados_t cl;
-  int ret = rados_create(&cl, NULL);
+TEST(LibCephConfig, ArgV) {
+  struct ceph_mount_info *cmount;
+  int ret = ceph_create(&cmount, NULL);
   ASSERT_EQ(ret, 0);
 
   const char *argv[] = { "foo", "--debug", "2",
 			 "--keyfile", "/tmp/my-keyfile", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
-  rados_conf_parse_argv(cl, argc, argv);
+  ceph_conf_parse_argv(cmount, argc, argv);
 
   char buf[128];
   memset(buf, 0, sizeof(buf));
-  ret = rados_conf_get(cl, "keyfile", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "keyfile", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = rados_conf_get(cl, "debug", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "debug", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("2"), string(buf));
 
-  rados_shutdown(cl);
+  ceph_shutdown(cmount);
 }
