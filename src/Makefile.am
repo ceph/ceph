@@ -746,7 +746,6 @@ libcommon_files = \
 	common/environment.cc\
 	common/sctp_crc32.c\
 	common/assert.cc \
-	common/dyn_snprintf.c \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
@@ -962,7 +961,6 @@ noinst_HEADERS = \
         common/signal.h\
         global/signal_handler.h\
         common/simple_spin.h\
-        common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
         common/config.h\

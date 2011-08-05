@@ -17,7 +17,6 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
-#include "common/dyn_snprintf.h"
 #include "common/static_assert.h"
 #include "common/strtol.h"
 #include "common/version.h"
