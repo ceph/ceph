@@ -2001,6 +2001,11 @@ pair<int,int> CInode::authority()
   if (parent)
     return parent->dir->authority();
 
+  // new items that are not yet linked in (in the committed plane) belong
+  // to their first parent.
+  if (!projected_parent.empty())
+    return projected_parent.front()->dir->authority();
+
   return CDIR_AUTH_UNDEF;
 }
 

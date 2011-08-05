@@ -631,7 +631,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   if (renamed_dirino) {
     if (olddir) {
       assert(renamed_diri);
-      mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir);
+      mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
       
       // see if we can discard the subtree we renamed out of
       CDir *root = mds->mdcache->get_subtree_root(olddir);

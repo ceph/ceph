@@ -538,7 +538,7 @@ public:
   // -- subtrees --
 protected:
   map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
-  map<CInode*,pair<CDir*,CDir*> > projected_subtree_renames;  // renamed ino -> target dir
+  map<CInode*,list<pair<CDir*,CDir*> > > projected_subtree_renames;  // renamed ino -> target dir
   
   // adjust subtree auth specification
   //  dir->dir_auth
@@ -581,7 +581,7 @@ public:
 
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
   void adjust_subtree_after_rename(CInode *diri, CDir *olddir,
-                                   bool imported = false);
+                                   bool pop, bool imported = false);
 
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);

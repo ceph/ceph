@@ -532,7 +532,7 @@ private:
 
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
-  CDentry* get_projected_parent_dn() { return projected_parent.size() ? projected_parent.back():parent; }
+  CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
   CDir *get_parent_dir();
   CDir *get_projected_parent_dir();
   CInode *get_parent_inode();

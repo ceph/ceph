@@ -4611,7 +4611,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   
   // update subtree map?
   if (straydn && straydnl->get_inode()->is_dir()) 
-    mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir());
+    mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir(), true);
 
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
@@ -4733,7 +4733,7 @@ void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   CInode *in = dn->get_linkage()->get_inode();
   dn->get_dir()->unlink_inode(dn);
   straydn->get_dir()->link_primary_inode(straydn, in);
-  mdcache->adjust_subtree_after_rename(in, dn->get_dir());
+  mdcache->adjust_subtree_after_rename(in, dn->get_dir(), true);
 
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						 MMDSSlaveRequest::OP_RMDIRPREPACK);
@@ -4847,7 +4847,7 @@ void Server::_rmdir_rollback_finish(MDRequest *mdr, metareqid_t reqid, CDentry *
   straydn->get_dir()->unlink_inode(dn);
   dn->get_dir()->link_primary_inode(dn, in);
 
-  mdcache->adjust_subtree_after_rename(in, straydn->get_dir());
+  mdcache->adjust_subtree_after_rename(in, straydn->get_dir(), true);
 
   if (mdr)
     mds->mdcache->request_finish(mdr);
@@ -5868,6 +5868,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   if (destdnl->is_primary() && in->is_dir()) 
     mdcache->adjust_subtree_after_rename(in,
                                          srcdn->get_dir(),
+					 true,
                                          imported_inode);
 
   // removing a new dn?
@@ -6393,7 +6394,7 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, 
 
   // update subtree map?
   if (in->is_dir())
-    mdcache->adjust_subtree_after_rename(in, olddir);
+    mdcache->adjust_subtree_after_rename(in, olddir, true);
 
   if (mdr)
     mds->mdcache->request_finish(mdr);
