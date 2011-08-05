@@ -95,13 +95,14 @@ def need_to_install(ctx, role, sha1):
     return ret
 
 def install_and_reboot(ctx, config):
+    procs = {}
     for role, sha1 in config.iteritems():
         log.info('Installing kernel version {sha1} on {role}...'.format(sha1=sha1,
                                                                         role=role))
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         _, deb_url = teuthology.get_ceph_binary_url(sha1=sha1, flavor='kernel')
         log.info('fetching kernel from {url}'.format(url=deb_url))
-        role_remote.run(
+        proc = role_remote.run(
             args=[
                 'echo',
                 'linux-image.deb',
@@ -126,7 +127,14 @@ def install_and_reboot(ctx, config):
                 '-r',
                 'now',
                 ],
+            wait=False,
             )
+        procs[role_remote.name] = proc
+
+    for name, proc in procs.iteritems():
+        log.debug('Waiting for install on %s to complete...', name)
+        proc.exitstatus.get()
+
 
 def reconnect(ctx, timeout):
     log.info('Re-opening connections...')
