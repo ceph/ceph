@@ -39,7 +39,7 @@ def get_ceph_binary_url(branch=None, tag=None, sha1=None, flavor=None):
         else:
             if branch is None:
                 branch = 'master'
-            ref = 'origin_{branch}'.format(branch=branch)
+            ref = branch
 
         sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
         log.debug('Translating ref to sha1 using url %s', sha1_url)
