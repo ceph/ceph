@@ -6351,7 +6351,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   res = _lookup(todir, toname, &req->other_inode);
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
-  req->inode = fromdir;
+  req->inode = todir;
 
   res = make_request(req, uid, gid);
 
