@@ -1383,13 +1383,13 @@ void Client::handle_client_reply(MClientReply *reply)
     return;
   }
 
-  if (-ESTALE == reply->get_result()) { //see if we can get to proper MDS
+  if (-ESTALE == reply->get_result()) { // see if we can get to proper MDS
     request->send_to_auth = true;
-    ldout(cct, 20) << "got ESTALE on req" << request->tid
-	     << "from mds" << request->mds << dendl;
+    ldout(cct, 20) << "got ESTALE on tid " << request->tid
+		   << " from mds" << request->mds << dendl;
     request->resend_mds = choose_target_mds(request);
     if (request->resend_mds >= 0 &&
-	request->resend_mds != request->mds) { //wasn't sent to auth, resend
+	request->resend_mds != request->mds) { // wasn't sent to auth, resend
       ldout(cct, 20) << "but it wasn't sent to auth, resending" << dendl;
       send_request(request, request->resend_mds);
       return;
@@ -1398,7 +1398,7 @@ void Client::handle_client_reply(MClientReply *reply)
       ldout(cct, 10) << "Got ESTALE on request without inode!" << dendl; //do nothing
     } else if (request->inode->caps.count(request->resend_mds) &&
 	       request->sent_on_mseq != request->inode->caps[request->resend_mds]->mseq) {
-      //auth data out of date; send it again!
+      // auth data out of date; send it again!
       ldout(cct, 20) << "auth data out of date, sending again" << dendl;
       send_request(request, request->resend_mds);
       return; 
