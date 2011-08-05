@@ -79,8 +79,7 @@ void rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
 
 /* Returns a configuration value as a string.
- * If len is positive, that is the maximum number of bytes we'll write into the
- * buffer. If len == -1, we'll call malloc() and set *buf.
+ * len is the maximum number of bytes we'll write into the buffer.
  * Returns 0 on success, error code otherwise. Returns ENAMETOOLONG if the
  * buffer is too short. */
 int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
