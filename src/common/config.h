@@ -133,10 +133,6 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 		   const char *key, std::string &out, bool emeta) const;
 
-  // Expand metavariables in the provided string.
-  // Returns true if any metavariables were found and expanded.
-  bool expand_meta(std::string &val) const;
-
 private:
   int parse_config_files_impl(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors);
@@ -146,6 +142,10 @@ private:
 
   int set_val_impl(const char *val, const config_option *opt);
   int set_val_raw(const char *val, const config_option *opt);
+
+  // Expand metavariables in the provided string.
+  // Returns true if any metavariables were found and expanded.
+  bool expand_meta(std::string &val) const;
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;

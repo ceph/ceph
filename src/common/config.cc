@@ -618,22 +618,22 @@ parse_argv(std::vector<const char*>& args)
     // Careful: you can burn through the alphabet pretty quickly by adding
     // to this list.
     else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", (char*)NULL)) {
-      set_val("monmap", val.c_str());
+      set_val_or_die("monmap", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", (char*)NULL)) {
-      set_val("mon_host", val.c_str());
+      set_val_or_die("mon_host", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
-      set_val("public_addr", val.c_str());
+      set_val_or_die("public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
-      set_val("keyfile", val.c_str());
+      set_val_or_die("keyfile", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
-      set_val("keyring", val.c_str());
+      set_val_or_die("keyring", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
-      set_val("client_mountpoint", val.c_str());
+      set_val_or_die("client_mountpoint", val.c_str());
     }
     else {
       int o;
@@ -948,6 +948,7 @@ set_val_from_default(const config_option *opt)
 int md_config_t::
 set_val_impl(const char *val, const config_option *opt)
 {
+  assert(lock.is_locked());
   int ret = set_val_raw(val, opt);
   if (ret)
     return ret;
@@ -958,6 +959,7 @@ set_val_impl(const char *val, const config_option *opt)
 int md_config_t::
 set_val_raw(const char *val, const config_option *opt)
 {
+  assert(lock.is_locked());
   switch (opt->type) {
     case OPT_INT: {
       std::string err;
@@ -1032,6 +1034,7 @@ static const int NUM_CONF_METAVARIABLES =
 bool md_config_t::
 expand_meta(std::string &val) const
 {
+  assert(lock.is_locked());
   bool found_meta = false;
   string out;
   string::size_type sz = val.size();
