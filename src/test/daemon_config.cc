@@ -59,3 +59,22 @@ TEST(DaemonConfig, ArgV) {
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("22"), string(buf));
 }
+
+TEST(DaemonConfig, InjectArgs) {
+  int ret;
+  std::ostringstream chat;
+  std::string injection("--debug 24 --keyfile /tmp/foobarbaz");
+  g_ceph_context->_conf->injectargs(injection, &chat);
+
+  char buf[128];
+  char *tmp = buf;
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("keyfile", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("/tmp/foobarbaz"), string(buf));
+
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("24"), string(buf));
+}
