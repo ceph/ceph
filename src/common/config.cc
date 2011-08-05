@@ -509,6 +509,8 @@ parse_config_files(const char *conf_files,
 		   std::deque<std::string> *parse_errors, int flags)
 {
   Mutex::Locker l(lock);
+  if (internal_safe_to_start_threads)
+    return -ENOSYS;
   if (!conf_files) {
     const char *c = getenv("CEPH_CONF");
     if (c) {
@@ -583,14 +585,20 @@ void md_config_t::
 parse_env()
 {
   Mutex::Locker l(lock);
+  if (internal_safe_to_start_threads)
+    return;
   if (getenv("CEPH_KEYRING"))
     keyring = getenv("CEPH_KEYRING");
 }
 
-void md_config_t::
+int md_config_t::
 parse_argv(std::vector<const char*>& args)
 {
   Mutex::Locker l(lock);
+  if (internal_safe_to_start_threads) {
+    return -ENOSYS;
+  }
+
   // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
@@ -658,6 +666,7 @@ parse_argv(std::vector<const char*>& args)
       }
     }
   }
+  return 0;
 }
 
 int md_config_t::parse_injectargs(std::vector<const char*>& args,
@@ -802,8 +811,20 @@ set_val(const char *key, const char *val)
 
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
-    if (strcmp(opt->name, k.c_str()) == 0)
+    if (strcmp(opt->name, k.c_str()) == 0) {
+      if (internal_safe_to_start_threads) {
+	// If threads have been started...
+	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) {
+	  // And this is NOT an integer valued variable....
+	  if (observers.find(opt->name) == observers.end()) {
+	    // And there is no observer to safely change it...
+	    // You lose.
+	    return -ENOSYS;
+	  }
+	}
+      }
       return set_val_impl(v.c_str(), opt);
+    }
   }
 
   // couldn't find a configuration option with key 'key'

@@ -39,6 +39,9 @@ TEST(DaemonConfig, SimpleSet) {
 }
 
 TEST(DaemonConfig, ArgV) {
+  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
+				       "false"));
+
   int ret;
   const char *argv[] = { "foo", "--debug", "22",
 			 "--keyfile", "/tmp/my-keyfile", NULL };
@@ -59,6 +62,9 @@ TEST(DaemonConfig, ArgV) {
   ret = g_ceph_context->_conf->get_val("debug", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("22"), string(buf));
+
+  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
+				       "true"));
 }
 
 TEST(DaemonConfig, InjectArgs) {
@@ -161,4 +167,32 @@ TEST(DaemonConfig, InjectArgsLogfile) {
 
   // Clean up the garbage
   unlink(tmpfile);
+}
+
+TEST(DaemonConfig, ThreadSafety1) {
+  int ret;
+  // Verify that we can't change this, since internal_safe_to_start_threads has
+  // been set.
+  ret = g_ceph_context->_conf->set_val("osd_data", "");
+  ASSERT_EQ(ret, -ENOSYS);
+
+  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
+				       "false"));
+
+  // Ok, now we can change this. Since this is just a test, and there are no
+  // OSD threads running, we know changing osd_data won't actually blow up the
+  // world.
+  ret = g_ceph_context->_conf->set_val("osd_data", "/tmp/crazydata");
+  ASSERT_EQ(ret, 0);
+
+  char buf[128];
+  char *tmp = buf;
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("osd_data", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("/tmp/crazydata"), string(buf));
+
+  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
+				       "false"));
+  ASSERT_EQ(ret, 0);
 }

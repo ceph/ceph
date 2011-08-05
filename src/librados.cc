@@ -3023,10 +3023,10 @@ conf_read_file(const char * const path) const
   return rados_conf_read_file((rados_t)client, path);
 }
 
-void librados::Rados::
+int librados::Rados::
 conf_parse_argv(int argc, const char ** argv) const
 {
-  rados_conf_parse_argv((rados_t)client, argc, argv);
+  return rados_conf_parse_argv((rados_t)client, argc, argv);
 }
 
 int librados::Rados::
@@ -3263,14 +3263,17 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   return 0;
 }
 
-extern "C" void rados_conf_parse_argv(rados_t cluster, int argc, const char **argv)
+extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  conf->parse_argv(args);
+  int ret = conf->parse_argv(args);
+  if (ret)
+    return ret;
   conf->apply_changes(NULL);
+  return 0;
 }
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)

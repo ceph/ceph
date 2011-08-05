@@ -140,12 +140,16 @@ public:
     return 0;
   }
 
-  void conf_parse_argv(int argc, const char **argv)
+  int conf_parse_argv(int argc, const char **argv)
   {
+    int ret;
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    cct->_conf->parse_argv(args);
+    ret = cct->_conf->parse_argv(args);
+    if (ret)
+	return ret;
     cct->_conf->apply_changes(NULL);
+    return 0;
   }
 
   int conf_set(const char *option, const char *value)
@@ -236,10 +240,10 @@ extern "C" int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *p
   return cmount->conf_read_file(path);
 }
 
-extern "C" void ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
+extern "C" int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
 				     const char **argv)
 {
-  cmount->conf_parse_argv(argc, argv);
+  return cmount->conf_parse_argv(argc, argv);
 }
 
 extern "C" int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,

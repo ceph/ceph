@@ -51,7 +51,7 @@ void ceph_shutdown(struct ceph_mount_info *cmount);
  */
 int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path_list);
 
-void ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc, const char **argv);
+int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc, const char **argv);
 
 /* Sets a configuration value from a string.
  * Returns 0 on success, error code otherwise. */

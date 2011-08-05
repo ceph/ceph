@@ -105,7 +105,7 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  void parse_argv(std::vector<const char*>& args);
+  int parse_argv(std::vector<const char*>& args);
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostringstream *oss);

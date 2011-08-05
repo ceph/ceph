@@ -72,7 +72,7 @@ void rados_shutdown(rados_t cluster);
 int rados_conf_read_file(rados_t cluster, const char *path);
 
 /* Parse argv */
-void rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
+int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
 /* Sets a configuration value from a string.
  * Returns 0 on success, error code otherwise. */
