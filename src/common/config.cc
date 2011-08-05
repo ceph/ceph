@@ -13,30 +13,23 @@
  */
 
 #include "auth/Auth.h"
-#include "common/BackTrace.h"
-#include "common/Clock.h"
 #include "common/ConfUtils.h"
-#include "common/DoutStreambuf.h"
-#include "common/perf_counters.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
+#include "common/common_init.h"
 #include "common/config.h"
 #include "common/dyn_snprintf.h"
 #include "common/static_assert.h"
 #include "common/strtol.h"
 #include "common/version.h"
-#include "include/atomic.h"
 #include "include/str_list.h"
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <fstream>
+#include <sstream>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
