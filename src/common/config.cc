@@ -660,6 +660,43 @@ parse_argv(std::vector<const char*>& args)
   }
 }
 
+int md_config_t::parse_injectargs(std::vector<const char*>& args,
+      std::ostringstream *oss)
+{
+  assert(lock.is_locked());
+  std::string val;
+  int ret = 0;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    int o;
+    for (o = 0; o < NUM_CONFIG_OPTIONS; ++o) {
+      const config_option *opt = config_optionsp + o;
+      std::string as_option("--");
+      as_option += opt->name;
+      if ((opt->type == OPT_BOOL) &&
+	  ceph_argparse_flag(args, i, as_option.c_str(), (char*)NULL)) {
+	set_val_impl("true", opt);
+	break;
+      }
+      else if (ceph_argparse_witharg(args, i, &val,
+				     as_option.c_str(), (char*)NULL)) {
+	if (((opt->type == OPT_STR) || (opt->type == OPT_ADDR)) &&
+	    (observers.find(opt->name) == observers.end())) {
+	  *oss << "You cannot change " << opt->name << " using injectargs.\n";
+	  ret = -ENOSYS;
+	  break;
+	}
+	set_val_impl(val.c_str(), opt);
+	break;
+      }
+    }
+    if (o == NUM_CONFIG_OPTIONS) {
+      // ignore
+      ++i;
+    }
+  }
+  return ret;
+}
+
 void md_config_t::
 apply_changes(std::ostringstream *oss)
 {
@@ -709,9 +746,10 @@ apply_changes(std::ostringstream *oss)
   changed.clear();
 }
 
-void md_config_t::
+int md_config_t::
 injectargs(const std::string& s, std::ostringstream *oss)
 {
+  int ret;
   Mutex::Locker l(lock);
   char b[s.length()+1];
   strcpy(b, s.c_str());
@@ -725,8 +763,8 @@ injectargs(const std::string& s, std::ostringstream *oss)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  parse_argv(nargs);
-  if ((!nargs.empty()) && (oss)) {
+  ret = parse_injectargs(nargs, oss);
+  if (!nargs.empty()) {
     *oss << "ERROR: failed to parse arguments: ";
     std::string prefix;
     for (std::vector<const char*>::const_iterator i = nargs.begin();
@@ -735,8 +773,10 @@ injectargs(const std::string& s, std::ostringstream *oss)
       prefix = ",";
     }
     *oss << "\n";
+    ret = -EINVAL;
   }
   apply_changes(oss);
+  return ret;
 }
 
 void md_config_t::

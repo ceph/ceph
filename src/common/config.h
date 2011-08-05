@@ -59,10 +59,13 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
  * configuration obserever which receives callbacks when a value changes. These
  * callbacks take place under the md_config_t lock.
  *
- * Clearly, the old way is not compatible with altering the value of the
- * configuration after multiple threads have been started. So, to avoid
- * thread-safety problems, we disallow changing configuration values unless
- * there is an observer registered to handle that change.
+ * To prevent serious problems resulting from thread-safety issues, we disallow
+ * changing std::string configuration values after
+ * md_config_t::internal_safe_to_start_threads becomes true. You can still
+ * change integer or floating point values, however.
+ *
+ * FIXME: really we shouldn't allow changing integer or floating point values
+ * while another thread is reading them, either.
  */
 class md_config_t {
 public:
@@ -108,7 +111,7 @@ public:
   void apply_changes(std::ostringstream *oss);
 
   // Called by the Ceph daemons to make configuration changes at runtime
-  void injectargs(const std::string &s, std::ostringstream *oss);
+  int injectargs(const std::string &s, std::ostringstream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
@@ -134,6 +137,8 @@ public:
 		   const char *key, std::string &out, bool emeta) const;
 
 private:
+  int parse_injectargs(std::vector<const char*>& args,
+		      std::ostringstream *oss);
   int parse_config_files_impl(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors);
 
