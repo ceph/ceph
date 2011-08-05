@@ -543,6 +543,12 @@ unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
+unittest_config_SOURCES = test/config.cc
+unittest_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_config_LDADD =  librados.la ${UNITTEST_LDADD}
+unittest_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_config
+
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -lrt -pthread -lcurl ${AM_LDFLAGS}
