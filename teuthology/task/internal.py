@@ -58,7 +58,10 @@ def lock_machines(ctx, config):
         assert num_up >= config, 'not enough machines are up'
 
         # make sure there are machines for non-automated jobs to run
-        num_free = len(filter(lambda machine: machine['locked'] == 0, machines))
+        num_free = len(filter(
+                lambda machine: machine['up'] and machine['locked'] == 0,
+                machines
+                ))
         if num_free < 6 and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info('waiting for more machines to be free...')
