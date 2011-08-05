@@ -638,7 +638,8 @@ bool PGMonitor::register_new_pgs()
 	continue;
       }
       created++;
-      register_pg(pool, pgid, epoch, new_pool);
+      register_pg(pool, pgid, new_pool ? pool.get_last_change() : epoch,
+                  new_pool);
     }
 
     for (ps_t ps = 0; ps < pool.get_lpg_num(); ps++) {
@@ -649,7 +650,8 @@ bool PGMonitor::register_new_pgs()
 	  continue;
 	}
 	created++;
-	register_pg(pool, pgid, pool.get_last_change(), new_pool);
+	register_pg(pool, pgid, new_pool? pool.get_last_change() : epoch,
+	            new_pool);
       }
     }
   } 
