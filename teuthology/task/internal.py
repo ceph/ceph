@@ -51,6 +51,22 @@ def lock_machines(ctx, config):
     assert isinstance(config, int), 'config must be an integer'
 
     while True:
+        # make sure there are enough machines up
+        machines = lock.list_locks(ctx)
+        assert machines is not None, 'error listing machines'
+        num_up = len(filter(lambda machine: machine['up'], machines))
+        assert num_up >= config, 'not enough machines are up'
+
+        # make sure there are machines for non-automated jobs to run
+        num_free = len(filter(lambda machine: machine['locked'] == 0, machines))
+        if num_free < 6 and ctx.owner.startswith('scheduled'):
+            if ctx.block:
+                log.info('waiting for more machines to be free...')
+                time.sleep(10)
+                continue
+            else:
+                assert 0, 'not enough machines free'
+
         newly_locked = lock.lock_many(ctx, config, ctx.owner)
         if len(newly_locked) == config:
             ctx.config['targets'] = newly_locked
@@ -58,12 +74,6 @@ def lock_machines(ctx, config):
             break
         elif not ctx.block:
             assert 0, 'not enough machines are available'
-
-        # make sure there are enough machines up
-        machines = lock.list_locks(ctx)
-        assert machines is not None, 'error listing machines'
-        num_up = len(filter(lambda machine: machine['up'], machines))
-        assert num_up >= config, 'not enough machines are up'
 
         log.warn('Could not lock enough machines, waiting...')
         time.sleep(10)
