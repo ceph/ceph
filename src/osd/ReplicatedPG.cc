@@ -2020,7 +2020,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       obs.exists = true;
     }
 
-    if (result)
+    if (result < 0)
       break;
   }
   return result;
