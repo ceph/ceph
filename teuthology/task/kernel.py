@@ -139,10 +139,15 @@ def reconnect(ctx, timeout):
                     user_at_host=remote.name,
                     host_key=ctx.config['targets'][remote.name],
                     )
-            except socket.error as (code, description):
-                if code not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
+            except socket.error as e:
+                if hasattr(e, '__getitem__'):
+                    if e[0] not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
                                 errno.EHOSTUNREACH, errno.EHOSTDOWN] or \
                                 time.time() - starttime > timeout:
+                        log.exception('unknown socket error: %s', repr(e))
+                        raise
+                else:
+                    log.exception('weird socket error without error code')
                     raise
             else:
                 need_reconnect.remove(remote)
