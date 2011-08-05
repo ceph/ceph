@@ -132,6 +132,12 @@ struct librados::IoCtxImpl {
   }
 };
 
+size_t librados::ObjectOperation::size()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  return o->size();
+}
+
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -170,10 +176,10 @@ void librados::ObjectReadOperation::stat()
   o->add_op(CEPH_OSD_OP_STAT);
 }
 
-void librados::ObjectReadOperation::read(size_t len, uint64_t off)
+void librados::ObjectReadOperation::read(size_t off, uint64_t len)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->read(len, off);
+  o->read(off, len);
 }
 
 void librados::ObjectReadOperation::getxattr(const char *name)

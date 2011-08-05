@@ -363,6 +363,9 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
     }
   }
 
+  if (!op.size())
+    return 0;
+
   r = io_ctx.operate(oid, &op, NULL);
   if (r < 0)
     return r;
@@ -706,10 +709,9 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
 {
   RGWObjState *s = rctx->get_state(obj);
+  *state = s;
   if (s->has_attrs)
     return 0;
-
-  *state = s;
 
   ObjectReadOperation op;
   op.getxattrs();
@@ -728,8 +730,15 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
 
   bufferlist::iterator oiter = outbl.begin();
   ::decode(s->attrset, oiter);
+
+  map<string, bufferlist>::iterator aiter;
+  for (aiter = s->attrset.begin(); aiter != s->attrset.end(); ++aiter) {
+    RGW_LOG(0) << "iter->first=" << aiter->first << dendl;
+  }
   ::decode(s->size, oiter);
-  ::decode(s->mtime, oiter);
+  utime_t ut;
+  ::decode(ut, oiter);
+  s->mtime = ut.sec();
 
   s->has_attrs = true;
   map<string, bufferlist>::iterator iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
@@ -968,7 +977,6 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   RGWRadosCtx *new_ctx = NULL;
   RGWObjState *astate = NULL;
 
-
   map<string, bufferlist>::iterator iter;
 
   *handle = NULL;
@@ -986,7 +994,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   state->io_ctx.locator_set_key(obj.key);
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx;
+    new_ctx = new RGWRadosCtx();
     rctx = new_ctx;
   }
 
@@ -1006,7 +1014,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   }
 
   /* Convert all times go GMT to make them compatible */
-  ctime = mktime(gmtime(&astate->mtime));
+  struct tm mtm;
+  ctime = mktime(gmtime_r(&astate->mtime, &mtm));
 
   r = -ECANCELED;
   if (mod_ptr) {
@@ -1154,24 +1163,26 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
 
   ObjectReadOperation op;
 
-  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
-  op.read(len, ofs);
-
   int r = append_atomic_test(rctx, obj, state->io_ctx, oid, op, &astate);
   if (r < 0)
     return r;
 
+  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
+  op.read(ofs, len);
+
   r = state->io_ctx.operate(oid, &op, &bl);
-  RGW_LOG(20) << "rados->read r=" << r << dendl;
+  RGW_LOG(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
     rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key);
     r = get_obj(NULL, handle, shadow, data, ofs, end);
+    return r;
   }
 
-  if (r > 0) {
+  if (bl.length() > 0) {
+    r = bl.length();
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());
   }
@@ -1213,7 +1224,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r < 0)
     return r;
 
-  op.read(size, ofs);
+  op.read(ofs, size);
 
   r = io_ctx.operate(oid, &op, &bl);
   if (r == -ECANCELED) {

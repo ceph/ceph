@@ -112,6 +112,8 @@ namespace librados
     ObjectOperation();
     virtual ~ObjectOperation();
 
+    size_t size();
+
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
     void src_cmpxattr(const std::string& src_oid,
@@ -167,7 +169,7 @@ namespace librados
     void stat();
     void getxattr(const char *name);
     void getxattrs();
-    void read(size_t len, uint64_t off);
+    void read(size_t off, uint64_t len);
   };
 
 

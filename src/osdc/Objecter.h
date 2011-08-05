@@ -51,6 +51,10 @@ struct ObjectOperation {
 
   ObjectOperation() : flags(0), priority(0) {}
 
+  size_t size() {
+    return ops.size();
+  }
+
   OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);

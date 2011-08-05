@@ -430,7 +430,6 @@ void RGWCreateBucket::execute()
       goto done;
     }
   }
-
   pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
   if (!pol_ret) {
     ret = -EINVAL;
