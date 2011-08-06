@@ -136,9 +136,15 @@ namespace librados
    */
   class ObjectWriteOperation : public ObjectOperation
   {
+  protected:
+    time_t *pmtime;
   public:
-    ObjectWriteOperation() {}
+    ObjectWriteOperation() : pmtime(NULL) {}
     ~ObjectWriteOperation() {}
+
+    void mtime(time_t *pt) {
+      pmtime = pt;
+    }
 
     void create(bool exclusive);
     void write(uint64_t off, const bufferlist& bl);
@@ -153,6 +159,8 @@ namespace librados
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len);
+
+    friend class IoCtx;
   };
 
   /*
