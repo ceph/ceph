@@ -693,7 +693,7 @@ void RGWPutObj::execute()
     if (!multipart) {
       rgw_obj dst_obj(s->bucket_str, s->object_str);
       rgwstore->set_atomic(s->obj_ctx, dst_obj);
-      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, attrs);
+      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs);
       if (ret < 0)
         goto done_err;
       if (created_obj) {
@@ -1288,7 +1288,7 @@ void RGWCompleteMultipart::execute()
 
     ofs += obj_iter->second.size;
   }
-  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, true);
+  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, NULL, true);
   if (ret < 0)
     goto done;
 

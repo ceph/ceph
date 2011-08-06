@@ -100,18 +100,21 @@ public:
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
                          vector<RGWCloneRangeInfo>& ranges,
-                         map<string, bufferlist> attrs, bool truncate_dest) {
-    return clone_objs(ctx, dst_obj, ranges, attrs, truncate_dest, NULL);
+                         map<string, bufferlist> attrs, time_t *pmtime, bool truncate_dest) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, pmtime, truncate_dest, NULL);
   }
 
   int clone_objs(void *ctx, rgw_obj& dst_obj, 
                  vector<RGWCloneRangeInfo>& ranges,
-                 map<string, bufferlist> attrs, bool truncate_dest,
+                 map<string, bufferlist> attrs,
+                 time_t *pmtime,
+                 bool truncate_dest,
                  pair<string, bufferlist> *cmp_xattr);
 
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                 rgw_obj& src_obj, off_t src_ofs,
                 uint64_t size, map<string, bufferlist> attrs,
+                time_t *pmtime,
                 pair<string, bufferlist> *xattr_cond) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
@@ -120,7 +123,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, true, xattr_cond);
+    return clone_objs(ctx, dst_obj, v, attrs, pmtime, true, xattr_cond);
   }
 
   /** Copy an object, with many extra options */

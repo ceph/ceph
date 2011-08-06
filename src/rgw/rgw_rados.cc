@@ -521,7 +521,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, attrs);
+  ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs);
   if (mtime)
     obj_stat(ctx, tmp_obj, NULL, mtime);
 
@@ -846,7 +846,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
 
     /* FIXME: clone obj should be conditional, should check src object id-tag */
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, &cond);
+    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, &state->mtime, &cond);
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
@@ -1083,6 +1083,7 @@ done_err:
 int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
+                        time_t *pmtime,
                         bool truncate_dest,
                         pair<string, bufferlist> *xattr_cond)
 {
@@ -1134,6 +1135,9 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
       op.clone_range(range.dst_ofs, range.src.object, range.src_ofs, range.len);
     }
   }
+
+  if (pmtime)
+    op.mtime(pmtime);
 
   bufferlist outbl;
   int ret = io_ctx.operate(dst_oid, &op, &outbl);

@@ -173,7 +173,8 @@ public:
 
   virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
-                          uint64_t size, map<string, bufferlist> attrs) {
+                          uint64_t size, time_t *pmtime,
+                          map<string, bufferlist> attrs) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
@@ -181,12 +182,13 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, true);
+    return clone_objs(ctx, dst_obj, v, attrs, pmtime, true);
   }
 
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs, bool truncate_dest) { return -ENOTSUP; }
+                        map<string, bufferlist> attrs, time_t *pmtime,
+                        bool truncate_dest) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state
    */
