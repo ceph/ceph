@@ -102,6 +102,11 @@ public:
 
   virtual void on_election_start();
 
+  /* Courtesy function provided by PaxosService, called when an election
+   * finishes and the cluster goes active. We use it here to make sure we
+   * haven't lost any PGs from new pools. */
+  virtual void on_active();
+
   void tick();  // check state, take actions
 
   void check_osd_map(epoch_t epoch);

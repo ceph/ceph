@@ -90,6 +90,13 @@ void PGMonitor::on_election_start()
   last_osd_report.clear();
 }
 
+void PGMonitor::on_active()
+{
+  if (mon->is_leader()) {
+    check_osd_map(mon->osdmon()->osdmap.epoch);
+  }
+}
+
 void PGMonitor::tick() 
 {
   if (!paxos->is_active()) return;
@@ -654,7 +661,7 @@ bool PGMonitor::register_new_pgs()
 	            new_pool);
       }
     }
-  } 
+  }
 
   int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
   int removed = 0;
