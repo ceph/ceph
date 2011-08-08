@@ -87,7 +87,7 @@ Description: debugging symbols for ceph-fuse
 
 Package: ceph-client-tools
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version}), librbd1 (= ${binary:Version})
 Suggests: ceph
 Description: utilities to mount a ceph filesystem with the kernel client
  Ceph is a distributed network file system designed to provide
@@ -151,7 +151,7 @@ Description: RADOS distributed object store client library (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: RADOS block device client library
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -265,7 +265,7 @@ Description: RGW distributed object store client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
