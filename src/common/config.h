@@ -24,7 +24,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
-#include "common/Mutex.h" // TODO: remove
+#include "common/Mutex.h"
 #include "include/assert.h" // TODO: remove
 #include "common/config_obs.h"
 #include "msg/msg_types.h"
@@ -42,6 +42,31 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
 #define LOG_TO_STDERR_SOME 1
 #define LOG_TO_STDERR_ALL 2
 
+/** This class represents the current Ceph configuration.
+ *
+ * For Ceph daemons, this is the daemon configuration.  Log levels, caching
+ * settings, btrfs settings, and so forth can all be found here.  For libceph
+ * and librados users, this is the configuration associated with their context.
+ *
+ * For information about how this class is loaded from a configuration file,
+ * see common/ConfUtils.
+ *
+ * ACCESS
+ *
+ * There are two ways to read the ceph context-- the old way and the new way.
+ * In the old way, code would simply read the public variables of the
+ * configuration, without taking a lock. In the new way, code registers a
+ * configuration obserever which receives callbacks when a value changes. These
+ * callbacks take place under the md_config_t lock.
+ *
+ * To prevent serious problems resulting from thread-safety issues, we disallow
+ * changing std::string configuration values after
+ * md_config_t::internal_safe_to_start_threads becomes true. You can still
+ * change integer or floating point values, however.
+ *
+ * FIXME: really we shouldn't allow changing integer or floating point values
+ * while another thread is reading them, either.
+ */
 class md_config_t {
 public:
   /* Maps configuration options to the observer listening for them. */
@@ -80,13 +105,13 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  void parse_argv(std::vector<const char*>& args);
+  int parse_argv(std::vector<const char*>& args);
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostringstream *oss);
 
   // Called by the Ceph daemons to make configuration changes at runtime
-  void injectargs(const std::string &s, std::ostringstream *oss);
+  int injectargs(const std::string &s, std::ostringstream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
@@ -111,11 +136,9 @@ public:
   int get_val_from_conf_file(const std::vector <std::string> &sections,
 		   const char *key, std::string &out, bool emeta) const;
 
-  // Expand metavariables in the provided string.
-  // Returns true if any metavariables were found and expanded.
-  bool expand_meta(std::string &val) const;
-
 private:
+  int parse_injectargs(std::vector<const char*>& args,
+		      std::ostringstream *oss);
   int parse_config_files_impl(const std::list<std::string> &conf_files,
 		   std::deque<std::string> *parse_errors);
 
@@ -125,8 +148,18 @@ private:
   int set_val_impl(const char *val, const config_option *opt);
   int set_val_raw(const char *val, const config_option *opt);
 
+  // Expand metavariables in the provided string.
+  // Returns true if any metavariables were found and expanded.
+  bool expand_meta(std::string &val) const;
+
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+
+  /** A lock that protects the md_config_t internals. It is
+   * recursive, for simplicity.
+   * It is best if this lock comes first in the lock hierarchy. We will
+   * hold this lock when calling configuration observers.  */
+  mutable Mutex lock;
 
   obs_map_t observers;
   changed_set_t changed;

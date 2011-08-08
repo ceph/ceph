@@ -2139,7 +2139,9 @@ void OSD::handle_command(MMonCommand *m)
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs") {
     ostringstream oss;
+    osd_lock.Unlock();
     g_conf->injectargs(m->cmd[1], &oss);
+    osd_lock.Lock();
     derr << "injectargs:" << dendl;
     derr << oss.str() << dendl;
   }

@@ -543,6 +543,24 @@ unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
+unittest_libceph_config_SOURCES = test/libceph_config.cc
+unittest_libceph_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_libceph_config_LDADD =  libceph.la ${UNITTEST_LDADD}
+unittest_libceph_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_libceph_config
+
+unittest_librados_config_SOURCES = test/librados_config.cc
+unittest_librados_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
+unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_librados_config
+
+unittest_daemon_config_SOURCES = test/daemon_config.cc
+unittest_daemon_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_daemon_config_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
+unittest_daemon_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_daemon_config
+
 if WITH_RADOSGW
 unittest_librgw_SOURCES = test/librgw.cc
 unittest_librgw_LDFLAGS = -lrt -pthread -lcurl ${AM_LDFLAGS}
@@ -728,7 +746,6 @@ libcommon_files = \
 	common/environment.cc\
 	common/sctp_crc32.c\
 	common/assert.cc \
-	common/dyn_snprintf.c \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
@@ -944,7 +961,6 @@ noinst_HEADERS = \
         common/signal.h\
         global/signal_handler.h\
         common/simple_spin.h\
-        common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
         common/config.h\
