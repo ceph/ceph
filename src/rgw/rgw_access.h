@@ -240,9 +240,13 @@ public:
   static void close_storage();
   static RGWAccess *store;
 
-  virtual void *create_context() { return NULL; }
+  virtual void *create_context(void *user_ctx) { return NULL; }
   virtual void destroy_context(void *ctx) {}
   virtual void set_atomic(void *ctx, rgw_obj& obj) {}
+
+  // to notify upper layer that we need to do some operation on an object, and it's up to
+  // the upper layer to schedule this operation.. e.g., log intent in intent log
+  virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
 };
 
 class RGWStoreManager {

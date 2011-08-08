@@ -142,6 +142,12 @@ void RGWProcess::run()
   }
 }
 
+static int call_log_intent(void *ctx, rgw_obj& obj, RGWIntentEvent intent)
+{
+  struct req_state *s = (struct req_state *)ctx;
+  return rgw_log_intent(s, obj, intent);
+}
+
 void RGWProcess::handle_request(FCGX_Request *fcgx)
 {
   RGWRESTMgr rest;
@@ -153,7 +159,8 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   rgw_env.init(fcgx->envp);
 
   struct req_state *s = new req_state(&rgw_env);
-  s->obj_ctx = rgwstore->create_context();
+  s->obj_ctx = rgwstore->create_context(s);
+  rgwstore->set_intent_cb(s->obj_ctx, call_log_intent);
 
   RGWOp *op = NULL;
   int init_error = 0;

@@ -861,6 +861,11 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
          as required */
       RGW_LOG(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
       r = 0;
+    } else {
+      int ret = rctx->notify_intent(dest_obj, DEL_OBJ);
+      if (ret < 0) {
+        RGW_LOG(0) << "WARNING: failed to log intent ret=" << ret << dendl;
+      }
     }
     if (r < 0) {
       RGW_LOG(0) << "ERROR: failed to clone object r=" << r << dendl;

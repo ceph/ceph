@@ -5,10 +5,12 @@
 #include "include/utime.h"
 
 #define LOG_ENTRY_VER 3
+#define INTENT_LOG_ENTRY_VER 1
 
 #define RGW_SHOULD_LOG_DEFAULT 1
 
 #define RGW_LOG_BUCKET_NAME ".log"
+#define RGW_INTENT_LOG_BUCKET_NAME ".intent-log"
 
 struct rgw_log_entry {
   string owner;
@@ -82,8 +84,31 @@ struct rgw_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
+struct rgw_intent_log_entry {
+  rgw_obj obj;
+  utime_t op_time;
+  uint32_t intent;
+
+  void encode(bufferlist &bl) const {
+    uint8_t ver;
+    ver = INTENT_LOG_ENTRY_VER;
+    ::encode(ver, bl);
+    ::encode(obj, bl);
+    ::encode(op_time, bl);
+    ::encode(intent, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    uint8_t ver;
+    ::decode(ver, p);
+    ::decode(obj, p);
+    ::decode(op_time, p);
+    ::decode(intent, p);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 
 int rgw_log_op(struct req_state *s);
+int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
 
 #endif
 

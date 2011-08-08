@@ -31,11 +31,23 @@ struct RGWObjState {
 
 struct RGWRadosCtx {
   map<rgw_obj, RGWObjState> objs_state;
+  int (*intent_cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
+  void *user_ctx;
   RGWObjState *get_state(rgw_obj& obj) {
     return &objs_state[obj];
   }
   void set_atomic(rgw_obj& obj) {
     objs_state[obj].is_atomic = true;
+  }
+  void set_intent_cb(int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+    intent_cb = cb;
+  }
+
+  int notify_intent(rgw_obj& obj, RGWIntentEvent intent) {
+    if (intent_cb) {
+      return intent_cb(user_ctx, obj, intent);
+    }
+    return 0;
   }
 };
   
@@ -190,8 +202,10 @@ public:
   virtual int distribute(bufferlist& bl);
   virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
 
-  void *create_context() {
-    return new RGWRadosCtx();
+  void *create_context(void *user_ctx) {
+    RGWRadosCtx *rctx = new RGWRadosCtx();
+    rctx->user_ctx = user_ctx;
+    return rctx;
   }
   void destroy_context(void *ctx) {
     delete (RGWRadosCtx *)ctx;
@@ -200,7 +214,10 @@ public:
     RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
     rctx->set_atomic(obj);
   }
-
+  void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+    RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+    rctx->set_intent_cb(cb);
+  }
 };
 
 #endif

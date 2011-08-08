@@ -97,3 +97,39 @@ done:
 
   return ret;
 }
+
+int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
+{
+  string intent_log_bucket = RGW_INTENT_LOG_BUCKET_NAME;
+
+  rgw_intent_log_entry entry;
+  entry.obj = obj;
+  entry.intent = (uint32_t)intent;
+  entry.op_time = s->time;
+
+  struct tm bdt;
+  time_t t = entry.op_time.sec();
+  localtime_r(&t, &bdt);
+
+  char buf[obj.bucket.size() + 16];
+  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, obj.bucket.c_str());
+  string oid(buf);
+  rgw_obj log_obj(intent_log_bucket, oid);
+
+  bufferlist bl;
+  ::encode(entry, bl);
+
+  int ret = rgwstore->append_async(log_obj, bl.length(), bl);
+  if (ret == -ENOENT) {
+    string id;
+    map<std::string, bufferlist> attrs;
+    ret = rgwstore->create_bucket(id, intent_log_bucket, attrs);
+    if (ret < 0)
+      goto done;
+    obj.object = entry.obj.bucket;
+    ret = rgwstore->append_async(log_obj, bl.length(), bl);
+  }
+
+done:
+  return ret;
+}
