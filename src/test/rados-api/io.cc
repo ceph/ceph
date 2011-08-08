@@ -1,6 +1,7 @@
 #include "include/rados/librados.h"
 #include "test/rados-api/test.h"
 
+#include <errno.h>
 #include "gtest/gtest.h"
 
 TEST(LibRadosIo, SimpleWrite) {
@@ -109,6 +110,23 @@ TEST(LibRadosIo, TruncTest) {
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)(sizeof(buf)/2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)/2));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, RemoveTest) {
+  char buf[128];
+  char buf2[sizeof(buf)];
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo"));
+  memset(buf2, 0, sizeof(buf2));
+  ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
