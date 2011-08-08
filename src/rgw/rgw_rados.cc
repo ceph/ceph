@@ -791,6 +791,8 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
     r = get_obj_state(rctx, obj, io_ctx, actual_obj, &state);
     if (r < 0)
       return r;
+    if (!state->exists)
+      return -ENOENT;
     if (state->get_attr(name, dest))
       return 0;
     return -ENODATA;
@@ -1262,6 +1264,9 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
     r = get_obj_state(rctx, obj, io_ctx, oid, &astate);
     if (r < 0)
       return r;
+
+    if (!astate->exists)
+      return -ENOENT;
 
     if (psize)
       *psize = astate->size;
