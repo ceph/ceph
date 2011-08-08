@@ -223,7 +223,8 @@ int main(int argc, const char **argv)
 
   SimpleMessenger *client_messenger = new SimpleMessenger(g_ceph_context);
   SimpleMessenger *cluster_messenger = new SimpleMessenger(g_ceph_context);
-  SimpleMessenger *messenger_hb = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *messenger_hbin = new SimpleMessenger(g_ceph_context);
+  SimpleMessenger *messenger_hbout = new SimpleMessenger(g_ceph_context);
 
   client_messenger->bind(g_conf->public_addr, getpid());
   cluster_messenger->bind(g_conf->cluster_addr, getpid());
@@ -232,7 +233,7 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr = g_conf->cluster_addr;
   if (!hb_addr.is_blank_ip())
     hb_addr.set_port(0);
-  messenger_hb->bind(hb_addr, getpid());
+  messenger_hbout->bind(hb_addr, getpid());
 
   cout << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 
@@ -243,7 +244,8 @@ int main(int argc, const char **argv)
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
   cluster_messenger->register_entity(entity_name_t::OSD(whoami));
-  messenger_hb->register_entity(entity_name_t::OSD(whoami));
+  messenger_hbin->register_entity(entity_name_t::OSD(whoami));
+  messenger_hbout->register_entity(entity_name_t::OSD(whoami));
 
   Throttle client_throttler(g_conf->osd_client_message_size_cap);
 
@@ -278,7 +280,9 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
+  OSD *osd = new OSD(whoami, cluster_messenger, client_messenger,
+		     messenger_hbin, messenger_hbout,
+		     &mc,
 		     g_conf->osd_data, g_conf->osd_journal);
   int err = osd->pre_init();
   if (err < 0) {
@@ -291,7 +295,8 @@ int main(int argc, const char **argv)
   global_init_shutdown_stderr(g_ceph_context);
 
   client_messenger->start();
-  messenger_hb->start();
+  messenger_hbin->start_with_nonce(getpid());
+  messenger_hbout->start();
   cluster_messenger->start();
 
   // start osd
@@ -303,13 +308,15 @@ int main(int argc, const char **argv)
   }
 
   client_messenger->wait();
-  messenger_hb->wait();
+  messenger_hbin->wait();
+  messenger_hbout->wait();
   cluster_messenger->wait();
 
   // done
   delete osd;
   client_messenger->destroy();
-  messenger_hb->destroy();
+  messenger_hbin->destroy();
+  messenger_hbout->destroy();
   cluster_messenger->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.

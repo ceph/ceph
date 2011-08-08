@@ -25,13 +25,15 @@ class MOSDPing : public Message {
  public:
   enum {
     HEARTBEAT = 0,
-    REQUEST_HEARTBEAT = 1,
+    START_HEARTBEAT = 1,
     YOU_DIED = 2,
+    STOP_HEARTBEAT = 3,
   };
   const char *get_op_name(int op) {
     switch (op) {
     case HEARTBEAT: return "heartbeat";
-    case REQUEST_HEARTBEAT: return "request_heartbeat";
+    case START_HEARTBEAT: return "start_heartbeat";
+    case STOP_HEARTBEAT: return "stop_heartbeat";
     case YOU_DIED: return "you_died";
     default: return "???";
     }
@@ -69,8 +71,7 @@ public:
 
   const char *get_type_name() { return "osd_ping"; }
   void print(ostream& out) {
-    out << "osd_ping(e" << map_epoch << " as_of " << peer_as_of_epoch
-	<< " " << get_op_name(op) << ")";
+    out << "osd_ping(" << get_op_name(op) << " e" << map_epoch << " as_of " << peer_as_of_epoch << ")";
   }
 };
 

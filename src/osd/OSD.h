@@ -248,10 +248,12 @@ private:
   epoch_t heartbeat_epoch;
   map<int, epoch_t> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
-  map<int, Connection*> heartbeat_con;
+  map<int, Connection*> heartbeat_to_con, heartbeat_from_con;
   utime_t last_mon_heartbeat;
-  Messenger *heartbeat_messenger;
+  Messenger *hbin_messenger, *hbout_messenger;
   
+  void _add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, utime_t>& old_from_stamp,
+			     map<int,Connection*>& old_con);
   void update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
@@ -964,8 +966,8 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbm, MonClient *mc,
-      const std::string &dev, const std::string &jdev);
+  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbmin, Messenger *hbmout,
+      MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 
   // static bits
