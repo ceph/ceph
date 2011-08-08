@@ -3108,11 +3108,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
 		    << " != my " << client_messenger->get_myaddr();
-      else if (osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
+      else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
-      else if (osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr()))
+      else if (!osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr()))
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
 		    << " != my " << heartbeat_messenger->get_myaddr();
