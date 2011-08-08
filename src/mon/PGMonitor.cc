@@ -516,13 +516,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   }
 
   if (!mon->osdmon()->paxos->is_readable()) {
-    dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
+    dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
     mon->osdmon()->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!paxos->is_writeable()) {
-    dout(10) << "register_new_pgs -- pgmap not writeable, waiting" << dendl;
+    dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
     paxos->wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
   }
