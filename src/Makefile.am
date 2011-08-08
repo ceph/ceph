@@ -569,6 +569,12 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
+test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
+test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
+test_rados_api_io_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_io_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_rados_api_io
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -1264,7 +1270,8 @@ noinst_HEADERS = \
 	test/system/st_rados_create_pool.h \
 	test/system/st_rados_list_objects.h \
 	test/system/systest_runnable.h \
-	test/system/systest_settings.h
+	test/system/systest_settings.h \
+	test/rados-api/test.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
