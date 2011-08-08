@@ -11,7 +11,7 @@ Standards-Version: 3.9.1
 
 Package: ceph
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
+Depends: ${shlibs:Depends}, ${misc:Depends}, hdparm, binutils
 Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, btrfs-tools, gceph
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
@@ -57,7 +57,7 @@ Description: debugging symbols for gceph
 
 Package: ceph-fuse
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Recommends: fuse-utils
 Suggests: ceph
 Description: FUSE-based client for the Ceph distributed file system
@@ -87,7 +87,7 @@ Description: debugging symbols for ceph-fuse
 
 Package: ceph-client-tools
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version}), librbd1 (= ${binary:Version})
 Suggests: ceph
 Description: utilities to mount a ceph filesystem with the kernel client
  Ceph is a distributed network file system designed to provide
@@ -151,7 +151,7 @@ Description: RADOS distributed object store client library (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados2
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: RADOS block device client library
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -265,7 +265,7 @@ Description: RGW distributed object store client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados2
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
