@@ -97,7 +97,8 @@ struct ceph_pg_pool {
 	__u8 object_hash;         /* hash mapping object name to ps */
 	__le32 pg_num, pgp_num;   /* number of pg's */
 	__le32 lpg_num, lpgp_num; /* number of localized pg's */
-	__le32 last_change;       /* most recent epoch changed */
+	__le32 last_change;       /* most recent epoch changed -- excludes
+	                             snapshot changes; use snap_epoch for that*/
 	__le64 snap_seq;          /* seq for per-pool snapshot */
 	__le32 snap_epoch;        /* epoch of last snap */
 	__le32 num_snaps;
