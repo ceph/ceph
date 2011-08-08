@@ -44,12 +44,12 @@ static int put_obj(string& uid, string& bucket, string& oid, const char *data, s
 
   rgw_obj obj(bucket, oid);
 
-  int ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
+  int ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_bucket(uid, bucket, attrs);
     if (ret >= 0)
-      ret = rgwstore->put_obj(uid, obj, data, size, NULL, attrs);
+      ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
   }
 
   return ret;
@@ -65,13 +65,13 @@ static int get_obj(string& bucket, string& key, bufferlist& bl)
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(obj, 0, NULL, NULL, NULL,
+  ret = rgwstore->prepare_get_obj(NULL, obj, 0, NULL, NULL, NULL,
                                   NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 
   do {
-    ret = rgwstore->get_obj(&handle, obj, &data, 0, request_len - 1);
+    ret = rgwstore->get_obj(NULL, &handle, obj, &data, 0, request_len - 1);
     if (ret < 0)
       goto done;
     if (ret < request_len)
@@ -220,7 +220,7 @@ static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
 {
   bufferlist bl;
   rgw_obj obj(ui_uid_bucket, user_id);
-  int ret = rgwstore->get_attr(obj, RGW_ATTR_BUCKETS, bl);
+  int ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_BUCKETS, bl);
   if (ret)
     return ret;
 
@@ -258,7 +258,7 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
 
     do {
-      ret = rgwstore->read(obj, 0, len, bl);
+      ret = rgwstore->read(NULL, obj, 0, len, bl);
       if (ret == -ENOENT) {
         /* try to read the old format */
         ret = rgw_read_buckets_from_attr(user_id, buckets);
@@ -329,7 +329,7 @@ int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets)
 
   rgw_obj obj(ui_uid_bucket, user_id);
 
-  int ret = rgwstore->set_attr(obj, RGW_ATTR_BUCKETS, bl);
+  int ret = rgwstore->set_attr(NULL, obj, RGW_ATTR_BUCKETS, bl);
 
   return ret;
 }
@@ -420,28 +420,28 @@ int rgw_remove_bucket(string user_id, string bucket_name, bool purge_data)
 int rgw_remove_key_index(RGWAccessKey& access_key)
 {
   rgw_obj obj(ui_key_bucket, access_key.id);
-  int ret = rgwstore->delete_obj(access_key.id, obj);
+  int ret = rgwstore->delete_obj(NULL, access_key.id, obj);
   return ret;
 }
 
 int rgw_remove_uid_index(string& uid)
 {
   rgw_obj obj(ui_uid_bucket, uid);
-  int ret = rgwstore->delete_obj(uid, obj);
+  int ret = rgwstore->delete_obj(NULL, uid, obj);
   return ret;
 }
 
 int rgw_remove_email_index(string& uid, string& email)
 {
   rgw_obj obj(ui_email_bucket, email);
-  int ret = rgwstore->delete_obj(uid, obj);
+  int ret = rgwstore->delete_obj(NULL, uid, obj);
   return ret;
 }
 
 int rgw_remove_openstack_name_index(string& uid, string& openstack_name)
 {
   rgw_obj obj(ui_openstack_bucket, openstack_name);
-  int ret = rgwstore->delete_obj(uid, obj);
+  int ret = rgwstore->delete_obj(NULL, uid, obj);
   return ret;
 }
 
@@ -473,20 +473,20 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
   }
 
   rgw_obj uid_obj(ui_uid_bucket, info.user_id);
-  ret = rgwstore->delete_obj(info.user_id, uid_obj);
+  ret = rgwstore->delete_obj(NULL, info.user_id, uid_obj);
   if (ret < 0 && ret != -ENOENT)
     RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed manually (err=" << ret << ")" << dendl;
 
   string buckets_obj_id;
   get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_obj uid_bucks(ui_uid_bucket, buckets_obj_id);
-  ret = rgwstore->delete_obj(info.user_id, uid_bucks);
+  ret = rgwstore->delete_obj(NULL, info.user_id, uid_bucks);
   if (ret < 0 && ret != -ENOENT)
     RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed manually (err=" << ret << ")" << dendl;
   
 
   rgw_obj email_obj(ui_email_bucket, info.user_email);
-  ret = rgwstore->delete_obj(info.user_id, email_obj);
+  ret = rgwstore->delete_obj(NULL, info.user_id, email_obj);
   if (ret < 0 && ret != -ENOENT)
     RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed manually (err=" << ret << ")" << dendl;
 

@@ -51,6 +51,10 @@ struct ObjectOperation {
 
   ObjectOperation() : flags(0), priority(0) {}
 
+  size_t size() {
+    return ops.size();
+  }
+
   OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);
@@ -80,6 +84,18 @@ struct ObjectOperation {
     ops[s].op.op = op;
     ops[s].op.xattr.name_len = (name ? strlen(name) : 0);
     ops[s].op.xattr.value_len = data.length();
+    if (name)
+      ops[s].data.append(name);
+    ops[s].data.append(data);
+  }
+  void add_xattr_cmp(int op, const char *name, uint8_t cmp_op, uint8_t cmp_mode, const bufferlist& data) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+    ops[s].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[s].op.xattr.value_len = data.length();
+    ops[s].op.xattr.cmp_op = cmp_op;
+    ops[s].op.xattr.cmp_mode = cmp_mode;
     if (name)
       ops[s].data.append(name);
     ops[s].data.append(data);
@@ -197,6 +213,9 @@ struct ObjectOperation {
     bufferlist bl;
     bl.append(s);
     add_xattr(CEPH_OSD_OP_SETXATTR, name, bl);
+  }
+  void cmpxattr(const char *name, uint8_t cmp_op, uint8_t cmp_mode, const bufferlist& bl) {
+    add_xattr_cmp(CEPH_OSD_OP_CMPXATTR, name, cmp_op, cmp_mode, bl);
   }
   void rmxattr(const char *name) {
     bufferlist bl;

@@ -153,6 +153,7 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   rgw_env.init(fcgx->envp);
 
   struct req_state *s = new req_state(&rgw_env);
+  s->obj_ctx = rgwstore->create_context();
 
   RGWOp *op = NULL;
   int init_error = 0;
@@ -201,6 +202,7 @@ done:
   int http_ret = s->err.http_ret;
 
   handler->put_op(op);
+  rgwstore->destroy_context(s->obj_ctx);
   delete s;
   FCGX_Finish_r(fcgx);
   delete fcgx;

@@ -47,6 +47,8 @@ extern string rgw_root_bucket;
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
+#define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
+#define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
@@ -416,6 +418,8 @@ struct req_state {
 
    struct RGWEnv *env;
 
+   void *obj_ctx;
+
    req_state(struct RGWEnv *e);
    ~req_state();
 };
@@ -628,6 +632,12 @@ public:
     ::decode(key, bl);
     ::decode(ns, bl);
     ::decode(object, bl);
+  }
+
+  bool operator<(const rgw_obj& o) const {
+    return  (bucket.compare(o.bucket) < 0) ||
+            (object.compare(o.object) < 0) ||
+            (ns.compare(o.ns) < 0);
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)

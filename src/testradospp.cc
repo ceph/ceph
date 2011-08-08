@@ -239,7 +239,7 @@ int main(int argc, const char **argv)
   }
 
   cout << "compound operation..." << std::endl;
-  ObjectOperation o;
+  ObjectWriteOperation o;
   o.write(0, bl);
   o.setxattr("foo", bl2);
   r = io_ctx.operate(oid, &o, &bl2);
@@ -251,16 +251,16 @@ int main(int argc, const char **argv)
   r = io_ctx.setxattr(oid, "foo", val);
   assert(r >= 0);
   {
-    ObjectOperation o;
-    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    ObjectReadOperation o;
+    o.cmpxattr("foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     r = io_ctx.operate(oid, &o, &bl2);
     cout << " got " << r << " wanted >= 0" << std::endl;
     assert(r >= 0);
   }
   val.append("...");
   {
-    ObjectOperation o;
-    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    ObjectReadOperation o;
+    o.cmpxattr("foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     r = io_ctx.operate(oid, &o, &bl2);
     cout << " got " << r << " wanted ECANCELED" << std::endl;
     assert(r == -ECANCELED);
@@ -269,8 +269,8 @@ int main(int argc, const char **argv)
   cout << "src_cmpxattr" << std::endl;
   const char *oidb = "bar-clone";
   {
-    ObjectOperation o;
-    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    ObjectWriteOperation o;
+    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
     r = io_ctx.operate(oidb, &o, &bl2);
@@ -278,8 +278,8 @@ int main(int argc, const char **argv)
     assert(r == -ECANCELED);
   }
   {
-    ObjectOperation o;
-    o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_NE, CEPH_OSD_CMPXATTR_MODE_STRING);
+    ObjectWriteOperation o;
+    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_NE, val);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
     r = io_ctx.operate(oidb, &o, &bl2);

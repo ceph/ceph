@@ -7,6 +7,38 @@
 
 class RGWWatcher;
 
+struct RGWObjState {
+  bool is_atomic;
+  bool has_attrs;
+  bool exists;
+  uint64_t size;
+  time_t mtime;
+  bufferlist obj_tag;
+  string shadow_obj;
+
+  map<string, bufferlist> attrset;
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false) {}
+
+  bool get_attr(string name, bufferlist& dest) {
+    map<string, bufferlist>::iterator iter = attrset.find(name);
+    if (iter != attrset.end()) {
+      dest = iter->second;
+      return true;
+    }
+    return false;
+  }
+};
+
+struct RGWRadosCtx {
+  map<rgw_obj, RGWObjState> objs_state;
+  RGWObjState *get_state(rgw_obj& obj) {
+    return &objs_state[obj];
+  }
+  void set_atomic(rgw_obj& obj) {
+    objs_state[obj].is_atomic = true;
+  }
+};
+  
 class RGWRados  : public RGWAccess
 {
   /** Open the pool used as root for this gateway */
@@ -28,6 +60,11 @@ class RGWRados  : public RGWAccess
   librados::IoCtx root_pool_ctx;
   librados::IoCtx control_pool_ctx;
 
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
+  int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
+  int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
 public:
   RGWRados() : watcher(NULL), watch_handle(0) {}
 
@@ -53,22 +90,44 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(std::string& id, rgw_obj& obj, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
               map<std::string, bufferlist>& attrs, bool exclusive);
-  virtual int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+  virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
-  virtual int aio_put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+  virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                                off_t ofs, size_t len, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
-  virtual int clone_range(rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs, uint64_t size);
-  virtual int clone_objs(rgw_obj& dst_obj, 
-                        vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs, bool truncate_dest);
+  virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
+                         vector<RGWCloneRangeInfo>& ranges,
+                         map<string, bufferlist> attrs, time_t *pmtime, bool truncate_dest) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, pmtime, truncate_dest, NULL);
+  }
+
+  int clone_objs(void *ctx, rgw_obj& dst_obj, 
+                 vector<RGWCloneRangeInfo>& ranges,
+                 map<string, bufferlist> attrs,
+                 time_t *pmtime,
+                 bool truncate_dest,
+                 pair<string, bufferlist> *cmp_xattr);
+
+  int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
+                rgw_obj& src_obj, off_t src_ofs,
+                uint64_t size, map<string, bufferlist> attrs,
+                time_t *pmtime,
+                pair<string, bufferlist> *xattr_cond) {
+    RGWCloneRangeInfo info;
+    vector<RGWCloneRangeInfo> v;
+    info.src = src_obj;
+    info.src_ofs = src_ofs;
+    info.dst_ofs = dst_ofs;
+    info.len = size;
+    v.push_back(info);
+    return clone_objs(ctx, dst_obj, v, attrs, pmtime, true, xattr_cond);
+  }
 
   /** Copy an object, with many extra options */
-  virtual int copy_obj(std::string& id, rgw_obj& dest_obj,
+  virtual int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -86,16 +145,16 @@ public:
   virtual int bucket_suspended(std::string& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(std::string& id, rgw_obj& src_obj, bool sync);
+  virtual int delete_obj(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 
   /** Get the attributes for an object.*/
-  virtual int get_attr(rgw_obj& obj, const char *name, bufferlist& dest);
+  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
-  virtual int set_attr(rgw_obj& obj, const char *name, bufferlist& bl);
+  virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
 
   /** Get data about an object out of RADOS and into memory. */
-  virtual int prepare_get_obj(rgw_obj& obj,
+  virtual int prepare_get_obj(void *ctx, rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -108,14 +167,14 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  virtual int get_obj(void **handle, rgw_obj& obj,
+  virtual int get_obj(void *ctx, void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);
 
-  virtual int read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
+  virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime);
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
 
   virtual int get_bucket_id(std::string& bucket);
 
@@ -130,6 +189,18 @@ public:
   virtual void finalize_watch();
   virtual int distribute(bufferlist& bl);
   virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
+
+  void *create_context() {
+    return new RGWRadosCtx();
+  }
+  void destroy_context(void *ctx) {
+    delete (RGWRadosCtx *)ctx;
+  }
+  void set_atomic(void *ctx, rgw_obj& obj) {
+    RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+    rctx->set_atomic(obj);
+  }
+
 };
 
 #endif

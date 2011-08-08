@@ -149,23 +149,23 @@ class RGWCache  : public T
 public:
   RGWCache() {}
 
-  int put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+  int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
 
-  int get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
+  int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
-  int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+  int obj_stat(void *ctx, std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 
-  int delete_obj(std::string& id, rgw_obj& obj, bool sync);
+  int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
 };
 
 
 template <class T>
-int RGWCache<T>::delete_obj(std::string& id, rgw_obj& obj, bool sync)
+int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 {
   string& bucket = obj.bucket;
   if (bucket[0] != '.')
-    return T::delete_obj(id, obj, sync);
+    return T::delete_obj(ctx, id, obj, sync);
 
   string name = normal_name(obj);
   cache.remove(name);
@@ -173,15 +173,15 @@ int RGWCache<T>::delete_obj(std::string& id, rgw_obj& obj, bool sync)
   ObjectCacheInfo info;
   distribute(obj, info, REMOVE_OBJ);
 
-  return T::delete_obj(id, obj, sync);
+  return T::delete_obj(ctx, id, obj, sync);
 }
 
 template <class T>
-int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
+int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
   string& bucket = obj.bucket;
   if (bucket[0] != '.' || ofs != 0)
-    return T::get_obj(handle, obj, data, ofs, end);
+    return T::get_obj(ctx, handle, obj, data, ofs, end);
 
   string& oid = obj.object;
   string name = normal_name(bucket, oid);
@@ -197,7 +197,7 @@ int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, of
     memcpy(*data, bl.c_str(), bl.length());
     return bl.length();
   }
-  int r = T::get_obj(handle, obj, data, ofs, end);
+  int r = T::get_obj(ctx, handle, obj, data, ofs, end);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -218,7 +218,7 @@ int RGWCache<T>::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, of
 }
 
 template <class T>
-int RGWCache<T>::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len)
 {
   string& bucket = obj.bucket;
@@ -236,7 +236,7 @@ int RGWCache<T>::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
     info.status = 0;
     info.flags = CACHE_FLAG_DATA;
   }
-  int ret = T::put_obj_data(id, obj, data, ofs, len);
+  int ret = T::put_obj_data(ctx, id, obj, data, ofs, len);
   if (cacheable) {
     if (ret >= 0) {
       cache.put(name, info);
@@ -252,10 +252,10 @@ int RGWCache<T>::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+int RGWCache<T>::obj_stat(void *ctx, std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
 {
   if (bucket[0] != '.')
-    return T::obj_stat(bucket, obj, psize, pmtime);
+    return T::obj_stat(ctx, bucket, obj, psize, pmtime);
 
   string name = normal_name(bucket, obj);
 
@@ -274,7 +274,7 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize
     mtime = info.meta.mtime;
     goto done;
   }
-  r = T::obj_stat(bucket, obj, &size, &mtime);
+  r = T::obj_stat(ctx, bucket, obj, &size, &mtime);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;

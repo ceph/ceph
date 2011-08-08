@@ -89,7 +89,7 @@ int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle
   }
 }
 
-int RGWFS::obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime)
+int RGWFS::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 {
   return -ENOTSUP;
 }
@@ -203,7 +203,7 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
   return 0;
 }
 
-int RGWFS::put_obj_meta(std::string& id, rgw_obj& obj,
+int RGWFS::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
                   time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
 {
   std::string& bucket = obj.bucket;
@@ -250,7 +250,7 @@ done_err:
   return -errno;
 }
 
-int RGWFS::put_obj_data(std::string& id, rgw_obj& obj, const char *data,
+int RGWFS::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                   off_t ofs, size_t size)
 {
   std::string& bucket = obj.bucket;
@@ -291,7 +291,7 @@ done_err:
   return r;
 }
 
-int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
+int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -309,13 +309,13 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
   time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
+  ret = prepare_get_obj(ctx, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &obj_size, &handle, err);
   if (ret < 0)
     return ret;
  
   do { 
-    ret = get_obj(&handle, src_obj, &data, ofs, end);
+    ret = get_obj(ctx, &handle, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
     ofs += ret;
@@ -327,7 +327,7 @@ int RGWFS::copy_obj(std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj(id, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(ctx, id, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -345,7 +345,7 @@ int RGWFS::delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int RGWFS::delete_obj(std::string& id, rgw_obj& obj, bool sync)
+int RGWFS::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -413,7 +413,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
   return attr_len;
 }
 
-int RGWFS::get_attr(rgw_obj& obj, const char *name, bufferlist& dest)
+int RGWFS::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -434,7 +434,7 @@ done:
   return r;
 }
 
-int RGWFS::set_attr(rgw_obj& obj,
+int RGWFS::set_attr(void *ctx, rgw_obj& obj,
                        const char *name, bufferlist& bl)
 {
   std::string& bucket = obj.bucket;
@@ -453,7 +453,8 @@ int RGWFS::set_attr(rgw_obj& obj,
   return ret;
 }
 
-int RGWFS::prepare_get_obj(rgw_obj& obj,
+int RGWFS::prepare_get_obj(void *ctx,
+            rgw_obj& obj,
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -561,7 +562,7 @@ done_err:
   return r;
 }
 
-int RGWFS::get_obj(void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
+int RGWFS::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
   uint64_t len;
   bufferlist bl;
@@ -616,7 +617,7 @@ void RGWFS::finish_get_obj(void **handle)
   }
 }
 
-int RGWFS::read(rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
+int RGWFS::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;

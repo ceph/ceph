@@ -132,93 +132,139 @@ struct librados::IoCtxImpl {
   }
 };
 
+size_t librados::ObjectOperation::size()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  return o->size();
+}
 
-void librados::ObjectOperation::create(bool exclusive)
+void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_STRING, v);
+}
+
+void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  bufferlist bl;
+  ::encode(v, bl);
+  o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
+}
+
+void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
+					 const char *name, int op, const bufferlist& v)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  object_t oid(src_oid);
+  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, CEPH_OSD_CMPXATTR_MODE_STRING);
+}
+
+void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
+					 const char *name, int op, uint64_t val)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  object_t oid(src_oid);
+  bufferlist bl;
+  ::encode(val, bl);
+  o->src_cmpxattr(oid, CEPH_NOSNAP, name, bl, op, CEPH_OSD_CMPXATTR_MODE_U64);
+}
+
+void librados::ObjectReadOperation::stat()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->add_op(CEPH_OSD_OP_STAT);
+}
+
+void librados::ObjectReadOperation::read(size_t off, uint64_t len)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->read(off, len);
+}
+
+void librados::ObjectReadOperation::getxattr(const char *name)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->getxattr(name);
+}
+
+void librados::ObjectReadOperation::getxattrs()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->getxattrs();
+}
+
+void librados::ObjectWriteOperation::create(bool exclusive)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->create(exclusive);
 }
 
-void librados::ObjectOperation::write(uint64_t off, const bufferlist& bl)
+void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->write(off, c);
 }
 
-void librados::ObjectOperation::write_full(const bufferlist& bl)
+void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->write_full(c);
 }
 
-void librados::ObjectOperation::append(const bufferlist& bl)
+void librados::ObjectWriteOperation::append(const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
   o->append(c);
 }
 
-void librados::ObjectOperation::remove()
+void librados::ObjectWriteOperation::remove()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->remove();
 }
 
-void librados::ObjectOperation::truncate(uint64_t off)
+void librados::ObjectWriteOperation::truncate(uint64_t off)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->truncate(off);
 }
 
-void librados::ObjectOperation::zero(uint64_t off, uint64_t len)
+void librados::ObjectWriteOperation::zero(uint64_t off, uint64_t len)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->zero(off, len);
 }
 
-void librados::ObjectOperation::rmxattr(const char *name)
+void librados::ObjectWriteOperation::rmxattr(const char *name)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->rmxattr(name);
 }
 
-void librados::ObjectOperation::setxattr(const char *name, const bufferlist& v)
+void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist& v)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->setxattr(name, v);
 }
 
-void librados::ObjectOperation::cmpxattr(const char *name, const bufferlist& v, int op, int mode)
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->cmpxattr(name, v, op, mode);
-}
-
-void librados::ObjectOperation::tmap_update(const bufferlist& cmdbl)
+void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = cmdbl;
   o->tmap_update(c);
 }
 
-void librados::ObjectOperation::clone_range(uint64_t dst_off,
+void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->clone_range(src_oid, src_off, len, dst_off);
 }
-
-void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
-					 const char *name, const bufferlist& v, int op, int mode)
-{
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
-  object_t oid(src_oid);
-  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, mode);
-}
-
 
 librados::WatchCtx::
 ~WatchCtx()
@@ -552,7 +598,8 @@ public:
 
   int list(Objecter::ListContext *context, int max_entries);
 
-  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
+  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime, bufferlist *pbl);
+  int operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
@@ -1610,13 +1657,21 @@ clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const o
 }
 
 int librados::RadosClient::
-operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl)
+operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime, bufferlist *pbl)
 {
-  utime_t ut = ceph_clock_now(cct);
+  utime_t ut;
+  if (pmtime) {
+    ut = utime_t(*pmtime, 0);
+  } else {
+    ut = ceph_clock_now(cct);
+  }
 
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
+
+  if (!o->size())
+    return 0;
 
   Mutex mylock("RadosClient::mutate::mylock");
   Cond cond;
@@ -1630,6 +1685,42 @@ operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pb
   objecter->mutate(oid, io.oloc,
 	           *o, io.snapc, ut, 0,
 	           onack, NULL, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::
+operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl)
+{
+  utime_t ut = ceph_clock_now(cct);
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  if (!o->size())
+    return 0;
+
+  Mutex mylock("RadosClient::mutate::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  eversion_t ver;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  objecter->read(oid, io.oloc,
+	           *o, io.snap_seq, pbl, 0,
+	           onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2741,13 +2832,19 @@ tmap_update(const std::string& oid, bufferlist& cmdbl)
   return io_ctx_impl->client->tmap_update(*io_ctx_impl, obj, cmdbl);
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
+  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, o->pmtime, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
