@@ -20,6 +20,7 @@ using namespace std;
 Rados *rados = NULL;
 
 static string notify_oid = "notify";
+static string shadow_ns = "shadow";
 
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
@@ -551,8 +552,13 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   if (r < 0)
     return r;
 
-  if (list_ctx.objects_begin() != list_ctx.objects_end())
-    return -ENOTEMPTY;
+  ObjectIterator iter = list_ctx.objects_begin();
+  string ns;
+  for (; iter != list_ctx.objects_end(); iter++) {
+    string obj = *iter;
+    if (rgw_obj::translate_raw_obj(obj, ns))
+      return -ENOTEMPTY;
+  }
 
   r = rados->pool_delete(bucket.c_str());
   if (r < 0)
@@ -839,6 +845,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   } else {
     RGW_LOG(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
+    dest_obj.set_ns(shadow_ns);
     if (obj.key.size())
       dest_obj.set_key(obj.key);
     else
@@ -922,7 +929,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::set_attr: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, state->shadow_obj, obj.key);
+    rgw_obj shadow(obj.bucket, state->shadow_obj, obj.key, shadow_ns);
     r = set_attr(NULL, shadow, name, bl);
   }
 
@@ -1180,7 +1187,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key);
+    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key, shadow_ns);
     r = get_obj(NULL, handle, shadow, data, ofs, end);
     return r;
   }
@@ -1234,7 +1241,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key);
+    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key, shadow_ns);
     r = read(NULL, shadow, ofs, size, bl);
   }
   return r;
