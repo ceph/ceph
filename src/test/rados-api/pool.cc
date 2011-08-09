@@ -26,3 +26,23 @@ TEST(LibRadosPools, PoolList) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+int rados_pool_lookup(rados_t cluster, const char *pool_name);
+
+TEST(LibRadosPools, PoolLookup) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  ASSERT_LT(0, rados_pool_lookup(cluster, pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+
+TEST(LibRadosPools, PoolDelete) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+  ASSERT_GT(0, rados_pool_lookup(cluster, pool_name.c_str()));
+  ASSERT_EQ(0, rados_pool_create(cluster, pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
