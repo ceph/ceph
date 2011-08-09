@@ -1,6 +1,7 @@
 #include "include/rados/librados.h"
 #include "test/rados-api/test.h"
 
+#include <sstream>
 #include <stdlib.h>
 #include <string>
 #include <time.h>
@@ -16,28 +17,37 @@ std::string get_temp_pool_name()
   return out;
 }
 
-int create_one_pool(const std::string &pool_name, rados_t *cluster)
+std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
 {
   int ret;
   ret = rados_create(cluster, NULL);
-  if (ret)
-    return ret;
+  if (ret) {
+    std::ostringstream oss;
+    oss << "rados_create failed with error " << ret;
+    return oss.str();
+  }
   ret = rados_conf_read_file(*cluster, NULL);
   if (ret) {
     rados_shutdown(*cluster);
-    return ret;
+    std::ostringstream oss;
+    oss << "rados_conf_read_file failed with error " << ret;
+    return oss.str();
   }
   ret = rados_connect(*cluster);
   if (ret) {
     rados_shutdown(*cluster);
-    return ret;
+    std::ostringstream oss;
+    oss << "rados_connect failed with error " << ret;
+    return oss.str();
   }
   ret = rados_pool_create(*cluster, pool_name.c_str());
   if (ret) {
     rados_shutdown(*cluster);
-    return ret;
+    std::ostringstream oss;
+    oss << "rados_pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
   }
-  return 0;
+  return "";
 }
 
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster)

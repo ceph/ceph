@@ -9,7 +9,7 @@ TEST(LibRadosIo, SimpleWrite) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -23,7 +23,7 @@ TEST(LibRadosIo, RoundTrip) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -41,7 +41,7 @@ TEST(LibRadosIo, OverlappingWriteRoundTrip) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -62,7 +62,7 @@ TEST(LibRadosIo, WriteFullRoundTrip) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -82,7 +82,7 @@ TEST(LibRadosIo, AppendRoundTrip) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xde, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
@@ -102,7 +102,7 @@ TEST(LibRadosIo, TruncTest) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
@@ -120,7 +120,7 @@ TEST(LibRadosIo, RemoveTest) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
@@ -138,7 +138,7 @@ TEST(LibRadosIo, XattrsRoundTrip) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
@@ -159,7 +159,7 @@ TEST(LibRadosIo, RmXattr) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
@@ -183,7 +183,7 @@ TEST(LibRadosIo, XattrIter) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));

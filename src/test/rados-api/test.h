@@ -21,7 +21,7 @@
 
 std::string get_temp_pool_name();
 
-int create_one_pool(const std::string &pool_name, rados_t *cluster);
+std::string create_one_pool(const std::string &pool_name, rados_t *cluster);
 
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster);
 

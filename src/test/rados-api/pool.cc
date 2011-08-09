@@ -12,7 +12,7 @@ TEST(LibRadosPools, PoolList) {
   char *buf = &pool_list_buf[0];
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   ASSERT_LT(rados_pool_list(cluster, buf, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
 
   bool found_pool = false;

@@ -40,11 +40,11 @@ public:
       return oss.str();
     }
     m_pool_name = get_temp_pool_name();
-    ret = create_one_pool(m_pool_name, &m_cluster);
-    if (ret) {
+    std::string err = create_one_pool(m_pool_name, &m_cluster);
+    if (!err.empty()) {
       sem_destroy(&m_sem);
       ostringstream oss;
-      oss << "create_one_pool(" << m_pool_name << ") failed: error " << ret;
+      oss << "create_one_pool(" << m_pool_name << ") failed: error " << err;
       return oss.str();
     }
     ret = rados_ioctx_create(m_cluster, m_pool_name.c_str(), &m_ioctx);

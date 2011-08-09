@@ -10,7 +10,7 @@ TEST(LibRadosList, ListObjects) {
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
