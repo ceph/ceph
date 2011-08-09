@@ -179,7 +179,6 @@ int rados_aio_wait_for_safe(rados_completion_t c);
 int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
-uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
