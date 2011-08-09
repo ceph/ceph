@@ -39,7 +39,7 @@ public:
       oss << "sem_init failed: " << cpp_strerror(err);
       return oss.str();
     }
-    std::string m_pool_name = get_temp_pool_name();
+    m_pool_name = get_temp_pool_name();
     ret = create_one_pool(m_pool_name, &m_cluster);
     if (ret) {
       sem_destroy(&m_sem);
