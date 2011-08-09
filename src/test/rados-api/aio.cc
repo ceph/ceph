@@ -151,3 +151,41 @@ TEST(LibRadosAio, RoundTrip) {
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 }
+
+TEST(LibRadosAio, RoundTripAppend) {
+  AioTestData test_data;
+  rados_completion_t my_completion, my_completion2, my_completion3;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_append(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  char buf2[128];
+  memset(buf2, 0xdd, sizeof(buf2));
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_append(test_data.m_ioctx, "foo",
+			       my_completion2, buf2, sizeof(buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  char buf3[sizeof(buf) + sizeof(buf2)];
+  memset(buf3, 0, sizeof(buf3));
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion3));
+  ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "foo",
+			      my_completion3, buf3, sizeof(buf3), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
+  }
+  ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
+}
