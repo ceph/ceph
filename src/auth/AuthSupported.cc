@@ -21,7 +21,7 @@
 
 static bool _supported_initialized = false;
 static Mutex _supported_lock("auth_supported_init");
-static map<int, bool> auth_supported;
+static set<int> auth_supported;
 
 static void _init_supported(CephContext *cct)
 {
@@ -30,9 +30,9 @@ static void _init_supported(CephContext *cct)
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     if (iter->compare("cephx") == 0) {
-      auth_supported[CEPH_AUTH_CEPHX] = true;
+      auth_supported.insert(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
-      auth_supported[CEPH_AUTH_NONE] = true;
+      auth_supported.insert(CEPH_AUTH_NONE);
     } else {
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
@@ -49,7 +49,7 @@ bool is_supported_auth(int auth_type, CephContext *cct)
       _init_supported(cct);
     }
   }
-  return auth_supported[auth_type];
+  return auth_supported.count(auth_type);
 }
 
 
