@@ -271,3 +271,21 @@ TEST(LibRadosAio, IsSafe) {
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
+
+TEST(LibRadosAio, ReturnValue) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "nonexistent",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(-ENOENT, rados_aio_get_return_value(my_completion));
+  rados_aio_release(my_completion);
+}
