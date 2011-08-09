@@ -23,6 +23,8 @@
 #include "common/WorkQueue.h"
 
 #include "common/Mutex.h"
+#include "HashIndex.h"
+#include "IndexManager.h"
 
 #include "Fake.h"
 
@@ -63,13 +65,15 @@ class FileStore : public JournalingObjectStore {
   // fake collections?
   FakeCollections collections;
   bool fake_collections;
+
+  // Indexed Collections
+  IndexManager index_manager;
+  Index get_index(coll_t c);
   
   Finisher ondisk_finisher;
 
   // helper fns
-  int append_oname(const hobject_t &oid, char *s, int len);
   int get_cdir(coll_t cid, char *s, int len);
-  bool parse_object(char *s, hobject_t& o);
   
   int lock_fsid();
 
@@ -238,8 +242,7 @@ public:
   void start_logger(int whoami, utime_t tare);
   void stop_logger();
 
-  int lfn_get(coll_t cid, const hobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn);
-  int lfn_find(coll_t cid, const hobject_t& oid, char *pathname, int len);
+  int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
   int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
   int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
   int lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name);

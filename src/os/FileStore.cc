@@ -82,6 +82,7 @@
 #include <map>
 
 #include "common/ceph_crypto.h"
+#include "HashIndex.h"
 
 using ceph::crypto::SHA1;
 
@@ -110,12 +111,12 @@ using ceph::crypto::SHA1;
 #define ALIGNED(x, by) (!((x) % (by)))
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
-static int do_getxattr(const char *fn, const char *name, void *val, size_t size);
-static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
-static int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
-static int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
-static int do_listxattr(const char *fn, char *names, size_t len);
-static int do_removexattr(const char *fn, const char *name);
+int do_getxattr(const char *fn, const char *name, void *val, size_t size);
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
+int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
+int do_listxattr(const char *fn, char *names, size_t len);
+int do_removexattr(const char *fn, const char *name);
 
 #ifdef DARWIN
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
@@ -168,296 +169,75 @@ int sys_listxattr(const char *fn, char *names, size_t len)
 }
 #endif
 
-static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
-{
-  int i;
-  str[0] = '\0';
-  for (i = 0; i < len; i++) {
-    sprintf(&str[i*2], "%02x", (int)buf[i]);
-  }
-}
-
-static int hash_filename(const char *filename, char *hash, int buf_len)
-{
-  if (buf_len < FILENAME_HASH_LEN + 1)
-    return -EINVAL;
-
-  char buf[FILENAME_LFN_DIGEST_SIZE];
-  char hex[FILENAME_LFN_DIGEST_SIZE * 2];
-
-  SHA1 h;
-  h.Update((const byte *)filename, strlen(filename));
-  h.Final((byte *)buf);
-
-  buf_to_hex((byte *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
-  strncpy(hash, hex, FILENAME_HASH_LEN);
-  hash[FILENAME_HASH_LEN] = '\0';
-  return 0;
-}
-
-static void build_filename(char *filename, int len, const char *old_filename, int i)
-{
-  char hash[FILENAME_HASH_LEN + 1];
-
-  assert(len >= FILENAME_SHORT_LEN + 4);
-
-  strncpy(filename, old_filename, FILENAME_PREFIX_LEN);
-  filename[FILENAME_PREFIX_LEN] = '\0';
-  if (strlen(filename) < FILENAME_PREFIX_LEN)
-    return;
-  if (old_filename[FILENAME_PREFIX_LEN] == '\0')
-    return;
-
-  hash_filename(old_filename, hash, sizeof(hash));
-  int ofs = FILENAME_PREFIX_LEN;
-  int suffix_len;
-  while (1) {
-    suffix_len = sprintf(filename + ofs, "_%s_%d_" FILENAME_COOKIE, hash, i);
-    if (ofs + suffix_len <= FILENAME_SHORT_LEN || !ofs)
-      break;
-    ofs--;
-  }
-}
-
-/* is this a candidate? */
-static int lfn_is_hashed_filename(const char *filename)
-{
-  int len = strlen(filename);
-  if (len < FILENAME_SHORT_LEN)
-    return 0;
-  return (strcmp(filename + len - (sizeof(FILENAME_COOKIE) - 1), FILENAME_COOKIE) == 0);
-}
-
-static void lfn_translate(const char *path, const char *name, char *new_name, int len)
-{
-  if (!lfn_is_hashed_filename(name)) {
-    strncpy(new_name, name, len);
-    return;
-  }
-
-  char buf[PATH_MAX];
-
-  snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = do_getxattr(buf, LFN_ATTR, new_name, len - 1);
-  if (r < 0)
-    strncpy(new_name, name, len);
-  else
-    new_name[r] = '\0';
-  return;
-}
-
-/* 
- * sorry, these are sentitive to the hobject_t and coll_t typing.
- */ 
-
-  //           11111111112222222222333333333344444444445555555555
-  // 012345678901234567890123456789012345678901234567890123456789
-  // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
-
-int FileStore::append_oname(const hobject_t &oid, char *s, int len)
-{
-  //assert(sizeof(oid) == 28);
-  char *end = s + len;
-  char *t = s + strlen(s);
-
-  const char *i = oid.oid.name.c_str();
-  while (*i && t < end) {
-    if (*i == '\\') {
-      *t++ = '\\';
-      *t++ = '\\';      
-    } else if (*i == '.' && i == oid.oid.name.c_str()) {  // only escape leading .
-      *t++ = '\\';
-      *t++ = '.';
-    } else if (*i == '/') {
-      *t++ = '\\';
-      *t++ = 's';
-    } else
-      *t++ = *i;
-    i++;
-  }
-
-  int size = t - s;
-
-  if (oid.snap == CEPH_NOSNAP)
-    size += snprintf(t, end - t, "_head");
-  else if (oid.snap == CEPH_SNAPDIR)
-    size += snprintf(t, end - t, "_snapdir");
-  else
-    size += snprintf(t, end - t, "_%llx", (long long unsigned)oid.snap);
-
-  return size;
-}
-
-bool FileStore::parse_object(char *s, hobject_t& o)
-{
-  char *bar = s + strlen(s) - 1;
-  while (*bar != '_' &&
-	 bar > s)
-    bar--;
-  if (*bar == '_') {
-    char buf[bar-s + 1];
-    char *t = buf;
-    char *i = s;
-    while (i < bar) {
-      if (*i == '\\') {
-	i++;
-	switch (*i) {
-	case '\\': *t++ = '\\'; break;
-	case '.': *t++ = '.'; break;
-	case 's': *t++ = '/'; break;
-	default: assert(0);
-	}
-      } else {
-	*t++ = *i;
-      }
-      i++;
-    }
-    *t = 0;
-    o.oid.name = string(buf, t-buf);
-    if (strcmp(bar+1, "head") == 0)
-      o.snap = CEPH_NOSNAP;
-    else if (strcmp(bar+1, "snapdir") == 0)
-      o.snap = CEPH_SNAPDIR;
-    else
-      o.snap = strtoull(bar+1, &s, 16);
-    return true;
-  }
-  return false;
-}
-
-  //           11111111112222222222333
-  // 012345678901234567890123456789012
-  // pppppppppppppppp.ssssssssssssssss
-
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
   const string &cid_str(cid.to_str());
   return snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
-int FileStore::lfn_get(coll_t cid, const hobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn)
+Index FileStore::get_index(coll_t cid)
 {
-  int i = 0;
-  char *filename;
-  int path_len = get_cdir(cid, pathname, len);
-  pathname[path_len] = '/';
-  path_len++;
-  pathname[path_len] = '\0';
-  filename = pathname + path_len;
-
-  *lfn = '\0';
-  int actual_len = append_oname(oid, lfn, lfn_len);
-
-  if (actual_len < (int)FILENAME_PREFIX_LEN) {
-    /* not a long file name, just build it as it is */
-    strncpy(filename, lfn, len - path_len);
-    *is_lfn = 0;
-    dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " pathname=" << pathname << " lfn=" << lfn << " is_lfn=" << *is_lfn << dendl;
-    return 0;
-  }
-
-  *is_lfn = 1;
-  *exist = 0;
-
-  while (1) {
-    char buf[PATH_MAX];
-    int r;
-
-    build_filename(filename, len - path_len, lfn, i);
-    r = do_getxattr(pathname, LFN_ATTR, buf, sizeof(buf));
-    if (r < 0)
-      r = -errno;
-    if (r > 0) {
-      buf[MIN((int)sizeof(buf)-1, r)] = '\0';
-      dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " lfn=" << lfn << " buf=" << buf << dendl;
-      if (strcmp(buf, lfn) == 0) { // a match?
-        *exist = 1;
-        return i;
-      }
-    }
-    switch (r) {
-    case -ENOENT:
-      return i;
-    case -ERANGE:
-      assert(0); // shouldn't happen
-    default:
-      break;
-    }
-    if (r < 0)
-      break;
-    i++;
-  }
-
-  dout(20) << "lfn_get cid=" << cid << " oid=" << oid << " pathname=" << pathname << " lfn=" << lfn << " is_lfn=" << *is_lfn << dendl;
-  return 0; // unreachable anyway
+  char path[PATH_MAX];
+  get_cdir(cid, path, sizeof(path));
+  return index_manager.get_index(cid, path);
 }
 
-int FileStore::lfn_find(coll_t cid, const hobject_t& oid, char *pathname, int len)
+int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
 {
-  char long_fn[PATH_MAX];
+  Index index = get_index(cid);
   int r, exist;
-  int is_lfn;
-
-  r = lfn_get(cid, oid, pathname, len, long_fn, sizeof(long_fn), &exist, &is_lfn);
+  r = index->lookup(oid, path, &exist);
+  
   if (r < 0)
     return r;
-  if (is_lfn && !exist)
+  if (!exist)
     return -ENOENT;
   return 0;
 }
+
 int FileStore::lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size)
 {
-  char new_fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  return do_getxattr(new_fn, name, val, size);
+  return do_getxattr(path->path(), name, val, size);
 }
 
 int FileStore::lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size)
 {
-  char new_fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  return do_setxattr(new_fn, name, val, size);
+  return do_setxattr(path->path(), name, val, size);
 }
 
 int FileStore::lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name)
 {
-  char new_fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  return do_removexattr(new_fn, name);
+  return do_removexattr(path->path(), name);
 }
 
 int FileStore::lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len)
 {
-  char new_fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  return do_listxattr(new_fn, names, len);
+  return do_listxattr(path->path(), names, len);
 }
 
 int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
 {
-  char new_fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, new_fn, sizeof(new_fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  r = ::truncate(new_fn, length);
+  r = ::truncate(path->path(), length);
   if (r < 0)
     return -errno;
   return r;
@@ -465,13 +245,11 @@ int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
 
 int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 {
-  char fn[PATH_MAX];
-  int r;
-
-  r = lfn_find(cid, oid, fn, sizeof(fn));
+  IndexedPath path;
+  int r = lfn_find(cid, oid, &path);
   if (r < 0)
     return r;
-  r = ::stat(fn, buf);
+  r = ::stat(path->path(), buf);
   if (r < 0)
     return -errno;
   return 0;
@@ -479,26 +257,21 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 
 int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode)
 {
-  char long_fn[PATH_MAX];
-  char short_fn[PATH_MAX];
+  Index index = get_index(cid);
+  IndexedPath path;
   int r, fd, exist;
-  int is_lfn;
+  r = index->lookup(oid, &path, &exist);
+  if (r < 0) {
+    return r;
+  }
 
-  r = lfn_get(cid, oid, short_fn, sizeof(short_fn), long_fn, sizeof(long_fn), &exist, &is_lfn);
+  r = ::open(path->path(), flags, mode);
   if (r < 0)
     return r;
-  if (!is_lfn)
-    return open(short_fn, flags, mode);
-
-  r = ::open(short_fn, flags, mode);
-
-  if (r < 0)
-    return r;
-
   fd = r;
 
-  if (flags & O_CREAT) {
-    r = do_fsetxattr(fd, LFN_ATTR, long_fn, strlen(long_fn));
+  if ((flags & O_CREAT) && (!exist)) {
+    r = index->created(oid, path->path());
     if (r < 0) {
       close(fd);
       return r;
@@ -514,85 +287,46 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags)
 
 int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o) 
 {
-  char long_fn[PATH_MAX];
-  char short_fn_old[PATH_MAX];
-  char short_fn_new[PATH_MAX];
-  int exist, is_lfn;
+  Index index_new, index_old;
+  IndexedPath path_new, path_old;
+  int exist;
   int r;
+  if (c < cid) {
+    index_new = get_index(cid);
+    index_old = get_index(c);
+  } else {
+    index_old = get_index(c);
+    index_new = get_index(cid);
+  }
 
-  r = lfn_get(cid, o, short_fn_new, sizeof(short_fn_new), long_fn, sizeof(long_fn), &exist, &is_lfn);
-  dout(25) << "lfn_link called lfn_get = " << r << dendl;
+  r = index_old->lookup(o, &path_old, &exist);
   if (r < 0)
     return r;
-  if (is_lfn && !exist)
+  if (!exist)
     return -ENOENT;
 
-  r = lfn_get(c, o, short_fn_old, sizeof(short_fn_old), long_fn, sizeof(long_fn), &exist, &is_lfn);
-  dout(25) << "lfn_link again called lfn_get = " << r << dendl;
+  r = index_new->lookup(o, &path_new, &exist);
   if (r < 0)
     return r;
-  if (is_lfn && exist)
+  if (exist)
     return -EEXIST;
 
-  dout(25) << "lfn_link short_fn_old: " << short_fn_old << dendl;
-  dout(25) << "lfn_link short_fn_new: " << short_fn_new << dendl;
-
-  r = link(short_fn_old, short_fn_new);
-  dout(25) << "lfn_link called link =" << r << dendl;
+  dout(25) << "lfn_link path_old: " << path_old << dendl;
+  dout(25) << "lfn_link path_new: " << path_new << dendl;
+  r = ::link(path_old->path(), path_new->path());
   if (r < 0)
     return -errno;
 
+  r = index_new->created(o, path_new->path());
+  if (r < 0)
+    return r;
   return 0;
 }
 
 int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
 {
-  char long_fn[PATH_MAX];
-  char short_fn[PATH_MAX];
-  char short_fn2[PATH_MAX];
-  int r, i, exist, err;
-  int path_len;
-  int is_lfn;
-
-  r = lfn_get(cid, o, short_fn, sizeof(short_fn), long_fn, sizeof(long_fn), &exist, &is_lfn);
-  if (r < 0)
-    return r;
-  if (!is_lfn)
-    return unlink(short_fn);
-  if (!exist)
-    return -ENOENT;
-
-  path_len = get_cdir(cid, short_fn2, sizeof(short_fn2));
-  short_fn2[path_len] = '/';
-  path_len++;
-  short_fn2[path_len] = '\0';
-
-  for (i = r + 1; ; i++) {
-    struct stat buf;
-    int ret;
-
-    build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, long_fn, i);
-    ret = ::stat(short_fn2, &buf);
-    if (ret < 0) {
-      if (i == r + 1) {
-        err = unlink(short_fn);
-        if (err < 0)
-          return err;
-        return 0;
-      }
-      break;
-    }
-  }
-
-  build_filename(&short_fn2[path_len], sizeof(short_fn2) - path_len, long_fn, i - 1);
-  generic_dout(0) << "renaming " << short_fn2 << " -> " << short_fn << dendl;
-
-  if (rename(short_fn2, short_fn) < 0) {
-    generic_derr << "ERROR: could not rename " << short_fn2 << " -> " << short_fn << dendl;
-    assert(0);
-  }
-
-  return 0;
+  Index index = get_index(cid);
+  return index->unlink(o);
 }
 
 static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
@@ -683,7 +417,7 @@ int do_getxattr_len(const char *fn, const char *name)
   return total;
 }
 
-static int do_getxattr(const char *fn, const char *name, void *val, size_t size)
+int do_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
@@ -726,7 +460,7 @@ static int do_getxattr(const char *fn, const char *name, void *val, size_t size)
   return ret;
 }
 
-static int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
@@ -757,7 +491,7 @@ static int do_setxattr(const char *fn, const char *name, const void *val, size_t
   return ret;
 }
 
-static int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
+int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
 {
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
@@ -789,7 +523,7 @@ static int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
   return ret;
 }
 
-static int do_removexattr(const char *fn, const char *name) {
+int do_removexattr(const char *fn, const char *name) {
   int i = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int r;
@@ -805,7 +539,7 @@ static int do_removexattr(const char *fn, const char *name) {
   return 0;
 }
 
-static int do_listxattr(const char *fn, char *names, size_t len) {
+int do_listxattr(const char *fn, char *names, size_t len) {
   int r;
 
   if (!len)
@@ -3748,7 +3482,6 @@ int FileStore::list_collections(vector<coll_t>& ls)
   }
 
   struct dirent sde, *de;
-  char new_name[PATH_MAX];
   while ((r = ::readdir_r(dir, &sde, &de)) == 0) {
     if (!de)
       break;
@@ -3775,8 +3508,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
 	 (de->d_name[1] == '.' &&
 	  de->d_name[2] == '\0')))
       continue;
-    lfn_translate(fn, de->d_name, new_name, sizeof(new_name));
-    ls.push_back(coll_t(new_name));
+    ls.push_back(coll_t(de->d_name));
   }
 
   if (r > 0) {
@@ -3813,152 +3545,36 @@ bool FileStore::collection_empty(coll_t c)
 {  
   if (fake_collections) return collections.collection_empty(c);
 
-  char buf[PATH_MAX];
-  get_cdir(c, buf, sizeof(buf));
-  dout(15) << "collection_empty " << buf << dendl;
-
-  DIR *dir = ::opendir(buf);
-  if (!dir)
-    return -errno;
-
-  bool empty = true;
-  struct dirent *de;
-  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
-    if (!de)
-      break;
-    // parse
-    if (de->d_name[0] == '.') continue;
-    //cout << "  got object " << de->d_name << std::endl;
-    hobject_t o;
-    if (parse_object(de->d_name, o)) {
-      empty = false;
-      break;
-    }
-  }
-  
-  ::closedir(dir);
-  dout(10) << "collection_empty " << c << " = " << empty << dendl;
-  return empty;
+  dout(15) << "collection_empty " << c << dendl;
+  Index index;
+  int r = get_index(c, &index);
+  if (r < 0)
+    return false;
+  vector<hobject_t> ls;
+  collection_list_handle_t handle = 0;
+  r = index->collection_list_partial(0, 1, &ls, &handle);
+  if (r < 0)
+    return false;
+  return ls.size() > 0;
 }
 
 int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>& ls, int max_count,
 				       collection_list_handle_t *handle)
 {  
   if (fake_collections) return collections.collection_list(c, ls);
-
-  char dir_name[PATH_MAX], buf[PATH_MAX];
-  get_cdir(c, dir_name, sizeof(dir_name));
-
-  DIR *dir = NULL;
-
-  struct dirent *de;
-  bool end;
-  
-  dir = ::opendir(dir_name);
-
-  if (!dir) {
-    int err = -errno;
-    dout(0) << "error opening directory " << dir_name << dendl;
-    return err;
-  }
-
-  if (handle && *handle) {
-    dout(10) << "collection_list_partial seeking to " << *handle << dendl;
-    seekdir(dir, *handle);
-    *handle = 0;
-  }
-
-  char new_name[PATH_MAX];
-
-  int i=0;
-  while (i < max_count) {
-    errno = 0;
-    end = false;
-    ::readdir_r(dir, (struct dirent*)buf, &de);
-    int err = errno;
-    if (!de && err) {
-      dout(0) << "error reading directory for " << c << dendl;
-      ::closedir(dir);
-      return -err;
-    }
-    if (!de) {
-      end = true;
-      break;
-    }
-
-    // parse
-    if (de->d_name[0] == '.') {
-      continue;
-    }
-    //cout << "  got object " << de->d_name << std::endl;
-    lfn_translate(dir_name, de->d_name, new_name, sizeof(new_name));
-    hobject_t o;
-    if (parse_object(new_name, o)) {
-      if (o.snap >= seq) {
-	ls.push_back(o);
-	i++;
-      }
-    }
-  }
-
-  if (handle && !end) {
-    *handle = (collection_list_handle_t)telldir(dir);
-    dout(10) << "collection_list_partial finished at " << *handle << dendl;
-  }
-
-  ::closedir(dir);
-
-  dout(10) << "collection_list " << c << " = 0 (" << ls.size() << " objects)" << dendl;
+  Index index = get_index(c);
+  int r = index->collection_list_partial(seq, max_count, &ls, handle);
+  if (r < 0)
+    return r;
   return 0;
 }
-
 
 int FileStore::collection_list(coll_t c, vector<hobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
-
-  char dir_name[PATH_MAX], buf[PATH_MAX], new_name[PATH_MAX];
-  get_cdir(c, dir_name, sizeof(dir_name));
-  dout(10) << "collection_list " << dir_name << dendl;
-
-  DIR *dir = ::opendir(dir_name);
-  if (!dir)
-    return -errno;
-  
-  // first, build (ino, object) list
-  vector< pair<ino_t,hobject_t> > inolist;
-
-  struct dirent *de;
-  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
-    if (!de)
-      break;
-    // parse
-    if (de->d_name[0] == '.')
-      continue;
-    //cout << "  got object " << de->d_name << std::endl;
-    hobject_t o;
-    lfn_translate(dir_name, de->d_name, new_name, sizeof(new_name));
-    if (parse_object(new_name, o)) {
-      inolist.push_back(pair<ino_t,hobject_t>(de->d_ino, o));
-      ls.push_back(o);
-    }
-  }
-
-  // sort
-  dout(10) << "collection_list " << c << " sorting " << inolist.size() << " objects" << dendl;
-  sort(inolist.begin(), inolist.end());
-
-  // build final list
-  ls.resize(inolist.size());
-  int i = 0;
-  for (vector< pair<ino_t,hobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
-    ls[i++].swap(p->second);
-  
-  dout(10) << "collection_list " << c << " = 0 (" << ls.size() << " objects)" << dendl;
-  ::closedir(dir);
-  return 0;
+  Index index = get_index(c);
+  return index->collection_list(&ls);
 }
-
 
 int FileStore::_create_collection(coll_t c) 
 {
@@ -3970,7 +3586,10 @@ int FileStore::_create_collection(coll_t c)
   int r = ::mkdir(fn, 0755);
   if (r < 0) r = -errno;
   dout(10) << "create_collection " << fn << " = " << r << dendl;
-  return r;
+
+  if (r < 0) return r;
+  Index index = get_index(c);
+  return index->init();
 }
 
 int FileStore::_destroy_collection(coll_t c) 
