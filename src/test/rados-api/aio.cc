@@ -234,3 +234,40 @@ TEST(LibRadosAio, IsComplete) {
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
+
+TEST(LibRadosAio, IsSafe) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+
+    // Busy-wait until the AIO completes.
+    // Normally we wouldn't do this, but we want to test rados_aio_is_safe.
+    while (true) {
+      int is_safe = rados_aio_is_safe(my_completion);
+      if (is_safe)
+	break;
+    }
+  }
+  char buf2[128];
+  memset(buf2, 0, sizeof(buf2));
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "foo",
+			      my_completion2, buf2, sizeof(buf2), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+}
