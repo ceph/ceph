@@ -33,6 +33,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_PGINFO CompatSet::Feature(2, "pginfo object")
 #define CEPH_OSD_FEATURE_INCOMPAT_OLOC CompatSet::Feature(3, "object locator")
 #define CEPH_OSD_FEATURE_INCOMPAT_LEC  CompatSet::Feature(4, "last_epoch_clean")
+#define CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES  CompatSet::Feature(5, "categories")
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
@@ -881,6 +882,167 @@ inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
   return out;
 }
 
+
+/*
+ * object_stat_sum_t - a summation of object stats
+ */
+struct object_stat_sum_t {
+  int64_t num_bytes;    // in bytes
+  int64_t num_kb;       // in KB
+  int64_t num_objects;
+  int64_t num_object_clones;
+  int64_t num_object_copies;  // num_objects * num_replicas
+  int64_t num_objects_missing_on_primary;
+  int64_t num_objects_degraded;
+  int64_t num_objects_unfound;
+  int64_t num_rd, num_rd_kb;
+  int64_t num_wr, num_wr_kb;
+
+  object_stat_sum_t()
+    : num_bytes(0), num_kb(0),
+      num_objects(0), num_object_clones(0), num_object_copies(0),
+      num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
+      num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+  {}
+
+  void calc_copies_degraded(int nrep, int acting_nrep) {
+    num_object_copies = nrep * num_objects;
+    num_objects_degraded = (nrep - acting_nrep) * num_objects;
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("num_bytes", num_bytes);
+    f->dump_unsigned("num_kb", num_kb);
+    f->dump_unsigned("num_objects", num_objects);
+    f->dump_unsigned("num_object_clones", num_object_clones);
+    f->dump_unsigned("num_object_copies", num_object_copies);
+    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
+    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
+    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
+    f->dump_unsigned("num_read", num_rd);
+    f->dump_unsigned("num_read_kb", num_rd_kb);
+    f->dump_unsigned("num_write", num_wr);
+    f->dump_unsigned("num_write_kb", num_wr_kb);
+  }
+  void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(num_bytes, bl);
+    ::encode(num_kb, bl);
+    ::encode(num_objects, bl);
+    ::encode(num_object_clones, bl);
+    ::encode(num_object_copies, bl);
+    ::encode(num_objects_missing_on_primary, bl);
+    ::encode(num_objects_degraded, bl);
+    ::encode(num_rd, bl);
+    ::encode(num_rd_kb, bl);
+    ::encode(num_wr, bl);
+    ::encode(num_wr_kb, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(num_bytes, bl);
+    ::decode(num_kb, bl);
+    ::decode(num_objects, bl);
+    ::decode(num_object_clones, bl);
+    ::decode(num_object_copies, bl);
+    ::decode(num_objects_missing_on_primary, bl);
+    ::decode(num_objects_degraded, bl);
+    ::decode(num_rd, bl);
+    ::decode(num_rd_kb, bl);
+    ::decode(num_wr, bl);
+    ::decode(num_wr_kb, bl);
+  }
+  void add(const object_stat_sum_t& o) {
+    num_bytes += o.num_bytes;
+    num_kb += o.num_kb;
+    num_objects += o.num_objects;
+    num_object_clones += o.num_object_clones;
+    num_object_copies += o.num_object_copies;
+    num_objects_missing_on_primary += o.num_objects_missing_on_primary;
+    num_objects_degraded += o.num_objects_degraded;
+    num_rd += o.num_rd;
+    num_rd_kb += o.num_rd_kb;
+    num_wr += o.num_wr;
+    num_wr_kb += o.num_wr_kb;
+    num_objects_unfound += o.num_objects_unfound;
+  }
+  void sub(const object_stat_sum_t& o) {
+    num_bytes -= o.num_bytes;
+    num_kb -= o.num_kb;
+    num_objects -= o.num_objects;
+    num_object_clones -= o.num_object_clones;
+    num_object_copies -= o.num_object_copies;
+    num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
+    num_objects_degraded -= o.num_objects_degraded;
+    num_rd -= o.num_rd;
+    num_rd_kb -= o.num_rd_kb;
+    num_wr -= o.num_wr;
+    num_wr_kb -= o.num_wr_kb;
+    num_objects_unfound -= o.num_objects_unfound;
+  }
+};
+WRITE_CLASS_ENCODER(object_stat_sum_t)
+
+struct object_stat_collection_t {
+  object_stat_sum_t sum;
+  map<string,object_stat_sum_t> cat_sum;
+
+  void calc_copies_degraded(int nrep, int acting_nrep) {
+    sum.calc_copies_degraded(nrep, acting_nrep);
+    for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
+      p->second.calc_copies_degraded(nrep, acting_nrep);
+  }
+
+  void dump(Formatter *f) const {
+    f->open_object_section("stat_sum");
+    sum.dump(f);
+    f->close_section();
+    f->open_object_section("stat_cat_sum");
+    for (map<string,object_stat_sum_t>::const_iterator p = cat_sum.begin(); p != cat_sum.end(); ++p) {
+      f->open_object_section(p->first.c_str());
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(sum, bl);
+    ::encode(cat_sum, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(sum, bl);
+    ::decode(cat_sum, bl);
+  }
+
+  void add(const object_stat_sum_t& o, const string& cat) {
+    sum.add(o);
+    if (cat.length())
+      cat_sum[cat].add(o);
+  }
+
+  void add(const object_stat_collection_t& o) {
+    sum.add(o.sum);
+    for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
+	 p != o.cat_sum.end();
+	 ++p)
+      cat_sum[p->first].add(p->second);
+  }
+  void sub(const object_stat_collection_t& o) {
+    sum.sub(o.sum);
+    for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
+	 p != o.cat_sum.end();
+	 ++p)
+      cat_sum[p->first].sub(p->second);
+  }
+};
+WRITE_CLASS_ENCODER(object_stat_collection_t)
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
@@ -899,29 +1061,17 @@ struct pg_stat_t {
   eversion_t last_scrub;
   utime_t last_scrub_stamp;
 
-  uint64_t num_bytes;    // in bytes
-  uint64_t num_kb;       // in KB
-  uint64_t num_objects;
-  uint64_t num_object_clones;
-  uint64_t num_object_copies;  // num_objects * num_replicas
-  uint64_t num_objects_missing_on_primary;
-  uint64_t num_objects_degraded;
-  uint64_t num_objects_unfound;
-  uint64_t log_size;
-  uint64_t ondisk_log_size;    // >= active_log_size
+  object_stat_collection_t stats;
 
-  uint64_t num_rd, num_rd_kb;
-  uint64_t num_wr, num_wr_kb;
+  int64_t log_size;
+  int64_t ondisk_log_size;    // >= active_log_size
 
   vector<int> up, acting;
 
+
   pg_stat_t() : state(0),
 		created(0), parent_split_bits(0), 
-		num_bytes(0), num_kb(0), 
-		num_objects(0), num_object_clones(0), num_object_copies(0),
-		num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
-		log_size(0), ondisk_log_size(0),
-		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+		log_size(0), ondisk_log_size(0)
   { }
 
   void dump(Formatter *f) const {
@@ -935,20 +1085,9 @@ struct pg_stat_t {
     f->dump_unsigned("parent_split_bits", parent_split_bits);
     f->dump_stream("last_scrub") << last_scrub;
     f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
-    f->dump_unsigned("num_bytes", num_bytes);
-    f->dump_unsigned("num_kb", num_kb);
-    f->dump_unsigned("num_objects", num_objects);
-    f->dump_unsigned("num_object_clones", num_object_clones);
-    f->dump_unsigned("num_object_copies", num_object_copies);
-    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
-    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
-    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
     f->dump_unsigned("log_size", log_size);
     f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-    f->dump_unsigned("num_read", num_rd);
-    f->dump_unsigned("num_read_kb", num_rd_kb);
-    f->dump_unsigned("num_write", num_wr);
-    f->dump_unsigned("num_write_kb", num_wr_kb);
+    stats.dump(f);
     f->open_array_section("up");
     for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
       f->dump_int("osd", *p);
@@ -960,7 +1099,7 @@ struct pg_stat_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 4;
+    __u8 v = 5;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -973,21 +1112,10 @@ struct pg_stat_t {
     ::encode(parent_split_bits, bl);
     ::encode(last_scrub, bl);
     ::encode(last_scrub_stamp, bl);
-    ::encode(num_bytes, bl);
-    ::encode(num_kb, bl);
-    ::encode(num_objects, bl);
-    ::encode(num_object_clones, bl);
-    ::encode(num_object_copies, bl);
-    ::encode(num_objects_missing_on_primary, bl);
-    ::encode(num_objects_degraded, bl);
+    ::encode(stats, bl);
     ::encode(log_size, bl);
     ::encode(ondisk_log_size, bl);
-    ::encode(num_rd, bl);
-    ::encode(num_rd_kb, bl);
-    ::encode(num_wr, bl);
-    ::encode(num_wr_kb, bl);
     ::encode(up, bl);
-    ::encode(num_objects_unfound, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -1004,61 +1132,47 @@ struct pg_stat_t {
     ::decode(parent_split_bits, bl);
     ::decode(last_scrub, bl);
     ::decode(last_scrub_stamp, bl);
-    ::decode(num_bytes, bl);
-    ::decode(num_kb, bl);
-    ::decode(num_objects, bl);
-    ::decode(num_object_clones, bl);
-    ::decode(num_object_copies, bl);
-    ::decode(num_objects_missing_on_primary, bl);
-    ::decode(num_objects_degraded, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    if (v >= 2) {
-      ::decode(num_rd, bl);
-      ::decode(num_rd_kb, bl);
-      ::decode(num_wr, bl);
-      ::decode(num_wr_kb, bl);
-    }
-    if (v >= 3) {
+    if (v <= 4) {
+      ::decode(stats.sum.num_bytes, bl);
+      ::decode(stats.sum.num_kb, bl);
+      ::decode(stats.sum.num_objects, bl);
+      ::decode(stats.sum.num_object_clones, bl);
+      ::decode(stats.sum.num_object_copies, bl);
+      ::decode(stats.sum.num_objects_missing_on_primary, bl);
+      ::decode(stats.sum.num_objects_degraded, bl);
+      ::decode(log_size, bl);
+      ::decode(ondisk_log_size, bl);
+      if (v >= 2) {
+	::decode(stats.sum.num_rd, bl);
+	::decode(stats.sum.num_rd_kb, bl);
+	::decode(stats.sum.num_wr, bl);
+	::decode(stats.sum.num_wr_kb, bl);
+      }
+      if (v >= 3) {
+	::decode(up, bl);
+      }
+      if (v == 4) {
+	::decode(stats.sum.num_objects_unfound, bl);  // sigh.
+      }
+      ::decode(acting, bl);
+    } else {
+      ::decode(stats, bl);
+      ::decode(log_size, bl);
+      ::decode(ondisk_log_size, bl);
       ::decode(up, bl);
+      ::decode(acting, bl);
     }
-    if (v >= 4) {
-      ::decode(num_objects_unfound, bl);
-    }
-    ::decode(acting, bl);
   }
 
   void add(const pg_stat_t& o) {
-    num_bytes += o.num_bytes;
-    num_kb += o.num_kb;
-    num_objects += o.num_objects;
-    num_object_clones += o.num_object_clones;
-    num_object_copies += o.num_object_copies;
-    num_objects_missing_on_primary += o.num_objects_missing_on_primary;
-    num_objects_degraded += o.num_objects_degraded;
+    stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
-    num_rd += o.num_rd;
-    num_rd_kb += o.num_rd_kb;
-    num_wr += o.num_wr;
-    num_wr_kb += o.num_wr_kb;
-    num_objects_unfound += o.num_objects_unfound;
   }
   void sub(const pg_stat_t& o) {
-    num_bytes -= o.num_bytes;
-    num_kb -= o.num_kb;
-    num_objects -= o.num_objects;
-    num_object_clones -= o.num_object_clones;
-    num_object_copies -= o.num_object_copies;
-    num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
-    num_objects_degraded -= o.num_objects_degraded;
+    stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
-    num_rd -= o.num_rd;
-    num_rd_kb -= o.num_rd_kb;
-    num_wr -= o.num_wr;
-    num_wr_kb -= o.num_wr_kb;
-    num_objects_unfound -= o.num_objects_unfound;
   }
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
@@ -1067,115 +1181,63 @@ WRITE_CLASS_ENCODER(pg_stat_t)
  * summation over an entire pool
  */
 struct pool_stat_t {
-  uint64_t num_bytes;    // in bytes
-  uint64_t num_kb;       // in KB
-  uint64_t num_objects;
-  uint64_t num_object_clones;
-  uint64_t num_object_copies;  // num_objects * num_replicas
-  uint64_t num_objects_missing_on_primary;
-  uint64_t num_objects_degraded;
-  uint64_t num_objects_unfound;
+  object_stat_collection_t stats;
   uint64_t log_size;
   uint64_t ondisk_log_size;    // >= active_log_size
-  uint64_t num_rd, num_rd_kb;
-  uint64_t num_wr, num_wr_kb;
 
-  pool_stat_t() : num_bytes(0), num_kb(0), 
-		  num_objects(0), num_object_clones(0), num_object_copies(0),
-		  num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
-		  log_size(0), ondisk_log_size(0),
-		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+  pool_stat_t() : log_size(0), ondisk_log_size(0)
   { }
 
   void dump(Formatter *f) const {
-    f->dump_unsigned("num_bytes", num_bytes);
-    f->dump_unsigned("num_kb", num_kb);
-    f->dump_unsigned("num_objects", num_objects);
-    f->dump_unsigned("num_object_clones", num_object_clones);
-    f->dump_unsigned("num_object_copies", num_object_copies);
-    f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
-    f->dump_unsigned("num_objects_degraded", num_objects_degraded);
-    f->dump_unsigned("num_objects_unfound", num_objects_unfound);
+    stats.dump(f);
     f->dump_unsigned("log_size", log_size);
     f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-    f->dump_unsigned("num_read", num_rd);
-    f->dump_unsigned("num_read_kb", num_rd_kb);
-    f->dump_unsigned("num_write", num_wr);
-    f->dump_unsigned("num_write_kb", num_wr_kb);
   }
-
   void encode(bufferlist &bl) const {
-    __u8 v = 3;
+    __u8 v = 4;
     ::encode(v, bl);
-    ::encode(num_bytes, bl);
-    ::encode(num_kb, bl);
-    ::encode(num_objects, bl);
-    ::encode(num_object_clones, bl);
-    ::encode(num_object_copies, bl);
-    ::encode(num_objects_missing_on_primary, bl);
-    ::encode(num_objects_degraded, bl);
+    ::encode(stats, bl);
     ::encode(log_size, bl);
     ::encode(ondisk_log_size, bl);
-    ::encode(num_rd, bl);
-    ::encode(num_rd_kb, bl);
-    ::encode(num_wr, bl);
-    ::encode(num_wr_kb, bl);
-    ::encode(num_objects_unfound, bl);
- }
+  }
   void decode(bufferlist::iterator &bl) {
     __u8 v;
     ::decode(v, bl);
-    ::decode(num_bytes, bl);
-    ::decode(num_kb, bl);
-    ::decode(num_objects, bl);
-    ::decode(num_object_clones, bl);
-    ::decode(num_object_copies, bl);
-    ::decode(num_objects_missing_on_primary, bl);
-    ::decode(num_objects_degraded, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    if (v >= 2) {
-      ::decode(num_rd, bl);
-      ::decode(num_rd_kb, bl);
-      ::decode(num_wr, bl);
-      ::decode(num_wr_kb, bl);
-    }
-    if (v >= 3) {
-      ::decode(num_objects_unfound, bl);
+    if (v >= 4) {
+      ::decode(stats, bl);
+      ::decode(log_size, bl);
+      ::decode(ondisk_log_size, bl);
+    } else {
+      ::decode(stats.sum.num_bytes, bl);
+      ::decode(stats.sum.num_kb, bl);
+      ::decode(stats.sum.num_objects, bl);
+      ::decode(stats.sum.num_object_clones, bl);
+      ::decode(stats.sum.num_object_copies, bl);
+      ::decode(stats.sum.num_objects_missing_on_primary, bl);
+      ::decode(stats.sum.num_objects_degraded, bl);
+      ::decode(log_size, bl);
+      ::decode(ondisk_log_size, bl);
+      if (v >= 2) {
+	::decode(stats.sum.num_rd, bl);
+	::decode(stats.sum.num_rd_kb, bl);
+	::decode(stats.sum.num_wr, bl);
+	::decode(stats.sum.num_wr_kb, bl);
+      }
+      if (v >= 3) {
+	::decode(stats.sum.num_objects_unfound, bl);
+      }
     }
   }
 
   void add(const pg_stat_t& o) {
-    num_bytes += o.num_bytes;
-    num_kb += o.num_kb;
-    num_objects += o.num_objects;
-    num_object_clones += o.num_object_clones;
-    num_object_copies += o.num_object_copies;
-    num_objects_missing_on_primary += o.num_objects_missing_on_primary;
-    num_objects_degraded += o.num_objects_degraded;
+    stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
-    num_rd += o.num_rd;
-    num_rd_kb += o.num_rd_kb;
-    num_wr += o.num_wr;
-    num_wr_kb += o.num_wr_kb;
-    num_objects_unfound += o.num_objects_unfound;
   }
   void sub(const pg_stat_t& o) {
-    num_bytes -= o.num_bytes;
-    num_kb -= o.num_kb;
-    num_objects -= o.num_objects;
-    num_object_clones -= o.num_object_clones;
-    num_object_copies -= o.num_object_copies;
-    num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
-    num_objects_degraded -= o.num_objects_degraded;
+    stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
-    num_rd -= o.num_rd;
-    num_rd_kb -= o.num_rd_kb;
-    num_wr -= o.num_wr;
-    num_wr_kb -= o.num_wr_kb;
-    num_objects_unfound -= o.num_objects_unfound;
   }
 };
 WRITE_CLASS_ENCODER(pool_stat_t)
@@ -1417,6 +1479,7 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;
+  string category;
 
   eversion_t version, prior_version;
   eversion_t user_version;
@@ -1439,15 +1502,17 @@ struct object_info_t {
     truncate_seq = other.truncate_seq;
     truncate_size = other.truncate_size;
     lost = other.lost;
+    category = other.category;
   }
 
   map<entity_name_t, watch_info_t> watchers;
 
   void encode(bufferlist& bl) const {
-    const __u8 v = 4;
+    const __u8 v = 5;
     ::encode(v, bl);
     ::encode(soid, bl);
     ::encode(oloc, bl);
+    ::encode(category, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
@@ -1469,6 +1534,8 @@ struct object_info_t {
     ::decode(soid, bl);
     if (v >= 2)
       ::decode(oloc, bl);
+    if (v >= 5)
+      ::decode(category, bl);
     ::decode(version, bl);
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);

@@ -338,7 +338,8 @@ public:
 
     ObjectState new_obs;  // resulting ObjectState
     SnapSet new_snapset;  // resulting SnapSet (in case of a write)
-    pg_stat_t new_stats;  // resulting Stats
+    //pg_stat_t new_stats;  // resulting Stats
+    object_stat_sum_t delta_stats;
 
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
@@ -380,7 +381,6 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
       new_obs(_obs->oi, _obs->exists),
-      new_stats(_pg->info.stats),
       modify(false), user_modify(false),
       watch_connect(false), watch_disconnect(false),
       bytes_written(0), bytes_read(0),
@@ -583,10 +583,10 @@ protected:
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
 
-  void write_update_size_and_usage(pg_stat_t& stats, object_info_t& oi,
+  void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   SnapSet& ss, interval_set<uint64_t>& modified,
 				   uint64_t offset, uint64_t length, bool count_bytes);
-  void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
+  void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);  
 
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);

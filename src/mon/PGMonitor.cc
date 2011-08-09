@@ -148,6 +148,7 @@ bool PGMonitor::update_from_paxos()
 	      << "incremental update: " << e.what() << dendl;
       return false;
     }
+
     pg_map.apply_incremental(inc);
     
     dout(10) << pg_map << dendl;
@@ -284,7 +285,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->h.st.kb = pg_map.osd_sum.kb;
   reply->h.st.kb_used = pg_map.osd_sum.kb_used;
   reply->h.st.kb_avail = pg_map.osd_sum.kb_avail;
-  reply->h.st.num_objects = pg_map.pg_sum.num_objects;
+  reply->h.st.num_objects = pg_map.pg_sum.stats.sum.num_objects;
 
   // reply
   mon->send_reply(statfs, reply);
@@ -591,7 +592,7 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
   pending_inc.pg_stat_updates[pgid].created = epoch;
   pending_inc.pg_stat_updates[pgid].parent = parent;
   pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
-  
+
   if (split_bits == 0) {
     dout(10) << "register_new_pgs  will create " << pgid << dendl;
   } else {
@@ -892,7 +893,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	for (hash_map<pg_t,pg_stat_t>::const_iterator s = pg_map.pg_stat.begin();
 	     s != end; ++s)
 	{
-	  if (s->second.num_objects_unfound > 0) {
+	  if (s->second.stats.sum.num_objects_unfound > 0) {
 	    unfound_objects_exist = true;
 	    break;
 	  }
@@ -910,7 +911,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	for (hash_map<pg_t,pg_stat_t>::const_iterator s = pg_map.pg_stat.begin();
 	     s != end; ++s)
 	{
-	  if (s->second.num_objects_degraded > 0) {
+	  if (s->second.stats.sum.num_objects_degraded > 0) {
 	    degraded_pgs_exist = true;
 	    break;
 	  }

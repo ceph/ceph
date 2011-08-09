@@ -194,10 +194,10 @@ void librados::ObjectReadOperation::getxattrs()
   o->getxattrs();
 }
 
-void librados::ObjectWriteOperation::create(bool exclusive)
+void librados::ObjectWriteOperation::create(bool exclusive, const std::string& category)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->create(exclusive);
+  o->create(exclusive, category);
 }
 
 void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
@@ -562,6 +562,7 @@ public:
 
   // io
   int create(IoCtxImpl& io, const object_t& oid, bool exclusive);
+  int create(IoCtxImpl& io, const object_t& oid, bool exclusive, const std::string& category);
   int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len);
   int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
@@ -1465,6 +1466,39 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
   objecter->create(oid, io.oloc,
 		  io.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
 		  onack, NULL, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::create(IoCtxImpl& io, const object_t& oid, bool exclusive, const std::string& category)
+{
+  utime_t ut = ceph_clock_now(cct);
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  Mutex mylock("RadosClient::create::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  eversion_t ver;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  ::ObjectOperation o;
+  o.create(exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0, category);
+
+  lock.Lock();
+  objecter->mutate(oid, io.oloc, o, io.snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2709,11 +2743,16 @@ get_auid(uint64_t *auid_)
   return io_ctx_impl->client->pool_get_auid(io_ctx_impl, (unsigned long long *)auid_);
 }
 
-int librados::IoCtx::
-create(const std::string& oid, bool exclusive)
+int librados::IoCtx::create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);
   return io_ctx_impl->client->create(*io_ctx_impl, obj, exclusive);
+}
+
+int librados::IoCtx::create(const std::string& oid, bool exclusive, const std::string& category)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->create(*io_ctx_impl, obj, exclusive, category);
 }
 
 int librados::IoCtx::
@@ -3231,18 +3270,18 @@ get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
        p != rawresult.end();
        p++) {
     pool_stat_t& v = result[p->first];
-    v.num_kb = p->second.num_kb;
-    v.num_bytes = p->second.num_bytes;
-    v.num_objects = p->second.num_objects;
-    v.num_object_clones = p->second.num_object_clones;
-    v.num_object_copies = p->second.num_object_copies;
-    v.num_objects_missing_on_primary = p->second.num_objects_missing_on_primary;
-    v.num_objects_unfound = p->second.num_objects_unfound;
-    v.num_objects_degraded = p->second.num_objects_degraded;
-    v.num_rd = p->second.num_rd;
-    v.num_rd_kb = p->second.num_rd_kb;
-    v.num_wr = p->second.num_wr;
-    v.num_wr_kb = p->second.num_wr_kb;
+    v.num_kb = p->second.stats.sum.num_kb;
+    v.num_bytes = p->second.stats.sum.num_bytes;
+    v.num_objects = p->second.stats.sum.num_objects;
+    v.num_object_clones = p->second.stats.sum.num_object_clones;
+    v.num_object_copies = p->second.stats.sum.num_object_copies;
+    v.num_objects_missing_on_primary = p->second.stats.sum.num_objects_missing_on_primary;
+    v.num_objects_unfound = p->second.stats.sum.num_objects_unfound;
+    v.num_objects_degraded = p->second.stats.sum.num_objects_degraded;
+    v.num_rd = p->second.stats.sum.num_rd;
+    v.num_rd_kb = p->second.stats.sum.num_rd_kb;
+    v.num_wr = p->second.stats.sum.num_wr;
+    v.num_wr_kb = p->second.stats.sum.num_wr_kb;
   }
   return r;
 }
@@ -3473,18 +3512,18 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
     return err;
 
   ::pool_stat_t& r = rawresult[io_ctx_impl->pool_name];
-  stats->num_kb = r.num_kb;
-  stats->num_bytes = r.num_bytes;
-  stats->num_objects = r.num_objects;
-  stats->num_object_clones = r.num_object_clones;
-  stats->num_object_copies = r.num_object_copies;
-  stats->num_objects_missing_on_primary = r.num_objects_missing_on_primary;
-  stats->num_objects_unfound = r.num_objects_unfound;
-  stats->num_objects_degraded = r.num_objects_degraded;
-  stats->num_rd = r.num_rd;
-  stats->num_rd_kb = r.num_rd_kb;
-  stats->num_wr = r.num_wr;
-  stats->num_wr_kb = r.num_wr_kb;
+  stats->num_kb = r.stats.sum.num_kb;
+  stats->num_bytes = r.stats.sum.num_bytes;
+  stats->num_objects = r.stats.sum.num_objects;
+  stats->num_object_clones = r.stats.sum.num_object_clones;
+  stats->num_object_copies = r.stats.sum.num_object_copies;
+  stats->num_objects_missing_on_primary = r.stats.sum.num_objects_missing_on_primary;
+  stats->num_objects_unfound = r.stats.sum.num_objects_unfound;
+  stats->num_objects_degraded = r.stats.sum.num_objects_degraded;
+  stats->num_rd = r.stats.sum.num_rd;
+  stats->num_rd_kb = r.stats.sum.num_rd_kb;
+  stats->num_wr = r.stats.sum.num_wr;
+  stats->num_wr_kb = r.stats.sum.num_wr_kb;
   return 0;
 }
 

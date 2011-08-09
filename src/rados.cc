@@ -55,7 +55,7 @@ void usage(ostream& out)
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
-"   create <obj-name>                create object\n"
+"   create <obj-name> [category]     create object\n"
 "   rm <obj-name>                    remove object\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
@@ -903,7 +903,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = io_ctx.create(oid, true);
+    if (nargs.size() > 2) {
+      string category(nargs[2]);
+      ret = io_ctx.create(oid, true, category);
+    } else {
+      ret = io_ctx.create(oid, true);
+    }
     if (ret < 0) {
       cerr << "error creating " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
