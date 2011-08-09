@@ -535,6 +535,8 @@ public:
   int filestore_op_thread_suicide_timeout;
   float filestore_commit_timeout;
   int filestore_fiemap_threshold;
+  int filestore_merge_threshold;
+  int filestore_split_multiple;
 
   // journal
   bool journal_dio;

@@ -1,0 +1,443 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+
+#ifndef OS_LFNINDEX_H
+#define OS_LFNINDEX_H
+
+#include <string>
+#include <map>
+#include <set>
+#include <vector>
+#include <tr1/memory>
+
+#include "osd/osd_types.h"
+#include "include/object.h"
+#include "common/ceph_crypto.h"
+#include "ObjectStore.h"
+
+#include "CollectionIndex.h"
+
+/** 
+ * LFNIndex also encapsulates logic for manipulating
+ * subdirectories of of a collection as well as the long filename
+ * logic.
+ *
+ * The protected methods provide machinery for derived classes to
+ * manipulate subdirectories and objects.
+ *  
+ * The virtual methods are to be overridden to provide the actual
+ * hashed layout.
+ *  
+ * User must call created when an object is created.
+ *  
+ * Syncronization: Calling code must ensure that there are no object
+ * creations or deletions during the lifetime of a Path object (except
+ * of an object at that path).
+ *
+ * Unless otherwise noted, methods which return an int return 0 on sucess
+ * and a negative error code on failure.
+ */
+class LFNIndex : public CollectionIndex {
+  /// Hash digest output size.
+  static const int FILENAME_LFN_DIGEST_SIZE = CEPH_CRYPTO_SHA1_DIGESTSIZE;
+  /// Length of filename hash.
+  static const int FILENAME_HASH_LEN = FILENAME_LFN_DIGEST_SIZE;
+  /// Max filename size.
+  static const int FILENAME_MAX_LEN = 4096;
+  /// Length of hashed filename.
+  static const int FILENAME_SHORT_LEN = 255;
+  /// Length of hashed filename prefix.
+  static const int FILENAME_PREFIX_LEN;
+  /// Length of hashed filename cookie.
+  static const int FILENAME_EXTRA = 4;
+  /// Lfn cookie value.
+  static const string FILENAME_COOKIE;
+  /// Name of LFN attribute for storing full name.
+  static const string LFN_ATTR;
+  /// Prefix for subdir index attributes.
+  static const string PHASH_ATTR_PREFIX;
+  /// Prefix for index subdirectories.
+  static const string SUBDIR_PREFIX;
+
+  /// Path to Index base.
+  const string base_path;
+  /// For reference counting the collection @see Path
+  std::tr1::weak_ptr<CollectionIndex> self_ref;
+
+protected:
+  /// Constructor
+  LFNIndex(const char *base_path) ///< [in] path to Index root
+    : base_path(base_path) {}
+
+  /// Virtual destructor
+  virtual ~LFNIndex() {}
+
+  /// @see CollectionIndex
+  void set_ref(std::tr1::shared_ptr<CollectionIndex> ref);
+
+  /// @see CollectionIndex
+  int init();
+
+  /// @see CollectionIndex
+  int cleanup() = 0;
+
+  /// @see CollectionIndex
+  int created(
+    const hobject_t &hoid,
+    const char *path
+    );
+
+  /// @see CollectionIndex
+  int unlink(
+    const hobject_t &hoid
+    );
+
+  /// @see CollectionIndex
+  int lookup(
+    const hobject_t &hoid,
+    IndexedPath *path,
+    int *exist
+    );
+
+  /// @see CollectionIndex
+  int collection_list_partial(
+    snapid_t seq,
+    int max_count,
+    vector<hobject_t> *ls, 
+    collection_list_handle_t *last
+    );
+
+  /// @see CollectionIndex
+  int collection_list(
+    vector<hobject_t> *ls
+    );
+
+protected:
+  virtual int _init() = 0;
+
+  /// Will be called upon object creation
+  virtual int _created(
+    const vector<string> &path, ///< [in] Path to subdir.
+    const hobject_t &hoid,      ///< [in] Object created.
+    const string &mangled_name  ///< [in] Mangled filename.
+    ) = 0;
+
+  /// Will be called to remove an object
+  virtual int _remove(
+    const vector<string> &path,     ///< [in] Path to subdir.
+    const hobject_t &hoid,          ///< [in] Object to remove.
+    const string &mangled_name	    ///< [in] Mangled filename.
+    ) = 0;
+
+  /// Return the path and mangled_name for hoid.
+  virtual int _lookup(
+    const hobject_t &hoid,///< [in] Object for lookup.
+    vector<string> *path, ///< [out] Path to the object.
+    string *mangled_name, ///< [out] Mangled filename.
+    int *exists		  ///< [out] True if the object exists.
+    ) = 0;
+
+  /**
+   * List contents of the collection, must be implemented by derived class.
+   *
+   * @param [out] seq Snapid to list.
+   * @param [in] max_count Max number to list (0 for no limit).
+   * @param [out] ls Container for listed objects.
+   * @param [in,out] last List handle.  0 for beginning.  Passing the same
+   * cookie location will cause the next max_count to be listed.
+   * @return Error code.  0 on success.
+   */
+  virtual int _collection_list_partial(
+    snapid_t seq,
+    int max_count,
+    vector<hobject_t> *ls,
+    collection_list_handle_t *last
+    ) = 0;
+				       
+  /// List contents of collection.
+  virtual int _collection_list(
+    vector<hobject_t> *ls ///< [out] Listed objects.
+    ) = 0;
+
+protected:
+
+  /* Non-virtual utility methods */
+
+  /// Sync a subdirectory
+  int fsync_dir(
+    const vector<string> &path ///< [in] Path to sync
+    ); ///< @return Error Code, 0 on success
+
+  /// Link an object from from into to
+  int link_object(
+    const vector<string> &from,   ///< [in] Source subdirectory.
+    const vector<string> &to,     ///< [in] Dest subdirectory.
+    const hobject_t &hoid,        ///< [in] Object to move.
+    const string &from_short_name ///< [in] Mangled filename of hoid.
+    ); ///< @return Error Code, 0 on success
+
+  /**
+   * Efficiently remove objects from a subdirectory
+   *
+   * remove_object invalidates mangled names in the directory requiring
+   * the mangled name of each additional object to be looked up a second
+   * time.  remove_objects removes the need for additional lookups
+   *
+   * @param [in] dir Directory from which to remove.
+   * @param [in] map of objects to remove to mangle names
+   * @param [in,out] map of filenames to objects
+   * @return Error Code, 0 on success.
+   */
+  int remove_objects(
+    const vector<string> &dir,             
+    const map<string, hobject_t> &to_remove,
+    map<string, hobject_t> *remaining
+    );
+	
+
+  /** 
+   * Moves contents of from into to.
+   *
+   * Invalidates mangled names in to.  If interupted, all objects will be
+   * present in to before objects are removed from from.  Ignores EEXIST 
+   * while linking into to.
+   * @return Error Code, 0 on success
+   */
+  int move_objects(
+    const vector<string> &from, ///< [in] Source subdirectory.
+    const vector<string> &to    ///< [in] Dest subdirectory.
+    );
+
+  /** 
+   * Remove an object from from.
+   *
+   * Invalidates mangled names in from.
+   * @return Error Code, 0 on success
+   */
+  int remove_object(
+    const vector<string> &from,  ///< [in] Directory from which to remove.
+    const hobject_t &to_remove   ///< [in] Object to remove.
+    );
+
+  /**
+   * Gets the filename corresponding to hoid in from.
+   * 
+   * The filename may differ between subdirectories.  Furthermore,
+   * file creations ore removals in from may invalidate the name.
+   * @return Error code on failure, 0 on success
+   */
+  int get_mangled_name(
+    const vector<string> &from, ///< [in] Subdirectory
+    const hobject_t &hoid,	///< [in] Object 
+    string *mangled_name,	///< [out] Filename
+    int *exists			///< [out] 1 if the file exists, else 0
+    );
+
+  /**
+   * Lists objects in to_list.
+   *
+   * @param [in] to_list Directory to list.
+   * @param [in] max_objects Max number to list.
+   * @param [in,out] handle Cookie for continuing the listing.
+   * Initialize to zero to start at the beginning of the directory.
+   * @param [out] out Mapping of listed object filenames to objects.
+   * @return Error code on failure, 0 on success
+   */
+  int list_objects(
+    const vector<string> &to_list,
+    int max_objects,
+    long *handle,
+    map<string, hobject_t> *out
+    );
+
+  /// Lists subdirectories.
+  int list_subdirs(
+    const vector<string> &to_list, ///< [in] Directory to list.
+    set<string> *out		   ///< [out] Subdirectories listed. 
+    );
+
+  /// Create subdirectory.
+  int create_path(
+    const vector<string> &to_create ///< [in] Subdirectory to create.
+    );
+
+  /// Remove subdirectory.
+  int remove_path(
+    const vector<string> &to_remove ///< [in] Subdirectory to remove.
+    );
+
+  /// Check whether to_check exists.
+  int path_exists(
+    const vector<string> &to_check, ///< [in] Subdirectory to check.
+    int *exists			    ///< [out] 1 if it exists, 0 else
+    );
+
+  /// Save attr_value to attr_name attribute on path.
+  int add_attr_path(
+    const vector<string> &path, ///< [in] Path to modify.
+    const string &attr_name, 	///< [in] Name of attribute.
+    bufferlist &attr_value	///< [in] Value to save.
+    );
+
+  /// Read into attr_value atribute attr_name on path.
+  int get_attr_path(
+    const vector<string> &path, ///< [in] Path to read.
+    const string &attr_name, 	///< [in] Attribute to read. 
+    bufferlist &attr_value	///< [out] Attribute value read.
+    );
+
+  /// Remove attr from path
+  int remove_attr_path(
+    const vector<string> &path, ///< [in] path from which to remove attr
+    const string &attr_name	///< [in] attr to remove
+    ); ///< @return Error code, 0 on success
+
+private:
+  /* lfn translation functions */
+  /**
+   * Gets the filename corresponsing to hoid in path.
+   *
+   * @param [in] path Path in which to get filename for hoid.
+   * @param [in] hoid Object for which to get filename.
+   * @param [out] mangled_name Filename for hoid, pass NULL if not needed.
+   * @param [out] full_path Fullpath for hoid, pass NULL if not needed.
+   * @param [out] exists 1 if the file exists, 0 otherwise, pass NULL if 
+   * not needed
+   * @return Error Code, 0 on success.
+   */
+  int lfn_get_name(
+    const vector<string> &path,
+    const hobject_t &hoid, 
+    string *mangled_name,
+    string *full_path,
+    int *exists
+    );
+
+  /// Adjusts path contents when hoid is created at name mangled_name.
+  int lfn_created(
+    const vector<string> &path, ///< [in] Path to adjust.
+    const hobject_t &hoid,	///< [in] Object created. 
+    const string &mangled_name  ///< [in] Filename of created object.
+    );
+
+  /// Removes hoid from path while adjusting path contents
+  int lfn_unlink(
+    const vector<string> &path, ///< [in] Path containing hoid.
+    const hobject_t &hoid,	///< [in] Object to remove.
+    const string &mangled_name	///< [in] Filename of object to remove.
+    );
+
+  ///Transate a file into and hobject_t.
+  int lfn_translate(
+    const vector<string> &path, ///< [in] Path containing the file.
+    const string &short_name,	///< [in] Filename to translate. 
+    hobject_t *out		///< [out] Object found.
+    ); ///< @return Negative error code on error, 0 if not an object, 1 else
+
+  /* manglers/demanglers */
+  /// Filters object filenames
+  bool lfn_is_object(
+    const string &short_name ///< [in] Filename to check
+    ); ///< True if short_name is an object, false otherwise
+
+  /// Filters subdir filenames
+  bool lfn_is_subdir(
+    const string &short_name, ///< [in] Filename to check.
+    string *demangled_name    ///< [out] Demangled subdir name.
+    ); ///< @return True if short_name is a subdir, false otherwise
+
+  /// Generate object name
+  string lfn_generate_object_name(
+    const hobject_t &hoid ///< [in] Object for which to generate.
+    ); ///< @return Generated object name.
+
+  /// Parse object name
+  bool lfn_parse_object_name(
+    const string &long_name, ///< [in] Name to parse
+    hobject_t *out	     ///< [out] Resulting Object
+    ); ///< @return True if successfull, False otherwise.
+
+  /// Checks whether short_name is a hashed filename.
+  bool lfn_is_hashed_filename(
+    const string &short_name ///< [in] Name to check.
+    ); ///< @return True if short_name is hashed, False otherwise.
+
+  /// Checks whether long_name must be hashed.
+  bool lfn_must_hash(
+    const string &long_name ///< [in] Name to check.
+    ); ///< @return True if long_name must be hashed, False otherwise.
+
+  /// Generate hashed name.
+  string lfn_get_short_name(
+    const hobject_t &hoid, ///< [in] Object for which to generate.
+    int i		   ///< [in] Index of hashed name to generate.
+    ); ///< @return Hashed filename.
+
+  /* other common methods */
+  /// Gets the base path
+  const string &get_base_path(); ///< @return Index base_path
+
+  /// Get full path the subdir
+  string get_full_path_subdir(
+    const vector<string> &rel ///< [in] The subdir.
+    ); ///< @return Full path to rel.
+
+  /// Get full path to object
+  string get_full_path(
+    const vector<string> &rel, ///< [in] Path to object.
+    const string &name	       ///< [in] Filename of object.
+    ); ///< @return Fullpath to object at name in rel.
+
+  /// Get mangled path component
+  string mangle_path_component(
+    const string &component ///< [in] Component to mangle
+    ); /// @return Mangled component
+
+  /// Demangle component
+  string demangle_path_component(
+    const string &component ///< [in] Subdir name to demangle
+    ); ///< @return Demangled path component.
+
+  /// Decompose full path into object name and filename.
+  int decompose_full_path(
+    const char *in,      ///< [in] Full path to object.
+    vector<string> *out, ///< [out] Path to object at in.
+    hobject_t *hoid,	 ///< [out] Object at in.
+    string *shortname	 ///< [out] Filename of object at in.
+    ); ///< @return Error Code, 0 on success.
+
+  /// Mangle attribute name
+  string mangle_attr_name(
+    const string &attr ///< [in] Attribute to mangle.
+    ); ///< @return Mangled attribute name.
+
+  /// Builds hashed filename
+  void build_filename(
+    const char *old_filename, ///< [in] Filename to convert.
+    int i,		      ///< [in] Index of hash.
+    char *filename,	      ///< [out] Resulting filename.
+    int len		      ///< [in] Size of buffer for filename
+    ); ///< @return Error Code, 0 on success
+
+  /// Get hash of filename
+  int hash_filename(
+    const char *filename, ///< [in] Filename to hash.
+    char *hash,		  ///< [out] Hash of filename.
+    int len		  ///< [in] Size of hash buffer.
+    ); ///< @return Error Code, 0 on success.
+};
+typedef LFNIndex::IndexedPath IndexedPath;
+
+#endif

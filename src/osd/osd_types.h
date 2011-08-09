@@ -266,6 +266,10 @@ public:
     return str.c_str();
   }
 
+  int operator<(const coll_t &rhs) const {
+    return str < rhs.str;
+  }
+
   bool is_pg(pg_t& pgid, snapid_t& snap) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
