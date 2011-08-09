@@ -89,3 +89,25 @@ TEST(LibRadosPools, AuidTest2) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosPools, PoolCreateWithCrushRule) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+
+  std::string pool2_name = get_temp_pool_name();
+  ASSERT_EQ(0, rados_pool_create_with_crush_rule(cluster,
+			    pool2_name.c_str(), 0));
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool2_name.c_str()));
+
+  std::string pool3_name = get_temp_pool_name();
+  ASSERT_EQ(0, rados_pool_create_with_all(cluster, pool3_name.c_str(),
+					  456ull, 0));
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool3_name.c_str(), &ioctx));
+  uint64_t auid;
+  ASSERT_EQ(0, rados_ioctx_pool_get_auid(ioctx, &auid));
+  ASSERT_EQ(456ull, auid);
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool3_name.c_str()));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
