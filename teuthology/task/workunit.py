@@ -30,16 +30,22 @@ def task(ctx, config):
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-        scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
         remote.run(
             args=[
+                # cd first so this will fail if the mount point does
+                # not exist; pure install -d will silently do the
+                # wrong thing
+                'cd',
+                '--',
+                mnt,
+                run.Raw('&&'),
                 'sudo',
                 'install',
                 '-d',
                 '-m', '0755',
                 '--owner={user}'.format(user='ubuntu'), #TODO
                 '--',
-                scratch,
+                'client.{id}'.format(id=id_),
                 ],
             )
 
