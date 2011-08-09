@@ -294,7 +294,7 @@ class Objecter {
   bool keep_balanced_budget;
   bool honor_osdmap_full;
 
-  void maybe_request_map();
+  void maybe_request_map(epoch_t epoch=0);
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
@@ -683,7 +683,7 @@ private:
   void set_client_incarnation(int inc) { client_inc = inc; }
 
   void wait_for_new_map(Context *c, epoch_t epoch, int replyCode=0) {
-    maybe_request_map();
+    maybe_request_map(epoch);
     waiting_for_map[epoch].push_back(pair<Context *, int>(c, replyCode));
   }
 
