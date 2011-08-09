@@ -284,12 +284,19 @@ def mount(ctx, config):
     else:
         role_images = [(role, None) for role in config]
 
-    mnt_template = '/tmp/cephtest/mnt.{role}'
+    def strip_client_prefix(role):
+        PREFIX = 'client.'
+        assert role.startswith(PREFIX)
+        id_ = role[len(PREFIX):]
+        return id_
+
+    mnt_template = '/tmp/cephtest/mnt.{id}'
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
-        mnt = mnt_template.format(role=role)
+        id_ = strip_client_prefix(role)
+        mnt = mnt_template.format(id=id_)
         remote.run(
             args=[
                 'mkdir',
@@ -315,7 +322,8 @@ def mount(ctx, config):
             if image is None:
                 image = default_image_name(role)
             (remote,) = ctx.cluster.only(role).remotes.keys()
-            mnt = mnt_template.format(role=role)
+            id_ = strip_client_prefix(role)
+            mnt = mnt_template.format(id=id_)
             remote.run(
                 args=[
                     'sudo',
