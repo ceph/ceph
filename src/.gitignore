@@ -92,3 +92,7 @@ massif.out.*
 testrados_list_parallel
 testrados_open_pools_parallel
 testrados_delete_pools_parallel
+test_rados_api_aio
+test_rados_api_io
+test_rados_api_list
+test_rados_api_pool
