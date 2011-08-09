@@ -194,6 +194,12 @@ void librados::ObjectReadOperation::getxattrs()
   o->getxattrs();
 }
 
+void librados::ObjectWriteOperation::create(bool exclusive)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->create(exclusive);
+}
+
 void librados::ObjectWriteOperation::create(bool exclusive, const std::string& category)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
