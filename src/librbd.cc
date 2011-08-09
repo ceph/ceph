@@ -1167,9 +1167,10 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
         block_read += extent_ofs - block_ofs;
       }
 
-      if (bl_ofs + extent_len > bl.length())
+      if (bl_ofs + extent_len > bl.length()) {
         return -EIO;
-
+      }
+      block_read += extent_ofs - block_ofs;
       block_ofs = extent_ofs;
 
       /* data */
@@ -1182,8 +1183,13 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     }
 
     /* last hole */
-    if (read_len - block_ofs) {
-      r = cb(total_read + block_read, read_len - block_ofs, NULL, arg);
+    if (read_len - block_read) {
+      ldout(ictx->cct, 20) << "last hole read_len=" << read_len
+			   << " block_ofs=" << block_ofs
+			   << " block_read=" << block_read
+			   << " total_read=" << total_read
+			   << dendl;
+      r = cb(total_read + block_read, read_len - block_read, NULL, arg);
       if (r < 0)
         return r;
     }
