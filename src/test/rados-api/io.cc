@@ -130,3 +130,24 @@ TEST(LibRadosIo, RemoveTest) {
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+TEST(LibRadosIo, XattrsRoundTrip) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+  ASSERT_EQ((int)sizeof(attr1_buf),
+      rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ((int)sizeof(attr1_buf),
+	    rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(attr1_buf, buf, sizeof(attr1_buf)));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
