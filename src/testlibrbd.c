@@ -267,6 +267,7 @@ void test_io_to_snapshot(rados_ioctx_t io_ctx, rbd_image_t image, size_t isize)
   for (i = 0; i < TEST_IO_TO_SNAP_SIZE - 1; ++i)
     test_data[i] = (char) (i + 48);
   test_data[TEST_IO_TO_SNAP_SIZE] = '\0';
+  orig_data[TEST_IO_TO_SNAP_SIZE] = '\0';
 
   r = rbd_read(image, 0, TEST_IO_TO_SNAP_SIZE, orig_data);
   assert(r == TEST_IO_TO_SNAP_SIZE);
