@@ -151,3 +151,71 @@ TEST(LibRadosIo, XattrsRoundTrip) {
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+TEST(LibRadosIo, RmXattr) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ((int)sizeof(attr1_buf),
+      rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
+  ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, XattrIter) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  char attr2[] = "attr2";
+  char attr2_buf[256];
+  for (size_t j = 0; j < sizeof(attr2_buf); ++j) {
+    attr2_buf[j] = j % 0xff;
+  }
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ(0, create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ((int)sizeof(attr1_buf),
+      rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ((int)sizeof(attr2_buf),
+      rados_setxattr(ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
+  rados_xattrs_iter_t iter;
+  ASSERT_EQ(0, rados_getxattrs(ioctx, "foo", &iter));
+  int num_seen = 0;
+  while (true) {
+    const char *name;
+    const char *val;
+    size_t len;
+    ASSERT_EQ(0, rados_getxattrs_next(iter, &name, &val, &len));
+    if (name == NULL) {
+      break;
+    }
+    ASSERT_LT(num_seen, 2);
+    if ((strcmp(name, attr1) == 0) && (memcmp(val, attr1_buf, len) == 0)) {
+      num_seen++;
+      continue;
+    }
+    else if ((strcmp(name, attr2) == 0) && (memcmp(val, attr2_buf, len) == 0)) {
+      num_seen++;
+      continue;
+    }
+    else {
+      ASSERT_EQ(0, 1);
+    }
+  }
+  rados_getxattrs_end(iter);
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
