@@ -16,39 +16,7 @@
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
 
-enum {
-  l_c_first = 20000,
-  l_c_reply,
-  l_c_lat,
-  l_c_owrlat,
-  l_c_ordlat,
-  l_c_wrlat,
-  l_c_last,
-};
-
-#include "mds/MDSMap.h"
-#include "osd/OSDMap.h"
-#include "mon/MonMap.h"
-
-#include "mon/MonClient.h"
-
-#include "msg/Message.h"
-#include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
-
-#include "messages/MClientReply.h"
-#include "messages/MClientRequest.h"
-
 #include "include/types.h"
-#include "include/lru.h"
-#include "include/filepath.h"
-#include "include/interval_set.h"
-
-#include "common/Mutex.h"
-#include "common/Timer.h"
-
-//#include "FileCache.h"
-
 
 // stl
 #include <string>
@@ -62,10 +30,28 @@ using std::fstream;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "include/filepath.h"
+#include "include/interval_set.h"
+#include "include/lru.h"
+
+#include "mds/mdstypes.h"
+
+#include "msg/Message.h"
+#include "msg/Dispatcher.h"
+#include "msg/Messenger.h"
+
+#include "common/Mutex.h"
+#include "common/Timer.h"
 
 #include "osdc/ObjectCacher.h"
 
+class MDSMap;
+class OSDMap;
+class MonClient;
+
 class CephContext;
+class MClientReply;
+class MClientRequest;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
@@ -73,11 +59,26 @@ class MClientLease;
 class MClientCaps;
 class MClientCapRelease;
 
+class DirStat;
+class LeaseStat;
+class InodeStat;
+
 class Filer;
 class Objecter;
 class ObjectCacher;
 
-extern class PerfCounters  *client_counters;
+extern class PerfCounters *client_counters;
+
+enum {
+  l_c_first = 20000,
+  l_c_reply,
+  l_c_lat,
+  l_c_owrlat,
+  l_c_ordlat,
+  l_c_wrlat,
+  l_c_last,
+};
+
 
 
 // ============================================
@@ -91,9 +92,6 @@ extern class PerfCounters  *client_counters;
  - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
-struct InodeCap;
-class Inode;
-class Dentry;
 
 /* getdir result */
 struct DirEntry {
@@ -104,638 +102,16 @@ struct DirEntry {
   DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
-struct MetaRequest {
-  uint64_t tid;
-  ceph_mds_request_head head;
-  filepath path, path2;
-  bufferlist data;
-  int inode_drop; //the inode caps this operation will drop
-  int inode_unless; //unless we have these caps already
-  int old_inode_drop, old_inode_unless;
-  int dentry_drop, dentry_unless;
-  int old_dentry_drop, old_dentry_unless;
-  int other_inode_drop, other_inode_unless;
-  vector<MClientRequest::Release> cap_releases;
-  Inode *inode;
-  Inode *old_inode, *other_inode;
-  Dentry *dentry; //associated with path
-  Dentry *old_dentry; //associated with path2
-
- 
-  utime_t  sent_stamp;
-  int      mds;                // who i am asking
-  int      resend_mds;         // someone wants you to (re)send the request here
-  bool     send_to_auth;       // must send to auth mds
-  __u32    sent_on_mseq;       // mseq at last submission of this request
-  int      num_fwd;            // # of times i've been forwarded
-  int      retry_attempt;
-  int      ref;
-  
-  MClientReply *reply;         // the reply
-  bool kick;
-  
-  // readdir result
-  frag_t readdir_frag;
-  string readdir_start;  // starting _after_ this name
-  uint64_t readdir_offset;
-
-  vector<pair<string,Inode*> > readdir_result;
-  bool readdir_end;
-  int readdir_num;
-  string readdir_last_name;
-
-  //possible responses
-  bool got_safe;
-  bool got_unsafe;
-
-  xlist<MetaRequest*>::item item;
-  xlist<MetaRequest*>::item unsafe_item;
-  Mutex lock; //for get/set sync
-
-  Cond  *caller_cond;          // who to take up
-  Cond  *dispatch_cond;        // who to kick back
-
-  Inode *target;
-
-  MetaRequest(int op) : 
-    inode_drop(0), inode_unless(0),
-    old_inode_drop(0), old_inode_unless(0),
-    dentry_drop(0), dentry_unless(0),
-    old_dentry_drop(0), old_dentry_unless(0),
-    other_inode_drop(0), other_inode_unless(0),
-    inode(NULL), old_inode(NULL), other_inode(NULL),
-    dentry(NULL), old_dentry(NULL),
-    mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
-    num_fwd(0), retry_attempt(0),
-    ref(1), reply(0), 
-    kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
-    lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0),
-    target(0) {
-    memset(&head, 0, sizeof(ceph_mds_request_head));
-    head.op = op;
-  }
-  ~MetaRequest();
-
-  MetaRequest* get() {
-    ++ref;
-    return this;
-  }
-
-  void put() {
-    if (--ref == 0)
-      delete this;
-  }
-
-  // normal fields
-  void set_tid(tid_t t) { tid = t; }
-  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
-  void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
-  void set_retry_attempt(int a) { head.num_retry = a; }
-  void set_filepath(const filepath& fp) { path = fp; }
-  void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_string2(const char *s) { path2.set_path(s, 0); }
-  void set_caller_uid(unsigned u) { head.caller_uid = u; }
-  void set_caller_gid(unsigned g) { head.caller_gid = g; }
-  void set_data(const bufferlist &d) { data = d; }
-  void set_dentry_wanted() {
-    head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
-  }
-  int get_op() { return head.op; }
-  tid_t get_tid() { return tid; }
-  filepath& get_filepath() { return path; }
-  filepath& get_filepath2() { return path2; }
-
-  bool is_write() {
-    return
-      (head.op & CEPH_MDS_OP_WRITE) || 
-      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC))) ||
-      (head.op == CEPH_MDS_OP_CREATE && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
-  }
-  bool can_forward() {
-    if (is_write() ||
-	head.op == CEPH_MDS_OP_OPEN ||   // do not forward _any_ open request.
-	head.op == CEPH_MDS_OP_CREATE)   // do not forward _any_ open request.
-      return false;
-    return true;
-  }
-  bool auth_is_best() {
-    if (is_write()) 
-      return true;
-    if (head.op == CEPH_MDS_OP_OPEN ||
-	head.op == CEPH_MDS_OP_CREATE ||
-	head.op == CEPH_MDS_OP_READDIR) 
-      return true;
-    return false;    
-  }
-};
-
+class Inode;
+struct Cap;
+class Dir;
+class Dentry;
+class SnapRealm;
+class Fh;
 class CapSnap;
 
-struct MDSSession {
-  int mds_num;
-  version_t seq;
-  uint64_t cap_gen;
-  utime_t cap_ttl, last_cap_renew_request;
-  uint64_t cap_renew_seq;
-  int num_caps;
-  entity_inst_t inst;
-  bool closing;
-  bool was_stale;
-
-  xlist<InodeCap*> caps;
-  xlist<Inode*> flushing_caps;
-  xlist<CapSnap*> flushing_capsnaps;
-  xlist<MetaRequest*> requests;
-  xlist<MetaRequest*> unsafe_requests;
-
-  MClientCapRelease *release;
-  
-  MDSSession() : mds_num(-1), seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-		 closing(false), was_stale(false), release(NULL) {}
-};
-
-class Dir;
-class Inode;
-
-class Dentry : public LRUObject {
- public:
-  string  name;                      // sort of lame
-  //const char *name;
-  Dir     *dir;
-  Inode   *inode;
-  int     ref;                       // 1 if there's a dir beneath me.
-  uint64_t offset;
-  int lease_mds;
-  utime_t lease_ttl;
-  uint64_t lease_gen;
-  ceph_seq_t lease_seq;
-  int cap_shared_gen;
-  
-  /*
-   * ref==1 -> cached, unused
-   * ref >1 -> pinned in lru
-   */
-  void get() { 
-    assert(ref > 0);
-    if (++ref == 2)
-      lru_pin(); 
-    //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
-  }
-  void put() { 
-    assert(ref > 0);
-    if (--ref == 1)
-      lru_unpin();
-    //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
-    if (ref == 0)
-      delete this;
-  }
-  
-  Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
-private:
-  ~Dentry() {
-    assert(ref == 0);
-  }
-};
-
-class Dir {
- public:
-  Inode    *parent_inode;  // my inode
-  hash_map<string, Dentry*> dentries;
-  map<string, Dentry*> dentry_map;
-  uint64_t release_count;
-  uint64_t max_offset;
-
-  Dir(Inode* in) : release_count(0), max_offset(2) { parent_inode = in; }
-
-  bool is_empty() {  return dentries.empty(); }
-};
-
-struct SnapRealm {
-  inodeno_t ino;
-  int nref;
-  snapid_t created;
-  snapid_t seq;
-  
-  inodeno_t parent;
-  snapid_t parent_since;
-  vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
-  vector<snapid_t> my_snaps;
-
-  SnapRealm *pparent;
-  set<SnapRealm*> pchildren;
-
-private:
-  SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
-  friend ostream& operator<<(ostream& out, const SnapRealm& r);
-
-public:
-  xlist<Inode*> inodes_with_caps;
-
-  SnapRealm(inodeno_t i) : 
-    ino(i), nref(1), created(0), seq(0),
-    pparent(NULL) { }
-
-  void build_snap_context();
-  void invalidate_cache() {
-    cached_snap_context.clear();
-  }
-
-  const SnapContext& get_snap_context() {
-    if (cached_snap_context.seq == 0)
-      build_snap_context();
-    return cached_snap_context;
-  }
-};
-
-inline ostream& operator<<(ostream& out, const SnapRealm& r) {
-  return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
-	     << " parent=" << r.parent
-	     << " my_snaps=" << r.my_snaps
-	     << " cached_snapc=" << r.cached_snap_context
-	     << ")";
-}
-
-struct InodeCap {
-  MDSSession *session;
-  Inode *inode;
-  xlist<InodeCap*>::item cap_item;
-
-  uint64_t cap_id;
-  unsigned issued;
-  unsigned implemented;
-  unsigned wanted;   // as known to mds.
-  uint64_t seq, issue_seq;
-  __u32 mseq;  // migration seq
-  __u32 gen;
-
-  InodeCap() : session(NULL), inode(NULL), cap_item(this), issued(0),
-	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
-};
-
-struct CapSnap {
-  //snapid_t follows;  // map key
-  Inode *in;
-  SnapContext context;
-  int issued, dirty;
-
-  uint64_t size;
-  utime_t ctime, mtime, atime;
-  version_t time_warp_seq;
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
-  map<string,bufferptr> xattrs;
-  version_t xattr_version;
-
-  bool writing, dirty_data;
-  uint64_t flush_tid;
-  xlist<CapSnap*>::item flushing_item;
-
-  CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0), 
-      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      writing(false), dirty_data(false), flush_tid(0),
-      flushing_item(this)
-  {}
-};
-
-
-// inode flags
-#define I_COMPLETE 1
-
-class Inode {
- public:
-  CephContext *cct;
-
-  // -- the actual inode --
-  inodeno_t ino;
-  snapid_t  snapid;
-  uint32_t   rdev;    // if special file
-
-  // affected by any inode change...
-  utime_t    ctime;   // inode change time
-
-  // perm (namespace permissions)
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
-
-  // nlink
-  int32_t    nlink;  
-
-  // file (data access)
-  ceph_dir_layout dir_layout;
-  ceph_file_layout layout;
-  uint64_t   size;        // on directory, # dentries
-  uint32_t   truncate_seq;
-  uint64_t   truncate_size;
-  utime_t    mtime;   // file data modify time.
-  utime_t    atime;   // file data access time.
-  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
-
-  uint64_t max_size;  // max size we can write to
-
-  // dirfrag, recursive accountin
-  frag_info_t dirstat;
-  nest_info_t rstat;
- 
-  // special stuff
-  version_t version;           // auth only
-  version_t xattr_version;
-
-  bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
-  bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
-  bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
-
-  unsigned flags;
-
-  // about the dir (if this is one!)
-  set<int>  dir_contacts;
-  bool      dir_hashed, dir_replicated;
-
-  // per-mds caps
-  map<int,InodeCap*> caps;            // mds -> InodeCap
-  InodeCap *auth_cap;
-  unsigned dirty_caps, flushing_caps;
-  uint64_t flushing_cap_seq;
-  __u16 flushing_cap_tid[CEPH_CAP_BITS];
-  int shared_gen, cache_gen;
-  int snap_caps, snap_cap_refs;
-  unsigned exporting_issued;
-  int exporting_mds;
-  ceph_seq_t exporting_mseq;
-  utime_t hold_caps_until;
-  xlist<Inode*>::item cap_item, flushing_cap_item;
-  tid_t last_flush_tid;
-
-  SnapRealm *snaprealm;
-  xlist<Inode*>::item snaprealm_item;
-  Inode *snapdir_parent;  // only if we are a snapdir inode
-  map<snapid_t,CapSnap*> cap_snaps;   // pending flush to mds
-
-  //int open_by_mode[CEPH_FILE_MODE_NUM];
-  map<int,int> open_by_mode;
-  map<int,int> cap_refs;
-
-  ObjectCacher::ObjectSet oset;
-
-  uint64_t     reported_size, wanted_max_size, requested_max_size;
-
-  int       ref;      // ref count. 1 for each dentry, fh that links to me.
-  int       ll_ref;   // separate ref count for ll client
-  Dir       *dir;     // if i'm a dir.
-  set<Dentry*> dn_set;      // if i'm linked to a dentry.
-  string    symlink;  // symlink content, if it's a symlink
-  fragtree_t dirfragtree;
-  map<string,bufferptr> xattrs;
-  map<frag_t,int> fragmap;  // known frag -> mds mappings
-
-  list<Cond*>       waitfor_caps;
-  list<Cond*>       waitfor_commit;
-
-#define dentry_of(a) (*(a->dn_set.begin()))
-
-  void make_long_path(filepath& p) {
-    if (!dn_set.empty()) {
-      assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-      (*dn_set.begin())->dir->parent_inode->make_long_path(p);
-      p.push_dentry((*dn_set.begin())->name);
-    } else if (snapdir_parent) {
-      snapdir_parent->make_nosnap_relative_path(p);
-      string empty;
-      p.push_dentry(empty);
-    } else
-      p = filepath(ino);
-  }
-
-  /*
-   * make a filepath suitable for an mds request:
-   *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234
-   *  - if we are snapped, make filepath relative to first non-snapped parent.
-   */
-  void make_nosnap_relative_path(filepath& p) {
-    if (snapid == CEPH_NOSNAP) {
-      p = filepath(ino);
-    } else if (snapdir_parent) {
-      snapdir_parent->make_nosnap_relative_path(p);
-      string empty;
-      p.push_dentry(empty);
-    } else if (!dn_set.empty()) {
-      assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-      (*dn_set.begin())->dir->parent_inode->make_nosnap_relative_path(p);
-      p.push_dentry((*dn_set.begin())->name);
-    } else {
-      p = filepath(ino);
-    }
-  }
-
-  void get() { 
-    ref++; 
-    ldout(cct, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-		   << " now " << ref << dendl;
-  }
-  void put(int n=1) { 
-    ref -= n; 
-    ldout(cct, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-		   << " now " << ref << dendl;
-    assert(ref >= 0);
-  }
-
-  void ll_get() {
-    ll_ref++;
-  }
-  void ll_put(int n=1) {
-    assert(ll_ref >= n);
-    ll_ref -= n;
-  }
-
-  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout) : 
-    cct(cct_), ino(vino.ino), snapid(vino.snapid),
-    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
-    time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-    flags(0),
-    dir_hashed(false), dir_replicated(false), auth_cap(NULL),
-    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
-    snap_caps(0), snap_cap_refs(0),
-    exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_item(this), flushing_cap_item(this), last_flush_tid(0),
-    snaprealm(0), snaprealm_item(this), snapdir_parent(0),
-    oset((void *)this, layout->fl_pg_pool, ino),
-    reported_size(0), wanted_max_size(0), requested_max_size(0),
-    ref(0), ll_ref(0), 
-    dir(0), dn_set()
-  {
-    memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
-  }
-  ~Inode() { }
-
-  vinodeno_t vino() { return vinodeno_t(ino, snapid); }
-
-
-  // CAPS --------
-  void get_open_ref(int mode) {
-    open_by_mode[mode]++;
-  }
-  bool put_open_ref(int mode) {
-    //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-    if (--open_by_mode[mode] == 0)
-      return true;
-    return false;
-  }
-
-  void get_cap_ref(int cap);
-  bool put_cap_ref(int cap);
-
-  bool is_any_caps() {
-    return caps.size() || exporting_mds >= 0;
-  }
-
-  bool cap_is_valid(InodeCap* cap) {
-    /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
-	 << "session gen " << cap->gen << std::endl
-	 << "cap expire  " << cap->session->cap_ttl << std::endl
-	 << "cur time    " << ceph_clock_now(cct) << std::endl;*/
-    if ((cap->session->cap_gen <= cap->gen)
-	&& (ceph_clock_now(cct) < cap->session->cap_ttl)) {
-      return true;
-    }
-    //if we make it here, the capabilities aren't up-to-date
-    cap->session->was_stale = true;
-    return true;
-  }
-
-  int caps_issued(int *implemented = 0) {
-    int c = exporting_issued | snap_caps;
-    int i = 0;
-    for (map<int,InodeCap*>::iterator it = caps.begin();
-         it != caps.end();
-         it++)
-      if (cap_is_valid(it->second)) {
-	c |= it->second->issued;
-	i |= it->second->implemented;
-      }
-    if (implemented)
-      *implemented = i;
-    return c;
-  }
-  void touch_cap(InodeCap *cap) {
-    // move to back of LRU
-    cap->session->caps.push_back(&cap->cap_item);
-  }
-  void try_touch_cap(int mds) {
-    if (caps.count(mds))
-      touch_cap(caps[mds]);
-  }
-  bool caps_issued_mask(unsigned mask) {
-    int c = exporting_issued | snap_caps;
-    if ((c & mask) == mask)
-      return true;
-    // prefer auth cap
-    if (auth_cap &&
-	cap_is_valid(auth_cap) &&
-	(auth_cap->issued & mask) == mask) {
-      touch_cap(auth_cap);
-      return true;
-    }
-    // try any cap
-    for (map<int,InodeCap*>::iterator it = caps.begin();
-         it != caps.end();
-         it++) {
-      if (cap_is_valid(it->second)) {
-	if ((it->second->issued & mask) == mask) {
-	  touch_cap(it->second);
-	  return true;
-	}
-	c |= it->second->issued;
-      }
-    }
-    if ((c & mask) == mask) {
-      // bah.. touch them all
-      for (map<int,InodeCap*>::iterator it = caps.begin();
-	   it != caps.end();
-	   it++)
-	touch_cap(it->second);
-      return true;
-    }
-    return false;
-  }
-
-  int caps_used() {
-    int w = 0;
-    for (map<int,int>::iterator p = cap_refs.begin();
-	 p != cap_refs.end();
-	 p++)
-      if (p->second)
-	w |= p->first;
-    return w;
-  }
-  int caps_file_wanted() {
-    int want = 0;
-    for (map<int,int>::iterator p = open_by_mode.begin();
-	 p != open_by_mode.end();
-	 p++)
-      if (p->second)
-	want |= ceph_caps_for_mode(p->first);
-    return want;
-  }
-  int caps_wanted() {
-    int want = caps_file_wanted() | caps_used();
-    if (want & CEPH_CAP_FILE_BUFFER)
-      want |= CEPH_CAP_FILE_EXCL;
-    return want;
-  }
-  int caps_dirty() {
-    return dirty_caps | flushing_caps;
-  }
-
-  bool have_valid_size() {
-    // RD+RDCACHE or WR+WRBUFFER => valid size
-    if (caps_issued() & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))
-      return true;
-    return false;
-  }
-
-  // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
-  Dir *open_dir() {
-    if (!dir) {
-      assert(dn_set.size() < 2); // dirs can't be hard-linked
-      if (!dn_set.empty())
-	(*dn_set.begin())->get();      // pin dentry
-      get();                  // pin inode
-      dir = new Dir(this);
-    }
-    return dir;
-  }
-
-};
-
-
-
-
-// file handle for any open file state
-
-struct Fh {
-  Inode    *inode;
-  loff_t     pos;
-  int       mds;        // have to talk to mds we opened with (for now)
-  int       mode;       // the mode i opened the file with
-
-  bool is_lazy() { return mode & O_LAZY; }
-
-  bool append;
-  bool pos_locked;           // pos is currently in use
-  list<Cond*> pos_waiters;   // waiters for pos
-
-  // readahead state
-  loff_t last_pos;
-  loff_t consec_read_bytes;
-  int nr_consec_read;
-
-  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false),
-	 last_pos(0), consec_read_bytes(0), nr_consec_read(0) {}
-};
-
+class MetaSession;
+class MetaRequest;
 
 
 
@@ -774,11 +150,7 @@ struct dir_result_t {
 
   string at_cache_name;  // last entry we successfully returned
 
-  dir_result_t(Inode *in) : inode(in), offset(0), next_offset(2),
-			 release_count(0),
-			 buffer(0) { 
-    inode->get();
-  }
+  dir_result_t(Inode *in);
 
   frag_t frag() { return frag_t(offset >> SHIFT); }
   unsigned fragpos() { return offset & MASK; }
@@ -830,7 +202,7 @@ public:
   client_t whoami;
 
   // mds sessions
-  map<int, MDSSession*> mds_sessions;  // mds -> push seq
+  map<int, MetaSession*> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
@@ -894,26 +266,9 @@ protected:
   int num_flushing_caps;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
-  SnapRealm *get_snap_realm(inodeno_t r) {
-    SnapRealm *realm = snap_realms[r];
-    if (!realm)
-      snap_realms[r] = realm = new SnapRealm(r);
-    realm->nref++;
-    return realm;
-  }
-  SnapRealm *get_snap_realm_maybe(inodeno_t r) {
-    if (snap_realms.count(r) == 0)
-      return NULL;
-    SnapRealm *realm = snap_realms[r];
-    realm->nref++;
-    return realm;
-  }
-  void put_snap_realm(SnapRealm *realm) {
-    if (--realm->nref == 0) {
-      snap_realms.erase(realm->ino);
-      delete realm;
-    }
-  }
+  SnapRealm *get_snap_realm(inodeno_t r);
+  SnapRealm *get_snap_realm_maybe(inodeno_t r);
+  void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
   inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
   inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
@@ -950,18 +305,7 @@ protected:
 
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in, int n=1);
-
-  void close_dir(Dir *dir) {
-    assert(dir->is_empty());
-    
-    Inode *in = dir->parent_inode;
-    assert (in->dn_set.size() < 2); //dirs can't be hard-linked
-    if (!in->dn_set.empty()) dentry_of(in)->put();   // unpin dentry
-    
-    delete in->dir;
-    in->dir = 0;
-    put_inode(in);               // unpin inode
-  }
+  void close_dir(Dir *dir);
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -971,109 +315,19 @@ protected:
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn=NULL) {
-    if (!dn) { //create a new Dentry
-      dn = new Dentry;
-      dn->name = name;
-      
-      // link to dir
-      dn->dir = dir;
-      //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
-      dir->dentries[dn->name] = dn;
-      dir->dentry_map[dn->name] = dn;
-      lru.lru_insert_mid(dn);    // mid or top?
-    }
-
-    if (in) {    // link to inode
-      dn->inode = in;
-      if(!in->dn_set.empty())
-        ldout(cct, 5) << "adding new hard link to " << in->vino()
-                << " from " << dn << dendl;
-      in->dn_set.insert(dn);
-      in->get();
-      
-      if (in->dir) dn->get();  // dir -> dn pin
-    }
-
-    return dn;
-  }
-
-  void unlink(Dentry *dn, bool keepdir = false) {
-    Inode *in = dn->inode;
-
-    // unlink from inode
-    if (in) {
-      if (in->dir) dn->put();        // dir -> dn pin
-      dn->inode = 0;
-      in->dn_set.erase(dn);
-      put_inode(in);
-    }
-        
-    // unlink from dir
-    dn->dir->dentries.erase(dn->name);
-    dn->dir->dentry_map.erase(dn->name);
-    if (dn->dir->is_empty() && !keepdir) 
-      close_dir(dn->dir);
-    dn->dir = 0;
-
-    // delete den
-    lru.lru_remove(dn);
-    dn->put();
-  }
+  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
+  void unlink(Dentry *dn, bool keepdir);
 
   /* If an inode's been moved from one dentry to another
    * (via rename, for instance), call this function to move it */
   Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
-                       Dentry *newdn=NULL) {
-    Dir *olddir = olddn->dir;  // note: might == dir!
-    bool made_new = false;
-
-    // newdn, attach to inode.  don't touch inode ref.
-    if (!newdn) {
-      made_new = true;
-      newdn = new Dentry;
-      newdn->dir = dir;
-      newdn->name = name;
-    } else {
-      assert(newdn->inode == NULL);
-    }
-    newdn->inode = in;
-    in->dn_set.erase(olddn);
-    in->dn_set.insert(newdn);
-
-    if (in->dir) { // dir -> dn pin
-      newdn->get();
-      olddn->put();
-    }
-
-    // unlink old dn from dir
-    olddir->dentries.erase(olddn->name);
-    olddir->dentry_map.erase(olddn->name);
-    olddn->inode = 0;
-    olddn->dir = 0;
-    lru.lru_remove(olddn);
-    olddn->put();
-    
-    // link new dn to dir
-    dir->dentries[name] = newdn;
-    dir->dentry_map[name] = newdn;
-    if (made_new)
-      lru.lru_insert_mid(newdn);
-    else
-      lru.lru_midtouch(newdn);
-    
-    // olddir now empty?  (remember, olddir might == dir)
-    if (olddir->is_empty()) 
-      close_dir(olddir);
-
-    return newdn;
-  }
+                       Dentry *newdn);
 
   // path traversal for high-level interface
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-  void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
+  void touch_dn(Dentry *dn);
 
   // trim cache.
   void trim_cache();
@@ -1109,7 +363,8 @@ protected:
   void tear_down_cache();   
 
   client_t get_nodeid() { return whoami; }
-  inodeno_t get_root_ino() { return root->ino; }
+
+  inodeno_t get_root_ino();
 
   void init();
   void shutdown();
@@ -1122,7 +377,7 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void check_cap_issue(Inode *in, InodeCap *cap, unsigned issued);
+  void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, int mds, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
@@ -1144,11 +399,11 @@ protected:
   void handle_cap_import(Inode *in, class MClientCaps *m);
   void handle_cap_export(Inode *in, class MClientCaps *m);
   void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
+  void handle_cap_flush_ack(Inode *in, int mds, Cap *cap, class MClientCaps *m);
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
-  void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
+  void handle_cap_grant(Inode *in, int mds, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush);
+  void send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);

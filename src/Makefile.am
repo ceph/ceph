@@ -217,7 +217,9 @@ noinst_LIBRARIES =
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
-	client/Client.cc
+	client/Client.cc \
+	client/Inode.cc \
+	client/MetaRequest.cc
 libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libceph_la_LIBADD = libosdc.la
@@ -870,6 +872,8 @@ noinst_LTLIBRARIES += libosdc.la
 
 libclient_la_SOURCES = \
 	client/Client.cc \
+	client/Inode.cc \
+	client/MetaRequest.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libclient.la
@@ -909,7 +913,14 @@ noinst_HEADERS = \
 	bash_completion/rados\
 	bash_completion/rbd\
 	bash_completion/radosgw_admin\
-	client/Client.h\
+        client/Client.h\
+	client/Dentry.h\
+	client/Dir.h\
+	client/Fh.h\
+	client/Inode.h\
+	client/MetaRequest.h\
+	client/MetaSession.h\
+	client/SnapRealm.h\
         client/SyntheticClient.h\
         client/Trace.h\
         client/fuse_ll.h\

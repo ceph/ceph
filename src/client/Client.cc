@@ -48,6 +48,12 @@ using namespace std;
 
 #include "messages/MMDSMap.h"
 
+#include "mon/MonClient.h"
+
+#include "mds/MDSMap.h"
+#include "osd/OSDMap.h"
+#include "mon/MonMap.h"
+
 #include "osdc/Filer.h"
 #include "osdc/Objecter.h"
 #include "osdc/ObjectCacher.h"
@@ -56,13 +62,20 @@ using namespace std;
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
 
-
-
 #include "common/config.h"
 
 #define DOUT_SUBSYS client
 
+#include "include/lru.h"
+
 #include "Client.h"
+#include "Inode.h"
+#include "Dentry.h"
+#include "Dir.h"
+#include "SnapRealm.h"
+#include "Fh.h"
+#include "MetaSession.h"
+#include "MetaRequest.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client" << whoami << " "
@@ -89,7 +102,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
-    for (map<int,InodeCap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
+    for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
       if (p != in.caps.begin())
 	out << ',';
       out << p->first << '=' << ccap_string(p->second->issued);
@@ -121,13 +134,16 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 }
 
 
-MetaRequest::~MetaRequest()
-{
-  if (dentry)
-    dentry->put();
-  if (old_dentry)
-    old_dentry->put();
+// -------------
+
+dir_result_t::dir_result_t(Inode *in)
+  : inode(in), offset(0), next_offset(2),
+    release_count(0),
+    buffer(0) { 
+  inode->get();
 }
+
+
 
 // cons/des
 
@@ -208,6 +224,10 @@ Client::~Client()
 }
 
 
+
+
+
+
 void Client::tear_down_cache()
 {
   // fd's
@@ -240,6 +260,10 @@ void Client::tear_down_cache()
   assert(inode_map.empty());
 }
 
+inodeno_t Client::get_root_ino()
+{
+  return root->ino;
+}
 
 
 // debug crapola
@@ -281,7 +305,6 @@ void Client::dump_cache()
   }
  
 }
-
 
 void Client::init() 
 {
@@ -378,7 +401,7 @@ void Client::trim_dentry(Dentry *dn)
     dn->dir->parent_inode->flags &= ~I_COMPLETE;
     dn->dir->release_count++;
   }
-  unlink(dn);
+  unlink(dn, false);
 }
 
 
@@ -875,7 +898,7 @@ int Client::choose_target_mds(MetaRequest *req)
   bool is_hash = false;
 
   Inode *in = NULL;
-  InodeCap *cap = NULL;
+  Cap *cap = NULL;
 
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
@@ -1113,7 +1136,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  InodeCap *caps = NULL;
+  Cap *caps = NULL;
   if (in->caps.count(mds))
     caps = in->caps[mds];
   if (caps &&
@@ -1206,11 +1229,11 @@ void Client::handle_client_session(MClientSession *m)
 {
   ldout(cct, 10) << "handle_client_session " << *m << dendl;
   int from = m->get_source().num();
-  MDSSession *mds_session = mds_sessions[from];
+  MetaSession *mds_session = mds_sessions[from];
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     if (!mds_session)
-      mds_sessions[from] = mds_session = new MDSSession();
+      mds_sessions[from] = mds_session = new MetaSession();
     mds_session->mds_num = from;
     mds_session->seq = 0;
     mds_session->inst = m->get_source_inst();
@@ -1531,7 +1554,7 @@ void Client::handle_mds_map(MMDSMap* m)
   mdsmap->decode(m->get_encoded());
 
   // reset session
-  for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
     int oldstate = oldmap->get_state(p->first);
@@ -1652,7 +1675,7 @@ void Client::kick_requests(int mds, bool signal)
 
 void Client::resend_unsafe_requests(int mds_num)
 {
-  MDSSession *mds = mds_sessions[mds_num];
+  MetaSession *mds = mds_sessions[mds_num];
   for (xlist<MetaRequest*>::iterator iter = mds->unsafe_requests.begin();
        !iter.end();
        ++iter)
@@ -1668,7 +1691,7 @@ void Client::resend_unsafe_requests(int mds_num)
 
 void Client::got_mds_push(int mds)
 {
-  MDSSession *s = mds_sessions[mds];
+  MetaSession *s = mds_sessions[mds];
 
   s->seq++;
   ldout(cct, 10) << " mds" << mds << " seq now " << s->seq << dendl;
@@ -1755,41 +1778,133 @@ void Client::put_inode(Inode *in, int n)
   }
 }
 
+void Client::close_dir(Dir *dir)
+{
+  assert(dir->is_empty());
+  
+  Inode *in = dir->parent_inode;
+  assert (in->dn_set.size() < 2); //dirs can't be hard-linked
+  if (!in->dn_set.empty())
+    dentry_of(in)->put();   // unpin dentry
+  
+  delete in->dir;
+  in->dir = 0;
+  put_inode(in);               // unpin inode
+}
+
+  /**
+   * Don't call this with in==NULL, use get_or_create for that
+   * leave dn set to default NULL unless you're trying to add
+   * a new inode to a pre-created Dentry
+   */
+Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
+{
+  if (!dn) { //create a new Dentry
+    dn = new Dentry;
+    dn->name = name;
+    
+    // link to dir
+    dn->dir = dir;
+    //cout << "link dir " << dir->parent_inode->ino << " '" << name
+    //<< "' -> inode " << in->ino << endl;
+    dir->dentries[dn->name] = dn;
+    dir->dentry_map[dn->name] = dn;
+    lru.lru_insert_mid(dn);    // mid or top?
+  }
+
+  if (in) {    // link to inode
+    dn->inode = in;
+    if (!in->dn_set.empty())
+      ldout(cct, 5) << "adding new hard link to " << in->vino()
+		    << " from " << dn << dendl;
+    in->dn_set.insert(dn);
+    in->get();
+    
+    if (in->dir)
+      dn->get();  // dir -> dn pin
+  }
+  
+  return dn;
+}
+
+void Client::unlink(Dentry *dn, bool keepdir)
+{
+  Inode *in = dn->inode;
+
+  // unlink from inode
+  if (in) {
+    if (in->dir)
+      dn->put();        // dir -> dn pin
+    dn->inode = 0;
+    in->dn_set.erase(dn);
+    put_inode(in);
+  }
+        
+  // unlink from dir
+  dn->dir->dentries.erase(dn->name);
+  dn->dir->dentry_map.erase(dn->name);
+  if (dn->dir->is_empty() && !keepdir) 
+    close_dir(dn->dir);
+  dn->dir = 0;
+
+  // delete den
+  lru.lru_remove(dn);
+  dn->put();
+}
+
+/* If an inode's been moved from one dentry to another
+ * (via rename, for instance), call this function to move it */
+Dentry *Client::relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
+			     Dentry *newdn)
+{
+  Dir *olddir = olddn->dir;  // note: might == dir!
+  bool made_new = false;
+
+  // newdn, attach to inode.  don't touch inode ref.
+  if (!newdn) {
+    made_new = true;
+    newdn = new Dentry;
+    newdn->dir = dir;
+    newdn->name = name;
+  } else {
+    assert(newdn->inode == NULL);
+  }
+  newdn->inode = in;
+  in->dn_set.erase(olddn);
+  in->dn_set.insert(newdn);
+
+  if (in->dir) { // dir -> dn pin
+    newdn->get();
+    olddn->put();
+  }
+
+  // unlink old dn from dir
+  olddir->dentries.erase(olddn->name);
+  olddir->dentry_map.erase(olddn->name);
+  olddn->inode = 0;
+  olddn->dir = 0;
+  lru.lru_remove(olddn);
+  olddn->put();
+    
+  // link new dn to dir
+  dir->dentries[name] = newdn;
+  dir->dentry_map[name] = newdn;
+  if (made_new)
+    lru.lru_insert_mid(newdn);
+  else
+    lru.lru_midtouch(newdn);
+    
+  // olddir now empty?  (remember, olddir might == dir)
+  if (olddir->is_empty()) 
+    close_dir(olddir);
+
+  return newdn;
+}
+
 
 /****
  * caps
  */
-
-void Inode::get_cap_ref(int cap)
-{
-  int n = 0;
-  while (cap) {
-    if (cap & 1) {
-      int c = 1 << n;
-      cap_refs[c]++;
-      //cout << "inode " << *this << " get " << cap_string(c) << " " << (cap_refs[c]-1) << " -> " << cap_refs[c] << std::endl;
-    }
-    cap >>= 1;
-    n++;
-  }
-}
-
-bool Inode::put_cap_ref(int cap)
-{
-  bool last = false;
-  int n = 0;
-  while (cap) {
-    if (cap & 1) {
-      int c = 1 << n;
-      if (--cap_refs[c] == 0)
-	last = true;      
-      //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
-    }
-    cap >>= 1;
-    n++;
-  }
-  return last;
-}
 
 void Client::get_cap_ref(Inode *in, int cap)
 {
@@ -1878,7 +1993,7 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_item);
 }
 
-void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush)
+void Client::send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -1993,10 +2108,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   utime_t now = ceph_clock_now(cct);
 
-  map<int,InodeCap*>::iterator it = in->caps.begin();
+  map<int,Cap*>::iterator it = in->caps.begin();
   while (it != in->caps.end()) {
     int mds = it->first;
-    InodeCap *cap = it->second;
+    Cap *cap = it->second;
     it++;
 
     int revoking = cap->implemented & ~cap->issued;
@@ -2207,8 +2322,8 @@ void Client::signal_cond_list(list<Cond*>& ls)
 
 void Client::wake_inode_waiters(int mds_num)
 {
-  MDSSession * mds = mds_sessions[mds_num];
-  xlist<InodeCap*>::iterator iter = mds->caps.begin();
+  MetaSession * mds = mds_sessions[mds_num];
+  xlist<Cap*>::iterator iter = mds->caps.begin();
   while (!iter.end()){
     signal_cond_list((*iter)->inode->waitfor_caps);
     ++iter;
@@ -2273,7 +2388,7 @@ void Client::_flushed(Inode *in)
 
 
 // checks common to add_update_cap, handle_cap_grant
-void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
+void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
 {
   unsigned had = in->caps_issued();
 
@@ -2296,8 +2411,8 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 			    int flags)
 {
-  InodeCap *cap = 0;
-  MDSSession *mds_session = mds_sessions[mds];
+  Cap *cap = 0;
+  MetaSession *mds_session = mds_sessions[mds];
   if (in->caps.count(mds)) {
     cap = in->caps[mds];
   } else {
@@ -2314,7 +2429,7 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
     }
-    in->caps[mds] = cap = new InodeCap;
+    in->caps[mds] = cap = new Cap;
     mds_session->caps.push_back(&cap->cap_item);
     cap->session = mds_session;
     cap->inode = in;
@@ -2359,8 +2474,8 @@ void Client::remove_cap(Inode *in, int mds)
 	     << "remove_cap returning" << dendl;
     return;
   }
-  InodeCap *cap = in->caps[mds];
-  MDSSession *session = mds_sessions[mds];
+  Cap *cap = in->caps[mds];
+  MetaSession *session = mds_sessions[mds];
   
   if (!session->release)
     session->release = new MClientCapRelease;
@@ -2400,7 +2515,7 @@ void Client::remove_all_caps(Inode *in)
 void Client::remove_session_caps(int mds_num) 
 {
   if (mds_sessions.count(mds_num)) {
-    MDSSession* mds = mds_sessions[mds_num];
+    MetaSession* mds = mds_sessions[mds_num];
     while (mds->caps.size())
       remove_cap((*mds->caps.begin())->inode, mds_num);
   }
@@ -2409,12 +2524,12 @@ void Client::remove_session_caps(int mds_num)
 void Client::trim_caps(int mds, int max)
 {
   ldout(cct, 10) << "trim_caps mds" << mds << " max " << max << dendl;
-  MDSSession *s = mds_sessions[mds];
+  MetaSession *s = mds_sessions[mds];
 
   int trimmed = 0;
-  xlist<InodeCap*>::iterator p = s->caps.begin();
+  xlist<Cap*>::iterator p = s->caps.begin();
   while (s->caps.size() > max && !p.end()) {
-    InodeCap *cap = *p;
+    Cap *cap = *p;
     ++p;
     Inode *in = cap->inode;
     if (in->caps.size() > 1 && cap != in->auth_cap) {
@@ -2455,7 +2570,7 @@ void Client::mark_caps_dirty(Inode *in, int caps)
 
 int Client::mark_caps_flushing(Inode *in)
 {
-  MDSSession *session = in->auth_cap->session;
+  MetaSession *session = in->auth_cap->session;
 
   int flushing = in->dirty_caps;
   assert(flushing);
@@ -2500,7 +2615,7 @@ void Client::flush_caps()
 void Client::flush_caps(Inode *in, int mds)
 {
   ldout(cct, 10) << "flush_caps " << in << " mds" << mds << dendl;
-  InodeCap *cap = in->auth_cap;
+  Cap *cap = in->auth_cap;
   assert(cap->session->mds_num == mds);
 
   int wanted = in->caps_wanted();
@@ -2514,7 +2629,7 @@ void Client::wait_sync_caps(uint64_t want)
  retry:
   ldout(cct, 10) << "wait_sync_caps want " << want << " (last is " << last_flush_seq << ", "
 	   << num_flushing_caps << " total flushing)" << dendl;
-  for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
     if (p->second->flushing_caps.empty())
@@ -2532,7 +2647,7 @@ void Client::wait_sync_caps(uint64_t want)
 void Client::kick_flushing_caps(int mds)
 {
   ldout(cct, 10) << "kick_flushing_caps" << dendl;
-  MDSSession *session = mds_sessions[mds];
+  MetaSession *session = mds_sessions[mds];
 
   for (xlist<CapSnap*>::iterator p = session->flushing_capsnaps.begin(); !p.end(); ++p) {
     CapSnap *capsnap = *p;
@@ -2596,6 +2711,32 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 	 p != realm->pchildren.end(); 
 	 p++)
       q.push_back(*p);
+  }
+}
+
+SnapRealm *Client::get_snap_realm(inodeno_t r)
+{
+  SnapRealm *realm = snap_realms[r];
+  if (!realm)
+    snap_realms[r] = realm = new SnapRealm(r);
+  realm->nref++;
+  return realm;
+}
+
+SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
+{
+  if (snap_realms.count(r) == 0)
+    return NULL;
+  SnapRealm *realm = snap_realms[r];
+  realm->nref++;
+  return realm;
+}
+
+void Client::put_snap_realm(SnapRealm *realm)
+{
+  if (--realm->nref == 0) {
+    snap_realms.erase(realm->ino);
+    delete realm;
   }
 }
 
@@ -2788,7 +2929,7 @@ void Client::handle_caps(MClientCaps *m)
     return;
   }
 
-  InodeCap *cap = in->caps[mds];
+  Cap *cap = in->caps[mds];
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
@@ -2836,11 +2977,11 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 void Client::handle_cap_export(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
-  InodeCap *cap = NULL;
+  Cap *cap = NULL;
 
   // note?
   bool found_higher_mseq = false;
-  for (map<int,InodeCap*>::iterator p = in->caps.begin();
+  for (map<int,Cap*>::iterator p = in->caps.begin();
        p != in->caps.end();
        p++) {
     if (p->first == mds)
@@ -2896,7 +3037,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   m->put();
 }
 
-void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
+void Client::handle_cap_flush_ack(Inode *in, int mds, Cap *cap, MClientCaps *m)
 {
   int dirty = m->get_dirty();
   int cleaned = 0;
@@ -2961,7 +3102,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 }
 
 
-void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
+void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
 {
   int used = in->caps_used();
 
@@ -3215,7 +3356,7 @@ void Client::unmount()
 
   
   // send session closes!
-  for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
     ldout(cct, 2) << "sending client_session close to mds" << p->first
@@ -3266,7 +3407,7 @@ void Client::tick()
       renew_caps();
 
     // send any cap releases
-    for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
+    for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
 	 p != mds_sessions.end();
 	 p++) {
       if (p->second->release) {
@@ -3295,7 +3436,7 @@ void Client::renew_caps()
   ldout(cct, 10) << "renew_caps()" << dendl;
   last_cap_renew = ceph_clock_now(cct);
   
-  for (map<int,MDSSession*>::iterator p = mds_sessions.begin();
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
     ldout(cct, 15) << "renew_caps requesting from mds" << p->first << dendl;
@@ -3306,7 +3447,7 @@ void Client::renew_caps()
 
 void Client::renew_caps(const int mds) {
   ldout(cct, 10) << "renew_caps mds" << mds << dendl;
-  MDSSession *session = mds_sessions[mds];
+  MetaSession *session = mds_sessions[mds];
   session->last_cap_renew_request = ceph_clock_now(cct);
   uint64_t seq = ++session->cap_renew_seq;
   messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
@@ -3381,7 +3522,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     if (dn->lease_mds >= 0 && 
 	dn->lease_ttl > now &&
 	mds_sessions.count(dn->lease_mds)) {
-      MDSSession *s = mds_sessions[dn->lease_mds];
+      MetaSession *s = mds_sessions[dn->lease_mds];
       if (s->cap_ttl > now &&
 	  s->cap_gen == dn->lease_gen) {
 	*target = dn->inode;
@@ -3434,7 +3575,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 	dn->lease_mds >= 0 && 
 	dn->lease_ttl > now &&
 	mds_sessions.count(dn->lease_mds)) {
-      MDSSession *s = mds_sessions[dn->lease_mds];
+      MetaSession *s = mds_sessions[dn->lease_mds];
       if (s->cap_ttl > now &&
 	  s->cap_gen == dn->lease_gen) {
 	if (expect_null)
@@ -3444,7 +3585,7 @@ int Client::get_or_create(Inode *dir, const char* name,
     *pdn = dn;
   } else {
     // otherwise link up a new one
-    *pdn = link(dir->dir, name, NULL);
+    *pdn = link(dir->dir, name, NULL, NULL);
   }
 
   // success
@@ -3916,6 +4057,11 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     *rstat = in->rstat;
 
   return in->caps_issued();
+}
+
+void Client::touch_dn(Dentry *dn)
+{
+  lru.lru_touch(dn);
 }
 
 int Client::chmod(const char *relpath, mode_t mode)
@@ -5274,7 +5420,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     _flush(in);
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    for (map<int, InodeCap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
+    for (map<int, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
       if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
         flush_caps(in, iter->first);
       }
@@ -6228,7 +6374,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
-      unlink(dn);
+      unlink(dn, false);
     }
   }
   ldout(cct, 10) << "unlink result is " << res << dendl;
@@ -6285,7 +6431,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
       if (dn->inode->dir && dn->inode->dir->is_empty() &&
           (dn->inode->dn_set.size() == 1))
 	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
-      unlink(dn);
+      unlink(dn, false);
     }
   }
 
