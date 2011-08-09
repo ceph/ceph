@@ -38,8 +38,8 @@ def task(ctx, config):
     if config is None:
         config = ['client.{id}'.format(id=id_)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
+    clients = list(teuthology.get_clients(ctx=ctx, roles=config))
 
-    clients = teuthology.get_clients(ctx=ctx, config=config)
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
