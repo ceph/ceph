@@ -32,12 +32,6 @@ def task(ctx, config):
     
     poolnum = int(config)
     creator_remotes = []
-#    mon_roles = teuthology.all_roles_of_type(ctx.cluster, 'mon')
-#    log.info('got mon_roles={mon_roles_}'.format(mon_roles_=mon_roles))
-#    for role in mon_roles:
-#        log.info('role={role_}'.format(role_=role))
-#        (creator_remote, ) = ctx.cluster.only('mon.{id}'.format(id=role)).remotes.iterkeys()
-#	creator_remotes.append((creator_remote, 'mon.{id}'.format(id=role)))
     client_roles = teuthology.all_roles_of_type(ctx.cluster, 'client')
     log.info('got client_roles={client_roles_}'.format(client_roles_=client_roles))
     for role in client_roles:
