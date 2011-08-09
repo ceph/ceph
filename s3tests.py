@@ -39,11 +39,11 @@ def download(ctx, config):
                 )
 
 def _config_user(s3tests_conf, section, user):
-    s3tests_conf[section]['user_id'] = user
-    s3tests_conf[section]['email'] = '{user}+test@test.test'.format(user=user)
-    s3tests_conf[section]['display_name'] = 'Mr. {user}'.format(user=user)
-    s3tests_conf[section]['access_key'] = base64.b64encode(os.urandom(20))
-    s3tests_conf[section]['secret_key'] = base64.b64encode(os.urandom(40))
+    s3tests_conf[section].setdefault('user_id', user)
+    s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
+    s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
+    s3tests_conf[section].setdefault('access_key', base64.b64encode(os.urandom(20)))
+    s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
 @contextlib.contextmanager
 def create_users(ctx, config):
@@ -51,7 +51,7 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
-        s3tests_conf['fixtures']['bucket prefix'] = 'test-' + client + '-{random}-'
+        s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
         for section, user in [('s3 main', 'foo'), ('s3 alt', 'bar')]:
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
