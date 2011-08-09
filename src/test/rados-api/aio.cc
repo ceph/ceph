@@ -107,6 +107,7 @@ TEST(LibRadosAio, SimpleWrite) {
   TestAlarm alarm;
   sem_wait(&test_data.m_sem);
   sem_wait(&test_data.m_sem);
+  rados_aio_release(my_completion);
 }
 
 TEST(LibRadosAio, WaitForSafe) {
@@ -121,6 +122,7 @@ TEST(LibRadosAio, WaitForSafe) {
 			       my_completion, buf, sizeof(buf), 0));
   TestAlarm alarm;
   ASSERT_EQ(0, rados_aio_wait_for_safe(my_completion));
+  rados_aio_release(my_completion);
 }
 
 TEST(LibRadosAio, RoundTrip) {
@@ -150,6 +152,8 @@ TEST(LibRadosAio, RoundTrip) {
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
 }
 
 TEST(LibRadosAio, RoundTripAppend) {
@@ -188,4 +192,7 @@ TEST(LibRadosAio, RoundTripAppend) {
   }
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+  rados_aio_release(my_completion3);
 }
