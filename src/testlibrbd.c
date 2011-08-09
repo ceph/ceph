@@ -62,9 +62,7 @@ void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
   va_list ap;
   size_t max_size = 1024;
   names = (char *) malloc(sizeof(char *) * 1024);
-  printf("names is %p\n", names);
   num_images = rbd_list(io_ctx, names, &max_size);
-  printf("names is %p\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
   assert(num_images == (int)num_expected);
