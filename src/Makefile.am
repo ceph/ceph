@@ -627,6 +627,12 @@ test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
+test_store_SOURCES = test/store_test.cc
+test_store_LDFLAGS = ${AM_LDFLAGS}
+test_store_LDADD =  librados.la ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_store
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -1343,7 +1349,7 @@ noinst_HEADERS = \
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
+	$(cosd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
