@@ -333,6 +333,7 @@ int main(int argc, const char **argv)
   srand(time(0));
 
   assert(rados_create(&cluster, NULL) == 0);
+  assert(rados_conf_parse_argv(cluster, argc, argv) == 0);
   assert(rados_conf_read_file(cluster, NULL) == 0);
   assert(rados_connect(cluster) == 0);
 
