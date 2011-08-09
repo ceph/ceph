@@ -29,6 +29,10 @@ def run_tasks(tasks, ctx):
     except:
         ctx.summary['success'] = False
         log.exception('Saw exception from tasks')
+        if ctx.config.get('interactive-on-error'):
+            from .task import interactive
+            log.warning('Saw failure, going into interactive mode...')
+            interactive.task(ctx=ctx, config=None)
     finally:
         try:
             exc_info = sys.exc_info()

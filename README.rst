@@ -165,3 +165,25 @@ reverse order, both on success and failure. A nice way of writing
 context managers is the ``contextlib.contextmanager`` decorator; look
 for that string in the existing tasks to see examples, and note where
 they use ``yield``.
+
+
+Troubleshooting
+===============
+
+Sometimes when a bug triggers, instead of automatic cleanup, you want
+to explore the system as is. Adding a top-level::
+
+	interactive-on-error: true
+
+as a config file for ``teuthology`` will make that possible. With that
+option, any *task* that fails, will have the ``interactive`` task
+called after it. This means that before any cleanup happens, you get a
+change to inspect the system -- both through Teuthology and via extra
+SSH connections -- and the cleanup completes only when you choose so.
+Just exit the interactive Python session to continue the cleanup.
+
+TODO: this only catches exceptions *between* the tasks. If a task
+calls multiple subtasks, e.g. with ``contextutil.nested``, those
+cleanups *will* be performed. Later on, we can let tasks communicate
+the subtasks they wish to invoke to the top-level runner, avoiding
+this issue.
