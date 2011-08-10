@@ -159,6 +159,16 @@ int rados_ioctx_snap_get_name(rados_ioctx_t io, rados_snap_t id, char *name, int
 int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 
 /* sync io */
+
+/**
+ * Return the version of the last object read or written to.
+ *
+ * This exposes the internal version number of the last object read or
+ * written via this rados_ioctx_t.
+ *
+ * @param io ioctx
+ * @return object version
+ */
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
@@ -181,8 +191,65 @@ int rados_getxattrs_next(rados_xattrs_iter_t iter, const char **name,
 void rados_getxattrs_end(rados_xattrs_iter_t iter);
 
 /* misc */
+/**
+ * Get object stats (size/mtime)
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param psize location to store object size
+ * @param pmtime location to store modification time
+ * @return 0 for success or negative error code
+ */
 int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime);
+
+/**
+ * Update tmap (trivial map)
+ *
+ * Do compound update to a tmap object, inserting or deleting some
+ * number of records.  The @cmdbuf is a series of operation byte
+ * codes, following by command payload.  Each command is a single-byte
+ * command code, whose value is one of CEPH_OSD_TMAP_*.
+ *
+ *  - update tmap 'header'
+ *    1 byte  = CEPH_OSD_TMAP_HDR
+ *    4 bytes = data length (little endian)
+ *    N bytes = data
+ *
+ *  - insert/update one key/value pair
+ *    1 byte  = CEPH_OSD_TMAP_SET
+ *    4 bytes = key name length (little endian)
+ *    N bytes = key name
+ *    4 bytes = data length (little endian)
+ *    M bytes = data
+ *
+ *  - insert one key/value pair; return -EEXIST if it already exists.
+ *    1 byte  = CEPH_OSD_TMAP_CREATE
+ *    4 bytes = key name length (little endian)
+ *    N bytes = key name
+ *    4 bytes = data length (little endian)
+ *    M bytes = data
+ *
+ *  - remove one key/value pair
+ *    1 byte  = CEPH_OSD_TMAP_RM
+ *    4 bytes = key name length (little endian)
+ *    N bytes = key name
+ *
+ * Restrictions:
+ *  - The HDR update must preceed any key/value updates.
+ *  - All key/value updates must be in lexicographically sorted order
+ *    in the @cmdbuf.
+ *  - You can read/write to a tmap object via the regular APIs, but
+ *    you should be careful not to corrupt it.  Also be aware that the
+ *    object format may change without notice.
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param cmdbuf command buffer
+ * @param cmdbuflen command buffer length
+ * @return 0 for success or negative error code
+ */
 int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
+
 int rados_exec(rados_ioctx_t io, const char *oid, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
