@@ -595,6 +595,9 @@ public:
   int trunc(IoCtxImpl& io, const object_t& oid, uint64_t size);
 
   int tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl);
+  int tmap_put(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
+  int tmap_get(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
+
   int exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
   int getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl);
@@ -1999,8 +2002,7 @@ trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
   return r;
 }
 
-int librados::RadosClient::
-tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
+int librados::RadosClient::tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
 {
   utime_t ut = ceph_clock_now(cct);
 
@@ -2023,6 +2025,75 @@ tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
   prepare_assert_ops(&io, &wr);
   wr.tmap_update(cmdbl);
   objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::tmap_put(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
+{
+  utime_t ut = ceph_clock_now(cct);
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  Mutex mylock("RadosClient::tmap_put::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  bufferlist outbl;
+
+  lock.Lock();
+  ::SnapContext snapc;
+  ::ObjectOperation wr;
+  prepare_assert_ops(&io, &wr);
+  wr.tmap_put(bl);
+  objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  return r;
+}
+
+int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
+{
+  utime_t ut = ceph_clock_now(cct);
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EROFS;
+
+  Mutex mylock("RadosClient::tmap_put::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  bufferlist outbl;
+
+  lock.Lock();
+  ::ObjectOperation rd;
+  prepare_assert_ops(&io, &rd);
+  rd.tmap_get();
+  objecter->read(oid, io.oloc, rd, io.snap_seq, &bl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2882,11 +2953,22 @@ exec(const std::string& oid, const char *cls, const char *method,
   return io_ctx_impl->client->exec(*io_ctx_impl, obj, cls, method, inbl, outbl);
 }
 
-int librados::IoCtx::
-tmap_update(const std::string& oid, bufferlist& cmdbl)
+int librados::IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl)
 {
   object_t obj(oid);
   return io_ctx_impl->client->tmap_update(*io_ctx_impl, obj, cmdbl);
+}
+
+int librados::IoCtx::tmap_put(const std::string& oid, bufferlist& bl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->tmap_put(*io_ctx_impl, obj, bl);
+}
+
+int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->tmap_get(*io_ctx_impl, obj, bl);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, bufferlist *pbl)
@@ -3944,6 +4026,29 @@ extern "C" int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cm
   bufferlist cmdbl;
   cmdbl.append(cmdbuf, cmdbuflen);
   return ctx->client->tmap_update(*ctx, oid, cmdbl);
+}
+
+extern "C" int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t buflen)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, buflen);
+  return ctx->client->tmap_put(*ctx, oid, bl);
+}
+
+extern "C" int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  int r = ctx->client->tmap_get(*ctx, oid, bl);
+  if (r < 0)
+    return r;
+  if (bl.length() > buflen)
+    return -ERANGE;
+  bl.copy(0, bl.length(), buf);
+  return bl.length();
 }
 
 extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, const char *method,

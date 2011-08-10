@@ -247,6 +247,8 @@ namespace librados
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
+    int tmap_put(const std::string& oid, bufferlist& bl);
+    int tmap_get(const std::string& oid, bufferlist& bl);
 
     void snap_set_read(snap_t seq);
     int selfmanaged_snap_set_write_ctx(snap_t seq, std::vector<snap_t>& snaps);

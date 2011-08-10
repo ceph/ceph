@@ -250,6 +250,44 @@ int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
  */
 int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
 
+/**
+ * Store complete tmap (trivial map) object
+ *
+ * Put a full tmap object into the store, replacing what was there.
+ *
+ * The format of the @buf buffer is:
+ *    4 bytes - length of header (little endian)
+ *    N bytes - header data
+ *    4 bytes - number of keys (little endian)
+ * and for each key,
+ *    4 bytes - key name length (little endian)
+ *    N bytes - key name
+ *    4 bytes - value length (little endian)
+ *    M bytes - value data
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param buf buffer
+ * @param buflen buffer length
+ * @return 0 for success or negative error code
+ */
+int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t buflen);
+
+/**
+ * Fetch complete tmap (trivial map) object
+ *
+ * Read a full tmap object.  See rados_tmap_put() for the format the
+ * data is returned in.  If the supplied buffer isn't big enough,
+ * returns -ERANGE.
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param buf buffer
+ * @param buflen buffer length
+ * @return 0 for success or negative error code
+ */
+int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
+
 int rados_exec(rados_ioctx_t io, const char *oid, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
