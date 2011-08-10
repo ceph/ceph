@@ -3392,13 +3392,13 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
 }
 
 
-extern "C" void rados_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
+extern "C" void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->set_snap_read((snapid_t)seq);
 }
 
-extern "C" int rados_snap_set_write_context(rados_ioctx_t io, rados_snap_t seq,
+extern "C" int rados_ioctx_snap_set_write_context(rados_ioctx_t io, rados_snap_t seq,
 				       rados_snap_t *snaps, int num_snaps)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
