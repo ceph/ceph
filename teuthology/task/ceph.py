@@ -624,7 +624,7 @@ def mds(ctx, config):
         log.info('Recording coverage for this run.')
         daemon_signal = 'term'
 
-    num_active = 1
+    num_active = 0
     for remote, roles_for_host in mdss.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             if not id_.endswith('-s'):
