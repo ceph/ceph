@@ -212,7 +212,7 @@ def task(ctx, config):
     assert config is None or isinstance(config, dict), \
         "task kernel only supports a dictionary for configuration"
 
-    timeout = 180
+    timeout = 300
     if config is not None and 'timeout' in config:
         timeout = config.pop('timeout')
 
