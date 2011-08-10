@@ -18,11 +18,23 @@
 #include "include/rados/librados.h"
 
 #include <string>
+#include <unistd.h>
 
 std::string get_temp_pool_name();
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster);
 
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster);
+
+class TestAlarm
+{
+public:
+  TestAlarm() {
+    alarm(360);
+  }
+  ~TestAlarm() {
+    alarm(0);
+  }
+};
 
 #endif

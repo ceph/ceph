@@ -69,17 +69,6 @@ public:
   bool m_safe;
 };
 
-class TestAlarm
-{
-public:
-  TestAlarm() {
-    alarm(360);
-  }
-  ~TestAlarm() {
-    alarm(0);
-  }
-};
-
 void set_completion_complete(rados_completion_t cb, void *arg)
 {
   AioTestData *test = (AioTestData*)arg;
