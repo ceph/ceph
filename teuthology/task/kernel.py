@@ -137,6 +137,19 @@ def install_and_reboot(ctx, config):
 
 
 def reconnect(ctx, timeout):
+    """
+    Connect to all the machines in ctx.cluster.
+
+    Presumably, some of them won't be up. Handle this
+    by waiting for them, unless the wait time exceeds
+    the specified timeout.
+
+    ctx needs to contain the cluster of machines you
+    wish it to try and connect to, as well as a config
+    holding the ssh keys for each of them. As long as it
+    contains this data, you can construct a context
+    that is a subset of your full cluster.
+    """
     log.info('Re-opening connections...')
     starttime = time.time()
     need_reconnect = ctx.cluster.remotes.keys()
@@ -150,10 +163,13 @@ def reconnect(ctx, timeout):
             except socket.error as e:
                 if hasattr(e, '__getitem__'):
                     if e[0] not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
-                                errno.EHOSTUNREACH, errno.EHOSTDOWN] or \
-                                time.time() - starttime > timeout:
+                                errno.EHOSTUNREACH, errno.EHOSTDOWN]:
                         log.exception('unknown socket error: %s', repr(e))
                         raise
+                    else if time.time() - starttime > timeout:
+                        log.exception('timed out waiting for %s', remote.name)
+                        raise
+
                 else:
                     log.exception('weird socket error without error code')
                     raise
