@@ -593,6 +593,12 @@ test_rados_api_pool_LDADD =  librados.la ${UNITTEST_LDADD}
 test_rados_api_pool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_pool
 
+test_rados_api_stat_SOURCES = test/rados-api/stat.cc test/rados-api/test.cc
+test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
+test_rados_api_stat_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_rados_api_stat
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
