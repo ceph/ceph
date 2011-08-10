@@ -2035,6 +2035,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       obs.exists = true;
     }
 
+    if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
+      result = 0;
+
     if (result < 0)
       break;
   }
