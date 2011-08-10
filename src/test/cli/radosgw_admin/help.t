@@ -20,6 +20,8 @@
     policy                     read bucket/object policy
     log show                   dump a log from specific object or (bucket + date
                                + pool-id)
+    temp remove                remove temporary objects that were created up to
+                               specified date
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name

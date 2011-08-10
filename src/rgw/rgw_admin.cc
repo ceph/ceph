@@ -50,6 +50,8 @@ void _usage()
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
   cerr << "                             + pool-id)\n";
+  cerr << "  temp remove                remove temporary objects that were created up to\n";
+  cerr << "                             specified date\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -107,6 +109,7 @@ enum {
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
   OPT_LOG_SHOW,
+  OPT_TEMP_REMOVE,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -175,7 +178,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "pool") == 0 ||
-      strcmp(cmd, "log") == 0) {
+      strcmp(cmd, "log") == 0 ||
+      strcmp(cmd, "temp") == 0) {
     *need_more = true;
     return 0;
   }
@@ -222,6 +226,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
+  } else if (strcmp(prev_cmd, "temp") == 0) {
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_TEMP_REMOVE;
   } else if (strcmp(prev_cmd, "pool") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_POOL_INFO;
@@ -351,6 +358,83 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 
   if (!success)
     cerr << "ERROR: this should be fixed manually!" << std::endl;
+}
+
+class IntentLogNameFilter : public RGWAccessListFilter
+{
+  string prefix;
+public:
+  IntentLogNameFilter(const char *date, const char *hour) {
+    prefix = date;
+    prefix.append("-");
+    prefix.append(hour);
+  }
+  bool filter(string& name, string& key) {
+    return name.compare(prefix) < 0;
+  }
+};
+
+enum IntentFlags { // bitmask
+  I_DEL_OBJ = 1,
+};
+
+int process_intent_log(string& bucket, string& oid, IntentFlags flags, bool purge)
+{
+  uint64_t size;
+  rgw_obj obj(bucket, oid);
+  int r = rgwstore->obj_stat(NULL, obj, &size, NULL);
+  if (r < 0) {
+    cerr << "error while doing stat on " << bucket << ":" << oid
+	 << " " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  bufferlist bl;
+  r = rgwstore->read(NULL, obj, 0, size, bl);
+  if (r < 0) {
+    cerr << "error while reading from " <<  bucket << ":" << oid
+	 << " " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  bufferlist::iterator iter = bl.begin();
+  string id;
+  bool complete = true;
+  try {
+    while (!iter.end()) {
+      struct rgw_intent_log_entry entry;
+      ::decode(entry, iter);
+      switch (entry.intent) {
+      case DEL_OBJ:
+        if (!flags & I_DEL_OBJ) {
+          complete = false;
+          break;
+        }
+        r = rgwstore->delete_obj(NULL, id, entry.obj);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove obj: " << entry.obj << std::endl;
+          complete = false;
+        }
+        break;
+      default:
+        complete = false;
+      }
+    }
+  } catch (buffer::error& err) {
+    cerr << "failed to decode intent log entry in " << bucket << ":" << oid << std::endl;
+    complete = false;
+  }
+
+  if (complete) {
+    rgw_obj obj(bucket, oid);
+    cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
+    if (purge) {
+      r = rgwstore->delete_obj(NULL, id, obj);
+      if (r < 0)
+        cerr << "failed to remove obj: " << obj << std::endl;
+    }
+  }
+
+  return 0;
 }
 
 
@@ -792,6 +876,39 @@ int main(int argc, char **argv)
     if (r < 0)
       cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
     return -r;
+  }
+
+  if (opt_cmd == OPT_TEMP_REMOVE) {
+    if (!date) {
+      cerr << "date wasn't specified" << std::endl;
+      return usage();
+    }
+    string bucket = RGW_INTENT_LOG_BUCKET_NAME;
+    string prefix, delim, marker;
+    vector<RGWObjEnt> objs;
+    map<string, bool> common_prefixes;
+    string ns;
+    string id;
+
+    int max = 1000;
+    bool is_truncated;
+    const char *hour = "00";
+    IntentLogNameFilter filter(date, hour);
+    do {
+      int r = store->list_objects(id, bucket, max, prefix, delim, marker,
+                          objs, common_prefixes, false, ns,
+                          &is_truncated, &filter);
+      if (r == -ENOENT)
+        break;
+      if (r < 0) {
+        cerr << "failed to list objects" << std::endl;
+      }
+      vector<RGWObjEnt>::iterator iter;
+      for (iter = objs.begin(); iter != objs.end(); ++iter) {
+        cout << "processing intent log " << (*iter).name << std::endl;
+        process_intent_log(bucket, (*iter).name, I_DEL_OBJ, true);
+      }
+    } while (is_truncated);
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
