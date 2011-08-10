@@ -1,0 +1,5 @@
+tasks:
+- ceph:
+- rbd: [client.0]
+- autotest:
+    client.0: [dbench]
