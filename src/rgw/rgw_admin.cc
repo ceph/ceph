@@ -51,7 +51,7 @@ void _usage()
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
   cerr << "                             + pool-id)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
-  cerr << "                             specified date\n";
+  cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -69,6 +69,7 @@ void _usage()
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
+  cerr << "   --time=<HH:MM:SS>\n";
   cerr << "   --pool-id=<pool-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
@@ -363,12 +364,18 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 class IntentLogNameFilter : public RGWAccessListFilter
 {
   string prefix;
+  bool filter_exact_date;
 public:
-  IntentLogNameFilter(const char *date) {
+  IntentLogNameFilter(const char *date, struct tm *tm) {
     prefix = date;
+    filter_exact_date = !(tm->tm_hour || tm->tm_min || tm->tm_sec); /* if time was specified and is not 00:00:00
+                                                                       we should look at objects from that date */
   }
   bool filter(string& name, string& key) {
-    return name.compare(prefix) < 0;
+    if (filter_exact_date)
+      return name.compare(prefix) < 0;
+    else
+      return name.compare(0, prefix.size(), prefix) <= 0;
   }
 };
 
@@ -376,7 +383,7 @@ enum IntentFlags { // bitmask
   I_DEL_OBJ = 1,
 };
 
-int process_intent_log(string& bucket, string& oid, IntentFlags flags, bool purge)
+int process_intent_log(string& bucket, string& oid, time_t epoch, IntentFlags flags, bool purge)
 {
   uint64_t size;
   rgw_obj obj(bucket, oid);
@@ -401,6 +408,12 @@ int process_intent_log(string& bucket, string& oid, IntentFlags flags, bool purg
     while (!iter.end()) {
       struct rgw_intent_log_entry entry;
       ::decode(entry, iter);
+      if (entry.op_time.sec() > epoch) {
+        cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
+        cerr << "skipping intent log" << std::endl; // no use to continue
+        complete = false;
+        break;
+      }
       switch (entry.intent) {
       case DEL_OBJ:
         if (!flags & I_DEL_OBJ) {
@@ -456,6 +469,7 @@ int main(int argc, char **argv)
   const char *openstack_user = 0;
   const char *openstack_key = 0;
   const char *date = 0;
+  const char *time = 0;
   const char *subuser = 0;
   const char *access = 0;
   uint32_t perm_mask = 0;
@@ -507,6 +521,8 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&openstack_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("time", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&time, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
       perm_mask = str_to_perm(access);
@@ -881,6 +897,31 @@ int main(int argc, char **argv)
       cerr << "date wasn't specified" << std::endl;
       return usage();
     }
+
+    struct tm tm;
+
+    string format = "%Y-%m-%d";
+    string datetime = date;
+    if (datetime.size() != 10) {
+      cerr << "bad date format" << std::endl;
+      return -EINVAL;
+    }
+
+    if (time) {
+      string time_str = time;
+      if (time_str.size() != 5 && time_str.size() != 8) {
+        cerr << "bad time format" << std::endl;
+        return -EINVAL;
+      }
+      format.append(" %H:%M:%S");
+      datetime.append(time);
+    }
+    const char *s = strptime(datetime.c_str(), format.c_str(), &tm);
+    if (s && *s) {
+      cerr << "failed to parse date/time" << std::endl;
+      return -EINVAL;
+    }
+    time_t epoch = mktime(&tm);
     string bucket = RGW_INTENT_LOG_BUCKET_NAME;
     string prefix, delim, marker;
     vector<RGWObjEnt> objs;
@@ -890,7 +931,7 @@ int main(int argc, char **argv)
 
     int max = 1000;
     bool is_truncated;
-    IntentLogNameFilter filter(date);
+    IntentLogNameFilter filter(date, &tm);
     do {
       int r = store->list_objects(id, bucket, max, prefix, delim, marker,
                           objs, common_prefixes, false, ns,
@@ -903,7 +944,7 @@ int main(int argc, char **argv)
       vector<RGWObjEnt>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
         cout << "processing intent log " << (*iter).name << std::endl;
-        process_intent_log(bucket, (*iter).name, I_DEL_OBJ, true);
+        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ, true);
       }
     } while (is_truncated);
   }
