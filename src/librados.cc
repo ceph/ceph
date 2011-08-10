@@ -138,6 +138,18 @@ size_t librados::ObjectOperation::size()
   return o->size();
 }
 
+void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
+{
+  int rados_flags = 0;
+  if (flags & OP_EXCL)
+    rados_flags |= CEPH_OSD_OP_FLAG_EXCL;
+  if (flags & OP_FAILOK)
+    rados_flags |= CEPH_OSD_OP_FLAG_FAILOK;
+
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->set_last_op_flags(rados_flags);
+}
+
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;

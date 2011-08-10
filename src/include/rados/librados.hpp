@@ -103,6 +103,11 @@ namespace librados
     PoolAsyncCompletionImpl *pc;
   };
 
+  enum ObjectOperationFlags {
+    OP_EXCL =   1,
+    OP_FAILOK = 2,
+  };
+
   /*
    * ObjectOperation : compount object operation
    * Batch multiple object operations into a single request, to be applied
@@ -115,6 +120,7 @@ namespace librados
     virtual ~ObjectOperation();
 
     size_t size();
+    void set_op_flags(ObjectOperationFlags flags);
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
