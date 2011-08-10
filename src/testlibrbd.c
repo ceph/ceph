@@ -62,9 +62,7 @@ void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
   va_list ap;
   size_t max_size = 1024;
   names = (char *) malloc(sizeof(char *) * 1024);
-  printf("names is %p\n", names);
   num_images = rbd_list(io_ctx, names, &max_size);
-  printf("names is %p\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
   assert(num_images == (int)num_expected);
@@ -267,6 +265,7 @@ void test_io_to_snapshot(rados_ioctx_t io_ctx, rbd_image_t image, size_t isize)
   for (i = 0; i < TEST_IO_TO_SNAP_SIZE - 1; ++i)
     test_data[i] = (char) (i + 48);
   test_data[TEST_IO_TO_SNAP_SIZE] = '\0';
+  orig_data[TEST_IO_TO_SNAP_SIZE] = '\0';
 
   r = rbd_read(image, 0, TEST_IO_TO_SNAP_SIZE, orig_data);
   assert(r == TEST_IO_TO_SNAP_SIZE);
@@ -333,6 +332,7 @@ int main(int argc, const char **argv)
   srand(time(0));
 
   assert(rados_create(&cluster, NULL) == 0);
+  assert(rados_conf_parse_argv(cluster, argc, argv) == 0);
   assert(rados_conf_read_file(cluster, NULL) == 0);
   assert(rados_connect(cluster) == 0);
 

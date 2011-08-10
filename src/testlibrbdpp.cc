@@ -244,6 +244,7 @@ int main(int argc, const char **argv)
   librbd::Image image;
   rbd = new librbd::RBD();
   assert(rados.init(NULL) == 0);
+  assert(rados.conf_parse_argv(argc, argv) == 0);
   assert(rados.conf_read_file(NULL) == 0);
   assert(rados.connect() == 0);
   if (rados.pool_lookup(TEST_POOL) != -ENOENT) {

@@ -283,6 +283,14 @@ namespace librbd {
                 AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
                char *buf, AioCompletion *c);
+  ssize_t handle_sparse_read(CephContext *cct,
+			     bufferlist data_bl,
+			     uint64_t block_ofs,
+			     const map<uint64_t, uint64_t> &data_map,
+			     uint64_t buf_ofs,
+			     size_t buf_len,
+			     int (*cb)(uint64_t, size_t, const char *, void *),
+			     void *arg);
 
   AioCompletion *aio_create_completion() {
     AioCompletion *c= new AioCompletion();
@@ -1141,58 +1149,25 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
     uint64_t block_ofs = get_block_ofs(ictx->header, off + total_read);
     ictx->lock.Unlock();
     uint64_t read_len = min(block_size - block_ofs, left);
-    uint64_t block_read = 0;
 
     map<uint64_t, uint64_t> m;
-    map<uint64_t, uint64_t>::iterator iter;
-    uint64_t bl_ofs = 0;
     r = ictx->data_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
-      ret = r;
-      goto done;
-    }
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      uint64_t extent_ofs = iter->first;
-      size_t extent_len = iter->second;
-      ldout(ictx->cct, 20) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
-      ldout(ictx->cct, 20) << "block_read=" << block_read << " total_read=" << total_read << " block_ofs=" << block_ofs << dendl;
-
-      /* a hole? */
-      if (extent_ofs - block_ofs > 0) {
-        r = cb(total_read + block_read, extent_ofs - block_ofs, NULL, arg);
-        if (r < 0)
-          return r;
-        block_read += extent_ofs - block_ofs;
-      }
-
-      if (bl_ofs + extent_len > bl.length())
-        return -EIO;
-
-      block_ofs = extent_ofs;
-
-      /* data */
-      r = cb(total_read + block_read, extent_len, bl.c_str() + bl_ofs, arg);
-      if (r < 0)
-        return r;
-      bl_ofs += extent_len;
-      block_ofs += extent_len;
-      block_read += extent_len;
+      return r;
     }
 
-    /* last hole */
-    if (read_len - block_ofs) {
-      r = cb(total_read + block_read, read_len - block_ofs, NULL, arg);
-      if (r < 0)
-        return r;
+    r = handle_sparse_read(ictx->cct, bl, block_ofs, m, total_read, read_len, cb, arg);
+    if (r < 0) {
+      return r;
     }
 
-    total_read += read_len;
-    left -= read_len;
+    total_read += r;
+    left -= r;
   }
   ret = total_read;
-done:
+
   return ret;
 }
 
@@ -1255,52 +1230,73 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   return total_write;
 }
 
+ssize_t handle_sparse_read(CephContext *cct,
+			   bufferlist data_bl,
+			   uint64_t block_ofs,
+			   const map<uint64_t, uint64_t> &data_map,
+			   uint64_t buf_ofs,
+			   size_t buf_len,
+			   int (*cb)(uint64_t, size_t, const char *, void *),
+			   void *arg)
+{
+  int r;
+  uint64_t bl_ofs = 0;
+
+  for (map<uint64_t, uint64_t>::const_iterator iter = data_map.begin();
+       iter != data_map.end();
+       ++iter) {
+    uint64_t extent_ofs = iter->first;
+    size_t extent_len = iter->second;
+
+    ldout(cct, 10) << "extent_ofs=" << extent_ofs
+		   << " extent_len=" << extent_len << dendl;
+    ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
+
+    /* a hole? */
+    if (extent_ofs - block_ofs > 0) {
+      ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << extent_ofs << dendl;
+      r = cb(buf_ofs, extent_ofs - block_ofs, NULL, arg);
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    if (bl_ofs + extent_len > buf_len) {
+      return -EIO;
+    }
+    buf_ofs += extent_ofs - block_ofs;
+    block_ofs = extent_ofs;
+
+    /* data */
+    ldout(cct, 10) << "<2>copying " << buf_ofs << "~" << extent_len
+		   << " from ofs=" << bl_ofs << dendl;
+    r = cb(buf_ofs, extent_len, data_bl.c_str() + bl_ofs, arg);
+    if (r < 0) {
+      return r;
+    }
+    bl_ofs += extent_len;
+    buf_ofs += extent_len;
+    block_ofs += extent_len;
+  }
+
+  /* last hole */
+  if (buf_len - buf_ofs) {
+    ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_len - buf_ofs << dendl;
+    r = cb(buf_ofs, buf_len - buf_ofs, NULL, arg);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return buf_len;
+}
+
 void AioBlockCompletion::complete(ssize_t r)
 {
   ldout(cct, 10) << "AioBlockCompletion::complete()" << dendl;
   if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
-    map<uint64_t, uint64_t>::iterator iter;
-    uint64_t bl_ofs = 0, buf_bl_pos = 0;
     ldout(cct, 10) << "ofs=" << ofs << " len=" << len << dendl;
-    uint64_t block_ofs = ofs;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      uint64_t extent_ofs = iter->first;
-      size_t extent_len = iter->second;
-
-      ldout(cct, 10) << "extent_ofs=" << extent_ofs << " extent_len=" << extent_len << dendl;
-      ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
-      
-      /* a hole? */
-      if (extent_ofs - block_ofs > 0) {
-	ldout(cct, 10) << "<1>zeroing " << buf_bl_pos << "~" << extent_ofs << dendl;
-	ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + extent_ofs - ofs - 1) << dendl;
-        memset(buf + buf_bl_pos, 0, extent_ofs - block_ofs);
-      }
-
-      if (bl_ofs + extent_len > len) {
-        r = -EIO;
-	break;
-      }
-      buf_bl_pos += extent_ofs - block_ofs;
-      block_ofs = extent_ofs;
-
-      /* data */
-      ldout(cct, 10) << "<2>copying " << buf_bl_pos << "~" << extent_len << " from ofs=" << bl_ofs << dendl;
-      ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + buf_bl_pos + extent_len -1) << dendl;
-      memcpy(buf + buf_bl_pos, data_bl.c_str() + bl_ofs, extent_len);
-      bl_ofs += extent_len;
-      buf_bl_pos += extent_len;
-      block_ofs += extent_len;
-    }
-
-    /* last hole */
-    if (len - buf_bl_pos) {
-      ldout(cct, 10) << "<3>zeroing " << buf_bl_pos << "~" << len - buf_bl_pos << dendl;
-      ldout(cct, 10) << "buf=" << (void *)(buf + buf_bl_pos) << "~" << (void *)(buf + len -1) << dendl;
-      memset(buf + buf_bl_pos, 0, len - buf_bl_pos);
-    }
-
-    r = len;
+    r = handle_sparse_read(cct, data_bl, ofs, m, 0, len, simple_read_cb, buf);
   }
   completion->complete_block(this, r);
 }
