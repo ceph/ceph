@@ -364,10 +364,8 @@ class IntentLogNameFilter : public RGWAccessListFilter
 {
   string prefix;
 public:
-  IntentLogNameFilter(const char *date, const char *hour) {
+  IntentLogNameFilter(const char *date) {
     prefix = date;
-    prefix.append("-");
-    prefix.append(hour);
   }
   bool filter(string& name, string& key) {
     return name.compare(prefix) < 0;
@@ -892,8 +890,7 @@ int main(int argc, char **argv)
 
     int max = 1000;
     bool is_truncated;
-    const char *hour = "00";
-    IntentLogNameFilter filter(date, hour);
+    IntentLogNameFilter filter(date);
     do {
       int r = store->list_objects(id, bucket, max, prefix, delim, marker,
                           objs, common_prefixes, false, ns,
