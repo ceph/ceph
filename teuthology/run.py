@@ -190,7 +190,7 @@ def nuke():
     check_lock(ctx, None)
     connect(ctx, None)
 
-    log.info('Killing daemons, unmounting, and removing data...')
+    log.info('Unmount cfuse and killing daemons...')
 
     from orchestra import run
     nodes = {}
@@ -216,6 +216,20 @@ def nuke():
                 'find', '/tmp/cephtest', '-maxdepth', '1', '-name', 'mnt.*',
                 '-execdir', 'fusermount', '-u', '{}', ';',
                 run.Raw(';'),
+                ],
+            wait=False,
+            )
+        nodes[remote.name] = proc
+
+    for name, proc in nodes.iteritems():
+        log.info('Waiting for %s to finish shutdowns...', name)
+        proc.exitstatus.get()
+    log.info('Shutdowns Done.')
+
+    log.info('Clearing filesystem of test data...')
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
                 'sudo', 'rm', '-rf', '/tmp/cephtest',
                 ],
             wait=False,
@@ -223,9 +237,10 @@ def nuke():
         nodes[remote.name] = proc
 
     for name, proc in nodes.iteritems():
-        log.info('Waiting for %s to be nuked...', name)
+        log.info('Waiting for %s to clear filesystem...', name)
         proc.exitstatus.get()
-    log.info('Done.')
+    log.info('Filesystem Cleared.')
+
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
