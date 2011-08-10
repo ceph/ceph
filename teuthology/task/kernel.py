@@ -1,7 +1,6 @@
 from cStringIO import StringIO
 
 import logging
-import errno
 import socket
 import time
 
@@ -136,52 +135,6 @@ def install_and_reboot(ctx, config):
         proc.exitstatus.get()
 
 
-def reconnect(ctx, timeout):
-    """
-    Connect to all the machines in ctx.cluster.
-
-    Presumably, some of them won't be up. Handle this
-    by waiting for them, unless the wait time exceeds
-    the specified timeout.
-
-    ctx needs to contain the cluster of machines you
-    wish it to try and connect to, as well as a config
-    holding the ssh keys for each of them. As long as it
-    contains this data, you can construct a context
-    that is a subset of your full cluster.
-    """
-    log.info('Re-opening connections...')
-    starttime = time.time()
-    need_reconnect = ctx.cluster.remotes.keys()
-    while True:
-        for remote in list(need_reconnect):
-            try:
-                remote.ssh = connection.connect(
-                    user_at_host=remote.name,
-                    host_key=ctx.config['targets'][remote.name],
-                    )
-            except socket.error as e:
-                if hasattr(e, '__getitem__'):
-                    if e[0] not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
-                                errno.EHOSTUNREACH, errno.EHOSTDOWN]:
-                        log.exception('unknown socket error: %s', repr(e))
-                        raise
-                    else if time.time() - starttime > timeout:
-                        log.exception('timed out waiting for %s', remote.name)
-                        raise
-
-                else:
-                    log.exception('weird socket error without error code')
-                    raise
-            else:
-                need_reconnect.remove(remote)
-
-        if not need_reconnect:
-            break
-        log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
-        time.sleep(1)
-
-
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -250,7 +203,7 @@ def task(ctx, config):
 
     if len(need_install) > 0:
         install_and_reboot(ctx, need_install)
-        reconnect(ctx, timeout)
+        teuthology.reconnect(ctx, timeout)
 
     for client, sha1 in need_install.iteritems():
         log.info('Checking client {client} for new kernel version...'.format(client=client))
