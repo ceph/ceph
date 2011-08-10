@@ -55,6 +55,11 @@ struct ObjectOperation {
     return ops.size();
   }
 
+  void set_last_op_flags(int flags) {
+    assert(!ops.empty());
+    ops.rbegin()->flags = flags;
+  }
+
   OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);
