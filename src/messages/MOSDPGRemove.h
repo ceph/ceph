@@ -48,7 +48,15 @@ public:
     ::decode(epoch, p);
     ::decode(pg_list, p);
   }
-
+  void print(ostream& out) {
+    out << "osd pg remove(" << "epoch " << epoch << "; ";
+    for (vector<pg_t>::iterator i = pg_list.begin();
+         i != pg_list.end();
+         ++i) {
+      out << "pg" << *i << "; ";
+    }
+    out << ")";
+  }
 };
 
 #endif

@@ -63,6 +63,16 @@ public:
     ::decode(epoch, p);
     ::decode(mkpg, p);
   }
+
+  void print(ostream& out) {
+    out << "osd pg create(";
+    for (map<pg_t,create_rec>::iterator i = mkpg.begin();
+         i != mkpg.end();
+         ++i) {
+      out << "pg" << i->first << "," << i->second.created << "; ";
+    }
+    out << ")";
+  }
 };
 
 WRITE_CLASS_ENCODER(MOSDPGCreate::create_rec)

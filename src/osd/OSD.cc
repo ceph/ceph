@@ -977,7 +977,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   return pg;
 }
 
-PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
+PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t,
+                             PG::Info::History history)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -992,12 +993,13 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->set_role(0);
   pg->acting.swap(acting);
   pg->up = pg->acting;
-  pg->info.history.epoch_created = 
-    pg->info.history.same_up_since =
-    pg->info.history.same_acting_since =
-    pg->info.history.same_primary_since = osdmap->get_epoch();
-
-  pg->info.history.last_epoch_started = osdmap->get_epoch() - 1;
+  pg->info.history = history;
+  /* This is weird, but all the peering code needs last_epoch_start
+   * to be less than same_acting_since. Make it so!
+   * This is easier to deal with if you remember that the PG, while
+   * now created in memory, still hasn't peered and started -- and
+   * the map epoch could change before that happens! */
+  pg->info.history.last_epoch_started = history.epoch_created - 1;
 
   pg->write_info(t);
   pg->write_log(t);
@@ -1155,7 +1157,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
     if (create) {
-      pg = _create_lock_new_pg(info.pgid, acting, **pt);
+      pg = _create_lock_new_pg(info.pgid, acting, **pt, history);
     } else {
       pg = _create_lock_pg(info.pgid, **pt);
       pg->acting.swap(acting);
@@ -1225,11 +1227,11 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
 
 
 /**
- * check epochs starting from start to verify the pg acting set hasn't changed
- * up until now
+ * Fill in the passed history so you know same_acting_since, same_up_since,
+ * and same_primary_since.
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
-			     vector<int>& lastup, vector<int>& lastacting)
+			     vector<int>& currentup, vector<int>& currentacting)
 {
   dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
@@ -1247,20 +1249,20 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     oldmap->pg_to_up_acting_osds(pgid, up, acting);
 
     // acting set change?
-    if (acting != lastacting && e > h.same_acting_since) {
+    if (acting != currentacting && e > h.same_acting_since) {
       dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << acting << " -> " << lastacting << dendl;
+                << " from " << acting << " -> " << currentacting << dendl;
       h.same_acting_since = e;
     }
     // up set change?
-    if (up != lastup && e > h.same_up_since) {
+    if (up != currentup && e > h.same_up_since) {
       dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << up << " -> " << lastup << dendl;
+                << " from " << up << " -> " << currentup << dendl;
       h.same_up_since = e;
     }
 
     // primary change?
-    if (!(!acting.empty() && !lastacting.empty() && acting[0] == lastacting[0]) &&
+    if (!(!acting.empty() && !currentacting.empty() && acting[0] == currentacting[0]) &&
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
@@ -3676,7 +3678,11 @@ void OSD::kick_pg_split_queue()
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t);
+      PG::Info::History history;
+      history.epoch_created = history.same_up_since =
+          history.same_acting_since = history.same_primary_since =
+          osdmap->get_epoch();
+      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, history);
       children[*q] = pg;
     }
 
@@ -3893,7 +3899,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     project_pg_history(pgid, history, created, up, acting);
     
     // register.
-    creating_pgs[pgid].created = created;
+    creating_pgs[pgid].history = history;
     creating_pgs[pgid].parent = parent;
     creating_pgs[pgid].split_bits = split_bits;
     creating_pgs[pgid].acting.swap(acting);
@@ -3913,7 +3919,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts(g_ceph_context);
 
-      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
+      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t, history);
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);

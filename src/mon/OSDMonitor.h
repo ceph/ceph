@@ -97,8 +97,7 @@ private:
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
   bool prepare_pool_op_auid(MPoolOp *m);
-  int prepare_new_pool(string& name, uint64_t auid = CEPH_AUTH_UID_DEFAULT,
-		       int crush_rule = -1);
+  int prepare_new_pool(string& name, uint64_t auid, int crush_rule);
   int prepare_new_pool(MPoolOp *m);
 
   void _pool_op_reply(MPoolOp *m, int ret, epoch_t epoch, bufferlist *blp=NULL);

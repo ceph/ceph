@@ -244,8 +244,7 @@ int OSDCaps::get_pool_cap(string& pool_name, uint64_t uid)
   pools_map.apply_caps(pool_name, explicit_cap);
 
   //owner gets full perms by default:
-  if (uid != CEPH_AUTH_UID_DEFAULT
-      && uid == auid
+  if (uid == auid
       && explicit_cap == 0) {
     explicit_cap = OSD_POOL_CAP_ALL;
   }

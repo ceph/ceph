@@ -478,7 +478,7 @@ void Objecter::wait_for_osd_map()
 }
 
 
-void Objecter::maybe_request_map()
+void Objecter::maybe_request_map(epoch_t epoch)
 {
   int flag = 0;
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
@@ -487,7 +487,10 @@ void Objecter::maybe_request_map()
     ldout(cct, 10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
-  if (monc->sub_want("osdmap", osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0, flag))
+  if (!epoch) {
+    epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
+  }
+  if (monc->sub_want("osdmap", epoch, flag))
     monc->renew_subs();
 }
 

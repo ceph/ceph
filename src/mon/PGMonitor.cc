@@ -90,6 +90,13 @@ void PGMonitor::on_election_start()
   last_osd_report.clear();
 }
 
+void PGMonitor::on_active()
+{
+  if (mon->is_leader()) {
+    check_osd_map(mon->osdmon()->osdmap.epoch);
+  }
+}
+
 void PGMonitor::tick() 
 {
   if (!paxos->is_active()) return;
@@ -517,13 +524,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   }
 
   if (!mon->osdmon()->paxos->is_readable()) {
-    dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
+    dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
     mon->osdmon()->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!paxos->is_writeable()) {
-    dout(10) << "register_new_pgs -- pgmap not writeable, waiting" << dendl;
+    dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
     paxos->wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
   }
@@ -639,7 +646,7 @@ bool PGMonitor::register_new_pgs()
 	continue;
       }
       created++;
-      register_pg(pool, pgid, epoch, new_pool);
+      register_pg(pool, pgid, pool.get_last_change(), new_pool);
     }
 
     for (ps_t ps = 0; ps < pool.get_lpg_num(); ps++) {
@@ -650,10 +657,10 @@ bool PGMonitor::register_new_pgs()
 	  continue;
 	}
 	created++;
-	register_pg(pool, pgid, epoch, new_pool);
+	register_pg(pool, pgid, pool.get_last_change(), new_pool);
       }
     }
-  } 
+  }
 
   int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
   int removed = 0;

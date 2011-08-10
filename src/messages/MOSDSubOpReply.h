@@ -136,7 +136,7 @@ public:
       out << " onnvram";
     if (ack_type & CEPH_OSD_FLAG_ACK)
       out << " ack";
-    out << " = " << result;
+    out << ", result = " << result;
     out << ")";
   }
 

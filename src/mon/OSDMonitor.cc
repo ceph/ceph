@@ -1343,7 +1343,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule);
   else
     return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
 }
@@ -1726,7 +1726,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       }
       else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
-        int ret = prepare_new_pool(m->cmd[3]);
+        int ret = prepare_new_pool(m->cmd[3], CEPH_AUTH_UID_DEFAULT, -1);
+        // that's the default auid owner (ie, none) and the default crush rule
         if (ret < 0) {
           if (ret == -EEXIST)
             ss << "pool '" << m->cmd[3] << "' exists";
@@ -1768,6 +1769,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    if (m->cmd[4] == "size") {
 	      pending_inc.new_pools[pool] = *p;
 	      pending_inc.new_pools[pool].v.size = n;
+	      pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
 	      ss << "set pool " << pool << " size to " << n;
 	      getline(ss, rs);
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1781,6 +1783,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		pending_inc.new_pools[pool] = osdmap.pools[pool];
 		pending_inc.new_pools[pool].v.pg_num = n;
+		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pg_num to " << n;
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1797,6 +1800,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      } else {
 		pending_inc.new_pools[pool] = osdmap.pools[pool];
 		pending_inc.new_pools[pool].v.pgp_num = n;
+		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pgp_num to " << n;
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
