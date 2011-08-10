@@ -1,21 +1,35 @@
 ceph-qa-suite
 -------------
 
-The basic idea is that the set of tests to run consists of all
+clusters/    - some predefined cluster layouts
+tasks/       - some predefined task fragments
+collections/ - collections of tests to actually run
+
+We have several collections, each a subdirectory within collections/.
+Each collection directory consists of a set facets.  The basic idea is
+that, for each collection, the set of tests to run consists of all
 combinations of taking one yaml fragment from each facet.
 
-Each directory represents a facet.  For example, given the files
+For example, given the files
 
-  clusters/
-  clusters/fixed-3.yaml
-  clusters/fixed-9.yaml
-  tasks/
-  tasks/a
-  tasks/b
-  tasks/c
+  collections/
+  collections/foo/
+  collections/foo/clusters/
+  collections/foo/clusters/fixed-3.yaml
+  collections/foo/clusters/fixed-9.yaml
+  collections/foo/tasks/
+  collections/foo/tasks/a
+  collections/foo/tasks/b
+  collections/foo/tasks/c
+  collections/bar/
+  collections/bar/clusters/fixed-3.yaml
+  collections/bar/tasks/
+  collections/bar/tasks/d
+  collections/bar/tasks/e
 
-teuthology-suite would run tasks a, b, and c on both fixed-3 and fixed-9
-clusters.  
+teuthology-suite would run tasks a, b, and c on both fixed-3 and
+fixed-9 clusters.  It would also run tasks d and e on the fixed-3
+cluster.
 
 Note that the 'clusters' and 'tasks' terminology is actually
 meaningless here.  All teuthology-suite does is stick the yaml
@@ -23,8 +37,7 @@ fragments together (one from each facet) and run teuthology on the
 result (optionally combined with any additional fragments passed on
 the command line).
 
-
-That is the current approach.  Eventually we may want something
-smarter, like different collections of facets, or some other way to
-limit the total size of the test space (e.g., running certain tasks
-only on certain clusters).
+In practice, we can keep common/shared task and cluster definitions in
+the top-level clusters/ and tasks/ directories (which are otherwise
+ignored), and symlink to them from the collections that want to use
+them.
