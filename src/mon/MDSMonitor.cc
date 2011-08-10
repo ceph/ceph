@@ -19,6 +19,8 @@
 #include "OSDMonitor.h"
 
 #include "common/strtol.h"
+#include "common/ceph_argparse.h"
+
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
@@ -486,17 +488,32 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  vector<const char*> args;
+  for (unsigned i = 1; i < m->cmd.size(); i++)
+    args.push_back(m->cmd[i].c_str());
+
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
       ss << mdsmap;
       r = 0;
     } 
     else if (m->cmd[1] == "dump") {
+      string format = "plain";
+      string val;
+      epoch_t epoch = 0;
+      for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
+	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
+	  format = val;
+	else if (!epoch)
+	  epoch = atoi(*i++);
+	else
+	  i++;
+      }
+
       MDSMap *p = &mdsmap;
-      if (m->cmd.size() > 2) {
-	epoch_t e = atoi(m->cmd[2].c_str());
+      if (epoch) {
 	bufferlist b;
-	mon->store->get_bl_sn(b,"mdsmap",e);
+	mon->store->get_bl_sn(b, "mdsmap", epoch);
 	if (!b.length()) {
 	  p = 0;
 	  r = -ENOENT;
@@ -507,12 +524,26 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       }
       if (p) {
 	stringstream ds;
-	p->print(ds);
-	rdata.append(ds);
-	ss << "dumped mdsmap epoch " << p->get_epoch();
+	if (format == "json") {
+	  JSONFormatter jf(true);
+	  jf.open_object_section("mdsmap");
+	  p->dump(&jf);
+	  jf.close_section();
+	  jf.flush(ds);
+	  r = 0;
+	} else if (format == "plain") {
+	  p->print(ds);
+	  r = 0;
+	} else {
+	  ss << "unrecognized format '" << format << "'";
+	  r = -EINVAL;
+	}
+	if (r == 0) {
+	  rdata.append(ds);
+	  ss << "dumped mdsmap epoch " << p->get_epoch();
+	}
 	if (p != &mdsmap)
 	  delete p;
-	r = 0;
       }
     }
     else if (m->cmd[1] == "getmap") {

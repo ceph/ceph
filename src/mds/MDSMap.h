@@ -28,6 +28,7 @@ using namespace std;
 #include "common/config.h"
 
 #include "include/CompatSet.h"
+#include "common/Formatter.h"
 
 /*
 
@@ -151,6 +152,7 @@ public:
       if (v >= 2)
 	::decode(export_targets, bl);
     }
+    void dump(Formatter *f) const;
   };
 
 
@@ -550,6 +552,8 @@ public:
 
   void print(ostream& out);
   void print_summary(ostream& out);
+
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER(MDSMap)

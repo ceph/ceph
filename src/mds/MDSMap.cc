@@ -56,7 +56,71 @@ CompatSet mdsmap_compat_base(feature_compat_base,
 			     feature_incompat_base);
 
 
-// ----
+void MDSMap::mds_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("gid", global_id);
+  f->dump_string("name", name);
+  f->dump_int("rank", rank);
+  f->dump_int("incarnation", inc);
+  f->dump_stream("state") << ceph_mds_state_name(state);
+  f->dump_int("state_seq", state_seq);
+  f->dump_stream("addr") << addr;
+  if (laggy_since != utime_t())
+    f->dump_stream("laggy_since") << laggy_since;
+  
+  f->dump_int("standby_for_rank", standby_for_rank);
+  f->dump_string("standby_for_name", standby_for_name);
+  f->open_array_section("export_targets");
+  for (set<int32_t>::iterator p = export_targets.begin();
+       p != export_targets.end(); ++p) {
+    f->dump_int("mds", *p);
+  }
+  f->close_section();
+}
+
+void MDSMap::dump(Formatter *f) const
+{
+  f->dump_int("epoch", epoch);
+  f->dump_unsigned("flags", flags);
+  f->dump_stream("created") << created;
+  f->dump_stream("modified") << modified;
+  f->dump_int("tableserver", tableserver);
+  f->dump_int("root", root);
+  f->dump_int("session_timeout", session_timeout);
+  f->dump_int("session_autoclose", session_autoclose);
+  f->dump_int("last_failure", last_failure);
+  f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
+  f->dump_stream("compat") << compat;
+  f->dump_int("max_mds", max_mds);
+  f->open_array_section("in");
+  for (set<int32_t>::const_iterator p = in.begin(); p != in.end(); ++p)
+    f->dump_int("mds", *p);
+  f->close_section();
+  f->open_object_section("up");
+  for (map<int32_t,uint64_t>::const_iterator p = up.begin(); p != up.end(); ++p) {
+    char s[10];
+    sprintf(s, "%d", p->first);
+    f->dump_int(s, p->second);
+  }
+  f->close_section();
+  f->open_array_section("failed");
+  for (set<int32_t>::const_iterator p = failed.begin(); p != failed.end(); ++p)
+    f->dump_int("mds", *p);
+  f->close_section();
+  f->open_array_section("stopped");
+  for (set<int32_t>::const_iterator p = stopped.begin(); p != stopped.end(); ++p)
+    f->dump_int("mds", *p);
+  f->close_section();
+  f->open_object_section("info");
+  for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin(); p != mds_info.end(); ++p) {
+    char s[10];
+    sprintf(s, "%llu", (long long unsigned)p->first);
+    f->open_object_section(s);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
 
 void MDSMap::print(ostream& out) 
 {
@@ -110,7 +174,6 @@ void MDSMap::print(ostream& out)
       out << " export_targets=" << info.export_targets;
     out << "\n";    
   }
-
 }
 
 
