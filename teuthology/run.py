@@ -197,6 +197,14 @@ def nuke():
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
+                'if', 'grep', '-q', 'cfuse', '/etc/mtab', run.Raw(';'),
+                'then',
+                'grep', 'cfuse', '/etc/mtab', run.Raw('|'),
+                'grep', '-o', " /.* fuse", run.Raw('|'),
+                'grep', '-o', "/.* ", run.Raw('|'),
+                'xargs', 'sudo', 'fusermount', '-u', run.Raw(';'),
+                'fi',
+                run.Raw(';'),
                 'killall',
                 '--quiet',
                 '/tmp/cephtest/binary/usr/local/bin/cmon',
@@ -212,9 +220,6 @@ def nuke():
                 'sudo', 'initctl', 'restart', 'rsyslog',
                 run.Raw(';'),
                 'fi',
-                run.Raw(';'),
-                'find', '/tmp/cephtest', '-maxdepth', '1', '-name', 'mnt.*',
-                '-execdir', 'fusermount', '-u', '{}', ';',
                 run.Raw(';'),
                 ],
             wait=False,
