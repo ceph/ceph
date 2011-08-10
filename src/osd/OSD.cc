@@ -1363,7 +1363,8 @@ void OSD::update_heartbeat_peers()
       for (unsigned i=0; i<pg->up.size(); i++)
 	_add_heartbeat_source(pg->up[i], old_from, old_from_stamp, old_con);
       for (map<int,PG::Info>::iterator p = pg->peer_info.begin(); p != pg->peer_info.end(); ++p)
-	_add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
+	if (osdmap->is_up(p->first))
+	  _add_heartbeat_source(p->first, old_from, old_from_stamp, old_con);
     }
   }
 
