@@ -21,7 +21,7 @@
     log show                   dump a log from specific object or (bucket + date
                                + pool-id)
     temp remove                remove temporary objects that were created up to
-                               specified date
+                               specified date (and optional time)
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
@@ -39,6 +39,7 @@
      --bucket=<bucket>
      --object=<object>
      --date=<yyyy-mm-dd>
+     --time=<HH:MM:SS>
      --pool-id=<pool-id>
      --format=<format>         specify output format for certain operations: xml,
                                json
