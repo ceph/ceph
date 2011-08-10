@@ -1329,3 +1329,11 @@ uninstall-local: uninstall-coverage
 if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
 endif
+
+
+project.tgz: clean
+	cov-configure -co /usr/bin/gcc
+	cov-configure -co /usr/bin/g++
+	cov-build -e emit -o output make
+	tar czvf project.tgz README emit output
+
