@@ -147,6 +147,8 @@ def reconnect(ctx, timeout):
                     user_at_host=remote.name,
                     host_key=ctx.config['targets'][remote.name],
                     )
+            except socket.timeout:
+                pass
             except socket.error as e:
                 if hasattr(e, '__getitem__'):
                     if e[0] not in [errno.ECONNREFUSED, errno.ETIMEDOUT,
