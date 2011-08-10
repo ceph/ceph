@@ -16,6 +16,9 @@ to determine monitor addresses during startup.
 .TP
 \fB\-m\fI monaddress[:port]\fR
 Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.TP
+\fB\-\-rgw\-socket\-path=\fIpath\fR
+Specify a unix domain socket path.
 .SH EXAMPLES
 An apache example configuration for using the RADOS gateway:
 .IP
@@ -56,6 +59,13 @@ And the corresponding radosgw script:
 .IP
 #!/bin/sh
 /usr/bin/radosgw -c /etc/ceph.conf
+.PP
+By default radosgw will run as single threaded and its execution will be controlled by the fastcgi process manager.
+An alternative way to run it would be by specifying (along the lines of) the following in the apache config:
+.IP
+FastCgiExternalServer /var/www/web1/web/s3gw.fcgi -socket /tmp/.radosgw.sock
+.PP
+and specify a unix domain socket path (either by passing a command line option, or through ceph.conf).
 .SH AVAILABILITY
 .B radosgw
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
