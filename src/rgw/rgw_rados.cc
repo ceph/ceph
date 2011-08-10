@@ -1120,13 +1120,16 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
   io_ctx.locator_set_key(dst_obj.key);
   ObjectWriteOperation op;
 
+  if (truncate_dest) {
+    op.remove();
+    op.set_op_flags(OP_FAILOK); // don't fail if object didn't exist
+  }
+
   if (category.size())
     op.create(false, category);
   else
     op.create(false);
 
-  if (truncate_dest)
-    op.truncate(0);
 
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
