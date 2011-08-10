@@ -101,13 +101,20 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 
 /* pools */
 
-/* Gets a list of pool names as NULL-terminated strings.
- * The pool names will be placed in the supplied buffer one after another.
+/**
+ * List objects in a pool.
+ *
+ * Gets a list of pool names as NULL-terminated strings.  The pool
+ * names will be placed in the supplied @buf buffer one after another.
  * After the last pool name, there will be two 0 bytes in a row.
  *
- * If len is too short to fit all the pool name entries we need, we will fill
+ * If @len is too short to fit all the pool name entries we need, we will fill
  * as much as we can.
- * Returns the length of the buffer we would need to list all pools.
+ *
+ * @param cluster cluster handle
+ * @param buf output buffer
+ * @param len output buffer length
+ * @return length of the buffer we would need to list all pools
  */
 int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
