@@ -1652,9 +1652,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     
     case CEPH_OSD_OP_DELETE:
-      if (!obs.exists)
-        result = -ENOENT;
-      _delete_head(ctx);
+      if (!obs.exists) {
+	result = -ENOENT;
+      } else {
+	_delete_head(ctx);
+      }
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
