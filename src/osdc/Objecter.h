@@ -57,7 +57,7 @@ struct ObjectOperation {
 
   void set_last_op_flags(int flags) {
     assert(!ops.empty());
-    ops.rbegin()->flags = flags;
+    ops.rbegin()->op.flags = flags;
   }
 
   OSDOp& add_op(int op) {
