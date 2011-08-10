@@ -165,6 +165,7 @@ def nuke():
     from orchestra import monkey; monkey.patch_all()
 
     import logging
+    import time
 
     log = logging.getLogger(__name__)
     ctx = parse_args()
@@ -231,6 +232,63 @@ def nuke():
         proc.exitstatus.get()
     log.info('Shutdowns Done.')
 
+    nodes = {}
+    log.info('Looking for kernel mounts to handle...')
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
+                'grep', '-q', " ceph " , '/etc/mtab'
+                ],
+            wait=False,
+            )
+        nodes[remote] = proc
+    kernel_mounts = list()
+    for remote, proc in nodes.iteritems():
+        try:
+            proc.exitstatus.get()
+            log.debug('kernel mount exists on %s', remote.name)
+            kernel_mounts.append(remote)
+        except run.CommandFailedError: # no mounts!
+            log.debug('no kernel mount on %s', remote.name)
+    """
+    properly we should be able to just do a forced unmount,
+    but that doesn't seem to be working, so we'll reboot instead 
+    nodes = {}
+    for remote in kernel_mounts:
+        log.info('clearing kernel mount from %s', remote.name)
+        proc = remote.run(
+            args=[
+                'grep', 'ceph', '/etc/mtab', run.Raw('|'),
+                'grep', '-o', "on /.* type", run.Raw('|'),
+                'grep', '-o', "/.* ", run.Raw('|'),
+                'xargs', 'sudo', 'umount', '-f', run.Raw(';')
+                'fi'
+                ]
+            wait=False
+            )
+        nodes[remote] = proc
+    """
+    nodes = {}
+    
+    for remote in kernel_mounts:
+        log.info('rebooting %s', remote.name)
+        proc = remote.run( # note use of -n to force a no-sync reboot
+            args=['sudo', 'reboot', '-f', '-n'],
+            wait=False
+            )
+        nodes[remote] = proc
+        # we just ignore these procs because reboot -f doesn't actually
+        # send anything back to the ssh client!
+        #for remote, proc in nodes.iteritems():
+        #proc.exitstatus.get()
+    from teuthology.misc import reconnect
+    if kernel_mounts:
+        log.info('waiting for nodes to reboot')
+        time.sleep(5) #if we try and reconnect too quickly, it succeeds!
+        reconnect(ctx, 300)     #allow 5 minutes for the reboots
+
+
+    nodes = {}
     log.info('Clearing filesystem of test data...')
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
