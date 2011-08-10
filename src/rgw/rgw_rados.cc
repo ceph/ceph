@@ -22,6 +22,9 @@ Rados *rados = NULL;
 static string notify_oid = "notify";
 static string shadow_ns = "shadow";
 
+static string shadow_category = "rgw.shadow";
+static string main_category = "rgw.main";
+
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
 public:
@@ -336,7 +339,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
+                  time_t *mtime, map<string, bufferlist>& attrs, string& category, bool exclusive)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -350,9 +353,10 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
 
   ObjectWriteOperation op;
 
-  if (exclusive) {
-    op.create(true);
-  }
+  if (category.size())
+    op.create(exclusive, category);
+  else
+    op.create(exclusive);
 
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -465,7 +469,8 @@ bool RGWRados::aio_completed(void *handle)
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
+int RGWRados::copy_obj(void *ctx, std::string& id,
+               rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -473,6 +478,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                const char *if_match,
                const char *if_nomatch,
                map<string, bufferlist>& attrs,  /* in/out */
+               string& category,
                struct rgw_err *err)
 {
   int ret, r;
@@ -522,7 +528,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs);
+  ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs, category);
   if (mtime)
     obj_stat(ctx, tmp_obj, NULL, mtime);
 
@@ -855,7 +861,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
 
     /* FIXME: clone obj should be conditional, should check src object id-tag */
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, &state->mtime, &cond);
+    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, &cond);
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
@@ -1097,6 +1103,7 @@ done_err:
 int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
+                        string& category,
                         time_t *pmtime,
                         bool truncate_dest,
                         pair<string, bufferlist> *xattr_cond)
@@ -1112,9 +1119,15 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 
   io_ctx.locator_set_key(dst_obj.key);
   ObjectWriteOperation op;
-  op.create(false);
+
+  if (category.size())
+    op.create(false, category);
+  else
+    op.create(false);
+
   if (truncate_dest)
     op.truncate(0);
+
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
@@ -1373,23 +1386,26 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     string bucket_name = iter->first;
     buckets_list.push_back(bucket_name);
   }
-  map<std::string,librados::pool_stat_t> stats;
-  int r = rados->get_pool_stats(buckets_list, stats);
+  map<std::string,librados::stats_map> sm;
+  int r = rados->get_pool_stats(buckets_list, rgw_obj_category_main, sm);
   if (r < 0)
     return r;
 
-  map<string,pool_stat_t>::iterator stats_iter = stats.begin();
+  map<string, librados::stats_map>::iterator miter;
 
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    string bucket_name = iter->first;
-    if (stats_iter->first.compare(bucket_name) == 0) {
-      RGWBucketEnt& ent = iter->second;
-      pool_stat_t stat = stats_iter->second;
-      ent.count = stat.num_objects;
-      ent.size = stat.num_bytes;
-      stats_iter++;
-      count++;
-    }
+  for (miter = sm.begin(), iter = m.begin(); miter != sm.end(), iter != m.end(); ++iter, ++miter) {
+    stats_map stats = miter->second;
+    stats_map::iterator stats_iter = stats.begin();
+
+    string bucket_name = miter->first;
+    RGWBucketEnt& ent = iter->second;
+    if (bucket_name.compare(ent.name) != 0)
+      continue;
+
+    pool_stat_t stat = stats_iter->second;
+    ent.count = stat.num_objects;
+    ent.size = stat.num_bytes;
+    count++;
   }
 
   return count;

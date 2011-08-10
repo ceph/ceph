@@ -20,7 +20,7 @@ public:
 
   int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid=0);
   int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-	      map<std::string, bufferlist>& attrs, bool exclusive);
+	      map<std::string, bufferlist>& attrs, string& category, bool exclusive);
   int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t size);
   int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
@@ -31,6 +31,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                map<std::string, bufferlist>& attrs,
+               string& category,
                struct rgw_err *err);
   int delete_bucket(std::string& id, std::string& bucket);
   int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);

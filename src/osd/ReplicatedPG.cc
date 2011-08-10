@@ -1592,12 +1592,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  bufferlist::iterator p = osd_op.data.begin();
 	  string category;
 	  ::decode(category, p);
-	  if (obs.exists) {
-	    if (obs.oi.category != category)
-	      result = -EEXIST;
-	  } else {
-	    obs.oi.category = category;
-	  }
+          if (category.size()) {
+	    if (obs.exists) {
+	      if (obs.oi.category != category)
+	        result = -EEXIST;
+	    } else {
+	      obs.oi.category = category;
+	    }
+          }
 	}
       }
       break;

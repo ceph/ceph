@@ -61,17 +61,20 @@ public:
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-                      map<std::string, bufferlist>& attrs, bool exclusive) = 0;
+                      map<std::string, bufferlist>& attrs, string& category, bool exclusive) = 0;
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
 
+
+  /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
-      ret = put_obj_meta(ctx, id, obj, mtime, attrs, false);
+      string category;
+      ret = put_obj_meta(ctx, id, obj, mtime, attrs, category, false);
     }
     return ret;
   }
@@ -103,7 +106,8 @@ public:
                       const time_t *unmod_ptr,
                       const char *if_match,
                       const char *if_nomatch,
-		       map<std::string, bufferlist>& attrs,
+		      map<std::string, bufferlist>& attrs,
+                      string& category,
                       struct rgw_err *err) = 0;
   /**
    * Delete a bucket.
@@ -174,7 +178,8 @@ public:
   virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size, time_t *pmtime,
-                          map<string, bufferlist> attrs) {
+                          map<string, bufferlist> attrs,
+                          string& category) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
@@ -182,12 +187,14 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, pmtime, true);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true);
   }
 
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
-                        map<string, bufferlist> attrs, time_t *pmtime,
+                        map<string, bufferlist> attrs,
+                        string& category,
+                        time_t *pmtime,
                         bool truncate_dest) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state

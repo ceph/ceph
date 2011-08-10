@@ -204,7 +204,8 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
 }
 
 int RGWFS::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs, bool exclusive)
+                  time_t *mtime, map<string, bufferlist>& attrs,
+                  string& category, bool exclusive)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -299,6 +300,7 @@ int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                const char *if_match,
                const char *if_nomatch,
                map<string, bufferlist>& attrs,
+               string& category,
                struct rgw_err *err)
 {
   int ret;

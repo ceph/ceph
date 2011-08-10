@@ -3268,26 +3268,63 @@ ioctx_create(const char *name, IoCtx &io)
 }
 
 int librados::Rados::
-get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
+get_pool_stats(std::list<string>& v, std::map<string, stats_map>& result)
+{
+  string category;
+  return get_pool_stats(v, category, result);
+}
+
+int librados::Rados::
+get_pool_stats(std::list<string>& v, string& category, std::map<string, stats_map>& result)
 {
   map<string,::pool_stat_t> rawresult;
   int r = client->get_pool_stats(v, rawresult);
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        p++) {
-    pool_stat_t& v = result[p->first];
-    v.num_kb = p->second.stats.sum.num_kb;
-    v.num_bytes = p->second.stats.sum.num_bytes;
-    v.num_objects = p->second.stats.sum.num_objects;
-    v.num_object_clones = p->second.stats.sum.num_object_clones;
-    v.num_object_copies = p->second.stats.sum.num_object_copies;
-    v.num_objects_missing_on_primary = p->second.stats.sum.num_objects_missing_on_primary;
-    v.num_objects_unfound = p->second.stats.sum.num_objects_unfound;
-    v.num_objects_degraded = p->second.stats.sum.num_objects_degraded;
-    v.num_rd = p->second.stats.sum.num_rd;
-    v.num_rd_kb = p->second.stats.sum.num_rd_kb;
-    v.num_wr = p->second.stats.sum.num_wr;
-    v.num_wr_kb = p->second.stats.sum.num_wr_kb;
+    stats_map& c = result[p->first];
+
+    string cat;
+    vector<string> cats;
+
+    if (!category.size()) {
+      cats.push_back(cat);
+      map<string,object_stat_sum_t>::iterator iter;
+      for (iter = p->second.stats.cat_sum.begin(); iter != p->second.stats.cat_sum.end(); ++iter) {
+        cats.push_back(iter->first);
+      }
+    } else {
+      cats.push_back(category);
+    }
+
+    vector<string>::iterator cat_iter;
+    for (cat_iter = cats.begin(); cat_iter != cats.end(); ++cat_iter) {
+      string& cur_category = *cat_iter;
+      object_stat_sum_t *sum;
+
+      if (!cur_category.size()) {
+         sum = &p->second.stats.sum;
+      } else {
+        map<string,object_stat_sum_t>::iterator iter = p->second.stats.cat_sum.find(cur_category);
+        if (iter == p->second.stats.cat_sum.end())
+          continue;
+        sum = &iter->second;
+      }
+      
+      pool_stat_t& v = c[cur_category];
+      v.num_kb = sum->num_kb;
+      v.num_bytes = sum->num_bytes;
+      v.num_objects = sum->num_objects;
+      v.num_object_clones = sum->num_object_clones;
+      v.num_object_copies = sum->num_object_copies;
+      v.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
+      v.num_objects_unfound = sum->num_objects_unfound;
+      v.num_objects_degraded = sum->num_objects_degraded;
+      v.num_rd = sum->num_rd;
+      v.num_rd_kb = sum->num_rd_kb;
+      v.num_wr = sum->num_wr;
+      v.num_wr_kb = sum->num_wr_kb;
+    }
   }
   return r;
 }

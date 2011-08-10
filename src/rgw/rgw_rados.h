@@ -103,7 +103,7 @@ public:
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-              map<std::string, bufferlist>& attrs, bool exclusive);
+              map<std::string, bufferlist>& attrs, string& category, bool exclusive);
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
@@ -112,13 +112,16 @@ public:
   virtual bool aio_completed(void *handle);
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
                          vector<RGWCloneRangeInfo>& ranges,
-                         map<string, bufferlist> attrs, time_t *pmtime, bool truncate_dest) {
-    return clone_objs(ctx, dst_obj, ranges, attrs, pmtime, truncate_dest, NULL);
+                         map<string, bufferlist> attrs,
+                         string& category,
+                         time_t *pmtime, bool truncate_dest) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, NULL);
   }
 
   int clone_objs(void *ctx, rgw_obj& dst_obj, 
                  vector<RGWCloneRangeInfo>& ranges,
                  map<string, bufferlist> attrs,
+                 string& category,
                  time_t *pmtime,
                  bool truncate_dest,
                  pair<string, bufferlist> *cmp_xattr);
@@ -126,6 +129,7 @@ public:
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                 rgw_obj& src_obj, off_t src_ofs,
                 uint64_t size, map<string, bufferlist> attrs,
+                string& category,
                 time_t *pmtime,
                 pair<string, bufferlist> *xattr_cond) {
     RGWCloneRangeInfo info;
@@ -135,7 +139,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, pmtime, true, xattr_cond);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, xattr_cond);
   }
 
   /** Copy an object, with many extra options */
@@ -147,6 +151,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                map<std::string, bufferlist>& attrs,
+               string& category,
                struct rgw_err *err);
   /** delete a bucket*/
   virtual int delete_bucket(std::string& id, std::string& bucket);

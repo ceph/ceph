@@ -36,6 +36,11 @@ using ceph::crypto::MD5;
 
 extern string rgw_root_bucket;
 
+extern string rgw_obj_category_main;
+extern string rgw_obj_category_shadow;
+extern string rgw_obj_category_multimeta;
+extern string rgw_obj_category_none;
+
 #define RGW_ROOT_BUCKET ".rgw"
 
 #define RGW_CONTROL_BUCKET ".rgw.control"

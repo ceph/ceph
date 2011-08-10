@@ -561,6 +561,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
+  std::string category;
 
   uint64_t min_obj_len = 0;
   uint64_t max_obj_len = 0;
@@ -579,6 +580,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("pool");
   if (i != opts.end()) {
     pool_name = i->second.c_str();
+  }
+  i = opts.find("category");
+  if (i != opts.end()) {
+    category = i->second;
   }
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
@@ -705,29 +710,41 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "df") == 0) {
     // pools
     list<string> vec;
-    rados.pool_list(vec);
 
-    map<string,pool_stat_t> stats;
-    rados.get_pool_stats(vec, stats);
+    if (!pool_name)
+      rados.pool_list(vec);
+    else
+      vec.push_back(pool_name);
 
-    printf("%-15s "
+    map<string, map<string, pool_stat_t> > stats;
+    rados.get_pool_stats(vec, category, stats);
+
+    printf("%-15s %-15s"
 	   "%12s %12s %12s %12s "
 	   "%12s %12s %12s %12s %12s\n",
 	   "pool name",
+	   "category",
 	   "KB", "objects", "clones", "degraded",
 	   "unfound", "rd", "rd KB", "wr", "wr KB");
-    for (map<string,pool_stat_t>::iterator i = stats.begin(); i != stats.end(); ++i) {
-      printf("%-15s "
-	     "%12lld %12lld %12lld %12lld"
-	     "%12lld %12lld %12lld %12lld %12lld\n",
-	     i->first.c_str(),
-	     (long long)i->second.num_kb,
-	     (long long)i->second.num_objects,
-	     (long long)i->second.num_object_clones,
-	     (long long)i->second.num_objects_degraded,
-	     (long long)i->second.num_objects_unfound,
-	     (long long)i->second.num_rd, (long long)i->second.num_rd_kb,
-	     (long long)i->second.num_wr, (long long)i->second.num_wr_kb);
+    for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
+      const string& pool_name = c->first;
+      stats_map& m = c->second;
+      for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
+        const char *category = (i->first.size() ? i->first.c_str() : "-");
+        printf("%-15s "
+               "%-15s "
+	       "%12lld %12lld %12lld %12lld"
+	       "%12lld %12lld %12lld %12lld %12lld\n",
+	       pool_name.c_str(),
+               category,
+	       (long long)i->second.num_kb,
+	       (long long)i->second.num_objects,
+	       (long long)i->second.num_object_clones,
+	       (long long)i->second.num_objects_degraded,
+	       (long long)i->second.num_objects_unfound,
+	       (long long)i->second.num_rd, (long long)i->second.num_rd_kb,
+	       (long long)i->second.num_wr, (long long)i->second.num_wr_kb);
+      }
     }
 
     // total
@@ -1170,6 +1187,8 @@ int main(int argc, const char **argv)
       opts["create"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
+      opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {

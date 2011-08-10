@@ -46,6 +46,8 @@ namespace librados
     uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
   };
 
+  typedef std::map<std::string, pool_stat_t> stats_map;
+
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
@@ -353,7 +355,10 @@ namespace librados
     /* listing objects */
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
-		       std::map<std::string,pool_stat_t>& stats);
+		       std::map<std::string, stats_map>& stats);
+    int get_pool_stats(std::list<std::string>& v,
+                       std::string& category,
+		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
 
     /* pool aio */
