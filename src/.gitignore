@@ -98,3 +98,4 @@ test_rados_api_list
 test_rados_api_pool
 test_rados_api_stat
 test_rados_api_watch_notify
+test_rados_api_snapshots
