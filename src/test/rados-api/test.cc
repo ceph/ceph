@@ -1,10 +1,13 @@
 #include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "test/rados-api/test.h"
 
 #include <sstream>
 #include <stdlib.h>
 #include <string>
 #include <time.h>
+
+using namespace librados;
 
 std::string get_temp_pool_name()
 {
@@ -50,6 +53,39 @@ std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
   return "";
 }
 
+std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
+{
+  int ret;
+  ret = cluster.init(NULL);
+  if (ret) {
+    std::ostringstream oss;
+    oss << "cluster.init failed with error " << ret;
+    return oss.str();
+  }
+  ret = cluster.conf_read_file(NULL);
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.conf_read_file failed with error " << ret;
+    return oss.str();
+  }
+  ret = cluster.connect();
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.connect failed with error " << ret;
+    return oss.str();
+  }
+  ret = cluster.pool_create(pool_name.c_str());
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+  return "";
+}
+
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster)
 {
   int ret = rados_pool_delete(*cluster, pool_name.c_str());
@@ -58,5 +94,16 @@ int destroy_one_pool(const std::string &pool_name, rados_t *cluster)
     return ret;
   }
   rados_shutdown(*cluster);
+  return 0;
+}
+
+int destroy_one_pool_pp(const std::string &pool_name, Rados &cluster)
+{
+  int ret = cluster.pool_delete(pool_name.c_str());
+  if (ret) {
+    cluster.shutdown();
+    return ret;
+  }
+  cluster.shutdown();
   return 0;
 }

@@ -16,6 +16,7 @@
 #define CEPH_TEST_RADOS_API_TEST_H
 
 #include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 
 #include <string>
 #include <unistd.h>
@@ -23,8 +24,10 @@
 std::string get_temp_pool_name();
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster);
-
+std::string create_one_pool_pp(const std::string &pool_name,
+			    librados::Rados &cluster);
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster);
+int destroy_one_pool_pp(const std::string &pool_name, librados::Rados &cluster);
 
 class TestAlarm
 {
