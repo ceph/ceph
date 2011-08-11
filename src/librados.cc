@@ -2585,6 +2585,12 @@ operator=(const IoCtx& rhs)
 librados::IoCtx::
 ~IoCtx()
 {
+  close();
+}
+
+void librados::IoCtx::
+close()
+{
   if (io_ctx_impl)
     io_ctx_impl->put();
   io_ctx_impl = 0;

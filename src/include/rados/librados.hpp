@@ -144,11 +144,10 @@ namespace librados
    *
    * Typical use (error checking omitted):
    *
-   * IoCtx *p;
-   * rados.ioctx_create("my_pool", &p);
+   * IoCtx p;
+   * rados.ioctx_create("my_pool", p);
    * p->stat(&stats);
    * ... etc ...
-   * delete p; // close our pool handle
    */
   class IoCtx
   {
@@ -158,8 +157,10 @@ namespace librados
     IoCtx(const IoCtx& rhs);
     IoCtx& operator=(const IoCtx& rhs);
 
-    // Close our pool handle
     ~IoCtx();
+
+    // Close our pool handle
+    void close();
 
     // deep copy
     void dup(const IoCtx& rhs);
