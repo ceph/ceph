@@ -1356,17 +1356,21 @@ endif
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
 COV_FILES = $(srcdir)/*.gcno
+COV_LIB_FILES = $(srcdir)/.libs/*.gcno
 endif
 
 install-coverage:
 if ENABLE_COVERAGE
-	-mkdir -p $(COV_DIR)
+	-mkdir -p $(COV_DIR)/.libs
 	-$(INSTALL_DATA) $(COV_FILES) $(COV_DIR)
+	-$(INSTALL_DATA) $(COV_LIB_FILES) $(COV_DIR)/.libs
 endif
 
 uninstall-coverage:
 if ENABLE_COVERAGE
 	-rm $(COV_DIR)/*.gcno
+	-rm $(COV_DIR)/.libs/*.gcno
+	-rmdir -p $(COV_DIR)/.libs
 	-rmdir -p $(COV_DIR)
 endif
 
