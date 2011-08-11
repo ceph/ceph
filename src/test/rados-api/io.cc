@@ -1,8 +1,11 @@
 #include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "test/rados-api/test.h"
 
 #include <errno.h>
 #include "gtest/gtest.h"
+
+using namespace librados;
 
 TEST(LibRadosIo, SimpleWrite) {
   char buf[128];
@@ -15,6 +18,21 @@ TEST(LibRadosIo, SimpleWrite) {
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, SimpleWritePP) {
+  char buf[128];
+  std::string pool_name = get_temp_pool_name();
+  Rados cluster;
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST(LibRadosIo, RoundTrip) {
