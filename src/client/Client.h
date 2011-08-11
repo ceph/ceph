@@ -114,6 +114,7 @@ class MetaSession;
 class MetaRequest;
 
 
+typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
 
 
 // ========================================================
@@ -188,6 +189,9 @@ class Client : public Dispatcher {
   OSDMap *osdmap;
 
   SafeTimer timer;
+
+  client_ino_callback_t ino_invalidate_cb;
+  void *ino_invalidate_cb_handle;
 
   Context *tick_event;
   utime_t last_cap_renew;
@@ -636,6 +640,8 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
+
+  void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
 };
 
 #endif

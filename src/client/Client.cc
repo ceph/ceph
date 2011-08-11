@@ -148,7 +148,9 @@ dir_result_t::dir_result_t(Inode *in)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : Dispatcher(m->cct), cct(m->cct), timer(m->cct, client_lock), client_lock("Client::client_lock"),
+  : Dispatcher(m->cct), cct(m->cct), timer(m->cct, client_lock), 
+    ino_invalidate_cb(NULL),
+    client_lock("Client::client_lock"),
   filer_flags(0)
 {
   // which client am i?
@@ -2091,7 +2093,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	   << " is_delayed=" << is_delayed
 	   << dendl;
 
-  if (in->snapid != CEPH_NOSNAP) return; //snap caps last forever, can't write
+  if (in->snapid != CEPH_NOSNAP)
+    return; //snap caps last forever, can't write
   
   if (in->caps.empty())
     return;   // guard if at end of func
@@ -2336,6 +2339,9 @@ void Client::_invalidate_inode_cache(Inode *in)
 
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
+  
+  if (ino_invalidate_cb)
+    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), 0, 0);
 }
 
 void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
@@ -2347,6 +2353,9 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
     filer->file_to_extents(in->ino, &in->layout, off, len, ls);
     objectcacher->truncate_set(&in->oset, ls);
   }
+  
+  if (ino_invalidate_cb)
+    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
 }
 
 
@@ -5585,6 +5594,12 @@ int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
   return statfs(0, stbuf);
 }
 
+void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle)
+{
+  Mutex::Locker l(client_lock);
+  ino_invalidate_cb = cb;
+  ino_invalidate_cb_handle = handle;
+}
 
 int Client::_sync_fs()
 {
