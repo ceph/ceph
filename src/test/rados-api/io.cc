@@ -260,6 +260,24 @@ TEST(LibRadosIo, RemoveTest) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosIo, RemoveTestPP) {
+  char buf[128];
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.remove("foo"));
+  bufferlist bl2;
+  ASSERT_EQ(-ENOENT, ioctx.read("foo", bl2, sizeof(buf), 0));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosIo, XattrsRoundTrip) {
   char buf[128];
   char attr1[] = "attr1";
