@@ -344,6 +344,29 @@ TEST(LibRadosIo, RmXattr) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosIo, RmXattrPP) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  bufferlist bl2;
+  bl2.append(attr1_buf, sizeof(attr1_buf));
+  ASSERT_EQ((int)sizeof(attr1_buf), ioctx.setxattr("foo", attr1, bl2));
+  ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
+  bufferlist bl3;
+  ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosIo, XattrIter) {
   char buf[128];
   char attr1[] = "attr1";
