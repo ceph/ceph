@@ -2335,7 +2335,7 @@ void Client::wake_inode_waiters(int mds_num)
 
 void Client::_invalidate_inode_cache(Inode *in)
 {
-  dout(10) << "_invalidate_inode_cache " << *in << dendl;
+  ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
 
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
@@ -2346,7 +2346,7 @@ void Client::_invalidate_inode_cache(Inode *in)
 
 void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 {
-  dout(10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
+  ldout(cct, 10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
 
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
