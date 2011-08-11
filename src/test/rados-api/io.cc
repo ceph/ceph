@@ -52,6 +52,25 @@ TEST(LibRadosIo, RoundTrip) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosIo, RoundTripPP) {
+  char buf[128];
+  char buf2[128];
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  bufferlist cl;
+  ASSERT_EQ((int)sizeof(buf2), ioctx.read("foo", cl, sizeof(buf), 0));
+  ASSERT_EQ(0, memcmp(buf, cl.c_str(), sizeof(buf)));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosIo, OverlappingWriteRoundTrip) {
   char buf[128];
   char buf2[64];
@@ -71,6 +90,30 @@ TEST(LibRadosIo, OverlappingWriteRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf2), buf, sizeof(buf) - sizeof(buf2)));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, OverlappingWriteRoundTripPP) {
+  char buf[128];
+  char buf2[64];
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  memset(buf2, 0xdd, sizeof(buf2));
+  bufferlist bl2;
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+  bufferlist bl3;
+  ASSERT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
+  ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
+  ASSERT_EQ(0, memcmp(bl3.c_str() + sizeof(buf2), buf, sizeof(buf) - sizeof(buf2)));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST(LibRadosIo, WriteFullRoundTrip) {
