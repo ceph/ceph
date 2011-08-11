@@ -180,6 +180,32 @@ TEST(LibRadosIo, AppendRoundTrip) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosIo, AppendRoundTripPP) {
+  char buf[64];
+  char buf2[64];
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xde, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  memset(buf2, 0xad, sizeof(buf2));
+  bufferlist bl2;
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ((int)sizeof(buf2), ioctx.append("foo", bl2, sizeof(buf2)));
+  bufferlist bl3;
+  ASSERT_EQ((int)(sizeof(buf) + sizeof(buf2)),
+	    ioctx.read("foo", bl3, (sizeof(buf) + sizeof(buf2)), 0));
+  const char *bl3_str = bl3.c_str();
+  ASSERT_EQ(0, memcmp(bl3_str, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(bl3_str + sizeof(buf), buf2, sizeof(buf2)));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosIo, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];
@@ -196,6 +222,25 @@ TEST(LibRadosIo, TruncTest) {
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)/2));
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, TruncTestPP) {
+  char buf[128];
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.trunc("foo", sizeof(buf) / 2));
+  bufferlist bl2;
+  ASSERT_EQ((int)(sizeof(buf)/2), ioctx.read("foo", bl2, sizeof(buf), 0));
+  ASSERT_EQ(0, memcmp(bl2.c_str(), buf, sizeof(buf)/2));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST(LibRadosIo, RemoveTest) {
