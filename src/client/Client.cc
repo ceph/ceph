@@ -433,12 +433,8 @@ void Client::update_inode_file_bits(Inode *in,
       in->oset.truncate_seq = truncate_seq;
 
       // truncate cached file data
-      if (cct->_conf->client_oc && prior_size > size) {
-	vector<ObjectExtent> ls;
-	filer->file_to_extents(in->ino, &in->layout,
-			       size, prior_size - size,
-			       ls);
-	objectcacher->truncate_set(&in->oset, ls);
+      if (prior_size > size) {
+	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size);
       }
     }
   }
@@ -2333,12 +2329,35 @@ void Client::wake_inode_waiters(int mds_num)
 }
 
 
+
+void Client::_invalidate_inode_cache(Inode *in)
+{
+  dout(10) << "_invalidate_inode_cache " << *in << dendl;
+
+  if (cct->_conf->client_oc)
+    objectcacher->release_set(&in->oset);
+}
+
+void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
+{
+  dout(10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
+
+  if (cct->_conf->client_oc) {
+    vector<ObjectExtent> ls;
+    filer->file_to_extents(in->ino, &in->layout, off, len, ls);
+    objectcacher->truncate_set(&in->oset, ls);
+  }
+}
+
+
 // flush dirty data (from objectcache)
 
 void Client::_release(Inode *in, bool checkafter)
 {
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
-    objectcacher->release_set(&in->oset);
+
+    _invalidate_inode_cache(in);
+
     if (checkafter)
       put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     else 
@@ -2381,8 +2400,9 @@ void Client::_flushed(Inode *in)
   ldout(cct, 10) << "_flushed " << *in << dendl;
 
   // release clean pages too, if we dont hold RDCACHE reference
-  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
-    objectcacher->release_set(&in->oset);
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
+    _invalidate_inode_cache(in);
+  }
 
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 }

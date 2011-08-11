@@ -413,6 +413,8 @@ protected:
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
+  void _invalidate_inode_cache(Inode *in);
+  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _release(Inode *in, bool checkafter=true);
   bool _flush(Inode *in, Context *onfinish=NULL);
   void _flushed(Inode *in);
