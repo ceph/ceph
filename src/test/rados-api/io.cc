@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 
 using namespace librados;
+using std::string;
 
 TEST(LibRadosIo, SimpleWrite) {
   char buf[128];
@@ -414,4 +415,46 @@ TEST(LibRadosIo, XattrIter) {
   rados_getxattrs_end(iter);
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosIo, XattrListPP) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  char attr2[] = "attr2";
+  char attr2_buf[256];
+  for (size_t j = 0; j < sizeof(attr2_buf); ++j) {
+    attr2_buf[j] = j % 0xff;
+  }
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  bufferlist bl2;
+  bl2.append(attr1_buf, sizeof(attr1_buf));
+  ASSERT_EQ((int)sizeof(attr1_buf), ioctx.setxattr("foo", attr1, bl2));
+  bufferlist bl3;
+  bl3.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ((int)sizeof(attr2_buf), ioctx.setxattr("foo", attr2, bl3));
+  std::map<std::string, bufferlist> attrset;
+  ASSERT_EQ(0, ioctx.getxattrs("foo", attrset));
+  for (std::map<std::string, bufferlist>::iterator i = attrset.begin();
+       i != attrset.end(); ++i) {
+    if (i->first == string(attr1)) {
+      ASSERT_EQ(0, memcmp(i->second.c_str(), attr1_buf, sizeof(attr1_buf)));
+    }
+    else if (i->first == string(attr2)) {
+      ASSERT_EQ(0, memcmp(i->second.c_str(), attr2_buf, sizeof(attr2_buf)));
+    }
+    else {
+      ASSERT_EQ(0, 1);
+    }
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
