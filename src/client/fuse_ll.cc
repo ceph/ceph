@@ -321,6 +321,7 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   int r = client->ll_open(fino_vino(ino), fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
+    fi->keep_cache = 1;
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, -r);
@@ -460,6 +461,14 @@ static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
+
+static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
+{
+  struct fuse_chan *ch = (struct fuse_chan *)handle;
+  fuse_ino_t fino = make_fake_ino(vino.ino, vino.snapid);
+  fuse_lowlevel_notify_inval_inode(ch, fino, off, len);
+}
+
 int fd_on_success = 0;
 
 static void do_init(void *foo, fuse_conn_info *bar)
@@ -550,7 +559,8 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
 
   //newargv[newargc++] = "-d";
 
-  for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
+  for (int argctr = 1; argctr < argc; argctr++)
+    newargv[newargc++] = argv[argctr];
 
   // go go gadget fuse
   struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
@@ -588,7 +598,13 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   }
 
   fuse_session_add_chan(se, ch);
+
+  client->ll_register_ino_invalidate_cb(invalidate_cb, ch);
+
   ret = fuse_session_loop(se);
+
+  client->ll_register_ino_invalidate_cb(NULL, NULL);
+
   fuse_remove_signal_handlers(se);
   fuse_session_remove_chan(ch);
 
