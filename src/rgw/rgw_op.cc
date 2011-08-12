@@ -379,7 +379,17 @@ void RGWListBucket::execute()
   marker = s->args.get("marker");
   max_keys = s->args.get(limit_opt_name);
   if (!max_keys.empty()) {
-    max = atoi(max_keys.c_str());
+    const char *srcptr = max_keys.c_str();
+    char *endptr;
+    max = strtol(max_keys.c_str(), &endptr, 10);
+    if (endptr) {
+      while (*endptr && isspace(*endptr)) // ignore white space
+        endptr++;
+      if (*endptr) {
+        ret = -EINVAL;
+        goto done;
+      }
+    }
   } else {
     max = default_max;
   }

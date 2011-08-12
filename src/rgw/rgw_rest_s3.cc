@@ -131,9 +131,7 @@ void RGWListBucket_REST_S3::send_response()
     s->formatter->dump_format("Prefix", prefix.c_str());
   if (!marker.empty())
     s->formatter->dump_format("Marker", marker.c_str());
-  if (!max_keys.empty()) {
-    s->formatter->dump_format("MaxKeys", max_keys.c_str());
-  }
+  s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_format("Delimiter", delimiter.c_str());
 
