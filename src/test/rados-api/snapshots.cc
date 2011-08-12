@@ -131,6 +131,46 @@ TEST(LibRadosSnapshots, SelfManagedSnapTest) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosSnapshots, SelfManagedRollbackTest) {
+  std::vector<uint64_t> my_snaps;
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf2[sizeof(buf)];
+  memset(buf2, 0xdd, sizeof(buf2));
+  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", my_snaps[1]);
+  char buf3[sizeof(buf)];
+  ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
+  ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
+
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
 TEST(LibRadosSnapshots, SelfManagedSnapTestPP) {
   std::vector<uint64_t> my_snaps;
   Rados cluster;
