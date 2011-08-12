@@ -91,6 +91,30 @@ TEST(LibRadosSnapshots, SnapGetName) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosSnapshots, SnapGetNamePP) {
+  char buf[128];
+  Rados cluster;
+  IoCtx ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.snap_create("snapfoo"));
+  rados_snap_t rid;
+  ASSERT_EQ(0, ioctx.snap_lookup("snapfoo", &rid));
+  ASSERT_EQ(-ENOENT, ioctx.snap_lookup("snapbar", &rid));
+  std::string name;
+  ASSERT_EQ(0, ioctx.snap_get_name(rid, &name));
+  time_t snaptime;
+  ASSERT_EQ(0, ioctx.snap_get_stamp(rid, &snaptime));
+  ASSERT_EQ(0, strcmp(name.c_str(), "snapfoo"));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosSnapshots, SelfManagedSnapTest) {
   std::vector<uint64_t> my_snaps;
   rados_t cluster;
