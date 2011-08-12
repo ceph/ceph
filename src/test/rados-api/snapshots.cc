@@ -59,7 +59,7 @@ TEST(LibRadosSnapshots, Rollback) {
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
   ASSERT_EQ(0, rados_rollback(ioctx, "foo", "snap1"));
   char buf3[sizeof(buf)];
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));

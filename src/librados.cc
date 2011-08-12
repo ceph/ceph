@@ -3433,7 +3433,7 @@ extern "C" int rados_append(rados_ioctx_t io, const char *o, const char *buf, si
   return ctx->client->append(*ctx, oid, bl, len);
 }
 
-extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len, uint64_t off)
+extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);

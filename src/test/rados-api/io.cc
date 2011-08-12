@@ -129,7 +129,7 @@ TEST(LibRadosIo, WriteFullRoundTrip) {
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
   memset(buf3, 0xdd, sizeof(buf3));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf2, buf2, sizeof(buf2)));
