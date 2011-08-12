@@ -1060,6 +1060,7 @@ int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char 
       if (r < 0)
 	goto done;
     }
+    ldout(cct, 0) << i + 1 << "/" << numseg << " objects copied" << dendl;
   }
   r = 0;
 
