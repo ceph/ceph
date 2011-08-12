@@ -545,7 +545,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
   bool need_issue = false;
 
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
-  if (caps) {
+  if (caps && in->is_head()) {
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, lock->get_cap_shift(), 3);
     dout(10) << " next state is " << lock->get_state_name(next) 
 	     << " issued/allows loner " << gcap_string(loner_issued)
@@ -701,7 +701,9 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
     // drop loner before doing waiters
     if (caps &&
-	in->is_auth() && in->get_wanted_loner() != in->get_loner()) {
+	in->is_head() &&
+	in->is_auth() &&
+	in->get_wanted_loner() != in->get_loner()) {
       dout(10) << "  trying to drop loner" << dendl;
       if (in->try_drop_loner()) {
 	dout(10) << "  dropped loner" << dendl;
@@ -715,7 +717,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
     else
       lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
-    if (caps)
+    if (caps && in->is_head())
       need_issue = true;
 
     if (lock->get_parent()->is_auth() &&
@@ -739,7 +741,7 @@ bool Locker::eval(CInode *in, int mask)
   dout(10) << "eval " << mask << " " << *in << dendl;
 
   // choose loner?
-  if (in->is_auth()) {
+  if (in->is_auth() && in->is_head()) {
     if (in->choose_ideal_loner() >= 0) {
       if (in->try_set_loner()) {
 	dout(10) << "eval set loner to client" << in->get_loner() << dendl;
@@ -767,7 +769,7 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->policylock, &need_issue);
 
   // drop loner?
-  if (in->is_auth() && in->get_wanted_loner() != in->get_loner()) {
+  if (in->is_auth() && in->is_head() && in->get_wanted_loner() != in->get_loner()) {
     dout(10) << "  trying to drop loner" << dendl;
     if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
@@ -1403,10 +1405,13 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
     try_eval(lock, &do_issue);
   
   if (do_issue) {
-    if (pneed_issue)
-      *pneed_issue = true;
-    else
-      issue_caps((CInode*)lock->get_parent());
+    CInode *in = (CInode*)lock->get_parent();
+    if (in->is_head()) {
+      if (pneed_issue)
+	*pneed_issue = true;
+      else
+	issue_caps(in);
+    }
   }
 }
 
@@ -3255,7 +3260,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       gather++;
     }
     
-    if (in) {
+    if (in && in->is_head()) {
       if (in->issued_caps_need_gather(lock)) {
 	if (need_issue)
 	  *need_issue = true;
@@ -3292,7 +3297,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
   }
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
-  if (in) {
+  if (in && in->is_head()) {
     if (need_issue)
       *need_issue = true;
     else
@@ -3333,7 +3338,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     gather++;
   }
   
-  if (in) {
+  if (in && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
       if (need_issue)
 	*need_issue = true;
@@ -3393,7 +3398,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
   if (lock->is_rdlocked())
     gather++;
-  if (in) {
+  if (in && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
       if (need_issue)
 	*need_issue = true;
@@ -3469,7 +3474,7 @@ void Locker::simple_xlock(SimpleLock *lock)
   if (lock->is_wrlocked())
     gather++;
   
-  if (in) {
+  if (in && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
       issue_caps(in);
       gather++;
@@ -3823,6 +3828,7 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     gather++;
 
   if (lock->get_cap_shift() &&
+      in->is_head() &&
       in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
@@ -4074,6 +4080,7 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       gather++;
     }
     if (lock->get_cap_shift() &&
+	in->is_head() &&
 	in->issued_caps_need_gather(lock)) {
       if (need_issue)
 	*need_issue = true;
@@ -4141,7 +4148,8 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
     revoke_client_leases(lock);
     gather++;
   }
-  if (in->issued_caps_need_gather(lock)) {
+  if (in->is_head() &&
+      in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
     else
@@ -4183,7 +4191,8 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
   if (lock->is_xlocked())
     gather++;
   
-  if (in->issued_caps_need_gather(lock)) {
+  if (in->is_head() &&
+      in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
     else
@@ -4222,7 +4231,8 @@ void Locker::file_recover(ScatterLock *lock)
     gather++;
   }
   */
-  if (in->issued_caps_need_gather(lock)) {
+  if (in->is_head() &&
+      in->issued_caps_need_gather(lock)) {
     issue_caps(in);
     gather++;
   }
