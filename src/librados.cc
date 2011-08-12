@@ -3404,8 +3404,8 @@ extern "C" void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
   ctx->set_snap_read((snapid_t)seq);
 }
 
-extern "C" int rados_ioctx_snap_set_write_context(rados_ioctx_t io, rados_snap_t seq,
-				       rados_snap_t *snaps, int num_snaps)
+extern "C" int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, 
+	    rados_snap_t seq, rados_snap_t *snaps, int num_snaps)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   vector<snapid_t> snv;

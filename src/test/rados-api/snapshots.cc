@@ -92,26 +92,41 @@ TEST(LibRadosSnapshots, SnapGetName) {
 }
 
 TEST(LibRadosSnapshots, SelfManagedSnapTest) {
-  char buf[128];
+  std::vector<uint64_t> my_snaps;
   rados_t cluster;
   rados_ioctx_t ioctx;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  uint64_t snapid;
-  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &snapid));
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2), 0));
-  //rados_ioctx_snap_set_read(ioctx, snapid);
-  //ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", snapid));
-//  char buf3[sizeof(buf)];
-//  memset(buf3, 0, sizeof(buf3));
-//  ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
-//  ASSERT_EQ(0, memcmp(buf, buf3, sizeof(buf3)));
-  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, snapid));
+  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  rados_ioctx_snap_set_read(ioctx, my_snaps[1]);
+  char buf3[sizeof(buf)];
+  ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
+  ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
+
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
