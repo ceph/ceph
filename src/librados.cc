@@ -2181,7 +2181,7 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
   if (r < 0)
     return r;
 
-  return bl.length();
+  return 0;
 }
 
 int librados::RadosClient::

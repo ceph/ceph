@@ -291,8 +291,7 @@ TEST(LibRadosIo, XattrsRoundTrip) {
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
-  ASSERT_EQ((int)sizeof(attr1_buf),
-      rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ((int)sizeof(attr1_buf),
 	    rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(attr1_buf, buf, sizeof(attr1_buf)));
@@ -317,7 +316,7 @@ TEST(LibRadosIo, XattrsRoundTripPP) {
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl2));
   bufferlist bl3;
   bl3.append(attr1_buf, sizeof(attr1_buf));
-  ASSERT_EQ((int)sizeof(attr1_buf), ioctx.setxattr("foo", attr1, bl3));
+  ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl3));
   bufferlist bl4;
   ASSERT_EQ((int)sizeof(attr1_buf),
       ioctx.getxattr("foo", attr1, bl4));
@@ -337,7 +336,7 @@ TEST(LibRadosIo, RmXattr) {
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
-  ASSERT_EQ((int)sizeof(attr1_buf),
+  ASSERT_EQ(0,
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
@@ -360,7 +359,7 @@ TEST(LibRadosIo, RmXattrPP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
-  ASSERT_EQ((int)sizeof(attr1_buf), ioctx.setxattr("foo", attr1, bl2));
+  ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));
   ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
   bufferlist bl3;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
@@ -384,10 +383,8 @@ TEST(LibRadosIo, XattrIter) {
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xaa, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
-  ASSERT_EQ((int)sizeof(attr1_buf),
-      rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
-  ASSERT_EQ((int)sizeof(attr2_buf),
-      rados_setxattr(ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
+  ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
   rados_xattrs_iter_t iter;
   ASSERT_EQ(0, rados_getxattrs(ioctx, "foo", &iter));
   int num_seen = 0;
@@ -437,10 +434,10 @@ TEST(LibRadosIo, XattrListPP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
-  ASSERT_EQ((int)sizeof(attr1_buf), ioctx.setxattr("foo", attr1, bl2));
+  ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));
   bufferlist bl3;
   bl3.append(attr2_buf, sizeof(attr2_buf));
-  ASSERT_EQ((int)sizeof(attr2_buf), ioctx.setxattr("foo", attr2, bl3));
+  ASSERT_EQ(0, ioctx.setxattr("foo", attr2, bl3));
   std::map<std::string, bufferlist> attrset;
   ASSERT_EQ(0, ioctx.getxattrs("foo", attrset));
   for (std::map<std::string, bufferlist>::iterator i = attrset.begin();
