@@ -152,12 +152,12 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->close_section();
     }
     if (common_prefixes.size() > 0) {
-      s->formatter->open_array_section("CommonPrefixes");
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        s->formatter->open_array_section("CommonPrefixes");
         s->formatter->dump_format("Prefix", pref_iter->first.c_str());
+        s->formatter->close_section();
       }
-      s->formatter->close_section();
     }
   }
   s->formatter->close_section();
