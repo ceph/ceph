@@ -9,6 +9,7 @@
 #include <string>
 
 using std::ostringstream;
+using namespace librados;
 
 class AioTestData
 {
@@ -62,7 +63,64 @@ public:
   sem_t m_sem;
   rados_t m_cluster;
   rados_ioctx_t m_ioctx;
-  rados_completion_t m_completion;
+  std::string m_pool_name;
+  bool m_init;
+  bool m_complete;
+  bool m_safe;
+};
+
+class AioTestDataPP
+{
+public:
+  AioTestDataPP()
+    : m_init(false),
+      m_complete(false),
+      m_safe(false)
+  {
+  }
+
+  ~AioTestDataPP()
+  {
+    if (m_init) {
+      m_ioctx.close();
+      destroy_one_pool_pp(m_pool_name, m_cluster);
+      sem_destroy(&m_sem);
+    }
+  }
+
+  std::string init()
+  {
+    int ret;
+    if (sem_init(&m_sem, 0, 0)) {
+      int err = errno;
+      sem_destroy(&m_sem);
+      ostringstream oss;
+      oss << "sem_init failed: " << cpp_strerror(err);
+      return oss.str();
+    }
+    m_pool_name = get_temp_pool_name();
+    std::string err = create_one_pool_pp(m_pool_name, m_cluster);
+    if (!err.empty()) {
+      sem_destroy(&m_sem);
+      ostringstream oss;
+      oss << "create_one_pool(" << m_pool_name << ") failed: error " << err;
+      return oss.str();
+    }
+    ret = m_cluster.ioctx_create(m_pool_name.c_str(), m_ioctx);
+    if (ret) {
+      sem_destroy(&m_sem);
+      destroy_one_pool_pp(m_pool_name, m_cluster);
+      ostringstream oss;
+      oss << "rados_ioctx_create failed: error " << ret;
+      return oss.str();
+    }
+    m_init = true;
+    return "";
+  }
+
+  sem_t m_sem;
+  Rados m_cluster;
+  IoCtx m_ioctx;
   std::string m_pool_name;
   bool m_init;
   bool m_complete;
@@ -97,6 +155,25 @@ TEST(LibRadosAio, SimpleWrite) {
   sem_wait(&test_data.m_sem);
   sem_wait(&test_data.m_sem);
   rados_aio_release(my_completion);
+}
+
+TEST(LibRadosAio, SimpleWritePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
+			       my_completion, bl1, sizeof(buf), 0));
+  TestAlarm alarm;
+  sem_wait(&test_data.m_sem);
+  sem_wait(&test_data.m_sem);
+  delete my_completion;
 }
 
 TEST(LibRadosAio, WaitForSafe) {
