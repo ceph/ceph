@@ -668,11 +668,11 @@ int RGWHandler_REST_S3::authorize()
     }
   } else {
     if (strncmp(s->http_auth, "AWS ", 4))
-      return -EPERM;
+      return -EINVAL;
     string auth_str(s->http_auth + 4);
     int pos = auth_str.find(':');
     if (pos < 0)
-      return -EPERM;
+      return -EINVAL;
 
     auth_id = auth_str.substr(0, pos);
     auth_sign = auth_str.substr(pos + 1);
