@@ -73,6 +73,8 @@ SRC_AKEY          Access key for the source URL
 SRC_SKEY          Secret access key for the source URL
 DST_AKEY          Access key for the destination URL
 DST_SKEY          Secret access key for the destination URL
+SRC_SECURE        If set, we'll use https to talk to the s3 source.
+DST_SECURE        If set, we'll use https to talk to the s3 destination.
 AKEY              Access key for both source and dest
 SKEY              Secret access key for both source and dest
 DST_CONSISTENCY   Set to 'eventual' if the destination is eventually consistent
@@ -543,7 +545,11 @@ class Store(object):
     def make_store(url, is_dst, create, akey, skey):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
-            return S3Store(s3_url, create, akey, skey)
+            if (is_dst):
+                is_secure = os.environ.has_key("DST_SECURE")
+            else:
+                is_secure = os.environ.has_key("SRC_SECURE")
+            return S3Store(s3_url, create, akey, skey, is_secure)
         rados_url = strip_prefix("rgw:", url)
         if (rados_url):
             dst_owner = None
@@ -649,7 +655,7 @@ class S3StoreIterator(object):
         return ret
 
 class S3Store(Store):
-    def __init__(self, url, create, akey, skey):
+    def __init__(self, url, create, akey, skey, is_secure):
         # Parse the s3 url
         host_end = string.find(url, "/")
         if (host_end == -1):
@@ -671,7 +677,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             print "self.bucket_name = '" + self.bucket_name + "' ",
             print "self.key_prefix = '" + self.key_prefix + "'"
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
-                host=self.host, is_secure=False,
+                host=self.host, is_secure=is_secure,
                 aws_access_key_id=akey, aws_secret_access_key=skey)
         self.bucket = self.conn.lookup(self.bucket_name)
         if (self.bucket == None):
