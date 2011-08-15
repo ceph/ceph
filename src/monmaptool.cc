@@ -120,7 +120,7 @@ int main(int argc, const char **argv)
     srand(getpid() + time(0));
     monmap.generate_fsid();
     cout << me << ": generated fsid " << monmap.fsid << std::endl;
-    modified++;
+    modified = true;
   }
 
   for (map<string,entity_addr_t>::iterator p = add.begin(); p != add.end(); p++) {
