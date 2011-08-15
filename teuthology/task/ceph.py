@@ -541,18 +541,24 @@ def mon(ctx, config):
 
     for remote, roles_for_host in mons.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-            proc = remote.run(
-                args=[
-                    '/tmp/cephtest/enable-coredump',
+            run_cmd = ['/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
                     '/tmp/cephtest/daemon-helper',
-                    daemon_signal,
-                    '/tmp/cephtest/binary/usr/local/bin/cmon',
+                    daemon_signal ]
+            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmon',
                     '-f',
                     '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    ],
+                    '-c', '/tmp/cephtest/ceph.conf']
+
+            if config.get('valgrind') and (config.get('valgrind').get('mon.{id}'.format(id=id_), None) is not None):
+                log.debug('running mon.{id} under valgrind'.format(id=id_))
+                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                run_cmd.extend(['valgrind', '--log-file={vdir}/mon.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ])
+
+            run_cmd.extend(run_cmd_tail)
+            proc = remote.run(
+                args=run_cmd,
                 logger=log.getChild('mon.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
@@ -583,18 +589,26 @@ def osd(ctx, config):
 
     for remote, roles_for_host in osds.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
+            run_cmd = ['/tmp/cephtest/enable-coredump',
+                       '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                       coverage_dir,
+                       '/tmp/cephtest/daemon-helper',
+                       daemon_signal
+                       ]
+            run_cmd_tail = [ '/tmp/cephtest/binary/usr/local/bin/cosd',
+                             '-f',
+                             '-i', id_,
+                             '-c', '/tmp/cephtest/ceph.conf',
+                             ]
+
+            if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_)) is not None):
+                log.debug('running osd.{id} under valgrind'.format(id=id_))
+                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                run_cmd.extend(['valgrind', '--log-file={vdir}/osd.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ])
+
+            run_cmd.extend(run_cmd_tail)
             proc = remote.run(
-                args=[
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/daemon-helper',
-                    daemon_signal,
-                    '/tmp/cephtest/binary/usr/local/bin/cosd',
-                    '-f',
-                    '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    ],
+                args=run_cmd,
                 logger=log.getChild('osd.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
@@ -624,23 +638,34 @@ def mds(ctx, config):
         log.info('Recording coverage for this run.')
         daemon_signal = 'term'
 
+    log.debug('config is %s', config)
+    log.debug('config.get(valgrind) is %s', config.get('valgrind'))
+
     num_active = 0
     for remote, roles_for_host in mdss.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             if not id_.endswith('-s'):
                 num_active += 1
+            run_cmd = ['/tmp/cephtest/enable-coredump',
+                       '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                       coverage_dir,
+                       '/tmp/cephtest/daemon-helper',
+                       daemon_signal,
+                       ]
+            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmds',
+                            '-f',
+                            '-i', id_,
+                            '-c', '/tmp/cephtest/ceph.conf',
+                            ]
+
+            if config.get('valgrind') and config.get('valgrind').get(('mds.{id}'.format(id=id_)) is not None):
+                log.debug('running mds.{id} under valgrind'.format(id=id_))
+                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                run_cmd.extend(['valgrind', '--log-file={vdir}/mds.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ])
+
+            run_cmd.extend(run_cmd_tail)
             proc = remote.run(
-                args=[
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    coverage_dir,
-                    '/tmp/cephtest/daemon-helper',
-                    daemon_signal,
-                    '/tmp/cephtest/binary/usr/local/bin/cmds',
-                    '-f',
-                    '-i', id_,
-                    '-c', '/tmp/cephtest/ceph.conf',
-                    ],
+                args=run_cmd,
                 logger=log.getChild('mds.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
