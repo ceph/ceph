@@ -810,6 +810,7 @@ libcommon_files = \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
+	osd/osd_types.cc \
 	mds/MDSMap.cc \
 	common/common_init.cc \
 	common/ceph_argparse.cc \
