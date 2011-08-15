@@ -780,15 +780,9 @@ def task(ctx, config):
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {})
                 )),
-        lambda: mon(ctx=ctx, config=dict(
-                coverage=config.get('coverage'),
-                )),
-        lambda: osd(ctx=ctx, config=dict(
-                coverage=config.get('coverage'),
-                )),
-        lambda: mds(ctx=ctx, config=dict(
-                coverage=config.get('coverage'),
-                )),
+        lambda: mon(ctx=ctx, config=config),
+        lambda: osd(ctx=ctx, config=config),
+        lambda: mds(ctx=ctx, config=config),
         ):
         healthy(ctx=ctx, config=None)
         yield
