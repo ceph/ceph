@@ -881,7 +881,7 @@ int main(int argc, const char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&reweight_name, OPT_STR);
       CEPH_ARGPARSE_SET_ARG_VAL(&reweight_weight, OPT_FLOAT);      
     } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
-      verbose++;
+      verbose = true;
     } else if (CEPH_ARGPARSE_EQ("build", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&build, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("num_osds", '\0')) {
