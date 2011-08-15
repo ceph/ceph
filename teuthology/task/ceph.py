@@ -753,6 +753,10 @@ def task(ctx, config):
         if config.get('coverage'):
             log.info('Recording coverage for this run.')
             flavor = 'gcov'
+        else:
+            if config.get('valgrind'):
+                log.info('Using notcmalloc flavor and running some daemons under valgrind')
+                flavor = 'notcmalloc'
     ctx.summary['flavor'] = flavor or 'default'
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
@@ -766,6 +770,18 @@ def task(ctx, config):
             wait=False,
             )
         )
+
+    if config.get('valgrind'):
+        val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'mkdir', '-p', val_path
+                    ],
+                wait=False,
+                )
+            )
+
 
     with contextutil.nested(
         lambda: ceph_log(ctx=ctx, config=None),
