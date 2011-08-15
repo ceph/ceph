@@ -3105,6 +3105,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (r != 0)
 	do_shutdown = true;  // FIXME: do_restart?
 
+      hbin_messenger->mark_down_all();
+
       reset_heartbeat_peers();
     }
   }

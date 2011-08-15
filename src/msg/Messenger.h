@@ -165,6 +165,7 @@ protected:
   virtual void mark_down(Connection *con) = 0;
   virtual void mark_down_on_empty(Connection *con) = 0;
   virtual void mark_disposable(Connection *con) = 0;
+  virtual void mark_down_all() = 0;
 
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
