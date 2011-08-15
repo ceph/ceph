@@ -118,6 +118,8 @@ def connect(ctx, config):
     ctx.cluster = orchestra.cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):
+            assert all(isinstance(role, str) for role in roles), \
+                "Roles in config must be strings: %r" % roles
             ctx.cluster.add(rem, roles)
     else:
         for rem in remotes:
