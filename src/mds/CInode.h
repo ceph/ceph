@@ -32,7 +32,6 @@
 #include "LocalLock.h"
 #include "Capability.h"
 #include "snap.h"
-#include "SessionMap.h"
 
 #include <list>
 #include <vector>

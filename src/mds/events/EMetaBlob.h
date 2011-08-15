@@ -22,6 +22,7 @@
 #include "../CDentry.h"
 
 #include "include/triple.h"
+#include "include/interval_set.h"
 
 class MDS;
 class MDLog;
