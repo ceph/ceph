@@ -161,7 +161,8 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
 
 int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
-  string upload_id = s->args.get("uploadId");
+  string upload_id;
+  url_decode(s->args.get("uploadId"), upload_id);
   string oid = object;
   rgw_obj obj;
 
@@ -376,10 +377,9 @@ void RGWListBucket::execute()
   string no_ns;
 
   url_decode(s->args.get("prefix"), prefix);
-  marker = s->args.get("marker");
-  max_keys = s->args.get(limit_opt_name);
+  url_decode(s->args.get("marker"), marker);
+  url_decode(s->args.get(limit_opt_name), max_keys);
   if (!max_keys.empty()) {
-    const char *srcptr = max_keys.c_str();
     char *endptr;
     max = strtol(max_keys.c_str(), &endptr, 10);
     if (endptr) {
@@ -396,7 +396,8 @@ void RGWListBucket::execute()
   url_decode(s->args.get("delimiter"), delimiter);
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
-    string path_args = s->args.get("path");
+    string path_args;
+    url_decode(s->args.get("path"), path_args);
     if (!path_args.empty()) {
       if (!delimiter.empty() || !prefix.empty()) {
         ret = -EINVAL;
@@ -607,11 +608,12 @@ void RGWPutObj::execute()
       oid.append(buf);
     } else {
       oid = s->object_str;
-      string upload_id = s->args.get("uploadId");
+      string upload_id;
+      url_decode(s->args.get("uploadId"), upload_id);
       RGWMPObj mp(oid, upload_id);
       multipart_meta_obj = mp.get_meta();
 
-      part_num = s->args.get("partNumber");
+      url_decode(s->args.get("partNumber"), part_num);
       if (part_num.empty()) {
         ret = -EINVAL;
         goto done;
@@ -1327,9 +1329,10 @@ int RGWAbortMultipart::verify_permission()
 void RGWAbortMultipart::execute()
 {
   ret = -EINVAL;
-  string upload_id = s->args.get("uploadId");
+  string upload_id;
   string meta_oid;
   string prefix;
+  url_decode(s->args.get("uploadId"), upload_id);
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy;
@@ -1410,7 +1413,8 @@ void RGWListBucketMultiparts::execute()
     goto done;
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
-    string path_args = s->args.get("path");
+    string path_args;
+    url_decode(s->args.get("path"), path_args);
     if (!path_args.empty()) {
       if (!delimiter.empty() || !prefix.empty()) {
         ret = -EINVAL;

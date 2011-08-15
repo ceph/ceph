@@ -237,7 +237,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 
   result.clear();
   int i;
-  for (i=0; (!max || i<max) && p != dir_map.end(); i++, ++p) {
+  for (i=0; i<max && p != dir_map.end(); i++, ++p) {
     RGWObjEnt obj;
     string name = p->first;
     string key = p->second;

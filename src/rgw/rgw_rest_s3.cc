@@ -129,13 +129,12 @@ void RGWListBucket_REST_S3::send_response()
   s->formatter->dump_format("Name", s->bucket);
   if (!prefix.empty())
     s->formatter->dump_format("Prefix", prefix.c_str());
-  if (!marker.empty())
-    s->formatter->dump_format("Marker", marker.c_str());
+  s->formatter->dump_format("Marker", marker.c_str());
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_format("Delimiter", delimiter.c_str());
 
-  s->formatter->dump_format("IsTruncated", (is_truncated ? "true" : "false"));
+  s->formatter->dump_format("IsTruncated", (max && is_truncated ? "true" : "false"));
 
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;

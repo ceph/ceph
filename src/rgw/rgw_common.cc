@@ -312,7 +312,11 @@ bool url_decode(string& src_str, string& dest_str)
       }
     } else {
       src++;
+      if (!*src)
+        break;
       char c1 = hex_to_num(*src++);
+      if (!*src)
+        break;
       c = c1 << 4;
       if (c1 < 0)
         return false;
