@@ -476,6 +476,45 @@ TEST(LibRadosAio, IsSafe) {
   rados_aio_release(my_completion2);
 }
 
+TEST(LibRadosAio, IsSafePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+
+    // Busy-wait until the AIO completes.
+    // Normally we wouldn't do this, but we want to test rados_aio_is_safe.
+    while (true) {
+      int is_safe = my_completion->is_safe();
+      if (is_safe)
+	break;
+    }
+  }
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  bufferlist bl2;
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("foo", my_completion2,
+					  &bl2, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
+  delete my_completion;
+  delete my_completion2;
+}
+
 TEST(LibRadosAio, ReturnValue) {
   AioTestData test_data;
   rados_completion_t my_completion;
