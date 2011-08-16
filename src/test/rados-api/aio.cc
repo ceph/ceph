@@ -515,6 +515,24 @@ TEST(LibRadosAio, IsSafePP) {
   delete my_completion2;
 }
 
+TEST(LibRadosAio, ReturnValuePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  bufferlist bl1;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("nonexistent",
+			       my_completion, &bl1, 128, 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(-ENOENT, my_completion->get_return_value());
+  delete my_completion;
+}
+
 TEST(LibRadosAio, ReturnValue) {
   AioTestData test_data;
   rados_completion_t my_completion;
