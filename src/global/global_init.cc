@@ -88,12 +88,6 @@ void global_init(std::vector < const char* >& args,
 
   conf->parse_argv(args); // argv override
 
-  if (code_env == CODE_ENVIRONMENT_DAEMON) {
-    if (conf->log_dir.empty() && conf->log_file.empty()) {
-	conf->set_val_or_die("log_file", "/var/log/ceph/$name.log");
-    }
-  }
-
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes(NULL);
 

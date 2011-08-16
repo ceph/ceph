@@ -274,7 +274,7 @@ const char** DoutStreambuf<charT, traits>::
 get_tracked_conf_keys() const
 {
   static const char *KEYS[] =
-	{ "log_file", "log_dir", "log_sym_dir",
+	{ "log_file", "log_sym_dir",
 	 "log_sym_history", "log_to_stderr",
 	 "log_to_syslog", "log_per_instance", NULL };
   return KEYS;
@@ -321,10 +321,8 @@ handle_conf_change(const md_config_t *conf, const std::set <std::string> &change
     }
   }
 
-  if ((!conf->log_file.empty()) || (!conf->log_dir.empty())) {
-    if (_read_ofile_config(conf) == 0) {
-      flags |= DOUTSB_FLAG_OFILE;
-    }
+  if (_read_ofile_config(conf) == 0) {
+    flags |= DOUTSB_FLAG_OFILE;
   }
 }
 
@@ -456,44 +454,19 @@ std::string DoutStreambuf<charT, traits>::
 _calculate_opath(const md_config_t *conf) const
 {
   // should hold the dout_lock here
-
-  // If conf->log_file was specified, that takes the highest priority
-  if (!conf->log_file.empty()) {
-    string log_file(normalize_relative(conf->log_file.c_str()));
-    if ((conf->log_per_instance) && (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
-      ostringstream oss;
-      oss << log_file << "." << getpid();
-      return oss.str();
-    }
-    else
-      return log_file;
+  if (conf->log_file.empty()) {
+    // We don't want a log file.
+    return "";
   }
 
-  string log_dir;
-  if (conf->log_dir.empty())
-    log_dir = normalize_relative(".");
-  else
-    log_dir = normalize_relative(conf->log_dir.c_str());
-
+  string log_file(normalize_relative(conf->log_file.c_str()));
   if ((conf->log_per_instance) && (g_code_env == CODE_ENVIRONMENT_DAEMON)) {
-    char hostname[255];
-    memset(hostname, 0, sizeof(hostname));
-    int ret = gethostname(hostname, sizeof(hostname));
-    if (ret) {
-      int err = errno;
-      ostringstream oss;
-      oss << __func__ << ": error calling gethostname: " << cpp_strerror(err) << "\n";
-      dout_emergency(oss.str());
-      return "";
-    }
     ostringstream oss;
-    oss << log_dir << "/" << hostname << "." << getpid();
+    oss << log_file << "." << getpid();
     return oss.str();
   }
   else {
-    ostringstream oss;
-    oss << log_dir << "/" << conf->name.to_str() << ".log";
-    return oss.str();
+    return log_file;
   }
 }
 
@@ -519,9 +492,6 @@ _read_ofile_config(const md_config_t *conf)
 
   opath = _calculate_opath(conf);
   if (opath.empty()) {
-    ostringstream oss;
-    oss << __func__ << ": _calculate_opath failed.\n";
-    dout_emergency(oss.str());
     return 1;
   }
 

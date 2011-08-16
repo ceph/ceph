@@ -176,7 +176,6 @@ public:
   std::string admin_socket;
 
   std::string log_file;
-  std::string log_dir;
   std::string log_sym_dir;
   int log_sym_history;
 

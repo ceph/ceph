@@ -53,6 +53,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
 	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
 	conf->set_val_or_die("admin_socket", "/var/run/ceph/$name.asok");
+	conf->set_val_or_die("log_file", "/var/log/ceph/$name.log");
       }
       conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
       break;

@@ -130,7 +130,6 @@ struct config_option config_optionsp[] = {
   OPTION(daemonize, OPT_BOOL, false),
   OPTION(admin_socket, OPT_STR, ""),
   OPTION(log_file, OPT_STR, 0),
-  OPTION(log_dir, OPT_STR, 0),
   OPTION(log_sym_dir, OPT_STR, 0),
   OPTION(log_sym_history, OPT_INT, 10),
   OPTION(log_to_stderr, OPT_INT, LOG_TO_STDERR_ALL),
@@ -606,7 +605,7 @@ parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
-      set_val_or_die("log_dir", "");
+      set_val_or_die("log_file", "");
       set_val_or_die("pid_file", "");
       set_val_or_die("log_sym_dir", "");
       set_val_or_die("log_sym_history", "0");
