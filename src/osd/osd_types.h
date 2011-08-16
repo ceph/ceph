@@ -993,6 +993,8 @@ struct pg_stat_t {
   void decode(bufferlist::iterator &bl) {
     __u8 v;
     ::decode(v, bl);
+    if (v > 4)
+      throw buffer::malformed_input("unknown pg_stat_t encoding version > 4");
 
     ::decode(version, bl);
     ::decode(reported, bl);
