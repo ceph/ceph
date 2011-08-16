@@ -911,7 +911,11 @@ noinst_LIBRARIES += libmds.a
 libos_la_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
-	os/JournalingObjectStore.cc
+	os/JournalingObjectStore.cc \
+	os/LFNIndex.cc \
+	os/HashIndex.cc \
+	os/FlatIndex.cc
+
 libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libos_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libos.la
