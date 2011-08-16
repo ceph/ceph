@@ -515,24 +515,6 @@ TEST(LibRadosAio, IsSafePP) {
   delete my_completion2;
 }
 
-TEST(LibRadosAio, ReturnValuePP) {
-  AioTestDataPP test_data;
-  ASSERT_EQ("", test_data.init());
-  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
-	  (void*)&test_data, set_completion_complete, set_completion_safe);
-  AioCompletion *my_completion_null = NULL;
-  ASSERT_NE(my_completion, my_completion_null);
-  bufferlist bl1;
-  ASSERT_EQ(0, test_data.m_ioctx.aio_read("nonexistent",
-			       my_completion, &bl1, 128, 0));
-  {
-    TestAlarm alarm;
-    ASSERT_EQ(0, my_completion->wait_for_complete());
-  }
-  ASSERT_EQ(-ENOENT, my_completion->get_return_value());
-  delete my_completion;
-}
-
 TEST(LibRadosAio, ReturnValue) {
   AioTestData test_data;
   rados_completion_t my_completion;
@@ -549,6 +531,24 @@ TEST(LibRadosAio, ReturnValue) {
   }
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(my_completion));
   rados_aio_release(my_completion);
+}
+
+TEST(LibRadosAio, ReturnValuePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  bufferlist bl1;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("nonexistent",
+			       my_completion, &bl1, 128, 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(-ENOENT, my_completion->get_return_value());
+  delete my_completion;
 }
 
 TEST(LibRadosAio, Flush) {
@@ -576,6 +576,35 @@ TEST(LibRadosAio, Flush) {
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
+}
+
+TEST(LibRadosAio, FlushPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xee, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_flush());
+  bufferlist bl2;
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("foo", my_completion2,
+					  &bl2, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
+  delete my_completion;
+  delete my_completion2;
 }
 
 TEST(LibRadosAio, RoundTripWriteFull) {
