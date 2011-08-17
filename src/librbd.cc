@@ -1695,7 +1695,7 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
     strcpy(names, cpp_names[i].c_str());
     names += strlen(names) + 1;
   }
-  return (int)cpp_names.size();
+  return (int)expected_size;
 }
 
 extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int *order)
