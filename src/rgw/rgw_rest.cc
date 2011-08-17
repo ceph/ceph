@@ -395,7 +395,7 @@ void init_entities_from_header(struct req_state *s)
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
       url_decode(encoded_bucket, s->bucket_str);
-      s->bucket = s->bucket_str.c_str();
+      s->bucket = strdup(s->bucket_str.c_str());
       s->host_bucket = s->bucket;
     } else {
       s->host_bucket = NULL;
@@ -473,11 +473,11 @@ void init_entities_from_header(struct req_state *s)
       goto done;
 
     url_decode(first, s->bucket_str);
-    s->bucket = s->bucket_str.c_str();
+    s->bucket = strdup(s->bucket_str.c_str());
    
     if (req.size()) {
       url_decode(req, s->object_str);
-      s->object = s->object_str.c_str();
+      s->object = strdup(s->object_str.c_str());
     }
 
     goto done;
