@@ -3501,6 +3501,11 @@ bool PG::old_peering_msg(const epoch_t &msg_epoch)
   return (last_warm_restart > msg_epoch);
 }
 
+void PG::reset_last_warm_restart() {
+  const OSDMap &osdmap = *osd->osdmap;
+  last_warm_restart = osdmap.get_epoch();
+}
+
 /* Called before initializing peering during advance_map */
 void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting)
 {
@@ -3509,7 +3514,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
   // -- there was a change! --
   kick();
 
-  last_warm_restart = osdmap.get_epoch();
+  reset_last_warm_restart();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
@@ -3891,6 +3896,13 @@ PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
 PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
   state_name = "Initial";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result 
+PG::RecoveryState::Initial::react(const Initialize&) {
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reset_last_warm_restart();
+  return transit< Started >();
 }
 
 boost::statechart::result 

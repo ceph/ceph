@@ -1019,8 +1019,8 @@ public:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Started >,
 	boost::statechart::transition< Load, Reset >,
+	boost::statechart::custom_reaction< Initialize >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
@@ -1030,6 +1030,7 @@ public:
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
+      boost::statechart::result react(const Initialize&);
     };
 
     struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
@@ -1577,6 +1578,7 @@ public:
   void share_pg_log(const eversion_t &oldver);
 
   void warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting);
+  void reset_last_warm_restart();
 		    
   void fulfill_info(int from, const Query &query, 
 		    pair<int, Info> &notify_info);
