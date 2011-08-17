@@ -1190,6 +1190,9 @@ struct object_info_t {
 
   void copy_user_bits(const object_info_t& other);
 
+  static ps_t legacy_object_locator_to_ps(const object_t &oid, 
+					  const object_locator_t &loc);
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
