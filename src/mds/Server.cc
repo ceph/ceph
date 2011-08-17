@@ -6625,7 +6625,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
   // journal the snaprealm changes
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
   mdlog->flush();
@@ -6744,7 +6744,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
   mdlog->flush();
