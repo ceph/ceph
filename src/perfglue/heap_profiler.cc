@@ -50,7 +50,7 @@ bool ceph_heap_profiler_running()
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
   char path[PATH_MAX];
-  snprintf(path, sizeof(path), g_conf->log_file.c_str());
+  snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
   char *last_slash = rindex(path, '/');
 
   if (last_slash == NULL) {
