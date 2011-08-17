@@ -7804,14 +7804,13 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   snapid_t seq;
   ::decode(seq, p);
 
-  SnapRealm t(this, in);
-  t.srnode.created = seq;
-  bufferlist snapbl;
-  ::encode(t, snapbl);
+  sr_t *newsnap = in->project_snaprealm(seq);
+  newsnap->seq = seq;
+  newsnap->last_created = seq;
   
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_cow_inode(mut, &le->metablob, in);
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in, 0, &snapbl);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in);
 
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
   mds->mdlog->flush();
