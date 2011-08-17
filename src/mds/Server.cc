@@ -2414,19 +2414,17 @@ void Server::handle_client_open(MDRequest *mdr)
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
+    // wait for pending truncate?
     inode_t *pi = cur->get_projected_inode();
-    if (pi->size > 0) {
-      // wait for pending truncate?
-      if (pi->is_truncating()) {
-	dout(10) << " waiting for pending truncate from " << pi->truncate_from
-		 << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-	cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
-
-      do_open_truncate(mdr, cmode);
+    if (pi->is_truncating()) {
+      dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+      cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
+    
+    do_open_truncate(mdr, cmode);
+    return;
   }
 
   // sync filelock if snapped.
@@ -3163,7 +3161,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
     pi->client_ranges[client].range.last = pi->get_layout_size_increment();
     pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
   }
-
+  
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   mdlog->start_entry(le);
