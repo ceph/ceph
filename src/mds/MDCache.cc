@@ -7900,6 +7900,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   ::decode(seq, p);
 
   in->open_snaprealm();
+  in->snaprealm->open = true;
   in->snaprealm->srnode.seq = seq;
   in->snaprealm->srnode.created = seq;
   in->snaprealm->srnode.current_parent_since = seq;
