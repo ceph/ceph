@@ -47,7 +47,6 @@ JSONFormatter::JSONFormatter(bool p)
 void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  assert(m_stack.empty());
   os << m_ss.str();
   m_ss.clear();
   m_ss.str("");
@@ -235,7 +234,6 @@ XMLFormatter::XMLFormatter(bool pretty)
 void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  assert(m_sections.empty());
   os << m_ss.str();
   m_ss.clear();
   m_ss.str("");
