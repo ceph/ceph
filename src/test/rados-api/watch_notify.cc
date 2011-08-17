@@ -1,9 +1,12 @@
 #include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "test/rados-api/test.h"
 
 #include <errno.h>
 #include <semaphore.h>
 #include "gtest/gtest.h"
+
+using namespace librados;
 
 static sem_t sem;
 
@@ -11,6 +14,15 @@ static void watch_notify_test_cb(uint8_t opcode, uint64_t ver, void *arg)
 {
   sem_post(&sem);
 }
+
+class WatchNotifyTestCtx : public WatchCtx
+{
+public:
+    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
+    {
+      sem_post(&sem);
+    }
+};
 
 TEST(LibRadosWatchNotify, WatchNotifyTest) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
@@ -34,3 +46,27 @@ TEST(LibRadosWatchNotify, WatchNotifyTest) {
   sem_destroy(&sem);
 }
 
+TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  bufferlist bl2;
+  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  ioctx.unwatch("foo", handle);
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  sem_destroy(&sem);
+}
