@@ -1,12 +1,20 @@
 #include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "test/rados-api/test.h"
 
 #include <errno.h>
 #include "gtest/gtest.h"
 
+using namespace librados;
+
 TEST(LibRadosMisc, Version) {
   int major, minor, extra;
   rados_version(&major, &minor, &extra);
+}
+
+TEST(LibRadosMisc, VersionPP) {
+  int major, minor, extra;
+  Rados::version(&major, &minor, &extra);
 }
 
 //TEST(LibRadosMisc, Exec) {
