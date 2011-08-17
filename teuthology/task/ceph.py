@@ -559,7 +559,7 @@ def mon(ctx, config):
                 log.debug('running mon.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 proc_signal = 'term'
-                extra_args = ['valgrind', '--log-file={vdir}/mon.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ]
+                extra_args = ['valgrind', '--log-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
@@ -614,7 +614,7 @@ def osd(ctx, config):
             if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_), None) is not None):
                 log.debug('running osd.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                extra_args = ['valgrind', '--log-file={vdir}/osd.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ]
+                extra_args = ['valgrind', '--log-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ]
                 proc_signal = 'term'
 
             run_cmd.append(proc_signal)
@@ -678,7 +678,7 @@ def mds(ctx, config):
                 log.debug('running mds.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 proc_signal = 'term'
-                extra_args = ['valgrind', '--log-file={vdir}/mds.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ]
+                extra_args = ['valgrind', '--log-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
