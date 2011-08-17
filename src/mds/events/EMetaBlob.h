@@ -531,13 +531,11 @@ private:
   }
 
   // return remote pointer to to-be-journaled inode
-  inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0) {
+  inode_t *add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
                               dn, dirty, in);
   }
-  inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0) {
+  inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, CInode *in=0) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
