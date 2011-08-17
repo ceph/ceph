@@ -541,21 +541,29 @@ def mon(ctx, config):
 
     for remote, roles_for_host in mons.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
+            proc_signal = daemon_signal
             run_cmd = ['/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/daemon-helper',
-                    daemon_signal ]
+                    '/tmp/cephtest/daemon-helper'
+                       ]
+
             run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmon',
                     '-f',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf']
 
+            extra_args = None
+
             if config.get('valgrind') and (config.get('valgrind').get('mon.{id}'.format(id=id_), None) is not None):
                 log.debug('running mon.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                run_cmd.extend(['valgrind', '--log-file={vdir}/mon.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ])
+                proc_signal = 'term'
+                extra_args = ['valgrind', '--log-file={vdir}/mon.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ]
 
+            run_cmd.append(proc_signal)
+            if extra_args is not None:
+                run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
             proc = remote.run(
                 args=run_cmd,
@@ -592,20 +600,26 @@ def osd(ctx, config):
             run_cmd = ['/tmp/cephtest/enable-coredump',
                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                        coverage_dir,
-                       '/tmp/cephtest/daemon-helper',
-                       daemon_signal
+                       '/tmp/cephtest/daemon-helper'
                        ]
+            proc_signal = daemon_signal
             run_cmd_tail = [ '/tmp/cephtest/binary/usr/local/bin/cosd',
                              '-f',
                              '-i', id_,
                              '-c', '/tmp/cephtest/ceph.conf',
                              ]
+            
+            extra_args = None
 
             if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_), None) is not None):
                 log.debug('running osd.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                run_cmd.extend(['valgrind', '--log-file={vdir}/osd.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ])
+                extra_args = ['valgrind', '--log-file={vdir}/osd.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ]
+                proc_signal = 'term'
 
+            run_cmd.append(proc_signal)
+            if extra_args is not None:
+                run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
             proc = remote.run(
                 args=run_cmd,
@@ -649,20 +663,26 @@ def mds(ctx, config):
             run_cmd = ['/tmp/cephtest/enable-coredump',
                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                        coverage_dir,
-                       '/tmp/cephtest/daemon-helper',
-                       daemon_signal,
+                       '/tmp/cephtest/daemon-helper'
                        ]
+            proc_signal = daemon_signal
             run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmds',
                             '-f',
                             '-i', id_,
                             '-c', '/tmp/cephtest/ceph.conf',
                             ]
 
-            if config.get('valgrind') and (config.get('valgrind').get('mds.{id}'.format(id=id_), None1) is not None):
+            extra_args = None
+
+            if config.get('valgrind') and (config.get('valgrind').get('mds.{id}'.format(id=id_), None) is not None):
                 log.debug('running mds.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                run_cmd.extend(['valgrind', '--log-file={vdir}/mds.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ])
+                proc_signal = 'term'
+                extra_args = ['valgrind', '--log-file={vdir}/mds.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ]
 
+            run_cmd.append(proc_signal)
+            if extra_args is not None:
+                run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
             proc = remote.run(
                 args=run_cmd,
