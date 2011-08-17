@@ -322,7 +322,8 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   if (r == 0) {
     fi->fh = (long)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    fi->keep_cache = 1;
+    if (g_conf->fuse_use_invalidate_cb)
+      fi->keep_cache = 1;
 #endif
     fuse_reply_open(req, fi);
   } else {
@@ -569,6 +570,7 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   // go go gadget fuse
   struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
   struct fuse_chan *ch = NULL;
+  struct fuse_chan *ch_inval = NULL;
   struct fuse_session *se = NULL;
   char *mountpoint = NULL;
   int ret = 0;
@@ -602,8 +604,10 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   }
 
   fuse_session_add_chan(se, ch);
+  fuse_session_add_chan(se, ch_inval);
 
-  client->ll_register_ino_invalidate_cb(invalidate_cb, ch);
+  if (g_conf->fuse_use_invalidate_cb)
+    client->ll_register_ino_invalidate_cb(invalidate_cb, ch);
 
   ret = fuse_session_loop(se);
 

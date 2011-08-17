@@ -315,6 +315,9 @@ public:
 
   int      client_notify_timeout;
 
+  // fuse
+  bool fuse_use_invalidate_cb;
+
   // objecter
   double objecter_mon_retry_interval;
   double objecter_tick_interval;

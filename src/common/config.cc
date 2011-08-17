@@ -230,6 +230,7 @@ struct config_option config_optionsp[] = {
   OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8), // target dirty (keep this smallish)
   // note: the max amount of "in flight" dirty data is roughly (max - target)
   OPTION(client_oc_max_sync_write, OPT_U64, 128*1024),   // sync writes >= this use wrlock
+  OPTION(fuse_use_invalidate_cb, OPT_BOOL, false), // use fuse 2.8+ invalidate callback to keep page cache consistent
   OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0),
   OPTION(objecter_mon_retry_interval, OPT_DOUBLE, 5.0),
   OPTION(objecter_timeout, OPT_DOUBLE, 10.0),    // before we ask for a map
