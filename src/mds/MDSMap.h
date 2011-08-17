@@ -16,6 +16,8 @@
 #ifndef CEPH_MDSMAP_H
 #define CEPH_MDSMAP_H
 
+#include <errno.h>
+
 #include "include/types.h"
 #include "common/Clock.h"
 #include "msg/Message.h"
@@ -266,6 +268,21 @@ public:
   }
   int get_num_failed() { return failed.size(); }
 
+  // data pools
+  void add_data_pg_pool(__u32 poolid) {
+    data_pg_pools.push_back(poolid);
+  }
+  int remove_data_pg_pool(__u32 poolid) {
+    for (vector<__u32>::iterator p = data_pg_pools.begin();
+	 p != data_pg_pools.end();
+	 ++p) {
+      if (*p == poolid) {
+	data_pg_pools.erase(p);
+	return 0;
+      }
+    }
+    return -ENOENT;
+  }
 
   // sets
   void get_mds_set(set<int>& s) {

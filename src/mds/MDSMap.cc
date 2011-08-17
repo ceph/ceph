@@ -120,6 +120,11 @@ void MDSMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("data_pools");
+  for (vector<__u32>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p)
+    f->dump_int("pool", *p);
+  f->close_section();
+  f->dump_int("metadata_pool", metadata_pg_pool);
 }
 
 void MDSMap::print(ostream& out) 
@@ -140,6 +145,8 @@ void MDSMap::print(ostream& out)
       << "up\t" << up << "\n"
       << "failed\t" << failed << "\n"
       << "stopped\t" << stopped << "\n";
+  out << "data_pools\t" << data_pg_pools << "\n";
+  out << "metadata_pool\t" << metadata_pg_pool << "\n";
 
   multimap< pair<unsigned,unsigned>, uint64_t > foo;
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();

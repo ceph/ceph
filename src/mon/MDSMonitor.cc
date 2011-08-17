@@ -821,6 +821,16 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	  r = -ENOENT;
 	}
       }
+    } else if (m->cmd[1] == "add_data_pool" && m->cmd.size() == 3) {
+      int poolid = atoi(m->cmd[2].c_str());
+      pending_mdsmap.add_data_pg_pool(poolid);
+      ss << "added data pool " << poolid << " to mdsmap";
+      r = 0;
+    } else if (m->cmd[1] == "remove_data_pool" && m->cmd.size() == 3) {
+      int poolid = atoi(m->cmd[2].c_str());
+      r = pending_mdsmap.remove_data_pg_pool(poolid);
+      if (r == 0)
+	ss << "removed data pool " << poolid << " from mdsmap";
     } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
       MDSMap newmap(g_ceph_context);
       int metadata = atoi(m->cmd[2].c_str());
