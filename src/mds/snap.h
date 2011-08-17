@@ -125,7 +125,7 @@ struct sr_t {
     __u8 struct_v;
     ::decode(struct_v, p);
     if (struct_v == 2)
-      ::decode(struct_v, p);
+      ::decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
     ::decode(seq, p);
     ::decode(created, p);
     ::decode(last_created, p);
