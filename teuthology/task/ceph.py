@@ -761,6 +761,14 @@ def task(ctx, config):
         - ceph:
             coverage: true
 
+    To run some daemons under valgrind, include their names
+    and the tool to use in a valgrind section::
+        tasks:
+        - ceph:
+          valgrind:
+            mds.1: --tool=memcheck
+            osd.1: --tool=memcheck
+
     To adjust or modify config options, use::
 
         tasks:
