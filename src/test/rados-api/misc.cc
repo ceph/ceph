@@ -155,7 +155,42 @@ TEST(LibRadosMisc, ExecPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-//int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
+TEST(LibRadosMisc, Operate1PP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  ObjectOperation o;
+  {
+    bufferlist bl;
+    bl.append(buf, sizeof(buf));
+    o.write(0, bl);
+  }
+
+  {
+    bufferlist bl2;
+    char buf2[128];
+    snprintf(buf2, sizeof(buf2), "val1");
+    bl2.append(buf2, sizeof(buf2));
+    o.setxattr("foo", bl2);
+  }
+
+  ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
+
+  {
+    bufferlist bl;
+    ASSERT_GT(ioctx.read("foo", bl, 0, 0), 0);
+    ASSERT_EQ(0, memcmp(bl.c_str(), buf, sizeof(buf)));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
 
 //TEST(LibRadosMisc, CloneRange) {
 //  char buf[128];
