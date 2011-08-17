@@ -532,12 +532,12 @@ private:
 
   // return remote pointer to to-be-journaled inode
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
+			      CInode *in=0, fragtree_t *pdft=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
-                              dn, dirty, in, pdft, psnapbl);
+                              dn, dirty, in, pdft);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
+			      CInode *in=0, fragtree_t *pdft=0) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
@@ -556,14 +556,9 @@ private:
       pdft = &in->dirfragtree;
 
     bufferlist snapbl;
-    if (psnapbl) {
-      snapbl = *psnapbl;
-    } else {
-      sr_t *sr = in->get_projected_srnode();
-      if (sr)
-	sr->encode(snapbl);
-    }
-	
+    sr_t *sr = in->get_projected_srnode();
+    if (sr)
+      sr->encode(snapbl);
 
     lump.nfull++;
     lump.get_dfull().push_back(std::tr1::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
