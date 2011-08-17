@@ -367,7 +367,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
 
 /* if newparent != parent, add parent to past_parents
  if parent DNE, we need to find what the parent actually is and fill that in */
-void CInode::project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& snapbl)
+void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
 {
   sr_t *new_snap = project_snaprealm();
   SnapRealm *oldparent;
@@ -384,7 +384,6 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& sna
     new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
     new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
   }
-  new_snap->encode(snapbl);
 }
 
 void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)

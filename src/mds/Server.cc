@@ -4547,10 +4547,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
-    bufferlist snapbl;
-    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
-    le->metablob.add_primary_dentry(straydn, true, in, 0, &snapbl);
+    le->metablob.add_primary_dentry(straydn, true, in, 0);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -5625,10 +5624,9 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	bufferlist snapbl;
-	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
-	tji = metablob->add_primary_dentry(straydn, true, oldin, 0, &snapbl);
+	tji = metablob->add_primary_dentry(straydn, true, oldin, 0);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -5670,9 +5668,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
-    bufferlist snapbl;
     if (destdn->is_auth() && srci->snaprealm)
-      srci->project_past_snaprealm_parent(dest_realm, snapbl);
+      srci->project_past_snaprealm_parent(dest_realm);
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -5680,11 +5677,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       destdn->first = MAX(destdn->first, next_dest_snap);
 
     if (destdn->is_auth())
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0);
     else if (force_journal) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+      ji = metablob->add_primary_dentry(destdn, true, srci, 0);
     }
   }
     
