@@ -539,6 +539,7 @@ public:
   virtual ~ObjectStore() {}
 
   // mgmt
+  virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
@@ -595,6 +596,10 @@ public:
     
   // collections
   virtual int list_collections(vector<coll_t>& ls) = 0;
+  virtual int collection_version_current(coll_t c, uint32_t *version) { 
+    *version = 0;
+    return 1;
+  }
   virtual bool collection_exists(coll_t c) = 0;
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) = 0;

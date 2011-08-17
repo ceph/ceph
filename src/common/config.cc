@@ -409,6 +409,7 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_fiemap_threshold, OPT_INT, 4096),
   OPTION(filestore_merge_threshold, OPT_INT, 10),
   OPTION(filestore_split_multiple, OPT_INT, 2),
+  OPTION(filestore_update_collections, OPT_BOOL, false),
   OPTION(journal_dio, OPT_BOOL, true),
   OPTION(journal_block_align, OPT_BOOL, true),
   OPTION(journal_max_write_bytes, OPT_INT, 10 << 20),

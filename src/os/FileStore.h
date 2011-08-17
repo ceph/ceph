@@ -39,6 +39,7 @@ using namespace __gnu_cxx;
 // fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore {
+  static const uint32_t on_disk_version = 1;
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
@@ -68,7 +69,8 @@ class FileStore : public JournalingObjectStore {
 
   // Indexed Collections
   IndexManager index_manager;
-  Index get_index(coll_t c);
+  int get_index(coll_t c, Index *index);
+  int init_index(coll_t c);
   
   Finisher ondisk_finisher;
 
@@ -261,6 +263,8 @@ public:
   int _sanity_check_fs();
   
   bool test_mount_in_use();
+  int write_version_stamp();
+  int version_stamp_is_valid(uint32_t *version);
   int read_op_seq(const char *fn, uint64_t *seq);
   int write_op_seq(int, uint64_t seq);
   int mount();
@@ -340,6 +344,7 @@ public:
 
   // collections
   int list_collections(vector<coll_t>& ls);
+  int collection_version_current(coll_t c, uint32_t *version);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);

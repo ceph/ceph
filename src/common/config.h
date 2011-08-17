@@ -537,6 +537,7 @@ public:
   int filestore_fiemap_threshold;
   int filestore_merge_threshold;
   int filestore_split_multiple;
+  bool filestore_update_collections;
 
   // journal
   bool journal_dio;

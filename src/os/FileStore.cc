@@ -175,19 +175,29 @@ int FileStore::get_cdir(coll_t cid, char *s, int len)
   return snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
-Index FileStore::get_index(coll_t cid)
+int FileStore::get_index(coll_t cid, Index *index)
 {
   char path[PATH_MAX];
   get_cdir(cid, path, sizeof(path));
-  return index_manager.get_index(cid, path);
+  return index_manager.get_index(cid, path, index);
+}
+
+int FileStore::init_index(coll_t cid)
+{
+  char path[PATH_MAX];
+  get_cdir(cid, path, sizeof(path));
+  return index_manager.init_index(cid, path, on_disk_version);
 }
 
 int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
 {
-  Index index = get_index(cid);
+  Index index; 
   int r, exist;
+  r = get_index(cid, &index);
+  if (r < 0)
+    return r;
+
   r = index->lookup(oid, path, &exist);
-  
   if (r < 0)
     return r;
   if (!exist)
@@ -257,9 +267,12 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 
 int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode)
 {
-  Index index = get_index(cid);
+  Index index;
   IndexedPath path;
   int r, fd, exist;
+  r = get_index(cid, &index);
+  if (r < 0)
+    return r;
   r = index->lookup(oid, &path, &exist);
   if (r < 0) {
     return r;
@@ -292,11 +305,19 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   int exist;
   int r;
   if (c < cid) {
-    index_new = get_index(cid);
-    index_old = get_index(c);
+    r = get_index(cid, &index_new);
+    if (r < 0)
+      return r;
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
   } else {
-    index_old = get_index(c);
-    index_new = get_index(cid);
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    r = get_index(cid, &index_new);
+    if (r < 0)
+      return r;
   }
 
   r = index_old->lookup(o, &path_old, &exist);
@@ -325,7 +346,10 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
 
 int FileStore::lfn_unlink(coll_t cid, const hobject_t& o)
 {
-  Index index = get_index(cid);
+  Index index;
+  int r = get_index(cid, &index);
+  if (r < 0)
+    return r;
   return index->unlink(o);
 }
 
@@ -846,6 +870,13 @@ int FileStore::mkfs()
   fsid_fd = -1;
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
+  ret = write_version_stamp();
+  if (ret < 0) {
+    derr << "Firestore::mkfs: write_version_stamp() failed: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fsid_fd;
+  }
+
   // current
   memset(&volargs, 0, sizeof(volargs));
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
@@ -951,7 +982,6 @@ int FileStore::mkjournal()
   }
   return ret;
 }
-
 
 int FileStore::lock_fsid()
 {
@@ -1223,6 +1253,48 @@ int FileStore::_sanity_check_fs()
   return 0;
 }
 
+int FileStore::version_stamp_is_valid(uint32_t *version)
+{
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/store_version", basedir.c_str());
+  int fd = ::open(fn, O_RDONLY, 0644);
+  if (fd < 0) {
+    if (errno == ENOENT)
+      return 0;
+    else 
+      return -errno;
+  }
+  bufferptr bp(PATH_MAX);
+  int ret = safe_read(fd, bp.c_str(), bp.length());
+  TEMP_FAILURE_RETRY(::close(op_fd));
+  if (ret < 0)
+    return -errno;
+  bufferlist bl;
+  bl.push_back(bp);
+  bufferlist::iterator i = bl.begin();
+  ::decode(*version, i);
+  if (*version == on_disk_version)
+    return 1;
+  else
+    return 0;
+}
+
+int FileStore::write_version_stamp()
+{
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/store_version", basedir.c_str());
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0)
+    return -errno;
+  bufferlist bl;
+  ::encode(on_disk_version, bl);
+  
+  int ret = safe_write(fd, bl.c_str(), bl.length());
+  TEMP_FAILURE_RETRY(::close(op_fd));
+  if (ret < 0)
+    return -errno;
+  return 0;
+}
 
 int FileStore::read_op_seq(const char *fn, uint64_t *seq)
 {
@@ -1277,6 +1349,30 @@ int FileStore::mount()
   ret = _detect_fs();
   if (ret)
     goto done;
+
+  uint32_t version_stamp;
+  ret = version_stamp_is_valid(&version_stamp);
+  if (ret < 0) {
+    derr << "FileStore::mount : error in version_stamp_is_valid: "
+	 << cpp_strerror(ret) << dendl;
+    goto done;
+  } else if (ret == 0) {
+    if (g_conf->filestore_update_collections) {
+      derr << "FileStore::mount : stale version stamp detected: "
+	   << version_stamp 
+	   << ". Proceeding, g_conf->filestore_update_collections "
+	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
+	   << " More details can be found on the wiki."
+	   << dendl;
+    } else {
+      ret = -EINVAL;
+      derr << "FileStore::mount : stale version stamp " << version_stamp
+	   << ". Please run the FileStore update script before starting the "
+	   << "OSD."
+	   << dendl;
+      goto done;
+    }
+  }
 
   // get fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
@@ -3464,6 +3560,19 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
 // --------------------------
 // collections
 
+int FileStore::collection_version_current(coll_t c, uint32_t *version)
+{
+  Index index;
+  int r = get_index(c, &index);
+  if (r < 0)
+    return r;
+  *version = index->collection_version();
+  if (*version == on_disk_version)
+    return 1;
+  else 
+    return 0;
+}
+
 int FileStore::list_collections(vector<coll_t>& ls) 
 {
   if (fake_collections) return collections.list_collections(ls);
@@ -3562,8 +3671,11 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>
 				       collection_list_handle_t *handle)
 {  
   if (fake_collections) return collections.collection_list(c, ls);
-  Index index = get_index(c);
-  int r = index->collection_list_partial(seq, max_count, &ls, handle);
+  Index index;
+  int r = get_index(c, &index);
+  if (r < 0)
+    return r;
+  r = index->collection_list_partial(seq, max_count, &ls, handle);
   if (r < 0)
     return r;
   return 0;
@@ -3572,7 +3684,10 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>
 int FileStore::collection_list(coll_t c, vector<hobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
-  Index index = get_index(c);
+  Index index;
+  int r = get_index(c, &index);
+  if (r < 0)
+    return r;
   return index->collection_list(&ls);
 }
 
@@ -3588,8 +3703,7 @@ int FileStore::_create_collection(coll_t c)
   dout(10) << "create_collection " << fn << " = " << r << dendl;
 
   if (r < 0) return r;
-  Index index = get_index(c);
-  return index->init();
+  return init_index(c);
 }
 
 int FileStore::_destroy_collection(coll_t c) 

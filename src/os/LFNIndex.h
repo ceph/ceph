@@ -76,7 +76,7 @@ class LFNIndex : public CollectionIndex {
   /// For reference counting the collection @see Path
   std::tr1::weak_ptr<CollectionIndex> self_ref;
 
-protected:
+public:
   /// Constructor
   LFNIndex(const char *base_path) ///< [in] path to Index root
     : base_path(base_path) {}

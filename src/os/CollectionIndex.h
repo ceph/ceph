@@ -58,6 +58,13 @@ protected:
   /// Type of returned paths
   typedef std::tr1::shared_ptr<Path> IndexedPath;
 
+  /**
+   * For tracking Filestore collection versions.
+   *
+   * @return Collection version represented by the Index implementation
+   */
+  virtual uint32_t collection_version() = 0;
+
   /** 
    * For setting the internal weak_ptr to a shared_ptr to this.
    *
