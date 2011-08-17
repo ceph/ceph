@@ -553,7 +553,7 @@ def mon(ctx, config):
 
             if config.get('valgrind') and (config.get('valgrind').get('mon.{id}'.format(id=id_), None) is not None):
                 log.debug('running mon.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 run_cmd.extend(['valgrind', '--log-file={vdir}/mon.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ])
 
             run_cmd.extend(run_cmd_tail)
@@ -601,9 +601,9 @@ def osd(ctx, config):
                              '-c', '/tmp/cephtest/ceph.conf',
                              ]
 
-            if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_)) is not None):
+            if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_), None) is not None):
                 log.debug('running osd.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 run_cmd.extend(['valgrind', '--log-file={vdir}/osd.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ])
 
             run_cmd.extend(run_cmd_tail)
@@ -658,9 +658,9 @@ def mds(ctx, config):
                             '-c', '/tmp/cephtest/ceph.conf',
                             ]
 
-            if config.get('valgrind') and config.get('valgrind').get(('mds.{id}'.format(id=id_)) is not None):
+            if config.get('valgrind') and (config.get('valgrind').get('mds.{id}'.format(id=id_), None1) is not None):
                 log.debug('running mds.{id} under valgrind'.format(id=id_))
-                val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+                val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 run_cmd.extend(['valgrind', '--log-file={vdir}/mds.{id}'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ])
 
             run_cmd.extend(run_cmd_tail)
@@ -797,7 +797,7 @@ def task(ctx, config):
         )
 
     if config.get('valgrind'):
-        val_path = '/tmp/cephtest/archive/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+        val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
         run.wait(
             ctx.cluster.run(
                 args=[
