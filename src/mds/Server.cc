@@ -4549,7 +4549,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     // project snaprealm, too
     in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
-    le->metablob.add_primary_dentry(straydn, true, in, 0);
+    le->metablob.add_primary_dentry(straydn, true, in);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -5626,7 +5626,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	// project snaprealm, too
 	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
-	tji = metablob->add_primary_dentry(straydn, true, oldin, 0);
+	tji = metablob->add_primary_dentry(straydn, true, oldin);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -5677,11 +5677,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       destdn->first = MAX(destdn->first, next_dest_snap);
 
     if (destdn->is_auth())
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0);
+      ji = metablob->add_primary_dentry(destdn, true, srci);
     else if (force_journal) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0);
+      ji = metablob->add_primary_dentry(destdn, true, srci);
     }
   }
     
