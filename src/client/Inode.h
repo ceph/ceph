@@ -222,5 +222,6 @@ class Inode {
   Dir *open_dir();
 };
 
+ostream& operator<<(ostream &out, Inode &in);
 
 #endif
