@@ -4829,7 +4829,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-  if (in->caps_issued_mask(want)) {
+  if ((flags & O_TRUNC) == 0 &&
+      in->caps_issued_mask(want)) {
     // update wanted?
     check_caps(in, true);
   } else {
