@@ -73,7 +73,7 @@ int rgw_log_op(struct req_state *s)
 
   struct tm bdt;
   time_t t = entry.time.sec();
-  localtime_r(&t, &bdt);
+  gmtime_r(&t, &bdt);
   
   char buf[entry.bucket.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, entry.bucket.c_str());
@@ -109,7 +109,7 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 
   struct tm bdt;
   time_t t = entry.op_time.sec();
-  localtime_r(&t, &bdt);
+  gmtime_r(&t, &bdt);
 
   char buf[obj.bucket.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, obj.bucket.c_str());

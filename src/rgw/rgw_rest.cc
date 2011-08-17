@@ -118,7 +118,8 @@ void dump_last_modified(struct req_state *s, time_t t)
 void dump_time(struct req_state *s, const char *name, time_t *t)
 {
   char buf[TIME_BUF_SIZE];
-  struct tm *tmp = localtime(t);
+  struct tm result;
+  struct tm *tmp = gmtime_r(t, &result);
   if (tmp == NULL)
     return;
 
