@@ -365,11 +365,11 @@ class Ioctx(object):
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
-    def write_full(self, key, data, offset = 0):
+    def write_full(self, key, data):
         self.require_ioctx_open()
         length = len(data)
         ret = self.librados.rados_write_full(self.io, c_char_p(key),
-                 c_char_p(data), c_size_t(length), c_uint64(offset))
+                 c_char_p(data), c_size_t(length))
         if ret == 0:
             return ret
         else:

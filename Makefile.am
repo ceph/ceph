@@ -9,13 +9,18 @@ EXTRA_DIST += \
 	src/test/downloads \
 	udev/50-rbd.rules
 
-check-local:
-#	Build gtest before we build our own tests. Doing this instead
-#	of SUBDIRS because with that, gtest's own tests would be run
-#	and that would slow us down.
-	@echo "Making lib/libgtest.a lib/libgtest_main.a in src/gtest"
-	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 
+all-local:
+if WITH_DEBUG
+#	We need gtest to build the rados-api tests. We only build those in
+#	a debug build, though.
+	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+endif
+
+check-local:
+#	We build gtest this way, instead of using SUBDIRS, because with that,
+#	gtest's own tests would be run and that would slow us down.
+	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 #	exercise cli tools
 	$(srcdir)/src/test/run-cli-tests '$(top_builddir)/src/test'
 

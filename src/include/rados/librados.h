@@ -148,9 +148,9 @@ int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname);
 int rados_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
 void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap);
-int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io, uint64_t *snapid);
-int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io, uint64_t snapid);
-int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, uint64_t snapid);
+int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io, rados_snap_t *snapid);
+int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io, rados_snap_t snapid);
+int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, rados_snap_t snapid);
 int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
 int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps, int maxlen);
@@ -172,7 +172,7 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
-int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
+int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
 int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
                       const char *src, uint64_t src_off, size_t len);
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
@@ -302,7 +302,6 @@ int rados_aio_wait_for_safe(rados_completion_t c);
 int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
-uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
