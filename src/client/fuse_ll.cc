@@ -321,7 +321,9 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   int r = client->ll_open(fino_vino(ino), fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
     fi->keep_cache = 1;
+#endif
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, -r);
@@ -466,7 +468,9 @@ static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t le
 {
   struct fuse_chan *ch = (struct fuse_chan *)handle;
   fuse_ino_t fino = make_fake_ino(vino.ino, vino.snapid);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
   fuse_lowlevel_notify_inval_inode(ch, fino, off, len);
+#endif
 }
 
 int fd_on_success = 0;
