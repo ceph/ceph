@@ -114,25 +114,46 @@ TEST(LibRadosMisc, TmapUpdatePP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-//TEST(LibRadosMisc, Exec) {
-//  char buf[128];
-//  char buf2[sizeof(buf)];
-//  char buf3[sizeof(buf)];
-//  rados_t cluster;
-//  rados_ioctx_t ioctx;
-//  std::string pool_name = get_temp_pool_name();
-//  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-//  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
-//  memset(buf, 0xcc, sizeof(buf));
-//  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-//  strncpy(buf2, "abracadabra", sizeof(buf2));
-//  memset(buf3, 0, sizeof(buf3));
-//  ASSERT_EQ(0, rados_exec(ioctx, "foo", "crypto", "md5",
-//	  buf2, strlen(buf2) + 1, buf3, sizeof(buf3)));
-//  ASSERT_EQ(string("06fce6115b1efc638e0cc2026f69ec43"), string(buf3));
-//  rados_ioctx_destroy(ioctx);
-//  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
-//}
+TEST(LibRadosMisc, Exec) {
+  char buf[128];
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  char buf2[512];
+  int res = rados_exec(ioctx, "foo", "rbd", "test_exec",
+			  NULL, 0, buf2, sizeof(buf2));
+  ASSERT_GT(res, 0);
+  bufferlist bl;
+  bl.append(buf2, res);
+  bufferlist::iterator iter = bl.begin();
+  std::string outstring;
+  ::decode(outstring, iter);
+  ASSERT_EQ(outstring, string("testing123"));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosMisc, ExecPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  bufferlist bl;
+  ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
+  bufferlist bl2, out;
+  ASSERT_EQ(0, ioctx.exec("foo", "rbd", "test_exec", bl2, out));
+  bufferlist::iterator iter = out.begin();
+  std::string outstring;
+  ::decode(outstring, iter);
+  ASSERT_EQ(outstring, string("testing123"));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
 
 //int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
 
