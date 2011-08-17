@@ -2136,7 +2136,7 @@ SnapRealm *CInode::find_snaprealm()
 void CInode::encode_snap_blob(bufferlist &snapbl)
 {
   if (snaprealm) {
-    ::encode(*snaprealm, snapbl);
+    ::encode(snaprealm->srnode, snapbl);
     dout(20) << "encode_snap_blob " << *snaprealm << dendl;
   }
 }
@@ -2145,7 +2145,7 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
   if (snapbl.length()) {
     open_snaprealm();
     bufferlist::iterator p = snapbl.begin();
-    ::decode(*snaprealm, p);
+    ::decode(snaprealm->srnode, p);
     dout(20) << "decode_snap_blob " << *snaprealm << dendl;
   }
 }

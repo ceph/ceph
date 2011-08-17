@@ -560,10 +560,14 @@ private:
       px = &in->xattrs;
 
     bufferlist snapbl;
-    if (psnapbl)
+    if (psnapbl) {
       snapbl = *psnapbl;
-    else
-      in->encode_snap_blob(snapbl);
+    } else {
+      sr_t *sr = in->get_projected_srnode();
+      if (sr)
+	sr->encode(snapbl);
+    }
+	
 
     lump.nfull++;
     lump.get_dfull().push_back(std::tr1::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
