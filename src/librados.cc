@@ -552,8 +552,8 @@ public:
 
   int list(Objecter::ListContext *context, int max_entries);
 
-  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
-  int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
+  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o);
+  int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c);
 
   struct C_aio_Ack : public Context {
     AioCompletionImpl *c;
@@ -1610,7 +1610,7 @@ clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const o
 }
 
 int librados::RadosClient::
-operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl)
+operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o)
 {
   utime_t ut = ceph_clock_now(cct);
 
@@ -1643,8 +1643,7 @@ operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pb
 }
 
 int librados::RadosClient::
-aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c,
-	    bufferlist *pbl)
+aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c)
 {
   utime_t ut = ceph_clock_now(cct);
   Context *onack = new C_aio_Ack(c);
@@ -2747,16 +2746,16 @@ tmap_update(const std::string& oid, bufferlist& cmdbl)
   return io_ctx_impl->client->tmap_update(*io_ctx_impl, obj, cmdbl);
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
+  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o, bufferlist *pbl)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
+  return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc);
 }
 
 

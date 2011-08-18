@@ -242,7 +242,7 @@ int main(int argc, const char **argv)
   ObjectOperation o;
   o.write(0, bl);
   o.setxattr("foo", bl2);
-  r = io_ctx.operate(oid, &o, &bl2);
+  r = io_ctx.operate(oid, &o);
   cout << "operate result=" << r << std::endl;
 
   cout << "cmpxattr" << std::endl;
@@ -253,7 +253,7 @@ int main(int argc, const char **argv)
   {
     ObjectOperation o;
     o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
-    r = io_ctx.operate(oid, &o, &bl2);
+    r = io_ctx.operate(oid, &o);
     cout << " got " << r << " wanted >= 0" << std::endl;
     assert(r >= 0);
   }
@@ -261,7 +261,7 @@ int main(int argc, const char **argv)
   {
     ObjectOperation o;
     o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
-    r = io_ctx.operate(oid, &o, &bl2);
+    r = io_ctx.operate(oid, &o);
     cout << " got " << r << " wanted ECANCELED" << std::endl;
     assert(r == -ECANCELED);
   }
@@ -273,7 +273,7 @@ int main(int argc, const char **argv)
     o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
-    r = io_ctx.operate(oidb, &o, &bl2);
+    r = io_ctx.operate(oidb, &o);
     cout << " got " << r << " wanted ECANCELED" << std::endl;
     assert(r == -ECANCELED);
   }
@@ -282,7 +282,7 @@ int main(int argc, const char **argv)
     o.src_cmpxattr(oid, "foo", val, CEPH_OSD_CMPXATTR_OP_NE, CEPH_OSD_CMPXATTR_MODE_STRING);
     io_ctx.locator_set_key(oid);
     o.write_full(val);
-    r = io_ctx.operate(oidb, &o, &bl2);
+    r = io_ctx.operate(oidb, &o);
     cout << " got " << r << " wanted >= 0" << std::endl;
     assert(r >= 0);
   }

@@ -310,7 +310,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
     op.setxattr(iter->first.c_str(), iter->second);
 
   bufferlist outbl;
-  int ret = root_pool_ctx.operate(bucket, &op, &outbl);
+  int ret = root_pool_ctx.operate(bucket, &op);
   if (ret < 0)
     return ret;
 
@@ -683,7 +683,7 @@ int RGWRados::delete_obj(std::string& id, rgw_obj& obj, bool sync)
     ObjectOperation op;
     op.remove();
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_operate(obj.object, completion, &op, NULL);
+    r = io_ctx.aio_operate(obj.object, completion, &op);
     completion->release();
   }
   if (r < 0)
@@ -963,8 +963,7 @@ int RGWRados::clone_objs(rgw_obj& dst_obj,
     }
   }
 
-  bufferlist outbl;
-  int ret = io_ctx.operate(dst_oid, &op, &outbl);
+  int ret = io_ctx.operate(dst_oid, &op);
   return ret;
 }
 

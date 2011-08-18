@@ -180,7 +180,7 @@ TEST(LibRadosMisc, Operate1PP) {
     o.setxattr("foo", bl2);
   }
 
-  ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
+  ASSERT_EQ(0, ioctx.operate("foo", &o));
 
   {
     bufferlist bl;
@@ -191,6 +191,35 @@ TEST(LibRadosMisc, Operate1PP) {
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+//  cout << "compound operation..." << std::endl;
+//  ObjectOperation o;
+//  o.write(0, bl);
+//  o.setxattr("foo", bl2);
+//  r = io_ctx.operate(oid, &o, &bl2);
+//  cout << "operate result=" << r << std::endl;
+//
+//  cout << "cmpxattr" << std::endl;
+//  bufferlist val;
+//  val.append("foo");
+//  r = io_ctx.setxattr(oid, "foo", val);
+//  assert(r >= 0);
+//  {
+//    ObjectOperation o;
+//    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+//    r = io_ctx.operate(oid, &o, &bl2);
+//    cout << " got " << r << " wanted >= 0" << std::endl;
+//    assert(r >= 0);
+//  }
+//  val.append("...");
+//  {
+//    ObjectOperation o;
+//    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+//    r = io_ctx.operate(oid, &o, &bl2);
+//    cout << " got " << r << " wanted ECANCELED" << std::endl;
+//    assert(r == -ECANCELED);
+//  }
+
 
 //TEST(LibRadosMisc, CloneRange) {
 //  char buf[128];
