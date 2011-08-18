@@ -225,34 +225,50 @@ TEST(LibRadosMisc, Operate2PP) {
   ASSERT_EQ(0U, size);
 }
 
-//  cout << "compound operation..." << std::endl;
-//  ObjectOperation o;
-//  o.write(0, bl);
-//  o.setxattr("foo", bl2);
-//  r = io_ctx.operate(oid, &o, &bl2);
-//  cout << "operate result=" << r << std::endl;
-//
-//  cout << "cmpxattr" << std::endl;
-//  bufferlist val;
-//  val.append("foo");
-//  r = io_ctx.setxattr(oid, "foo", val);
-//  assert(r >= 0);
-//  {
-//    ObjectOperation o;
-//    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
-//    r = io_ctx.operate(oid, &o, &bl2);
-//    cout << " got " << r << " wanted >= 0" << std::endl;
-//    assert(r >= 0);
-//  }
-//  val.append("...");
-//  {
-//    ObjectOperation o;
-//    o.cmpxattr("foo", val, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
-//    r = io_ctx.operate(oid, &o, &bl2);
-//    cout << " got " << r << " wanted ECANCELED" << std::endl;
-//    assert(r == -ECANCELED);
-//  }
+void set_completion_complete(rados_completion_t cb, void *arg)
+{
+  bool *my_aio_complete = (bool*)arg;
+  *my_aio_complete = true;
+}
 
+TEST(LibRadosMisc, AioOperatePP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bool my_aio_complete = false;
+  AioCompletion *my_completion = cluster.aio_create_completion(
+	  (void*)&my_aio_complete, set_completion_complete, NULL);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+
+  ObjectOperation o;
+  {
+    bufferlist bl;
+    o.write(0, bl);
+  }
+  std::string val1("val1");
+  {
+    bufferlist bl;
+    bl.append(val1.c_str(), val1.size() + 1);
+    o.setxattr("key1", bl);
+    bufferlist bl2;
+    char buf2[1024];
+    memset(buf2, 0xdd, sizeof(buf2));
+    bl2.append(buf2, sizeof(buf2));
+    o.append(bl2);
+  }
+  ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
+  ASSERT_EQ(0, my_completion->wait_for_complete());
+  ASSERT_EQ(my_aio_complete, true);
+
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(1024U, size);
+}
 
 //TEST(LibRadosMisc, CloneRange) {
 //  char buf[128];
