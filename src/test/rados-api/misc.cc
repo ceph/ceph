@@ -162,32 +162,38 @@ TEST(LibRadosMisc, Operate1PP) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-
   ObjectOperation o;
   {
     bufferlist bl;
-    bl.append(buf, sizeof(buf));
     o.write(0, bl);
   }
-
-  {
-    bufferlist bl2;
-    char buf2[128];
-    snprintf(buf2, sizeof(buf2), "val1");
-    bl2.append(buf2, sizeof(buf2));
-    o.setxattr("foo", bl2);
-  }
-
-  ASSERT_EQ(0, ioctx.operate("foo", &o));
-
+  std::string val1("val1");
   {
     bufferlist bl;
-    ASSERT_GT(ioctx.read("foo", bl, 0, 0), 0);
-    ASSERT_EQ(0, memcmp(bl.c_str(), buf, sizeof(buf)));
+    bl.append(val1.c_str(), val1.size() + 1);
+    o.setxattr("key1", bl);
   }
-
+  ASSERT_EQ(0, ioctx.operate("foo", &o));
+  {
+    bufferlist bl;
+    ASSERT_GT(ioctx.getxattr("foo", "key1", bl), 0);
+    ASSERT_EQ(0, strcmp(bl.c_str(), val1.c_str()));
+  }
+  ObjectOperation o2;
+  {
+    bufferlist bl;
+    bl.append(val1);
+    o2.cmpxattr("key1", bl, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    o2.rmxattr("key1");
+  }
+  ASSERT_EQ(1, ioctx.operate("foo", &o2));
+  ObjectOperation o3;
+  {
+    bufferlist bl;
+    bl.append(val1);
+    o3.cmpxattr("key1", bl, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+  }
+  ASSERT_LT(ioctx.operate("foo", &o3), 0);
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
