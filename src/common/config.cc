@@ -145,6 +145,7 @@ struct config_option config_optionsp[] = {
   OPTION(debug_context, OPT_INT, 0),
   OPTION(debug_mds, OPT_INT, 1),
   OPTION(debug_mds_balancer, OPT_INT, 1),
+  OPTION(debug_mds_locker, OPT_INT, 1),
   OPTION(debug_mds_log, OPT_INT, 1),
   OPTION(debug_mds_log_expire, OPT_INT, 1),
   OPTION(debug_mds_migrator, OPT_INT, 1),

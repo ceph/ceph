@@ -198,6 +198,7 @@ public:
   int debug_context;
   int debug_mds;
   int debug_mds_balancer;
+  int debug_mds_locker;
   int debug_mds_log;
   int debug_mds_log_expire;
   int debug_mds_migrator;
