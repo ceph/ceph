@@ -198,6 +198,33 @@ TEST(LibRadosMisc, Operate1PP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, Operate2PP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  ObjectOperation o;
+  {
+    bufferlist bl;
+    bl.append("abcdefg");
+    o.write(0, bl);
+  }
+  std::string val1("val1");
+  {
+    bufferlist bl;
+    bl.append(val1.c_str(), val1.size() + 1);
+    o.setxattr("key1", bl);
+    o.truncate(0);
+  }
+  ASSERT_EQ(0, ioctx.operate("foo", &o));
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(0U, size);
+}
+
 //  cout << "compound operation..." << std::endl;
 //  ObjectOperation o;
 //  o.write(0, bl);
