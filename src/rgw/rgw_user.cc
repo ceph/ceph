@@ -12,16 +12,14 @@
 
 using namespace std;
 
-static rgw_bucket ui_key_bucket(USER_INFO_BUCKET_NAME);
-static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_BUCKET_NAME);
-static rgw_bucket ui_openstack_bucket(USER_INFO_OPENSTACK_BUCKET_NAME);
-static rgw_bucket ui_uid_bucket(USER_INFO_UID_BUCKET_NAME);
+static rgw_bucket ui_key_bucket(USER_INFO_POOL_NAME);
+static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_POOL_NAME);
+static rgw_bucket ui_openstack_bucket(USER_INFO_OPENSTACK_POOL_NAME);
+static rgw_bucket ui_uid_bucket(USER_INFO_UID_POOL_NAME);
 
-static rgw_bucket pi_pool_bucket(POOL_INFO_BUCKET_NAME);
+static rgw_bucket pi_pool_bucket(POOL_INFO_POOL_NAME);
 
 rgw_bucket rgw_root_bucket(RGW_ROOT_BUCKET);
-
-#define READ_CHUNK_LEN (16 * 1024)
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -36,57 +34,6 @@ void rgw_get_anon_user(RGWUserInfo& info)
 bool rgw_user_is_authenticated(RGWUserInfo& info)
 {
   return (info.user_id != RGW_USER_ANON_ID);
-}
-
-static int put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size)
-{
-  map<string,bufferlist> attrs;
-
-  rgw_obj obj(bucket, oid);
-
-  int ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
-
-  if (ret == -ENOENT) {
-    ret = rgwstore->create_bucket(uid, bucket, attrs);
-    if (ret >= 0)
-      ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
-  }
-
-  return ret;
-}
-
-static int get_obj(rgw_bucket& bucket, string& key, bufferlist& bl)
-{
-  int ret;
-  char *data = NULL;
-  struct rgw_err err;
-  RGWUID uid;
-  void *handle = NULL;
-  bufferlist::iterator iter;
-  int request_len = READ_CHUNK_LEN;
-  rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(NULL, obj, 0, NULL, NULL, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
-  if (ret < 0)
-    return ret;
-
-  do {
-    ret = rgwstore->get_obj(NULL, &handle, obj, &data, 0, request_len - 1);
-    if (ret < 0)
-      goto done;
-    if (ret < request_len)
-      break;
-    free(data);
-    request_len *= 2;
-  } while (true);
-
-  bl.append(data, ret);
-  free(data);
-
-  ret = 0;
-done:
-  rgwstore->finish_get_obj(&handle);
-  return ret;
 }
 
 /**
@@ -131,12 +78,12 @@ int rgw_store_user_info(RGWUserInfo& info)
   ::encode(ui, uid_bl);
   ::encode(info, uid_bl);
 
-  ret = put_obj(info.user_id, ui_uid_bucket, info.user_id, uid_bl.c_str(), uid_bl.length());
+  ret = rgw_put_obj(info.user_id, ui_uid_bucket, info.user_id, uid_bl.c_str(), uid_bl.length());
   if (ret < 0)
     return ret;
 
   if (info.user_email.size()) {
-    ret = put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length());
+    ret = rgw_put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length());
     if (ret < 0)
       return ret;
   }
@@ -145,14 +92,14 @@ int rgw_store_user_info(RGWUserInfo& info)
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      ret = put_obj(k.id, ui_key_bucket, k.id, uid_bl.c_str(), uid_bl.length());
+      ret = rgw_put_obj(k.id, ui_key_bucket, k.id, uid_bl.c_str(), uid_bl.length());
       if (ret < 0)
         return ret;
     }
   }
 
   if (info.openstack_name.size())
-    ret = put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length());
+    ret = rgw_put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length());
 
   return ret;
 }
@@ -162,7 +109,7 @@ int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& i
   bufferlist bl;
   RGWUID uid;
 
-  int ret = get_obj(bucket, key, bl);
+  int ret = rgw_get_obj(bucket, key, bl);
   if (ret < 0)
     return ret;
 
@@ -511,7 +458,7 @@ int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
   snprintf(buf, sizeof(buf), "%d", pool_id);
   string pool_id_str(buf);
 
-  int ret = put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
+  int ret = rgw_put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
   if (ret < 0) {
     RGW_LOG(0) << "ERROR: could not write to pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
   }
@@ -522,12 +469,11 @@ int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info)
 {
   bufferlist bl;
 
-  string uid;
   char buf[16];
   snprintf(buf, sizeof(buf), "%d", pool_id);
   string pool_id_str(buf);
 
-  int ret = get_obj(pi_pool_bucket, pool_id_str, bl);
+  int ret = rgw_get_obj(pi_pool_bucket, pool_id_str, bl);
   if (ret < 0) {
     RGW_LOG(0) << "ERROR: could not read from pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
     return ret;
@@ -538,10 +484,4 @@ int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info)
   return 0;
 }
 
-int rgw_bucket_from_name(string& bucket_name, rgw_bucket& bucket)
-{
-  bucket.name = bucket_name;
-  bucket.pool = bucket_name; // for now
 
-  return 0;
-}

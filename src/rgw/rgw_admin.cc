@@ -14,6 +14,7 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
+#include "rgw_bucket.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
@@ -297,7 +298,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
   bufferlist aclbl;
   string no_oid;
   rgw_obj obj;
-  rgw_bucket bucket;
+  RGWBucketInfo bucket_info;
 
   int ret;
 
@@ -305,9 +306,11 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
-  ret = rgw_bucket_from_name(bucket_str, bucket);
+  ret = rgw_get_bucket_info(bucket_str, bucket_info);
   if (ret < 0)
     return ret;
+
+  rgw_bucket& bucket = bucket_info.bucket;
 
   ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
   if (ret && ret != -EEXIST)   
@@ -723,7 +726,9 @@ int main(int argc, char **argv)
 
   if (bucket_name) {
     string bucket_name_str = bucket_name;
-    rgw_bucket_from_name(bucket_name_str, bucket);
+    RGWBucketInfo bucket_info;
+    int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+    bucket = bucket_info.bucket;
   }
 
   int err;
@@ -930,7 +935,7 @@ int main(int argc, char **argv)
       return -EINVAL;
     }
     time_t epoch = mktime(&tm);
-    rgw_bucket bucket(RGW_INTENT_LOG_BUCKET_NAME);
+    rgw_bucket bucket(RGW_INTENT_LOG_POOL_NAME);
     string prefix, delim, marker;
     vector<RGWObjEnt> objs;
     map<string, bool> common_prefixes;
@@ -963,7 +968,7 @@ int main(int argc, char **argv)
       return usage();
     }
 
-    rgw_bucket log_bucket(RGW_LOG_BUCKET_NAME);
+    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
     string oid;
     if (object) {
       oid = object;

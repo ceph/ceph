@@ -5,16 +5,17 @@
 
 #include "include/types.h"
 #include "rgw_common.h"
+#include "rgw_tools.h"
 
 using namespace std;
 
-#define USER_INFO_BUCKET_NAME ".users"
-#define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
-#define USER_INFO_OPENSTACK_BUCKET_NAME ".users.openstack"
-#define USER_INFO_UID_BUCKET_NAME ".users.uid"
+#define USER_INFO_POOL_NAME ".users"
+#define USER_INFO_EMAIL_POOL_NAME ".users.email"
+#define USER_INFO_OPENSTACK_POOL_NAME ".users.openstack"
+#define USER_INFO_UID_POOL_NAME ".users.uid"
 #define RGW_USER_ANON_ID "anonymous"
 
-#define POOL_INFO_BUCKET_NAME ".pool"
+#define POOL_INFO_POOL_NAME ".pool"
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -139,8 +140,6 @@ extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 
 extern int rgw_add_bucket(string user_id, rgw_bucket& bucket);
 extern int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data);
-
-extern int rgw_bucket_from_name(string& bucket_name, rgw_bucket& bucket);
 
 /*
  * remove the different indexes

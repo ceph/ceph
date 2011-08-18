@@ -4,7 +4,7 @@
 #include "rgw_acl.h"
 #include "rgw_access.h"
 
-static rgw_bucket log_bucket(RGW_LOG_BUCKET_NAME, RGW_LOG_BUCKET_NAME);
+static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
@@ -100,7 +100,7 @@ done:
 
 int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 {
-  rgw_bucket intent_log_bucket(RGW_INTENT_LOG_BUCKET_NAME, RGW_INTENT_LOG_BUCKET_NAME);
+  rgw_bucket intent_log_bucket(RGW_INTENT_LOG_POOL_NAME);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;

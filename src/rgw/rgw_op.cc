@@ -14,6 +14,7 @@
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
+#include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
 
@@ -229,6 +230,14 @@ int read_acls(struct req_state *s, bool only_bucket)
     rgw_obj obj(s->bucket, obj_str);
     rgwstore->set_atomic(s->obj_ctx, obj);
   }
+
+  RGWBucketInfo bucket_info;
+  ret = rgw_get_bucket_info(s->bucket_name_str, bucket_info);
+  if (ret < 0) {
+    RGW_LOG(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
+    return ret;
+  }
+  s->bucket = bucket_info.bucket;
 
   ret = read_acls(s, s->acl, s->bucket, obj_str);
 
@@ -813,9 +822,13 @@ int RGWCopyObj::verify_permission()
   if (!ret)
      return -EINVAL;
 
-  ret = rgw_bucket_from_name(src_bucket_name, src_bucket);
+  RGWBucketInfo bucket_info;
+
+  ret = rgw_get_bucket_info(src_bucket_name, bucket_info);
   if (ret < 0)
     return ret;
+
+  src_bucket = bucket_info.bucket;
 
   /* just checking the bucket's permission */
   ret = read_acls(s, &src_policy, src_bucket, empty_str);

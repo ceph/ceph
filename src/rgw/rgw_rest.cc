@@ -753,11 +753,11 @@ int RGWHandler_REST::read_permissions()
     break;
   case OP_PUT:
   case OP_POST:
-    /* is it a 'create bucket' request? */
     if (is_acl_op()) {
       only_bucket = false;
       break;
     }
+    /* is it a 'create bucket' request? */
     if (s->object_str.size() == 0)
       return 0;
   case OP_DELETE:

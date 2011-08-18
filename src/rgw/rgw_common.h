@@ -408,6 +408,23 @@ struct RGWPoolInfo
 };
 WRITE_CLASS_ENCODER(RGWPoolInfo)
 
+struct RGWBucketInfo
+{
+  rgw_bucket bucket;
+
+  void encode(bufferlist& bl) const {
+     __u32 ver = 1;
+     ::encode(ver, bl);
+     ::encode(bucket, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     __u32 ver;
+     ::decode(ver, bl);
+     ::decode(bucket, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWBucketInfo)
+
 struct req_state;
 
 struct RGWEnv;
