@@ -34,8 +34,6 @@ namespace ceph {
 
 using ceph::crypto::MD5;
 
-extern string rgw_root_bucket;
-
 extern string rgw_obj_category_main;
 extern string rgw_obj_category_shadow;
 extern string rgw_obj_category_multimeta;
@@ -347,22 +345,65 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+struct rgw_bucket {
+  std::string name;
+  std::string pool;
+
+  rgw_bucket() {}
+  rgw_bucket(const char *n) : name(n) {
+    assert(*n == '.'); // only rgw private buckets should be initialized without pool
+    pool = n;
+  }
+  rgw_bucket(const char *n, const char *p) : name(n), pool(p) {}
+
+  void clear() {
+    name = "";
+    pool = "";
+  }
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(name, bl);
+    ::encode(pool, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(name, bl);
+    ::decode(pool, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket)
+
+inline ostream& operator<<(ostream& out, const rgw_bucket b) {
+  out << b.name;
+  if (b.name.compare(b.pool))
+    out << "(@" << b.pool << ")";
+  return out;
+}
+
+extern rgw_bucket rgw_root_bucket;
+
 struct RGWPoolInfo
 {
-  string bucket;
+  rgw_bucket bucket;
   string owner;
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
+     __u32 ver = 2;
      ::encode(ver, bl);
-     ::encode(bucket, bl);
+     ::encode(bucket.name, bl);
      ::encode(owner, bl);
+     ::encode(bucket, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
     ::decode(ver, bl);
-    ::decode(bucket, bl);
+    ::decode(bucket.name, bl);
     ::decode(owner, bl);
+    if (ver >= 2)
+      ::decode(bucket, bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWPoolInfo)
@@ -398,12 +439,13 @@ struct req_state {
 
    XMLArgs args;
 
-   const char *bucket;
+   const char *bucket_name;
    const char *object;
 
    const char *host_bucket;
 
-   string bucket_str;
+   rgw_bucket bucket;
+   string bucket_name_str;
    string object_str;
 
    map<string, string> x_amz_map;
@@ -457,37 +499,40 @@ struct RGWObjEnt {
 
 /** Store basic data on an object */
 struct RGWBucketEnt {
-  std::string name;
+  rgw_bucket bucket;
   size_t size;
   time_t mtime;
   char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   uint64_t count;
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
     uint64_t s = size;
     __u32 mt = mtime;
-    ::encode(name, bl);
+    ::encode(bucket.name, bl);
     ::encode(s, bl);
     ::encode(mt, bl);
     ::encode(count, bl);
+    ::encode(bucket, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     __u32 mt;
     uint64_t s;
-    ::decode(name, bl);
+    ::decode(bucket.name, bl);
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
     mtime = mt;
     if (struct_v >= 2)
       ::decode(count, bl);
+    if (struct_v >= 3)
+      ::decode(bucket, bl);
   }
   void clear() {
-    name="";
+    bucket.clear();
     size = 0;
     mtime = 0;
     memset(etag, 0, sizeof(etag));
@@ -525,33 +570,33 @@ class rgw_obj {
   std::string orig_obj;
   std::string orig_key;
 public:
-  std::string bucket;
+  rgw_bucket bucket;
   std::string key;
   std::string ns;
   std::string object;
 
   rgw_obj() {}
-  rgw_obj(std::string& b, std::string& o) {
+  rgw_obj(rgw_bucket& b, std::string& o) {
     init(b, o);
   }
-  rgw_obj(std::string& b, std::string& o, std::string& k) {
+  rgw_obj(rgw_bucket& b, std::string& o, std::string& k) {
     init(b, o, k);
   }
-  rgw_obj(std::string& b, std::string& o, std::string& k, std::string& n) {
+  rgw_obj(rgw_bucket& b, std::string& o, std::string& k, std::string& n) {
     init(b, o, k, n);
   }
-  void init(std::string& b, std::string& o, std::string& k, std::string& n) {
+  void init(rgw_bucket& b, std::string& o, std::string& k, std::string& n) {
     bucket = b;
     set_ns(n);
     set_obj(o);
     set_key(k);
   }
-  void init(std::string& b, std::string& o, std::string& k) {
+  void init(rgw_bucket& b, std::string& o, std::string& k) {
     bucket = b;
     set_obj(o);
     set_key(k);
   }
-  void init(std::string& b, std::string& o) {
+  void init(rgw_bucket& b, std::string& o) {
     bucket = b;
     set_obj(o);
     orig_key = key = "";
@@ -627,24 +672,27 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
-    ::encode(bucket, bl);
+    ::encode(bucket.name, bl);
     ::encode(key, bl);
     ::encode(ns, bl);
     ::encode(object, bl);
+    ::encode(bucket, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
-    ::decode(bucket, bl);
+    ::decode(bucket.name, bl);
     ::decode(key, bl);
     ::decode(ns, bl);
     ::decode(object, bl);
+    if (struct_v >= 2)
+      ::decode(bucket, bl);
   }
 
   bool operator<(const rgw_obj& o) const {
-    return  (bucket.compare(o.bucket) < 0) ||
+    return  (bucket.name.compare(o.bucket.name) < 0) ||
             (object.compare(o.object) < 0) ||
             (ns.compare(o.ns) < 0);
   }
@@ -652,7 +700,7 @@ public:
 WRITE_CLASS_ENCODER(rgw_obj)
 
 inline ostream& operator<<(ostream& out, const rgw_obj o) {
-  return out << o.bucket << ":" << o.object;
+  return out << o.bucket.name << ":" << o.object;
 }
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)

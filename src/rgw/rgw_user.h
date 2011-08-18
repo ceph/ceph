@@ -98,7 +98,7 @@ public:
    * Add a (created) bucket to the user's bucket list.
    */
   void add(RGWBucketEnt& bucket) {
-    buckets[bucket.name] = bucket;
+    buckets[bucket.bucket.name] = bucket;
   }
 
   /**
@@ -137,9 +137,10 @@ extern int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool n
  */
 extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 
-extern int rgw_add_bucket(string user_id, string bucket_name);
-extern int rgw_remove_bucket(string user_id, string bucket_name, bool purge_data);
+extern int rgw_add_bucket(string user_id, rgw_bucket& bucket);
+extern int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data);
 
+extern int rgw_bucket_from_name(string& bucket_name, rgw_bucket& bucket);
 
 /*
  * remove the different indexes

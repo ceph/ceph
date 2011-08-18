@@ -12,14 +12,14 @@
 
 using namespace std;
 
-static string ui_key_bucket = USER_INFO_BUCKET_NAME;
-static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
-static string ui_openstack_bucket = USER_INFO_OPENSTACK_BUCKET_NAME;
-static string ui_uid_bucket = USER_INFO_UID_BUCKET_NAME;
+static rgw_bucket ui_key_bucket(USER_INFO_BUCKET_NAME);
+static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_BUCKET_NAME);
+static rgw_bucket ui_openstack_bucket(USER_INFO_OPENSTACK_BUCKET_NAME);
+static rgw_bucket ui_uid_bucket(USER_INFO_UID_BUCKET_NAME);
 
-static string pi_pool_bucket = POOL_INFO_BUCKET_NAME;
+static rgw_bucket pi_pool_bucket(POOL_INFO_BUCKET_NAME);
 
-string rgw_root_bucket = RGW_ROOT_BUCKET;
+rgw_bucket rgw_root_bucket(RGW_ROOT_BUCKET);
 
 #define READ_CHUNK_LEN (16 * 1024)
 
@@ -38,7 +38,7 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
   return (info.user_id != RGW_USER_ANON_ID);
 }
 
-static int put_obj(string& uid, string& bucket, string& oid, const char *data, size_t size)
+static int put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size)
 {
   map<string,bufferlist> attrs;
 
@@ -55,7 +55,7 @@ static int put_obj(string& uid, string& bucket, string& oid, const char *data, s
   return ret;
 }
 
-static int get_obj(string& bucket, string& key, bufferlist& bl)
+static int get_obj(rgw_bucket& bucket, string& key, bufferlist& bl)
 {
   int ret;
   char *data = NULL;
@@ -157,7 +157,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   return ret;
 }
 
-int rgw_get_user_info_from_index(string& key, string& bucket, RGWUserInfo& info)
+int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& info)
 {
   bufferlist bl;
   RGWUID uid;
@@ -234,10 +234,10 @@ static void store_buckets(string& user_id, RGWUserBuckets& buckets)
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   map<string, RGWBucketEnt>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    string bucket_name = iter->first;
-    int r = rgw_add_bucket(user_id, bucket_name);
+    RGWBucketEnt& entry = iter->second;
+    int r = rgw_add_bucket(user_id, entry.bucket);
     if (r < 0)
-      RGW_LOG(0) << "failed to store bucket information for user " << user_id << " bucket=" << bucket_name << dendl;
+      RGW_LOG(0) << "failed to store bucket information for user " << user_id << " bucket=" << entry.bucket << dendl;
   }
 }
 
@@ -334,15 +334,16 @@ int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets)
   return ret;
 }
 
-int rgw_add_bucket(string user_id, string bucket_name)
+int rgw_add_bucket(string user_id, rgw_bucket& bucket)
 {
   int ret;
+   string& bucket_name = bucket.name;
 
   if (rgwstore->supports_tmap()) {
     bufferlist bl;
 
     RGWBucketEnt new_bucket;
-    new_bucket.name = bucket_name;
+    new_bucket.bucket = bucket;
     new_bucket.size = 0;
     time(&new_bucket.mtime);
     ::encode(new_bucket, bl);
@@ -366,7 +367,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
     case 0:
     case -ENOENT:
     case -ENODATA:
-      new_bucket.name = bucket_name;
+      new_bucket.bucket = bucket;
       new_bucket.size = 0;
       time(&new_bucket.mtime);
       buckets.add(new_bucket);
@@ -381,7 +382,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
   return ret;
 }
 
-int rgw_remove_bucket(string user_id, string bucket_name, bool purge_data)
+int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
 {
   int ret;
 
@@ -392,7 +393,7 @@ int rgw_remove_bucket(string user_id, string bucket_name, bool purge_data)
     get_buckets_obj(user_id, buckets_obj_id);
 
     rgw_obj obj(ui_uid_bucket, buckets_obj_id);
-    ret = rgwstore->tmap_del(obj, bucket_name);
+    ret = rgwstore->tmap_del(obj, bucket.name);
     if (ret < 0) {
       RGW_LOG(0) << "error removing bucket from directory: "
 		 << cpp_strerror(-ret)<< dendl;
@@ -403,15 +404,15 @@ int rgw_remove_bucket(string user_id, string bucket_name, bool purge_data)
     ret = rgw_read_user_buckets(user_id, buckets, false);
 
     if (ret == 0 || ret == -ENOENT) {
-      buckets.remove(bucket_name);
+      buckets.remove(bucket.name);
       ret = rgw_write_buckets_attr(user_id, buckets);
     }
   }
 
   if (ret == 0 && purge_data) {
-    vector<string> buckets;
-    buckets.push_back(bucket_name);
-    ret = rgwstore->purge_buckets(user_id, buckets);
+    vector<rgw_bucket> buckets_vec;
+    buckets_vec.push_back(bucket);
+    ret = rgwstore->purge_buckets(user_id, buckets_vec);
   }
 
   return ret;
@@ -458,12 +459,12 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
     return ret;
 
   map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-  vector<string> buckets_vec;
+  vector<rgw_bucket> buckets_vec;
   for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
        i != buckets.end();
        ++i) {
-    string bucket_name = i->first;
-    buckets_vec.push_back(bucket_name);
+    RGWBucketEnt& bucket = i->second;
+    buckets_vec.push_back(bucket.bucket);
   }
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {
@@ -512,7 +513,7 @@ int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
 
   int ret = put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
   if (ret < 0) {
-    RGW_LOG(0) << "ERROR: could not write to pool=" << pi_pool_bucket << " obj=" << pool_id_str << " ret=" << ret << dendl;
+    RGW_LOG(0) << "ERROR: could not write to pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
   }
   return ret;
 }
@@ -528,11 +529,19 @@ int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info)
 
   int ret = get_obj(pi_pool_bucket, pool_id_str, bl);
   if (ret < 0) {
-    RGW_LOG(0) << "ERROR: could not read from pool=" << pi_pool_bucket << " obj=" << pool_id_str << " ret=" << ret << dendl;
+    RGW_LOG(0) << "ERROR: could not read from pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
     return ret;
   }
   bufferlist::iterator iter = bl.begin();
   ::decode(pool_info, iter);
+
+  return 0;
+}
+
+int rgw_bucket_from_name(string& bucket_name, rgw_bucket& bucket)
+{
+  bucket.name = bucket_name;
+  bucket.pool = bucket_name; // for now
 
   return 0;
 }

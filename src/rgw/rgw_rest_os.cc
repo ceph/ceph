@@ -38,7 +38,7 @@ void RGWListBuckets_REST_OS::send_response()
   for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
     RGWBucketEnt obj = iter->second;
     s->formatter->open_object_section("container");
-    s->formatter->dump_format("name", obj.name.c_str());
+    s->formatter->dump_format("name", obj.bucket.name.c_str());
     s->formatter->dump_int("count", obj.count);
     s->formatter->dump_int("bytes", obj.size);
     s->formatter->close_section();
@@ -249,7 +249,7 @@ RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(bool get_data)
     RGWGetObj_REST_OS *get_obj_op = new RGWGetObj_REST_OS;
     get_obj_op->set_get_data(get_data);
     return get_obj_op;
-  } else if (!s->bucket) {
+  } else if (!s->bucket_name) {
     return NULL;
   }
 
@@ -261,7 +261,7 @@ RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_OS::get_retrieve_op(bool get_data)
 {
-  if (s->bucket) {
+  if (s->bucket_name) {
     if (is_acl_op()) {
       return new RGWGetACLs_REST_OS;
     }
@@ -280,7 +280,7 @@ RGWOp *RGWHandler_REST_OS::get_create_op()
       return new RGWPutObj_REST_OS;
     else
       return new RGWCopyObj_REST_OS;
-  } else if (s->bucket) {
+  } else if (s->bucket_name) {
     return new RGWCreateBucket_REST_OS;
   }
 
@@ -291,7 +291,7 @@ RGWOp *RGWHandler_REST_OS::get_delete_op()
 {
   if (s->object)
     return new RGWDeleteObj_REST_OS;
-  else if (s->bucket)
+  else if (s->bucket_name)
     return new RGWDeleteBucket_REST_OS;
 
   return NULL;
