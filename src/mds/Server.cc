@@ -2510,6 +2510,8 @@ public:
 
     mdr->apply();
 
+    mds->locker->share_inode_max_size(newi);
+
     mds->mdcache->send_dentry_link(dn);
 
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
@@ -3156,10 +3158,12 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   pi->truncate_size = 0;
   pi->truncate_seq++;
 
+  bool changed_ranges = false;
   if (cmode & CEPH_FILE_MODE_WR) {
     pi->client_ranges[client].range.first = 0;
     pi->client_ranges[client].range.last = pi->get_layout_size_increment();
     pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
+    changed_ranges = true;
   }
   
   mdr->ls = mdlog->get_current_segment();
@@ -3180,7 +3184,8 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->item_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true,
+								  changed_ranges));
 }
 
 
@@ -3496,6 +3501,8 @@ public:
 
     mds->mdcache->send_dentry_link(dn);
 
+    if (newi->inode.is_file())
+      mds->locker->share_inode_max_size(newi);
 
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
