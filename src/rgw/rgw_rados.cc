@@ -942,7 +942,8 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::set_attr: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, state->shadow_obj, obj.key, shadow_ns);
+    string loc = obj.loc();
+    rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
     r = set_attr(NULL, shadow, name, bl);
   }
 
@@ -1210,7 +1211,8 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key, shadow_ns);
+    string loc = obj.loc();
+    rgw_obj shadow(obj.bucket, astate->shadow_obj, loc, shadow_ns);
     r = get_obj(NULL, handle, shadow, data, ofs, end);
     return r;
   }
@@ -1264,7 +1266,8 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
     dout(0) << "RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    rgw_obj shadow(obj.bucket, astate->shadow_obj, obj.key, shadow_ns);
+    string loc = obj.loc();
+    rgw_obj shadow(obj.bucket, astate->shadow_obj, loc, shadow_ns);
     r = read(NULL, shadow, ofs, size, bl);
   }
   return r;

@@ -598,6 +598,13 @@ public:
     set_key(orig_key);
   }
 
+  string loc() {
+    if (orig_key.empty())
+      return orig_obj;
+    else
+      return orig_key;
+  }
+
   static bool translate_raw_obj(string& obj, string& ns) {
     if (ns.empty()) {
       if (obj[0] != '_')
