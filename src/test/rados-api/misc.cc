@@ -294,22 +294,21 @@ TEST(LibRadosMisc, CloneRangePP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-//TEST(LibRadosMisc, CloneRange) {
-//  char buf[128];
-//  rados_t cluster;
-//  rados_ioctx_t ioctx;
-//  std::string pool_name = get_temp_pool_name();
-//  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-//  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
-//  memset(buf, 0xcc, sizeof(buf));
-//  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "src", buf, sizeof(buf), 0));
-//  rados_ioctx_locator_set_key(ioctx, "src");
-//  ASSERT_EQ(0, rados_clone_range(ioctx, "dst", 0, "src", 0, sizeof(buf)));
-//  rados_ioctx_locator_set_key(ioctx, NULL);
-//  char buf2[sizeof(buf)];
-//  memset(buf2, 0, sizeof(buf2));
-//  ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "dst", buf2, sizeof(buf2), 0));
-//  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-//  rados_ioctx_destroy(ioctx);
-//  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
-//}
+TEST(LibRadosMisc, CloneRange) {
+  char buf[128];
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "src", buf, sizeof(buf), 0));
+  rados_ioctx_locator_set_key(ioctx, "src");
+  ASSERT_EQ(0, rados_clone_range(ioctx, "dst", 0, "src", 0, sizeof(buf)));
+  char buf2[sizeof(buf)];
+  memset(buf2, 0, sizeof(buf2));
+  ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "dst", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
