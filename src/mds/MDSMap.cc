@@ -90,7 +90,9 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("session_autoclose", session_autoclose);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
-  f->dump_stream("compat") << compat;
+  f->open_object_section("compat");
+  compat.dump(f);
+  f->close_section();
   f->dump_int("max_mds", max_mds);
   f->open_array_section("in");
   for (set<int32_t>::const_iterator p = in.begin(); p != in.end(); ++p)

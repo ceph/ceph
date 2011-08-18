@@ -17,6 +17,8 @@
 #include "include/buffer.h"
 #include <vector>
 
+#include "common/Formatter.h"
+
 #define END_FEATURE CompatSet::Feature(0, "")
 
 struct CompatSet {
@@ -57,6 +59,16 @@ struct CompatSet {
     void decode(bufferlist::iterator& bl) {
       ::decode(mask, bl);
       ::decode(names, bl);
+    }
+
+    void dump(Formatter *f) const {
+      for (map<uint64_t,string>::const_iterator p = names.begin();
+	   p != names.end();
+	   ++p) {
+	char s[10];
+	snprintf(s, sizeof(s), "%lld", (unsigned long long)p->first);
+	f->dump_string(s, p->second);
+      }
     }
   };
 
@@ -153,6 +165,18 @@ struct CompatSet {
     compat.decode(bl);
     ro_compat.decode(bl);
     incompat.decode(bl);
+  }
+
+  void dump(Formatter *f) const {
+    f->open_object_section("compat");
+    compat.dump(f);
+    f->close_section();
+    f->open_object_section("ro_compat");
+    ro_compat.dump(f);
+    f->close_section();
+    f->open_object_section("incompat");
+    incompat.dump(f);
+    f->close_section();
   }
 };
 WRITE_CLASS_ENCODER(CompatSet)
