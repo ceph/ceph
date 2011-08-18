@@ -1540,6 +1540,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   clean_up_local(t); 
 
   // find out when we commit
+  get();   // for callback
   tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_acting_since));
   
   // initialize snap_trimq
@@ -1714,10 +1715,6 @@ void PG::_activate_committed(epoch_t e)
 {
   osd->map_lock.get_read();
   lock();
-  epoch_t cur_epoch = osd->osdmap->get_epoch();
-  entity_inst_t primary = osd->osdmap->get_cluster_inst(acting[0]);
-  osd->map_lock.put_read();
-
   if (e < last_warm_restart) {
     dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
   } else if (is_primary()) {
@@ -1729,13 +1726,17 @@ void PG::_activate_committed(epoch_t e)
       all_activated_and_committed();
   } else {
     dout(10) << "_activate_committed " << e << " telling primary" << dendl;
+    epoch_t cur_epoch = osd->osdmap->get_epoch();
+    entity_inst_t primary = osd->osdmap->get_cluster_inst(acting[0]);
     MOSDPGInfo *m = new MOSDPGInfo(cur_epoch);
     PG::Info i = info;
     i.history.last_epoch_started = e;
     m->pg_info.push_back(i);
     osd->cluster_messenger->send_message(m, primary);
   }
+  osd->map_lock.put_read();
   unlock();
+  put();
 }
 
 /*
