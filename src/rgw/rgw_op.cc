@@ -265,6 +265,7 @@ void RGWGetObj::execute()
     goto done;
 
   while (ofs <= end) {
+    data = NULL;
     ret = rgwstore->get_obj(s->obj_ctx, &handle, obj, &data, ofs, end);
     if (ret < 0) {
       goto done;
