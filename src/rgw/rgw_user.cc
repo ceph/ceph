@@ -9,6 +9,7 @@
 
 #include "include/types.h"
 #include "rgw_user.h"
+#include "rgw_bucket.h"
 
 using namespace std;
 
@@ -356,11 +357,16 @@ int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
     }
   }
 
+  if (ret == 0) {
+    ret = rgw_remove_bucket_info(bucket.name);
+  }
+
   if (ret == 0 && purge_data) {
     vector<rgw_bucket> buckets_vec;
     buckets_vec.push_back(bucket);
     ret = rgwstore->purge_buckets(user_id, buckets_vec);
   }
+
 
   return ret;
 }

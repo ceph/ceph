@@ -326,6 +326,40 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string
   return ret;
 }
 
+int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid)
+{
+  vector<string>::iterator iter;
+  vector<librados::PoolAsyncCompletion *> completions;
+  vector<int> rets;
+
+  for (iter = names.begin(); iter != names.end(); ++iter) {
+    librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
+    completions.push_back(c);
+    string& name = *iter;
+    int ret = rados->pool_create_async(name.c_str(), auid, c);
+    rets.push_back(ret);
+  }
+
+  vector<int>::iterator riter;
+  vector<librados::PoolAsyncCompletion *>::iterator citer;
+
+  assert(rets.size() == completions.size());
+  for (riter = rets.begin(), citer = completions.begin(); riter != rets.end(); ++riter, ++citer) {
+    int r = *riter;
+    PoolAsyncCompletion *c = *citer;
+    if (r == 0) {
+      c->wait();
+      r = c->get_return_value();
+      if (r < 0) {
+        RGW_LOG(0) << "async pool_create returned " << r << dendl;
+      }
+      c->release();
+    }
+    retcodes.push_back(r);
+  }
+  return 0;
+}
+
 /**
  * Write/overwrite an object to the bucket storage.
  * id: ignored

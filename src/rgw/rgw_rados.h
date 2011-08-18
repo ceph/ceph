@@ -100,6 +100,7 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
