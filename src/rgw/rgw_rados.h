@@ -27,6 +27,16 @@ struct RGWObjState {
     }
     return false;
   }
+
+  void clear() {
+    has_attrs = false;
+    exists = false;
+    size = 0;
+    mtime = 0;
+    obj_tag.clear();
+    shadow_obj.clear();
+    attrset.clear();
+  }
 };
 
 struct RGWRadosCtx {
@@ -75,6 +85,8 @@ class RGWRados  : public RGWAccess
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
+  int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
 public:

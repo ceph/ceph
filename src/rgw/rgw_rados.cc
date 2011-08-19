@@ -832,12 +832,9 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCt
   return 0;
 }
 
-int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                             string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
 {
-  if (!rctx)
-    return 0;
-
   int r = get_obj_state(rctx, obj, io_ctx, actual_obj, pstate);
   if (r < 0)
     return r;
@@ -859,14 +856,14 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
     else
       dest_obj.set_key(obj.object);
 
-    /* FIXME: clone obj should be conditional, should check src object id-tag */
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
     r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, &cond);
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
       RGW_LOG(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
-      r = 0;
+      state->clear();
+      return r;
     } else {
       int ret = rctx->notify_intent(dest_obj, DEL_OBJ);
       if (ret < 0) {
@@ -895,6 +892,18 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   op.setxattr(RGW_ATTR_SHADOW_OBJ, shadow_bl);
 
   return 0;
+}
+
+int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                            string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
+{
+  if (!rctx)
+    return 0;
+
+  int r;
+  do {
+    r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
+  } while (r == -ECANCELED);
 }
 
 /**
