@@ -91,7 +91,7 @@ class RGWRados  : public RGWAccess
                          string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
 
   void atomic_write_finish(RGWObjState *state, int r) {
-    if (r == -ECANCELED) {
+    if (state && r == -ECANCELED) {
       state->clear();
     }
   }

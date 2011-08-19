@@ -916,8 +916,10 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                             string& actual_obj, ObjectWriteOperation& op, RGWObjState **pstate)
 {
-  if (!rctx)
+  if (!rctx) {
+    *pstate = NULL;
     return 0;
+  }
 
   int r;
   do {
@@ -1218,7 +1220,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
   int r;
   do {
     r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, xattr_cond);
-  } while (r == -ECANCELED);
+  } while (ctx && r == -ECANCELED);
   return r;
 }
 
