@@ -68,6 +68,14 @@ public:
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return put_bl_ss(bl, a, bs, sync);
   }
+  /**
+   * Put a whole set of values efficiently and safely.
+   *
+   * @param a - prefix/directory
+   * @param vals - map of int name -> values
+   * @return 0 for success or negative error code
+   */
+  int put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals);
 
   int erase_ss(const char *a, const char *b);
   int erase_sn(const char *a, version_t b) {

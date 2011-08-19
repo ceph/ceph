@@ -340,3 +340,76 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
   assert(!err);  // for now
   return 0;
 }
+
+int MonitorStore::put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals)
+{
+  version_t first = vals.begin()->first;
+  version_t last = vals.rbegin()->first;
+  dout(15) <<  "put_bl_sn_map " << a << "/[" << first << ".." << last << "]" << dendl;
+
+  // only do a big sync if there are several values.
+  if (vals.size() < 5) {
+    // just do them individually
+    for (map<version_t,bufferlist>::iterator p = vals.begin();
+	 p != vals.end();
+	 p++) {
+      int err = put_bl_sn(p->second, a, p->first);
+      if (err < 0)
+	return err;
+    }
+    return 0;
+  }
+
+  // make sure dir exists
+  char dfn[1024];
+  snprintf(dfn, sizeof(dfn), "%s/%s", dir.c_str(), a);
+  ::mkdir(dfn, 0755);
+
+  for (map<version_t,bufferlist>::iterator p = vals.begin();
+       p != vals.end();
+       p++) {
+    char tfn[1024], fn[1024];
+
+    snprintf(fn, sizeof(fn), "%s/%llu", dfn, (long long unsigned)p->first);
+    snprintf(tfn, sizeof(tfn), "%s.new", fn);
+
+    int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
+    if (fd < 0) {
+      int err = -errno;
+      derr << "failed to open " << tfn << ": " << cpp_strerror(err) << dendl;
+      return err;
+    }
+
+    int err = p->second.write_fd(fd);
+    ::close(fd);
+    if (err < 0)
+      return -errno;
+  }
+
+  // sync them all
+  int dirfd = ::open(dir.c_str(), O_RDONLY);
+  sync_filesystem(dirfd);
+  ::close(dirfd);
+    
+  // rename them all into place
+  for (map<version_t,bufferlist>::iterator p = vals.begin();
+       p != vals.end();
+       p++) {
+    char tfn[1024], fn[1024];
+    
+    snprintf(fn, sizeof(fn), "%s/%llu", dfn, (long long unsigned)p->first);
+    snprintf(tfn, sizeof(tfn), "%s.new", fn);
+    
+    int err = ::rename(tfn, fn);
+    if (err < 0)
+      return -errno;
+  }
+    
+  // fsync the dir (to commit the renames)
+  dirfd = ::open(dir.c_str(), O_RDONLY);
+  ::fsync(dirfd);
+  ::close(dirfd);
+
+  return 0;
+}
+
