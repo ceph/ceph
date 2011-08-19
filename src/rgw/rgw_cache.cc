@@ -7,6 +7,8 @@ using namespace std;
 
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {
+  Mutex::Locker l(lock);
+
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     RGW_LOG(10) << "cache get: name=" << name << " : miss" << dendl;
@@ -29,6 +31,8 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
 void ObjectCache::put(string& name, ObjectCacheInfo& info)
 {
+  Mutex::Locker l(lock);
+
   RGW_LOG(10) << "cache put: name=" << name << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
@@ -67,6 +71,8 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 
 void ObjectCache::remove(string& name)
 {
+  Mutex::Locker l(lock);
+
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end())
     return;
