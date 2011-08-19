@@ -923,6 +923,8 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados
   do {
     r = prepare_atomic_for_write_impl(rctx, obj, io_ctx, actual_obj, op, pstate);
   } while (r == -ECANCELED);
+
+  return r;
 }
 
 /**
