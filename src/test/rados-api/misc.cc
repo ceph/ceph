@@ -162,7 +162,7 @@ TEST(LibRadosMisc, Operate1PP) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
-  ObjectOperation o;
+  ObjectWriteOperation o;
   {
     bufferlist bl;
     o.write(0, bl);
@@ -179,19 +179,19 @@ TEST(LibRadosMisc, Operate1PP) {
     ASSERT_GT(ioctx.getxattr("foo", "key1", bl), 0);
     ASSERT_EQ(0, strcmp(bl.c_str(), val1.c_str()));
   }
-  ObjectOperation o2;
+  ObjectWriteOperation o2;
   {
     bufferlist bl;
     bl.append(val1);
-    o2.cmpxattr("key1", bl, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    o2.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
     o2.rmxattr("key1");
   }
   ASSERT_EQ(1, ioctx.operate("foo", &o2));
-  ObjectOperation o3;
+  ObjectWriteOperation o3;
   {
     bufferlist bl;
     bl.append(val1);
-    o3.cmpxattr("key1", bl, CEPH_OSD_CMPXATTR_OP_EQ, CEPH_OSD_CMPXATTR_MODE_STRING);
+    o3.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
   }
   ASSERT_LT(ioctx.operate("foo", &o3), 0);
   ioctx.close();
@@ -205,7 +205,7 @@ TEST(LibRadosMisc, Operate2PP) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
-  ObjectOperation o;
+  ObjectWriteOperation o;
   {
     bufferlist bl;
     bl.append("abcdefg");
@@ -246,7 +246,7 @@ TEST(LibRadosMisc, AioOperatePP) {
   AioCompletion *my_completion_null = NULL;
   ASSERT_NE(my_completion, my_completion_null);
 
-  ObjectOperation o;
+  ObjectWriteOperation o;
   {
     bufferlist bl;
     o.write(0, bl);
