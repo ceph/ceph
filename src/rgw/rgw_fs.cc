@@ -334,7 +334,7 @@ int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
   return ret;
 }
 
-int RGWFS::delete_bucket(std::string& id, rgw_bucket& bucket)
+int RGWFS::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.name.size() + 1;
   char buf[len];

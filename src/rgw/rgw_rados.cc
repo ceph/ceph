@@ -587,7 +587,7 @@ done_err:
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket)
+int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool)
 {
   librados::IoCtx list_ctx;
   int r = open_bucket_ctx(bucket, list_ctx);
@@ -602,9 +602,11 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket)
       return -ENOTEMPTY;
   }
 
-  r = rados->pool_delete(bucket.pool.c_str());
-  if (r < 0)
-    return r;
+  if (remove_pool) {
+    r = rados->pool_delete(bucket.pool.c_str());
+    if (r < 0)
+      return r;
+  }
 
   rgw_obj obj(rgw_root_bucket, bucket.name);
   r = delete_obj(NULL, id, obj, true);

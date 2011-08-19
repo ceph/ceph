@@ -507,10 +507,21 @@ void RGWDeleteBucket::execute()
   ret = -EINVAL;
 
   if (s->bucket_name) {
-    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket);
+    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket, false);
 
     if (ret == 0) {
       ret = rgw_remove_bucket(s->user.user_id, s->bucket, false);
+      if (ret < 0) {
+        RGW_LOG(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
+      }
+
+      int r = rgw_remove_bucket_info(s->bucket.name);
+      if (ret == 0)
+        ret = r;
+      string oid;
+      rgw_obj obj(s->bucket, oid);
+      RGWIntentEvent intent = DEL_POOL;
+      r = rgw_log_intent(s, obj, intent);
     }
   }
 

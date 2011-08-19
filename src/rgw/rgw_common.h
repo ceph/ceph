@@ -122,6 +122,7 @@ extern int gen_rand_alphanumeric_upper(char *dest, int size);
 
 enum RGWIntentEvent {
   DEL_OBJ,
+  DEL_POOL,
 };
 
 /** Store error returns for output at a different point in the program */

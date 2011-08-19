@@ -116,7 +116,7 @@ public:
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  virtual int delete_bucket(std::string& id, rgw_bucket& bucket) = 0;
+  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool) = 0;
   virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets) { return -ENOTSUP; }
 
   virtual int disable_buckets(std::vector<rgw_bucket>& buckets) { return -ENOTSUP; }

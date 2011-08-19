@@ -29,6 +29,8 @@ int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
   if (ret < 0)
     return ret;
 
+  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << dendl;
+
   return 0;
 }
 
@@ -48,6 +50,8 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
 
   bufferlist::iterator iter = bl.begin();
   ::decode(info, iter);
+
+  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << dendl;
 
   return 0;
 }
@@ -163,8 +167,8 @@ int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
   do {
     --miter;
 
-    string name = miter->first;
-    ret = rgwstore->tmap_del(obj, name);
+    pool_name = miter->first;
+    ret = rgwstore->tmap_del(obj, pool_name);
     if (!ret)
       break;
 
@@ -207,7 +211,7 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
   ret = rgw_store_bucket_info(bucket_name, info);
   if (ret < 0) {
     RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
-    rgwstore->delete_bucket(id, bucket);
+    rgwstore->delete_bucket(id, bucket, true);
     return ret;
   }
 

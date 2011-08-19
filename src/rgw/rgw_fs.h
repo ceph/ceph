@@ -33,7 +33,7 @@ public:
                map<std::string, bufferlist>& attrs,
                string& category,
                struct rgw_err *err);
-  int delete_bucket(std::string& id, rgw_bucket& bucket);
+  int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
   int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
 
   int get_attr(const char *name, int fd, char **attr);

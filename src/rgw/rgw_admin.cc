@@ -391,9 +391,10 @@ public:
 
 enum IntentFlags { // bitmask
   I_DEL_OBJ = 1,
+  I_DEL_POOL = 2,
 };
 
-int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, IntentFlags flags, bool purge)
+int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags, bool purge)
 {
   uint64_t size;
   rgw_obj obj(bucket, oid);
@@ -433,6 +434,17 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, IntentFlag
         r = rgwstore->delete_obj(NULL, id, entry.obj);
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove obj: " << entry.obj << std::endl;
+          complete = false;
+        }
+        break;
+      case DEL_POOL:
+        if (!flags & I_DEL_POOL) {
+          complete = false;
+          break;
+        }
+        r = rgwstore->delete_bucket(id, entry.obj.bucket, true);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
           complete = false;
         }
         break;
@@ -728,6 +740,9 @@ int main(int argc, char **argv)
     string bucket_name_str = bucket_name;
     RGWBucketInfo bucket_info;
     int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+    if (r < 0) {
+      RGW_LOG(0) << "could not get bucket info for bucket=" << bucket_name_str << dendl;
+    }
     bucket = bucket_info.bucket;
   }
 
@@ -957,7 +972,7 @@ int main(int argc, char **argv)
       vector<RGWObjEnt>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
         cout << "processing intent log " << (*iter).name << std::endl;
-        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ, true);
+        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
       }
     } while (is_truncated);
   }

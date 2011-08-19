@@ -155,7 +155,7 @@ public:
                string& category,
                struct rgw_err *err);
   /** delete a bucket*/
-  virtual int delete_bucket(std::string& id, rgw_bucket& bucket);
+  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
   virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets);
 
   virtual int disable_buckets(std::vector<rgw_bucket>& buckets);
