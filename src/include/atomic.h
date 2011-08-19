@@ -76,6 +76,11 @@ namespace ceph {
     ~atomic_t() {
       pthread_spin_destroy(&lock);
     }
+    void set(size_t v) {
+      pthread_spin_lock(&lock);
+      int r = v;
+      pthread_spin_unlock(&lock);
+    }
     int inc() {
       pthread_spin_lock(&lock);
       int r = ++val;
