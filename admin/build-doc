@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+cd "$(dirname "$0")"
+cd ..
+
+dia --filter=png-libart --export=doc/overview.png.tmp doc/overview.dia
+mv -- doc/overview.png.tmp doc/overview.png
+
+install -d -m0755 build-doc
+cd build-doc
+
+if [ ! -e virtualenv ]; then
+    virtualenv --no-site-packages virtualenv
+fi
+if [ ! -x virtualenv/bin/sphinx-build ]; then
+    ./virtualenv/bin/pip install sphinx
+fi
+
+install -d -m0755 \
+    output/html \
+    output/man
+./virtualenv/bin/sphinx-build -a -b dirhtml -d doctrees ../doc output/html
+./virtualenv/bin/sphinx-build -a -b man -d doctrees ../doc output/man
