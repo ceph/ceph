@@ -156,7 +156,7 @@ version_t MonitorStore::get_int(const char *a, const char *b)
 }
 
 
-void MonitorStore::put_int(version_t val, const char *a, const char *b, bool sync)
+void MonitorStore::put_int(version_t val, const char *a, const char *b)
 {
   char fn[1024];
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
@@ -187,8 +187,7 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b, bool syn
 	 << cpp_strerror(r) << dendl;
     ceph_abort();
   }
-  if (sync)
-    ::fsync(fd);
+  ::fsync(fd);
   if (TEMP_FAILURE_RETRY(::close(fd))) {
     derr << "MonitorStore::put_int: failed to close fd for '" << tfn << "': "
 	 << cpp_strerror(r) << dendl;
@@ -289,7 +288,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
+int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append)
 {
   char fn[1024];
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
@@ -324,7 +323,7 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
   
   err = bl.write_fd(fd);
 
-  if (sync && !err)
+  if (!err)
     ::fsync(fd);
   ::close(fd);
   if (!append && !err) {
@@ -334,9 +333,9 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
   return err;
 }
 
-int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
+int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
 {
-  int err = write_bl_ss_impl(bl, a, b, append,sync);
+  int err = write_bl_ss_impl(bl, a, b, append);
   assert(!err);  // for now
   return 0;
 }
