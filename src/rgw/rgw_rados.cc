@@ -678,6 +678,7 @@ int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)
   *suspended = (auid == RGW_SUSPENDED_USER_AUID);
   return 0;
 }
+
 /**
  * Delete an object.
  * id: unused
@@ -685,7 +686,7 @@ int RGWRados::bucket_suspended(std::string& bucket, bool *suspended)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 {
   std::string& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -712,10 +713,22 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
     r = io_ctx.aio_operate(obj.object, completion, &op);
     completion->release();
   }
+
+  atomic_write_finish(state, r);
+
   if (r < 0)
     return r;
 
   return 0;
+}
+
+int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+{
+  int r;
+  do {
+    r = delete_obj_impl(ctx, id, obj, sync);
+  } while (r == -ECANCELED);
+  return r;
 }
 
 int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
@@ -847,6 +860,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
   if (state->obj_tag.length() == 0 ||
       state->shadow_obj.size() == 0) {
     RGW_LOG(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
+    // FIXME: need to test object does not exist
   } else {
     RGW_LOG(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
@@ -874,12 +888,17 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       RGW_LOG(0) << "ERROR: failed to clone object r=" << r << dendl;
       return r;
     }
+
+    /* first verify that the object wasn't replaced under */
+    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
+    // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
   }
 
   string tag;
   append_rand_alpha(tag, tag, 32);
   bufferlist bl;
   bl.append(tag);
+
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
@@ -1109,7 +1128,7 @@ done_err:
   return r;
 }
 
-int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
+int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
                         string& category,
@@ -1180,8 +1199,27 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 
   bufferlist outbl;
   int ret = io_ctx.operate(dst_oid, &op);
+
+  atomic_write_finish(state, ret);
+
   return ret;
 }
+
+int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
+                        vector<RGWCloneRangeInfo>& ranges,
+                        map<string, bufferlist> attrs,
+                        string& category,
+                        time_t *pmtime,
+                        bool truncate_dest,
+                        pair<string, bufferlist> *xattr_cond)
+{
+  int r;
+  do {
+    r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, xattr_cond);
+  } while (r == -ECANCELED);
+  return r;
+}
+
 
 int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
             char **data, off_t ofs, off_t end)

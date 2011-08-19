@@ -89,6 +89,21 @@ class RGWRados  : public RGWAccess
                          string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
+
+  void atomic_write_finish(RGWObjState *state, int r) {
+    if (r == -ECANCELED) {
+      state->clear();
+    }
+  }
+
+  int clone_objs_impl(void *ctx, rgw_obj& dst_obj, 
+                 vector<RGWCloneRangeInfo>& ranges,
+                 map<string, bufferlist> attrs,
+                 string& category,
+                 time_t *pmtime,
+                 bool truncate_dest,
+                 pair<string, bufferlist> *cmp_xattr);
+  int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 public:
   RGWRados() : watcher(NULL), watch_handle(0) {}
 
