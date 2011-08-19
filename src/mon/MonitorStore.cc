@@ -289,8 +289,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::
-write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
+int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
 {
   char fn[1024];
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
@@ -335,8 +334,7 @@ write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append, bool
   return err;
 }
 
-int MonitorStore::
-write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
+int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
 {
   int err = write_bl_ss_impl(bl, a, b, append,sync);
   assert(!err);  // for now
