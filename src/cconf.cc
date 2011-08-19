@@ -40,6 +40,10 @@ cconf <flags> <action>\n\
 ACTIONS\n\
   -L|--list-all-sections          List all sections\n\
   -l|--list-sections <prefix>     List sections with the given prefix\n\
+  --filter-key <key>              Filter section list to only include sections\n\
+                                  with given key defined.\n\
+  --filter-key-value <key>=<val>  Filter section list to only include sections\n\
+                                  with given key/value pair.\n\
   --lookup <key>                  Print a configuration setting to stdout.\n\
                                   Returns 0 (success) if the configuration setting is\n\
                                   found; 1 otherwise.\n\
@@ -66,7 +70,9 @@ Return code will be 0 on success; error code otherwise.\n\
   exit(1);
 }
 
-static int list_sections(const std::string &prefix)
+static int list_sections(const std::string &prefix,
+			 const std::list<string>& filter_key,
+			 const std::map<string,string>& filter_key_value)
 {
   std::vector <std::string> sections;
   int ret = g_conf->get_all_sections(sections);
@@ -74,9 +80,36 @@ static int list_sections(const std::string &prefix)
     return 2;
   for (std::vector<std::string>::const_iterator p = sections.begin();
        p != sections.end(); ++p) {
-    if (strncmp(prefix.c_str(), p->c_str(), prefix.size()) == 0) {
-      cout << *p << std::endl;
+    if (strncmp(prefix.c_str(), p->c_str(), prefix.size()))
+      continue;
+
+    std::vector<std::string> sec;
+    sec.push_back(*p);
+
+    int r = 0;
+    for (std::list<string>::const_iterator q = filter_key.begin(); q != filter_key.end(); ++q) {
+      string v;
+      r = g_conf->get_val_from_conf_file(sec, q->c_str(), v, false);
+      if (r < 0)
+	break;
     }
+    if (r < 0)
+      continue;
+
+    for (std::map<string,string>::const_iterator q = filter_key_value.begin();
+	 q != filter_key_value.end();
+	 ++q) {
+      string v;
+      r = g_conf->get_val_from_conf_file(sec, q->first.c_str(), v, false);
+      if (r < 0 || v != q->second) {
+	r = -1;
+	break;
+      }
+    }
+    if (r < 0)
+      continue;
+    
+    cout << *p << std::endl;
   }
   return 0;
 }
@@ -118,6 +151,8 @@ int main(int argc, const char **argv)
   std::string action;
   std::string lookup_key;
   std::string section_list_prefix;
+  std::list<string> filter_key;
+  std::map<string,string> filter_key_value;
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -141,6 +176,18 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-l", "--list_sections", (char*)NULL)) {
       action = "list-sections";
       section_list_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--filter_key", (char*)NULL)) {
+      filter_key.push_back(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--filter_key_value", (char*)NULL)) {
+      size_t pos = val.find_first_of('=');
+      if (pos == string::npos) {
+	cerr << "expecting argument like 'key=value' for --filter-key-value (not '" << val << "')" << std::endl;
+	usage();
+	exit(1);
+      } 
+      string key(val, 0, pos);
+      string value(val, pos+1);
+      filter_key_value[key] = value;
     } else {
       if (((action == "lookup") || (action == "")) && (lookup_key.empty())) {
 	action = "lookup";
@@ -157,7 +204,7 @@ int main(int argc, const char **argv)
     usage();
     exit(0);
   } else if (action == "list-sections") {
-    return list_sections(section_list_prefix);
+    return list_sections(section_list_prefix, filter_key, filter_key_value);
   } else if (action == "lookup") {
     return lookup(sections, lookup_key, resolve_search);
   } else {
