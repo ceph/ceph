@@ -13,6 +13,9 @@
 extern int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 extern int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info);
 extern int rgw_remove_bucket_info(string& bucket_name);
+extern int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket);
+extern int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
+                      map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
 
 
 #endif

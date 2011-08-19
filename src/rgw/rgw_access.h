@@ -57,7 +57,7 @@ public:
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0) = 0;
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
@@ -231,7 +231,9 @@ public:
 
   virtual bool supports_tmap() { return false; }
 
+  virtual int tmap_get(rgw_obj& obj, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
+  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_del(rgw_obj& obj, std::string& key) { return -ENOTSUP; }
 

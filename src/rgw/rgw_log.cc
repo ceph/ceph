@@ -3,6 +3,7 @@
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_access.h"
+#include "rgw_bucket.h"
 
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
@@ -85,7 +86,7 @@ int rgw_log_op(struct req_state *s)
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, log_bucket, attrs);
+    ret = rgw_create_bucket(id, log_bucket.name, log_bucket, attrs);
     if (ret < 0)
       goto done;
     obj.object = entry.bucket;
@@ -123,7 +124,7 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, intent_log_bucket, attrs);
+    ret = rgw_create_bucket(id, intent_log_bucket.name, intent_log_bucket, attrs);
     if (ret < 0)
       goto done;
     ret = rgwstore->append_async(log_obj, bl.length(), bl);

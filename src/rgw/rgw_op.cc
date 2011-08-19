@@ -441,7 +441,7 @@ void RGWCreateBucket::execute()
   bool pol_ret;
   int pool_id;
 
-  rgw_obj obj(rgw_root_bucket, s->bucket.name);
+  rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
 
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
@@ -459,10 +459,16 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgwstore->create_bucket(s->user.user_id, s->bucket, attrs, true,
-				s->user.auid);
+  ret = rgw_bucket_allocate_pool(s->bucket_name_str, s->bucket);
+  if (ret < 0)
+    goto done;
+
+  ret = rgw_create_bucket(s->user.user_id, s->bucket_name_str, s->bucket, attrs, true,
+			  s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
+  RGW_LOG(0) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
+
   if (ret && ret != -EEXIST)   
     goto done;
 

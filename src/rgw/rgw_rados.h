@@ -99,7 +99,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
@@ -197,7 +197,9 @@ public:
   virtual int get_bucket_id(rgw_bucket& bucket);
 
   virtual bool supports_tmap() { return true; }
+  virtual int tmap_get(rgw_obj& obj, bufferlist& bl);
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);
   virtual int tmap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);

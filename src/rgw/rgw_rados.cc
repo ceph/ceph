@@ -306,7 +306,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
  * if auid is set, it sets the auid of the underlying rados io_ctx
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
+int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive, uint64_t auid)
 {
   librados::ObjectWriteOperation op;
   op.create(exclusive);
@@ -319,9 +319,11 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string
   if (ret < 0)
     return ret;
 
-  ret = rados->pool_create(bucket.pool.c_str(), auid);
-  if (ret < 0)
-    root_pool_ctx.remove(bucket.name.c_str());
+  if (create_pool) {
+    ret = rados->pool_create(bucket.pool.c_str(), auid);
+    if (ret < 0)
+      root_pool_ctx.remove(bucket.name.c_str());
+  }
 
   return ret;
 }
@@ -1346,6 +1348,23 @@ int RGWRados::get_bucket_id(rgw_bucket& bucket)
   return io_ctx.get_id();
 }
 
+int RGWRados::tmap_get(rgw_obj& obj, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+  rgw_bucket& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(obj.key);
+
+  r = io_ctx.tmap_get(oid, bl);
+
+  return r;
+ 
+}
+
 int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)
 {
   rgw_bucket& bucket = obj.bucket;
@@ -1358,6 +1377,34 @@ int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)
   ::encode(bl, cmdbl);
 
   RGW_LOG(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << key << dendl;
+
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  io_ctx.locator_set_key(obj.key);
+
+  r = io_ctx.tmap_update(oid, cmdbl);
+
+  return r;
+}
+
+int RGWRados::tmap_set(rgw_obj& obj, std::map<std::string, bufferlist>& m)
+{
+  rgw_bucket& bucket = obj.bucket;
+  std::string& oid = obj.object;
+  bufferlist cmdbl, emptybl;
+  __u8 c = CEPH_OSD_TMAP_SET;
+  map<string, bufferlist>::iterator iter;
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    ::encode(c, cmdbl);
+    ::encode(iter->first, cmdbl);
+    ::encode(iter->second, cmdbl);
+    RGW_LOG(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << iter->first << dendl;
+  }
+
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);

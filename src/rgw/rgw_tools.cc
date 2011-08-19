@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_tools.h"
+#include "rgw_bucket.h"
 
 #define READ_CHUNK_LEN (16 * 1024)
 
@@ -19,7 +20,7 @@ int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, 
   int ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
 
   if (ret == -ENOENT) {
-    ret = rgwstore->create_bucket(uid, bucket, attrs);
+    ret = rgw_create_bucket(uid, bucket.name, bucket, attrs);
     if (ret >= 0)
       ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
   }
