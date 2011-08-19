@@ -4843,8 +4843,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	dout(0) << " missing clone(s) for " << head << dendl;
-	assert(head == sobject_t());  // we had better be done
+	osd->clog.error() << "Missing clone(s) for " << head << "\n";
 	errors++;
       }
       
