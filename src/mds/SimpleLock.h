@@ -96,7 +96,7 @@ public:
     case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
-    case LOCK_LOCK_XLOCK: return "lock->prexlock";
+    case LOCK_LOCK_XLOCK: return "lock->xlock";
 
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
