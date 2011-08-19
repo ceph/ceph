@@ -99,8 +99,7 @@ int main(int argc, const char **argv)
   }
   librados::ObjectWriteOperation op;
   op.create(true);
-  bufferlist outbl;
-  ret = ioctx.operate(oid, &op, &outbl);
+  ret = ioctx.operate(oid, &op);
   if (ret) {
      cerr << "ioctx.operate failed: ret = " << ret << std::endl;
      return 1;

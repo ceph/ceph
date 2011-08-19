@@ -315,7 +315,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
     op.setxattr(iter->first.c_str(), iter->second);
 
   bufferlist outbl;
-  int ret = root_pool_ctx.operate(bucket, &op, &outbl);
+  int ret = root_pool_ctx.operate(bucket, &op);
   if (ret < 0)
     return ret;
 
@@ -371,7 +371,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
   if (!op.size())
     return 0;
 
-  r = io_ctx.operate(oid, &op, NULL);
+  r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
 
@@ -706,10 +706,10 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 
   op.remove();
   if (sync) {
-    r = io_ctx.operate(oid, &op, NULL);
+    r = io_ctx.operate(oid, &op);
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_operate(obj.object, completion, &op, NULL);
+    r = io_ctx.aio_operate(obj.object, completion, &op);
     completion->release();
   }
   if (r < 0)
@@ -932,9 +932,8 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   if (r < 0)
     return r;
 
-  bufferlist outbl;
   op.setxattr(name, bl);
-  r = io_ctx.operate(actual_obj, &op, &outbl);
+  r = io_ctx.operate(actual_obj, &op);
 
   if (state && r >= 0)
     state->attrset[name] = bl;
@@ -1171,7 +1170,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
     op.mtime(pmtime);
 
   bufferlist outbl;
-  int ret = io_ctx.operate(dst_oid, &op, &outbl);
+  int ret = io_ctx.operate(dst_oid, &op);
   return ret;
 }
 

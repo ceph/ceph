@@ -620,9 +620,9 @@ public:
 
   int list(Objecter::ListContext *context, int max_entries);
 
-  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime, bufferlist *pbl);
+  int operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
   int operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
-  int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
+  int aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c);
 
   struct C_aio_Ack : public Context {
     AioCompletionImpl *c;
@@ -1712,7 +1712,7 @@ clone_range(IoCtxImpl& io, const object_t& dst_oid, uint64_t dst_offset, const o
 }
 
 int librados::RadosClient::
-operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime, bufferlist *pbl)
+operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, time_t *pmtime)
 {
   utime_t ut;
   if (pmtime) {
@@ -1789,8 +1789,7 @@ operate_read(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, bufferlis
 }
 
 int librados::RadosClient::
-aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c,
-	    bufferlist *pbl)
+aio_operate(IoCtxImpl& io, const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c)
 {
   utime_t ut = ceph_clock_now(cct);
   Context *onack = new C_aio_Ack(c);
@@ -2977,10 +2976,10 @@ int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
   return io_ctx_impl->client->tmap_get(*io_ctx_impl, obj, bl);
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, o->pmtime, pbl);
+  return io_ctx_impl->client->operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, o->pmtime);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
@@ -2989,10 +2988,10 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
   return io_ctx_impl->client->operate_read(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o, bufferlist *pbl)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc, pbl);
+  return io_ctx_impl->client->aio_operate(*io_ctx_impl, obj, (::ObjectOperation*)o->impl, c->pc);
 }
 
 

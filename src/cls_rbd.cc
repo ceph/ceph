@@ -20,6 +20,7 @@ cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
 cls_method_handle_t h_snapshot_revert;
 cls_method_handle_t h_assign_bid;
+cls_method_handle_t h_test_exec;
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -366,6 +367,15 @@ int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return out->length();
 }
 
+/* Used for testing rados_exec */
+static int test_exec(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist bl;
+  std::string testing123("testing123");
+  ::encode(testing123, *out);
+  return out->length();
+}
+
 void __cls_init()
 {
   CLS_LOG("Loaded rbd class!");
@@ -378,6 +388,8 @@ void __cls_init()
 
   /* assign a unique block id for rbd blocks */
   cls_register_cxx_method(h_class, "assign_bid", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rbd_assign_bid, &h_assign_bid);
+
+  cls_register_cxx_method(h_class, "test_exec", CLS_METHOD_RD | CLS_METHOD_PUBLIC, test_exec, &h_test_exec);
 
   return;
 }
