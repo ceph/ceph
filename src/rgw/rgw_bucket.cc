@@ -116,6 +116,14 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
   }
   rgw_obj obj(pi_buckets, avail_pools);
   ret = rgwstore->tmap_set(obj, m);
+  if (ret == -ENOENT) {
+    rgw_bucket new_bucket;
+    map<string,bufferlist> attrs;
+    string uid;
+    ret = rgw_create_bucket(uid, pi_buckets.name, new_bucket, attrs, false);
+    if (ret >= 0)
+      ret = rgwstore->tmap_set(obj, m);
+  }
   if (ret < 0) {
     RGW_LOG(0) << "rgwstore->tmap_set() failed" << dendl;
     return ret;
@@ -177,8 +185,11 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
                       map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
   /* system bucket name? */
-  if (bucket_name[0] == '.')
+  if (bucket_name[0] == '.') {
+    bucket.name = bucket_name;
+    bucket.pool = bucket_name;
     return rgwstore->create_bucket(id, bucket, attrs, true, exclusive, auid);
+  }
 
   int ret = rgw_bucket_allocate_pool(bucket_name, bucket);
   if (ret < 0)
@@ -190,6 +201,15 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
   }
   if (ret < 0)
     return ret;
+
+  RGWBucketInfo info;
+  info.bucket = bucket;
+  ret = rgw_store_bucket_info(bucket_name, info);
+  if (ret < 0) {
+    RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
+    rgwstore->delete_bucket(id, bucket);
+    return ret;
+  }
 
   return 0; 
 }
