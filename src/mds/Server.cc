@@ -3100,16 +3100,12 @@ void Server::handle_client_setattr(MDRequest *mdr)
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
-      pi->truncate_from = old_size;
-      pi->size = req->head.args.setattr.size;
-      pi->truncate_size = pi->size;
-      pi->truncate_seq++;
-      pi->truncate_pending++;
+      pi->truncate(old_size, req->head.args.setattr.size);
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi->size = req->head.args.setattr.size;
+      pi->rstat.rbytes = pi->size;
     }
-    pi->rstat.rbytes = pi->size;
     pi->mtime = now;
 
     // adjust client's max_size?
@@ -3147,16 +3143,20 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 
   dout(10) << "do_open_truncate " << *in << dendl;
 
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "open_truncate");
+  mdlog->start_entry(le);
+
   // prepare
   inode_t *pi = in->project_inode();
   pi->mtime = pi->ctime = ceph_clock_now(g_ceph_context);
   pi->version = in->pre_dirty();
 
-  pi->truncate_from = pi->size;
-  pi->size = 0;
-  pi->rstat.rbytes = 0;
-  pi->truncate_size = 0;
-  pi->truncate_seq++;
+  uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
+  if (old_size > 0) {
+    pi->truncate(old_size, 0);
+    le->metablob.add_truncate_start(in->ino());
+  }
 
   bool changed_ranges = false;
   if (cmode & CEPH_FILE_MODE_WR) {
@@ -3166,10 +3166,6 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
     changed_ranges = true;
   }
   
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "open_truncate");
-  mdlog->start_entry(le);
-  le->metablob.add_truncate_start(in->ino());
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
 
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
@@ -3184,7 +3180,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->item_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true,
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
 								  changed_ranges));
 }
 
