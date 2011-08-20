@@ -515,13 +515,10 @@ void RGWDeleteBucket::execute()
         RGW_LOG(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
       }
 
-      int r = rgw_remove_bucket_info(s->bucket.name);
-      if (ret == 0)
-        ret = r;
       string oid;
       rgw_obj obj(s->bucket, oid);
       RGWIntentEvent intent = DEL_POOL;
-      r = rgw_log_intent(s, obj, intent);
+      int r = rgw_log_intent(s, obj, intent);
     }
   }
 
