@@ -215,7 +215,7 @@ void Paxos::store_state(MMonPaxos *m)
       // drop anything we've already committed
       if (vals.begin()->first <= last_committed) {
 	dout(20) << " dropping leading elements from " << vals.begin()->first << " to last_committed" << dendl;
-	while (vals.begin()->first <= last_committed) {
+	while (!vals.empty() && vals.begin()->first <= last_committed) {
 	  vals.erase(vals.begin());
 	}
       }
