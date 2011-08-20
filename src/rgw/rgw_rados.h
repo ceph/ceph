@@ -102,6 +102,7 @@ class RGWRados  : public RGWAccess
                  string& category,
                  time_t *pmtime,
                  bool truncate_dest,
+                 bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
   int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 public:
@@ -141,8 +142,8 @@ public:
                          vector<RGWCloneRangeInfo>& ranges,
                          map<string, bufferlist> attrs,
                          string& category,
-                         time_t *pmtime, bool truncate_dest) {
-    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, NULL);
+                         time_t *pmtime, bool truncate_dest, bool exclusive) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, NULL);
   }
 
   int clone_objs(void *ctx, rgw_obj& dst_obj, 
@@ -151,6 +152,7 @@ public:
                  string& category,
                  time_t *pmtime,
                  bool truncate_dest,
+                 bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
 
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
@@ -158,6 +160,8 @@ public:
                 uint64_t size, map<string, bufferlist> attrs,
                 string& category,
                 time_t *pmtime,
+                bool truncate_dest,
+                bool exclusive,
                 pair<string, bufferlist> *xattr_cond) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
@@ -166,7 +170,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, xattr_cond);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
   /** Copy an object, with many extra options */

@@ -871,7 +871,10 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       dest_obj.set_key(obj.object);
 
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, &cond);
+    RGW_LOG(0) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
+    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, false, true, &cond);
+    if (r == -EEXIST)
+      r = 0;
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
@@ -1138,6 +1141,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
                         string& category,
                         time_t *pmtime,
                         bool truncate_dest,
+                        bool exclusive,
                         pair<string, bufferlist> *xattr_cond)
 {
   std::string& bucket = dst_obj.bucket;
@@ -1151,16 +1155,15 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   io_ctx.locator_set_key(dst_obj.key);
   ObjectWriteOperation op;
-
   if (truncate_dest) {
     op.remove();
     op.set_op_flags(OP_FAILOK); // don't fail if object didn't exist
   }
 
   if (category.size())
-    op.create(false, category);
+    op.create(exclusive, category);
   else
-    op.create(false);
+    op.create(exclusive);
 
 
   map<string, bufferlist>::iterator iter;
@@ -1215,11 +1218,12 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         string& category,
                         time_t *pmtime,
                         bool truncate_dest,
+                        bool exclusive,
                         pair<string, bufferlist> *xattr_cond)
 {
   int r;
   do {
-    r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, xattr_cond);
+    r = clone_objs_impl(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   } while (ctx && r == -ECANCELED);
   return r;
 }

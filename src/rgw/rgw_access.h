@@ -187,7 +187,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
   }
 
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
@@ -195,7 +195,8 @@ public:
                         map<string, bufferlist> attrs,
                         string& category,
                         time_t *pmtime,
-                        bool truncate_dest) { return -ENOTSUP; }
+                        bool truncate_dest,
+                        bool exclusive) { return -ENOTSUP; }
  /**
    * a simple object read without keeping state
    */
