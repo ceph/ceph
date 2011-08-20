@@ -281,9 +281,13 @@ rados_SOURCES = rados.cc rados_sync.cc
 rados_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
+testrados_SOURCES = testrados.c
+testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testradospp_SOURCES = testradospp.cc
+testradospp_LDADD = librados.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += radosacl
+bin_DEBUGPROGRAMS += testrados testradospp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
