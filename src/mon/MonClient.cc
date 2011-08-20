@@ -285,7 +285,7 @@ bool MonClient::ms_dispatch(Message *m)
 
   // ignore any messages outside our current session
   if (m->get_connection() != cur_con) {
-    ldout(cct, 0) << "discarding stray montior message " << *m << dendl;
+    ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
     m->put();
     return true;
   }
