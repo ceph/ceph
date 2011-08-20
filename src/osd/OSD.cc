@@ -3089,15 +3089,15 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " wrongly marked me down or wrong addr";
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.err() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
 		    << " != my " << client_messenger->get_myaddr();
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.err() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
       else if (!osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.err() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
 		    << " != my " << hbout_messenger->get_myaddr();
       
