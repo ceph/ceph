@@ -464,10 +464,10 @@ void MonClient::handle_auth(MAuthReply *m)
   m->put();
 
   if (ret == -EAGAIN) {
-    MAuth *m = new MAuth;
-    m->protocol = auth->get_protocol();
-    ret = auth->build_request(m->auth_payload);
-    _send_mon_message(m, true);
+    MAuth *ma = new MAuth;
+    ma->protocol = auth->get_protocol();
+    ret = auth->build_request(ma->auth_payload);
+    _send_mon_message(ma, true);
     return;
   }
 
