@@ -99,7 +99,6 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
     lru_iter--;
     RGW_LOG(10) << "adding " << name << " to cache LRU end" << dendl;
   } else {
-    string name = *lru_iter;
     RGW_LOG(10) << "moving " << name << " to cache LRU end" << dendl;
     lru.erase(lru_iter);
     lru.push_back(name);
