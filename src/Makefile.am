@@ -430,6 +430,10 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
 	$(top_builddir)/src/gtest/lib/libgtest_main.la \
 	-lpthread
+UNITTEST_STATIC_LDADD = \
+	$(top_builddir)/src/gtest/lib/libgtest.a \
+	$(top_builddir)/src/gtest/lib/libgtest_main.a \
+	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la -lpthread -lm \

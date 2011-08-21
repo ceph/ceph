@@ -180,8 +180,10 @@ endif
 
 # Build rules for libraries.
 lib_LTLIBRARIES = lib/libgtest.la lib/libgtest_main.la
+lib_LTLIBRARIES += lib/libgtest.a lib/libgtest_main.a
 
 lib_libgtest_la_SOURCES = src/gtest-all.cc
+lib_libgtest_a_SOURCES = src/gtest-all.cc
 
 pkginclude_HEADERS = include/gtest/gtest.h \
                      include/gtest/gtest-death-test.h \
@@ -208,6 +210,9 @@ pkginclude_internal_HEADERS = \
 
 lib_libgtest_main_la_SOURCES = src/gtest_main.cc
 lib_libgtest_main_la_LIBADD = lib/libgtest.la
+
+lib_libgtest_main_a_SOURCES = src/gtest_main.cc
+lib_libgtest_main_a_LIBADD = lib/libgtest.a
 
 # Bulid rules for samples and tests. Automake's naming for some of
 # these variables isn't terribly obvious, so this is a brief
