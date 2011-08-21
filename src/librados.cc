@@ -3410,19 +3410,19 @@ get_pool_stats(std::list<string>& v, string& category, std::map<string, stats_ma
         sum = &iter->second;
       }
       
-      pool_stat_t& v = c[cur_category];
-      v.num_kb = sum->num_kb;
-      v.num_bytes = sum->num_bytes;
-      v.num_objects = sum->num_objects;
-      v.num_object_clones = sum->num_object_clones;
-      v.num_object_copies = sum->num_object_copies;
-      v.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
-      v.num_objects_unfound = sum->num_objects_unfound;
-      v.num_objects_degraded = sum->num_objects_degraded;
-      v.num_rd = sum->num_rd;
-      v.num_rd_kb = sum->num_rd_kb;
-      v.num_wr = sum->num_wr;
-      v.num_wr_kb = sum->num_wr_kb;
+      pool_stat_t& pv = c[cur_category];
+      pv.num_kb = sum->num_kb;
+      pv.num_bytes = sum->num_bytes;
+      pv.num_objects = sum->num_objects;
+      pv.num_object_clones = sum->num_object_clones;
+      pv.num_object_copies = sum->num_object_copies;
+      pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
+      pv.num_objects_unfound = sum->num_objects_unfound;
+      pv.num_objects_degraded = sum->num_objects_degraded;
+      pv.num_rd = sum->num_rd;
+      pv.num_rd_kb = sum->num_rd_kb;
+      pv.num_wr = sum->num_wr;
+      pv.num_wr_kb = sum->num_wr_kb;
     }
   }
   return r;
