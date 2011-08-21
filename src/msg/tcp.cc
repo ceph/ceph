@@ -4,6 +4,7 @@
 #include <poll.h>
 #include "tcp.h"
 #include "common/config.h"
+#include "common/errno.h"
 
 /******************
  * tcp crap
@@ -69,9 +70,8 @@ again:
     if (errno == EAGAIN || errno == EINTR) {
       goto again;
     } else {
-      char buf[100];
       lgeneric_dout(cct, 10) << "tcp_read_nonblocking socket " << sd << " returned "
-        << got << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+			     << got << " errno " << errno << " " << cpp_strerror(errno) << dendl;
       return -1;
     }
   } else if (got == 0) {
