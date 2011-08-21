@@ -37,7 +37,7 @@ def create_image(ctx, config):
         if properties is None:
             properties = {}
         name = properties.get('image_name', default_image_name(role))
-        size = properties.get('image_size', 1024)
+        size = properties.get('image_size', 10240)
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
