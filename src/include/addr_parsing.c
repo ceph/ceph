@@ -44,8 +44,7 @@ char *resolve_addrs(const char *orig_str)
   char *new_str;
   char *tok, *p, *port_str, *saveptr;
   int len, pos;
-  char buf[strlen(orig_str) + 1];
-  strcpy(buf, orig_str);
+  char *buf = strdup(orig_str);
 
   len = BUF_SIZE;
   new_str = (char *)malloc(len);
@@ -97,6 +96,7 @@ char *resolve_addrs(const char *orig_str)
     if (r < 0) {
       printf("server name not found: %s (%s)\n", tok, strerror(errno));
       free(new_str);
+      free(buf);
       return 0;
     }
 
@@ -136,5 +136,6 @@ char *resolve_addrs(const char *orig_str)
   }
 
   //printf("new_str is '%s'\n", new_str);
+  free(buf);
   return new_str;
 }

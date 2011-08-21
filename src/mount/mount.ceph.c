@@ -40,6 +40,7 @@ static char *mount_resolve_src(const char *orig_str)
 	char *mount_path;
 	char *src;
 	char *buf = strdup(orig_str);
+
 	mount_path = strrchr(buf, ':');
 	if (!mount_path) {
 		printf("source mount path was not specified\n");
