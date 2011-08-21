@@ -217,9 +217,9 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
     // debug: journal this every time to catch subtree replay bugs.
     // use a different event id so it doesn't get interpreted as a
     // LogSegment boundary on replay.
-    LogEvent *le = mds->mdcache->create_subtree_map();
-    le->set_type(EVENT_SUBTREEMAP_TEST);
-    submit_entry(le);
+    LogEvent *sle = mds->mdcache->create_subtree_map();
+    sle->set_type(EVENT_SUBTREEMAP_TEST);
+    submit_entry(sle);
   }
 
   delete le;
