@@ -182,17 +182,17 @@ do { \
           if (got_eq) {
             ASSERT_STATE((services_list.size() > 0) ||
 			 (uid_list.size() > 0));
-            list<int>::iterator iter;
-            for (iter = services_list.begin(); iter != services_list.end(); ++iter) {
-              MonCap& cap = services_map[*iter];
+            
+            for (list<int>::iterator i = services_list.begin(); i != services_list.end(); ++i) {
+              MonCap& cap = services_map[*i];
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
                 cap.deny |= cap_val;
               }
             }
-	    for (iter = uid_list.begin(); iter != uid_list.end(); ++iter) {
-	      MonCap& cap = pool_auid_map[*iter];
+	    for (list<int>::iterator i = uid_list.begin(); i != uid_list.end(); ++i) {
+	      MonCap& cap = pool_auid_map[*i];
 	      if (op_allow) {
 		cap.allow |= cap_val;
 	      } else {
