@@ -1769,7 +1769,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     pi->rstat.add(delta);
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
 
-    if (pi->rstat.rbytes < 0)
+    if (pi->rstat.rbytes < 0 && !pin->is_stray())
       assert(!"negative rstat rbytes" == g_conf->mds_verify_scatter);
 
     last = first-1;
@@ -2004,18 +2004,20 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
-      if (pi->dirstat.size() < 0)
+      if (pi->dirstat.size() < 0 && !pin->is_stray())
 	assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->dirstat.size() != pf->fragstat.size()) {
-	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
-	     << parent->dirfrag() << ", inode has " << pi->dirstat
-	     << ", dirfrag has " << pf->fragstat << "\n";
+	  if (!pin->is_stray())
+	    mds->clog.error() << "unmatched fragstat size on single dirfrag "
+			      << parent->dirfrag() << ", inode has " << pi->dirstat
+			      << ", dirfrag has " << pf->fragstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
 
-	  assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
+	  if (!pin->is_stray())
+	    assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	}
       }
     }
@@ -2054,15 +2056,17 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       pf->accounted_rstat = pf->rstat;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  mds->clog.error() << "unmatched rstat rbytes on single dirfrag "
-	      << parent->dirfrag() << ", inode has " << pi->rstat
-	      << ", dirfrag has " << pf->rstat << "\n";
+	if (pi->rstat.rbytes != pf->rstat.rbytes) {
+	  if (!pin->is_stray())
+	    mds->clog.error() << "unmatched rstat rbytes on single dirfrag "
+			      << parent->dirfrag() << ", inode has " << pi->rstat
+			      << ", dirfrag has " << pf->rstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->rstat = pf->rstat;
 
-	  assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
+	  if (!pin->is_stray())
+	    assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
 	}
       }
     }
