@@ -484,9 +484,9 @@ void MonClient::handle_auth(MAuthReply *m)
 
       if (log_client) {
 	log_client->reset_session();
-	Message *m = log_client->get_mon_log_message();
-	if (m)
-	  _send_mon_message(m);
+	Message *lm = log_client->get_mon_log_message();
+	if (lm)
+	  _send_mon_message(lm);
       }
     }
   
