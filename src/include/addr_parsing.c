@@ -42,7 +42,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 char *resolve_addrs(const char *orig_str)
 {
   char *new_str;
-  char *tok, *p, *port_str, *saveptr;
+  char *tok, *p, *port_str, *saveptr = NULL;
   int len, pos;
   char *buf = strdup(orig_str);
 
