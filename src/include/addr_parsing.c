@@ -34,7 +34,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
     }
   }
 
-  strcpy((*pstr)+pos, str2);
+  strncpy((*pstr)+pos, str2, len2);
 
   return pos + len2;
 }
