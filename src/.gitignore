@@ -100,3 +100,5 @@ test_rados_api_stat
 test_rados_api_watch_notify
 test_rados_api_snapshots
 test_rados_api_misc
+/scratchtool
+/scratchtoolpp
