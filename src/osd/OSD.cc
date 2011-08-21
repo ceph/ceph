@@ -2218,11 +2218,11 @@ void OSD::handle_command(MMonCommand *m)
 
 	fout << *pg << std::endl;
 	std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-	std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
-	for (; m != mend; ++m) {
-	  fout << m->first << " -> " << m->second << std::endl;
+	std::map<sobject_t, PG::Missing::item>::iterator mi = pg->missing.missing.begin();
+	for (; mi != mend; ++mi) {
+	  fout << mi->first << " -> " << mi->second << std::endl;
 	  map<sobject_t, set<int> >::const_iterator mli =
-	    pg->missing_loc.find(m->first);
+	    pg->missing_loc.find(mi->first);
 	  if (mli == pg->missing_loc.end())
 	    continue;
 	  const set<int> &mls(mli->second);
