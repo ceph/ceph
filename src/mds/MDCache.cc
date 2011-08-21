@@ -3046,9 +3046,9 @@ void MDCache::remove_inode_recursive(CInode *in)
       ++q;
       CDentry::linkage_t *dnl = dn->get_linkage();
       if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
+	CInode *tin = dnl->get_inode();
 	subdir->unlink_inode(dn);
-	remove_inode_recursive(in);
+	remove_inode_recursive(tin);
       }
       subdir->remove_dentry(dn);
     }
