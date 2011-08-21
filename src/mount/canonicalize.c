@@ -168,24 +168,29 @@ canonicalize_dm_name(const char *ptname)
 char *
 canonicalize_path(const char *path)
 {
-	char canonical[PATH_MAX+2];
+	char *canonical;
 	char *p;
 
 	if (path == NULL)
 		return NULL;
 
-	if (!myrealpath(path, canonical, PATH_MAX+1))
+	canonical = malloc(PATH_MAX+2);
+	if (!myrealpath(path, canonical, PATH_MAX+1)) {
+		free(canonical);
 		return strdup(path);
+	}
 
 
 	p = strrchr(canonical, '/');
 	if (p && strncmp(p, "/dm-", 4) == 0 && isdigit(*(p + 4))) {
 		p = canonicalize_dm_name(p+1);
-		if (p)
+		if (p) {
+			free(canonical);
 			return p;
+		}
 	}
 
-	return strdup(canonical);
+	return canonical;
 }
 
 
