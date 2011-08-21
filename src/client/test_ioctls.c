@@ -14,13 +14,14 @@
 
 #include "ioctl.h"
 
+char new_file_name[PATH_MAX];
+
 int main(int argc, char **argv)
 {
 	char *fn;
 	int fd, err;
 	struct ceph_ioctl_layout l;
 	struct ceph_ioctl_dataloc dl;
-        char new_file_name[PATH_MAX];
 
 	if (argc < 3) {
 		printf("usage: test_ioctls <filename> <offset>\n");
