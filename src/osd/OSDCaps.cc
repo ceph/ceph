@@ -184,11 +184,13 @@ do { \
         if (token.compare(";") == 0 || pos >= s.size()) {
           if (got_eq) {
             ASSERT_STATE(name_list.size() > 0);
-            list<string>::iterator iter;
 	    CapMap *working_map = &pools_map;
-	    if (cmd_uid) working_map = &auid_map;
-            for (iter = name_list.begin(); iter != name_list.end(); ++iter) {
-              OSDCap& cap = working_map->get_cap(*iter);
+	    if (cmd_uid)
+	      working_map = &auid_map;
+            for (list<string>::iterator iter2 = name_list.begin();
+		 iter2 != name_list.end();
+		 ++iter2) {
+              OSDCap& cap = working_map->get_cap(*iter2);
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
