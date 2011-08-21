@@ -1167,11 +1167,11 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-      CDir *dir = *p;
-      if (!dir->state_test(CDir::STATE_EXPORTBOUND)) {
+      CDir *t = *p;
+      if (!t->state_test(CDir::STATE_EXPORTBOUND)) {
 	// include nested dirfrag
-	assert(dir->get_dir_auth().first == CDIR_AUTH_PARENT);
-	subdirs.push_back(dir);  // it's ours, recurse (later)
+	assert(t->get_dir_auth().first == CDIR_AUTH_PARENT);
+	subdirs.push_back(t);  // it's ours, recurse (later)
       }
     }
   }
