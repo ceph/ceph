@@ -1319,10 +1319,10 @@ void Migrator::export_reverse(CDir *dir)
   list<CDir*> rq;
   rq.push_back(dir);
   while (!rq.empty()) {
-    CDir *dir = rq.front(); 
+    CDir *t = rq.front(); 
     rq.pop_front();
-    dir->abort_export();
-    for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
+    t->abort_export();
+    for (CDir::map_t::iterator p = t->items.begin(); p != t->items.end(); ++p) {
       p->second->abort_export();
       if (!p->second->get_linkage()->is_primary())
 	continue;
