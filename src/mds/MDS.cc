@@ -1839,14 +1839,14 @@ bool MDS::_dispatch(Message *m)
     if (is_laggy())
       return true;
 
-    Message *m = waiting_for_nolaggy.front();
+    Message *old = waiting_for_nolaggy.front();
     waiting_for_nolaggy.pop_front();
 
-    if (is_stale_message(m)) {
-      m->put();
+    if (is_stale_message(old)) {
+      old->put();
     } else {
-      dout(7) << " processing laggy deferred " << *m << dendl;
-      handle_deferrable_message(m);
+      dout(7) << " processing laggy deferred " << *old << dendl;
+      handle_deferrable_message(old);
     }
 
     // give other threads (beacon!) a chance
