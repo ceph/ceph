@@ -579,49 +579,49 @@ endif
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_io_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_io_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_io
 
 test_rados_api_aio_SOURCES = test/rados-api/aio.cc test/rados-api/test.cc
 test_rados_api_aio_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_aio_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_aio_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_aio_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_aio
 
 test_rados_api_list_SOURCES = test/rados-api/list.cc test/rados-api/test.cc
 test_rados_api_list_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_list_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_list_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_list
 
 test_rados_api_pool_SOURCES = test/rados-api/pool.cc test/rados-api/test.cc
 test_rados_api_pool_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_pool_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_pool_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_pool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_pool
 
 test_rados_api_stat_SOURCES = test/rados-api/stat.cc test/rados-api/test.cc
 test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_stat_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_stat_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_stat
 
 test_rados_api_watch_notify_SOURCES = test/rados-api/watch_notify.cc test/rados-api/test.cc
 test_rados_api_watch_notify_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_watch_notify_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_watch_notify_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_watch_notify_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_watch_notify
 
 test_rados_api_snapshots_SOURCES = test/rados-api/snapshots.cc test/rados-api/test.cc
 test_rados_api_snapshots_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_snapshots_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_snapshots
 
 test_rados_api_misc_SOURCES = test/rados-api/misc.cc test/rados-api/test.cc
 test_rados_api_misc_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_misc_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
