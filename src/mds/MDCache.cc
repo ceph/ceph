@@ -603,8 +603,23 @@ void MDCache::populate_mydir()
     if (!strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
       strays[i]->get(CInode::PIN_STRAY);
       strays[i]->state_set(CInode::STATE_STRAYPINNED);
+      strays[i]->get_stickydirs();
     }
     dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
+
+    // open all frags
+    list<frag_t> ls;
+    strays[i]->dirfragtree.get_leaves(ls);
+    for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      frag_t fg = *p;
+      CDir *dir = strays[i]->get_dirfrag(fg);
+      if (!dir)
+	dir = strays[i]->get_or_open_dirfrag(this, fg);
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDS_RetryOpenRoot(this));
+	return;
+      }
+    }
   }
 
   // open or create journal file
@@ -636,7 +651,8 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   CInode *strayi = get_stray();
   assert(strayi);
   frag_t fg = strayi->pick_dirfrag(straydname);
-  CDir *straydir = strayi->get_or_open_dirfrag(this, fg);
+  CDir *straydir = strayi->get_dirfrag(fg);
+  assert(straydir);
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
@@ -6195,14 +6211,13 @@ bool MDCache::shutdown_pass()
   }
   
   // drop our reference to our stray dir inode
-  static bool did_stray_put = false;
-  if (!did_stray_put) {
-    for (int i = 0; i < NUM_STRAY; ++i) {
-      if (strays[i]) {
-	strays[i]->put(CInode::PIN_STRAY);
-      }
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (strays[i] &&
+	strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
+      strays[i]->state_clear(CInode::STATE_STRAYPINNED);
+      strays[i]->put(CInode::PIN_STRAY);
+      strays[i]->put_stickydirs();
     }
-    did_stray_put = true;
   }
 
   // trim cache
