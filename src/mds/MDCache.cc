@@ -6532,6 +6532,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 			   CInode **pin,
                            int onfail)
 {
+  bool discover = (onfail == MDS_TRAVERSE_DISCOVER);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
   bool forward = (onfail == MDS_TRAVERSE_FORWARD);
 
@@ -6616,7 +6617,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
-		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+		      null_okay);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       }
@@ -6804,24 +6805,23 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       // dirfrag/dentry is not mine.
       pair<int,int> dauth = curdir->authority();
 
-      if (onfail == MDS_TRAVERSE_FORWARD &&
+      if (forward &&
 	  snapid && mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_retry_attempt()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < retry " << mdr->client_request->get_retry_attempt()
 		<< ", discovering instead of forwarding" << dendl;
-	onfail = MDS_TRAVERSE_DISCOVER;
+	discover = true;
       }
 
-      if ((onfail == MDS_TRAVERSE_DISCOVER ||
-           onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
+      if ((discover || null_okay)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
-		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+		      null_okay);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       } 
-      if (onfail == MDS_TRAVERSE_FORWARD) {
+      if (forward) {
         // forward
         dout(7) << "traverse: not auth for " << path << " in " << *curdir << dendl;
 	
