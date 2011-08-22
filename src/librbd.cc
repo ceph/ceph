@@ -1005,45 +1005,58 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
 int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname)
 {
   CephContext *cct = dest_md_ctx.cct();
-  struct rbd_obj_header_ondisk dest_header;
+
+  uint64_t src_size;
+  if (ictx.snapname.length()) {
+    map<std::string,SnapInfo>::iterator p = ictx.snaps_by_name.find(ictx.snapname);
+    assert(p != ictx.snaps_by_name.end());
+    src_size = p->second.size;
+  } else {
+    src_size = ictx.header.image_size;
+  }
+
+  uint64_t numseg = get_max_block(src_size, ictx.header.options.order);
 
   int order = ictx.header.options.order;
-  int r = create(dest_md_ctx, destname, ictx.header.image_size, &order);
+  int r = create(dest_md_ctx, destname, src_size, &order);
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
   }
 
-  uint64_t numseg = get_max_block(ictx.header);
-  if (ictx.snapname.length()) {
-    map<std::string,SnapInfo>::iterator p = ictx.snaps_by_name.find(ictx.snapname);
-    assert(p != ictx.snaps_by_name.end());
-    numseg = get_max_block(p->second.size, ictx.header.options.order);
+  ImageCtx *destictx = new librbd::ImageCtx(destname, dest_md_ctx);
+  r = open_image(dest_md_ctx, destictx, destname, NULL);
+  if (r < 0) {
+    lderr(cct) << "failed to read newly created header" << dendl;
+    return r;
   }
+
   uint64_t block_size = get_block_size(ictx.header);
 
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
     string oid = get_block_oid(ictx.header, i);
-    string dest_oid = get_block_oid(dest_header, i);
     map<uint64_t, uint64_t> m;
-    map<uint64_t, uint64_t>::iterator iter;
     r = ictx.data_ctx.sparse_read(oid, m, bl, block_size, 0);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0)
-      return r;
+      goto done;
 
-    for (iter = m.begin(); iter != m.end(); ++iter) {
+    uint64_t blpos = 0;
+    for (map<uint64_t, uint64_t>::iterator iter = m.begin(); iter != m.end(); ++iter) {
+      ldout(cct, 0) << " " << i << " " <<  iter->first << "~" << iter->second << dendl;
       uint64_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
       bufferlist wrbl;
-      if (extent_ofs + extent_len > bl.length()) {
+      if (blpos + extent_len > bl.length()) {
 	lderr(cct) << "data error!" << dendl;
-	return -EIO;
+	r = -EIO;
+	goto done;
       }
-      bl.copy(extent_ofs, extent_len, wrbl);
-      r = dest_md_ctx.write(dest_oid, wrbl, extent_len, extent_ofs);
+      bl.copy(blpos, extent_len, wrbl);
+      blpos += extent_len;
+      r = write(destictx, i * block_size + extent_ofs, extent_len, wrbl.c_str());
       if (r < 0)
 	goto done;
     }
@@ -1052,6 +1065,7 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname)
   r = 0;
 
  done:
+  close_image(destictx);
   return r;
 }
 
