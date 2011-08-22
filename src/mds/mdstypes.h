@@ -61,7 +61,6 @@ using namespace std;
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
-#define MDS_TRAVERSE_FAIL          4
 
 
 extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;

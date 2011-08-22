@@ -6852,8 +6852,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	if (mds->logger) mds->logger->inc(l_mds_tfw);
 	return 2;
       }    
-      if (onfail == MDS_TRAVERSE_FAIL)
-        return -ENOENT;  // not necessarily exactly true....
     }
     
     assert(0);  // i shouldn't get here
