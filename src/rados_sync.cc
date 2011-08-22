@@ -55,6 +55,11 @@ static const char ERR_PREFIX[] = "[ERROR]        ";
 #define ENOATTR ENODATA
 #endif
 
+enum {
+  CHANGED_XATTRS = 0x1,
+  CHANGED_CONTENTS = 0x2,
+};
+
 /* Given the name of an extended attribute from a file in the filesystem,
  * returns an empty string if the extended attribute does not represent a rados
  * user extended attribute. Otherwise, returns the name of the rados extended
@@ -761,10 +766,6 @@ static int do_export(IoCtx& io_ctx, const char *dir_name,
   if (!export_dir.get())
     return -EIO;
   for (; oi != oi_end; ++oi) {
-    enum {
-      CHANGED_XATTRS = 0x1,
-      CHANGED_CONTENTS = 0x2,
-    };
     int flags = 0;
     auto_ptr <BackedUpObject> sobj;
     auto_ptr <BackedUpObject> dobj;
@@ -921,10 +922,6 @@ static int do_import(IoCtx& io_ctx, const char *dir_name,
     return ret;
   }
   while (true) {
-    enum {
-      CHANGED_XATTRS = 0x1,
-      CHANGED_CONTENTS = 0x2,
-    };
     auto_ptr <BackedUpObject> sobj;
     auto_ptr <BackedUpObject> dobj;
     std::list < std::string > only_in_a;
