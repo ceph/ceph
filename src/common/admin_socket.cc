@@ -12,13 +12,14 @@
  * 
  */
 
-#include "common/admin_socket.h"
-#include "common/perf_counters.h"
 #include "common/Thread.h"
+#include "common/admin_socket.h"
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/pipe.h"
 #include "common/safe_io.h"
 
 #include <errno.h>
@@ -110,11 +111,10 @@ public:
   static std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
   {
     int pipefd[2];
-    int ret = pipe2(pipefd, O_CLOEXEC);
+    int ret = pipe_cloexec(pipefd);
     if (ret < 0) {
-      int err = errno;
       ostringstream oss;
-      oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(err);
+      oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(ret);
       return oss.str();
     }
 
