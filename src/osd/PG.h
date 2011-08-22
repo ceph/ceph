@@ -1019,8 +1019,8 @@ public:
       void exit();
 
       typedef boost::mpl::list <
+	boost::statechart::transition< Initialize, Started >,
 	boost::statechart::transition< Load, Reset >,
-	boost::statechart::custom_reaction< Initialize >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
@@ -1030,7 +1030,6 @@ public:
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
-      boost::statechart::result react(const Initialize&);
     };
 
     struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
