@@ -113,7 +113,7 @@ def _run_tests(ctx, role, tests):
                         run.Raw('&&'),
                         run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                         run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
-                        run.Raw('CEPH_ARGS="-c /tmp/cephtest/ceph.conf"'),
+                        run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
                         '{srcdir}/{workunit}'.format(
                             srcdir=srcdir,
                             workunit=workunit,
