@@ -17,7 +17,9 @@ std::string get_temp_pool_name()
   for (size_t i = 0; i < sizeof(out) - 1; ++i) {
     out[i] = 'A' + (rand() % 26);
   }
-  return out;
+  std::string prefix("test-rados-api-");
+  prefix += out;
+  return prefix;
 }
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
