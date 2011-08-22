@@ -104,6 +104,16 @@ namespace librbd {
     {
       return name + RBD_SUFFIX;
     }
+
+    uint64_t get_image_size() {
+      if (snapname.length() == 0) {
+	return header.image_size;
+      } else {
+	map<std::string,SnapInfo>::iterator p = snaps_by_name.find(snapname);
+	assert(p != snaps_by_name.end());
+	return p->second.size;
+      }
+    }
   };
 
   class WatchCtx : public librados::WatchCtx {
@@ -1333,7 +1343,7 @@ void rados_cb(rados_completion_t c, void *arg)
 int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
 {
   ictx->lock.Lock();
-  uint64_t image_size = ictx->header.image_size;
+  uint64_t image_size = ictx->get_image_size();
   ictx->lock.Unlock();
 
   if ((uint64_t)(off + len) > image_size)
