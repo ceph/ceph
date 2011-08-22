@@ -6489,22 +6489,6 @@ void MDCache::dispatch(Message *m)
   }
 }
 
-
-/* path_traverse
- *
- * return values:
- *   <0 : traverse error (ENOTDIR, ENOENT, etc.)
- *    0 : success
- *   >0 : delayed or forwarded
- *
- * onfail values:
- *
- *  MDS_TRAVERSE_FORWARD       - forward to auth (or best guess)
- *  MDS_TRAVERSE_DISCOVER      - discover missing items.  skip permission checks.
- *  MDS_TRAVERSE_DISCOVERXLOCK - discover XLOCKED items too (be careful!).
- *  MDS_TRAVERSE_FAIL          - return an error
- */
-
 Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
 {
   if (mdr) {
@@ -6518,14 +6502,6 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
   }
 }
 
-/*
- * Returns 0 on success, >0 if request has been put on hold or otherwise dealt with,
- * <0 if there's been a failure the caller needs to clean up from.
- *
- * on succes, @pdnvec points to a vector of dentries we traverse.  
- * on failure, @pdnvec it is either the full trace, up to and
- *             including the final null dn, or empty.
- */
 int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result

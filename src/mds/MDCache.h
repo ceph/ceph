@@ -1012,7 +1012,42 @@ public:
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req, Context *fin);
-  int path_traverse(MDRequest *mdr, Message *req, Context *c, const filepath& path,
+
+  /**
+   * Find the given dentry (and whether it exists or not), its ancestors,
+   * and get them all into memory and usable on this MDS. This function
+   * makes a best-effort attempt to load everything; if it needs to
+   * go away and do something then it will put the request on a waitlist.
+   * It prefers the mdr, then the req, then the fin. (At least one of these
+   * must be non-null.)
+   *
+   * At least one of the params mdr, req, and fin must be non-null.
+   *
+   * @param mdr The MDRequest associated with the path. Can be null.
+   * @param req The Message associated with the path. Can be null.
+   * @param fin The Context associated with the path. Can be null.
+   * @param filepath The path to traverse to.
+   * @pdnvec Data return parameter -- on success, contains a vector of dentries.
+   * On failure, is either empty or contains the full trace of traversable
+   * dentries.
+   * @param pin Data return parameter -- if successful, points to the inode
+   * associated with filepath. If unsuccessful, is null.
+   * @param onfail Specifies different lookup failure behaviors. If set to
+   * MDS_TRAVERSE_DISCOVERXLOCK, path_traverse will succeed on null
+   * dentries (instead of returning -ENOENT). If set to
+   * MDS_TRAVERSE_FORWARD, it will forward the request to the auth
+   * MDS if that becomes appropriate (ie, if it doesn't know the contents
+   * of a directory). If set to MDS_TRAVERSE_DISCOVER, it
+   * will attempt to look up the path from a different MDS (and bring them
+   * into its cache as replicas).
+   *
+   * @returns 0 on success, 1 on "not done yet", 2 on "forwarding", -errno otherwise.
+   * If it returns 1, the requester associated with this call has been placed
+   * on the appropriate waitlist, and it should unwind itself and back out.
+   * If it returns 2 the request has been forwarded, and again the requester
+   * should unwind itself and back out.
+   */
+  int path_traverse(MDRequest *mdr, Message *req, Context *fin, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
