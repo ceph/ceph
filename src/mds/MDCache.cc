@@ -6683,9 +6683,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
     }
     
     // can we conclude ENOENT?
-    if (dnl && dnl->is_null() && dn->lock.can_read(client)) {
-      dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
-      return -ENOENT;
+    if (dnl && dnl->is_null()) {
+      if (dn->lock.can_read(client)) {
+        dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
+        return -ENOENT;
+      } else {
+        dout(12) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
+        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
+        return 1;
+      }
     }
 
     if (dnl && !dnl->is_null()) {
