@@ -3900,13 +3900,6 @@ PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
 }
 
 boost::statechart::result 
-PG::RecoveryState::Initial::react(const Initialize&) {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->reset_last_warm_restart();
-  return transit< Started >();
-}
-
-boost::statechart::result 
 PG::RecoveryState::Initial::react(const MNotifyRec& notify) {
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(notify.from, notify.info);
@@ -3930,6 +3923,8 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
 }
 
 void PG::RecoveryState::Initial::exit() {
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reset_last_warm_restart();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
