@@ -1650,17 +1650,15 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
-	  if (!is_stray())
-	    clog.error() << "bad/negative dir size on "
-			 << dir->dirfrag() << " " << pf->fragstat << "\n";
+	  clog.error() << "bad/negative dir size on "
+	      << dir->dirfrag() << " " << pf->fragstat << "\n";
 	  
 	  if (pf->fragstat.nfiles < 0)
 	    pf->fragstat.nfiles = 0;
 	  if (pf->fragstat.nsubdirs < 0)
 	    pf->fragstat.nsubdirs = 0;
 
-	  if (!is_stray())
-	    assert(!"bad/negative frag size" == g_conf->mds_verify_scatter);
+	  assert(!"bad/negative frag size" == g_conf->mds_verify_scatter);
 	}
 
 	if (update) {
@@ -1671,18 +1669,16 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (fg == frag_t()) { // i.e., we are the only frag
 	  if (pi->dirstat.size() != pf->fragstat.size()) {
-	    if (!is_stray())
-	      clog.error() << "unmatched fragstat size on single "
-			   << "dirfrag " << dir->dirfrag() << ", inode has " 
-			   << pi->dirstat << ", dirfrag has " << pf->fragstat << "\n";
+	    clog.error() << "unmatched fragstat size on single "
+	       << "dirfrag " << dir->dirfrag() << ", inode has " 
+	       << pi->dirstat << ", dirfrag has " << pf->fragstat << "\n";
 	    
 	    // trust the dirfrag for now
 	    version_t v = pi->dirstat.version;
 	    pi->dirstat = pf->fragstat;
 	    pi->dirstat.version = v;
 
-	    if (!is_stray())
-	      assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
+	    assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	  }
 	}
       }
@@ -1692,17 +1688,15 @@ void CInode::finish_scatter_gather_update(int type)
 
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
-	if (!is_stray())
-	  clog.error() << "bad/negative dir size on " << ino()
-		       << ", inode has " << pi->dirstat << "\n";
+	clog.error() << "bad/negative dir size on " << ino()
+	    << ", inode has " << pi->dirstat << "\n";
 
 	if (pi->dirstat.nfiles < 0)
 	  pi->dirstat.nfiles = 0;
 	if (pi->dirstat.nsubdirs < 0)
 	  pi->dirstat.nsubdirs = 0;
 
-	if (!is_stray())
-	  assert(!"bad/negative dir size" == g_conf->mds_verify_scatter);
+	assert(!"bad/negative dir size" == g_conf->mds_verify_scatter);
       }
     }
     break;
@@ -1758,18 +1752,16 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (fg == frag_t()) { // i.e., we are the only frag
 	  if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	    if (!is_stray())
-	      clog.error() << "unmatched rstat rbytes on single dirfrag "
-			   << dir->dirfrag() << ", inode has " << pi->rstat
-			   << ", dirfrag has " << pf->rstat << "\n";
+	    clog.error() << "unmatched rstat rbytes on single dirfrag "
+		<< dir->dirfrag() << ", inode has " << pi->rstat
+		<< ", dirfrag has " << pf->rstat << "\n";
 	    
 	    // trust the dirfrag for now
 	    version_t v = pi->rstat.version;
 	    pi->rstat = pf->rstat;
 	    pi->rstat.version = v;
 	    
-	    if (!is_stray())
-	      assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
+	    assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
 	  }
 	}
 	if (update)
@@ -1779,17 +1771,15 @@ void CInode::finish_scatter_gather_update(int type)
 
       //assert(pi->rstat.rfiles >= 0);
       if (pi->rstat.rfiles < 0) {
-	if (!is_stray())
-	  clog.error() << "rfiles underflow " << pi->rstat.rfiles
-		       << " on " << *this << "\n";
+	clog.error() << "rfiles underflow " << pi->rstat.rfiles
+	  << " on " << *this << "\n";
 	pi->rstat.rfiles = 0;
       }
 
       //assert(pi->rstat.rsubdirs >= 0);
       if (pi->rstat.rsubdirs < 0) {
-	if (!is_stray())
-	  clog.error() << "rsubdirs underflow " << pi->rstat.rfiles
-		       << " on " << *this << "\n";
+	clog.error() << "rsubdirs underflow " << pi->rstat.rfiles
+	  << " on " << *this << "\n";
 	pi->rstat.rsubdirs = 0;
       }
     }
