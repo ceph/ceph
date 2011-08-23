@@ -599,7 +599,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
     // mark new guy up.
-    down_pending_out.erase(from);  // if any
+    if (g_conf->mon_osd_auto_mark_in)
+      down_pending_out.erase(from);  // if any
 
     pending_inc.new_up_client[from] = m->get_orig_source_addr();
     if (!m->cluster_addr.is_blank_ip())
@@ -607,7 +608,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_hb_up[from] = m->hb_addr;
 
     // mark in?
-    pending_inc.new_weight[from] = CEPH_OSD_IN;
+    if (g_conf->mon_osd_auto_mark_in)
+      pending_inc.new_weight[from] = CEPH_OSD_IN;
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;

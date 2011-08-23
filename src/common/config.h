@@ -261,6 +261,7 @@ public:
   std::string mon_data;
   int mon_tick_interval;
   double mon_subscribe_interval;
+  bool mon_osd_auto_mark_in;
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;
