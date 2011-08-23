@@ -175,7 +175,7 @@ TEST(DaemonConfig, InjectArgsBooleans) {
 
   // parse error
   std::ostringstream chat4;
-  injection = "--debug 1 --log_to_syslog=falsey --debug-ms 40";
+  injection = "--debug 1 --log_to_syslog=falsey --debug-ms 42";
   ret = g_ceph_context->_conf->injectargs(injection, &chat3);
   ASSERT_EQ(ret, -EINVAL);
 
@@ -184,6 +184,12 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("true"), string(buf));
+
+  // debug-ms should still become 42...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("debug_ms", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("42"), string(buf));
 }
 
 TEST(DaemonConfig, InjectArgsLogfile) {

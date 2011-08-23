@@ -46,6 +46,7 @@
 
 using std::map;
 using std::multimap;
+using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
@@ -679,10 +680,18 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
       const config_option *opt = config_optionsp + o;
       std::string as_option("--");
       as_option += opt->name;
-      if ((opt->type == OPT_BOOL) &&
-	  ceph_argparse_flag(args, i, as_option.c_str(), (char*)NULL)) {
-	set_val_impl("true", opt);
-	break;
+      if (opt->type == OPT_BOOL) {
+	int res;
+	if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
+				      (char*)NULL)) {
+	  if (res == 0)
+	    set_val_impl("false", opt);
+	  else if (res == 1)
+	    set_val_impl("true", opt);
+	  else
+	    ret = res;
+	  break;
+	}
       }
       else if (ceph_argparse_witharg(args, i, &val,
 				     as_option.c_str(), (char*)NULL)) {

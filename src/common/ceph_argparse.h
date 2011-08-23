@@ -96,6 +96,9 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, ...);
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...);
+bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...);
 extern CephInitParameters ceph_argparse_early_args
 	    (std::vector<const char*>& args, uint32_t module_type, int flags,
 	     std::string *conf_file_list);

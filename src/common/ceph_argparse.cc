@@ -24,10 +24,12 @@
 #include "msg/msg_types.h"
 
 #include <deque>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
+#include <sstream>
 #include <vector>
 
 /*
@@ -272,6 +274,55 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
     if (strcmp(a2, first) == 0) {
       i = args.erase(i);
       return true;
+    }
+  }
+}
+
+bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...)
+{
+  const char *first = *i;
+  char tmp[strlen(first)+1];
+  dashes_to_underscores(first, tmp);
+  first = tmp;
+  const char *a;
+  va_list ap;
+  int strlen_a;
+
+  // does this argument match any of the possibilities?
+  va_start(ap, oss);
+  while (1) {
+    a = va_arg(ap, char*);
+    if (a == NULL)
+      return false;
+    strlen_a = strlen(a);
+    char a2[strlen_a+1];
+    dashes_to_underscores(a, a2);
+    if (strncmp(a2, first, strlen(a2)) == 0) {
+      if (first[strlen_a] == '=') {
+	i = args.erase(i);
+	const char *val = first + strlen_a + 1;
+	if (strcmp(val, "true") == 0) {
+	  *ret = 1;
+	  return true;
+	}
+	else if (strcmp(val, "false") == 0) {
+	  *ret = 0;
+	  return true;
+	}
+	if (oss) {
+	  (*oss) << "Parse error parsing binary flag  " << a
+	         << ". Expected true or false, but got '" << val << "'\n";
+	}
+	*ret = -EINVAL;
+	return true;
+      }
+      else if (first[strlen_a] == '\0') {
+	i = args.erase(i);
+	*ret = 1;
+	return true;
+      }
     }
   }
 }
