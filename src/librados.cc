@@ -2713,13 +2713,17 @@ void librados::IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
   IoCtxImpl *io_ctx_impl = (IoCtxImpl*)p;
 
   io.io_ctx_impl = io_ctx_impl;
-  io_ctx_impl->get();
+  if (io_ctx_impl) {
+    io_ctx_impl->get();
+  }
 }
 
 librados::IoCtx::IoCtx(const IoCtx& rhs)
 {
   io_ctx_impl = rhs.io_ctx_impl;
-  io_ctx_impl->get();
+  if (io_ctx_impl) {
+    io_ctx_impl->get();
+  }
 }
 
 librados::IoCtx& librados::IoCtx::operator=(const IoCtx& rhs)
