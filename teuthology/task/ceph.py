@@ -509,6 +509,19 @@ def cluster(ctx, config):
     try:
         yield
     finally:
+        if ctx.archive is not None:
+            (remote,) = ctx.cluster.only(firstmon).remotes.iterkeys()
+            log.info('Grabbing cluster log from %s %s...' % (remote, firstmon))
+            dest = os.path.join(ctx.archive, 'ceph.log')
+            proc = remote.run(
+                args = [
+                    'cat',
+                    '--',
+                    '/tmp/cephtest/data/%s/log' % firstmon
+                    ],
+                stdout=file(dest, 'wb'),
+                )
+
         log.info('Cleaning ceph cluster...')
         run.wait(
             ctx.cluster.run(
