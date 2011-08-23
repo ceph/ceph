@@ -308,12 +308,19 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
        p != s->caps.cmd_allow.end();
        ++p) {
     list<string>::iterator q;
-    int i = 0;
-    for (q = p->begin(); q != p->end(); ++q, ++i) {
+    unsigned i;
+    dout(0) << "cmd " << cmd << " vs " << *p << dendl;
+    for (q = p->begin(), i = 0; q != p->end() && i < cmd.size(); ++q, ++i) {
+      if (*q == "*")
+	continue;
+      if (*q == "...") {
+	i = cmd.size() - 1;
+	continue;
+      }	
       if (*q != cmd[i])
 	break;
     }
-    if (q == p->end())
+    if (q == p->end() && i == cmd.size())
       return true;   // match
   }
 
