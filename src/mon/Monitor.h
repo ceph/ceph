@@ -150,6 +150,7 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
+  bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_route(MRoute *m);

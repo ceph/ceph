@@ -112,6 +112,8 @@ bool MonCaps::parse(bufferlist::iterator& iter)
     bool op_deny = false;
     bool any_cmd = false;
     bool got_eq = false;
+    bool got_command = false;
+    list<string> command;
     list<int> services_list;
     list<int> uid_list;
     bool last_is_comma = false;
@@ -123,6 +125,8 @@ bool MonCaps::parse(bufferlist::iterator& iter)
         op_deny = false;
         any_cmd = false;
         got_eq = false;
+	got_command = false;
+	command.clear();
         last_is_comma = false;
         cap_val = 0;
         init = false;
@@ -141,6 +145,9 @@ do { \
 	if (token.compare("*") == 0) { //allow all operations
 	  ASSERT_STATE(op_allow);
 	  allow_all = true;
+	} else if (token.compare("command") == 0) {
+	  ASSERT_STATE(op_allow);
+	  got_command = true;
 	} else if (token.compare("=") == 0) {
           ASSERT_STATE(any_cmd);
           got_eq = true;
@@ -160,26 +167,34 @@ do { \
 	} else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
-          ASSERT_STATE(got_eq);
-          if (token.compare(",") == 0) {
-            ASSERT_STATE(!last_is_comma);
-          } else {
-            last_is_comma = false;
-	    int service = get_service_id(token);
-            if (service != -EINVAL) {
-	      if (service >= 0) {
-		services_list.push_back(service);
-	      } else {
-		generic_dout(0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
+	  if (got_command) {
+	    command.push_back(token);
+	  } else {
+	    ASSERT_STATE(got_eq);
+	    if (token.compare(",") == 0) {
+	      ASSERT_STATE(!last_is_comma);
+	    } else {
+	      last_is_comma = false;
+	      int service = get_service_id(token);
+	      if (service != -EINVAL) {
+		if (service >= 0) {
+		  services_list.push_back(service);
+		} else {
+		  generic_dout(0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
+		}
+	      } else { //must be a uid
+		uid_list.push_back(strtoul(token.c_str(), NULL, 10));
 	      }
-	    } else { //must be a uid
-	      uid_list.push_back(strtoul(token.c_str(), NULL, 10));
 	    }
           }
         }
 
         if (token.compare(";") == 0 || pos >= s.size()) {
-          if (got_eq) {
+	  if (got_command) {
+	    generic_dout(0) << "parsed command " << command << dendl;
+	    cmd_allow.push_back(command);
+	  }
+	  else if (got_eq) {
             ASSERT_STATE((services_list.size() > 0) ||
 			 (uid_list.size() > 0));
             
