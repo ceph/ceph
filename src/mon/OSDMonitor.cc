@@ -1486,6 +1486,39 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
+    else if (m->cmd[1] == "crush" && m->cmd[2] == "reweight" &&
+	     m->cmd.size() > 4) {
+      do {
+	// osd crush reweight <name> <weight>
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush.encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	int id = newcrush.get_item_id(m->cmd[3].c_str());
+	if (id < 0) {
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  break;
+	}
+	float w = atof(m->cmd[4].c_str());
+
+	err = newcrush.adjust_item_weightf(id, w);
+	if (err == 0) {
+	  pending_inc.crush.clear();
+	  newcrush.encode(pending_inc.crush);
+	  ss << "reweighted item id " << id << " name '" << m->cmd[3] << "' to " << w
+	     << " in crush map";
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+      } while (false);
+    }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       int newmax = atoi(m->cmd[2].c_str());
       if (newmax < osdmap.crush.get_max_devices()) {
