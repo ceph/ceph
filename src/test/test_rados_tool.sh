@@ -111,8 +111,10 @@ run_expect_succ grep '\[force\]' "$TDIR/out2"
 run_expect_succ "$RADOS_TOOL" -C export "$POOL" "$TDIR/dirc_copy"
 
 # check to make sure extended attributes were preserved
-PRE_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc/foo"`
-POST_EXPORT=`attr -qg user.rados.toothbrush "$TDIR/dirc_copy/foo"`
+PRE_EXPORT=`attr -qg rados.toothbrush "$TDIR/dirc/foo"`
+[ $? -eq 0 ] || die "failed to get xattr"
+POST_EXPORT=`attr -qg rados.toothbrush "$TDIR/dirc_copy/foo"`
+[ $? -eq 0 ] || die "failed to get xattr"
 if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
     die "xattr not preserved across import/export! \
 \$PRE_EXPORT = $PRE_EXPORT, \$POST_EXPORT = $POST_EXPORT"
@@ -130,7 +132,7 @@ run_expect_succ grep '\[deleted\]' "$TDIR/out4"
 [ -e "$TDIR/dird/foo" ] && die "--delete-after failed to delete a file!"
 
 # test hashed pathnames
-mkdir "$TDIR/dird"
+mkdir -p "$TDIR/dird"
 attr -q -s "rados_sync_ver" -V "1" "$TDIR/dird"
 touch "$TDIR/dird/bar@bar_00000000000055ca"
 attr -q -s "rados_full_name" -V "bar/bar" "$TDIR/dird/bar@bar_00000000000055ca"
