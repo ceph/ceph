@@ -1,6 +1,6 @@
 CFLAGS = -Wall -Wextra -D_GNU_SOURCE
 
-TARGETS = direct_io_test test_sync_io test_short_dio_read
+TARGETS = clone_range
 
 .c:
 	$(CC) $(CFLAGS) $@.c -o $@
