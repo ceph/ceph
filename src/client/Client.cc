@@ -908,7 +908,7 @@ int Client::choose_target_mds(MetaRequest *req)
         /* In most cases there will only be one dentry, so getting it
          * will be the correct action. If there are multiple hard links,
          * I think the MDS should be able to redirect as needed*/
-	in = dentry_of(in)->dir->parent_inode;
+	in = in->get_first_parent()->dir->parent_inode;
       else {
         ldout(cct, 10) << "got unlinked inode, can't look at parent" << dendl;
         break;
@@ -1747,7 +1747,7 @@ void Client::close_dir(Dir *dir)
   Inode *in = dir->parent_inode;
   assert (in->dn_set.size() < 2); //dirs can't be hard-linked
   if (!in->dn_set.empty())
-    dentry_of(in)->put();   // unpin dentry
+    in->get_first_parent()->put();   // unpin dentry
   
   delete in->dir;
   in->dir = 0;
@@ -3482,7 +3482,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     if (dir->dn_set.empty())
       r = -ENOENT;
     else
-      *target = dentry_of(dir)->dir->parent_inode; //dirs can't be hard-linked
+      *target = dir->get_first_parent()->dir->parent_inode; //dirs can't be hard-linked
     goto done;
   }
 
@@ -4432,7 +4432,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   if (dirp->offset == 1) {
     ldout(cct, 15) << " including .." << dendl;
     assert(!diri->dn_set.empty());
-    Inode *in = dentry_of(diri)->inode;
+    Inode *in = diri->get_first_parent()->inode;
     fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
 
     fill_stat(in, &st);
@@ -5485,7 +5485,7 @@ void Client::getcwd(string& dir)
   Inode *in = cwd;
   while (in->ino != CEPH_INO_ROOT) {
     assert(in->dn_set.size() < 2); // dirs can't be hard-linked
-    Dentry *dn = dentry_of(in);
+    Dentry *dn = in->get_first_parent();
     if (!dn) {
       // look it up
       ldout(cct, 10) << "getcwd looking up parent for " << *in << dendl;
