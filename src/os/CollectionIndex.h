@@ -71,6 +71,7 @@ protected:
    * @see IndexManager
    */
   virtual void set_ref(std::tr1::shared_ptr<CollectionIndex> ref) = 0;
+
   /** 
    * Initializes the index.
    *
@@ -81,6 +82,12 @@ protected:
   /**
    * Cleanup before replaying journal
    *
+   * Index implemenations may need to perform compound operations
+   * which may leave the collection unstable if interupted.  cleanup
+   * is called on mount to allow the CollectionIndex implementation
+   * to stabilize.
+   *
+   * @see HashIndex
    * @return Error Code, 0 for success
    */
   virtual int cleanup() = 0;

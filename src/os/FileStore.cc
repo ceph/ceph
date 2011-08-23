@@ -1604,6 +1604,28 @@ int FileStore::mount()
     goto close_current_fd;
   }
 
+  // Cleanup possibly invalid collections
+  {
+    vector<coll_t> collections;
+    ret = list_collections(collections);
+    if (ret < 0) {
+      derr << "Error " << ret << " while listing collections" << dendl;
+      goto close_current_fd;
+    }
+    for (vector<coll_t>::iterator i = collections.begin();
+	 i != collections.end();
+	 ++i) {
+      Index index;
+      ret = get_index(*i, &index);
+      if (ret < 0) {
+	derr << "Unable to mount index " << *i 
+	     << " with error: " << ret << dendl;
+	goto close_current_fd;
+      }
+      index->cleanup();
+    }
+  }
+
   ret = journal_replay(initial_op_seq);
   if (ret < 0) {
     derr << "mount failed to open journal " << journalpath << ": "
