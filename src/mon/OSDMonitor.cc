@@ -37,6 +37,7 @@
 #include "common/ceph_argparse.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 
 #include <sstream>
 
@@ -1857,6 +1858,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   }
 out:
   getline(ss, rs);
+  if (err < 0 && rs.length() == 0)
+    rs = cpp_strerror(err);
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }
