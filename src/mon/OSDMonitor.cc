@@ -1409,7 +1409,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "crush" && m->cmd[2] == "add" && m->cmd.size() >= 6) {
+    else if (m->cmd.size() >= 6 && m->cmd[1] == "crush" && m->cmd[2] == "add") {
       do {
 	// osd crush add <id> <name> <weight> [<loc1> [<loc2> ...]]
 	int id = atoi(m->cmd[3].c_str());
@@ -1456,8 +1456,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove") &&
-	     m->cmd.size() > 3) {
+    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
       do {
 	// osd crush rm <id>
 	bufferlist bl;
@@ -1486,8 +1485,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd[1] == "crush" && m->cmd[2] == "reweight" &&
-	     m->cmd.size() > 4) {
+    else if (m->cmd.size() > 4 && m->cmd[1] == "crush" && m->cmd[2] == "reweight") {
       do {
 	// osd crush reweight <name> <weight>
 	bufferlist bl;
