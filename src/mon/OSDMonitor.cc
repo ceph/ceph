@@ -1383,7 +1383,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   string rs;
   int err = -EINVAL;
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "setcrushmap") {
+    if ((m->cmd.size() == 2 && m->cmd[1] == "setcrushmap") ||
+	(m->cmd.size() == 3 && m->cmd[1] == "crush" && m->cmd[2] == "set")) {
       dout(10) << "prepare_command setting new crush map" << dendl;
       bufferlist data(m->get_data());
       CrushWrapper crush;
