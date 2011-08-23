@@ -131,6 +131,38 @@ TEST(DaemonConfig, InjectArgsReject) {
   ASSERT_EQ(string(buf), string(buf2));
 }
 
+TEST(DaemonConfig, InjectArgsBooleans) {
+  int ret;
+  char buf[128];
+  char *tmp = buf;
+  char buf2[128];
+  char *tmp2 = buf2;
+
+  // Change log_to_syslog
+  std::ostringstream chat;
+  std::string injection("--log_to_syslog --debug 28");
+  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  ASSERT_EQ(ret, 0);
+
+  // log_to_syslog should be set...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("true"), string(buf));
+
+  // Turn off log_to_syslog
+  std::ostringstream chat2;
+  injection = "--log_to_syslog=false --debug 28";
+  ret = g_ceph_context->_conf->injectargs(injection, &chat2);
+  ASSERT_EQ(ret, 0);
+
+  // log_to_syslog should be cleared...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("false"), string(buf));
+}
+
 TEST(DaemonConfig, InjectArgsLogfile) {
   int ret;
   std::ostringstream chat;

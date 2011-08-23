@@ -862,8 +862,10 @@ get_val(const char *key, char **buf, int len) const
       case OPT_DOUBLE:
         oss << *(double*)opt->conf_ptr(this);
         break;
-      case OPT_BOOL:
-        oss << *(bool*)opt->conf_ptr(this);
+      case OPT_BOOL: {
+	  bool b = *(bool*)opt->conf_ptr(this);
+	  oss << (b ? "true" : "false");
+	}
         break;
       case OPT_U32:
         oss << *(uint32_t*)opt->conf_ptr(this);
