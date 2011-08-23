@@ -692,7 +692,13 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 	  ret = -ENOSYS;
 	  break;
 	}
-	set_val_impl(val.c_str(), opt);
+	int res = set_val_impl(val.c_str(), opt);
+	if (res) {
+	  *oss << "Parse error setting " << opt->name << " to '"
+	       << val << "' using injectargs.\n";
+	  ret = res;
+	  break;
+	}
 	break;
       }
     }

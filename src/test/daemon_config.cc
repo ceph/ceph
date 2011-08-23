@@ -136,7 +136,6 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   char buf[128];
   char *tmp = buf;
   char buf2[128];
-  char *tmp2 = buf2;
 
   // Change log_to_syslog
   std::ostringstream chat;
@@ -169,6 +168,18 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   ASSERT_EQ(ret, 0);
 
   // log_to_syslog should be set...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("true"), string(buf));
+
+  // parse error
+  std::ostringstream chat4;
+  injection = "--debug 1 --log_to_syslog=falsey --debug-ms 40";
+  ret = g_ceph_context->_conf->injectargs(injection, &chat3);
+  ASSERT_EQ(ret, -EINVAL);
+
+  // log_to_syslog should still be set...
   memset(buf, 0, sizeof(buf));
   ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
