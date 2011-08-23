@@ -543,10 +543,11 @@ void object_info_t::copy_user_bits(const object_info_t& other)
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  const __u8 v = 4;
+  const __u8 v = 5;
   ::encode(v, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
+  ::encode(category, bl);
   ::encode(version, bl);
   ::encode(prior_version, bl);
   ::encode(last_reqid, bl);
@@ -570,6 +571,8 @@ void object_info_t::decode(bufferlist::iterator& bl)
   ::decode(soid, bl);
   if (v >= 2)
     ::decode(oloc, bl);
+  if (v >= 5)
+    ::decode(category, bl);
   ::decode(version, bl);
   ::decode(prior_version, bl);
   ::decode(last_reqid, bl);
