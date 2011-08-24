@@ -840,17 +840,18 @@ def task(ctx, config):
                 flavor = 'notcmalloc'
     ctx.summary['flavor'] = flavor or 'default'
 
-    coverage_dir = '/tmp/cephtest/archive/coverage'
-    log.info('Creating coverage directory...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'install', '-d', '-m0755', '--',
-                coverage_dir,
-                ],
-            wait=False,
+    if config.get('coverage'):
+        coverage_dir = '/tmp/cephtest/archive/coverage'
+        log.info('Creating coverage directory...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'install', '-d', '-m0755', '--',
+                    coverage_dir,
+                    ],
+                wait=False,
+                )
             )
-        )
 
     if config.get('valgrind'):
         val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
