@@ -100,7 +100,7 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), offset(0), next_offset(2),
-    release_count(0),
+    release_count(0), start_shared_gen(0),
     buffer(0) { 
   inode->get();
 }
@@ -4138,8 +4138,9 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
   if (!in->is_dir())
     return -ENOTDIR;
   (*dirpp)->set_frag(in->dirfragtree[0]);
-  if(in->dir)
+  if (in->dir)
     (*dirpp)->release_count = in->dir->release_count;
+  (*dirpp)->start_shared_gen = in->shared_gen;
   ldout(cct, 10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
@@ -4516,7 +4517,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       continue;
     }
 
-    if (diri->dir && diri->dir->release_count == dirp->release_count) {
+    if (diri->dir &&
+	diri->dir->release_count == dirp->release_count &&
+	diri->shared_gen == dirp->start_shared_gen) {
       ldout(cct, 10) << " marking I_COMPLETE on " << *diri << dendl;
       diri->flags |= I_COMPLETE;
       if (diri->dir)
