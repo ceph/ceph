@@ -1769,12 +1769,12 @@ int librados::RadosClient::aio_operate(IoCtxImpl& io, const object_t& oid,
 				       ::ObjectOperation *o, AioCompletionImpl *c)
 {
   utime_t ut = ceph_clock_now(cct);
-  Context *onack = new C_aio_Ack(c);
-  Context *oncommit = new C_aio_Safe(c);
-
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
+
+  Context *onack = new C_aio_Ack(c);
+  Context *oncommit = new C_aio_Safe(c);
 
   io.queue_aio_write(c);
   objecter->mutate(oid, io.oloc, *o, io.snapc, ut, 0, onack, oncommit, &c->objver);
