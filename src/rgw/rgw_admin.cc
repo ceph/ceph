@@ -14,6 +14,7 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
+#include "rgw_bucket.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
@@ -290,13 +291,14 @@ static void show_user_info( RGWUserInfo& info)
   cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
 }
 
-static int create_bucket(string& bucket, string& user_id, string& display_name, uint64_t auid)
+static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
 {
   RGWAccessControlPolicy policy, old_policy;
   map<string, bufferlist> attrs;
   bufferlist aclbl;
   string no_oid;
-  rgw_obj obj(bucket, no_oid);
+  rgw_obj obj;
+  RGWBucketInfo bucket_info;
 
   int ret;
 
@@ -304,9 +306,17 @@ static int create_bucket(string& bucket, string& user_id, string& display_name, 
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
+  ret = rgw_get_bucket_info(bucket_str, bucket_info);
+  if (ret < 0)
+    return ret;
+
+  rgw_bucket& bucket = bucket_info.bucket;
+
   ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
   if (ret && ret != -EEXIST)   
     goto done;
+
+  obj.init(bucket, no_oid);
 
   ret = rgwstore->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
   if (ret < 0) {
@@ -381,9 +391,10 @@ public:
 
 enum IntentFlags { // bitmask
   I_DEL_OBJ = 1,
+  I_DEL_POOL = 2,
 };
 
-int process_intent_log(string& bucket, string& oid, time_t epoch, IntentFlags flags, bool purge)
+int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags, bool purge)
 {
   uint64_t size;
   rgw_obj obj(bucket, oid);
@@ -426,6 +437,17 @@ int process_intent_log(string& bucket, string& oid, time_t epoch, IntentFlags fl
           complete = false;
         }
         break;
+      case DEL_POOL:
+        if (!flags & I_DEL_POOL) {
+          complete = false;
+          break;
+        }
+        r = rgwstore->delete_bucket(id, entry.obj.bucket, true);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
+          complete = false;
+        }
+        break;
       default:
         complete = false;
       }
@@ -464,7 +486,8 @@ int main(int argc, char **argv)
   const char *secret_key = 0;
   const char *user_email = 0;
   const char *display_name = 0;
-  const char *bucket = 0;
+  const char *bucket_name = 0;
+  rgw_bucket bucket;
   const char *object = 0;
   const char *openstack_user = 0;
   const char *openstack_key = 0;
@@ -506,7 +529,7 @@ int main(int argc, char **argv)
     } else if (CEPH_ARGPARSE_EQ("display-name", 'n')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&display_name, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("bucket", 'b')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&bucket, OPT_STR);
+      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_name, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("object", 'o')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&object, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("gen-access-key", '\0')) {
@@ -713,6 +736,16 @@ int main(int argc, char **argv)
   map<string, RGWSubUser>::iterator uiter;
   RGWUserInfo old_info = info;
 
+  if (bucket_name) {
+    string bucket_name_str = bucket_name;
+    RGWBucketInfo bucket_info;
+    int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+    if (r < 0) {
+      RGW_LOG(0) << "could not get bucket info for bucket=" << bucket_name_str << dendl;
+    }
+    bucket = bucket_info.bucket;
+  }
+
   int err;
   switch (opt_cmd) {
   case OPT_USER_CREATE:
@@ -793,13 +826,10 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_POLICY) {
     bufferlist bl;
-    if (!bucket)
-      bucket = "";
     if (!object)
       object = "";
-    string bucket_str(bucket);
     string object_str(object);
-    rgw_obj obj(bucket_str, object_str);
+    rgw_obj obj(bucket, object_str);
     int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;
@@ -825,7 +855,7 @@ int main(int argc, char **argv)
 
         for (iter = m.begin(); iter != m.end(); ++iter) {
           RGWBucketEnt obj = iter->second;
-          cout << obj.name << std::endl;
+          cout << obj.bucket.name << std::endl;
         }
       }
     } else {
@@ -842,16 +872,15 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    if (!bucket) {
+    if (!bucket_name) {
       cerr << "bucket name was not specified" << std::endl;
       return usage();
     }
-    string bucket_str(bucket);
     string uid_str(user_id);
     
     string no_oid;
     bufferlist aclbl;
-    rgw_obj obj(bucket_str, no_oid);
+    rgw_obj obj(bucket, no_oid);
 
     int r = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
     if (r >= 0) {
@@ -866,27 +895,26 @@ int main(int argc, char **argv)
 	return -EINVAL;
       }
       cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
-      r = rgw_remove_bucket(owner.get_id(), bucket_str, false);
+      r = rgw_remove_bucket(owner.get_id(), bucket, false);
       if (r < 0) {
 	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
 	return r;
       }
     }
 
-    r = create_bucket(bucket_str, uid_str, info.display_name, info.auid);
+    r = create_bucket(bucket_name, uid_str, info.display_name, info.auid);
     if (r < 0)
         cerr << "error linking bucket to user: r=" << r << std::endl;
     return -r;
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    if (!bucket) {
+    if (!bucket_name) {
       cerr << "bucket name was not specified" << std::endl;
       return usage();
     }
 
-    string bucket_str(bucket);
-    int r = rgw_remove_bucket(user_id, bucket_str, false);
+    int r = rgw_remove_bucket(user_id, bucket, false);
     if (r < 0)
       cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
     return -r;
@@ -922,7 +950,7 @@ int main(int argc, char **argv)
       return -EINVAL;
     }
     time_t epoch = mktime(&tm);
-    string bucket = RGW_INTENT_LOG_BUCKET_NAME;
+    rgw_bucket bucket(RGW_INTENT_LOG_POOL_NAME);
     string prefix, delim, marker;
     vector<RGWObjEnt> objs;
     map<string, bool> common_prefixes;
@@ -944,18 +972,18 @@ int main(int argc, char **argv)
       vector<RGWObjEnt>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
         cout << "processing intent log " << (*iter).name << std::endl;
-        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ, true);
+        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
       }
     } while (is_truncated);
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!object && (!date || !bucket || pool_id < 0)) {
+    if (!object && (!date || !bucket_name || pool_id < 0)) {
       cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
       return usage();
     }
 
-    string log_bucket = RGW_LOG_BUCKET_NAME;
+    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
     string oid;
     if (object) {
       oid = object;
@@ -966,7 +994,7 @@ int main(int argc, char **argv)
       oid += "-";
       oid += buf;
       oid += "-";
-      oid += string(bucket);
+      oid += string(bucket.name);
     }
 
     uint64_t size;
@@ -1063,20 +1091,19 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_object_section("Pool");
     formatter->dump_int("ID", pool_id);
-    formatter->dump_format("Bucket", "%s", info.bucket.c_str());
+    formatter->dump_format("Bucket", "%s", info.bucket.name.c_str());
     formatter->dump_format("Owner", "%s", info.owner.c_str());
     formatter->close_section();
     formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_POOL_CREATE) {
-    if (!bucket)
+    if (!bucket_name)
       return usage();
-    string bucket_str(bucket);
     string no_object;
     int ret;
     bufferlist bl;
-    rgw_obj obj(bucket_str, no_object);
+    rgw_obj obj(bucket, no_object);
 
     ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
     if (ret < 0) {
@@ -1091,7 +1118,7 @@ int main(int argc, char **argv)
     info.bucket = bucket;
     info.owner = policy.get_owner().get_id();
 
-    int pool_id = rgwstore->get_bucket_id(bucket_str);
+    int pool_id = rgwstore->get_bucket_id(bucket);
     ret = rgw_store_pool_info(pool_id, info);
     if (ret < 0) {
       RGW_LOG(0) << "can't store pool info: pool_id=" << pool_id << " ret=" << ret << dendl;
@@ -1127,10 +1154,10 @@ int main(int argc, char **argv)
     else
       RGW_LOG(0) << "enabling user buckets" << dendl;
 
-    vector<string> bucket_names;
+    vector<rgw_bucket> bucket_names;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       RGWBucketEnt obj = iter->second;
-      bucket_names.push_back(obj.name);
+      bucket_names.push_back(obj.bucket);
     }
     if (disable)
       ret = rgwstore->disable_buckets(bucket_names);

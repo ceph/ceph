@@ -371,8 +371,8 @@ void init_entities_from_header(struct req_state *s)
 
   RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
-  s->bucket = NULL;
-  s->bucket_str = "";
+  s->bucket_name = NULL;
+  s->bucket.clear();
   s->object = NULL;
   s->object_str = "";
 
@@ -394,9 +394,9 @@ void init_entities_from_header(struct req_state *s)
 
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
-      url_decode(encoded_bucket, s->bucket_str);
-      s->bucket = strdup(s->bucket_str.c_str());
-      s->host_bucket = s->bucket;
+      url_decode(encoded_bucket, s->bucket_name_str);
+      s->bucket_name = strdup(s->bucket_name_str.c_str());
+      s->host_bucket = s->bucket_name;
     } else {
       s->host_bucket = NULL;
     }
@@ -472,8 +472,8 @@ void init_entities_from_header(struct req_state *s)
     if (first.size() == 0)
       goto done;
 
-    url_decode(first, s->bucket_str);
-    s->bucket = strdup(s->bucket_str.c_str());
+    url_decode(first, s->bucket_name_str);
+    s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
       url_decode(req, s->object_str);
@@ -483,16 +483,16 @@ void init_entities_from_header(struct req_state *s)
     goto done;
   }
 
-  if (!s->bucket) {
-    url_decode(first, s->bucket_str);
-    s->bucket = strdup(s->bucket_str.c_str());
+  if (!s->bucket_name) {
+    url_decode(first, s->bucket_name_str);
+    s->bucket_name = strdup(s->bucket_name_str.c_str());
   } else {
     url_decode(req, s->object_str);
     s->object = strdup(s->object_str.c_str());
     goto done;
   }
 
-  if (strcmp(s->bucket, "auth") == 0)
+  if (strcmp(s->bucket_name, "auth") == 0)
     s->prot_flags |= RGW_REST_OPENSTACK_AUTH;
 
   if (pos >= 0) {
@@ -717,13 +717,13 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   if (ret)
     return ret;
 
-  ret = validate_bucket_name(s->bucket_str.c_str());
+  ret = validate_bucket_name(s->bucket_name_str.c_str());
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());
   if (ret)
     return ret;
-  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << dendl;
+  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
 
   init_auth_info(s);
 
@@ -753,11 +753,11 @@ int RGWHandler_REST::read_permissions()
     break;
   case OP_PUT:
   case OP_POST:
-    /* is it a 'create bucket' request? */
     if (is_acl_op()) {
       only_bucket = false;
       break;
     }
+    /* is it a 'create bucket' request? */
     if (s->object_str.size() == 0)
       return 0;
   case OP_DELETE:

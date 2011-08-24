@@ -3,6 +3,9 @@
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_access.h"
+#include "rgw_bucket.h"
+
+static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
@@ -18,7 +21,7 @@ int rgw_log_op(struct req_state *s)
   if (!s->should_log)
     return 0;
 
-  if (!s->bucket) {
+  if (!s->bucket_name) {
     RGW_LOG(0) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
@@ -26,7 +29,7 @@ int rgw_log_op(struct req_state *s)
     RGW_LOG(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
     return 0;
   }
-  entry.bucket = s->bucket;
+  entry.bucket = s->bucket_name;
 
   if (s->object)
     entry.obj = s->object;
@@ -69,8 +72,6 @@ int rgw_log_op(struct req_state *s)
   bufferlist bl;
   ::encode(entry, bl);
 
-  string log_bucket = RGW_LOG_BUCKET_NAME;
-
   struct tm bdt;
   time_t t = entry.time.sec();
   gmtime_r(&t, &bdt);
@@ -85,7 +86,7 @@ int rgw_log_op(struct req_state *s)
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, log_bucket, attrs);
+    ret = rgw_create_bucket(id, log_bucket.name, log_bucket, attrs);
     if (ret < 0)
       goto done;
     obj.object = entry.bucket;
@@ -100,7 +101,7 @@ done:
 
 int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 {
-  string intent_log_bucket = RGW_INTENT_LOG_BUCKET_NAME;
+  rgw_bucket intent_log_bucket(RGW_INTENT_LOG_POOL_NAME);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;
@@ -111,8 +112,8 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   time_t t = entry.op_time.sec();
   gmtime_r(&t, &bdt);
 
-  char buf[obj.bucket.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, obj.bucket.c_str());
+  char buf[obj.bucket.name.size() + 16];
+  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, obj.bucket.name.c_str());
   string oid(buf);
   rgw_obj log_obj(intent_log_bucket, oid);
 
@@ -123,10 +124,9 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(id, intent_log_bucket, attrs);
+    ret = rgw_create_bucket(id, intent_log_bucket.name, intent_log_bucket, attrs);
     if (ret < 0)
       goto done;
-    obj.object = entry.obj.bucket;
     ret = rgwstore->append_async(log_obj, bl.length(), bl);
   }
 

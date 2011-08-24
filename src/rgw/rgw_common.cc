@@ -67,7 +67,7 @@ req_state::req_state(struct RGWEnv *e) : acl(NULL), os_auth_token(NULL), os_user
   perm_mask = 0;
   content_length = 0;
   object = NULL;
-  bucket = NULL;
+  bucket_name = NULL;
 }
 
 req_state::~req_state() {
@@ -75,7 +75,7 @@ req_state::~req_state() {
   free(os_user);
   free(os_groups);
   free((void *)object);
-  free((void *)bucket);
+  free((void *)bucket_name);
 }
 
 void flush_formatter_to_req_state(struct req_state *s, Formatter *formatter)

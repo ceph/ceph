@@ -26,7 +26,7 @@ extern void get_request_metadata(struct req_state *s, map<string, bufferlist>& a
  * Get the ACL for an object off of disk. If you hold the req_state, use next
  * method.
  */
-extern int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object);
+extern int read_acls(RGWAccessControlPolicy *policy, rgw_obj& bucket, string& object);
 /** Get the ACL needed for a request off of disk.*/
 extern int read_acls(struct req_state *s, bool only_bucket = false);
 
@@ -271,7 +271,7 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
-  string src_bucket;
+  rgw_bucket src_bucket;
   string src_object;
   time_t mtime;
 

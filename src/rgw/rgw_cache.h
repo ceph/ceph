@@ -120,9 +120,10 @@ class RGWCache  : public T
 {
   ObjectCache cache;
 
-  string normal_name(std::string& bucket, std::string& oid) {
-    char buf[bucket.size() + 1 + oid.size() + 1];
-    const char *bucket_str = bucket.c_str();
+  string normal_name(rgw_bucket& bucket, std::string& oid) {
+    string& bucket_name = bucket.name;
+    char buf[bucket_name.size() + 1 + oid.size() + 1];
+    const char *bucket_str = bucket_name.c_str();
     const char *oid_str = oid.c_str();
     sprintf(buf, "%s+%s", bucket_str, oid_str);
     return string(buf);
@@ -155,7 +156,7 @@ public:
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+  int obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 
   int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
 };
@@ -164,8 +165,8 @@ public:
 template <class T>
 int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 {
-  string& bucket = obj.bucket;
-  if (bucket[0] != '.')
+  string& bucket_name = obj.bucket.name;
+  if (bucket_name[0] != '.')
     return T::delete_obj(ctx, id, obj, sync);
 
   string name = normal_name(obj);
@@ -180,12 +181,12 @@ int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 template <class T>
 int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
-  string& bucket = obj.bucket;
-  if (bucket[0] != '.' || ofs != 0)
+  string& bucket_name = obj.bucket.name;
+  if (bucket_name[0] != '.' || ofs != 0)
     return T::get_obj(ctx, handle, obj, data, ofs, end);
 
   string& oid = obj.object;
-  string name = normal_name(bucket, oid);
+  string name = normal_name(obj.bucket, oid);
 
   ObjectCacheInfo info;
   if (cache.get(name, info, CACHE_FLAG_DATA) == 0) {
@@ -222,12 +223,11 @@ template <class T>
 int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len)
 {
-  string& bucket = obj.bucket;
+  string& bucket_name = obj.bucket.name;
   string& oid = obj.object;
-  string name = normal_name(bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
-  if ((bucket[0] == '.') && ((ofs == 0) || (ofs == -1))) {
+  if ((bucket_name[0] == '.') && ((ofs == 0) || (ofs == -1))) {
     cacheable = true;
     bufferptr p(len);
     memcpy(p.c_str(), data, len);
@@ -239,6 +239,7 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
   }
   int ret = T::put_obj_data(ctx, id, obj, data, ofs, len);
   if (cacheable) {
+    string name = normal_name(obj.bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
@@ -253,9 +254,9 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
 {
-  if (bucket[0] != '.')
+  if (bucket.name[0] != '.')
     return T::obj_stat(ctx, bucket, obj, psize, pmtime);
 
   string name = normal_name(bucket, obj);

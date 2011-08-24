@@ -27,7 +27,7 @@ void list_all_buckets_end(struct req_state *s)
 void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_object_section("Bucket");
-  s->formatter->dump_format("Name", obj.name.c_str());
+  s->formatter->dump_format("Name", obj.bucket.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
   s->formatter->close_section();
 }
@@ -126,7 +126,7 @@ void RGWListBucket_REST_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListBucketResult");
-  s->formatter->dump_format("Name", s->bucket);
+  s->formatter->dump_format("Name", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_format("Prefix", prefix.c_str());
   s->formatter->dump_format("Marker", marker.c_str());
@@ -255,7 +255,7 @@ void RGWInitMultipart_REST_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
-    s->formatter->dump_format("Bucket", s->bucket);
+    s->formatter->dump_format("Bucket", s->bucket_name);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("UploadId", upload_id.c_str());
     s->formatter->close_section();
@@ -275,8 +275,8 @@ void RGWCompleteMultipart_REST_S3::send_response()
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
     const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
     if (gateway_dns_name)
-      s->formatter->dump_format("Location", "%s.%s", s->bucket, gateway_dns_name);
-    s->formatter->dump_format("Bucket", s->bucket);
+      s->formatter->dump_format("Location", "%s.%s", s->bucket_name, gateway_dns_name);
+    s->formatter->dump_format("Bucket", s->bucket_name);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("ETag", etag.c_str());
     s->formatter->close_section();
@@ -313,7 +313,7 @@ void RGWListMultipart_REST_S3::send_response()
     for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
       cur_max = test_iter->first;
     }
-    s->formatter->dump_format("Bucket", s->bucket);
+    s->formatter->dump_format("Bucket", s->bucket_name);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("UploadId", upload_id.c_str());
     s->formatter->dump_format("StorageClass", "STANDARD");
@@ -359,7 +359,7 @@ void RGWListBucketMultiparts_REST_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
-  s->formatter->dump_format("Bucket", s->bucket);
+  s->formatter->dump_format("Bucket", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_format("ListMultipartUploadsResult.Prefix", prefix.c_str());
   string& key_marker = marker.get_key();
@@ -414,7 +414,7 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(bool get_data)
     RGWGetObj_REST_S3 *get_obj_op = new RGWGetObj_REST_S3;
     get_obj_op->set_get_data(get_data);
     return get_obj_op;
-  } else if (!s->bucket) {
+  } else if (!s->bucket_name) {
     return NULL;
   }
 
@@ -426,7 +426,7 @@ RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_S3::get_retrieve_op(bool get_data)
 {
-  if (s->bucket) {
+  if (s->bucket_name) {
     if (is_acl_op()) {
       return new RGWGetACLs_REST_S3;
     } else if (s->args.exists("uploadId")) {
@@ -447,7 +447,7 @@ RGWOp *RGWHandler_REST_S3::get_create_op()
       return new RGWPutObj_REST_S3;
     else
       return new RGWCopyObj_REST_S3;
-  } else if (s->bucket) {
+  } else if (s->bucket_name) {
     return new RGWCreateBucket_REST_S3;
   }
 
@@ -463,7 +463,7 @@ RGWOp *RGWHandler_REST_S3::get_delete_op()
       return new RGWDeleteObj_REST_S3;
     else
       return new RGWAbortMultipart_REST_S3;
-  } else if (s->bucket)
+  } else if (s->bucket_name)
     return new RGWDeleteBucket_REST_S3;
 
   return NULL;

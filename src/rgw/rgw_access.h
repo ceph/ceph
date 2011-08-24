@@ -52,12 +52,13 @@ public:
    * common_prefixes: if delim is filled in, any matching prefixes are placed
    *     here.
    */
-  virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
+  virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                            std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
@@ -115,12 +116,12 @@ public:
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
-  virtual int purge_buckets(std::string& id, vector<std::string>& buckets) { return -ENOTSUP; }
+  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool) = 0;
+  virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets) { return -ENOTSUP; }
 
-  virtual int disable_buckets(std::vector<std::string>& buckets) { return -ENOTSUP; }
-  virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid) { return -ENOTSUP; }
-  virtual int bucket_suspended(std::string& bucket, bool *suspended) {
+  virtual int disable_buckets(std::vector<rgw_bucket>& buckets) { return -ENOTSUP; }
+  virtual int enable_buckets(std::vector<rgw_bucket>& buckets, uint64_t auid) { return -ENOTSUP; }
+  virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended) {
     *suspended = false;
     return 0;
   }
@@ -222,7 +223,7 @@ public:
    */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
 
-  virtual int get_bucket_id(std::string& bucket) { return -ENOTSUP; }
+  virtual int get_bucket_id(rgw_bucket& bucket) { return -ENOTSUP; }
 
  /**
   * stat an object
@@ -231,7 +232,9 @@ public:
 
   virtual bool supports_tmap() { return false; }
 
+  virtual int tmap_get(rgw_obj& obj, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
+  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_del(rgw_obj& obj, std::string& key) { return -ENOTSUP; }
 

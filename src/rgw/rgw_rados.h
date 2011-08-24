@@ -66,7 +66,7 @@ class RGWRados  : public RGWAccess
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
 
-  int open_bucket_ctx(std::string& bucket, librados::IoCtx&  io_ctx);
+  int open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
 
   struct GetObjState {
     librados::IoCtx io_ctx;
@@ -75,7 +75,7 @@ class RGWRados  : public RGWAccess
     GetObjState() : sent_data(false) {}
   };
 
-  int set_buckets_auid(vector<std::string>& buckets, uint64_t auid);
+  int set_buckets_auid(vector<rgw_bucket>& buckets, uint64_t auid);
 
   RGWWatcher *watcher;
   uint64_t watch_handle;
@@ -119,7 +119,7 @@ public:
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
   /** get listing of the objects in a bucket */
-  virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
+  virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
@@ -127,7 +127,8 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
@@ -185,12 +186,12 @@ public:
                string& category,
                struct rgw_err *err);
   /** delete a bucket*/
-  virtual int delete_bucket(std::string& id, std::string& bucket);
-  virtual int purge_buckets(std::string& id, vector<std::string>& buckets);
+  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
+  virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets);
 
-  virtual int disable_buckets(std::vector<std::string>& buckets);
-  virtual int enable_buckets(std::vector<std::string>& buckets, uint64_t auid);
-  virtual int bucket_suspended(std::string& bucket, bool *suspended);
+  virtual int disable_buckets(std::vector<rgw_bucket>& buckets);
+  virtual int enable_buckets(std::vector<rgw_bucket>& buckets, uint64_t auid);
+  virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
   virtual int delete_obj(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
@@ -224,10 +225,12 @@ public:
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
 
-  virtual int get_bucket_id(std::string& bucket);
+  virtual int get_bucket_id(rgw_bucket& bucket);
 
   virtual bool supports_tmap() { return true; }
+  virtual int tmap_get(rgw_obj& obj, bufferlist& bl);
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);
   virtual int tmap_del(rgw_obj& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
