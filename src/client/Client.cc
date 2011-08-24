@@ -678,11 +678,11 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
+Inode* Client::insert_trace(MetaRequest *request, int mds)
 {
   MClientReply *reply = request->reply;
 
-  ldout(cct, 10) << "insert_trace from " << from << " mds" << mds 
+  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds" << mds 
 	   << " is_target=" << (int)reply->head.is_target
 	   << " is_dentry=" << (int)reply->head.is_dentry
 	   << dendl;
@@ -722,16 +722,16 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   Inode *in = 0;
   if (reply->head.is_target) {
     ist.decode(p, features);
-    in = add_update_inode(&ist, from, mds);
+    in = add_update_inode(&ist, request->sent_stamp, mds);
   }
 
   if (reply->head.is_dentry) {
-    Inode *diri = add_update_inode(&dirst, from, mds);
+    Inode *diri = add_update_inode(&dirst, request->sent_stamp, mds);
     update_dir_dist(diri, &dst);  // dir stat info is attached to ..
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true,
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true,
                           ((request->head.op == CEPH_MDS_OP_RENAME) ?
                                         request->old_dentry : NULL));
     } else {
@@ -758,7 +758,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true);
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true);
     } else {
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
@@ -809,7 +809,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       ::decode(dlease, p);
       InodeStat ist(p, features);
 
-      Inode *in = add_update_inode(&ist, from, mds);
+      Inode *in = add_update_inode(&ist, request->sent_stamp, mds);
       Dentry *dn;
       if (pd != dir->dentry_map.end() &&
 	  pd->first == dname) {
@@ -828,7 +828,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 	// new dn
 	dn = link(dir, dname, in, NULL);
       }
-      update_dentry_lease(dn, &dlease, from, mds);
+      update_dentry_lease(dn, &dlease, request->sent_stamp, mds);
       dn->offset = dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
       // remove any extra names
@@ -1416,7 +1416,7 @@ void Client::handle_client_reply(MClientReply *reply)
   
   int mds = reply->get_source().num();
   request->reply = reply;
-  insert_trace(request, request->sent_stamp, mds);
+  insert_trace(request, mds);
 
   if (!request->got_unsafe) {
     request->got_unsafe = true;
