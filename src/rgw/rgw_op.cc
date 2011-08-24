@@ -754,8 +754,10 @@ void RGWPutObj::execute()
       meta_attrs[p] = bl;
 
       rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
-      
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, meta_obj, NULL, meta_attrs, rgw_obj_category_multimeta, false);
+
+      // we don't set a category, since by now a category should have already been assigned
+      string nocategory;
+      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, meta_obj, NULL, meta_attrs, nocategory, false);
     }
   }
 done:
