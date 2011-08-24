@@ -31,21 +31,42 @@ def task(ctx, config):
         - cfuse: [client.0]
         - kclient: [client.1]
         - interactive:
+
+    Example that enables valgrind:
+
+        tasks:
+        - ceph:
+        - cfuse:
+            client.0:
+              valgrind: --tool=memcheck
+        - interactive:
+
     """
     log.info('Mounting cfuse clients...')
-    assert config is None or isinstance(config, list), \
-        "task cfuse got invalid config"
     cfuse_daemons = {}
 
     if config is None:
-        config = ['client.{id}'.format(id=id_)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-    clients = list(teuthology.get_clients(ctx=ctx, roles=config))
+        config = dict(('client.{id}'.format(id=id_), None)
+                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
+    elif isinstance(config, list):
+        config = dict((name, None) for name in config)
+
+    clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
         log.info('Mounting cfuse client.{id} at {remote} {mnt}...'.format(
                 id=id_, remote=remote,mnt=mnt))
+
+        client_config = config.get("client.%s" % id_)
+        if client_config is None:
+            client_config = {}
+        log.info("Client client.%s config is %s" % (id_, client_config))
+
+        daemon_signal = 'kill'
+        if client_config.get('coverage'):
+            log.info('Recording coverage for this run.')
+            daemon_signal = 'term'
 
         remote.run(
             args=[
@@ -54,20 +75,47 @@ def task(ctx, config):
                 mnt,
                 ],
             )
+
+        run_cmd=[
+            '/tmp/cephtest/enable-coredump',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
+            '/tmp/cephtest/daemon-helper',
+            ]
+        run_cmd_tail=[
+            '/tmp/cephtest/binary/usr/local/bin/cfuse',
+            '-f',
+            '--name', 'client.{id}'.format(id=id_),
+            '-c', '/tmp/cephtest/ceph.conf',
+            # TODO cfuse doesn't understand dash dash '--',
+            mnt,
+            ]
+
+        extra_args = None
+        if client_config.get('valgrind') is not None:
+                log.debug('Running client.{id} under valgrind'.format(id=id_))
+                val_path = '/tmp/cephtest/archive/log/valgrind'
+                daemon_signal = 'term'
+                remote.run(
+                    args=[
+                        'mkdir', '-p', '--', val_path,
+                        ],
+                    wait=True,
+                    )
+                extra_args = [
+                    'valgrind',
+                    '--log-file={vdir}/client.{id}.log'.format(vdir=val_path,
+                                                               id=id_),
+                    client_config.get('valgrind')
+                    ]
+        
+        run_cmd.append(daemon_signal)
+        if extra_args is not None:
+            run_cmd.extend(extra_args)
+        run_cmd.extend(run_cmd_tail)
+
         proc = remote.run(
-            args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/daemon-helper',
-                'kill',
-                '/tmp/cephtest/binary/usr/local/bin/cfuse',
-                '-f',
-                '--name', 'client.{id}'.format(id=id_),
-                '-c', '/tmp/cephtest/ceph.conf',
-                # TODO cfuse doesn't understand dash dash '--',
-                mnt,
-                ],
+            args=run_cmd,
             logger=log.getChild('cfuse.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False,
