@@ -135,7 +135,6 @@ TEST(DaemonConfig, InjectArgsBooleans) {
   int ret;
   char buf[128];
   char *tmp = buf;
-  char buf2[128];
 
   // Change log_to_syslog
   std::ostringstream chat;

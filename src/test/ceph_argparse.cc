@@ -116,7 +116,10 @@ TEST(CephArgParse, DoubleDash) {
        i != args.arr.end(); )
   {
     std::string myarg;
-    if (ceph_argparse_witharg(args.arr, i, &myarg, "--foo", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args.arr, i)) {
+      break;
+    }
+    else if (ceph_argparse_witharg(args.arr, i, &myarg, "--foo", (char*)NULL)) {
       foo = atoi(myarg.c_str());
     }
     else if (ceph_argparse_witharg(args.arr, i, &myarg, "--bar", (char*)NULL)) {

@@ -254,13 +254,13 @@ static void dashes_to_underscores(const char *input, char *output)
   *o++ = '\0';
 }
 
-/** Once we see a standalone double dash, '--', we stop looking for any
- * other options and flags. */
-static bool handle_double_dash(std::vector<const char*> &args,
+/** Once we see a standalone double dash, '--', we should remove it and stop
+ * looking for any other options and flags. */
+bool ceph_argparse_double_dash(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i)
 {
-  if (*i == "--") {
-    i = args.end();
+  if (strcmp(*i, "--") == 0) {
+    i = args.erase(i);
     return true;
   }
   return false;
@@ -276,8 +276,6 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   const char *a;
   va_list ap;
 
-  if (handle_double_dash(args, i))
-    return false;
   va_start(ap, i);
   while (1) {
     a = va_arg(ap, char*);
@@ -304,8 +302,6 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
   va_list ap;
   int strlen_a;
 
-  if (handle_double_dash(args, i))
-    return false;
   // does this argument match any of the possibilities?
   va_start(ap, oss);
   while (1) {
@@ -354,8 +350,6 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   va_list ap;
   int strlen_a;
 
-  if (handle_double_dash(args, i))
-    return false;
   // does this argument match any of the possibilities?
   va_start(ap, ret);
   while (1) {

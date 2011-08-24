@@ -51,8 +51,9 @@ int main(int argc, const char **argv)
   string oid("test_object");
   string pool_name("test_pool");
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (strcmp(*i, "--") == 0)
+    if (ceph_argparse_double_dash(args, i)) {
       break;
+    }
     else if (ceph_argparse_witharg(args, i, &val, "--oid", "-o", (char*)NULL)) {
       oid = val;
     }

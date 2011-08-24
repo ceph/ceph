@@ -92,6 +92,8 @@ extern void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
 
 extern bool parse_ip_port_vec(const char *s, std::vector<entity_addr_t>& vec);
+bool ceph_argparse_double_dash(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i);
 bool ceph_argparse_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, ...);
 bool ceph_argparse_witharg(std::vector<const char*> &args,

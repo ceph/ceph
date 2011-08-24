@@ -161,7 +161,9 @@ int main(int argc, const char **argv)
 
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_witharg(args, i, &val, "-s", "--section", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "-s", "--section", (char*)NULL)) {
       sections.push_back(val);
     } else if (ceph_argparse_flag(args, i, "-r", "--resolve_search", (char*)NULL)) {
       resolve_search = true;

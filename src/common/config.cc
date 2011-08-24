@@ -599,7 +599,10 @@ parse_argv(std::vector<const char*>& args)
   // observer notifications later.
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    }
+    else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
       cerr << cf << std::endl;
       _exit(0);
     }

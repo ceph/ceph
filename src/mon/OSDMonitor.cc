@@ -1179,7 +1179,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       epoch_t epoch = 0;
       string cmd = args[0];
       for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
-	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
+	if (ceph_argparse_double_dash(args, i))
+	  break;
+	else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL))
 	  format = val;
 	else if (!epoch)
 	  epoch = atoi(*i++);
