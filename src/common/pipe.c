@@ -12,10 +12,6 @@
  *
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE /* need for pipe2 */
-#endif
-
 #include "common/pipe.h"
 
 #include <errno.h>
