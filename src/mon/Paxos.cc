@@ -201,31 +201,40 @@ void Paxos::store_state(MMonPaxos *m)
     last_committed = m->latest_version;
     first_committed = last_committed;
     mon->store->put_int(first_committed, machine_name, "first_committed");
+    mon->store->put_int(last_committed, machine_name, "last_committed");
+    return;
   }
 
   // build map of values to store
-  map<version_t,bufferlist> vals;
-  vals.swap(m->values);
-  if (vals.size()) {
-    if (vals.begin()->first > last_committed + 1) {
-      // drop everything if it starts in the future.
-      dout(20) << " dropping full set, it starts at " << vals.begin()->first << " > last_committed+1" << dendl;
-      vals.clear();
-    } else {
-      // drop anything we've already committed
-      if (vals.begin()->first <= last_committed) {
-	dout(20) << " dropping leading elements from " << vals.begin()->first << " to last_committed" << dendl;
-	while (!vals.empty() && vals.begin()->first <= last_committed) {
-	  vals.erase(vals.begin());
-	}
-      }
-      if (!vals.empty()) {
-	mon->store->put_bl_sn_map(machine_name, vals);
-	last_committed = vals.rbegin()->first;
-      }
-    }
+  // we want to write the range [last_committed, m->last_committed] only.
+  map<version_t,bufferlist>::iterator start = m->values.begin();
+
+  if (start != m->values.end() &&
+      start->first > last_committed + 1) {
+    // ignore everything if values start in the future.
+    dout(10) << "store_state ignoring all values, they start at " << start->first
+	     << " > last_committed+1" << dendl;
+    start = m->values.end();
   }
-  mon->store->put_int(last_committed, machine_name, "last_committed");
+
+  while (start != m->values.end() &&
+	 start->first <= last_committed)
+    ++start;
+
+  map<version_t,bufferlist>::iterator end = start;
+  while (end != m->values.end() &&
+	 end->first <= m->last_committed) {
+    last_committed = end->first;
+    ++end;
+  }
+
+  if (start == end) {
+    dout(10) << "store_state nothing to commit" << dendl;
+  } else {
+    dout(10) << "store_state [" << start->first << ".." << last_committed << "]" << dendl;
+    mon->store->put_bl_sn_map(machine_name, start, end);
+    mon->store->put_int(last_committed, machine_name, "last_committed");
+  }
 }
 
 

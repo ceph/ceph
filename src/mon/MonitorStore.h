@@ -75,7 +75,9 @@ public:
    * @param vals - map of int name -> values
    * @return 0 for success or negative error code
    */
-  int put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals);
+  int put_bl_sn_map(const char *a,
+		    map<version_t,bufferlist>::iterator start,
+		    map<version_t,bufferlist>::iterator end);
 
   int erase_ss(const char *a, const char *b);
   int erase_sn(const char *a, version_t b) {

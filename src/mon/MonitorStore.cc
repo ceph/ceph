@@ -340,18 +340,20 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
   return 0;
 }
 
-int MonitorStore::put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals)
+int MonitorStore::put_bl_sn_map(const char *a,
+				map<version_t,bufferlist>::iterator start,
+				map<version_t,bufferlist>::iterator end)
 {
-  version_t first = vals.begin()->first;
-  version_t last = vals.rbegin()->first;
+  version_t first = start->first;
+  map<version_t,bufferlist>::iterator lastp = end;
+  --lastp;
+  version_t last = lastp->first;
   dout(15) <<  "put_bl_sn_map " << a << "/[" << first << ".." << last << "]" << dendl;
 
   // only do a big sync if there are several values.
-  if (vals.size() < 5) {
+  if (last - first < 5) {
     // just do them individually
-    for (map<version_t,bufferlist>::iterator p = vals.begin();
-	 p != vals.end();
-	 p++) {
+    for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
       int err = put_bl_sn(p->second, a, p->first);
       if (err < 0)
 	return err;
@@ -364,9 +366,7 @@ int MonitorStore::put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals)
   snprintf(dfn, sizeof(dfn), "%s/%s", dir.c_str(), a);
   ::mkdir(dfn, 0755);
 
-  for (map<version_t,bufferlist>::iterator p = vals.begin();
-       p != vals.end();
-       p++) {
+  for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
     char tfn[1024], fn[1024];
 
     snprintf(fn, sizeof(fn), "%s/%llu", dfn, (long long unsigned)p->first);
@@ -391,9 +391,7 @@ int MonitorStore::put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals)
   ::close(dirfd);
     
   // rename them all into place
-  for (map<version_t,bufferlist>::iterator p = vals.begin();
-       p != vals.end();
-       p++) {
+  for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
     char tfn[1024], fn[1024];
     
     snprintf(fn, sizeof(fn), "%s/%llu", dfn, (long long unsigned)p->first);
