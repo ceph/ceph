@@ -163,6 +163,10 @@ int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
   ::decode(header, iter);
   ::decode(m, iter);
 
+  if (!m.size()) {
+    return generate_pool(bucket_name, bucket);
+  }
+
   map<string, bufferlist>::iterator miter = m.end();
   do {
     --miter;
