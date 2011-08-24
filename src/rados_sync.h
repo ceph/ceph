@@ -30,6 +30,7 @@ namespace librados {
 extern const char USER_XATTR_PREFIX[];
 extern const char RADOS_SYNC_TMP_SUFFIX[];
 #define ERR_PREFIX "[ERROR]        "
+#define DEFAULT_NUM_RADOS_WORKER_THREADS 5
 
 /* Linux seems to use ENODATA instead of ENOATTR when an extended attribute
  * is missing */

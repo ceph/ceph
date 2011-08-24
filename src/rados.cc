@@ -38,6 +38,8 @@ using namespace librados;
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
 
+#define STR(x) #x
+
 void usage(ostream& out)
 {
   out <<					\
@@ -81,6 +83,8 @@ void usage(ostream& out)
 "       -d / --delete-after          After synchronizing, delete unreferenced\n"
 "                                    files or objects from the target bucket\n"
 "                                    or directory.\n"
+"       --workers                    Number of worker threads to spawn (default "
+STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "\n"
 "GLOBAL OPTIONS:\n"
 "   -p pool\n"
@@ -1215,6 +1219,8 @@ int main(int argc, const char **argv)
       opts["read-percent"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)NULL)) {
       opts["num-objects"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)NULL)) {
+      opts["workers"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();

@@ -792,6 +792,28 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
   bool force = opts.count("force");
   bool delete_after = opts.count("delete-after");
   bool create = opts.count("create");
+
+  std::map < std::string, std::string >::const_iterator n = opts.find("workers");
+  int num_threads;
+  if (n == opts.end()) {
+    num_threads = DEFAULT_NUM_RADOS_WORKER_THREADS;
+  }
+  else {
+    std::string err;
+    num_threads = strict_strtol(n->second.c_str(), 10, &err);
+    if (!err.empty()) {
+      cerr << "rados: can't parse number of worker threads given: "
+	   << err << std::endl;
+      return 1;
+    }
+    if ((num_threads < 1) || (num_threads > 9000)) {
+      cerr << "rados: unreasonable value given for num_threads: "
+	   << num_threads << std::endl;
+      return 1;
+    }
+  }
+
+
   std::string action, src, dst;
   std::vector<const char*>::iterator i = args.begin();
   if ((i != args.end()) &&
@@ -859,7 +881,6 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
   }
 
   std::string dir_name = (action == "import") ? src : dst;
-  int num_threads = 3;
   IoCtxDistributor *io_ctx_dist = IoCtxDistributor::instance();
   ret = io_ctx_dist->init(rados, pool_name.c_str(), num_threads);
   if (ret) {
