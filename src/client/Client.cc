@@ -808,9 +808,27 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       ::decode(dname, p);
       ::decode(dlease, p);
       InodeStat ist(p, features);
-      
+
       Inode *in = add_update_inode(&ist, from, mds);
-      Dentry *dn = insert_dentry_inode(dir, dname, &dlease, in, from, mds, false);
+      Dentry *dn;
+      if (pd != dir->dentry_map.end() &&
+	  pd->first == dname) {
+	Dentry *olddn = pd->second;
+	if (pd->second->inode != in) {
+	  // replace incorrect dentry
+	  pd++;
+	  unlink(olddn, true);
+	  dn = link(dir, dname, in, NULL);
+	} else {
+	  // keep existing dn
+	  dn = olddn;
+	  touch_dn(dn);
+	}
+      } else {
+	// new dn
+	dn = link(dir, dname, in, NULL);
+      }
+      update_dentry_lease(dn, &dlease, from, mds);
       dn->offset = dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
       // remove any extra names
