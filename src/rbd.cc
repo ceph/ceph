@@ -579,11 +579,17 @@ static int read_file(const char *filename, char *buf, size_t bufsize)
     return r;
 }
 
+void do_closedir(DIR *dp)
+{
+  if (dp)
+    closedir(dp);
+}
+
 static int do_kernel_showmapped()
 {
   int r;
   const char *devices_path = "/sys/bus/rbd/devices";
-  std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), closedir);
+  std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
   if (!device_dir.get()) {
     r = -errno;
     cerr << "Could not open " << devices_path << ": " << cpp_strerror(-r) << std::endl;
