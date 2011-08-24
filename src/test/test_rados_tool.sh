@@ -120,6 +120,12 @@ if [ "$PRE_EXPORT" != "$POST_EXPORT" ]; then
 \$PRE_EXPORT = $PRE_EXPORT, \$POST_EXPORT = $POST_EXPORT"
 fi
 
+# another try with a different --worker setting
+run_expect_succ "$RADOS_TOOL" --workers 1 -C export "$POOL" "$TDIR/dirc_copy2"
+
+# another try with a different --worker setting
+run_expect_succ "$RADOS_TOOL" --workers 30 -C export "$POOL" "$TDIR/dirc_copy3"
+
 # trigger a rados delete using --delete-after
 run_expect_succ "$RADOS_TOOL" --create export "$POOL" "$TDIR/dird"
 rm -f "$TDIR/dird/foo"
