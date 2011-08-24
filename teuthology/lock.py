@@ -109,6 +109,12 @@ Lock, unlock, or query lock status of machines.
         help='Show lock info for all machines, or only machines specified. Can be restricted by --owner and --status.',
         )
     group.add_argument(
+        '--list-targets',
+        action='store_true',
+        default=False,
+        help='Show lock info for all machines, or only machines specified, in targets: yaml format. Can be restricted by --owner and --status.',
+        )
+    group.add_argument(
         '--lock',
         action='store_true',
         default=False,
@@ -200,13 +206,13 @@ Lock, unlock, or query lock status of machines.
         assert ctx.lock or ctx.unlock, \
             '-f is only supported by --lock and --unlock'
     if ctx.machines:
-        assert ctx.lock or ctx.unlock or ctx.list or ctx.update, \
+        assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets or ctx.update, \
             'machines cannot be specified with that operation'
     else:
-        assert ctx.num_to_lock or ctx.list, \
+        assert ctx.num_to_lock or ctx.list or ctx.list_targets, \
             'machines must be specified for that operation'
 
-    if ctx.list:
+    if ctx.list or ctx.list_targets:
         assert ctx.desc is None, '--desc does nothing with --list'
 
         if machines:
@@ -221,7 +227,13 @@ Lock, unlock, or query lock status of machines.
             if ctx.status is not None:
                 statuses = [status for status in statuses \
                                 if status['up'] == (ctx.status == 'up')]
-            print json.dumps(statuses, indent=4)
+            if ctx.list:
+                print json.dumps(statuses, indent=4)
+            else:
+                frag = { 'targets': {} }
+                for f in statuses:
+                    frag['targets'][f['name']] = f['sshpubkey']
+                print yaml.safe_dump(frag, default_flow_style=False)
         else:
             log.error('error retrieving lock statuses')
             ret = 1
