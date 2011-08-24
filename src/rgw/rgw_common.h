@@ -426,6 +426,21 @@ struct RGWBucketInfo
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
+struct RGWBucketStats
+{
+  string pool_name;
+  string category;
+  uint64_t num_kb;
+  uint64_t num_objects;
+  uint64_t num_object_clones;
+  uint64_t num_object_copies;  // num_objects * num_replicas
+  uint64_t num_objects_missing_on_primary;
+  uint64_t num_objects_unfound;
+  uint64_t num_objects_degraded;
+  uint64_t num_rd_kb;
+  uint64_t num_wr_kb;
+};
+
 struct req_state;
 
 struct RGWEnv;

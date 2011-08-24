@@ -482,7 +482,10 @@ void RGWCreateBucket::execute()
   if (ret == -EEXIST)
     ret = 0;
 
-  pool_id = rgwstore->get_bucket_id(s->bucket);
+  ret = rgwstore->get_bucket_id(s->bucket, &pool_id);
+  if (ret < 0)
+    goto done;
+
   if (pool_id >= 0) {
     s->pool_id = pool_id;
     RGWPoolInfo info;
@@ -1510,8 +1513,11 @@ int RGWHandler::do_read_permissions(bool only_bucket)
       ret = -EACCES;
   }
 
-  if (!s->bucket.name.empty())
-    s->pool_id = rgwstore->get_bucket_id(s->bucket);
+  if (!s->bucket.name.empty()) {
+    ret = rgwstore->get_bucket_id(s->bucket, &s->pool_id);
+    if (ret < 0)
+      return ret;
+  }
 
   return ret;
 }

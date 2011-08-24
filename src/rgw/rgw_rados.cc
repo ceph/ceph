@@ -1412,13 +1412,63 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
   return r;
 }
 
-int RGWRados::get_bucket_id(rgw_bucket& bucket)
+int RGWRados::get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-  return io_ctx.get_id();
+
+  *bucket_id = io_ctx.get_id();
+  return 0;
+}
+
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats)
+{
+  list<string> vec;
+
+  string pool_name = bucket.pool;
+
+  if (pool_name.empty())
+    pool_name = bucket.name;
+
+  if (pool_name.empty())
+    return -EINVAL;
+
+  vec.push_back(pool_name.c_str());
+
+  vector<string>::iterator cat_iter;
+  map<string, map<string, pool_stat_t> > pool_stats;
+  string empty_category;
+  int ret = rados->get_pool_stats(vec, empty_category, pool_stats);
+  if (ret < 0)
+    return ret;
+
+  map<string, bool> cats_map;
+  vector<string>::iterator iter;
+
+  for (map<string, librados::stats_map>::iterator c = pool_stats.begin(); c != pool_stats.end(); ++c) {
+    const string& pool_name = c->first;
+    stats_map& m = c->second;
+    for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
+      string cat = (i->first.size() ? i->first.c_str() : empty_category);
+
+      RGWBucketStats& s = stats[cat];
+      pool_stat_t& ps = i->second;
+      s.pool_name = pool_name;
+      s.category = cat;
+      s.num_kb = ps.num_kb;
+      s.num_objects = ps.num_objects;
+      s.num_object_clones = ps.num_object_clones;
+      s.num_object_copies = ps.num_object_copies;
+      s.num_objects_missing_on_primary = ps.num_objects_missing_on_primary;
+      s.num_objects_unfound = ps.num_objects_unfound;
+      s.num_objects_degraded = ps.num_objects_degraded;
+      s.num_rd_kb = ps.num_rd_kb;
+      s.num_wr_kb = ps.num_wr_kb;
+    }
+  }
+  return 0;
 }
 
 int RGWRados::tmap_get(rgw_obj& obj, bufferlist& bl)

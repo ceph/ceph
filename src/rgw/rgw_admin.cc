@@ -25,8 +25,7 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static XMLFormatter formatter_xml;
-static JSONFormatter formatter_json;
+static XMLFormatter default_formatter;
 
 void _usage() 
 {
@@ -46,11 +45,12 @@ void _usage()
   cerr << "  buckets list               list buckets\n";
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
+  cerr << "  bucket stats               returns bucket statistics\n";
   cerr << "  pool info                  show pool information\n";
   cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
-  cerr << "                             + pool-id)\n";
+  cerr << "                             + bucket-id)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
@@ -71,7 +71,7 @@ void _usage()
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
   cerr << "   --time=<HH:MM:SS>\n";
-  cerr << "   --pool-id=<pool-id>\n";
+  cerr << "   --bucket-id=<bucket-id>\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
@@ -107,6 +107,7 @@ enum {
   OPT_BUCKETS_LIST,
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
+  OPT_BUCKET_STATS,
   OPT_POLICY,
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
@@ -225,6 +226,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_LINK;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_BUCKET_UNLINK;
+    if (strcmp(cmd, "stats") == 0)
+      return OPT_BUCKET_STATS;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
@@ -507,10 +510,12 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
-  int pool_id = -1;
+  int bucket_id = -1;
   const char *format = 0;
-  Formatter *formatter = &formatter_xml;
+  Formatter *formatter = &default_formatter;
   bool purge_data = false;
+  RGWPoolInfo pool_info;
+  bool pretty_format = false;
 
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("help", 'h')) {
@@ -549,14 +554,16 @@ int main(int argc, char **argv)
     } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
       perm_mask = str_to_perm(access);
-    } else if (CEPH_ARGPARSE_EQ("pool-id", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&pool_id, OPT_INT);
-      if (pool_id < 0) {
-        cerr << "bad pool-id: " << pool_id << std::endl;
+    } else if (CEPH_ARGPARSE_EQ("bucket-id", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_id, OPT_INT);
+      if (bucket_id < 0) {
+        cerr << "bad bucket-id: " << bucket_id << std::endl;
         return usage();
       }
     } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("pretty-format", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pretty_format, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("purge-data", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&purge_data, OPT_BOOL);
     } else {
@@ -582,9 +589,9 @@ int main(int argc, char **argv)
 
   if (format) {
     if (strcmp(format, "xml") == 0)
-      formatter = &formatter_xml;
+      formatter = new XMLFormatter(pretty_format);
     else if (strcmp(format, "json") == 0)
-      formatter = &formatter_json;
+      formatter = new JSONFormatter(pretty_format);
     else {
       cerr << "unrecognized format: " << format << std::endl;
       return usage();
@@ -736,14 +743,33 @@ int main(int argc, char **argv)
   map<string, RGWSubUser>::iterator uiter;
   RGWUserInfo old_info = info;
 
-  if (bucket_name) {
-    string bucket_name_str = bucket_name;
-    RGWBucketInfo bucket_info;
-    int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
-    if (r < 0) {
-      RGW_LOG(0) << "could not get bucket info for bucket=" << bucket_name_str << dendl;
+  if (bucket_name || bucket_id >= 0) {
+    if (bucket_id >= 0) {
+      int ret = rgw_retrieve_pool_info(bucket_id, pool_info);
+      if (ret < 0) {
+        cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
+        return ret;
+      }
+      bucket = pool_info.bucket;
+      if (bucket_name && bucket.name.compare(bucket_name) != 0) {
+        cerr << "bucket name does not match bucket id (expected bucket name: " << bucket.name << ")" << std::endl;
+        return -EINVAL;
+      }
+    } else {
+      string bucket_name_str = bucket_name;
+      RGWBucketInfo bucket_info;
+      int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+      if (r < 0) {
+        cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
+        return r;
+      }
+      bucket = bucket_info.bucket;
+      int ret = rgwstore->get_bucket_id(bucket, &bucket_id);
+      if (ret < 0) {
+        cerr << "could not get bucket id for bucket" << bucket << std::endl;
+        return ret;
+      }
     }
-    bucket = bucket_info.bucket;
   }
 
   int err;
@@ -978,8 +1004,8 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!object && (!date || !bucket_name || pool_id < 0)) {
-      cerr << "object or (at least one of date, bucket, pool-id) were not specified" << std::endl;
+    if (!object && (!date || !bucket_name || bucket_id < 0)) {
+      cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
       return usage();
     }
 
@@ -989,7 +1015,7 @@ int main(int argc, char **argv)
       oid = object;
     } else {
       char buf[16];
-      snprintf(buf, sizeof(buf), "%d", pool_id);
+      snprintf(buf, sizeof(buf), "%d", bucket_id);
       oid = date;
       oid += "-";
       oid += buf;
@@ -1082,17 +1108,56 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POOL_INFO) {
-    RGWPoolInfo info;
-    int ret = rgw_retrieve_pool_info(pool_id, info);
-    if (ret < 0) {
-      cerr << "could not retrieve pool info for pool_id=" << pool_id << std::endl;
-      return ret;
+    if (!bucket_name && bucket_id < 0) {
+      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
+      return usage();
     }
     formatter->reset();
-    formatter->open_object_section("Pool");
-    formatter->dump_int("ID", pool_id);
-    formatter->dump_format("Bucket", "%s", info.bucket.name.c_str());
-    formatter->dump_format("Owner", "%s", info.owner.c_str());
+    formatter->open_object_section("PoolInfo");
+    formatter->dump_int("ID", bucket_id);
+    formatter->dump_format("Bucket", "%s", pool_info.bucket.name.c_str());
+    formatter->dump_format("Pool", "%s", pool_info.bucket.pool.c_str());
+    formatter->dump_format("Owner", "%s", pool_info.owner.c_str());
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BUCKET_STATS) {
+    if (!bucket_name && bucket_id < 0) {
+      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
+      return usage();
+    }
+    map<string, RGWBucketStats> stats;
+    int ret = rgwstore->get_bucket_stats(bucket, stats);
+    if (ret < 0) {
+      cerr << "error getting bucket stats ret=" << ret << std::endl;
+      return ret;
+    }
+    map<string, RGWBucketStats>::iterator iter;
+    formatter->reset();
+    formatter->open_object_section("Stats");
+    formatter->dump_format("Bucket", "%s", bucket.name.c_str());
+    formatter->dump_format("Pool", "%s", bucket.pool.c_str());
+    formatter->dump_int("ID", bucket_id);
+    formatter->open_array_section("Categories");
+    for (iter = stats.begin(); iter != stats.end(); ++iter) {
+      RGWBucketStats& s = iter->second;
+      formatter->open_object_section("Category");
+      const char *cat_name = (iter->first.size() ? iter->first.c_str() : "");
+      formatter->dump_format("Name", "%s", cat_name);
+      formatter->dump_format("SizeKB", "%lld", s.num_kb);
+      formatter->dump_format("NumObjects", "%lld", s.num_objects);
+      formatter->dump_format("NumObjectClones", "%lld", s.num_object_clones);
+      formatter->dump_format("NumObjectCopies", "%lld", s.num_object_copies);
+      formatter->dump_format("NumObjectsMissingOnPrimary", "%lld", s.num_objects_missing_on_primary);
+      formatter->dump_format("NumObjectsUnfound", "%lld", s.num_objects_unfound);
+      formatter->dump_format("NumObjectsDegraded", "%lld", s.num_objects_degraded);
+      formatter->dump_format("ReadKB", "%lld", s.num_rd_kb);
+      formatter->dump_format("WriteKB", "%lld", s.num_wr_kb);
+      formatter->close_section();
+      formatter->flush(cout);
+    }
+    formatter->close_section();
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -1118,10 +1183,15 @@ int main(int argc, char **argv)
     info.bucket = bucket;
     info.owner = policy.get_owner().get_id();
 
-    int pool_id = rgwstore->get_bucket_id(bucket);
-    ret = rgw_store_pool_info(pool_id, info);
+    int bucket_id;
+    ret = rgwstore->get_bucket_id(bucket, &bucket_id);
     if (ret < 0) {
-      RGW_LOG(0) << "can't store pool info: pool_id=" << pool_id << " ret=" << ret << dendl;
+      RGW_LOG(0) << "get_bucket_id returned " << ret << dendl;
+      return ret;
+    }
+    ret = rgw_store_pool_info(bucket_id, info);
+    if (ret < 0) {
+      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket_id << " ret=" << ret << dendl;
       return ret;
     }
   }

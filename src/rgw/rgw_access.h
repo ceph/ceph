@@ -223,7 +223,7 @@ public:
    */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
 
-  virtual int get_bucket_id(rgw_bucket& bucket) { return -ENOTSUP; }
+  virtual int get_bucket_id(rgw_bucket& bucket, int *bucket_id) { return -ENOTSUP; }
 
  /**
   * stat an object
@@ -258,6 +258,8 @@ public:
   // to notify upper layer that we need to do some operation on an object, and it's up to
   // the upper layer to schedule this operation.. e.g., log intent in intent log
   virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
+
+  virtual int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats) { return -ENOTSUP; }
 };
 
 class RGWStoreManager {
