@@ -460,7 +460,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
   while (1) {
     r = ceph_getdnames(cmount, dirp, buf, buflen);
     if (r==-ERANGE) { //expand the buffer
-      delete buf;
+      delete [] buf;
       buflen *= 2;
       buf = new char[buflen];
       continue;
@@ -477,7 +477,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
       delete ent;
     }
   }
-  delete buf;
+  delete [] buf;
   ceph_closedir(cmount, dirp);
 
   if (r < 0) report_error(cb, -r); //Ceph shouldn't return r<0 on getdnames
