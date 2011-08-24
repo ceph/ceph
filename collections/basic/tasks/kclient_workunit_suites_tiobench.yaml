@@ -1,0 +1,6 @@
+tasks:
+- ceph:
+- kclient: [client.0]
+- workunit:
+    client.0:
+      - suites/tiobench.sh
