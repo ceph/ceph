@@ -784,6 +784,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
+    s->mtime = 0;
     return 0;
   }
   if (r < 0)
@@ -1095,6 +1096,11 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   if (r < 0)
     goto done_err;
 
+  if (!astate->exists) {
+    r = -ENOENT;
+    goto done_err;
+  }
+
   if (attrs) {
     *attrs = astate->attrset;
     if (g_conf->rgw_log >= 20) {
@@ -1107,26 +1113,34 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   }
 
   /* Convert all times go GMT to make them compatible */
-  struct tm mtm;
-  ctime = mktime(gmtime_r(&astate->mtime, &mtm));
-
-  r = -ECANCELED;
-  if (mod_ptr) {
-    RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
-    if (ctime < *mod_ptr) {
-      err->http_ret = 304;
-      err->s3_code = "NotModified";
-
-      goto done_err;
+  if (mod_ptr || unmod_ptr) {
+    struct tm mtm;
+    struct tm *gmtm = gmtime_r(&astate->mtime, &mtm);
+    if (!gmtm) {
+       RGW_LOG(0) << "could not get translate mtime for object" << dendl;
+       r = -EINVAL;
+       goto done_err;
     }
-  }
+    ctime = mktime(gmtm);
 
-  if (unmod_ptr) {
-    RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
-    if (ctime > *unmod_ptr) {
-      err->http_ret = 412;
-      err->s3_code = "PreconditionFailed";
-      goto done_err;
+    r = -ECANCELED;
+    if (mod_ptr) {
+      RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
+      if (ctime < *mod_ptr) {
+        err->http_ret = 304;
+        err->s3_code = "NotModified";
+
+        goto done_err;
+      }
+    }
+
+    if (unmod_ptr) {
+      RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
+      if (ctime > *unmod_ptr) {
+        err->http_ret = 412;
+        err->s3_code = "PreconditionFailed";
+        goto done_err;
+      }
     }
   }
   if (if_match || if_nomatch) {
