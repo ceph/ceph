@@ -642,6 +642,7 @@ int BackedUpObject::upload(IoCtx &io_ctx, const char *file_name, const char *dir
   int ret = io_ctx.trunc(rados_name, 0);
   if (ret) {
     cerr << ERR_PREFIX << "upload: trunc failed with error " << ret << std::endl;
+    fclose(fp);
     return ret;
   }
   uint64_t off = 0;
