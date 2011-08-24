@@ -509,11 +509,12 @@ def cluster(ctx, config):
     try:
         yield
     finally:
+        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
         if ctx.archive is not None:
-            (remote,) = ctx.cluster.only(firstmon).remotes.iterkeys()
-            log.info('Grabbing cluster log from %s %s...' % (remote, firstmon))
+            log.info('Grabbing cluster log from %s %s...' % (mon0_remote,
+                                                             firstmon))
             dest = os.path.join(ctx.archive, 'ceph.log')
-            proc = remote.run(
+            proc = mon0_remote.run(
                 args = [
                     'cat',
                     '--',
@@ -521,6 +522,20 @@ def cluster(ctx, config):
                     ],
                 stdout=file(dest, 'wb'),
                 )
+
+        log.info('Checking cluster ceph.log for badness...')
+        r = mon0_remote.run(args=[
+                'if', run.Raw('!'),
+                'egrep', '-q', '\[ERR\]|\[WRN\]|\[SEC\]',
+                '/tmp/cephtest/data/%s/log' % firstmon,
+                run.Raw(';'), 'then', 'echo', 'OK', run.Raw(';'),
+                'fi',
+                ],
+                stdout=StringIO(),
+                )
+        if r.stdout.getvalue() != "OK\n":
+            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+            ctx.summary['success'] = False
 
         log.info('Cleaning ceph cluster...')
         run.wait(
