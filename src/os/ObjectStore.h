@@ -340,7 +340,7 @@ public:
       string n(name);
       setattr(cid, oid, n, val);
     }
-    void setattr(coll_t cid, const sobject_t& oid, string& s, bufferlist& val) {
+    void setattr(coll_t cid, const sobject_t& oid, const string& s, bufferlist& val) {
       __u32 op = OP_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -361,7 +361,7 @@ public:
       string n(name);
       rmattr(cid, oid, n);
     }
-    void rmattr(coll_t cid, const sobject_t& oid, string& s) {
+    void rmattr(coll_t cid, const sobject_t& oid, const string& s) {
       __u32 op = OP_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -432,7 +432,7 @@ public:
       string n(name);
       collection_setattr(cid, n, val);
     }
-    void collection_setattr(coll_t cid, string& name, bufferlist& val) {
+    void collection_setattr(coll_t cid, const string& name, bufferlist& val) {
       __u32 op = OP_COLL_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -445,7 +445,7 @@ public:
       string n(name);
       collection_rmattr(cid, n);
     }
-    void collection_rmattr(coll_t cid, string& name) {
+    void collection_rmattr(coll_t cid, const string& name) {
       __u32 op = OP_COLL_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
