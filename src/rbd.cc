@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
+#include <tr1/memory>
 #include <sys/ioctl.h>
 
 #include "include/rbd_types.h"
@@ -582,15 +583,15 @@ static int do_kernel_showmapped()
 {
   int r;
   const char *devices_path = "/sys/bus/rbd/devices";
-  DIR *device_dir = opendir(devices_path);
-  if (!device_dir) {
+  std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), closedir);
+  if (!device_dir.get()) {
     r = -errno;
     cerr << "Could not open " << devices_path << ": " << cpp_strerror(-r) << std::endl;
     return r;
   }
 
   struct dirent *dent;
-  dent = readdir(device_dir);
+  dent = readdir(device_dir.get());
   if (!dent) {
     r = -errno;
     cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r) << std::endl;
@@ -634,7 +635,7 @@ static int do_kernel_showmapped()
 
     cout << dent->d_name << "\t" << pool << "\t" << name << "\t" << snap << "\t" << dev << std::endl;
 
-  } while ((dent = readdir(device_dir)));
+  } while ((dent = readdir(device_dir.get())));
 
   return 0;
 }
