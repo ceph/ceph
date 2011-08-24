@@ -311,6 +311,8 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  friend class C_Client_PutInode; // calls put_inode()
+
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
 
@@ -420,7 +422,7 @@ protected:
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _release(Inode *in, bool checkafter=true);
-  bool _flush(Inode *in, Context *onfinish=NULL);
+  bool _flush(Inode *in);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
 

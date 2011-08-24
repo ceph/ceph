@@ -1728,7 +1728,8 @@ void Client::put_inode(Inode *in, int n)
     remove_all_caps(in);
 
     ldout(cct, 10) << "put_inode deleting " << *in << dendl;
-    objectcacher->release_set(&in->oset);
+    bool unclean = objectcacher->release_set(&in->oset);
+    assert(!unclean);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
@@ -2342,7 +2343,20 @@ void Client::_release(Inode *in, bool checkafter)
 }
 
 
-bool Client::_flush(Inode *in, Context *onfinish)
+class C_Client_PutInode : public Context {
+  Client *client;
+  Inode *in;
+public:
+  C_Client_PutInode(Client *c, Inode *i) : client(c), in(i) {
+    in->get();
+  }
+  void finish(int) {
+    client->put_inode(in);
+  }
+};
+
+
+bool Client::_flush(Inode *in)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
@@ -2351,13 +2365,10 @@ bool Client::_flush(Inode *in, Context *onfinish)
     return true;
   }
 
-  if (!onfinish)
-    onfinish = new C_NoopContext;
-
+  Context *onfinish = new C_Client_PutInode(this, in);
   bool safe = objectcacher->commit_set(&in->oset, onfinish);
-  if (safe && onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+  if (safe) {
+    onfinish->complete(0);
   }
   return safe;
 }
