@@ -520,6 +520,9 @@ void RGWDeleteBucket::execute()
       rgw_obj obj(s->bucket, oid);
       RGWIntentEvent intent = DEL_POOL;
       int r = rgw_log_intent(s, obj, intent);
+      if (r < 0) {
+        RGW_LOG(0) << "WARNING: failed to log intent for bucket removal bucket=" << s->bucket << dendl;
+      }
     }
   }
 
