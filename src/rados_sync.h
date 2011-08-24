@@ -15,6 +15,7 @@
 #ifndef CEPH_RADOS_SYNC_H
 #define CEPH_RADOS_SYNC_H
 
+#include <stddef.h>
 #include "include/atomic.h"
 #include "common/WorkQueue.h"
 
