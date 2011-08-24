@@ -667,7 +667,8 @@ void Journaler::_prezeroed(int r, uint64_t start, uint64_t len)
     }
 
     if (waiting_for_zero) {
-      waiting_for_zero = false;
+      if (prezero_pos > write_pos)
+	waiting_for_zero = false;
       _do_flush();
     }
   } else {

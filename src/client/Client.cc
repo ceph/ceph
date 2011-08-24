@@ -1779,11 +1779,16 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (!in->dn_set.empty())
       ldout(cct, 5) << "adding new hard link to " << in->vino()
 		    << " from " << dn << dendl;
-    in->dn_set.insert(dn);
     in->get();
-    
     if (in->dir)
       dn->get();  // dir -> dn pin
+
+    // only one parent for directories!
+    if (in->is_dir() && !in->dn_set.empty()) {
+      unlink(in->get_first_parent(), false);
+    }
+
+    in->dn_set.insert(dn);
   }
   
   return dn;
