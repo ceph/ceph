@@ -3301,6 +3301,7 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
   if (!ceph_file_layout_is_valid(&layout->layout)) {
     dout(10) << "bad layout" << dendl;
     reply_request(mdr, -EINVAL);
+    delete layout;
     return;
   }
 
