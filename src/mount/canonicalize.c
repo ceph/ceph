@@ -37,7 +37,7 @@ static char *
 myrealpath(const char *path, char *resolved_path, int maxreslth) {
 	int readlinks = 0;
 	char *npath;
-	char link_path[PATH_MAX+1];
+	char *link_path;
 	int n;
 	char *buf = NULL;
 
@@ -56,6 +56,7 @@ myrealpath(const char *path, char *resolved_path, int maxreslth) {
 	}
 
 	/* Expand each slash-separated pathname component. */
+	link_path = malloc(PATH_MAX+1);
 	while (*path != '\0') {
 		/* Ignore stray "/" */
 		if (*path == '/') {
@@ -93,6 +94,7 @@ myrealpath(const char *path, char *resolved_path, int maxreslth) {
 
 		/* See if last pathname component is a symlink. */
 		*npath = '\0';
+
 		n = readlink(resolved_path, link_path, PATH_MAX);
 		if (n < 0) {
 			/* EINVAL means the file exists but isn't a symlink. */
@@ -130,10 +132,12 @@ myrealpath(const char *path, char *resolved_path, int maxreslth) {
 	/* Make sure it's null terminated. */
 	*npath = '\0';
 
+	free(link_path);
 	free(buf);
 	return resolved_path;
 
  err:
+	free(link_path);
 	free(buf);
 	return NULL;
 }
@@ -168,24 +172,29 @@ canonicalize_dm_name(const char *ptname)
 char *
 canonicalize_path(const char *path)
 {
-	char canonical[PATH_MAX+2];
+	char *canonical;
 	char *p;
 
 	if (path == NULL)
 		return NULL;
 
-	if (!myrealpath(path, canonical, PATH_MAX+1))
+	canonical = malloc(PATH_MAX+2);
+	if (!myrealpath(path, canonical, PATH_MAX+1)) {
+		free(canonical);
 		return strdup(path);
+	}
 
 
 	p = strrchr(canonical, '/');
 	if (p && strncmp(p, "/dm-", 4) == 0 && isdigit(*(p + 4))) {
 		p = canonicalize_dm_name(p+1);
-		if (p)
+		if (p) {
+			free(canonical);
 			return p;
+		}
 	}
 
-	return strdup(canonical);
+	return canonical;
 }
 
 

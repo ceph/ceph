@@ -174,7 +174,7 @@ Description: debugging symbols for librbd1
 Package: librbd-dev
 Architecture: linux-any
 Section: libdevel
-Depends: ${misc:Depends}, librbd1 (= ${binary:Version})
+Depends: ${misc:Depends}, librbd1 (= ${binary:Version}), librados-dev
 Conflicts: librbd1-dev
 Replaces: librbd1-dev
 Description: RADOS block device client library (development files)

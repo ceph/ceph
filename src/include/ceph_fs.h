@@ -23,7 +23,7 @@
  */
 #define CEPH_OSD_PROTOCOL     8 /* cluster internal */
 #define CEPH_MDS_PROTOCOL    14 /* cluster internal */
-#define CEPH_MON_PROTOCOL     7 /* cluster internal */
+#define CEPH_MON_PROTOCOL     8 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL   24 /* server/client */
 #define CEPH_MDSC_PROTOCOL   32 /* server/client */
 #define CEPH_MONC_PROTOCOL   15 /* server/client */
@@ -395,6 +395,7 @@ union ceph_mds_request_args {
 		__le32 object_size;
 		__le32 file_replication;
 		__le32 preferred;
+		__le64 old_size;             /* if O_TRUNC */
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;

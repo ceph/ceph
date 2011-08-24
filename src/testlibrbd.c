@@ -91,6 +91,7 @@ void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
     }
     assert(found);
   }
+  va_end(ap);
 
   for (i = 0, cur_name = names; i < num_images; i++) {
     assert(cur_name[0] == '_');
@@ -143,6 +144,7 @@ void test_ls_snaps(rbd_image_t image, int num_expected, ...)
     }
     assert(found);
   }
+  va_end(ap);
 
   for (i = 0; i < num_snaps; i++) {
     assert(snaps[i].name == NULL);

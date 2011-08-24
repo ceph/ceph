@@ -26,9 +26,9 @@ class MonitorStore {
   int lock_fd;
 
   int write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
-		       bool append, bool sync);
+		       bool append);
   int write_bl_ss(bufferlist& bl, const char *a, const char *b,
-		  bool append, bool sync=true);
+		  bool append);
 public:
   MonitorStore(const std::string &d) : dir(d) { }
   ~MonitorStore() { }
@@ -41,17 +41,17 @@ public:
 
   // ints (stored as ascii)
   version_t get_int(const char *a, const char *b=0);
-  void put_int(version_t v, const char *a, const char *b=0, bool sync=true);
+  void put_int(version_t v, const char *a, const char *b=0);
 
   // buffers
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
   int get_bl_ss(bufferlist& bl, const char *a, const char *b);
-  int put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true) {
-    return write_bl_ss(bl, a, b, false, sync);
+  int put_bl_ss(bufferlist& bl, const char *a, const char *b) {
+    return write_bl_ss(bl, a, b, false);
   }
-  int append_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true) {
-    return write_bl_ss(bl, a, b, true, sync);
+  int append_bl_ss(bufferlist& bl, const char *a, const char *b) {
+    return write_bl_ss(bl, a, b, true);
   }
   bool exists_bl_sn(const char *a, version_t b) {
     char bs[20];
@@ -63,11 +63,19 @@ public:
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return get_bl_ss(bl, a, bs);
   }
-  int put_bl_sn(bufferlist& bl, const char *a, version_t b, bool sync=true) {
+  int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
-    return put_bl_ss(bl, a, bs, sync);
+    return put_bl_ss(bl, a, bs);
   }
+  /**
+   * Put a whole set of values efficiently and safely.
+   *
+   * @param a - prefix/directory
+   * @param vals - map of int name -> values
+   * @return 0 for success or negative error code
+   */
+  int put_bl_sn_map(const char *a, map<version_t,bufferlist>& vals);
 
   int erase_ss(const char *a, const char *b);
   int erase_sn(const char *a, version_t b) {

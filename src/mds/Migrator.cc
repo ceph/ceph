@@ -1167,11 +1167,11 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-      CDir *dir = *p;
-      if (!dir->state_test(CDir::STATE_EXPORTBOUND)) {
+      CDir *t = *p;
+      if (!t->state_test(CDir::STATE_EXPORTBOUND)) {
 	// include nested dirfrag
-	assert(dir->get_dir_auth().first == CDIR_AUTH_PARENT);
-	subdirs.push_back(dir);  // it's ours, recurse (later)
+	assert(t->get_dir_auth().first == CDIR_AUTH_PARENT);
+	subdirs.push_back(t);  // it's ours, recurse (later)
       }
     }
   }
@@ -1319,10 +1319,10 @@ void Migrator::export_reverse(CDir *dir)
   list<CDir*> rq;
   rq.push_back(dir);
   while (!rq.empty()) {
-    CDir *dir = rq.front(); 
+    CDir *t = rq.front(); 
     rq.pop_front();
-    dir->abort_export();
-    for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
+    t->abort_export();
+    for (CDir::map_t::iterator p = t->items.begin(); p != t->items.end(); ++p) {
       p->second->abort_export();
       if (!p->second->get_linkage()->is_primary())
 	continue;

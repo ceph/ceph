@@ -277,17 +277,17 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' -lpthread $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_sync.cc
+rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc
 rados_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rados
 
-testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.la -lpthread -lm
+scratchtool_SOURCES = scratchtool.c
+scratchtool_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+scratchtoolpp_SOURCES = scratchtoolpp.cc
+scratchtoolpp_LDADD = librados.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += testrados testradospp radosacl
+bin_DEBUGPROGRAMS += scratchtool scratchtoolpp radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
@@ -431,6 +431,10 @@ UNITTEST_CXXFLAGS = \
 UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
 	$(top_builddir)/src/gtest/lib/libgtest_main.la \
+	-lpthread
+UNITTEST_STATIC_LDADD = \
+	$(top_builddir)/src/gtest/lib/libgtest.a \
+	$(top_builddir)/src/gtest/lib/libgtest_main.a \
 	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
@@ -577,49 +581,49 @@ endif
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_io_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_io_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_io
 
 test_rados_api_aio_SOURCES = test/rados-api/aio.cc test/rados-api/test.cc
 test_rados_api_aio_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_aio_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_aio_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_aio_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_aio
 
 test_rados_api_list_SOURCES = test/rados-api/list.cc test/rados-api/test.cc
 test_rados_api_list_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_list_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_list_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_list
 
 test_rados_api_pool_SOURCES = test/rados-api/pool.cc test/rados-api/test.cc
 test_rados_api_pool_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_pool_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_pool_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_pool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_pool
 
 test_rados_api_stat_SOURCES = test/rados-api/stat.cc test/rados-api/test.cc
 test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_stat_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_stat_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_stat
 
 test_rados_api_watch_notify_SOURCES = test/rados-api/watch_notify.cc test/rados-api/test.cc
 test_rados_api_watch_notify_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_watch_notify_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_watch_notify_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_watch_notify_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_watch_notify
 
 test_rados_api_snapshots_SOURCES = test/rados-api/snapshots.cc test/rados-api/test.cc
 test_rados_api_snapshots_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_snapshots_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_snapshots
 
 test_rados_api_misc_SOURCES = test/rados-api/misc.cc test/rados-api/test.cc
 test_rados_api_misc_LDFLAGS = ${AM_LDFLAGS}
-test_rados_api_misc_LDADD =  librados.la ${UNITTEST_LDADD}
+test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
@@ -657,7 +661,7 @@ CLEANFILES += \
 ##
 
 AM_COMMON_FLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT \
--D_THREAD_SAFE -D__STDC_FORMAT_MACROS -rdynamic \
+-D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE -rdynamic \
 ${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
 -fno-strict-aliasing
 
@@ -812,8 +816,10 @@ libcommon_files = \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
+	osd/osd_types.cc \
 	mds/MDSMap.cc \
 	common/common_init.cc \
+	common/pipe.c \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
@@ -945,6 +951,7 @@ endif
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
+	rados_sync.h \
 	auth/cephx/CephxAuthorizeHandler.h\
 	auth/cephx/CephxKeyServer.h\
 	auth/cephx/CephxProtocol.h\
@@ -1021,6 +1028,7 @@ noinst_HEADERS = \
 	global/global_init.h \
 	global/global_context.h \
         common/common_init.h\
+        common/pipe.h\
 	common/code_environment.h \
         common/signal.h\
         global/signal_handler.h\
@@ -1390,3 +1398,6 @@ project.tgz: clean
 	cov-build -e emit -o output make
 	tar czvf project.tgz README emit output
 
+submit-coverity:
+	scp project.tgz ceph.newdream.net:ceph.newdream.net/coverity/`git describe`.tgz
+	echo "v2;ceph;"`cat .coverity.build.pass`";MAIL;http://ceph.newdream.net/coverity/"`git describe`.tgz | mail build@submit.scan.coverity.com

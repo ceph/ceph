@@ -99,7 +99,7 @@ void escape_xml_attr(const char *buf, char *out)
 			// Escape control characters.
 			if (((c < 0x20) && (c != 0x09) && (c != 0x0a)) ||
 				    (c == 0x7f)) {
-				sprintf(o, "&#x%02x;", c);
+				snprintf(o, 7, "&#x%02x;", c);
 				o += 6;
 			}
 			else {
@@ -185,7 +185,7 @@ void escape_json_attr(const char *buf, char *out)
 		default:
 			// Escape control characters.
 			if ((c < 0x20) || (c == 0x7f)) {
-				sprintf(o, "\\%04x", c);
+				snprintf(o, 6, "\\%04x", c);
 				o += 5;
 			}
 			else {

@@ -64,7 +64,10 @@ int CrushWrapper::insert_item(int item, int weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
   cout << "insert_item item " << item << " weight " << weight
-	  << " name " << name << " loc " << loc << std::endl;
+       << " name " << name << " loc " << loc << std::endl;
+
+  if (item >= get_max_devices())
+    return -ERANGE;
 
   if (name_exists(name.c_str())) {
     cerr << "error: device name '" << name << "' already exists as id "

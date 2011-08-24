@@ -75,13 +75,16 @@ static int add_secret_to_kernel(const char *secret, const char *key_name)
 int get_secret_option(const char *secret, const char *key_name, char *secret_option, size_t max_len)
 {
   int ret;
-  char option[strlen(secret) + strlen(key_name) + 7];
+  int olen = strlen(secret) + strlen(key_name) + 7;
+  char option[olen+1];
+
+  option[olen] = '\0';
 
   ret = add_secret_to_kernel(secret, key_name);
   if (ret < 0) {
     if (ret == -ENODEV || ret == -ENOSYS) {
       /* running against older kernel; fall back to secret= in options */
-      sprintf(option, "secret=%s", secret);
+      snprintf(option, olen, "secret=%s", secret);
       ret = 0;
     } else {
       fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n", strerror(-ret));
@@ -89,13 +92,14 @@ int get_secret_option(const char *secret, const char *key_name, char *secret_opt
     }
   } else {
     /* add key= option to identify key to use */
-    sprintf(option, "key=%s", key_name);
+    snprintf(option, olen, "key=%s", key_name);
   }
 
   if (strlen(option) + 1 > max_len) {
     ret = -ERANGE;
   } else {
-    strcpy(secret_option, option);
+    secret_option[max_len-1] = '\0';
+    strncpy(secret_option, option, max_len-1);
   }
 
   return ret;

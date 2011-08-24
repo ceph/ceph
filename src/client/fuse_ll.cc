@@ -570,7 +570,6 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   // go go gadget fuse
   struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
   struct fuse_chan *ch = NULL;
-  struct fuse_chan *ch_inval = NULL;
   struct fuse_session *se = NULL;
   char *mountpoint = NULL;
   int ret = 0;
@@ -604,7 +603,6 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   }
 
   fuse_session_add_chan(se, ch);
-  fuse_session_add_chan(se, ch_inval);
 
   if (g_conf->fuse_use_invalidate_cb)
     client->ll_register_ino_invalidate_cb(invalidate_cb, ch);

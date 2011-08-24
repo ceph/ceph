@@ -299,9 +299,9 @@ namespace librados
     int aio_flush();
 
     // compound object operations
-    int operate(const std::string& oid, ObjectWriteOperation *op, bufferlist *pbl);
+    int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectOperation *op);
 
     // watch/notify
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,

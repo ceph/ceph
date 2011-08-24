@@ -111,7 +111,7 @@ struct sr_t {
 
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
     ::encode(seq, bl);
     ::encode(created, bl);
@@ -124,6 +124,8 @@ struct sr_t {
   void decode(bufferlist::iterator& p) {
     __u8 struct_v;
     ::decode(struct_v, p);
+    if (struct_v == 2)
+      ::decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
     ::decode(seq, p);
     ::decode(created, p);
     ::decode(last_created, p);
@@ -139,26 +141,6 @@ struct SnapRealm {
   // realm state
 
   sr_t srnode;
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(srnode, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    if (struct_v >= 2)
-      ::decode(srnode, p);
-    else {
-      ::decode(srnode.seq, p);
-      ::decode(srnode.created, p);
-      ::decode(srnode.last_created, p);
-      ::decode(srnode.last_destroyed, p);
-      ::decode(srnode.current_parent_since, p);
-      ::decode(srnode.snaps, p);
-      ::decode(srnode.past_parents, p);
-    }
-  }
 
   // in-memory state
   MDCache *mdcache;
@@ -276,7 +258,6 @@ struct SnapRealm {
   }
 
 };
-WRITE_CLASS_ENCODER(SnapRealm)
 
 ostream& operator<<(ostream& out, const SnapRealm &realm);
 

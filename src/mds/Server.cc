@@ -2414,19 +2414,17 @@ void Server::handle_client_open(MDRequest *mdr)
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
+    // wait for pending truncate?
     inode_t *pi = cur->get_projected_inode();
-    if (pi->size > 0) {
-      // wait for pending truncate?
-      if (pi->is_truncating()) {
-	dout(10) << " waiting for pending truncate from " << pi->truncate_from
-		 << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-	cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
-
-      do_open_truncate(mdr, cmode);
+    if (pi->is_truncating()) {
+      dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+      cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
+    
+    do_open_truncate(mdr, cmode);
+    return;
   }
 
   // sync filelock if snapped.
@@ -2511,6 +2509,8 @@ public:
     newi->mark_dirty(newi->inode.version+1, mdr->ls);
 
     mdr->apply();
+
+    mds->locker->share_inode_max_size(newi);
 
     mds->mdcache->send_dentry_link(dn);
 
@@ -3100,16 +3100,12 @@ void Server::handle_client_setattr(MDRequest *mdr)
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
-      pi->truncate_from = old_size;
-      pi->size = req->head.args.setattr.size;
-      pi->truncate_size = pi->size;
-      pi->truncate_seq++;
-      pi->truncate_pending++;
+      pi->truncate(old_size, req->head.args.setattr.size);
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi->size = req->head.args.setattr.size;
+      pi->rstat.rbytes = pi->size;
     }
-    pi->rstat.rbytes = pi->size;
     pi->mtime = now;
 
     // adjust client's max_size?
@@ -3147,27 +3143,29 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 
   dout(10) << "do_open_truncate " << *in << dendl;
 
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "open_truncate");
+  mdlog->start_entry(le);
+
   // prepare
   inode_t *pi = in->project_inode();
   pi->mtime = pi->ctime = ceph_clock_now(g_ceph_context);
   pi->version = in->pre_dirty();
 
-  pi->truncate_from = pi->size;
-  pi->size = 0;
-  pi->rstat.rbytes = 0;
-  pi->truncate_size = 0;
-  pi->truncate_seq++;
+  uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
+  if (old_size > 0) {
+    pi->truncate(old_size, 0);
+    le->metablob.add_truncate_start(in->ino());
+  }
 
+  bool changed_ranges = false;
   if (cmode & CEPH_FILE_MODE_WR) {
     pi->client_ranges[client].range.first = 0;
     pi->client_ranges[client].range.last = pi->get_layout_size_increment();
     pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
+    changed_ranges = true;
   }
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "open_truncate");
-  mdlog->start_entry(le);
-  le->metablob.add_truncate_start(in->ino());
+  
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
 
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
@@ -3182,7 +3180,8 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->item_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
+								  changed_ranges));
 }
 
 
@@ -3402,7 +3401,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -3451,7 +3450,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -3498,6 +3497,8 @@ public:
 
     mds->mdcache->send_dentry_link(dn);
 
+    if (newi->inode.is_file())
+      mds->locker->share_inode_max_size(newi);
 
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
@@ -4549,10 +4550,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
-    bufferlist snapbl;
-    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
-    le->metablob.add_primary_dentry(straydn, true, in, 0, &snapbl);
+    le->metablob.add_primary_dentry(straydn, true, in);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -5627,10 +5627,9 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	bufferlist snapbl;
-	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+	oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
-	tji = metablob->add_primary_dentry(straydn, true, oldin, 0, &snapbl);
+	tji = metablob->add_primary_dentry(straydn, true, oldin);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -5672,9 +5671,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
-    bufferlist snapbl;
     if (destdn->is_auth() && srci->snaprealm)
-      srci->project_past_snaprealm_parent(dest_realm, snapbl);
+      srci->project_past_snaprealm_parent(dest_realm);
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -5682,11 +5680,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       destdn->first = MAX(destdn->first, next_dest_snap);
 
     if (destdn->is_auth())
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+      ji = metablob->add_primary_dentry(destdn, true, srci);
     else if (force_journal) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
-      ji = metablob->add_primary_dentry(destdn, true, srci, 0, &snapbl);
+      ji = metablob->add_primary_dentry(destdn, true, srci);
     }
   }
     
@@ -6627,7 +6625,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
   // journal the snaprealm changes
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
   mdlog->flush();
@@ -6746,7 +6744,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
   mdlog->flush();

@@ -90,7 +90,9 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("session_autoclose", session_autoclose);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
-  f->dump_stream("compat") << compat;
+  f->open_object_section("compat");
+  compat.dump(f);
+  f->close_section();
   f->dump_int("max_mds", max_mds);
   f->open_array_section("in");
   for (set<int32_t>::const_iterator p = in.begin(); p != in.end(); ++p)
@@ -120,6 +122,11 @@ void MDSMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("data_pools");
+  for (vector<__u32>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p)
+    f->dump_int("pool", *p);
+  f->close_section();
+  f->dump_int("metadata_pool", metadata_pg_pool);
 }
 
 void MDSMap::print(ostream& out) 
@@ -140,6 +147,8 @@ void MDSMap::print(ostream& out)
       << "up\t" << up << "\n"
       << "failed\t" << failed << "\n"
       << "stopped\t" << stopped << "\n";
+  out << "data_pools\t" << data_pg_pools << "\n";
+  out << "metadata_pool\t" << metadata_pg_pool << "\n";
 
   multimap< pair<unsigned,unsigned>, uint64_t > foo;
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();

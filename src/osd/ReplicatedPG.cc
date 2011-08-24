@@ -294,6 +294,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	  // it's a readdir cookie
 	  response.handle &= high_bit - 1ull;
 	  dout(10) << " handle high/missing " << response.handle << dendl;
+	  osr.flush();  // order wrt preceeding writes
 	  result = osd->store->collection_list_partial(coll, snapid,
 						       sentries, p->op.pgls.count - sentries.size(),
 						       &response.handle);
@@ -4843,8 +4844,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	dout(0) << " missing clone(s) for " << head << dendl;
-	assert(head == sobject_t());  // we had better be done
+	osd->clog.error() << "Missing clone(s) for " << head << "\n";
 	errors++;
       }
       

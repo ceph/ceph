@@ -18,6 +18,11 @@ layout.object_size:   2097152
 layout.stripe_unit:   1048576
 layout.stripe_count:  2
 layout.preferred_osd: -1" > file2_layout
+echo "layout.data_pool:     3
+layout.object_size:   2097152
+layout.stripe_unit:   1048576
+layout.stripe_count:  2
+layout.preferred_osd: -1" > file3_layout
 
 mkdir layout_test
 cephfs layout_test show_layout
@@ -25,7 +30,7 @@ cephfs layout_test set_layout -u $MB -c 1 -s $MB
 touch layout_test/file1
 cephfs layout_test/file1 show_layout > temp
 diff new_layout temp || return 1
-`echo "hello, I'm a file" > layout_test/file1`
+echo "hello, I'm a file" > layout_test/file1
 cephfs layout_test/file1 show_layout > temp
 diff new_layout temp || return 1
 touch layout_test/file2
@@ -36,5 +41,16 @@ cephfs layout_test/file2 show_layout > temp
 diff file2_layout temp || return 1
 
 echo "hello, I'm a file with a custom layout" > layout_test/file2
+
+touch layout_test/file3
+cephfs layout_test/file3 show_layout > temp
+diff new_layout temp || return 1
+ceph osd pool create newpool || true
+ceph mds add_data_pool 3 || true
+cephfs layout_test/file3 set_layout -p 3 -u $MB -c 2 -s $twoMB
+cephfs layout_test/file3 show_layout > temp
+diff file3_layout temp || return 1
+echo "hello, I'm a file in pool3" > layout_test/file3
+
 sync
 echo "OK"

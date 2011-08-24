@@ -96,7 +96,7 @@ public:
     case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
-    case LOCK_LOCK_XLOCK: return "lock->prexlock";
+    case LOCK_LOCK_XLOCK: return "lock->xlock";
 
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
@@ -588,7 +588,7 @@ public:
     if (s < 0) s = state;
     if (parent->is_auth()) {
       if (get_xlock_by_client() >= 0 && who == CAP_XLOCKER)
-	return get_sm()->states[s].xlocker_caps;
+	return get_sm()->states[s].xlocker_caps | get_sm()->states[s].caps; // xlocker always gets more
       else if (is_loner_mode() && who == CAP_ANY)
 	return get_sm()->states[s].caps;
       else 

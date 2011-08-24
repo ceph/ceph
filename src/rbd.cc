@@ -463,11 +463,10 @@ done:
   return r;
 }
 
-static int do_copy(librbd::RBD &rbd, librados::IoCtx& pp,
-	   const char *imgname, librados::IoCtx& dest_pp,
-	   const char *destname)
+static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
+		   const char *destname)
 {
-  int r = rbd.copy(pp, imgname, dest_pp, destname);
+  int r = src.copy(dest_pp, destname);
   if (r < 0)
     return r;
   return 0;
@@ -966,7 +965,8 @@ int main(int argc, const char **argv)
   if (imgname &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH ||
+       opt_cmd == OPT_COPY)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << strerror(r) << std::endl;
@@ -1128,7 +1128,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_COPY:
-    r = do_copy(rbd, io_ctx, imgname, dest_io_ctx, destname);
+    r = do_copy(image, dest_io_ctx, destname);
     if (r < 0) {
       cerr << "copy failed: " << strerror(-r) << std::endl;
       exit(1);

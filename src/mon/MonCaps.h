@@ -68,9 +68,15 @@ struct MonCaps {
   int get_service_id(string& token);
   bool allow_all;
   uint64_t auid;
+
+  // command whitelist
+  list<list<string> > cmd_allow;
+
 public:
-  MonCaps() : text(), default_action(0),
-	      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT) {}
+  MonCaps()
+    : text(), default_action(0),
+      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT)
+  {}
   const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service) const;
@@ -80,24 +86,29 @@ public:
   void set_auid(uint64_t uid) { auid = uid; }
 
   void encode(bufferlist& bl) const {
+    __u8 v = 2;
+    ::encode(v, bl);
     ::encode(text, bl);
     ::encode(default_action, bl);
     ::encode(services_map, bl);
     ::encode(pool_auid_map, bl);
     ::encode(allow_all, bl);
     ::encode(auid, bl);
+    ::encode(cmd_allow, bl);
   }
 
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(text, bl);
     ::decode(default_action, bl);
     ::decode(services_map, bl);
     ::decode(pool_auid_map, bl);
     ::decode(allow_all, bl);
     ::decode(auid, bl);
+    ::decode(cmd_allow, bl);
   }
 };
-
 WRITE_CLASS_ENCODER(MonCaps);
 
 inline ostream& operator<<(ostream& out, const MonCaps& m) {

@@ -57,6 +57,8 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
+#undef DOUT_COND
+#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_locker
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDS *mds) {
   return *_dout << "mds" << mds->get_nodeid() << ".locker ";
@@ -1304,7 +1306,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 	return true;
       }
       
-      if (!lock->is_stable() && lock->get_state() != LOCK_XLOCKDONE)
+      if (!lock->is_stable() && !(lock->get_state() == LOCK_XLOCKDONE &&
+				  lock->get_xlock_by_client() == client))
 	break;
 
       if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE)

@@ -70,3 +70,19 @@ TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
   sem_destroy(&sem);
 }
+
+TEST(LibRadosWatchNotify, WatchNotifyTimeoutTestPP) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ioctx.set_notify_timeout(1);
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  sem_destroy(&sem);
+}

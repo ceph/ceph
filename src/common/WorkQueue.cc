@@ -70,7 +70,7 @@ void ThreadPool::worker()
     cct->get_heartbeat_map()->reset_timeout(hb, 4);
     _cond.WaitInterval(cct, _lock, utime_t(2, 0));
   }
-  ldout(cct,0) << "worker finish" << dendl;
+  ldout(cct,1) << "worker finish" << dendl;
 
   cct->get_heartbeat_map()->remove_worker(hb);
 

@@ -107,6 +107,31 @@ TEST(CephArgParse, SimpleArgParse) {
   ASSERT_EQ(found_bar, "");
 }
 
+TEST(CephArgParse, DoubleDash) {
+  const char *ARGS[] = { "./myprog", "--foo", "5", "--", "--bar", "6", NULL };
+
+  int foo = -1, bar = -1;
+  VectorContainer args(ARGS);
+  for (std::vector<const char*>::iterator i = args.arr.begin();
+       i != args.arr.end(); )
+  {
+    std::string myarg;
+    if (ceph_argparse_double_dash(args.arr, i)) {
+      break;
+    }
+    else if (ceph_argparse_witharg(args.arr, i, &myarg, "--foo", (char*)NULL)) {
+      foo = atoi(myarg.c_str());
+    }
+    else if (ceph_argparse_witharg(args.arr, i, &myarg, "--bar", (char*)NULL)) {
+      bar = atoi(myarg.c_str());
+    }
+    else
+      ++i;
+  }
+  ASSERT_EQ(foo, 5);
+  ASSERT_EQ(bar, -1);
+}
+
 
 TEST(CephArgParse, WithDashesAndUnderscores) {
   const char *BAZSTUFF1[] = { "./myprog", "--goo", "--baz-stuff", "50", "--end", NULL };

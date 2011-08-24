@@ -61,7 +61,6 @@ using namespace std;
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
-#define MDS_TRAVERSE_FAIL          4
 
 
 extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
@@ -430,6 +429,14 @@ struct inode_t {
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool is_truncating() const { return (truncate_pending > 0); }
+  void truncate(uint64_t old_size, uint64_t new_size) {
+    truncate_from = old_size;
+    size = new_size;
+    rstat.rbytes = new_size;
+    truncate_size = size;
+    truncate_seq++;
+    truncate_pending++;
+  }
 
   uint64_t get_layout_size_increment() {
     return layout.fl_object_size * layout.fl_stripe_count;

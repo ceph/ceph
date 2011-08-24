@@ -603,8 +603,23 @@ void MDCache::populate_mydir()
     if (!strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
       strays[i]->get(CInode::PIN_STRAY);
       strays[i]->state_set(CInode::STATE_STRAYPINNED);
+      strays[i]->get_stickydirs();
     }
     dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
+
+    // open all frags
+    list<frag_t> ls;
+    strays[i]->dirfragtree.get_leaves(ls);
+    for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      frag_t fg = *p;
+      CDir *dir = strays[i]->get_dirfrag(fg);
+      if (!dir)
+	dir = strays[i]->get_or_open_dirfrag(this, fg);
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDS_RetryOpenRoot(this));
+	return;
+      }
+    }
   }
 
   // open or create journal file
@@ -636,7 +651,8 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   CInode *strayi = get_stray();
   assert(strayi);
   frag_t fg = strayi->pick_dirfrag(straydname);
-  CDir *straydir = strayi->get_or_open_dirfrag(this, fg);
+  CDir *straydir = strayi->get_dirfrag(fg);
+  assert(straydir);
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
@@ -1521,10 +1537,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       oldin->inode.version = olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
-      bufferlist snapbl;
-      if (dnl->get_inode()->projected_nodes.back()->snapnode)
-        dnl->get_inode()->projected_nodes.back()->snapnode->encode(snapbl);
-      metablob->add_primary_dentry(olddn, true, 0, 0, (snapbl.length() ? &snapbl : NULL));
+      metablob->add_primary_dentry(olddn, true, 0);
       mut->add_cow_dentry(olddn);
     } else {
       assert(dnl->is_remote());
@@ -3045,9 +3058,9 @@ void MDCache::remove_inode_recursive(CInode *in)
       ++q;
       CDentry::linkage_t *dnl = dn->get_linkage();
       if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
+	CInode *tin = dnl->get_inode();
 	subdir->unlink_inode(dn);
-	remove_inode_recursive(in);
+	remove_inode_recursive(tin);
       }
       subdir->remove_dentry(dn);
     }
@@ -6198,14 +6211,13 @@ bool MDCache::shutdown_pass()
   }
   
   // drop our reference to our stray dir inode
-  static bool did_stray_put = false;
-  if (!did_stray_put) {
-    for (int i = 0; i < NUM_STRAY; ++i) {
-      if (strays[i]) {
-	strays[i]->put(CInode::PIN_STRAY);
-      }
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (strays[i] &&
+	strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
+      strays[i]->state_clear(CInode::STATE_STRAYPINNED);
+      strays[i]->put(CInode::PIN_STRAY);
+      strays[i]->put_stickydirs();
     }
-    did_stray_put = true;
   }
 
   // trim cache
@@ -6477,22 +6489,6 @@ void MDCache::dispatch(Message *m)
   }
 }
 
-
-/* path_traverse
- *
- * return values:
- *   <0 : traverse error (ENOTDIR, ENOENT, etc.)
- *    0 : success
- *   >0 : delayed or forwarded
- *
- * onfail values:
- *
- *  MDS_TRAVERSE_FORWARD       - forward to auth (or best guess)
- *  MDS_TRAVERSE_DISCOVER      - discover missing items.  skip permission checks.
- *  MDS_TRAVERSE_DISCOVERXLOCK - discover XLOCKED items too (be careful!).
- *  MDS_TRAVERSE_FAIL          - return an error
- */
-
 Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
 {
   if (mdr) {
@@ -6506,20 +6502,13 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
   }
 }
 
-/*
- * Returns 0 on success, >0 if request has been put on hold or otherwise dealt with,
- * <0 if there's been a failure the caller needs to clean up from.
- *
- * on succes, @pdnvec points to a vector of dentries we traverse.  
- * on failure, @pdnvec it is either the full trace, up to and
- *             including the final null dn, or empty.
- */
 int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
 			   CInode **pin,
                            int onfail)
 {
+  bool discover = (onfail == MDS_TRAVERSE_DISCOVER);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
   bool forward = (onfail == MDS_TRAVERSE_FORWARD);
 
@@ -6604,7 +6593,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
-		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+		      null_okay);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       }
@@ -6671,9 +6660,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
     }
     
     // can we conclude ENOENT?
-    if (dnl && dnl->is_null() && dn->lock.can_read(client)) {
-      dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
-      return -ENOENT;
+    if (dnl && dnl->is_null()) {
+      if (dn->lock.can_read(client)) {
+        dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
+        return -ENOENT;
+      } else {
+        dout(12) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
+        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
+        return 1;
+      }
     }
 
     if (dnl && !dnl->is_null()) {
@@ -6786,24 +6781,23 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       // dirfrag/dentry is not mine.
       pair<int,int> dauth = curdir->authority();
 
-      if (onfail == MDS_TRAVERSE_FORWARD &&
+      if (forward &&
 	  snapid && mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_retry_attempt()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < retry " << mdr->client_request->get_retry_attempt()
 		<< ", discovering instead of forwarding" << dendl;
-	onfail = MDS_TRAVERSE_DISCOVER;
+	discover = true;
       }
 
-      if ((onfail == MDS_TRAVERSE_DISCOVER ||
-           onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
+      if ((discover || null_okay)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
-		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+		      null_okay);
 	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       } 
-      if (onfail == MDS_TRAVERSE_FORWARD) {
+      if (forward) {
         // forward
         dout(7) << "traverse: not auth for " << path << " in " << *curdir << dendl;
 	
@@ -6834,8 +6828,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	if (mds->logger) mds->logger->inc(l_mds_tfw);
 	return 2;
       }    
-      if (onfail == MDS_TRAVERSE_FAIL)
-        return -ENOENT;  // not necessarily exactly true....
     }
     
     assert(0);  // i shouldn't get here
@@ -7807,14 +7799,13 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   snapid_t seq;
   ::decode(seq, p);
 
-  SnapRealm t(this, in);
-  t.srnode.created = seq;
-  bufferlist snapbl;
-  ::encode(t, snapbl);
+  sr_t *newsnap = in->project_snaprealm(seq);
+  newsnap->seq = seq;
+  newsnap->last_created = seq;
   
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_cow_inode(mut, &le->metablob, in);
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in, 0, &snapbl);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in);
 
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
   mds->mdlog->flush();

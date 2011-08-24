@@ -15,9 +15,6 @@
 #ifndef CEPH_SYNC_FILESYSTEM_H
 #define CEPH_SYNC_FILESYSTEM_H
 
-#ifndef _GNU_SOURCE
-# define _GNU_SOURCE
-#endif
 #include <unistd.h>
 
 inline int sync_filesystem(int fd)

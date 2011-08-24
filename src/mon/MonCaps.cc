@@ -26,21 +26,30 @@ bool MonCaps::get_next_token(string s, size_t& pos, string& token)
   if (start < 0) {
     return false; 
   }
+  
+  token.clear();
 
-  if (s[start] == '=' || s[start] == ',' || s[start] == ';') {
-    end = start + 1;
-  } else {
-    end = s.find_first_of(";,= \t", start+1);
+  while (true) {
+    if (s[start] == '=' || s[start] == ',' || s[start] == ';') {
+      end = start + 1;
+    } else {
+      end = s.find_first_of(";,= \t", start+1);
+      if (end < 0) {
+	end = s.size();
+      }
+      else if (end >= start + 2 && s[end] == ' ' && s[end-1] == '\\') {
+	token += s.substr(start, end - start - 1);
+	token += ' ';
+	start = end + 1;
+	continue;
+      }
+    }
+    break;
   }
 
-  if (end < 0) {
-    end=s.size();
-  }
-
-  token = s.substr(start, end - start);
+  token += s.substr(start, end - start);
 
   pos = end;
-
   return true;
 }
 
@@ -141,6 +150,15 @@ do { \
 	if (token.compare("*") == 0) { //allow all operations
 	  ASSERT_STATE(op_allow);
 	  allow_all = true;
+	} else if (token.compare("command") == 0) {
+	  ASSERT_STATE(op_allow);
+	  list<string> command;
+	  while (get_next_token(s, pos, token)) {
+	    if (token.compare(";") == 0)
+	      break;
+	    command.push_back(token);
+	  }
+	  cmd_allow.push_back(command);
 	} else if (token.compare("=") == 0) {
           ASSERT_STATE(any_cmd);
           got_eq = true;
@@ -160,13 +178,13 @@ do { \
 	} else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
-          ASSERT_STATE(got_eq);
-          if (token.compare(",") == 0) {
-            ASSERT_STATE(!last_is_comma);
-          } else {
-            last_is_comma = false;
+	  ASSERT_STATE(got_eq);
+	  if (token.compare(",") == 0) {
+	    ASSERT_STATE(!last_is_comma);
+	  } else {
+	    last_is_comma = false;
 	    int service = get_service_id(token);
-            if (service != -EINVAL) {
+	    if (service != -EINVAL) {
 	      if (service >= 0) {
 		services_list.push_back(service);
 	      } else {
@@ -179,20 +197,20 @@ do { \
         }
 
         if (token.compare(";") == 0 || pos >= s.size()) {
-          if (got_eq) {
+	  if (got_eq) {
             ASSERT_STATE((services_list.size() > 0) ||
 			 (uid_list.size() > 0));
-            list<int>::iterator iter;
-            for (iter = services_list.begin(); iter != services_list.end(); ++iter) {
-              MonCap& cap = services_map[*iter];
+            
+            for (list<int>::iterator i = services_list.begin(); i != services_list.end(); ++i) {
+              MonCap& cap = services_map[*i];
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
                 cap.deny |= cap_val;
               }
             }
-	    for (iter = uid_list.begin(); iter != uid_list.end(); ++iter) {
-	      MonCap& cap = pool_auid_map[*iter];
+	    for (list<int>::iterator i = uid_list.begin(); i != uid_list.end(); ++i) {
+	      MonCap& cap = pool_auid_map[*i];
 	      if (op_allow) {
 		cap.allow |= cap_val;
 	      } else {

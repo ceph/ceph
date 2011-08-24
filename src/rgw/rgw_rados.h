@@ -27,6 +27,16 @@ struct RGWObjState {
     }
     return false;
   }
+
+  void clear() {
+    has_attrs = false;
+    exists = false;
+    size = 0;
+    mtime = 0;
+    obj_tag.clear();
+    shadow_obj.clear();
+    attrset.clear();
+  }
 };
 
 struct RGWRadosCtx {
@@ -75,8 +85,26 @@ class RGWRados  : public RGWAccess
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectOperation& op, RGWObjState **state);
+  int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
+                         string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
                          string& actual_obj, librados::ObjectWriteOperation& op, RGWObjState **pstate);
+
+  void atomic_write_finish(RGWObjState *state, int r) {
+    if (state && r == -ECANCELED) {
+      state->clear();
+    }
+  }
+
+  int clone_objs_impl(void *ctx, rgw_obj& dst_obj, 
+                 vector<RGWCloneRangeInfo>& ranges,
+                 map<string, bufferlist> attrs,
+                 string& category,
+                 time_t *pmtime,
+                 bool truncate_dest,
+                 bool exclusive,
+                 pair<string, bufferlist> *cmp_xattr);
+  int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 public:
   RGWRados() : watcher(NULL), watch_handle(0) {}
 
@@ -115,8 +143,8 @@ public:
                          vector<RGWCloneRangeInfo>& ranges,
                          map<string, bufferlist> attrs,
                          string& category,
-                         time_t *pmtime, bool truncate_dest) {
-    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, NULL);
+                         time_t *pmtime, bool truncate_dest, bool exclusive) {
+    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, NULL);
   }
 
   int clone_objs(void *ctx, rgw_obj& dst_obj, 
@@ -125,6 +153,7 @@ public:
                  string& category,
                  time_t *pmtime,
                  bool truncate_dest,
+                 bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
 
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
@@ -132,6 +161,8 @@ public:
                 uint64_t size, map<string, bufferlist> attrs,
                 string& category,
                 time_t *pmtime,
+                bool truncate_dest,
+                bool exclusive,
                 pair<string, bufferlist> *xattr_cond) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
@@ -140,7 +171,7 @@ public:
     info.dst_ofs = dst_ofs;
     info.len = size;
     v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, xattr_cond);
+    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
   /** Copy an object, with many extra options */

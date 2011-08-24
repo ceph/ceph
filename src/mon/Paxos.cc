@@ -188,8 +188,6 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
 
 void Paxos::store_state(MMonPaxos *m)
 {
-  bool big_sync = m->values.size() > 5;
-
   // stash?
   if (m->latest_version && m->latest_version > last_committed) {
     dout(10) << "store_state got stash version " << m->latest_version << ", zapping old states" << dendl;
@@ -205,21 +203,29 @@ void Paxos::store_state(MMonPaxos *m)
     mon->store->put_int(first_committed, machine_name, "first_committed");
   }
 
-  for (map<version_t,bufferlist>::iterator p = m->values.begin();
-       p != m->values.end() && p->first <= m->last_committed;
-       ++p) {
-    if (p->first <= last_committed)
-      continue;
-    if (p->first > last_committed + 1)
-      break;
-    last_committed = p->first;
-    dout(10) << "store_state got " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
-    mon->store->put_bl_sn(p->second, machine_name, last_committed, !big_sync);
+  // build map of values to store
+  map<version_t,bufferlist> vals;
+  vals.swap(m->values);
+  if (vals.size()) {
+    if (vals.begin()->first > last_committed + 1) {
+      // drop everything if it starts in the future.
+      dout(20) << " dropping full set, it starts at " << vals.begin()->first << " > last_committed+1" << dendl;
+      vals.clear();
+    } else {
+      // drop anything we've already committed
+      if (vals.begin()->first <= last_committed) {
+	dout(20) << " dropping leading elements from " << vals.begin()->first << " to last_committed" << dendl;
+	while (!vals.empty() && vals.begin()->first <= last_committed) {
+	  vals.erase(vals.begin());
+	}
+      }
+      if (!vals.empty()) {
+	mon->store->put_bl_sn_map(machine_name, vals);
+	last_committed = vals.rbegin()->first;
+      }
+    }
   }
-
   mon->store->put_int(last_committed, machine_name, "last_committed");
-  if (big_sync)
-    mon->store->sync();
 }
 
 

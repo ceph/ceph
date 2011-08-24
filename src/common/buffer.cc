@@ -247,33 +247,40 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 #endif
   }
 
-  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len) {   // no lock needed; this is an unref raw.
+  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
+  {
     r->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(unsigned l) : _off(0), _len(l) {
+  buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
+  {
     _raw = create(l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l) {    // ditto.
+  buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
+  {
     _raw = copy(d, l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len) {
+  buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
+  {
     if (_raw) {
       _raw->nref.inc();
       bdout << "ptr " << this << " get " << _raw << bendl;
     }
   }
-  buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l) : _raw(p._raw), _off(p._off + o), _len(l) {
+  buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
+    : _raw(p._raw), _off(p._off + o), _len(l)
+  {
     assert(o+l <= p._len);
     assert(_raw);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr& buffer::ptr::operator= (const ptr& p) {
+  buffer::ptr& buffer::ptr::operator= (const ptr& p)
+  {
     // be careful -- we need to properly handle self-assignment.
     if (p._raw) {
       p._raw->nref.inc();                      // inc new
@@ -290,11 +297,26 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     return *this;
   }
 
-  buffer::raw *buffer::ptr::clone() {
+  buffer::raw *buffer::ptr::clone()
+  {
     return _raw->clone();
   }
 
-  void buffer::ptr::release() {
+  void buffer::ptr::swap(ptr& other)
+  {
+    raw *r = _raw;
+    unsigned o = _off;
+    unsigned l = _len;
+    _raw = other._raw;
+    _off = other._off;
+    _len = other._len;
+    other._raw = r;
+    other._off = o;
+    other._len = l;
+  }
+
+  void buffer::ptr::release()
+  {
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
       if (_raw->nref.dec() == 0) {
@@ -309,18 +331,22 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   const char *buffer::ptr::c_str() const { assert(_raw); return _raw->data + _off; }
   char *buffer::ptr::c_str() { assert(_raw); return _raw->data + _off; }
-  unsigned buffer::ptr::unused_tail_length() const {
+
+  unsigned buffer::ptr::unused_tail_length() const
+  {
     if (_raw)
       return _raw->len - (_off+_len);
     else
       return 0;
   }
-  const char& buffer::ptr::operator[](unsigned n) const {
+  const char& buffer::ptr::operator[](unsigned n) const
+  {
     assert(_raw);
     assert(n < _len);
     return _raw->data[_off + n];
   }
-  char& buffer::ptr::operator[](unsigned n) {
+  char& buffer::ptr::operator[](unsigned n)
+  {
     assert(_raw);
     assert(n < _len);
     return _raw->data[_off + n];
@@ -330,33 +356,331 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
   int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
-  unsigned buffer::ptr::wasted() {
+  unsigned buffer::ptr::wasted()
+  {
     assert(_raw);
     return _raw->len - _len;
   }
 
-void buffer::list::encode_base64(buffer::list& o)
-{
-  bufferptr bp(length() * 4 / 3 + 3);
-  int l = ceph_armor(bp.c_str(), bp.c_str() + bp.length(), c_str(), c_str() + length());
-  bp.set_length(l);
-  o.push_back(bp);
-}
-
-void buffer::list::decode_base64(buffer::list& e)
-{
-  bufferptr bp(4 + ((e.length() * 3) / 4));
-  int l = ceph_unarmor(bp.c_str(), bp.c_str() + bp.length(), e.c_str(), e.c_str() + e.length());
-  if (l < 0) {
-    std::ostringstream oss;
-    oss << "decode_base64: decoding failed:\n";
-    hexdump(oss);
-    throw buffer::malformed_input(oss.str().c_str());
+  int buffer::ptr::cmp(const ptr& o)
+  {
+    int l = _len < o._len ? _len : o._len;
+    if (l) {
+      int r = memcmp(c_str(), o.c_str(), l);
+      if (!r)
+	return r;
+    }
+    if (_len < o._len)
+      return -1;
+    if (_len > o._len)
+      return 1;
+    return 0;
   }
-  assert(l <= (int)bp.length());
-  bp.set_length(l);
-  push_back(bp);
-}
+
+  void buffer::ptr::append(char c)
+  {
+    assert(_raw);
+    assert(1 <= unused_tail_length());
+    (c_str())[_len] = c;
+    _len++;
+  }
+  
+  void buffer::ptr::append(const char *p, unsigned l)
+  {
+    assert(_raw);
+    assert(l <= unused_tail_length());
+    memcpy(c_str() + _len, p, l);
+    _len += l;
+  }
+    
+  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
+  {
+    assert(_raw);
+    assert(o <= _len);
+    assert(o+l <= _len);
+    memcpy(c_str()+o, src, l);
+  }
+
+  void buffer::ptr::zero()
+  {
+    memset(c_str(), 0, _len);
+  }
+
+  void buffer::ptr::zero(unsigned o, unsigned l)
+  {
+    assert(o+l <= _len);
+    memset(c_str()+o, 0, l);
+  }
+
+
+  // -- buffer::list::iterator --
+  /*
+  buffer::list::iterator operator=(const buffer::list::iterator& other)
+  {
+    if (this != &other) {
+      bl = other.bl;
+      ls = other.ls;
+      off = other.off;
+      p = other.p;
+      p_off = other.p_off;
+    }
+    return *this;
+    }*/
+
+  void buffer::list::iterator::advance(unsigned o)
+  {
+    //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
+    p_off += o;
+    while (p_off > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      if (p_off >= p->length()) {
+	// skip this buffer
+	p_off -= p->length();
+	p++;
+      } else {
+	// somewhere in this buffer!
+	break;
+      }
+    }
+    off += o;
+  }
+  
+  void buffer::list::iterator::seek(unsigned o)
+  {
+    //cout << this << " seek " << o << std::endl;
+    p = ls->begin();
+    off = p_off = 0;
+    advance(o);
+  }
+
+  char buffer::list::iterator::operator*()
+  {
+    if (p == ls->end())
+      throw end_of_buffer();
+    return (*p)[p_off];
+  }
+  
+  buffer::list::iterator& buffer::list::iterator::operator++()
+  {
+    if (p == ls->end())
+      throw end_of_buffer();
+    advance(1);
+    return *this;
+  }
+
+  buffer::ptr buffer::list::iterator::get_current_ptr()
+  {
+    if (p == ls->end())
+      throw end_of_buffer();
+    return ptr(*p, p_off, p->length() - p_off);
+  }
+  
+  // copy data out.
+  // note that these all _append_ to dest!
+  
+  void buffer::list::iterator::copy(unsigned len, char *dest)
+  {
+    if (p == ls->end()) seek(off);
+    while (len > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      assert(p->length() > 0); 
+      
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch) howmuch = len;
+      p->copy_out(p_off, howmuch, dest);
+      dest += howmuch;
+
+      len -= howmuch;
+      advance(howmuch);
+    }
+  }
+  
+  void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  {
+    dest = create(len);
+    copy(len, dest.c_str());
+  }
+
+  void buffer::list::iterator::copy(unsigned len, list &dest)
+  {
+    if (p == ls->end())
+      seek(off);
+    while (len > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch)
+	howmuch = len;
+      dest.append(*p, p_off, howmuch);
+      
+      len -= howmuch;
+      advance(howmuch);
+    }
+  }
+
+  void buffer::list::iterator::copy(unsigned len, std::string &dest)
+  {
+    if (p == ls->end())
+      seek(off);
+    while (len > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      
+      unsigned howmuch = p->length() - p_off;
+      const char *c_str = p->c_str();
+      if (len < howmuch)
+	howmuch = len;
+      dest.append(c_str + p_off, howmuch);
+
+      len -= howmuch;
+      advance(howmuch);
+    }
+  }
+
+  void buffer::list::iterator::copy_all(list &dest)
+  {
+    if (p == ls->end())
+      seek(off);
+    while (1) {
+      if (p == ls->end())
+	return;
+      assert(p->length() > 0);
+      
+      unsigned howmuch = p->length() - p_off;
+      const char *c_str = p->c_str();
+      dest.append(c_str + p_off, howmuch);
+      
+      advance(howmuch);
+    }
+  }
+  
+  // copy data in
+
+  void buffer::list::iterator::copy_in(unsigned len, const char *src)
+  {
+    // copy
+    if (p == ls->end())
+      seek(off);
+    while (len > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch)
+	howmuch = len;
+      p->copy_in(p_off, howmuch, src);
+	
+      src += howmuch;
+      len -= howmuch;
+      advance(howmuch);
+    }
+  }
+  
+  void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
+  {
+    if (p == ls->end())
+      seek(off);
+    unsigned left = len;
+    for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
+	 i != otherl._buffers.end();
+	 i++) {
+      unsigned l = (*i).length();
+      if (left < l)
+	l = left;
+      copy_in(l, i->c_str());
+      left -= l;
+      if (left == 0)
+	break;
+    }
+  }
+
+
+  // -- buffer::list --
+
+  void buffer::list::swap(list& other)
+  {
+    std::swap(_len, other._len);
+    _buffers.swap(other._buffers);
+    append_buffer.swap(other.append_buffer);
+    //last_p.swap(other.last_p);
+    last_p = begin();
+    other.last_p = other.begin();
+  }
+
+  bool buffer::list::is_page_aligned() const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++) 
+      if (!it->is_page_aligned())
+	return false;
+    return true;
+  }
+
+  bool buffer::list::is_n_page_sized() const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++) 
+      if (!it->is_n_page_sized())
+	return false;
+    return true;
+  }
+
+  void buffer::list::zero()
+  {
+    for (std::list<ptr>::iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++)
+      it->zero();
+  }
+
+  void buffer::list::zero(unsigned o, unsigned l)
+  {
+    assert(o+l <= _len);
+    unsigned p = 0;
+    for (std::list<ptr>::iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++) {
+      if (p + it->length() > o) {
+	if (p >= o && p+it->length() >= o+l)
+	  it->zero();                         // all
+	else if (p >= o) 
+	  it->zero(0, o+l-p);                 // head
+	else
+	  it->zero(o-p, it->length()-(o-p));  // tail
+      }
+      p += it->length();
+      if (o+l >= p)
+	break;  // done
+    }
+  }
+  
+  bool buffer::list::is_contiguous()
+  {
+    return &(*_buffers.begin()) == &(*_buffers.rbegin());
+  }
+
+  void buffer::list::rebuild()
+  {
+    ptr nb;
+    if ((_len & ~PAGE_MASK) == 0)
+      nb = buffer::create_page_aligned(_len);
+    else
+      nb = buffer::create(_len);
+    unsigned pos = 0;
+    for (std::list<ptr>::iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 it++) {
+      nb.copy_in(pos, it->length(), it->c_str());
+      pos += it->length();
+    }
+    _buffers.clear();
+    _buffers.push_back(nb);
+  }
 
 void buffer::list::rebuild_page_aligned()
 {
@@ -394,6 +718,330 @@ void buffer::list::rebuild_page_aligned()
     _buffers.insert(p, unaligned._buffers.front());
   }
 }
+
+  // sort-of-like-assignment-op
+  void buffer::list::claim(list& bl)
+  {
+    // free my buffers
+    clear();
+    claim_append(bl);
+  }
+
+  void buffer::list::claim_append(list& bl)
+  {
+    // steal the other guy's buffers
+    _len += bl._len;
+    _buffers.splice( _buffers.end(), bl._buffers );
+    bl._len = 0;
+    bl.last_p = bl.begin();
+  }
+
+
+  void buffer::list::copy(unsigned off, unsigned len, char *dest) const
+  {
+    if (off + len > length())
+      throw end_of_buffer();
+    if (last_p.get_off() != off) 
+      last_p.seek(off);
+    last_p.copy(len, dest);
+  }
+
+  void buffer::list::copy(unsigned off, unsigned len, list &dest) const
+  {
+    if (off + len > length())
+      throw end_of_buffer();
+    if (last_p.get_off() != off) 
+      last_p.seek(off);
+    last_p.copy(len, dest);
+  }
+
+  void buffer::list::copy(unsigned off, unsigned len, std::string& dest) const
+  {
+    if (last_p.get_off() != off) 
+      last_p.seek(off);
+    return last_p.copy(len, dest);
+  }
+    
+  void buffer::list::copy_in(unsigned off, unsigned len, const char *src)
+  {
+    if (off + len > length())
+      throw end_of_buffer();
+    
+    if (last_p.get_off() != off) 
+      last_p.seek(off);
+    last_p.copy_in(len, src);
+  }
+
+  void buffer::list::copy_in(unsigned off, unsigned len, const list& src)
+  {
+    if (last_p.get_off() != off) 
+      last_p.seek(off);
+    last_p.copy_in(len, src);
+  }
+
+  void buffer::list::append(char c)
+  {
+    // put what we can into the existing append_buffer.
+    unsigned gap = append_buffer.unused_tail_length();
+    if (!gap) {
+      // make a new append_buffer!
+      unsigned alen = PAGE_SIZE;
+      append_buffer = create_page_aligned(alen);
+      append_buffer.set_length(0);   // unused, so far.
+    }
+    append_buffer.append(c);
+    append(append_buffer, append_buffer.end() - 1, 1);	// add segment to the list
+  }
+  
+  void buffer::list::append(const char *data, unsigned len)
+  {
+    while (len > 0) {
+      // put what we can into the existing append_buffer.
+      unsigned gap = append_buffer.unused_tail_length();
+      if (gap > 0) {
+	if (gap > len) gap = len;
+	//cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
+	append_buffer.append(data, gap);
+	append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+	len -= gap;
+	data += gap;
+      }
+      if (len == 0)
+	break;  // done!
+      
+      // make a new append_buffer!
+      unsigned alen = PAGE_SIZE * (((len-1) / PAGE_SIZE) + 1);
+      append_buffer = create_page_aligned(alen);
+      append_buffer.set_length(0);   // unused, so far.
+    }
+  }
+
+  void buffer::list::append(const ptr& bp)
+  {
+    if (bp.length())
+      push_back(bp);
+  }
+
+  void buffer::list::append(const ptr& bp, unsigned off, unsigned len)
+  {
+    assert(len+off <= bp.length());
+    if (!_buffers.empty()) {
+      ptr &l = _buffers.back();
+      if (l.get_raw() == bp.get_raw() &&
+	  l.end() == bp.start() + off) {
+	// yay contiguous with tail bp!
+	l.set_length(l.length()+len);
+	_len += len;
+	return;
+      }
+    }
+    // add new item to list
+    ptr tempbp(bp, off, len);
+    push_back(tempbp);
+  }
+
+  void buffer::list::append(const list& bl)
+  {
+    _len += bl._len;
+    for (std::list<ptr>::const_iterator p = bl._buffers.begin();
+	 p != bl._buffers.end();
+	 ++p) 
+      _buffers.push_back(*p);
+  }
+
+  void buffer::list::append(std::istream& in)
+  {
+    while (!in.eof()) {
+      std::string s;
+      getline(in, s);
+      append(s.c_str(), s.length());
+      append("\n", 1);
+    }
+  }
+  
+  void buffer::list::append_zero(unsigned len)
+  {
+    ptr bp(len);
+    bp.zero();
+    append(bp);
+  }
+
+  
+  /*
+   * get a char
+   */
+  const char& buffer::list::operator[](unsigned n) const
+  {
+    if (n >= _len)
+      throw end_of_buffer();
+    
+    for (std::list<ptr>::const_iterator p = _buffers.begin();
+	 p != _buffers.end();
+	 p++) {
+      if (n >= p->length()) {
+	n -= p->length();
+	continue;
+      }
+      return (*p)[n];
+    }
+    assert(0);
+  }
+
+  /*
+   * return a contiguous ptr to whole bufferlist contents.
+   */
+  char *buffer::list::c_str()
+  {
+    if (_buffers.size() == 0) 
+      return 0;                         // no buffers
+    if (_buffers.size() > 1) 
+      rebuild();
+    assert(_buffers.size() == 1);
+    return _buffers.front().c_str();  // good, we're already contiguous.
+  }
+
+  void buffer::list::substr_of(const list& other, unsigned off, unsigned len)
+  {
+    if (off + len > other.length())
+      throw end_of_buffer();
+
+    clear();
+      
+    // skip off
+    std::list<ptr>::const_iterator curbuf = other._buffers.begin();
+    while (off > 0 &&
+	   off >= curbuf->length()) {
+      // skip this buffer
+      //cout << "skipping over " << *curbuf << std::endl;
+      off -= (*curbuf).length();
+      curbuf++;
+    }
+    assert(len == 0 || curbuf != other._buffers.end());
+    
+    while (len > 0) {
+      // partial?
+      if (off + len < curbuf->length()) {
+	//cout << "copying partial of " << *curbuf << std::endl;
+	_buffers.push_back( ptr( *curbuf, off, len ) );
+	_len += len;
+	break;
+      }
+      
+      // through end
+      //cout << "copying end (all?) of " << *curbuf << std::endl;
+      unsigned howmuch = curbuf->length() - off;
+      _buffers.push_back( ptr( *curbuf, off, howmuch ) );
+      _len += howmuch;
+      len -= howmuch;
+      off = 0;
+      curbuf++;
+    }
+  }
+
+  // funky modifer
+  void buffer::list::splice(unsigned off, unsigned len, list *claim_by /*, bufferlist& replace_with */)
+  {    // fixme?
+    if (off >= length())
+      throw end_of_buffer();
+
+    assert(len > 0);
+    //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
+      
+    // skip off
+    std::list<ptr>::iterator curbuf = _buffers.begin();
+    while (off > 0) {
+      assert(curbuf != _buffers.end());
+      if (off >= (*curbuf).length()) {
+	// skip this buffer
+	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
+	off -= (*curbuf).length();
+	curbuf++;
+      } else {
+	// somewhere in this buffer!
+	//cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
+	break;
+      }
+    }
+    
+    if (off) {
+      // add a reference to the front bit
+      //  insert it before curbuf (which we'll hose)
+      //cout << "keeping front " << off << " of " << *curbuf << std::endl;
+      _buffers.insert( curbuf, ptr( *curbuf, 0, off ) );
+      _len += off;
+    }
+    
+    while (len > 0) {
+      // partial?
+      if (off + len < (*curbuf).length()) {
+	//cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
+	if (claim_by) 
+	  claim_by->append( *curbuf, off, len );
+	(*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
+	(*curbuf).set_length( (*curbuf).length() - (len+off) );
+	_len -= off+len;
+	//cout << " now " << *curbuf << std::endl;
+	break;
+      }
+      
+      // hose though the end
+      unsigned howmuch = (*curbuf).length() - off;
+      //cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
+      if (claim_by) 
+	claim_by->append( *curbuf, off, howmuch );
+      _len -= (*curbuf).length();
+      _buffers.erase( curbuf++ );
+      len -= howmuch;
+      off = 0;
+    }
+      
+    // splice in *replace (implement me later?)
+    
+    last_p = begin();  // just in case we were in the removed region.
+  };
+
+  void buffer::list::write(int off, int len, std::ostream& out) const
+  {
+    list s;
+    s.substr_of(*this, off, len);
+    for (std::list<ptr>::const_iterator it = s._buffers.begin(); 
+	 it != s._buffers.end(); 
+	 it++)
+      if (it->length())
+	out.write(it->c_str(), it->length());
+    /*iterator p(this, off);
+      while (len > 0 && !p.end()) {
+      int l = p.left_in_this_buf();
+      if (l > len)
+      l = len;
+      out.write(p.c_str(), l);
+      len -= l;
+      }*/
+  }
+  
+void buffer::list::encode_base64(buffer::list& o)
+{
+  bufferptr bp(length() * 4 / 3 + 3);
+  int l = ceph_armor(bp.c_str(), bp.c_str() + bp.length(), c_str(), c_str() + length());
+  bp.set_length(l);
+  o.push_back(bp);
+}
+
+void buffer::list::decode_base64(buffer::list& e)
+{
+  bufferptr bp(4 + ((e.length() * 3) / 4));
+  int l = ceph_unarmor(bp.c_str(), bp.c_str() + bp.length(), e.c_str(), e.c_str() + e.length());
+  if (l < 0) {
+    std::ostringstream oss;
+    oss << "decode_base64: decoding failed:\n";
+    hexdump(oss);
+    throw buffer::malformed_input(oss.str().c_str());
+  }
+  assert(l <= (int)bp.length());
+  bp.set_length(l);
+  push_back(bp);
+}
+
   
 
 int buffer::list::read_file(const char *fn, std::string *error)

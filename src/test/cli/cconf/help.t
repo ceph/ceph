@@ -7,6 +7,10 @@
   ACTIONS
     -L|--list-all-sections          List all sections
     -l|--list-sections <prefix>     List sections with the given prefix
+    --filter-key <key>              Filter section list to only include sections
+                                    with given key defined.
+    --filter-key-value <key>=<val>  Filter section list to only include sections
+                                    with given key/value pair.
     --lookup <key>                  Print a configuration setting to stdout.
                                     Returns 0 (success) if the configuration setting is
                                     found; 1 otherwise.

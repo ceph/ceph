@@ -1577,6 +1577,7 @@ public:
   void share_pg_log(const eversion_t &oldver);
 
   void warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting);
+  void reset_last_warm_restart();
 		    
   void fulfill_info(int from, const Query &query, 
 		    pair<int, Info> &notify_info);

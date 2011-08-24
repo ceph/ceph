@@ -285,7 +285,7 @@ bool MonClient::ms_dispatch(Message *m)
 
   // ignore any messages outside our current session
   if (m->get_connection() != cur_con) {
-    ldout(cct, 0) << "discarding stray montior message " << *m << dendl;
+    ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
     m->put();
     return true;
   }
@@ -464,10 +464,10 @@ void MonClient::handle_auth(MAuthReply *m)
   m->put();
 
   if (ret == -EAGAIN) {
-    MAuth *m = new MAuth;
-    m->protocol = auth->get_protocol();
-    ret = auth->build_request(m->auth_payload);
-    _send_mon_message(m, true);
+    MAuth *ma = new MAuth;
+    ma->protocol = auth->get_protocol();
+    ret = auth->build_request(ma->auth_payload);
+    _send_mon_message(ma, true);
     return;
   }
 
@@ -484,9 +484,9 @@ void MonClient::handle_auth(MAuthReply *m)
 
       if (log_client) {
 	log_client->reset_session();
-	Message *m = log_client->get_mon_log_message();
-	if (m)
-	  _send_mon_message(m);
+	Message *lm = log_client->get_mon_log_message();
+	if (lm)
+	  _send_mon_message(lm);
       }
     }
   

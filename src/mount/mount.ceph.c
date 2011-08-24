@@ -39,15 +39,17 @@ static char *mount_resolve_src(const char *orig_str)
 	int len, pos;
 	char *mount_path;
 	char *src;
-	char buf[strlen(orig_str) + 1];
-	strcpy(buf, orig_str);
+	char *buf = strdup(orig_str);
+
 	mount_path = strrchr(buf, ':');
 	if (!mount_path) {
 		printf("source mount path was not specified\n");
+		free(buf);
 		return NULL;
 	}
 	if (mount_path == buf) {
 		printf("server address expected\n");
+		free(buf);
 		return NULL;
 	}
 
@@ -56,10 +58,12 @@ static char *mount_resolve_src(const char *orig_str)
 
 	if (!*mount_path) {
 		printf("incorrect source mount path\n");
+		free(buf);
 		return NULL;
 	}
 
 	src = resolve_addrs(buf);
+	free(buf);
 	if (!src)
 		return NULL;
 

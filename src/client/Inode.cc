@@ -4,6 +4,43 @@
 #include "Dentry.h"
 #include "Dir.h"
 
+ostream& operator<<(ostream &out, Inode &in)
+{
+  out << in.vino() << "("
+      << " cap_refs=" << in.cap_refs
+      << " open=" << in.open_by_mode
+      << " ref=" << in.ref
+      << " mode=" << oct << in.mode << dec
+      << " size=" << in.size
+      << " mtime=" << in.mtime
+      << " caps=" << ccap_string(in.caps_issued());
+  if (!in.caps.empty()) {
+    out << "(";
+    for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
+      if (p != in.caps.begin())
+	out << ',';
+      out << p->first << '=' << ccap_string(p->second->issued);
+    }
+    out << ")";
+  }
+  if (in.dirty_caps)
+    out << " dirty_caps=" << ccap_string(in.dirty_caps);
+  if (in.flushing_caps)
+    out << " flushing_caps=" << ccap_string(in.flushing_caps);
+
+  if (in.flags & I_COMPLETE)
+    out << " COMPLETE";
+
+  set<Dentry*>::iterator i = in.dn_set.begin();
+  while(i != in.dn_set.end()) {
+      out << " parent=" << *i;
+      ++i;
+  }
+  out << ' ' << &in << ")";
+  return out;
+}
+
+
 void Inode::make_long_path(filepath& p)
 {
   if (!dn_set.empty()) {

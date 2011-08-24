@@ -134,7 +134,10 @@ int main(int argc, const char **argv)
 
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_witharg(args, i, &val, "--dump-journal", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--dump-journal", (char*)NULL)) {
       set_special_action(action, "dump-journal");
       rank = parse_rank("dump-journal", val);
       if (i == args.end()) {

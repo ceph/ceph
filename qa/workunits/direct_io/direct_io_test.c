@@ -9,7 +9,6 @@
  * Foundation.  See file COPYING.
  *
  */
-#define _GNU_SOURCE // for O_DIRECT
 
 #include <errno.h>
 #include <inttypes.h>

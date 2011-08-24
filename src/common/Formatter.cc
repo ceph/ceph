@@ -12,7 +12,7 @@
  *
  */
 
-#define LARGE_SIZE 8192
+#define LARGE_SIZE 1024
 
 #include "assert.h"
 #include "Formatter.h"

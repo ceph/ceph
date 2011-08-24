@@ -131,6 +131,66 @@ TEST(DaemonConfig, InjectArgsReject) {
   ASSERT_EQ(string(buf), string(buf2));
 }
 
+TEST(DaemonConfig, InjectArgsBooleans) {
+  int ret;
+  char buf[128];
+  char *tmp = buf;
+
+  // Change log_to_syslog
+  std::ostringstream chat;
+  std::string injection("--log_to_syslog --debug 28");
+  ret = g_ceph_context->_conf->injectargs(injection, &chat);
+  ASSERT_EQ(ret, 0);
+
+  // log_to_syslog should be set...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("true"), string(buf));
+
+  // Turn off log_to_syslog
+  std::ostringstream chat2;
+  injection = "--log_to_syslog=false --debug 28";
+  ret = g_ceph_context->_conf->injectargs(injection, &chat2);
+  ASSERT_EQ(ret, 0);
+
+  // log_to_syslog should be cleared...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("false"), string(buf));
+
+  // Turn on log_to_syslog
+  std::ostringstream chat3;
+  injection = "--debug 1 --log_to_syslog=true --debug-ms 40";
+  ret = g_ceph_context->_conf->injectargs(injection, &chat3);
+  ASSERT_EQ(ret, 0);
+
+  // log_to_syslog should be set...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("true"), string(buf));
+
+  // parse error
+  std::ostringstream chat4;
+  injection = "--debug 1 --log_to_syslog=falsey --debug-ms 42";
+  ret = g_ceph_context->_conf->injectargs(injection, &chat3);
+  ASSERT_EQ(ret, -EINVAL);
+
+  // log_to_syslog should still be set...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_to_syslog", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("true"), string(buf));
+
+  // debug-ms should still become 42...
+  memset(buf, 0, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("debug_ms", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("42"), string(buf));
+}
+
 TEST(DaemonConfig, InjectArgsLogfile) {
   int ret;
   std::ostringstream chat;

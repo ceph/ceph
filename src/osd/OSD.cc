@@ -2218,11 +2218,11 @@ void OSD::handle_command(MMonCommand *m)
 
 	fout << *pg << std::endl;
 	std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-	std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
-	for (; m != mend; ++m) {
-	  fout << m->first << " -> " << m->second << std::endl;
+	std::map<sobject_t, PG::Missing::item>::iterator mi = pg->missing.missing.begin();
+	for (; mi != mend; ++mi) {
+	  fout << mi->first << " -> " << mi->second << std::endl;
 	  map<sobject_t, set<int> >::const_iterator mli =
-	    pg->missing_loc.find(m->first);
+	    pg->missing_loc.find(mi->first);
 	  if (mli == pg->missing_loc.end())
 	    continue;
 	  const set<int> &mls(mli->second);
@@ -3089,15 +3089,15 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.warn() << "map e" << osdmap->get_epoch()
 		    << " wrongly marked me down or wrong addr";
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
 		    << " != my " << client_messenger->get_myaddr();
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
       else if (!osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr()))
-	clog.warn() << "map e" << osdmap->get_epoch()
+	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
 		    << " != my " << hbout_messenger->get_myaddr();
       

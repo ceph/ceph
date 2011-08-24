@@ -275,15 +275,11 @@ public:
     map<entity_name_t, utime_t> unconnected_watchers;
     map<Watch::Notification *, bool> notifs;
 
-    /*    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
-      ref(0), registered(false), obs(s, ol),
-      lock("ReplicatedPG::ObjectContext::lock"),
-      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}*/
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
       : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
-      lock("ReplicatedPG::ObjectContext::lock"),
-      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
-
+	lock("ReplicatedPG::ObjectContext::lock"),
+	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
+    
     void get() { ++ref; }
 
     // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.

@@ -14,7 +14,7 @@ all-local:
 if WITH_DEBUG
 #	We need gtest to build the rados-api tests. We only build those in
 #	a debug build, though.
-	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la lib/libgtest.a lib/libgtest_main.a
 endif
 
 check-local:

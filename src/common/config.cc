@@ -46,6 +46,7 @@
 
 using std::map;
 using std::multimap;
+using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
@@ -145,6 +146,7 @@ struct config_option config_optionsp[] = {
   OPTION(debug_context, OPT_INT, 0),
   OPTION(debug_mds, OPT_INT, 1),
   OPTION(debug_mds_balancer, OPT_INT, 1),
+  OPTION(debug_mds_locker, OPT_INT, 1),
   OPTION(debug_mds_log, OPT_INT, 1),
   OPTION(debug_mds_log_expire, OPT_INT, 1),
   OPTION(debug_mds_migrator, OPT_INT, 1),
@@ -187,6 +189,7 @@ struct config_option config_optionsp[] = {
   OPTION(mon_data, OPT_STR, 0),
   OPTION(mon_tick_interval, OPT_INT, 5),
   OPTION(mon_subscribe_interval, OPT_DOUBLE, 300),
+  OPTION(mon_osd_auto_mark_in, OPT_BOOL, true),    // automatically mark new osds 'in'
   OPTION(mon_osd_down_out_interval, OPT_INT, 300), // seconds
   OPTION(mon_lease, OPT_FLOAT, 5),       // lease interval
   OPTION(mon_lease_renew_interval, OPT_FLOAT, 3), // on leader, to renew the lease
@@ -596,7 +599,10 @@ parse_argv(std::vector<const char*>& args)
   // observer notifications later.
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    }
+    else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
       cerr << cf << std::endl;
       _exit(0);
     }
@@ -673,10 +679,18 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
       const config_option *opt = config_optionsp + o;
       std::string as_option("--");
       as_option += opt->name;
-      if ((opt->type == OPT_BOOL) &&
-	  ceph_argparse_flag(args, i, as_option.c_str(), (char*)NULL)) {
-	set_val_impl("true", opt);
-	break;
+      if (opt->type == OPT_BOOL) {
+	int res;
+	if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
+				      (char*)NULL)) {
+	  if (res == 0)
+	    set_val_impl("false", opt);
+	  else if (res == 1)
+	    set_val_impl("true", opt);
+	  else
+	    ret = res;
+	  break;
+	}
       }
       else if (ceph_argparse_witharg(args, i, &val,
 				     as_option.c_str(), (char*)NULL)) {
@@ -686,7 +700,13 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 	  ret = -ENOSYS;
 	  break;
 	}
-	set_val_impl(val.c_str(), opt);
+	int res = set_val_impl(val.c_str(), opt);
+	if (res) {
+	  *oss << "Parse error setting " << opt->name << " to '"
+	       << val << "' using injectargs.\n";
+	  ret = res;
+	  break;
+	}
 	break;
       }
     }
@@ -856,8 +876,10 @@ get_val(const char *key, char **buf, int len) const
       case OPT_DOUBLE:
         oss << *(double*)opt->conf_ptr(this);
         break;
-      case OPT_BOOL:
-        oss << *(bool*)opt->conf_ptr(this);
+      case OPT_BOOL: {
+	  bool b = *(bool*)opt->conf_ptr(this);
+	  oss << (b ? "true" : "false");
+	}
         break;
       case OPT_U32:
         oss << *(uint32_t*)opt->conf_ptr(this);

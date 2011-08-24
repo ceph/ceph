@@ -1175,7 +1175,9 @@ int main(int argc, const char **argv)
   std::vector<const char*>::iterator i;
   std::string val;
   for (i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(cout);
       exit(0);
     } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {

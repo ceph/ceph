@@ -782,7 +782,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       string what = "all";
       string val;
       for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
-	if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
+	if (ceph_argparse_double_dash(args, i)) {
+	  break;
+	} else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
 	  format = val;
 	} else {
 	  what = *i++;

@@ -153,7 +153,10 @@ class Inode {
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
 
-#define dentry_of(a) (*(a->dn_set.begin()))
+  Dentry *get_first_parent() {
+    assert(!dn_set.empty());
+    return *dn_set.begin();
+  }
 
   void make_long_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
@@ -222,5 +225,6 @@ class Inode {
   Dir *open_dir();
 };
 
+ostream& operator<<(ostream &out, Inode &in);
 
 #endif

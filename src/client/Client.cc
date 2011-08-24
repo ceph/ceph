@@ -89,44 +89,6 @@ Mutex client_logger_lock("client_logger_lock");
 PerfCounters  *client_counters = 0;
 
 
-
-
-ostream& operator<<(ostream &out, Inode &in)
-{
-  out << in.vino() << "("
-      << " cap_refs=" << in.cap_refs
-      << " open=" << in.open_by_mode
-      << " ref=" << in.ref
-      << " mode=" << oct << in.mode << dec
-      << " mtime=" << in.mtime
-      << " caps=" << ccap_string(in.caps_issued());
-  if (!in.caps.empty()) {
-    out << "(";
-    for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
-      if (p != in.caps.begin())
-	out << ',';
-      out << p->first << '=' << ccap_string(p->second->issued);
-    }
-    out << ")";
-  }
-  if (in.dirty_caps)
-    out << " dirty_caps=" << ccap_string(in.dirty_caps);
-  if (in.flushing_caps)
-    out << " flushing_caps=" << ccap_string(in.flushing_caps);
-
-  if (in.flags & I_COMPLETE)
-    out << " COMPLETE";
-
-  set<Dentry*>::iterator i = in.dn_set.begin();
-  while(i != in.dn_set.end()) {
-      out << " parent=" << *i;
-      ++i;
-  }
-  out << ' ' << &in << ")";
-  return out;
-}
-
-
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = (Client*)p;
@@ -946,7 +908,7 @@ int Client::choose_target_mds(MetaRequest *req)
         /* In most cases there will only be one dentry, so getting it
          * will be the correct action. If there are multiple hard links,
          * I think the MDS should be able to redirect as needed*/
-	in = dentry_of(in)->dir->parent_inode;
+	in = in->get_first_parent()->dir->parent_inode;
       else {
         ldout(cct, 10) << "got unlinked inode, can't look at parent" << dendl;
         break;
@@ -1785,7 +1747,7 @@ void Client::close_dir(Dir *dir)
   Inode *in = dir->parent_inode;
   assert (in->dn_set.size() < 2); //dirs can't be hard-linked
   if (!in->dn_set.empty())
-    dentry_of(in)->put();   // unpin dentry
+    in->get_first_parent()->put();   // unpin dentry
   
   delete in->dir;
   in->dir = 0;
@@ -3520,7 +3482,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     if (dir->dn_set.empty())
       r = -ENOENT;
     else
-      *target = dentry_of(dir)->dir->parent_inode; //dirs can't be hard-linked
+      *target = dir->get_first_parent()->dir->parent_inode; //dirs can't be hard-linked
     goto done;
   }
 
@@ -4470,7 +4432,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   if (dirp->offset == 1) {
     ldout(cct, 15) << " including .." << dendl;
     assert(!diri->dn_set.empty());
-    Inode *in = dentry_of(diri)->inode;
+    Inode *in = diri->get_first_parent()->inode;
     fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
 
     fill_stat(in, &st);
@@ -4867,7 +4829,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-  if (in->caps_issued_mask(want)) {
+  if ((flags & O_TRUNC) == 0 &&
+      in->caps_issued_mask(want)) {
     // update wanted?
     check_caps(in, true);
   } else {
@@ -4877,6 +4840,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     req->set_filepath(path); 
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
+    req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->inode = in;
     result = make_request(req, uid, gid);
   }
@@ -5521,7 +5485,7 @@ void Client::getcwd(string& dir)
   Inode *in = cwd;
   while (in->ino != CEPH_INO_ROOT) {
     assert(in->dn_set.size() < 2); // dirs can't be hard-linked
-    Dentry *dn = dentry_of(in);
+    Dentry *dn = in->get_first_parent();
     if (!dn) {
       // look it up
       ldout(cct, 10) << "getcwd looking up parent for " << *in << dendl;

@@ -299,6 +299,34 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   resend_routed_requests();
 }
 
+bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
+{
+  if (s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))
+    return true;
+
+  for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
+       p != s->caps.cmd_allow.end();
+       ++p) {
+    list<string>::iterator q;
+    unsigned i;
+    dout(0) << "cmd " << cmd << " vs " << *p << dendl;
+    for (q = p->begin(), i = 0; q != p->end() && i < cmd.size(); ++q, ++i) {
+      if (*q == "*")
+	continue;
+      if (*q == "...") {
+	i = cmd.size() - 1;
+	continue;
+      }	
+      if (*q != cmd[i])
+	break;
+    }
+    if (q == p->end() && i == cmd.size())
+      return true;   // match
+  }
+
+  return false;
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
@@ -308,8 +336,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session ||
-      !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
+  if (!session || !_allowed_command(session, m->cmd)) {
     string rs = "Access denied";
     reply_command(m, -EACCES, rs, 0);
     return;
