@@ -574,9 +574,6 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 				    Inode *in, utime_t from, int mds, bool set_offset,
 				    Dentry *old_dentry)
 {
-  utime_t dttl = from;
-  dttl += (float)dlease->duration_ms / 1000.0;
-  
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
@@ -619,11 +616,20 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
   }
 
+  update_dentry_lease(dn, dlease, from, mds);
+  return dn;
+}
+
+void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds)
+{
+  utime_t dttl = from;
+  dttl += (float)dlease->duration_ms / 1000.0;
+  
   assert(dn && dn->inode);
 
   if (dlease->mask & CEPH_LOCK_DN) {
     if (dttl > dn->lease_ttl) {
-      ldout(cct, 10) << "got dentry lease on " << dname
+      ldout(cct, 10) << "got dentry lease on " << dn->name
 	       << " dur " << dlease->duration_ms << "ms ttl " << dttl << dendl;
       dn->lease_ttl = dttl;
       dn->lease_mds = mds;
@@ -631,8 +637,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       dn->lease_gen = mds_sessions[mds]->cap_gen;
     }
   }
-  dn->cap_shared_gen = dir->parent_inode->shared_gen;
-  return dn;
+  dn->cap_shared_gen = dn->dir->parent_inode->shared_gen;
 }
 
 

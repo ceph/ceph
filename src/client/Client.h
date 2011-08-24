@@ -444,6 +444,7 @@ protected:
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			      Inode *in, utime_t from, int mds, bool set_offset,
 			      Dentry *old_dentry = NULL);
+  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds);
 
 
   // ----------------------
