@@ -4805,6 +4805,11 @@ struct C_MDS_LoggedRmdirRollback : public Context {
 
 void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 {
+  // unlink the other rollback methods, the rmdir rollback is only
+  // needed to record the subtree changes in the journal for inode
+  // replicas who are auth for empty dirfrags.  no actual changes to
+  // the file system are taking place here, so there is no Mutation.
+
   rmdir_rollback rollback;
   bufferlist::iterator p = rbl.begin();
   ::decode(rollback, p);
@@ -4814,8 +4819,6 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     assert(mds->is_resolve());
     mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
   }
-  Mutation *mut = new Mutation(rollback.reqid);
-  mut->ls = mds->mdlog->get_current_segment();
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
   CDentry *dn = dir->lookup(rollback.src_dname);
