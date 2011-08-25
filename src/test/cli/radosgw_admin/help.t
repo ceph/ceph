@@ -15,11 +15,12 @@
     buckets list               list buckets
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
+    bucket stats               returns bucket statistics
     pool info                  show pool information
     pool create                generate pool information (requires bucket)
     policy                     read bucket/object policy
     log show                   dump a log from specific object or (bucket + date
-                               + pool-id)
+                               + bucket-id)
     temp remove                remove temporary objects that were created up to
                                specified date (and optional time)
   options:
@@ -40,7 +41,7 @@
      --object=<object>
      --date=<yyyy-mm-dd>
      --time=<HH:MM:SS>
-     --pool-id=<pool-id>
+     --bucket-id=<bucket-id>
      --format=<format>         specify output format for certain operations: xml,
                                json
      --purge-data              when specified, user removal will also purge all the
