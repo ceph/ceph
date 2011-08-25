@@ -727,7 +727,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     switch (op.op.op) {
     case CEPH_OSD_OP_PGLS:
     case CEPH_OSD_OP_PGLS_FILTER:
-      out << " cookie " << op.op.pgls.cookie;
       out << " start_epoch " << op.op.pgls.start_epoch;
       break;
     }

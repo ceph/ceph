@@ -261,7 +261,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	// read into a buffer
         vector<hobject_t> sentries;
         PGLSResponse response;
-        response.handle = (collection_list_handle_t)(uint64_t)(p->op.pgls.cookie);
+	::decode(response.handle, bp);
 
 	// reset cookie?
 	if (p->op.pgls.start_epoch &&
@@ -269,36 +269,34 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	  dout(10) << " pgls sequence started epoch " << p->op.pgls.start_epoch
 		   << " < same_primary_since " << info.history.same_primary_since
 		   << ", resetting cookie" << dendl;
-	  response.handle = 0;
+	  response.handle = collection_list_handle_t();
 	}
 
-	uint64_t high_bit = 1ull << 63;
-	if ((response.handle & high_bit) == 0) {
+	if (response.handle.in_missing_set) {
 	  // it's an offset into the missing set
-	  version_t v = response.handle;
+	  version_t v = response.handle.index;
 	  dout(10) << " handle low/missing " << v << dendl;
 	  map<version_t, hobject_t>::iterator mp = missing.rmissing.lower_bound(v);
 	  result = 0;
 	  while (sentries.size() < p->op.pgls.count) {
 	    if (mp == missing.rmissing.end()) {
 	      dout(10) << " handle finished low/missing, moving to high/ondisk" << dendl;
-	      response.handle = high_bit;
+	      response.handle.in_missing_set = false;
 	      break;
 	    }
 	    sentries.push_back(mp->second);
-	    response.handle = mp->first + 1;
+	    response.handle.index = mp->first + 1;
 	  }
 	}
 	if (sentries.size() < p->op.pgls.count &&
-	    (response.handle & high_bit)) {
+	    !response.handle.in_missing_set) {
 	  // it's a readdir cookie
-	  response.handle &= high_bit - 1ull;
 	  dout(10) << " handle high/missing " << response.handle << dendl;
 	  osr.flush();  // order wrt preceeding writes
 	  result = osd->store->collection_list_partial(coll, snapid,
 						       sentries, p->op.pgls.count - sentries.size(),
 						       &response.handle);
-	  response.handle |= high_bit;
+	  response.handle.in_missing_set = false;
 	}
 
 	if (result == 0) {

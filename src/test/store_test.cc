@@ -189,7 +189,7 @@ TEST_F(StoreTest, ManyObjectTest) {
 
   objects.clear();
   listed.clear();
-  collection_list_handle_t handle = 0;
+  collection_list_handle_t handle;
   while (1) {
     r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
     ASSERT_EQ(r, 0);
@@ -360,7 +360,7 @@ public:
       cond.Wait(lock);
     vector<hobject_t> objects;
     set<hobject_t> objects_set;
-    collection_list_handle_t handle = 0;
+    collection_list_handle_t handle;
     while (1) {
       cerr << "scanning..." << std::endl;
       int r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
@@ -486,7 +486,7 @@ TEST_F(StoreTest, HashCollisionTest) {
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
   listed.clear();
-  collection_list_handle_t handle = 0;
+  collection_list_handle_t handle;
   while (1) {
     r = store->collection_list_partial(cid, CEPH_NOSNAP, objects, 50, &handle);
     ASSERT_EQ(r, 0);

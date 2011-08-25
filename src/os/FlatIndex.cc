@@ -363,64 +363,7 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
 int FlatIndex::collection_list_partial(snapid_t seq, int max_count,
 				       vector<hobject_t> *ls, 
 				       collection_list_handle_t *handle) {
-  char dir_name[PATH_MAX], buf[PATH_MAX];
-  strncpy(dir_name, base_path.c_str(), sizeof(dir_name));
-
-  DIR *dir = NULL;
-
-  struct dirent *de;
-  bool end;
-  
-  dir = ::opendir(dir_name);
-
-  if (!dir) {
-    int err = -errno;
-    return err;
-  }
-
-  if (handle && *handle) {
-    seekdir(dir, *handle);
-    *handle = 0;
-  }
-
-  char new_name[PATH_MAX];
-
-  int i=0;
-  while (i < max_count) {
-    errno = 0;
-    end = false;
-    ::readdir_r(dir, (struct dirent*)buf, &de);
-    int err = errno;
-    if (!de && err) {
-      ::closedir(dir);
-      return -err;
-    }
-    if (!de) {
-      end = true;
-      break;
-    }
-
-    // parse
-    if (de->d_name[0] == '.') {
-      continue;
-    }
-    lfn_translate(dir_name, de->d_name, new_name, sizeof(new_name));
-    hobject_t o;
-    if (parse_object(new_name, o)) {
-      get_hobject_from_oinfo(dir_name, de->d_name, &o);
-      if (o.snap >= seq) {
-	ls->push_back(o);
-	i++;
-      }
-    }
-  }
-
-  if (handle && !end) {
-    *handle = (collection_list_handle_t)telldir(dir);
-  }
-
-  ::closedir(dir);
-
+  assert(0); // Should not be called
   return 0;
 }
 

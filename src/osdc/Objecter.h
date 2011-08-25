@@ -125,32 +125,32 @@ struct ObjectOperation {
     ops[s].op.watch.flag = flag;
     ops[s].data.append(inbl);
   }
-  void add_pgls(int op, uint64_t count, uint64_t cookie, epoch_t start_epoch) {
+  void add_pgls(int op, uint64_t count, collection_list_handle_t cookie, epoch_t start_epoch) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
-    ops[s].op.pgls.cookie = cookie;
     ops[s].op.pgls.start_epoch = start_epoch;
+    ::encode(cookie, ops[s].data);
   }
-  void add_pgls_filter(int op, uint64_t count, bufferlist& filter, uint64_t cookie, epoch_t start_epoch) {
+  void add_pgls_filter(int op, uint64_t count, bufferlist& filter, collection_list_handle_t cookie, epoch_t start_epoch) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
-    ops[s].op.pgls.cookie = cookie;
     ops[s].op.pgls.start_epoch = start_epoch;
     string cname = "pg";
     string mname = "filter";
     ::encode(cname, ops[s].data);
     ::encode(mname, ops[s].data);
+    ::encode(cookie, ops[s].data);
     ops[s].data.append(filter);
   }
 
   // ------
 
   // pg
-  void pg_ls(uint64_t count, bufferlist& filter, uint64_t cookie, epoch_t start_epoch) {
+  void pg_ls(uint64_t count, bufferlist& filter, collection_list_handle_t cookie, epoch_t start_epoch) {
     if (filter.length() == 0)
       add_pgls(CEPH_OSD_OP_PGLS, count, cookie, start_epoch);
     else
@@ -448,7 +448,7 @@ public:
   // Pools and statistics 
   struct ListContext {
     int current_pg;
-    uint64_t cookie;
+    collection_list_handle_t cookie;
     epoch_t current_pg_epoch;
     int starting_pg_num;
     bool at_end;
@@ -462,7 +462,7 @@ public:
 
     bufferlist extra_info;
 
-    ListContext() : current_pg(0), cookie(0), current_pg_epoch(0), starting_pg_num(0),
+    ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),
 		    pool_snap_seq(0), max_entries(0) {}
   };

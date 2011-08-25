@@ -10,13 +10,15 @@ struct PGLSResponse {
   list<object_t> entries;
 
   void encode(bufferlist& bl) const {
-    ::encode((uint64_t)handle, bl);
+		__u8 v = 0;
+		::encode(v, bl);
+    ::encode(handle, bl);
     ::encode(entries, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    uint64_t tmp;
-    ::decode(tmp, bl);
-    handle = (collection_list_handle_t)tmp;
+		__u8 v;
+		::decode(v, bl);
+    ::decode(handle, bl);
     ::decode(entries, bl);
   }
 };

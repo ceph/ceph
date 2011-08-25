@@ -123,13 +123,15 @@ int HashIndex::_lookup(const hobject_t &hoid,
 
 static void split_handle(collection_list_handle_t handle, 
 			 uint32_t *hash, uint32_t *index) {
-  *hash = handle & 
-    ~((~static_cast<collection_list_handle_t>(0)) << (sizeof(handle) * 4));
-  *index = handle >> (sizeof(handle) * 4);
+  *hash = handle.hash;
+  *index = handle.index;
 }
 
 static collection_list_handle_t form_handle(uint32_t hash, uint32_t index) {
-  return ((static_cast<uint64_t>(index)) << sizeof(hash) * 8) + hash;
+  collection_list_handle_t handle;
+  handle.hash = hash;
+  handle.index = index;
+  return handle;
 }
 
 int HashIndex::_collection_list_partial(snapid_t seq, int max_count,

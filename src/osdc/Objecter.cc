@@ -956,7 +956,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     // start reading from the beginning; the pgs have changed
     ldout(cct, 10) << "The placement groups have changed, restarting with " << pg_num << dendl;
     list_context->current_pg = 0;
-    list_context->cookie = 0;
+    list_context->cookie = collection_list_handle_t();
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
@@ -999,7 +999,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   if (!iter.end()) {
     ::decode(extra_info, iter);
   }
-  list_context->cookie = (uint64_t)response.handle;
+  list_context->cookie = response.handle;
   if (!list_context->current_pg_epoch) {
     // first pgls result, set epoch marker
     ldout(cct, 20) << "first pgls piece, reply_epoch is " << reply_epoch << dendl;
@@ -1028,7 +1028,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   list_context->current_pg_epoch = 0;
   ldout(cct, 20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
   if (list_context->current_pg < list_context->starting_pg_num){ // we have more pgs to go through
-    list_context->cookie = 0;
+    list_context->cookie = collection_list_handle_t();
     delete bl;
     list_objects(list_context, final_finish);
     return;

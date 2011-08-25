@@ -34,8 +34,6 @@
 using std::vector;
 using std::string;
 
-typedef uint64_t collection_list_handle_t;
-
 /*
  * low-level interface to the local OSD file system
  */

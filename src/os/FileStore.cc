@@ -3687,7 +3687,7 @@ bool FileStore::collection_empty(coll_t c)
   if (r < 0)
     return false;
   vector<hobject_t> ls;
-  collection_list_handle_t handle = 0;
+  collection_list_handle_t handle;
   r = index->collection_list_partial(0, 1, &ls, &handle);
   if (r < 0)
     return false;
