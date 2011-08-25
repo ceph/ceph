@@ -22,13 +22,6 @@ class Thrasher(gevent.Greenlet):
         gevent.Greenlet.__init__(self, self.do_thrash)
         self.start()
 
-    def wait_till_clean(self):
-        self.log("Waiting until clean")
-        while not self.ceph_manager.is_clean():
-            time.sleep(3)
-            print "..."
-        self.log("Clean!")
-
     def remove_osd(self):
         osd = random.choice(self.in_osds)
         self.log("Removing osd %s"%(str(osd),))
@@ -58,7 +51,7 @@ class Thrasher(gevent.Greenlet):
         while not self.stopping:
             self.log(" ".join([str(x) for x in ["in_osds: ", self.in_osds, " out_osds: ", self.out_osds]]))
             if random.uniform(0,1) < (float(DELAY)/CLEANINT):
-                self.wait_till_clean()
+                self.ceph_manager.wait_till_clean()
             if (len(self.out_osds) == 0):
                 self.remove_osd()
             elif (len(self.in_osds) <= 2):
