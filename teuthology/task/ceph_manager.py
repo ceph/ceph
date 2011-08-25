@@ -4,8 +4,11 @@ import re
 import gevent
 from orchestra import run
 
+CLEANINT=60
+DELAY=5
+
 class Thrasher(gevent.Greenlet):
-    def __init__(self, manager, logger=None):
+    def __init__(self, manager, config, logger=None):
         self.ceph_manager = manager
         self.ceph_manager.wait_till_clean()
         osd_status = self.ceph_manager.get_osd_status()
@@ -13,12 +16,15 @@ class Thrasher(gevent.Greenlet):
         self.out_osds = osd_status['out']
         self.stopping = False
         self.logger = logger
+        self.config = config
         if self.logger != None:
             self.log = lambda x: self.logger.info(x)
         else:
             def tmp(x):
                 print x
             self.log = tmp
+        if self.config is None:
+            self.config = dict()
         gevent.Greenlet.__init__(self, self.do_thrash)
         self.start()
 
@@ -45,21 +51,31 @@ class Thrasher(gevent.Greenlet):
         self.get()
 
     def do_thrash(self):
-        CLEANINT=60
-        DELAY=5
+        cleanint = CLEANINT
+        delay = DELAY
+        minin = 2
+        minout = 0
+        if self.config.get("cleanInterval"):
+            cleanint = self.config["cleanInterval"]
+        if self.config.get("opDelay"):
+            delay = self.config["opDelay"]
+        if self.config.get("minIn"):
+            minin = self.config["minIn"]
+        if self.config.get("minOut"):
+            minout = self.config["minOut"]
         self.log("starting do_thrash")
         while not self.stopping:
             self.log(" ".join([str(x) for x in ["in_osds: ", self.in_osds, " out_osds: ", self.out_osds]]))
-            if random.uniform(0,1) < (float(DELAY)/CLEANINT):
+            if random.uniform(0,1) < (float(delay)/cleanint):
                 self.ceph_manager.wait_till_clean()
-            if (len(self.out_osds) == 0):
+            if (len(self.out_osds) == minout):
                 self.remove_osd()
-            elif (len(self.in_osds) <= 2):
+            elif (len(self.in_osds) <= minin):
                 self.add_osd()
             else:
                 x = random.choice([self.remove_osd, self.add_osd])
                 x()
-            time.sleep(DELAY)
+            time.sleep(delay)
 
 class CephManager:
     def __init__(self, controller, logger=None):
