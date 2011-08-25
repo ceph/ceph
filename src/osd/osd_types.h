@@ -517,15 +517,15 @@ struct pg_pool_t {
   bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
   bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
 
-  int get_pg_num() const { return v.pg_num; }
-  int get_pgp_num() const { return v.pgp_num; }
-  int get_lpg_num() const { return v.lpg_num; }
-  int get_lpgp_num() const { return v.lpgp_num; }
+  unsigned get_pg_num() const { return v.pg_num; }
+  unsigned get_pgp_num() const { return v.pgp_num; }
+  unsigned get_lpg_num() const { return v.lpg_num; }
+  unsigned get_lpgp_num() const { return v.lpgp_num; }
 
-  int get_pg_num_mask() const { return pg_num_mask; }
-  int get_pgp_num_mask() const { return pgp_num_mask; }
-  int get_lpg_num_mask() const { return lpg_num_mask; }
-  int get_lpgp_num_mask() const { return lpgp_num_mask; }
+  unsigned get_pg_num_mask() const { return pg_num_mask; }
+  unsigned get_pgp_num_mask() const { return pgp_num_mask; }
+  unsigned get_lpg_num_mask() const { return lpg_num_mask; }
+  unsigned get_lpgp_num_mask() const { return lpgp_num_mask; }
 
   int calc_bits_of(int t);
   void calc_pg_masks();
