@@ -700,9 +700,10 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   else
     s->op = OP_UNKNOWN;
 
+  init_entities_from_header(s);
   switch (s->op) {
   case OP_PUT:
-    if (!s->length)
+    if (s->object_str.size() && !s->length)
       ret = -ERR_LENGTH_REQUIRED;
     else if (*s->length == '\0')
       ret = -EINVAL;
@@ -713,7 +714,6 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     break;
   }
 
-  init_entities_from_header(s);
   if (ret)
     return ret;
 
