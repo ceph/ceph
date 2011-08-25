@@ -1416,6 +1416,8 @@ int RGWRados::get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
+  if (r == -ENOENT)
+    r = -ERR_NO_SUCH_BUCKET;
   if (r < 0)
     return r;
 
