@@ -3213,7 +3213,6 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   }
 
   // validate layout
-  // FIXME: only set striping parameters, for now.
   ceph_file_layout layout;
   memset(&layout, 0, sizeof(layout));
   layout.fl_cas_hash = 0; // default value; "none"
@@ -3226,6 +3225,14 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
   if (req->head.args.setlayout.layout.fl_stripe_count > 0)
     layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  if (req->head.args.setlayout.layout.fl_cas_hash > 0)
+    layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
+  if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
+    layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_pg_preferred != (__le32)-1)
+    layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
+  if (req->head.args.setlayout.layout.fl_pg_pool > 0)
+    layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << "bad layout" << dendl;
     reply_request(mdr, -EINVAL);
