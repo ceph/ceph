@@ -245,7 +245,8 @@ int MonClient::get_monmap_privately()
   if (temp_msgr) {
     monc_lock.Unlock();
     messenger->shutdown();
-    smessenger->wait();
+    if (smessenger)
+      smessenger->wait();
     messenger->destroy();
     messenger = 0;
     monc_lock.Lock();
