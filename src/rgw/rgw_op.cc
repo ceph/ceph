@@ -1511,7 +1511,7 @@ int RGWHandler::do_read_permissions(bool only_bucket)
       ret = -EACCES;
   }
 
-  if (!s->bucket.name.empty()) {
+  if (ret == 0 && !s->bucket.name.empty()) {
     ret = rgwstore->get_bucket_id(s->bucket, &s->pool_id);
     if (ret < 0)
       return ret;
