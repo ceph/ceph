@@ -3213,11 +3213,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   }
 
   // validate layout
-  ceph_file_layout layout;
-  memset(&layout, 0, sizeof(layout));
-  layout.fl_cas_hash = 0; // default value; "none"
-  layout.fl_pg_pool = 0; // default value "data" pool
-  layout.fl_pg_preferred = -1; // default value; "none"
+  ceph_file_layout layout = cur->get_projected_inode()->layout;
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
     layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
