@@ -3715,8 +3715,11 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
 
 int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
 {
+  char new_coll[PATH_MAX], old_coll[PATH_MAX];
+  get_cdir(cid, old_coll, sizeof(old_coll));
+  get_cdir(ncid, new_coll, sizeof(new_coll));
   int ret = 0;
-  if (::rename(cid.c_str(), ncid.c_str())) {
+  if (::rename(old_coll, new_coll)) {
     ret = errno;
   }
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
