@@ -846,7 +846,7 @@ struct pg_stat_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 5;
+    __u8 v = 6;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -868,7 +868,7 @@ struct pg_stat_t {
   void decode(bufferlist::iterator &bl) {
     __u8 v;
     ::decode(v, bl);
-    if (v > 5)
+    if (v > 6)
       throw buffer::malformed_input("unknown pg_stat_t encoding version > 4");
 
     ::decode(version, bl);
@@ -877,7 +877,13 @@ struct pg_stat_t {
     ::decode(log_start, bl);
     ::decode(ondisk_log_start, bl);
     ::decode(created, bl);
-    ::decode(parent, bl);
+    if (v < 6) {
+      old_pg_t opgid;
+      ::decode(opgid, bl);
+      parent = opgid;
+    } else {
+      ::decode(parent, bl);
+    }
     ::decode(parent_split_bits, bl);
     ::decode(last_scrub, bl);
     ::decode(last_scrub_stamp, bl);
