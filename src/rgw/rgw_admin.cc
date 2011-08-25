@@ -1139,6 +1139,7 @@ int main(int argc, char **argv)
     formatter->dump_format("Bucket", "%s", bucket.name.c_str());
     formatter->dump_format("Pool", "%s", bucket.pool.c_str());
     formatter->dump_int("ID", bucket_id);
+    formatter->dump_format("Owner", "%s", pool_info.owner.c_str());
     formatter->open_array_section("Categories");
     for (iter = stats.begin(); iter != stats.end(); ++iter) {
       RGWBucketStats& s = iter->second;
