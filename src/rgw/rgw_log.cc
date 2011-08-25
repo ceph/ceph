@@ -77,7 +77,7 @@ int rgw_log_op(struct req_state *s)
   gmtime_r(&t, &bdt);
   
   char buf[entry.bucket.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, entry.bucket.c_str());
+  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, (long long)s->pool_id, entry.bucket.c_str());
   string oid(buf);
   rgw_obj obj(log_bucket, oid);
 
@@ -113,7 +113,7 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   gmtime_r(&t, &bdt);
 
   char buf[obj.bucket.name.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%d-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, s->pool_id, obj.bucket.name.c_str());
+  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, (long long)s->pool_id, obj.bucket.name.c_str());
   string oid(buf);
   rgw_obj log_obj(intent_log_bucket, oid);
 
