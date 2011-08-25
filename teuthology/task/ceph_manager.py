@@ -29,11 +29,22 @@ class Thrasher(gevent.Greenlet):
         self.start()
 
     def remove_osd(self):
+        chance_down = 0
+        if self.config.get("chanceDown"):
+            if isinstance(self.config["chanceDown"], int):
+                chance_down = float(self.config["chanceDown"])/100
+            else:
+                chance_down = self.config["chanceDown"]
         osd = random.choice(self.in_osds)
-        self.log("Removing osd %s"%(str(osd),))
-        self.in_osds.remove(osd)
-        self.out_osds.append(osd)
-        self.ceph_manager.mark_out_osd(osd)
+        if random.uniform(0,1) < chance_down:
+            self.log("Marking osd {id_} down".format(id_=osd))
+            self.ceph_manager.mark_down_osd(osd)
+        else:
+            self.log("Removing osd %s"%(str(osd),))
+            self.ceph_manager.mark_out_osd(osd)
+            self.in_osds.remove(osd)
+            self.out_osds.append(osd)
+
 
     def add_osd(self):
         osd = random.choice(self.out_osds)
@@ -165,6 +176,9 @@ class CephManager:
 
     def mark_out_osd(self, osd):
         self.raw_cluster_cmd("osd out %s"%(str(osd,)))
+
+    def mark_down_osd(self, osd):
+        self.raw_cluster_cmd("osd down %s"%(str(osd,)))
 
     def mark_in_osd(self, osd):
         self.raw_cluster_cmd("osd in %s"%(str(osd,)))
