@@ -19,10 +19,16 @@ layout.stripe_unit:   1048576
 layout.stripe_count:  2
 layout.preferred_osd: -1" > file2_layout
 echo "layout.data_pool:     3
-layout.object_size:   2097152
+layout.object_size:   1048576
 layout.stripe_unit:   1048576
-layout.stripe_count:  2
+layout.stripe_count:  1
 layout.preferred_osd: -1" > file3_layout
+echo "layout.data_pool:     0
+layout.object_size:   1048576
+layout.stripe_unit:   262144
+layout.stripe_count:  1
+layout.preferred_osd: -1" > file4_layout
+
 
 mkdir layout_test
 cephfs layout_test show_layout
@@ -47,10 +53,18 @@ cephfs layout_test/file3 show_layout > temp
 diff new_layout temp || return 1
 ceph osd pool create newpool || true
 ceph mds add_data_pool 3 || true
-cephfs layout_test/file3 set_layout -p 3 -u $MB -c 2 -s $twoMB
+cephfs layout_test/file3 set_layout -p 3
 cephfs layout_test/file3 show_layout > temp
 diff file3_layout temp || return 1
 echo "hello, I'm a file in pool3" > layout_test/file3
+
+touch layout_test/file4
+cephfs layout_test/file4 show_layout > temp
+diff new_layout temp || return 1
+cephfs layout_test/file4 set_layout -u 262144
+cephfs layout_test/file4 show_layout > temp
+diff file4_layout temp || return 1
+echo "hello, I'm a file with a small stripe unit!" > layout_test/file3
 
 sync
 echo "OK"
