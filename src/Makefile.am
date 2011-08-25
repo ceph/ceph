@@ -97,6 +97,10 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
+fsconverter_SOURCES = fsconverter.cc
+fsconverter_LDADD = libos.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += fsconverter
+
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 sbin_PROGRAMS += mount.ceph
@@ -114,7 +118,7 @@ csyn_SOURCES = csyn.cc client/SyntheticClient.cc
 csyn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += csyn
 
-core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
+core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn fsconverter
 
 
 # fuse targets?
@@ -1352,7 +1356,7 @@ noinst_HEADERS = \
 	test/rados-api/test.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
-	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
+	$(fsconverter_SOURCES) $(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(cosd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \

@@ -46,6 +46,7 @@
 /test_store
 /test_libcommon_build
 /test_mutate
+/fsconverter
 dev
 mondata
 log
