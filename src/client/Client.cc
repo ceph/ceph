@@ -1959,7 +1959,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
 	int revoking = implemented & ~have;
 	ldout(cct, 10) << "get_caps " << *in << " have " << ccap_string(have)
 		 << " need " << ccap_string(need) << " want " << ccap_string(want)
-		 << " but not  " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
+		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
 		 << dendl;
 	if ((revoking & butnot) == 0) {
 	  *got = need | (have & want);
@@ -2378,12 +2378,11 @@ public:
   }
 };
 
-
 bool Client::_flush(Inode *in)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
-  if (!in->oset.dirty_tx && in->oset.uncommitted.empty()) {
+  if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     return true;
   }
@@ -5329,7 +5328,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   if (cct->_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
-    if (!in->oset.dirty_tx && in->oset.uncommitted.empty())
+    if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);

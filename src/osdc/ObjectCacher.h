@@ -148,12 +148,12 @@ class ObjectCacher {
     tid_t last_ack_tid;    // last update acked.
     tid_t last_commit_tid; // last update commited.
 
+    int dirty_or_tx;
+
     map< tid_t, list<Context*> > waitfor_ack;
     map< tid_t, list<Context*> > waitfor_commit;
     list<Context*> waitfor_rd;
     list<Context*> waitfor_wr;
-
-    xlist<Object*>::item uncommitted_item;
 
     // lock
     static const int LOCK_NONE = 0;
@@ -177,13 +177,14 @@ class ObjectCacher {
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
-      uncommitted_item(this),
+      dirty_or_tx(0),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
       // add to set
       os->objects.push_back(&set_item);
     }
     ~Object() {
       assert(data.empty());
+      assert(dirty_or_tx == 0);
       set_item.remove_myself();
     }
 
@@ -199,7 +200,7 @@ class ObjectCacher {
       return data.empty() && lock_state == LOCK_NONE &&
         waitfor_ack.empty() && waitfor_commit.empty() &&
         waitfor_rd.empty() && waitfor_wr.empty() &&
-	!uncommitted_item.is_on_list();
+	dirty_or_tx == 0;
     }
 
     // bh
@@ -257,12 +258,11 @@ class ObjectCacher {
 
     int poolid;
     xlist<Object*> objects;
-    xlist<Object*> uncommitted;
 
-    int dirty_tx;
+    int dirty_or_tx;
 
     ObjectSet(void *p, int _poolid, inodeno_t i) : parent(p), ino(i), truncate_seq(0),
-                                      truncate_size(0), poolid(_poolid), dirty_tx(0) {}
+                                      truncate_size(0), poolid(_poolid), dirty_or_tx(0) {}
   };
 
 
@@ -344,11 +344,13 @@ class ObjectCacher {
       break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty += bh->length(); 
-      bh->ob->oset->dirty_tx += bh->length();
+      bh->ob->dirty_or_tx += bh->length();
+      bh->ob->oset->dirty_or_tx += bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx += bh->length(); 
-      bh->ob->oset->dirty_tx += bh->length();
+      bh->ob->dirty_or_tx += bh->length();
+      bh->ob->oset->dirty_or_tx += bh->length();
       break;
     case BufferHead::STATE_RX:
       stat_rx += bh->length();
@@ -366,11 +368,13 @@ class ObjectCacher {
       break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty -= bh->length(); 
-      bh->ob->oset->dirty_tx -= bh->length();
+      bh->ob->dirty_or_tx -= bh->length();
+      bh->ob->oset->dirty_or_tx -= bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx -= bh->length(); 
-      bh->ob->oset->dirty_tx -= bh->length();
+      bh->ob->dirty_or_tx -= bh->length();
+      bh->ob->oset->dirty_or_tx -= bh->length();
       break;
     case BufferHead::STATE_RX:
       stat_rx -= bh->length();
@@ -674,6 +678,15 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
   out << "]";
   return out;
+}
+
+inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
+{
+  return out << "objectset[" << os.ino
+	     << " ts " << os.truncate_seq << "/" << os.truncate_size
+	     << " objects " << os.objects.size()
+	     << " dirty_or_tx " << os.dirty_or_tx
+	     << "]";
 }
 
 inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
