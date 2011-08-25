@@ -453,7 +453,7 @@ public:
     int starting_pg_num;
     bool at_end;
 
-    int pool_id;
+    int64_t pool_id;
     int pool_snap_seq;
     int max_entries;
     std::list<object_t> list;
@@ -505,7 +505,7 @@ public:
 
   struct PoolOp {
     tid_t tid;
-    int pool;
+    int64_t pool;
     string name;
     Context *onfinish;
     int pool_op;
@@ -1086,15 +1086,15 @@ private:
 private:
   void pool_op_submit(PoolOp *op);
 public:
-  int create_pool_snap(int pool, string& snapName, Context *onfinish);
-  int allocate_selfmanaged_snap(int pool, snapid_t *psnapid, Context *onfinish);
-  int delete_pool_snap(int pool, string& snapName, Context *onfinish);
-  int delete_selfmanaged_snap(int pool, snapid_t snap, Context *onfinish);
+  int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
+  int allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid, Context *onfinish);
+  int delete_pool_snap(int64_t pool, string& snapName, Context *onfinish);
+  int delete_selfmanaged_snap(int64_t pool, snapid_t snap, Context *onfinish);
 
   int create_pool(string& name, Context *onfinish, uint64_t auid=0,
 		  int crush_rule=-1);
-  int delete_pool(int pool, Context *onfinish);
-  int change_pool_auid(int pool, Context *onfinish, uint64_t auid);
+  int delete_pool(int64_t pool, Context *onfinish);
+  int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
 

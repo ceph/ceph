@@ -243,9 +243,9 @@ public:
   }
 
   /* modifiers */
-  int add_rule(int len, int pool, int type, int minsize, int maxsize, int ruleno) {
+  int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len, pool, type, minsize, maxsize);
+    crush_rule *n = crush_make_rule(len, ruleset, type, minsize, maxsize);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
   }
@@ -378,9 +378,9 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int pool, int type, int size) {
+  int find_rule(int ruleset, int type, int size) {
     if (!crush) return -1;
-    return crush_find_rule(crush, pool, type, size);
+    return crush_find_rule(crush, ruleset, type, size);
   }
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
 	       vector<__u32>& weight) {

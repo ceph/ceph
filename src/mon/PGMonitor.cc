@@ -323,7 +323,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
        p++) {
-    int poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
+    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
     if (poolid < 0)
       continue;
     if (pg_map.pg_pool_sum.count(poolid) == 0)
@@ -620,10 +620,10 @@ bool PGMonitor::register_new_pgs()
   OSDMap *osdmap = &mon->osdmon()->osdmap;
 
   int created = 0;
-  for (map<int,pg_pool_t>::iterator p = osdmap->pools.begin();
+  for (map<int64_t,pg_pool_t>::iterator p = osdmap->pools.begin();
        p != osdmap->pools.end();
        p++) {
-    int poolid = p->first;
+    int64_t poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
     if (!osdmap->crush.rule_exists(ruleno)) 

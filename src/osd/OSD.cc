@@ -4866,7 +4866,7 @@ void OSD::handle_op(MOSDOp *op)
 
   // calc actual pgid
   pg_t pgid = op->get_pg();
-  int pool = pgid.pool();
+  int64_t pool = pgid.pool();
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
       osdmap->have_pg_pool(pool))
     pgid = osdmap->raw_pg_to_pg(pgid);

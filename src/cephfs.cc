@@ -36,7 +36,7 @@ using namespace std;
 void usage();
 int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
                  int *stripe_unit, int *stripe_count,
-                 int *object_size, int *pool, int* osd, int *file_offset, bool *dir);
+                 int *object_size, int64_t *pool, int* osd, int *file_offset, bool *dir);
 int get_layout(int fd, struct ceph_ioctl_layout *layout);
 int get_location(int fd, struct ceph_ioctl_dataloc *location);
 
@@ -49,7 +49,7 @@ int main (int argc, char **argv) {
   int stripe_unit = 0;
   int stripe_count = 0;
   int object_size = 0;
-  int pool = 0;
+  int64_t pool = 0;
   int osd = -1;
   int file_offset = 0;
   bool dir = false;
@@ -143,7 +143,7 @@ void usage() {
 
 int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
                  int *stripe_unit, int *stripe_count,
-                 int *object_size, int *pool, int* osd, int *file_offset,
+                 int *object_size, int64_t *pool, int* osd, int *file_offset,
                  bool *dir) {
   // look through the options, make sure they're valid,
   // and set the variables from them

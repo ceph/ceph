@@ -26,7 +26,7 @@ TEST(LibRadosPools, PoolList) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-int rados_pool_lookup(rados_t cluster, const char *pool_name);
+int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
 
 TEST(LibRadosPools, PoolLookup) {
   rados_t cluster;
@@ -40,11 +40,11 @@ TEST(LibRadosPools, PoolLookup2) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  int pool_id = rados_pool_lookup(cluster, pool_name.c_str());
+  int64_t pool_id = rados_pool_lookup(cluster, pool_name.c_str());
   ASSERT_GT(pool_id, 0);
   rados_ioctx_t ioctx;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
-  int pool_id2 = rados_ioctx_get_id(ioctx);
+  int64_t pool_id2 = rados_ioctx_get_id(ioctx);
   ASSERT_EQ(pool_id, pool_id2);
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));

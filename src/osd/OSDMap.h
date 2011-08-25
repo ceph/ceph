@@ -276,9 +276,9 @@ private:
   vector<osd_info_t> osd_info;
   map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
-  map<int,pg_pool_t> pools;
+  map<int64_t,pg_pool_t> pools;
   map<int32_t,string> pool_name;
-  map<string,int> name_pool;
+  map<string,int64_t> name_pool;
 
   hash_map<entity_addr_t,utime_t> blacklist;
 
@@ -309,7 +309,7 @@ private:
 
   void set_epoch(epoch_t e) {
     epoch = e;
-    for (map<int,pg_pool_t>::iterator p = pools.begin();
+    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
 	 p != pools.end();
 	 p++)
       p->second.v.last_change = e;
@@ -760,7 +760,7 @@ private:
 
     // index pool names
     name_pool.clear();
-    for (map<int,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
+    for (map<int32_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
     
     calc_num_osds();
@@ -906,28 +906,28 @@ public:
       acting = up;
   }
 
-  int lookup_pg_pool_name(const char *name) {
+  int64_t lookup_pg_pool_name(const char *name) {
     if (name_pool.count(name))
       return name_pool[name];
-    return -1;
+    return -ENOENT;
   }
 
-  const map<int,pg_pool_t>& get_pools() { return pools; }
-  const char *get_pool_name(int p) {
+  const map<int64_t,pg_pool_t>& get_pools() { return pools; }
+  const char *get_pool_name(int64_t p) {
     if (pool_name.count(p))
       return pool_name[p].c_str();
     return 0;
   }
-  bool have_pg_pool(int p) const {
+  bool have_pg_pool(int64_t p) const {
     return pools.count(p);
   }
-  const pg_pool_t* get_pg_pool(int p) {
-    if(pools.count(p))
+  const pg_pool_t* get_pg_pool(int64_t p) {
+    if (pools.count(p))
       return &pools[p];
     return NULL;
   }
   unsigned get_pg_size(pg_t pg) const {
-    map<int,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
     assert(p != pools.end());
     return p->second.get_size();
   }

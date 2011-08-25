@@ -79,7 +79,7 @@ static atomic_t rados_instance;
 struct librados::IoCtxImpl {
   atomic_t ref_cnt;
   RadosClient *client;
-  int poolid;
+  int64_t poolid;
   string pool_name;
   snapid_t snap_seq;
   ::SnapContext snapc;
@@ -551,14 +551,14 @@ public:
   int connect();
   void shutdown();
 
-  int lookup_pool(const char *name) {
-    int ret = osdmap.lookup_pg_pool_name(name);
+  int64_t lookup_pool(const char *name) {
+    int64_t ret = osdmap.lookup_pg_pool_name(name);
     if (ret < 0)
       return -ENOENT;
     return ret;
   }
 
-  const char *get_pool_name(int poolid_)
+  const char *get_pool_name(int64_t poolid_)
   {
     return osdmap.get_pool_name(poolid_);
   }
@@ -1077,7 +1077,7 @@ bool librados::RadosClient::_dispatch(Message *m)
 int librados::RadosClient::pool_list(std::list<std::string>& v)
 {
   Mutex::Locker l(lock);
-  for (map<int,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+  for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end();
        p++)
     v.push_back(osdmap.get_pool_name(p->first));
@@ -1125,7 +1125,7 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
 int librados::RadosClient::snap_create(rados_ioctx_t io, const char *snapName)
 {
   int reply;
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
   string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_create::mylock");
@@ -1146,7 +1146,7 @@ int librados::RadosClient::snap_create(rados_ioctx_t io, const char *snapName)
 int librados::RadosClient::selfmanaged_snap_create(rados_ioctx_t io, uint64_t *psnapid)
 {
   int reply;
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_create::mylock");
   Cond cond;
@@ -1168,7 +1168,7 @@ int librados::RadosClient::selfmanaged_snap_create(rados_ioctx_t io, uint64_t *p
 int librados::RadosClient::snap_remove(rados_ioctx_t io, const char *snapName)
 {
   int reply;
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
   string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_remove::mylock");
@@ -1217,7 +1217,7 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
   string sName(snapName);
 
   snapid_t snap;
-  const map<int, pg_pool_t>& pools = objecter->osdmap->get_pools();
+  const map<int64_t, pg_pool_t>& pools = objecter->osdmap->get_pools();
   const pg_pool_t& pg_pool = pools.find(io->poolid)->second;
   map<snapid_t, pool_snap_info_t>::const_iterator p;
   for (p = pg_pool.snaps.begin();
@@ -1236,7 +1236,7 @@ int librados::RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
 int librados::RadosClient::selfmanaged_snap_remove(rados_ioctx_t io, uint64_t snapid)
 {
   int reply;
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_remove::mylock");
   Cond cond;
@@ -1327,7 +1327,7 @@ int librados::RadosClient::pool_change_auid(rados_ioctx_t io, unsigned long long
 {
   int reply;
 
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::pool_change_auid::mylock");
   Cond cond;
@@ -1347,7 +1347,7 @@ int librados::RadosClient::pool_change_auid(rados_ioctx_t io, unsigned long long
 int librados::RadosClient::pool_change_auid_async(rados_ioctx_t io, unsigned long long auid,
 						  PoolAsyncCompletionImpl *c)
 {
-  int poolID = ((IoCtxImpl *)io)->poolid;
+  int64_t poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex::Locker l(lock);
   objecter->change_pool_auid(poolID,
@@ -1359,7 +1359,7 @@ int librados::RadosClient::pool_change_auid_async(rados_ioctx_t io, unsigned lon
 int librados::RadosClient::pool_get_auid(rados_ioctx_t io, unsigned long long *auid)
 {
   Mutex::Locker l(lock);
-  int pool_id = ((IoCtxImpl *)io)->poolid;
+  int64_t pool_id = ((IoCtxImpl *)io)->poolid;
   const pg_pool_t *pg = osdmap.get_pg_pool(pool_id);
   if (!pg)
     return -ENOENT;
@@ -3220,7 +3220,7 @@ int librados::Rados::pool_list(std::list<std::string>& v)
   return client->pool_list(v);
 }
 
-int librados::Rados::pool_lookup(const char *name)
+int64_t librados::Rados::pool_lookup(const char *name)
 {
   return client->lookup_pool(name);
 }
@@ -3453,7 +3453,7 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, si
   return conf->get_val(option, &tmp, len);
 }
 
-extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
+extern "C" int64_t rados_pool_lookup(rados_t cluster, const char *name)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   return radosp->lookup_pool(name);
@@ -3490,7 +3490,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
 extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
-  int poolid = radosp->lookup_pool(name);
+  int64_t poolid = radosp->lookup_pool(name);
   if (poolid >= 0) {
     librados::IoCtxImpl *ctx = new librados::IoCtxImpl(radosp, poolid, name, CEPH_NOSNAP);
     if (!ctx)
@@ -3499,7 +3499,7 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
     ctx->get();
     return 0;
   }
-  return poolid;
+  return 0;
 }
 
 extern "C" void rados_ioctx_destroy(rados_ioctx_t io)

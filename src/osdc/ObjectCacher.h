@@ -254,13 +254,14 @@ class ObjectCacher {
     inodeno_t ino;
     uint64_t truncate_seq, truncate_size;
 
-    int poolid;
+    int64_t poolid;
     xlist<Object*> objects;
 
     int dirty_or_tx;
 
-    ObjectSet(void *p, int _poolid, inodeno_t i) : parent(p), ino(i), truncate_seq(0),
-                                      truncate_size(0), poolid(_poolid), dirty_or_tx(0) {}
+    ObjectSet(void *p, int64_t _poolid, inodeno_t i)
+      : parent(p), ino(i), truncate_seq(0),
+	truncate_size(0), poolid(_poolid), dirty_or_tx(0) {}
   };
 
 
@@ -463,13 +464,13 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(int poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
-  void bh_write_commit(int poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
-  void lock_ack(int poolid, list<sobject_t>& oids, tid_t tid);
+  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
+  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
+  void lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
-    int poolid;
+    int64_t poolid;
     sobject_t oid;
     loff_t start;
     uint64_t length;
@@ -484,13 +485,13 @@ class ObjectCacher {
 
   class C_WriteCommit : public Context {
     ObjectCacher *oc;
-    int poolid;
+    int64_t poolid;
     sobject_t oid;
     loff_t start;
     uint64_t length;
   public:
     tid_t tid;
-    C_WriteCommit(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
+    C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s, uint64_t l) :
       oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_write_commit(poolid, oid, start, length, tid);
@@ -500,10 +501,10 @@ class ObjectCacher {
   class C_LockAck : public Context {
     ObjectCacher *oc;
   public:
-    int poolid;
+    int64_t poolid;
     list<sobject_t> oids;
     tid_t tid;
-    C_LockAck(ObjectCacher *c, int _poolid, sobject_t o) : oc(c), poolid(_poolid) {
+    C_LockAck(ObjectCacher *c, int64_t _poolid, sobject_t o) : oc(c), poolid(_poolid) {
       oids.push_back(o);
     }
     void finish(int r) {

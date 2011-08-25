@@ -231,7 +231,7 @@ int main(int argc, const char **argv)
       cout << "pass " << ++pass << std::endl;
 
       hash_map<pg_t,vector<int> > m;
-      for (map<int,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+      for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
 	   p != osdmap.get_pools().end();
 	   p++) {
 	const pg_pool_t *pool = osdmap.get_pg_pool(p->first);
