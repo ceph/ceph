@@ -540,6 +540,7 @@ public:
 
   // mgmt
   virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
+  virtual int update_version_stamp() = 0;
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;

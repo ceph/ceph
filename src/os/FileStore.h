@@ -265,6 +265,7 @@ public:
   bool test_mount_in_use();
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
+  int update_version_stamp();
   int read_op_seq(const char *fn, uint64_t *seq);
   int write_op_seq(int, uint64_t seq);
   int mount();

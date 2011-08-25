@@ -1253,6 +1253,11 @@ int FileStore::_sanity_check_fs()
   return 0;
 }
 
+int FileStore::update_version_stamp()
+{
+  return write_version_stamp();
+}
+
 int FileStore::version_stamp_is_valid(uint32_t *version)
 {
   char fn[PATH_MAX];
