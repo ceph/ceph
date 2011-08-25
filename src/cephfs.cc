@@ -131,7 +131,7 @@ void usage() {
   cerr << "Options:" << endl;
   cerr << "   Useful for setting layouts:" << endl;
   cerr << "   --stripe_unit, -u:  set the size of each stripe" << endl;
-  cerr << "   --stripe_count, -c: set the number of stripes per object" << endl;
+  cerr << "   --stripe_count, -c: set the number of objects to stripe across" << endl;
   cerr << "   --object_size, -s:  set the size of the objects to stripe across" << endl;
   cerr << "   --pool, -p:         set the pool to use" << endl;
   cerr << "   --osd, -o:          set the preferred osd to use as primary" << endl;
