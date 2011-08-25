@@ -581,9 +581,9 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
     parent = pgid;
     while (1) {
       // remove most significant bit
-      int msb = pool.calc_bits_of(parent.v.ps);
+      int msb = pool.calc_bits_of(parent.ps());
       if (!msb) break;
-      parent.v.ps = parent.v.ps & ~(1<<(msb-1));
+      parent.set_ps(parent.ps() & ~(1<<(msb-1)));
       split_bits++;
       dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
       //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {

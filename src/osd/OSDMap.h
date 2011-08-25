@@ -811,7 +811,7 @@ private:
     
     ceph_object_layout ol;
     pg_t pgid = object_locator_to_pg(oid, loc);
-    ol.ol_pgid = pgid.v;
+    ol.ol_pgid = pgid.get_old_pg().v;
     ol.ol_stripe_unit = 0;
     return ol;
   }

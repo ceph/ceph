@@ -2146,7 +2146,7 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
   return true;
 }
 
-int OSDMonitor::_prepare_remove_pool(int pool)
+int OSDMonitor::_prepare_remove_pool(uint64_t pool)
 {
     dout(10) << "_prepare_remove_pool " << pool << dendl;
   if (pending_inc.old_pools.count(pool)) {

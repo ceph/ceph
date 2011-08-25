@@ -26,25 +26,25 @@ void osd_reqid_t::decode(bufferlist::iterator &bl)
 int pg_t::print(char *o, int maxlen) const
 {
   if (preferred() >= 0)
-    return snprintf(o, maxlen, "%d.%xp%d", pool(), ps(), preferred());
+    return snprintf(o, maxlen, "%llu.%xp%d", (unsigned long long)pool(), ps(), preferred());
   else
-    return snprintf(o, maxlen, "%d.%x", pool(), ps());
+    return snprintf(o, maxlen, "%llu.%x", (unsigned long long)pool(), ps());
 }
 
 bool pg_t::parse(const char *s)
 {
-  int ppool;
-  int pseed;
-  int pref;
-  int r = sscanf(s, "%d.%xp%d", &ppool, &pseed, &pref);
+  uint64_t ppool;
+  uint32_t pseed;
+  int32_t pref;
+  int r = sscanf(s, "%llu.%xp%d", (long long unsigned *)&ppool, &pseed, &pref);
   if (r < 2)
     return false;
-  v.pool = ppool;
-  v.ps = pseed;
+  m_pool = ppool;
+  m_seed = pseed;
   if (r == 3)
-    v.preferred = pref;
+    m_preferred = pref;
   else
-    v.preferred = -1;
+    m_preferred = -1;
   return true;
 }
 
@@ -363,9 +363,9 @@ SnapContext pg_pool_t::get_snap_context() const
 pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
 {
   if (pg.preferred() >= 0 && v.lpg_num)
-    pg.v.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
+    pg.set_ps(ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask));
   else
-    pg.v.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
+    pg.set_ps(ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask));
   return pg;
 }
   

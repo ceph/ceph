@@ -72,7 +72,7 @@ public:
     head.flags =
       (req->flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
     oid = req->oid;
-    head.layout.ol_pgid = req->pgid.v;
+    head.layout.ol_pgid = req->pgid.get_old_pg();
     head.osdmap_epoch = e;
     head.reassert_version = req->reassert_version;
   }

@@ -202,7 +202,7 @@ int main(int argc, const char **argv)
     ceph_object_layout ol = osdmap.make_object_layout(oid, 0);
     
     pg_t pgid;
-    pgid.v = ol.ol_pgid;
+    pgid = ol.ol_pgid;
 
     vector<int> acting;
     osdmap.pg_to_acting_osds(pgid, acting);

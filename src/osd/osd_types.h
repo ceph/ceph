@@ -89,8 +89,6 @@ namespace __gnu_cxx {
 
 // pg stuff
 
-typedef uint16_t ps_t;
-
 // object namespaces
 #define CEPH_METADATA_NS       1
 #define CEPH_DATA_NS           2
@@ -104,32 +102,97 @@ enum {
   CEPH_RBD_RULE,
 };
 
-//#define CEPH_POOL(poolset, size) (((poolset) << 8) + (size))
-
 #define OSD_SUPERBLOCK_POBJECT sobject_t(object_t("osd_superblock"), 0)
+
+// placement seed (a hash value)
+typedef uint32_t ps_t;
+
+// old (v1) pg_t encoding (wrap old struct ceph_pg)
+struct old_pg_t {
+  ceph_pg v;
+  void encode(bufferlist& bl) const {
+    ::encode_raw(v, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode_raw(v, bl);
+  }
+};
+WRITE_CLASS_ENCODER(old_pg_t)
 
 // placement group id
 struct pg_t {
-  struct ceph_pg v;
+  uint64_t m_pool;
+  uint32_t m_seed;
+  int32_t m_preferred;
 
-  pg_t() { memset(&v, 0, sizeof(v)); }
-  pg_t(const pg_t& o) { v = o.v; }
-  pg_t(ps_t seed, int pool_, int pref) {
-    v.ps = seed;
-    v.pool = pool_;
-    v.preferred = pref;   // hack: avoid negative.
+  pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
+  pg_t(ps_t seed, uint64_t pool, int pref) {
+    m_seed = seed;
+    m_pool = pool;
+    m_preferred = pref;
   }
+
   pg_t(const ceph_pg& cpg) {
-    v = cpg;
+    m_pool = cpg.pool;
+    m_seed = cpg.ps;
+    m_preferred = (__s16)cpg.preferred;
+  }
+  old_pg_t get_old_pg() const {
+    old_pg_t o;
+    assert(m_pool < 0xffffffffull);
+    o.v.pool = m_pool;
+    o.v.ps = m_seed;
+    o.v.preferred = (__s16)m_preferred;
+    return o;
+  }
+  pg_t(const old_pg_t& opg) {
+    *this = opg.v;
   }
 
-  ps_t ps() const { return v.ps; }
-  int pool() const { return v.pool; }
-  int preferred() const { return (__s16)v.preferred; }   // hack: avoid negative.
+  ps_t ps() const {
+    return m_seed;
+  }
+  uint64_t pool() const {
+    return m_pool;
+  }
+  int32_t preferred() const {
+    return m_preferred;
+  }
+
+  void set_ps(ps_t p) {
+    m_seed = p;
+  }
+  void set_pool(uint64_t p) {
+    m_pool = p;
+  }
+  void set_preferred(int32_t osd) {
+    m_preferred = osd;
+  }
 
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
-} __attribute__ ((packed));
+
+  void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(m_pool, bl);
+    ::encode(m_seed, bl);
+    ::encode(m_preferred, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(m_pool, bl);
+    ::decode(m_seed, bl);
+    ::decode(m_preferred, bl);
+  }
+  void decode_old(bufferlist::iterator& bl) {
+    old_pg_t opg;
+    ::decode(opg, bl);
+    *this = opg;
+  }
+};
+WRITE_CLASS_ENCODER(pg_t)
 
 inline bool operator<(const pg_t& l, const pg_t& r) {
   return l.pool() < r.pool() ||
@@ -162,14 +225,6 @@ inline bool operator>=(const pg_t& l, const pg_t& r) {
 			      (l.preferred() == r.preferred() && (l.ps() >= r.ps()))));
 }
 
-
-inline void encode(pg_t pgid, bufferlist& bl) {
-  encode_raw(pgid.v, bl);
-}
-inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
-  decode_raw(pgid.v, p); 
-}
-
 ostream& operator<<(ostream& out, const pg_t &pg);
 
 namespace __gnu_cxx {
@@ -178,7 +233,7 @@ namespace __gnu_cxx {
     size_t operator()( const pg_t& x ) const
     {
       static hash<uint32_t> H;
-      return H(x.pool() ^ x.ps() ^ x.preferred());
+      return H((x.pool() & 0xffffffff) ^ (x.pool() >> 32) ^ x.ps() ^ x.preferred());
     }
   };
 }
