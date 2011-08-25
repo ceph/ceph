@@ -188,7 +188,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *stripe_unit = atoi(argv[i+1]);
+      *stripe_unit = strtol(argv[i+1], NULL, 0);
       if (!*stripe_unit) {
         cerr << "invalid value for stripe unit" << endl;
         return 1;
@@ -198,7 +198,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *stripe_count = atoi(argv[i+1]);
+      *stripe_count = strtol(argv[i+1], NULL, 0);
       if (!*stripe_count) {
         cerr << "invalid value for stripe count" << endl;
         return 1;
@@ -208,7 +208,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *object_size = atoi(argv[i+1]);
+      *object_size = strtol(argv[i+1], NULL, 0);
       if (!*object_size) {
         cerr << "invalid value for object size" << endl;
         return 1;
@@ -218,8 +218,9 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *pool= atoi(argv[i+1]);
-      if (!*pool) {
+      errno = 0;
+      *pool= strtol(argv[i+1], NULL, 0);
+      if (!*pool && errno) {
         cerr << "invalid value for pool" << endl;
         return 1;
       }
@@ -228,8 +229,9 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *osd = atoi(argv[i+1]);
-      if (!*osd) {
+      errno = 0;
+      *osd = strtol(argv[i+1], NULL, 0);
+      if (!*osd && errno) {
         cerr << "invalid value for osd" << endl;
         return 1;
       }
@@ -238,8 +240,9 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
         cerr << "Invalid option for command!" << endl;
         return 1;
       }
-      *file_offset = atoi(argv[i+1]);
-      if (!*file_offset) {
+      errno = 0;
+      *file_offset = strtol(argv[i+1], NULL, 0);
+      if (!*file_offset && errno) {
         cerr << "invalid value for offset" << endl;
         return 1;
       }
