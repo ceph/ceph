@@ -67,6 +67,8 @@ void set_req_state_err(struct req_state *s, int err_no)
       return;
     }
   }
+  RGW_LOG(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
+
   s->err.http_ret = 500;
   s->err.s3_code = "UnknownError";
 }
@@ -703,12 +705,16 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   init_entities_from_header(s);
   switch (s->op) {
   case OP_PUT:
-    if (s->object_str.size() && !s->length)
-      ret = -ERR_LENGTH_REQUIRED;
-    else if (*s->length == '\0')
-      ret = -EINVAL;
-    else
+    if (s->object) {
+      if (!s->length)
+        ret = -ERR_LENGTH_REQUIRED;
+      else if (*s->length == '\0')
+        ret = -EINVAL;
+    }
+    if (s->length)
       s->content_length = atoll(s->length);
+    else
+      s->content_length = 0;
     break;
   default:
     break;

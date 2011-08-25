@@ -498,7 +498,7 @@ struct req_state {
 
    utime_t time;
 
-   int pool_id;
+   uint64_t pool_id;
 
    struct RGWEnv *env;
 

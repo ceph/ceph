@@ -510,7 +510,7 @@ int main(int argc, char **argv)
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
-  int bucket_id = -1;
+  int64_t bucket_id = -1;
   const char *format = 0;
   Formatter *formatter = &default_formatter;
   bool purge_data = false;
@@ -555,7 +555,7 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
       perm_mask = str_to_perm(access);
     } else if (CEPH_ARGPARSE_EQ("bucket-id", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_id, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_id, OPT_LONGLONG);
       if (bucket_id < 0) {
         cerr << "bad bucket-id: " << bucket_id << std::endl;
         return usage();
@@ -764,7 +764,7 @@ int main(int argc, char **argv)
         return r;
       }
       bucket = bucket_info.bucket;
-      int ret = rgwstore->get_bucket_id(bucket, &bucket_id);
+      int ret = rgwstore->get_bucket_id(bucket, (uint64_t *)&bucket_id);
       if (ret < 0) {
         cerr << "could not get bucket id for bucket" << bucket << std::endl;
         return ret;
@@ -1015,7 +1015,7 @@ int main(int argc, char **argv)
       oid = object;
     } else {
       char buf[16];
-      snprintf(buf, sizeof(buf), "%d", bucket_id);
+      snprintf(buf, sizeof(buf), "%lld", (unsigned long long)bucket_id);
       oid = date;
       oid += "-";
       oid += buf;
@@ -1184,7 +1184,7 @@ int main(int argc, char **argv)
     info.bucket = bucket;
     info.owner = policy.get_owner().get_id();
 
-    int bucket_id;
+    uint64_t bucket_id;
     ret = rgwstore->get_bucket_id(bucket, &bucket_id);
     if (ret < 0) {
       RGW_LOG(0) << "get_bucket_id returned " << ret << dendl;

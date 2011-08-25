@@ -223,7 +223,7 @@ public:
    */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
 
-  virtual int get_bucket_id(rgw_bucket& bucket, int *bucket_id) { return -ENOTSUP; }
+  virtual int get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id) { return -ENOTSUP; }
 
  /**
   * stat an object

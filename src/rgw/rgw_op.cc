@@ -440,7 +440,8 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   bool pol_ret;
-  int pool_id;
+  uint64_t pool_id;
+  RGWPoolInfo info;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
 
@@ -486,13 +487,10 @@ void RGWCreateBucket::execute()
   if (ret < 0)
     goto done;
 
-  if (pool_id >= 0) {
-    s->pool_id = pool_id;
-    RGWPoolInfo info;
-    info.owner = s->user.user_id;
-    info.bucket = s->bucket;
-    rgw_store_pool_info(pool_id, info);
-  }
+  s->pool_id = pool_id;
+  info.owner = s->user.user_id;
+  info.bucket = s->bucket;
+  rgw_store_pool_info(pool_id, info);
 
 done:
   send_response();
