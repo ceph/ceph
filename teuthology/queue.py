@@ -72,17 +72,19 @@ describe. One job is run at a time.
 
         # bury the job so it won't be re-run if it fails
         job.bury()
-        run_job(job, ctx.archive_dir)
+        log.debug('Config is: %s', job.body)
+        job_config = yaml.safe_load(job.body)
 
-def run_job(job, archive_dir):
-    log.info('Running job %d', job.jid)
-    log.debug('Config is: %s', job.body)
-    job_config = yaml.safe_load(job.body)
+        log.debug('Creating archive dir...')
+        safe_archive = safepath.munge(job_config['name'])
+        safepath.makedirs(ctx.archive_dir, safe_archive)
+        archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
 
-    safe_archive = safepath.munge(job_config['name'])
-    safepath.makedirs(archive_dir, safe_archive)
-    archive_path = os.path.join(archive_dir, safe_archive, str(job.jid))
+        log.info('Running job %d', job.jid)
+        run_job(job_config, archive_path)
+        job.delete()
 
+def run_job(job_config, archive_path):
     arg = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology'),
         ]
@@ -113,7 +115,6 @@ def run_job(job, archive_dir):
         log.exception(e)
     else:
         log.info('Success!')
-        job.delete()
     finally:
         os.close(tmp_fp)
         os.unlink(tmp_path)
