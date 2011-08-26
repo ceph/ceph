@@ -556,10 +556,10 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {
-	  MDSMap m(g_ceph_context);
-	  m.decode(b);
-	  m.encode(rdata);
-	  ss << "got mdsmap epoch " << m.get_epoch();
+	  MDSMap mm(g_ceph_context);
+	  mm.decode(b);
+	  mm.encode(rdata);
+	  ss << "got mdsmap epoch " << mm.get_epoch();
 	}
       } else {
 	mdsmap.encode(rdata);
