@@ -130,7 +130,7 @@ void OSDMap::print(ostream& out) const
  
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     std::string name("<unknown>");
-    map<int32_t,string>::const_iterator pni = pool_name.find(p->first);
+    map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
     if (pni != pool_name.end())
       name = pni->second;
     out << "pg_pool " << p->first
