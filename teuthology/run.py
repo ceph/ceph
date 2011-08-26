@@ -164,7 +164,7 @@ def schedule():
     parser.add_argument(
         'config',
         metavar='CONFFILE',
-        nargs='+',
+        nargs='*',
         type=config_file,
         action=MergeConfig,
         default={},
@@ -173,7 +173,22 @@ def schedule():
     parser.add_argument(
         '--name',
         required=True,
-        help='job name',
+        help='name of suite run the job is part of',
+        )
+    parser.add_argument(
+        '--last-in-suite',
+        action='store_true',
+        default=False,
+        help='mark the last job in a suite so suite post-processing can be run',
+        )
+    parser.add_argument(
+        '--email',
+        help='where to send the results of a suite (only applies to the last job in a suite)',
+        )
+    parser.add_argument(
+        '--timeout',
+        help='how many seconds to wait for jobs to finish before emailing results (only applies to the last job in a suite',
+        type=int,
         )
     parser.add_argument(
         '--description',
@@ -191,6 +206,9 @@ def schedule():
         )
 
     ctx = parser.parse_args()
+    if not ctx.last_in_suite:
+        assert not ctx.email, '--email is only applicable to the last job in a suite'
+        assert not ctx.timeout, '--timeout is only applicable to the last job in a suite'
 
     from teuthology.misc import read_config, get_user
     if ctx.owner is None:
@@ -204,6 +222,8 @@ def schedule():
     job = yaml.safe_dump(dict(
             config=ctx.config,
             name=ctx.name,
+            last_in_suite=ctx.last_in_suite,
+            email=ctx.email,
             description=ctx.description,
             owner=ctx.owner,
             verbose=ctx.verbose,

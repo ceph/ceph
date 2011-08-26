@@ -72,17 +72,32 @@ describe. One job is run at a time.
 
         # bury the job so it won't be re-run if it fails
         job.bury()
+        log.debug('Reserved job %d', job.jid)
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
-
-        log.debug('Creating archive dir...')
         safe_archive = safepath.munge(job_config['name'])
-        safepath.makedirs(ctx.archive_dir, safe_archive)
-        archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
 
-        log.info('Running job %d', job.jid)
-        run_job(job_config, archive_path)
-        job.delete()
+        if job_config.get('last_in_suite', False):
+            log.debug('Generating coverage for %s', job_config['name'])
+            subprocess.Popen(
+                args=[
+                    os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-results'),
+                    '--timeout',
+                    job_config.get('results_timeout', '21600'),
+                    '--email',
+                    job_config['email'],
+                    '--archive-dir',
+                    os.path.join(ctx.archive_dir, safe_archive),
+                    '--name',
+                    job_config['name'],
+                    ])
+        else:
+            log.debug('Creating archive dir...')
+            safepath.makedirs(ctx.archive_dir, safe_archive)
+            archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
+            log.info('Running job %d', job.jid)
+            run_job(job_config, archive_path)
+            job.delete()
 
 def run_job(job_config, archive_path):
     arg = [
