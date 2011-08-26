@@ -50,7 +50,7 @@ public:
     float nearfull_ratio;
 
     void encode(bufferlist &bl) const {
-      __u8 v = 2;
+      __u8 v = 3;
       ::encode(v, bl);
       ::encode(version, bl);
       ::encode(pg_stat_updates, bl);
@@ -66,7 +66,19 @@ public:
       __u8 v;
       ::decode(v, bl);
       ::decode(version, bl);
-      ::decode(pg_stat_updates, bl);
+      if (v < 3) {
+	pg_stat_updates.clear();
+	__u32 n;
+	::decode(n, bl);
+	while (n--) {
+	  old_pg_t opgid;
+	  ::decode(opgid, bl);
+	  pg_t pgid = opgid;
+	  ::decode(pg_stat_updates[pgid], bl);
+	}
+      } else {
+	::decode(pg_stat_updates, bl);
+      }
       ::decode(osd_stat_updates, bl);
       ::decode(osd_stat_rm, bl);
       ::decode(osdmap_epoch, bl);
@@ -75,7 +87,18 @@ public:
         ::decode(full_ratio, bl);
         ::decode(nearfull_ratio, bl);
       }
-      ::decode(pg_remove, bl);
+      if (v < 3) {
+	pg_remove.clear();
+  	__u32 n;
+	::decode(n, bl);
+	while (n--) {
+	  old_pg_t opgid;
+	  ::decode(opgid, bl);
+	  pg_remove.insert(pg_t(opgid));
+	}
+      } else {
+	::decode(pg_remove, bl);
+      }
     }
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
