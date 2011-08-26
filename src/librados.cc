@@ -2427,7 +2427,7 @@ int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ve
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t objver;
 
   lock.Lock();
@@ -2437,7 +2437,7 @@ int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ve
   prepare_assert_ops(&io, &rd);
   rd.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(oid, io.oloc, rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger(oid, io.oloc, rd, io.snap_seq, bl, NULL, 0, NULL, onfinish, &objver);
   lock.Unlock();
 
   mylock.Lock();
