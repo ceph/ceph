@@ -1072,25 +1072,25 @@ int main(int argc, char **argv)
              << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
       } else {
         formatter->open_object_section("LogEntry");
-        formatter->dump_format("Bucket", "%s", entry.bucket.c_str());
+        formatter->dump_string("Bucket", entry.bucket.c_str());
 
         stringstream ss;
         ss << entry.time;
         string s = ss.str();
 
-        formatter->dump_format("Time", "%s", s.c_str());
-        formatter->dump_format("RemoteAddr", "%s", entry.remote_addr.c_str());
-        formatter->dump_format("User", "%s", entry.user.c_str());
-        formatter->dump_format("Operation", "%s", entry.op.c_str());
-        formatter->dump_format("URI", "%s", entry.uri.c_str());
-        formatter->dump_format("HttpStatus", "%s", entry.http_status.c_str());
-        formatter->dump_format("ErrorCode", "%s", entry.error_code.c_str());
+        formatter->dump_string("Time", s.c_str());
+        formatter->dump_string("RemoteAddr", entry.remote_addr.c_str());
+        formatter->dump_string("User", entry.user.c_str());
+        formatter->dump_string("Operation", entry.op.c_str());
+        formatter->dump_string("URI", entry.uri.c_str());
+        formatter->dump_string("HttpStatus", entry.http_status.c_str());
+        formatter->dump_string("ErrorCode", entry.error_code.c_str());
         formatter->dump_format("BytesSent", "%lld", entry.bytes_sent);
         formatter->dump_format("BytesReceived", "%lld", entry.bytes_received);
         formatter->dump_format("ObjectSize", "%lld", entry.obj_size);
         formatter->dump_format("TotalTime", "%lld", total_time);
-        formatter->dump_format("UserAgent", "%s",  entry.user_agent.c_str());
-        formatter->dump_format("Referrer", "%s",  entry.referrer.c_str());
+        formatter->dump_string("UserAgent",  entry.user_agent.c_str());
+        formatter->dump_string("Referrer",  entry.referrer.c_str());
         formatter->close_section();
         formatter->flush(cout);
       }
@@ -1115,9 +1115,9 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_object_section("PoolInfo");
     formatter->dump_int("ID", bucket_id);
-    formatter->dump_format("Bucket", "%s", pool_info.bucket.name.c_str());
-    formatter->dump_format("Pool", "%s", pool_info.bucket.pool.c_str());
-    formatter->dump_format("Owner", "%s", pool_info.owner.c_str());
+    formatter->dump_string("Bucket", pool_info.bucket.name.c_str());
+    formatter->dump_string("Pool", pool_info.bucket.pool.c_str());
+    formatter->dump_string("Owner", pool_info.owner.c_str());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -1136,16 +1136,16 @@ int main(int argc, char **argv)
     map<string, RGWBucketStats>::iterator iter;
     formatter->reset();
     formatter->open_object_section("Stats");
-    formatter->dump_format("Bucket", "%s", bucket.name.c_str());
-    formatter->dump_format("Pool", "%s", bucket.pool.c_str());
+    formatter->dump_string("Bucket", bucket.name.c_str());
+    formatter->dump_string("Pool", bucket.pool.c_str());
     formatter->dump_int("ID", bucket_id);
-    formatter->dump_format("Owner", "%s", pool_info.owner.c_str());
+    formatter->dump_string("Owner", pool_info.owner.c_str());
     formatter->open_array_section("Categories");
     for (iter = stats.begin(); iter != stats.end(); ++iter) {
       RGWBucketStats& s = iter->second;
       formatter->open_object_section("Category");
       const char *cat_name = (iter->first.size() ? iter->first.c_str() : "");
-      formatter->dump_format("Name", "%s", cat_name);
+      formatter->dump_string("Name", cat_name);
       formatter->dump_format("SizeKB", "%lld", s.num_kb);
       formatter->dump_format("NumObjects", "%lld", s.num_objects);
       formatter->dump_format("NumObjectClones", "%lld", s.num_object_clones);
