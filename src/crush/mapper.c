@@ -529,6 +529,7 @@ int crush_do_rule(struct crush_map *map,
 		case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
 		case CRUSH_RULE_CHOOSE_FIRSTN:
 			firstn = 1;
+			/* fall through */
 		case CRUSH_RULE_CHOOSE_LEAF_INDEP:
 		case CRUSH_RULE_CHOOSE_INDEP:
 			BUG_ON(wsize == 0);
