@@ -85,8 +85,7 @@ private:
   CephContext *_cct;
 };
 
-CephContext::
-CephContext(uint32_t module_type_)
+CephContext::CephContext(uint32_t module_type_)
   : _conf(new md_config_t()),
     _doss(new DoutStreambuf <char, std::basic_string<char>::traits_type>()),
     _dout(_doss),
@@ -104,8 +103,7 @@ CephContext(uint32_t module_type_)
   _heartbeat_map = new HeartbeatMap(this);
 }
 
-CephContext::
-~CephContext()
+CephContext::~CephContext()
 {
   join_service_thread();
 
@@ -128,8 +126,7 @@ CephContext::
 
 }
 
-void CephContext::
-start_service_thread()
+void CephContext::start_service_thread()
 {
   pthread_spin_lock(&_service_thread_lock);
   if (_service_thread) {
@@ -141,8 +138,7 @@ start_service_thread()
   pthread_spin_unlock(&_service_thread_lock);
 }
 
-void CephContext::
-reopen_logs()
+void CephContext::reopen_logs()
 {
   pthread_spin_lock(&_service_thread_lock);
   if (_service_thread)
@@ -150,16 +146,14 @@ reopen_logs()
   pthread_spin_unlock(&_service_thread_lock);
 }
 
-void CephContext::
-dout_lock(DoutLocker *locker)
+void CephContext::dout_lock(DoutLocker *locker)
 {
   pthread_mutex_t *lock = &_doss->lock;
   pthread_mutex_lock(lock);
   locker->lock = lock;
 }
 
-void CephContext::
-dout_trylock(DoutLocker *locker)
+void CephContext::dout_trylock(DoutLocker *locker)
 {
   static const int MAX_DOUT_TRYLOCK_TRIES = 3;
 
@@ -174,8 +168,7 @@ dout_trylock(DoutLocker *locker)
   }
 }
 
-void CephContext::
-join_service_thread()
+void CephContext::join_service_thread()
 {
   pthread_spin_lock(&_service_thread_lock);
   CephContextServiceThread *thread = _service_thread;
@@ -191,14 +184,12 @@ join_service_thread()
   delete thread;
 }
 
-uint32_t CephContext::
-get_module_type() const
+uint32_t CephContext::get_module_type() const
 {
   return _module_type;
 }
 
-PerfCountersCollection *CephContext::
-GetPerfCountersCollection()
+PerfCountersCollection *CephContext::GetPerfCountersCollection()
 {
   return _perf_counters_collection;
 }

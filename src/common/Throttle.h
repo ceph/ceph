@@ -13,7 +13,7 @@ public:
   Throttle(int64_t m = 0) : count(0), max(m), waiting(0),
 			  lock("Throttle::lock") {
     assert(m >= 0);
-}
+  }
 
 private:
   void _reset_max(int64_t m) {
