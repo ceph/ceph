@@ -112,15 +112,15 @@ struct file_object_t {
 // a locator constrains the placement of an object.  mainly, which pool
 // does it go in.
 struct object_locator_t {
-  __s32 pool;
-  __s16 preferred;
+  int64_t pool;
+  int32_t preferred;
   string key;
 
   explicit object_locator_t() : pool(-1), preferred(-1) {}
 
-  explicit object_locator_t(int po) : pool(po), preferred(-1) {}
+  explicit object_locator_t(int64_t po) : pool(po), preferred(-1) {}
 
-  explicit object_locator_t(int po, int pre) : pool(po), preferred(pre) {}
+  explicit object_locator_t(int64_t po, int pre) : pool(po), preferred(pre) {}
 
   int get_pool() const {
     return pool;
@@ -136,7 +136,7 @@ struct object_locator_t {
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(pool, bl);
     ::encode(preferred, bl);
@@ -145,8 +145,17 @@ struct object_locator_t {
   void decode(bufferlist::iterator& p) {
     __u8 struct_v;
     ::decode(struct_v, p);
-    ::decode(pool, p);
-    ::decode(preferred, p);
+    if (struct_v < 2) {
+      int32_t op;
+      ::decode(op, p);
+      pool = op;
+      int16_t pref;
+      ::decode(pref, p);
+      preferred = pref;
+    } else {
+      ::decode(pool, p);
+      ::decode(preferred, p);
+    }
     ::decode(key, p);
   }
 };
