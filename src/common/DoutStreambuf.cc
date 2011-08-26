@@ -21,6 +21,7 @@
 #include "common/safe_io.h"
 #include "common/simple_spin.h"
 #include "common/debug.h"
+#include "include/utime.h"
 
 #include <values.h>
 #include <assert.h>

@@ -66,7 +66,6 @@ using namespace __gnu_cxx;
 
 #include "assert.h"
 #include "object.h"
-#include "utime.h"
 #include "intarith.h"
 
 #include "acconfig.h"

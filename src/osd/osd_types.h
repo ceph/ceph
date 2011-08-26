@@ -21,6 +21,7 @@
 
 #include "msg/msg_types.h"
 #include "include/types.h"
+#include "include/utime.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
 #include "common/Formatter.h"

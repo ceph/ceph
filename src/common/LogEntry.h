@@ -16,6 +16,7 @@
 #define CEPH_LOGENTRY_H
 
 #include "include/types.h"
+#include "include/utime.h"
 #include "include/encoding.h"
 #include "msg/msg_types.h" // for entity_inst_t
 
