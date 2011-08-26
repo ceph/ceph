@@ -231,13 +231,15 @@ int read_acls(struct req_state *s, bool only_bucket)
     rgwstore->set_atomic(s->obj_ctx, obj);
   }
 
-  RGWBucketInfo bucket_info;
-  ret = rgw_get_bucket_info(s->bucket_name_str, bucket_info);
-  if (ret < 0) {
-    RGW_LOG(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
-    return ret;
+  if (s->bucket_name_str.size()) {
+    RGWBucketInfo bucket_info;
+    ret = rgw_get_bucket_info(s->bucket_name_str, bucket_info);
+    if (ret < 0) {
+      RGW_LOG(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
+      return ret;
+    }
+    s->bucket = bucket_info.bucket;
   }
-  s->bucket = bucket_info.bucket;
 
   ret = read_acls(s, s->acl, s->bucket, obj_str);
 
