@@ -174,9 +174,9 @@ protected:
   __u32 session_autoclose;
   uint64_t max_file_size;
 
-  vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
-  __s32 cas_pg_pool;            // where CAS objects go
-  __u32 metadata_pg_pool;       // where fs metadata objects go
+  vector<int64_t> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
+  int64_t cas_pg_pool;            // where CAS objects go
+  int64_t metadata_pg_pool;       // where fs metadata objects go
   
   /*
    * in: the set of logical mds #'s that define the cluster.  this is the set
@@ -239,10 +239,10 @@ public:
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
-  const vector<__u32> &get_data_pg_pools() const { return data_pg_pools; }
-  __u32 get_data_pg_pool() const { return data_pg_pools[0]; }
-  __s32 get_cas_pg_pool() const { return cas_pg_pool; }
-  __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
+  const vector<int64_t> &get_data_pg_pools() const { return data_pg_pools; }
+  int64_t get_data_pg_pool() const { return data_pg_pools[0]; }
+  int64_t get_cas_pg_pool() const { return cas_pg_pool; }
+  int64_t get_metadata_pg_pool() const { return metadata_pg_pool; }
 
   const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
   const mds_info_t& get_mds_info_gid(uint64_t gid) {
@@ -269,11 +269,11 @@ public:
   int get_num_failed() { return failed.size(); }
 
   // data pools
-  void add_data_pg_pool(__u32 poolid) {
+  void add_data_pg_pool(int64_t poolid) {
     data_pg_pools.push_back(poolid);
   }
-  int remove_data_pg_pool(__u32 poolid) {
-    for (vector<__u32>::iterator p = data_pg_pools.begin();
+  int remove_data_pg_pool(int64_t poolid) {
+    for (vector<int64_t>::iterator p = data_pg_pools.begin();
 	 p != data_pg_pools.end();
 	 ++p) {
       if (*p == poolid) {
@@ -494,10 +494,29 @@ public:
     return -1;
   }
 
-
-
-  void encode(bufferlist& bl) const {
+  void encode_client_old(bufferlist& bl) const {
     __u16 v = 2;
+    ::encode(v, bl);
+    ::encode(epoch, bl);
+    ::encode(flags, bl);
+    ::encode(last_failure, bl);
+    ::encode(root, bl);
+    ::encode(session_timeout, bl);
+    ::encode(session_autoclose, bl);
+    ::encode(max_file_size, bl);
+    ::encode(max_mds, bl);
+    ::encode(mds_info, bl);
+    __u32 n = data_pg_pools.size();
+    ::encode(n, bl);
+    for (vector<int64_t>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p) {
+      n = *p;
+      ::encode(n, bl);
+    }
+    int32_t m = cas_pg_pool;
+    ::encode(m, bl);
+  }
+  void encode(bufferlist& bl) const {
+    __u16 v = 3;
     ::encode(v, bl);
     ::encode(epoch, bl);
     ::encode(flags, bl);
@@ -512,7 +531,7 @@ public:
     ::encode(cas_pg_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 4;
+    __u16 ev = 5;
     ::encode(ev, bl);
     ::encode(compat, bl);
     ::encode(metadata_pg_pool, bl);
@@ -538,8 +557,21 @@ public:
     ::decode(max_file_size, p);
     ::decode(max_mds, p);
     ::decode(mds_info, p);
-    ::decode(data_pg_pools, p);
-    ::decode(cas_pg_pool, p);
+    if (v < 3) {
+      __u32 n;
+      ::decode(n, p);
+      while (n--) {
+	__u32 m;
+	::decode(m, p);
+	data_pg_pools.push_back(m);
+      }
+      __s32 s;
+      ::decode(s, p);
+      cas_pg_pool = s;
+    } else {
+      ::decode(data_pg_pools, p);
+      ::decode(cas_pg_pool, p);
+    }
 
     // kclient ignores everything from here
     __u16 ev = 1;
@@ -549,7 +581,13 @@ public:
       ::decode(compat, p);
     else
       compat = mdsmap_compat_base;
-    ::decode(metadata_pg_pool, p);
+    if (ev < 5) {
+      __u32 n;
+      ::decode(n, p);
+      metadata_pg_pool = n;
+    } else {
+      ::decode(metadata_pg_pool, p);
+    }
     ::decode(created, p);
     ::decode(modified, p);
     ::decode(tableserver, p);

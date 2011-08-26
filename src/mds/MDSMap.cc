@@ -123,7 +123,7 @@ void MDSMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("data_pools");
-  for (vector<__u32>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p)
+  for (vector<int64_t>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p)
     f->dump_int("pool", *p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pg_pool);
