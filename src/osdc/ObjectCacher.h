@@ -145,15 +145,13 @@ class ObjectCacher {
     map<loff_t, BufferHead*>     data;
 
     tid_t last_write_tid;  // version of bh (if non-zero)
-    tid_t last_ack_tid;    // last update acked.
     tid_t last_commit_tid; // last update commited.
 
-    map< tid_t, list<Context*> > waitfor_ack;
+    int dirty_or_tx;
+
     map< tid_t, list<Context*> > waitfor_commit;
     list<Context*> waitfor_rd;
     list<Context*> waitfor_wr;
-
-    xlist<Object*>::item uncommitted_item;
 
     // lock
     static const int LOCK_NONE = 0;
@@ -176,14 +174,15 @@ class ObjectCacher {
     Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
-      last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
-      uncommitted_item(this),
+      last_write_tid(0), last_commit_tid(0),
+      dirty_or_tx(0),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
       // add to set
       os->objects.push_back(&set_item);
     }
     ~Object() {
       assert(data.empty());
+      assert(dirty_or_tx == 0);
       set_item.remove_myself();
     }
 
@@ -197,9 +196,9 @@ class ObjectCacher {
 
     bool can_close() {
       return data.empty() && lock_state == LOCK_NONE &&
-        waitfor_ack.empty() && waitfor_commit.empty() &&
+        waitfor_commit.empty() &&
         waitfor_rd.empty() && waitfor_wr.empty() &&
-	!uncommitted_item.is_on_list();
+	dirty_or_tx == 0;
     }
 
     // bh
@@ -257,12 +256,11 @@ class ObjectCacher {
 
     int poolid;
     xlist<Object*> objects;
-    xlist<Object*> uncommitted;
 
-    int dirty_tx;
+    int dirty_or_tx;
 
     ObjectSet(void *p, int _poolid, inodeno_t i) : parent(p), ino(i), truncate_seq(0),
-                                      truncate_size(0), poolid(_poolid), dirty_tx(0) {}
+                                      truncate_size(0), poolid(_poolid), dirty_or_tx(0) {}
   };
 
 
@@ -275,7 +273,7 @@ class ObjectCacher {
  private:
   Mutex& lock;
   
-  flush_set_callback_t flush_set_callback, commit_set_callback;
+  flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
   vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
@@ -344,11 +342,13 @@ class ObjectCacher {
       break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty += bh->length(); 
-      bh->ob->oset->dirty_tx += bh->length();
+      bh->ob->dirty_or_tx += bh->length();
+      bh->ob->oset->dirty_or_tx += bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx += bh->length(); 
-      bh->ob->oset->dirty_tx += bh->length();
+      bh->ob->dirty_or_tx += bh->length();
+      bh->ob->oset->dirty_or_tx += bh->length();
       break;
     case BufferHead::STATE_RX:
       stat_rx += bh->length();
@@ -366,11 +366,13 @@ class ObjectCacher {
       break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty -= bh->length(); 
-      bh->ob->oset->dirty_tx -= bh->length();
+      bh->ob->dirty_or_tx -= bh->length();
+      bh->ob->oset->dirty_or_tx -= bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx -= bh->length(); 
-      bh->ob->oset->dirty_tx -= bh->length();
+      bh->ob->dirty_or_tx -= bh->length();
+      bh->ob->oset->dirty_or_tx -= bh->length();
       break;
     case BufferHead::STATE_RX:
       stat_rx -= bh->length();
@@ -462,7 +464,6 @@ class ObjectCacher {
 
  public:
   void bh_read_finish(int poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
-  void bh_write_ack(int poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
   void bh_write_commit(int poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
   void lock_ack(int poolid, list<sobject_t>& oids, tid_t tid);
 
@@ -481,20 +482,6 @@ class ObjectCacher {
     }
   };
 
-  class C_WriteAck : public Context {
-    ObjectCacher *oc;
-    int poolid;
-    sobject_t oid;
-    loff_t start;
-    uint64_t length;
-  public:
-    tid_t tid;
-    C_WriteAck(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
-    void finish(int r) {
-      oc->bh_write_ack(poolid, oid, start, length, tid);
-    }
-  };
   class C_WriteCommit : public Context {
     ObjectCacher *oc;
     int poolid;
@@ -529,8 +516,7 @@ class ObjectCacher {
  public:
   ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l,
 	       flush_set_callback_t flush_callback,
-	       flush_set_callback_t commit_callback,
-	       void *callback_arg);
+	       void *flush_callback_arg);
   ~ObjectCacher() {
     // we should be empty.
     for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
@@ -676,11 +662,20 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   return out;
 }
 
+inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
+{
+  return out << "objectset[" << os.ino
+	     << " ts " << os.truncate_seq << "/" << os.truncate_size
+	     << " objects " << os.objects.size()
+	     << " dirty_or_tx " << os.dirty_or_tx
+	     << "]";
+}
+
 inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
 {
   out << "object["
       << ob.get_soid() << " oset " << ob.oset << dec
-      << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid;
+      << " wr " << ob.last_write_tid << "/" << ob.last_commit_tid;
 
   switch (ob.lock_state) {
   case ObjectCacher::Object::LOCK_WRLOCKING: out << " wrlocking"; break;

@@ -162,7 +162,6 @@ Client::Client(Messenger *m, MonClient *mc)
   objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(cct, objecter, client_lock, 
-				  0,                            // all ack callback
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this);
   filer = new Filer(objecter);
@@ -574,9 +573,6 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 				    Inode *in, utime_t from, int mds, bool set_offset,
 				    Dentry *old_dentry)
 {
-  utime_t dttl = from;
-  dttl += (float)dlease->duration_ms / 1000.0;
-  
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
@@ -619,11 +615,20 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
   }
 
+  update_dentry_lease(dn, dlease, from, mds);
+  return dn;
+}
+
+void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds)
+{
+  utime_t dttl = from;
+  dttl += (float)dlease->duration_ms / 1000.0;
+  
   assert(dn && dn->inode);
 
   if (dlease->mask & CEPH_LOCK_DN) {
     if (dttl > dn->lease_ttl) {
-      ldout(cct, 10) << "got dentry lease on " << dname
+      ldout(cct, 10) << "got dentry lease on " << dn->name
 	       << " dur " << dlease->duration_ms << "ms ttl " << dttl << dendl;
       dn->lease_ttl = dttl;
       dn->lease_mds = mds;
@@ -631,8 +636,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       dn->lease_gen = mds_sessions[mds]->cap_gen;
     }
   }
-  dn->cap_shared_gen = dir->parent_inode->shared_gen;
-  return dn;
+  dn->cap_shared_gen = dn->dir->parent_inode->shared_gen;
 }
 
 
@@ -673,11 +677,11 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
+Inode* Client::insert_trace(MetaRequest *request, int mds)
 {
   MClientReply *reply = request->reply;
 
-  ldout(cct, 10) << "insert_trace from " << from << " mds" << mds 
+  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds" << mds 
 	   << " is_target=" << (int)reply->head.is_target
 	   << " is_dentry=" << (int)reply->head.is_dentry
 	   << dendl;
@@ -717,16 +721,16 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   Inode *in = 0;
   if (reply->head.is_target) {
     ist.decode(p, features);
-    in = add_update_inode(&ist, from, mds);
+    in = add_update_inode(&ist, request->sent_stamp, mds);
   }
 
   if (reply->head.is_dentry) {
-    Inode *diri = add_update_inode(&dirst, from, mds);
+    Inode *diri = add_update_inode(&dirst, request->sent_stamp, mds);
     update_dir_dist(diri, &dst);  // dir stat info is attached to ..
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true,
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true,
                           ((request->head.op == CEPH_MDS_OP_RENAME) ?
                                         request->old_dentry : NULL));
     } else {
@@ -753,7 +757,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true);
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true);
     } else {
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
@@ -803,9 +807,27 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       ::decode(dname, p);
       ::decode(dlease, p);
       InodeStat ist(p, features);
-      
-      Inode *in = add_update_inode(&ist, from, mds);
-      Dentry *dn = insert_dentry_inode(dir, dname, &dlease, in, from, mds, false);
+
+      Inode *in = add_update_inode(&ist, request->sent_stamp, mds);
+      Dentry *dn;
+      if (pd != dir->dentry_map.end() &&
+	  pd->first == dname) {
+	Dentry *olddn = pd->second;
+	if (pd->second->inode != in) {
+	  // replace incorrect dentry
+	  pd++;
+	  unlink(olddn, true);
+	  dn = link(dir, dname, in, NULL);
+	} else {
+	  // keep existing dn
+	  dn = olddn;
+	  touch_dn(dn);
+	}
+      } else {
+	// new dn
+	dn = link(dir, dname, in, NULL);
+      }
+      update_dentry_lease(dn, &dlease, request->sent_stamp, mds);
       dn->offset = dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
       // remove any extra names
@@ -1393,7 +1415,7 @@ void Client::handle_client_reply(MClientReply *reply)
   
   int mds = reply->get_source().num();
   request->reply = reply;
-  insert_trace(request, request->sent_stamp, mds);
+  insert_trace(request, mds);
 
   if (!request->got_unsafe) {
     request->got_unsafe = true;
@@ -1728,7 +1750,8 @@ void Client::put_inode(Inode *in, int n)
     remove_all_caps(in);
 
     ldout(cct, 10) << "put_inode deleting " << *in << dendl;
-    objectcacher->release_set(&in->oset);
+    bool unclean = objectcacher->release_set(&in->oset);
+    assert(!unclean);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
@@ -1935,7 +1958,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
 	int revoking = implemented & ~have;
 	ldout(cct, 10) << "get_caps " << *in << " have " << ccap_string(have)
 		 << " need " << ccap_string(need) << " want " << ccap_string(want)
-		 << " but not  " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
+		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
 		 << dendl;
 	if ((revoking & butnot) == 0) {
 	  *got = need | (have & want);
@@ -2342,22 +2365,31 @@ void Client::_release(Inode *in, bool checkafter)
 }
 
 
-bool Client::_flush(Inode *in, Context *onfinish)
+class C_Client_PutInode : public Context {
+  Client *client;
+  Inode *in;
+public:
+  C_Client_PutInode(Client *c, Inode *i) : client(c), in(i) {
+    in->get();
+  }
+  void finish(int) {
+    client->put_inode(in);
+  }
+};
+
+bool Client::_flush(Inode *in)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
-  if (!in->oset.dirty_tx && in->oset.uncommitted.empty()) {
+  if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     return true;
   }
 
-  if (!onfinish)
-    onfinish = new C_NoopContext;
-
+  Context *onfinish = new C_Client_PutInode(this, in);
   bool safe = objectcacher->commit_set(&in->oset, onfinish);
-  if (safe && onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+  if (safe) {
+    onfinish->complete(0);
   }
   return safe;
 }
@@ -5298,7 +5330,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   if (cct->_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
-    if (!in->oset.dirty_tx && in->oset.uncommitted.empty())
+    if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);

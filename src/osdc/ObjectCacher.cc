@@ -18,9 +18,9 @@
 
 ObjectCacher::
 ObjectCacher(CephContext *cct_, Objecter *o, Mutex& l, flush_set_callback_t flush_callback,
-	       flush_set_callback_t commit_callback, void *callback_arg) : 
+	     void *flush_callback_arg) : 
     cct(cct_), objecter(o), filer(o), lock(l),
-    flush_set_callback(flush_callback), commit_set_callback(commit_callback), flush_set_callback_arg(callback_arg),
+    flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
@@ -394,30 +394,27 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
   return final;
 }
 
-
 void ObjectCacher::Object::truncate(loff_t s)
 {
-  ldout(oc->cct, 10) << "truncate to " << s << dendl;
-  
-  while (!data.empty()) {
-	BufferHead *bh = data.rbegin()->second;
-	if (bh->end() <= s) 
-	  break;
-	
-	// split bh at truncation point?
-	if (bh->start() < s) {
-	  split(bh, s);
-	  continue;
-	}
+  ldout(oc->cct, 10) << "truncate " << *this << " to " << s << dendl;
 
-	// remove bh entirely
-	assert(bh->start() >= s);
-	oc->bh_remove(this, bh);
-	delete bh;
+  while (!data.empty()) {
+    BufferHead *bh = data.rbegin()->second;
+    if (bh->end() <= s) 
+      break;
+
+    // split bh at truncation point?
+    if (bh->start() < s) {
+      split(bh, s);
+      continue;
+    }
+
+    // remove bh entirely
+    assert(bh->start() >= s);
+    oc->bh_remove(this, bh);
+    delete bh;
   }
 }
-
-
 
 
 
@@ -425,7 +422,6 @@ void ObjectCacher::Object::truncate(loff_t s)
 
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".objectcacher "
-
 
 /* private */
 
@@ -543,8 +539,6 @@ void ObjectCacher::bh_write(BufferHead *bh)
   ldout(cct, 7) << "bh_write " << *bh << dendl;
   
   // finishers
-  C_WriteAck *onack = new C_WriteAck(this, bh->ob->oloc.pool,
-                                     bh->ob->get_soid(), bh->start(), bh->length());
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
                                               bh->ob->get_soid(), bh->start(), bh->length());
 
@@ -555,15 +549,12 @@ void ObjectCacher::bh_write(BufferHead *bh)
 			      bh->start(), bh->length(),
 			      bh->snapc, bh->bl, bh->last_write, 0,
 			      oset->truncate_size, oset->truncate_seq,
-			      onack, oncommit);
+				    NULL, oncommit);
 
   // set bh last_write_tid
-  onack->tid = tid;
   oncommit->tid = tid;
   bh->ob->last_write_tid = tid;
   bh->last_write_tid = tid;
-  if (commit_set_callback)
-    oset->uncommitted.push_back(&bh->ob->uncommitted_item);
 
   mark_tx(bh);
 }
@@ -585,9 +576,9 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
     list<Context*> ls;
 
     // waiters?
-    if (ob->waitfor_ack.count(tid)) {
-      ls.splice(ls.end(), ob->waitfor_ack[tid]);
-      ob->waitfor_ack.erase(tid);
+    if (ob->waitfor_commit.count(tid)) {
+      ls.splice(ls.end(), ob->waitfor_commit[tid]);
+      ob->waitfor_commit.erase(tid);
     }
     
     assert(tid <= ob->last_write_tid);
@@ -616,7 +607,7 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
         assert(0);
       }
       
-      ob->last_ack_tid = tid;
+      ob->last_commit_tid = tid;
       
       if (ob->can_close())
         close_object(ob);
@@ -630,17 +621,17 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
   }
 }
 
-void ObjectCacher::bh_write_ack(int poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
+void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
 {
   //lock.Lock();
   
-  ldout(cct, 7) << "bh_write_ack " 
+  ldout(cct, 7) << "bh_write_commit " 
           << oid 
           << " tid " << tid
           << " " << start << "~" << length
           << dendl;
   if (objects[poolid].count(oid) == 0) {
-    ldout(cct, 7) << "bh_write_ack no object cache" << dendl;
+    ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
     assert(0);
   } else {
     Object *ob = objects[poolid][oid];
@@ -655,65 +646,30 @@ void ObjectCacher::bh_write_ack(int poolid, sobject_t oid, loff_t start, uint64_
 
       if (bh->start() < start &&
           bh->end() > start+(loff_t)length) {
-        ldout(cct, 20) << "bh_write_ack skipping " << *bh << dendl;
+        ldout(cct, 20) << "bh_write_commit skipping " << *bh << dendl;
         continue;
       }
       
       // make sure bh is tx
       if (!bh->is_tx()) {
-        ldout(cct, 10) << "bh_write_ack skipping non-tx " << *bh << dendl;
+        ldout(cct, 10) << "bh_write_commit skipping non-tx " << *bh << dendl;
         continue;
       }
       
       // make sure bh tid matches
       if (bh->last_write_tid != tid) {
         assert(bh->last_write_tid > tid);
-        ldout(cct, 10) << "bh_write_ack newer tid on " << *bh << dendl;
+        ldout(cct, 10) << "bh_write_commit newer tid on " << *bh << dendl;
         continue;
       }
       
       // ok!  mark bh clean.
       mark_clean(bh);
-      ldout(cct, 10) << "bh_write_ack clean " << *bh << dendl;
+      ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
     }
-    
-    // update object last_ack.
-    assert(ob->last_ack_tid < tid);
-    ob->last_ack_tid = tid;
-
-    // waiters?
-    if (ob->waitfor_ack.count(tid)) {
-      list<Context*> ls;
-      ls.splice(ls.begin(), ob->waitfor_ack[tid]);
-      ob->waitfor_ack.erase(tid);
-      finish_contexts(cct, ls);
-    }
-
-    // is the entire object set now clean?
-    if (flush_set_callback && ob->oset->dirty_tx == 0) {
-      flush_set_callback(flush_set_callback_arg, ob->oset);
-    }
-  }
-  //lock.Unlock();
-}
-
-void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
-{
-  //lock.Lock();
-  
-  // update object last_commit
-  ldout(cct, 7) << "bh_write_commit " 
-          << oid 
-          << " tid " << tid
-          << " " << start << "~" << length
-          << dendl;
-  if (objects[poolid].count(oid) == 0) {
-    ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
-    //assert(0);
-  } else {
-    Object *ob = objects[poolid][oid];
     
     // update last_commit.
+    assert(ob->last_commit_tid < tid);
     ob->last_commit_tid = tid;
 
     // waiters?
@@ -725,22 +681,18 @@ void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint
     }
 
     // is the entire object set now clean and fully committed?
-    if (commit_set_callback &&
-	ob->last_commit_tid == ob->last_write_tid) {
-      ob->uncommitted_item.remove_myself();
-      ObjectSet *oset = ob->oset;
-      if (ob->can_close())
-	close_object(ob);
-      if (oset->uncommitted.empty()) {  // no uncommitted in flight
-	if (oset->dirty_tx == 0)        // AND nothing dirty/tx
-	  commit_set_callback(flush_set_callback_arg, oset);      
-      }
+    ObjectSet *oset = ob->oset;
+    if (ob->can_close())
+      close_object(ob);
+
+    // is the entire object set now clean?
+    if (flush_set_callback &&
+	oset->dirty_or_tx == 0) {        // nothing dirty/tx
+      flush_set_callback(flush_set_callback_arg, oset);      
     }
   }
-
-  //  lock.Unlock();
+  //lock.Unlock();
 }
-
 
 void ObjectCacher::flush(loff_t amount)
 {
@@ -1441,19 +1393,14 @@ void ObjectCacher::purge(Object *ob)
 {
   ldout(cct, 10) << "purge " << *ob << dendl;
 
-  while (!ob->data.empty()) {
-    BufferHead *bh = ob->data.begin()->second;
-    if (!bh->is_clean())
-      ldout(cct, 0) << "purge forcibly removing " << *ob << " " << *bh << dendl;
-    bh_remove(ob, bh);
-    delete bh;
-  }
-  
+  ob->truncate(0);
+
   if (ob->can_close()) {
-    ldout(cct, 10) << "trim trimming " << *ob << dendl;
+    ldout(cct, 10) << "purge closing " << *ob << dendl;
     close_object(ob);
   }
 }
+
 
 // flush.  non-blocking.  no callback.
 // true if clean, already flushed.  
@@ -1505,7 +1452,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
                << " on " << *ob
                << dendl;
       if (onfinish != NULL)
-        ob->waitfor_ack[ob->last_write_tid].push_back(gather.new_sub());
+        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   if (onfinish != NULL)
@@ -1695,7 +1642,7 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
   
   ldout(cct, 10) << "truncate_set " << oset << dendl;
 
-  bool were_dirty = oset->dirty_tx > 0;
+  bool were_dirty = oset->dirty_or_tx > 0;
 
   for (vector<ObjectExtent>::iterator p = exls.begin();
        p != exls.end();
@@ -1723,9 +1670,9 @@ void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
   }
 
   // did we truncate off dirty data?
-  if (commit_set_callback &&
-      were_dirty && oset->dirty_tx == 0)
-    commit_set_callback(flush_set_callback_arg, oset);
+  if (flush_set_callback &&
+      were_dirty && oset->dirty_or_tx == 0)
+    flush_set_callback(flush_set_callback_arg, oset);
 }
 
 

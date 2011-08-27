@@ -312,6 +312,8 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  friend class C_Client_PutInode; // calls put_inode()
+
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
 
@@ -421,7 +423,7 @@ protected:
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _release(Inode *in, bool checkafter=true);
-  bool _flush(Inode *in, Context *onfinish=NULL);
+  bool _flush(Inode *in);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
 
@@ -434,7 +436,7 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  Inode* insert_trace(MetaRequest *request, utime_t ttl, int mds);
+  Inode* insert_trace(MetaRequest *request, int mds);
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
@@ -443,6 +445,7 @@ protected:
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			      Inode *in, utime_t from, int mds, bool set_offset,
 			      Dentry *old_dentry = NULL);
+  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds);
 
 
   // ----------------------
