@@ -238,7 +238,7 @@ void FileJournal::_check_disk_write_cache() const
       dout(10) << "_check_disk_write_cache: failed to get kernel version."
 	       << dendl;
     }
-    else if (a >= 2 && b >= 6 && c >= 33) {
+    else if ((a >= 2 && b >= 6 && c >= 33) || a >= 3) {
       dout(20) << "_check_disk_write_cache: disk write cache is on, but your "
 	       << "kernel is new enough to handle it correctly. (fn:"
 	       << fn << ")" << dendl;
