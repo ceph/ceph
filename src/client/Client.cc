@@ -2500,16 +2500,13 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
     signal_cond_list(in->waitfor_caps);
 }
 
-void Client::remove_cap(Inode *in, int mds)
+void Client::remove_cap(Cap *cap)
 {
+  Inode *in = cap->inode;
+  MetaSession *session = cap->session;
+  int mds = cap->session->mds_num;
+
   ldout(cct, 10) << "remove_cap mds" << mds << " on " << *in << dendl;
-  if (!in->caps.count(mds)) {
-    ldout(cct, 10) << "no caps from mds " << mds << "on this inode!\n"
-	     << "remove_cap returning" << dendl;
-    return;
-  }
-  Cap *cap = in->caps[mds];
-  MetaSession *session = mds_sessions[mds];
   
   if (!session->release)
     session->release = new MClientCapRelease;
@@ -2543,13 +2540,15 @@ void Client::remove_cap(Inode *in, int mds)
 void Client::remove_all_caps(Inode *in)
 {
   while (in->caps.size())
-    remove_cap(in, in->caps.begin()->first);
+    remove_cap(in->caps.begin()->second);
 }
 
 void Client::remove_session_caps(MetaSession *mds) 
 {
-  while (mds->caps.size())
-    remove_cap((*mds->caps.begin())->inode, mds->mds_num);
+  while (mds->caps.size()) {
+    Cap *cap = *mds->caps.begin();
+    remove_cap(cap);
+  }
 }
 
 void Client::trim_caps(int mds, int max)
@@ -2571,7 +2570,7 @@ void Client::trim_caps(int mds, int max)
 	continue;
       }
       ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-      remove_cap(in, mds);
+      remove_cap(cap);
       trimmed++;
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
@@ -3038,7 +3037,7 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
 	      << " EXPORT from mds" << mds
 	      << ", just removing old cap" << dendl;
 
-    remove_cap(in, mds);
+    remove_cap(cap);
   }
   // else we already released it
 

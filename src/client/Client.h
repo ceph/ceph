@@ -388,7 +388,7 @@ protected:
   void add_update_cap(Inode *in, int mds, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
-  void remove_cap(Inode *in, int mds);
+  void remove_cap(Cap *cap);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
