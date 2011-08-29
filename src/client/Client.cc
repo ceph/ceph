@@ -1213,7 +1213,10 @@ void Client::handle_client_session(MClientSession *m)
 {
   ldout(cct, 10) << "handle_client_session " << *m << dendl;
   int from = m->get_source().num();
-  MetaSession *mds_session = mds_sessions[from];
+  MetaSession *mds_session = NULL;
+  if (mds_sessions.count(from))
+    mds_session = mds_sessions[from];
+
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     if (!mds_session)
