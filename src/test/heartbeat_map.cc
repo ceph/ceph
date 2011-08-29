@@ -24,7 +24,7 @@ TEST(HeartbeatMap, Healthy) {
   HeartbeatMap hm(g_ceph_context);
   heartbeat_handle_d *h = hm.add_worker("one");
 
-  hm.reset_timeout(h, 10);
+  hm.reset_timeout(h, 9, 18);
   bool healthy = hm.is_healthy();
   ASSERT_EQ(healthy, true);
 
@@ -35,7 +35,7 @@ TEST(HeartbeatMap, Unhealth) {
   HeartbeatMap hm(g_ceph_context);
   heartbeat_handle_d *h = hm.add_worker("one");
 
-  hm.reset_timeout(h, 1);
+  hm.reset_timeout(h, 1, 3);
   sleep(2);
   bool healthy = hm.is_healthy();
   ASSERT_EQ(healthy, false);
