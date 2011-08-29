@@ -1046,7 +1046,22 @@ int main(int argc, char **argv)
 
     if (format) {
       formatter->reset();
-      formatter->open_array_section("Log");
+      formatter->open_object_section("Log");
+
+      bufferlist::iterator first_iter = iter;
+      if (!first_iter.end()) {
+        ::decode(entry, first_iter);
+        int ret = rgw_retrieve_pool_info(entry.pool_id, pool_info);
+        if (ret >= 0) {
+          formatter->dump_string("Bucket", pool_info.bucket.name.c_str());
+          formatter->dump_string("Pool", pool_info.bucket.pool.c_str());
+          formatter->dump_string("BucketOwner", pool_info.owner.c_str());
+        } else {
+          cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
+        }
+        formatter->dump_format("BucketId", "%lld", entry.pool_id);
+      }
+      formatter->open_array_section("LogEntries");
     }
 
     while (!iter.end()) {
@@ -1080,6 +1095,8 @@ int main(int argc, char **argv)
 
         formatter->dump_string("Time", s.c_str());
         formatter->dump_string("RemoteAddr", entry.remote_addr.c_str());
+        if (entry.owner.size())
+          formatter->dump_string("Owner", entry.owner.c_str());
         formatter->dump_string("User", entry.user.c_str());
         formatter->dump_string("Operation", entry.op.c_str());
         formatter->dump_string("URI", entry.uri.c_str());
@@ -1097,6 +1114,7 @@ int main(int argc, char **argv)
     }
 
     if (format) {
+      formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
     }
