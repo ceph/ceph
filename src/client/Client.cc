@@ -1236,7 +1236,8 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_CLOSE:
     mount_cond.Signal();
-    remove_session_caps(from);
+    if (mds_session)
+      remove_session_caps(mds_session);
     kick_requests(from, true);
     delete mds_session;
     mds_sessions.erase(from);
@@ -2545,13 +2546,10 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(in, in->caps.begin()->first);
 }
 
-void Client::remove_session_caps(int mds_num) 
+void Client::remove_session_caps(MetaSession *mds) 
 {
-  if (mds_sessions.count(mds_num)) {
-    MetaSession* mds = mds_sessions[mds_num];
-    while (mds->caps.size())
-      remove_cap((*mds->caps.begin())->inode, mds_num);
-  }
+  while (mds->caps.size())
+    remove_cap((*mds->caps.begin())->inode, mds->mds_num);
 }
 
 void Client::trim_caps(int mds, int max)

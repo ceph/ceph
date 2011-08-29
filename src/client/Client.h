@@ -390,7 +390,7 @@ protected:
 		      int flags);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
-  void remove_session_caps(int mds_num);
+  void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
   int mark_caps_flushing(Inode *in);
   void flush_caps();
