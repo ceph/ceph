@@ -92,6 +92,8 @@ void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace, time_t sui
 
   if (suicide_grace)
     h->suicide_timeout.set(now + suicide_grace);
+  else
+    h->suicide_timeout.set(0);
   h->suicide_grace = suicide_grace;
 }
 
