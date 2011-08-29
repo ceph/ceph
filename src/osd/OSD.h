@@ -318,7 +318,7 @@ private:
   struct OpWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
     OpWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::OpWQ", ti, 0, tp), osd(o) {}
+      : ThreadPool::WorkQueue<PG>("OSD::OpWQ", ti, ti*10, tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       pg->get();
@@ -648,7 +648,7 @@ protected:
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
     RecoveryWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", ti, 0, tp), osd(o) {}
+      : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", ti, ti*10, tp), osd(o) {}
 
     bool _empty() {
       return osd->recovery_queue.empty();
@@ -827,7 +827,7 @@ protected:
 
   public:
     ScrubFinalizeWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, 0, tp), osd(o) {}
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp), osd(o) {}
 
     bool _empty() {
       return scrub_finalize_queue.empty();
