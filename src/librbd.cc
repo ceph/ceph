@@ -1012,17 +1012,32 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *destictx)
+struct CopyProgressCtx {
+  ImageCtx *destictx;
+  uint64_t src_size;
+  copy_progress_fn_t fn;
+  void *data;
+};
+
+int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
 {
-  if (buf)
-    return write((ImageCtx *)destictx, offset, len, buf);
-  else
-    return 0;  /* do nothing for holes */
+  CopyProgressCtx *cp = reinterpret_cast<CopyProgressCtx*>(data);
+  if (buf) {
+    int ret = write(cp->destictx, offset, len, buf);
+    if (ret) {
+      return ret;
+    }
+  }
+  if (cp->fn)
+    cp->fn(offset, cp->src_size, cp->data);
+  return 0;
 }
 
-int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname)
+int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
+	 copy_progress_fn_t fn, void *data)
 {
   CephContext *cct = dest_md_ctx.cct();
+  CopyProgressCtx cp;
 
   uint64_t src_size = ictx.get_image_size();
 
@@ -1033,15 +1048,21 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname)
     return r;
   }
 
-  ImageCtx *destictx = new librbd::ImageCtx(destname, dest_md_ctx);
-  r = open_image(dest_md_ctx, destictx, destname, NULL);
+  cp.destictx = new librbd::ImageCtx(destname, dest_md_ctx);
+  cp.src_size = src_size;
+  cp.fn = fn;
+  cp.data = data;
+  r = open_image(dest_md_ctx, cp.destictx, destname, NULL);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
   }
 
-  r = read_iterate(&ictx, 0, src_size, do_copy_extent, destictx);
-  close_image(destictx);
+  r = read_iterate(&ictx, 0, src_size, do_copy_extent, &cp);
+  if ((r >= 0) && (cp.fn)) {
+    cp.fn(cp.src_size, cp.src_size, cp.data);
+  }
+  close_image(cp.destictx);
   return r;
 }
 
@@ -1556,7 +1577,15 @@ int Image::stat(image_info_t& info, size_t infosize)
 int Image::copy(IoCtx& dest_io_ctx, const char *destname)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::copy(*ictx, dest_io_ctx, destname);
+  int r = librbd::copy(*ictx, dest_io_ctx, destname, NULL, NULL);
+  return r;
+}
+
+int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
+			      copy_progress_fn_t fn, void *data)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::copy(*ictx, dest_io_ctx, destname, fn, data);
   return r;
 }
 
@@ -1694,7 +1723,16 @@ extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p, const char *des
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;
   librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
-  return librbd::copy(*ictx, dest_io_ctx, destname);
+  return librbd::copy(*ictx, dest_io_ctx, destname, NULL, NULL);
+}
+
+extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
+	      const char *destname, librbd_copy_progress_fn_t fn, void *data)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librados::IoCtx dest_io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
+  return librbd::copy(*ictx, dest_io_ctx, destname, fn, data);
 }
 
 extern "C" int rbd_rename(rados_ioctx_t src_p, const char *srcname, const char *destname)

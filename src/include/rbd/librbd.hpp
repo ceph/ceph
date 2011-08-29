@@ -32,6 +32,8 @@ namespace librbd {
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
+  typedef void (*copy_progress_fn_t)(uint64_t offset, uint64_t src_size,
+				     void *data);
 
   typedef struct {
     uint64_t id;
@@ -79,6 +81,8 @@ public:
   int resize(uint64_t size);
   int stat(image_info_t &info, size_t infosize);
   int copy(IoCtx& dest_io_ctx, const char *destname);
+  int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
+	    copy_progress_fn_t fn, void *data);
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
