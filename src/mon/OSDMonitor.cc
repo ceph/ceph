@@ -1141,14 +1141,8 @@ enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
     ss << "no osds";
     ret = HEALTH_ERR;
   } else {
-    if (num_up_osds < num_osds) {
-      ss << (num_osds - num_up_osds) << "/" << num_osds << " osds down";
-      ret = HEALTH_WARN;
-    }
-    if (num_in_osds < num_osds) {
-      if (ret != HEALTH_OK)
-	ss << ", ";
-      ss << (num_osds - num_in_osds) << "/" << num_osds << " osds out";
+    if (num_up_osds < num_in_osds) {
+      ss << (num_in_osds - num_up_osds) << "/" << num_in_osds << " in osds are down";
       ret = HEALTH_WARN;
     }
   }
