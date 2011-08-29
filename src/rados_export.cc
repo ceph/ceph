@@ -37,7 +37,7 @@ class ExportLocalFileWQ : public RadosSyncWQ {
 public:
   ExportLocalFileWQ(IoCtxDistributor *io_ctx_dist, time_t ti,
 		    ThreadPool *tp, ExportDir *export_dir, bool force)
-    : RadosSyncWQ(io_ctx_dist, ti, tp),
+    : RadosSyncWQ(io_ctx_dist, ti, 0, tp),
       m_export_dir(export_dir),
       m_force(force)
   {
@@ -135,7 +135,7 @@ class ExportValidateExistingWQ : public RadosSyncWQ {
 public:
   ExportValidateExistingWQ(IoCtxDistributor *io_ctx_dist, time_t ti,
 			   ThreadPool *tp, const char *dir_name)
-    : RadosSyncWQ(io_ctx_dist, ti, tp),
+    : RadosSyncWQ(io_ctx_dist, ti, 0, tp),
       m_dir_name(dir_name)
   {
   }

@@ -304,8 +304,8 @@ IoCtxDistributor::~IoCtxDistributor() {
   clear();
 }
 
-RadosSyncWQ::RadosSyncWQ(IoCtxDistributor *io_ctx_dist, time_t ti, ThreadPool *tp)
-  : ThreadPool::WorkQueue<std::string>("FileStore::OpWQ", ti, tp),
+RadosSyncWQ::RadosSyncWQ(IoCtxDistributor *io_ctx_dist, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
+  : ThreadPool::WorkQueue<std::string>("FileStore::OpWQ", timeout, suicide_timeout, tp),
     m_io_ctx_dist(io_ctx_dist)
 {
 }

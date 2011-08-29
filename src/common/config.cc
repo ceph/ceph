@@ -428,6 +428,7 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_cache_lru_size, OPT_INT, 10000),   // num of entries in rgw cache
   OPTION(rgw_socket_path, OPT_STR, NULL),   // path to unix domain socket, if not specified, rgw will not run as external fcgi
   OPTION(rgw_op_thread_timeout, OPT_INT, 10*60),
+  OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60),
 
   // see config.h
   OPTION(internal_safe_to_start_threads, OPT_BOOL, false),

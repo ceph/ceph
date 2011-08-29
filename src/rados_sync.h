@@ -121,7 +121,7 @@ private:
 
 class RadosSyncWQ : public ThreadPool::WorkQueue<std::string> {
 public:
-  RadosSyncWQ(IoCtxDistributor *io_ctx_dist, time_t ti, ThreadPool *tp);
+  RadosSyncWQ(IoCtxDistributor *io_ctx_dist, time_t timeout, time_t suicide_timeout, ThreadPool *tp);
 protected:
   IoCtxDistributor *m_io_ctx_dist;
 private:

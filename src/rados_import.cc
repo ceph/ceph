@@ -37,7 +37,7 @@ class ImportLocalFileWQ : public RadosSyncWQ {
 public:
   ImportLocalFileWQ(const char *dir_name, bool force,
 		    IoCtxDistributor *io_ctx_dist, time_t ti, ThreadPool *tp)
-    : RadosSyncWQ(io_ctx_dist, ti, tp),
+    : RadosSyncWQ(io_ctx_dist, ti, 0, tp),
       m_dir_name(dir_name),
       m_force(force)
   {
@@ -161,7 +161,7 @@ class ImportValidateExistingWQ : public RadosSyncWQ {
 public:
   ImportValidateExistingWQ(ExportDir *export_dir,
 		 IoCtxDistributor *io_ctx_dist, time_t ti, ThreadPool *tp)
-    : RadosSyncWQ(io_ctx_dist, ti, tp),
+    : RadosSyncWQ(io_ctx_dist, ti, 0, tp),
       m_export_dir(export_dir)
   {
   }

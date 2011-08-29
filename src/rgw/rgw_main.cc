@@ -61,8 +61,8 @@ class RGWProcess {
 
   struct RGWWQ : public ThreadPool::WorkQueue<FCGX_Request> {
     RGWProcess *process;
-    RGWWQ(RGWProcess *p, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<FCGX_Request>("RGWWQ", ti, tp), process(p) {}
+    RGWWQ(RGWProcess *p, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
+      : ThreadPool::WorkQueue<FCGX_Request>("RGWWQ", timeout, suicide_timeout, tp), process(p) {}
 
     bool _enqueue(FCGX_Request *req) {
       process->m_fcgx_queue.push_back(req);
@@ -107,7 +107,8 @@ class RGWProcess {
 public:
   RGWProcess(CephContext *cct, int num_threads)
     : m_tp(cct, "RGWProcess::m_tp", num_threads),
-      req_wq(this, g_conf->rgw_op_thread_timeout, &m_tp) {}
+      req_wq(this, g_conf->rgw_op_thread_timeout,
+	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
   void run();
   void handle_request(FCGX_Request *fcgx);
 };

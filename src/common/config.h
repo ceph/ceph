@@ -562,6 +562,7 @@ public:
   int   rgw_cache_lru_size;
   string rgw_socket_path;
   int rgw_op_thread_timeout;
+  int rgw_op_thread_suicide_timeout;
 
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.

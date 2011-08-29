@@ -32,9 +32,9 @@ class ThreadPool {
 
   struct WorkQueue_ {
     string name;
-    time_t timeout_interval;
-    WorkQueue_(string n, time_t ti)
-      : name(n), timeout_interval(ti)
+    time_t timeout_interval, suicide_interval;
+    WorkQueue_(string n, time_t ti, time_t sti)
+      : name(n), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
     virtual void _clear() = 0;
@@ -66,7 +66,7 @@ public:
     }
 
   public:
-    WorkQueue(string n, time_t ti, ThreadPool* p) : WorkQueue_(n, ti), pool(p) {
+    WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p) : WorkQueue_(n, ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
     ~WorkQueue() {

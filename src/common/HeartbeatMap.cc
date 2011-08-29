@@ -60,29 +60,48 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
   delete h;
 }
 
-void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace)
+bool HeartbeatMap::_check(heartbeat_handle_d *h, const char *who, time_t now)
 {
-  ldout(m_cct, 20) << "reset_timeout '" << h->name << "' grace " << grace << dendl;
-  time_t now = time(NULL);
-  time_t was = h->timeout.read();
+  bool healthy = true;
+  time_t was;
+
+  was = h->timeout.read();
   if (was && was < now) {
-    ldout(m_cct, 1) << "reset_timeout '" << h->name << "'"
+    ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
+    healthy = false;
   }
+  was = h->suicide_timeout.read();
+  if (was && was < now) {
+    ldout(m_cct, 1) << who << " '" << h->name << "'"
+		    << " had suicide timed out after " << h->suicide_grace << dendl;
+    assert(0 == "hit suicide timeout");
+  }
+  return healthy;
+}
+
+void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace, time_t suicide_grace)
+{
+  ldout(m_cct, 20) << "reset_timeout '" << h->name << "' grace " << grace
+		   << " suicide " << suicide_grace << dendl;
+  time_t now = time(NULL);
+  _check(h, "reset_timeout", now);
+
   h->timeout.set(now + grace);
   h->grace = grace;
+
+  if (suicide_grace)
+    h->suicide_timeout.set(now + suicide_grace);
+  h->suicide_grace = suicide_grace;
 }
 
 void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 {
   ldout(m_cct, 20) << "clear_timeout '" << h->name << "'" << dendl;
   time_t now = time(NULL);
-  time_t was = h->timeout.read();
-  if (was && was < now) {
-    ldout(m_cct, 1) << "clear_timeout '" << h->name << "'"
-		    << " had timed out after " << h->grace << dendl;
-  }
+  _check(h, "clear_timeout", now);
   h->timeout.set(0);
+  h->suicide_timeout.set(0);
 }
 
 bool HeartbeatMap::is_healthy()
@@ -94,10 +113,7 @@ bool HeartbeatMap::is_healthy()
        p != m_workers.end();
        ++p) {
     heartbeat_handle_d *h = *p;
-    time_t timeout = h->timeout.read();
-    if (timeout && timeout < now) {
-      ldout(m_cct, 1) << "is_healthy '" << h->name << "'" 
-		      << " timed out after " << h->grace << dendl;
+    if (!_check(h, "is_healthy", now)) {
       healthy = false;
     }
   }

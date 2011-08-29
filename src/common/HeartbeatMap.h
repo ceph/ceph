@@ -41,12 +41,12 @@ namespace ceph {
 
 struct heartbeat_handle_d {
   std::string name;
-  atomic_t timeout;
-  time_t grace;
+  atomic_t timeout, suicide_timeout;
+  time_t grace, suicide_grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
   heartbeat_handle_d(const std::string& n)
-    : name(n), grace(0)
+    : name(n), grace(0), suicide_grace(0)
   { }
 };
 
@@ -57,7 +57,7 @@ class HeartbeatMap {
   void remove_worker(heartbeat_handle_d *h);
 
   // reset the timeout so that it expects another touch within grace amount of time
-  void reset_timeout(heartbeat_handle_d *h, time_t grace);
+  void reset_timeout(heartbeat_handle_d *h, time_t grace, time_t suicide_grace);
   // clear the timeout so that it's not checked on
   void clear_timeout(heartbeat_handle_d *h);
 
@@ -74,6 +74,8 @@ class HeartbeatMap {
   CephContext *m_cct;
   RWLock m_rwlock;
   std::list<heartbeat_handle_d*> m_workers;
+
+  bool _check(heartbeat_handle_d *h, const char *who, time_t now);
 };
 
 }
