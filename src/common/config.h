@@ -532,6 +532,7 @@ public:
   int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
   int filestore_op_thread_timeout;
+  int filestore_op_thread_suicide_timeout;
   float filestore_commit_timeout;
   int filestore_fiemap_threshold;
 

@@ -404,6 +404,7 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20), //  "
   OPTION(filestore_op_threads, OPT_INT, 2),
   OPTION(filestore_op_thread_timeout, OPT_INT, 60),
+  OPTION(filestore_op_thread_suicide_timeout, OPT_INT, 180),
   OPTION(filestore_commit_timeout, OPT_FLOAT, 600),
   OPTION(filestore_fiemap_threshold, OPT_INT, 4096),
   OPTION(journal_dio, OPT_BOOL, true),
