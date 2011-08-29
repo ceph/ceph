@@ -89,7 +89,7 @@ private:
   bool preprocess_pgtemp(class MOSDPGTemp *m);
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
-  int _prepare_remove_pool(int pool);
+  int _prepare_remove_pool(uint64_t pool);
 
   bool preprocess_pool_op ( class MPoolOp *m);
   bool preprocess_pool_op_create ( class MPoolOp *m);

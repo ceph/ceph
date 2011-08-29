@@ -458,7 +458,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
 		 onfinish);
 }
 
-void ObjectCacher::bh_read_finish(int poolid, sobject_t oid, loff_t start, uint64_t length, bufferlist &bl)
+void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, bufferlist &bl)
 {
   //lock.Lock();
   ldout(cct, 7) << "bh_read_finish " 
@@ -559,7 +559,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   mark_tx(bh);
 }
 
-void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
+void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
 {
   for (list<sobject_t>::iterator i = oids.begin();
        i != oids.end();
@@ -621,7 +621,7 @@ void ObjectCacher::lock_ack(int poolid, list<sobject_t>& oids, tid_t tid)
   }
 }
 
-void ObjectCacher::bh_write_commit(int poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
+void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, uint64_t length, tid_t tid)
 {
   //lock.Lock();
   

@@ -602,7 +602,7 @@ public:
 
   // expose osdmap 
   int get_local_osd();
-  int get_pool_replication(int pool);
+  int get_pool_replication(int64_t pool);
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);

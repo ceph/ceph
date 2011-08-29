@@ -48,7 +48,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_int("max_osd", get_max_osd());
 
   f->open_array_section("pools");
-  for (map<int,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     f->open_object_section("pool");
     f->dump_int("pool", p->first);
     p->second.dump(f);
@@ -128,9 +128,9 @@ void OSDMap::print(ostream& out) const
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";
  
-  for (map<int,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     std::string name("<unknown>");
-    map<int32_t,string>::const_iterator pni = pool_name.find(p->first);
+    map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
     if (pni != pool_name.end())
       name = pni->second;
     out << "pg_pool " << p->first
@@ -278,7 +278,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
   rulesets[CEPH_RBD_RULE] = "rbd";
   
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
-    int pool = ++pool_max;
+    int64_t pool = ++pool_max;
     pools[pool].v.type = CEPH_PG_TYPE_REP;
     pools[pool].v.size = cct->_conf->osd_pool_default_size;
     pools[pool].v.crush_ruleset = p->first;

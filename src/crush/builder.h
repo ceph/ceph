@@ -7,7 +7,7 @@ extern struct crush_map *crush_create();
 extern void crush_finalize(struct crush_map *map);
 
 /* rules */
-extern struct crush_rule *crush_make_rule(int len, int pool, int type, int minsize, int maxsize);
+extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize);
 extern void crush_rule_set_step(struct crush_rule *rule, int pos, int op, int arg1, int arg2);
 extern int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno);
 

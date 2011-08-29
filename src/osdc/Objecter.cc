@@ -1046,7 +1046,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
 
 //snapshots
 
-int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
+int Objecter::create_pool_snap(int64_t pool, string& snapName, Context *onfinish) {
   ldout(cct, 10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   PoolOp *op = new PoolOp;
   if (!op)
@@ -1078,7 +1078,7 @@ struct C_SelfmanagedSnap : public Context {
   }
 };
 
-int Objecter::allocate_selfmanaged_snap(int pool, snapid_t *psnapid,
+int Objecter::allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid,
 					Context *onfinish)
 {
   ldout(cct, 10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
@@ -1096,7 +1096,7 @@ int Objecter::allocate_selfmanaged_snap(int pool, snapid_t *psnapid,
   return 0;
 }
 
-int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
+int Objecter::delete_pool_snap(int64_t pool, string& snapName, Context *onfinish)
 {
   ldout(cct, 10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   PoolOp *op = new PoolOp;
@@ -1114,7 +1114,7 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   return 0;
 }
 
-int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
+int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
 				      Context *onfinish) {
   ldout(cct, 10) << "delete_selfmanaged_snap; pool: " << pool << "; snap: " 
 	   << snap << dendl;
@@ -1153,7 +1153,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   return 0;
 }
 
-int Objecter::delete_pool(int pool, Context *onfinish)
+int Objecter::delete_pool(int64_t pool, Context *onfinish)
 {
   ldout(cct, 10) << "delete_pool " << pool << dendl;
 
@@ -1177,7 +1177,7 @@ int Objecter::delete_pool(int pool, Context *onfinish)
  * on both the pool's current auid and the new (parameter) auid.
  * Uses the standard Context callback when done.
  */
-int Objecter::change_pool_auid(int pool, Context *onfinish, uint64_t auid)
+int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
 {
   ldout(cct, 10) << "change_pool_auid " << pool << " to " << auid << dendl;
   PoolOp *op = new PoolOp;

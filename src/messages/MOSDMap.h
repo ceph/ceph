@@ -65,6 +65,30 @@ public:
   }
   void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
+    if (connection && !connection->has_feature(CEPH_FEATURE_PGID64)) {
+      // reencode maps using old format
+      //
+      // FIXME: this can probably be done more efficiently higher up
+      // the stack, or maybe replaced with something that only
+      // includes the pools the client cares about.
+      for (map<epoch_t,bufferlist>::iterator p = incremental_maps.begin();
+	   p != incremental_maps.end();
+	   ++p) {
+	OSDMap::Incremental inc;
+	bufferlist::iterator q = p->second.begin();
+	inc.decode(q);
+	p->second.clear();
+	inc.encode_client_old(p->second);
+      }
+      for (map<epoch_t,bufferlist>::iterator p = maps.begin();
+	   p != maps.end();
+	   ++p) {
+	OSDMap m;
+	m.decode(p->second);
+	p->second.clear();
+	m.encode_client_old(p->second);
+      }
+    }
     ::encode(incremental_maps, payload);
     ::encode(maps, payload);
   }

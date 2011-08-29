@@ -202,7 +202,7 @@ int main(int argc, const char **argv)
     ceph_object_layout ol = osdmap.make_object_layout(oid, 0);
     
     pg_t pgid;
-    pgid.v = ol.ol_pgid;
+    pgid = ol.ol_pgid;
 
     vector<int> acting;
     osdmap.pg_to_acting_osds(pgid, acting);
@@ -231,11 +231,11 @@ int main(int argc, const char **argv)
       cout << "pass " << ++pass << std::endl;
 
       hash_map<pg_t,vector<int> > m;
-      for (map<int,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+      for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
 	   p != osdmap.get_pools().end();
 	   p++) {
 	const pg_pool_t *pool = osdmap.get_pg_pool(p->first);
-	for (int ps = 0; ps < pool->get_pg_num(); ps++) {
+	for (ps_t ps = 0; ps < pool->get_pg_num(); ps++) {
 	  pg_t pgid(ps, p->first, -1);
 	  for (int i=0; i<100; i++) {
 	    cout << pgid << " attempt " << i << std::endl;

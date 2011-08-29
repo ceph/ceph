@@ -323,7 +323,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
        p++) {
-    int poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
+    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
     if (poolid < 0)
       continue;
     if (pg_map.pg_pool_sum.count(poolid) == 0)
@@ -581,9 +581,9 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
     parent = pgid;
     while (1) {
       // remove most significant bit
-      int msb = pool.calc_bits_of(parent.v.ps);
+      int msb = pool.calc_bits_of(parent.ps());
       if (!msb) break;
-      parent.v.ps = parent.v.ps & ~(1<<(msb-1));
+      parent.set_ps(parent.ps() & ~(1<<(msb-1)));
       split_bits++;
       dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
       //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
@@ -620,10 +620,10 @@ bool PGMonitor::register_new_pgs()
   OSDMap *osdmap = &mon->osdmon()->osdmap;
 
   int created = 0;
-  for (map<int,pg_pool_t>::iterator p = osdmap->pools.begin();
+  for (map<int64_t,pg_pool_t>::iterator p = osdmap->pools.begin();
        p != osdmap->pools.end();
        p++) {
-    int poolid = p->first;
+    int64_t poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
     if (!osdmap->crush.rule_exists(ruleno)) 

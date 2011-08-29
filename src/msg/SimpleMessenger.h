@@ -59,7 +59,8 @@ using namespace __gnu_cxx;
   CEPH_FEATURE_FLOCK |           \
   CEPH_FEATURE_RECONNECT_SEQ |   \
   CEPH_FEATURE_DIRLAYOUTHASH |   \
-  CEPH_FEATURE_OBJECTLOCATOR
+  CEPH_FEATURE_OBJECTLOCATOR |	 \
+  CEPH_FEATURE_PGID64
 
 class SimpleMessenger : public Messenger {
 public:

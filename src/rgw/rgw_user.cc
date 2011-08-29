@@ -453,7 +453,7 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
 }
 
 
-int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
+int rgw_store_pool_info(int64_t pool_id, RGWPoolInfo& pool_info)
 {
   bufferlist bl;
 
@@ -461,7 +461,7 @@ int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
 
   string uid;
   char buf[16];
-  snprintf(buf, sizeof(buf), "%d", pool_id);
+  snprintf(buf, sizeof(buf), "%lld", (long long unsigned)pool_id);
   string pool_id_str(buf);
 
   int ret = rgw_put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
@@ -471,12 +471,12 @@ int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info)
   return ret;
 }
 
-int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info)
+int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info)
 {
   bufferlist bl;
 
   char buf[16];
-  snprintf(buf, sizeof(buf), "%d", pool_id);
+  snprintf(buf, sizeof(buf), "%lld", (long long unsigned)pool_id);
   string pool_id_str(buf);
 
   int ret = rgw_get_obj(pi_pool_bucket, pool_id_str, bl);

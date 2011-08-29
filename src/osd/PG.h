@@ -252,7 +252,7 @@ public:
     bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
-      __u8 v = 22;
+      __u8 v = 23;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
@@ -268,7 +268,13 @@ public:
       __u8 v;
       ::decode(v, bl);
 
-      ::decode(pgid, bl);
+      if (v < 23) {
+	old_pg_t opgid;
+	::decode(opgid, bl);
+	pgid = opgid;
+      } else {
+	::decode(pgid, bl);
+      }
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
       ::decode(log_tail, bl);

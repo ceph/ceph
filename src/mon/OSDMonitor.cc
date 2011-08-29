@@ -1052,7 +1052,7 @@ void OSDMonitor::tick()
     // For all PGs that have OSD 0 as the primary,
     // switch them to use the first replca
     ps_t numps = osdmap.get_pg_num();
-    for (int pool=0; pool<1; pool++)
+    for (int64_t pool=0; pool<1; pool++)
       for (ps_t ps = 0; ps < numps; ++ps) {
 	pg_t pgid = pg_t(pg_t::TYPE_REP, ps, pool, -1);
 	vector<int> osds;
@@ -1301,8 +1301,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       if (m->cmd.size() > 2) {
 	uid_pools = strtol(m->cmd[2].c_str(), NULL, 10);
       }
-      for (map<int, pg_pool_t>::iterator p = osdmap.pools.begin();
-	   p !=osdmap.pools.end();
+      for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
+	   p != osdmap.pools.end();
 	   ++p) {
 	if (!uid_pools || p->second.v.auid == uid_pools) {
 	  ss << p->first << ' ' << osdmap.pool_name[p->first] << ',';
@@ -1354,7 +1354,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
   }
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
-  int pool = ++pending_inc.new_pool_max;
+  int64_t pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
 
   pending_inc.new_pools[pool].v.size = g_conf->osd_pool_default_size;
@@ -1759,7 +1759,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
       if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
-	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
@@ -1788,7 +1788,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       }
       else if (m->cmd.size() >= 5 && m->cmd[2] == "rmsnap") {
-	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
@@ -1832,7 +1832,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       } else if (m->cmd[2] == "delete" && m->cmd.size() >= 4) {
 	//hey, let's delete a pool!
-	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
@@ -1850,13 +1850,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "usage: osd pool set <poolname> <field> <value>";
 	  goto out;
 	}
-	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
 	} else {
 	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
-	  int n = atoi(m->cmd[5].c_str());
+	  unsigned n = atoi(m->cmd[5].c_str());
 	  if (n) {
 	    if (m->cmd[4] == "size") {
 	      pending_inc.new_pools[pool] = *p;
@@ -1910,7 +1910,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "usage: osd pool get <poolname> <field>";
 	  goto out;
 	}
-	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
@@ -2033,7 +2033,7 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
     return true;
   }
 
-  int pool = osdmap.lookup_pg_pool_name(m->name.c_str());
+  int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
     _pool_op_reply(m, -EEXIST, osdmap.get_epoch());
     return true;
@@ -2140,7 +2140,7 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
   return true;
 }
 
-int OSDMonitor::_prepare_remove_pool(int pool)
+int OSDMonitor::_prepare_remove_pool(uint64_t pool)
 {
     dout(10) << "_prepare_remove_pool " << pool << dendl;
   if (pending_inc.old_pools.count(pool)) {

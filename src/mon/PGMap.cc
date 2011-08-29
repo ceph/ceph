@@ -156,7 +156,7 @@ void PGMap::stat_osd_sub(const osd_stat_t &s)
 
 void PGMap::encode(bufferlist &bl)
 {
-  __u8 v = 2;
+  __u8 v = 3;
   ::encode(v, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
@@ -172,7 +172,19 @@ void PGMap::decode(bufferlist::iterator &bl)
   __u8 v;
   ::decode(v, bl);
   ::decode(version, bl);
-  ::decode(pg_stat, bl);
+  if (v < 3) {
+    pg_stat.clear();
+    __u32 n;
+    ::decode(n, bl);
+    while (n--) {
+      old_pg_t opgid;
+      ::decode(opgid, bl);
+      pg_t pgid = opgid;
+      ::decode(pg_stat[pgid], bl);
+    }
+  } else {
+    ::decode(pg_stat, bl);
+  }
   ::decode(osd_stat, bl);
   ::decode(last_osdmap_epoch, bl);
   ::decode(last_pg_scan, bl);

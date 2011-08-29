@@ -235,7 +235,7 @@ struct ceph_osd_request_head {
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::encode(peer_stat, payload);
     } else {
-      header.version = 2;
+      header.version = 3;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
@@ -267,8 +267,11 @@ struct ceph_osd_request_head {
       // old decode
       ::decode(client_inc, p);
 
+      old_pg_t opgid;
+      ::decode_raw(opgid, p);
+      pgid = opgid;
+
       __u32 su;
-      ::decode(pgid, p);
       ::decode(su, p);
       oloc.pool = pgid.pool();
 
@@ -296,6 +299,11 @@ struct ceph_osd_request_head {
 
       if (flags & CEPH_OSD_FLAG_PEERSTAT)
 	::decode(peer_stat, p);
+
+      // recalculate pgid hash value
+      pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
+				oid.name.c_str(),
+				oid.name.length()));
     } else {
       // new decode 
       ::decode(client_inc, p);
@@ -305,7 +313,15 @@ struct ceph_osd_request_head {
       ::decode(reassert_version, p);
 
       ::decode(oloc, p);
-      ::decode(pgid, p);
+
+      if (header.version < 3) {
+	old_pg_t opgid;
+	::decode_raw(opgid, p);
+	pgid = opgid;
+      } else {
+	::decode(pgid, p);
+      }
+
       ::decode(oid, p);
 
       //::decode(ops, p);

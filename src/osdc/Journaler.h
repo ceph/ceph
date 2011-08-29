@@ -102,7 +102,7 @@ public:
 private:
   // me
   inodeno_t ino;
-  unsigned pg_pool;
+  int64_t pg_pool;
   bool readonly;
   ceph_file_layout layout;
 
@@ -229,7 +229,7 @@ private:
   }
 
 public:
-  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
+  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
     cct(obj->cct), last_written(mag), last_committed(mag),
     ino(ino_), pg_pool(pool), readonly(true), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),

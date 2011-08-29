@@ -149,7 +149,7 @@ extern int rgw_remove_uid_index(string& uid);
 extern int rgw_remove_email_index(string& uid, string& email);
 extern int rgw_remove_openstack_name_index(string& uid, string& openstack_name);
 
-extern int rgw_store_pool_info(int pool_id, RGWPoolInfo& pool_info);
-extern int rgw_retrieve_pool_info(int pool_id, RGWPoolInfo& pool_info);
+extern int rgw_store_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);
+extern int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);
 
 #endif

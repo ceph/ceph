@@ -6832,7 +6832,7 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 
 // expose osdmap
 
-int Client::get_pool_replication(int pool)
+int Client::get_pool_replication(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
   if (!osdmap->have_pg_pool(pool))

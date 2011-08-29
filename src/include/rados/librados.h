@@ -123,7 +123,7 @@ void rados_ioctx_destroy(rados_ioctx_t io);
 
 int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
 
-int rados_pool_lookup(rados_t cluster, const char *pool_name);
+int64_t rados_pool_lookup(rados_t cluster, const char *pool_name);
 int rados_pool_create(rados_t cluster, const char *pool_name);
 int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid);
 int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
