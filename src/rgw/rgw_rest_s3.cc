@@ -691,8 +691,8 @@ int RGWHandler_REST_S3::authorize()
   RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
 
   time_t req_sec = s->header_time.sec();
-  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
+  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+      req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
     RGW_LOG(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
     RGW_LOG(0) << "request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
     return -ERR_REQUEST_TIME_SKEWED;
