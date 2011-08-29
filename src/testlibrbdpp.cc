@@ -248,6 +248,24 @@ void test_rbd_copy(librados::IoCtx& io_ctx, librbd::Image& image)
   }
 }
 
+static void print_progress_percent(uint64_t offset, uint64_t src_size,
+				     void *data)
+{
+  float percent = ((float)offset * 100) / src_size;
+  printf("%3.2f%% done\n", percent);
+}
+
+void test_rbd_copy_with_progress(librados::IoCtx& io_ctx, librbd::Image& image)
+{
+  int ret;
+  ret = image.copy_with_progress(io_ctx, TEST_IMAGE2,
+				 print_progress_percent, NULL);
+  if (ret < 0) {
+    fprintf(stderr, "image.copy returned %d!\n", ret);
+    abort();
+  }
+}
+
 int main(int argc, const char **argv) 
 {
   librados::Rados rados;
@@ -287,6 +305,8 @@ int main(int argc, const char **argv)
   test_delete(io_ctx, TEST_IMAGE "1");
   test_ls(io_ctx, 0);
   test_rbd_copy(io_ctx, image);
+  test_delete(io_ctx, TEST_IMAGE2);
+  test_rbd_copy_with_progress(io_ctx, image);
   delete rbd;
   return 0;
 }
