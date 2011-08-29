@@ -584,10 +584,15 @@ def mon(ctx, config):
             extra_args = None
 
             if config.get('valgrind') and (config.get('valgrind').get('mon.{id}'.format(id=id_), None) is not None):
+                valgrind_args = config.get('valgrind').get('mon.{id}'.format(id=id_))
                 log.debug('running mon.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 proc_signal = 'term'
-                extra_args = ['valgrind', '--log-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['mon.{id}'.format(id=id_)] ]
+                if 'memcheck' in valgrind_args or \
+                        'helgrind' in valgrind_args:
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
+                else:
+                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/mon.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
@@ -639,11 +644,16 @@ def osd(ctx, config):
             
             extra_args = None
 
-            if config.get('valgrind') and config.get('valgrind').get(('osd.{id}'.format(id=id_), None) is not None):
+            if config.get('valgrind') and config.get('valgrind').get('osd.{id}'.format(id=id_), None) is not None:
+                valgrind_args = config.get('valgrind').get('osd.{id}'.format(id=id_))
                 log.debug('running osd.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-                extra_args = ['valgrind', '--log-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['osd.{id}'.format(id=id_)] ]
                 proc_signal = 'term'
+                if 'memcheck' in valgrind_args or \
+                        'helgrind' in valgrind_args:
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
+                else:
+                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/osd.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
@@ -680,9 +690,6 @@ def mds(ctx, config):
         log.info('Recording coverage for this run.')
         daemon_signal = 'term'
 
-    log.debug('config is %s', config)
-    log.debug('config.get(valgrind) is %s', config.get('valgrind'))
-
     num_active = 0
     for remote, roles_for_host in mdss.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
@@ -703,10 +710,15 @@ def mds(ctx, config):
             extra_args = None
 
             if config.get('valgrind') and (config.get('valgrind').get('mds.{id}'.format(id=id_), None) is not None):
+                valgrind_args = config.get('valgrind').get('mds.{id}'.format(id=id_))
                 log.debug('running mds.{id} under valgrind'.format(id=id_))
                 val_path = '/tmp/cephtest/archive/log/{val_dir}'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
                 proc_signal = 'term'
-                extra_args = ['valgrind', '--log-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), config.get('valgrind')['mds.{id}'.format(id=id_)] ]
+                if 'memcheck' in valgrind_args or \
+                        'helgrind' in valgrind_args:
+                    extra_args = ['valgrind', '--xml=yes', '--xml-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
+                else:
+                    extra_args = extra_args = ['valgrind', '--log-file={vdir}/mds.{id}.log'.format(vdir=val_path, id=id_), valgrind_args]
 
             run_cmd.append(proc_signal)
             if extra_args is not None:
