@@ -3,10 +3,15 @@ set -e
 cd "$(dirname "$0")"
 cd ..
 
+install -d -m0755 build-doc
+
+if [ ! -e build-doc/doxygen/xml ]; then
+    doxygen
+fi
+
 dia --filter=png-libart --export=doc/overview.png.tmp doc/overview.dia
 mv -- doc/overview.png.tmp doc/overview.png
 
-install -d -m0755 build-doc
 cd build-doc
 
 if [ ! -e virtualenv ]; then
@@ -15,6 +20,17 @@ fi
 if [ ! -x virtualenv/bin/sphinx-build ]; then
     ./virtualenv/bin/pip install sphinx
 fi
+
+# ugly kludge until breathe is distutils-friendly
+install -d breathe
+cd breathe
+if [ ! -e .git ]; then
+    git init
+fi
+if [ -z "$(git rev-parse --default HEAD)" ]; then
+    git pull --ff-only https://github.com/michaeljones/breathe.git master
+fi
+cd ..
 
 install -d -m0755 \
     output/html \

@@ -92,6 +92,7 @@ Table of Contents
    tutorial
    architecture
    ops/index
+   api/index
    man/index
    papers
    glossary

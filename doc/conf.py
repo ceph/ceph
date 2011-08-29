@@ -17,7 +17,12 @@ html_static_path = ['_static']
 html_use_smartypants = True
 html_show_sphinx = False
 
-extensions = ['sphinx.ext.todo']
+# ugly kludge until breathe is distutils-friendly
+import sys; sys.path.append('../build-doc/breathe')
+extensions = [
+    'sphinx.ext.todo',
+    'breathe',
+    ]
 todo_include_todos = True
 
 def _get_manpages():
@@ -56,3 +61,8 @@ def _get_manpages():
                 )
 
 man_pages = list(_get_manpages())
+
+breathe_default_project = 'ceph'
+breathe_projects = dict(
+    ceph='doxygen/xml',
+    )
