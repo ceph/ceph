@@ -221,6 +221,34 @@ def get_first_mon(ctx, config):
     return firstmon
 
 @contextlib.contextmanager
+def valgrind_post(ctx, config):
+    try:
+        yield
+    finally:
+        lookup_procs = list()
+        val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
+        for remote in ctx.cluster.remotes.iterkeys():
+            #look at valgrind logs for each node
+            proc = remote.run(
+                args=[
+                    'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
+                    'grep', '-v', '-q', "PossiblyLost"],
+                wait = False,
+                check_status=False
+                )
+            lookup_procs.append((proc, remote))
+            
+        valgrind_exception = None
+        for (proc, remote) in lookup_procs:
+            result = proc.exitstatus.get()
+            if result is not 1:
+                valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
+        
+        if valgrind_exception is not None:
+            raise valgrind_exception
+                
+
+@contextlib.contextmanager
 def cluster(ctx, config):
     log.info('Creating ceph cluster...')
     run.wait(
@@ -808,6 +836,8 @@ def task(ctx, config):
           valgrind:
             mds.1: --tool=memcheck
             osd.1: --tool=memcheck
+    Those nodes which are using memcheck or helgrind will get
+    checked for bad results.
 
     To adjust or modify config options, use::
 
@@ -887,6 +917,7 @@ def task(ctx, config):
                 path=config.get('path'),
                 flavor=flavor,
                 )),
+        lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {})
                 )),
