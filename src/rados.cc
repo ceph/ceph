@@ -24,6 +24,7 @@ using namespace librados;
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mds/inode_backtrace.h"
 #include "auth/Crypto.h"
 #include <iostream>
@@ -577,6 +578,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t num_objs = 0;
   int run_length = 0;
 
+  Formatter *formatter = NULL;
+  bool pretty_format = false;
+
   i = opts.find("create");
   if (i != opts.end()) {
     create_pool = true;
@@ -641,6 +645,23 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     run_length = strtol(i->second.c_str(), NULL, 10);
   }
+  i = opts.find("pretty-format");
+  if (i != opts.end()) {
+    pretty_format = true;
+  }
+  i = opts.find("format");
+  if (i != opts.end()) {
+    const char *format = i->second.c_str();
+    if (strcmp(format, "xml") == 0)
+      formatter = new XMLFormatter(pretty_format);
+    else if (strcmp(format, "json") == 0)
+      formatter = new JSONFormatter(pretty_format);
+    else {
+      cerr << "unrecognized format: " << format << std::endl;
+      return -EINVAL;
+    }
+  }
+
 
   // open rados
   Rados rados;
@@ -723,41 +744,94 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     map<string, map<string, pool_stat_t> > stats;
     rados.get_pool_stats(vec, category, stats);
 
-    printf("%-15s %-15s"
-	   "%12s %12s %12s %12s "
-	   "%12s %12s %12s %12s %12s\n",
-	   "pool name",
-	   "category",
-	   "KB", "objects", "clones", "degraded",
-	   "unfound", "rd", "rd KB", "wr", "wr KB");
+    if (!formatter) {
+      printf("%-15s %-15s"
+	     "%12s %12s %12s %12s "
+	     "%12s %12s %12s %12s %12s\n",
+	     "pool name",
+	     "category",
+	     "KB", "objects", "clones", "degraded",
+	     "unfound", "rd", "rd KB", "wr", "wr KB");
+    } else {
+      formatter->open_array_section("Pools");
+    }
     for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
-      const string& pool_name = c->first;
+      const char *pool_name = c->first.c_str();
       stats_map& m = c->second;
+      if (formatter) {
+        formatter->open_object_section("Pool");
+        int64_t pool_id = rados.pool_lookup(pool_name);
+        formatter->dump_string("Name", pool_name);
+        if (pool_id >= 0)
+          formatter->dump_format("ID", "%lld", pool_id);
+        else
+          cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
+        formatter->open_array_section("Categories");
+      }
       for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
-        const char *category = (i->first.size() ? i->first.c_str() : "-");
-        printf("%-15s "
-               "%-15s "
-	       "%12lld %12lld %12lld %12lld"
-	       "%12lld %12lld %12lld %12lld %12lld\n",
-	       pool_name.c_str(),
-               category,
-	       (long long)i->second.num_kb,
-	       (long long)i->second.num_objects,
-	       (long long)i->second.num_object_clones,
-	       (long long)i->second.num_objects_degraded,
-	       (long long)i->second.num_objects_unfound,
-	       (long long)i->second.num_rd, (long long)i->second.num_rd_kb,
-	       (long long)i->second.num_wr, (long long)i->second.num_wr_kb);
+        const char *category = (i->first.size() ? i->first.c_str() : "");
+        pool_stat_t& s = i->second;
+        if (!formatter) {
+          if (!*category)
+            category = "-";
+          printf("%-15s "
+                 "%-15s "
+	         "%12lld %12lld %12lld %12lld"
+	         "%12lld %12lld %12lld %12lld %12lld\n",
+	         pool_name,
+                 category,
+	         (long long)s.num_kb,
+	         (long long)s.num_objects,
+	         (long long)s.num_object_clones,
+	         (long long)s.num_objects_degraded,
+	         (long long)s.num_objects_unfound,
+	         (long long)s.num_rd, (long long)s.num_rd_kb,
+	         (long long)s.num_wr, (long long)s.num_wr_kb);
+        } else {
+          formatter->open_object_section("Category");
+          if (category)
+            formatter->dump_string("Name", category);
+          formatter->dump_format("SizeBytes", "%lld", s.num_bytes);
+          formatter->dump_format("SizeKB", "%lld", s.num_kb);
+          formatter->dump_format("NumObjects", "%lld", s.num_objects);
+          formatter->dump_format("NumObjectClones", "%lld", s.num_object_clones);
+          formatter->dump_format("NumObjectCopies", "%lld", s.num_object_copies);
+          formatter->dump_format("NumObjectsMissingOnPrimary", "%lld", s.num_objects_missing_on_primary);
+          formatter->dump_format("NumObjectsUnfound", "%lld", s.num_objects_unfound);
+          formatter->dump_format("NumObjectsDegraded", "%lld", s.num_objects_degraded);
+          formatter->dump_format("ReadBytes", "%lld", s.num_rd);
+          formatter->dump_format("ReadKB", "%lld", s.num_rd_kb);
+          formatter->dump_format("WriteBytes", "%lld", s.num_wr);
+          formatter->dump_format("WriteKB", "%lld", s.num_wr_kb);
+          formatter->flush(cout);
+        }
+        if (formatter) {
+          formatter->close_section();
+        }
+      }
+      if (formatter) {
+        formatter->close_section();
+        formatter->close_section();
+        formatter->flush(cout);
       }
     }
 
     // total
     cluster_stat_t tstats;
     rados.cluster_stat(tstats);
-    printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
-	   (long long unsigned)tstats.num_objects);
-    printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
-    printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
+    if (!formatter) {
+      printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
+	     (long long unsigned)tstats.num_objects);
+      printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
+      printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
+    } else {
+      formatter->dump_format("TotalObjects", "%lld", (long long unsigned)tstats.num_objects);
+      formatter->dump_format("TotalUsed", "%lld", (long long unsigned)tstats.kb_used);
+      formatter->dump_format("TotalAvail", "%lld", (long long unsigned)tstats.kb_avail);
+      formatter->dump_format("TotalSpace", "%lld", (long long unsigned)tstats.kb);
+      formatter->close_section();
+      formatter->flush(cout);
+    }
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
@@ -1191,6 +1265,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-C", "--create", "--create-pool",
 				  (char*)NULL)) {
       opts["create"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
+      opts["pretty-format"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
@@ -1221,6 +1297,8 @@ int main(int argc, const char **argv)
       opts["num-objects"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)NULL)) {
       opts["workers"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+      opts["format"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();
