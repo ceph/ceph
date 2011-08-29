@@ -1788,24 +1788,26 @@ void Client::close_dir(Dir *dir)
    */
 Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 {
-  if (!dn) { //create a new Dentry
+  if (!dn) {
+    // create a new Dentry
     dn = new Dentry;
     dn->name = name;
     
     // link to dir
     dn->dir = dir;
-    //cout << "link dir " << dir->parent_inode->ino << " '" << name
-    //<< "' -> inode " << in->ino << endl;
     dir->dentries[dn->name] = dn;
     dir->dentry_map[dn->name] = dn;
     lru.lru_insert_mid(dn);    // mid or top?
+
+    ldout(cct, 15) << "link " << dir->parent_inode << " '" << name << "' to " << in
+		   << " dn " << dn << " (new dn)" << dendl;
+  } else {
+    ldout(cct, 15) << "link " << dir->parent_inode << " '" << name << "' to " << in
+		   << " dn " << dn << " (old dn)" << dendl;
   }
 
   if (in) {    // link to inode
     dn->inode = in;
-    if (!in->dn_set.empty())
-      ldout(cct, 5) << "adding new hard link to " << in->vino()
-		    << " from " << dn << dendl;
     in->get();
     if (in->dir)
       dn->get();  // dir -> dn pin
@@ -1816,6 +1818,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     }
 
     in->dn_set.insert(dn);
+
+    ldout(cct, 20) << "link  inode " << in << " parents now " << in->dn_set << dendl; 
   }
   
   return dn;
@@ -1824,6 +1828,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir)
 {
   Inode *in = dn->inode;
+  ldout(cct, 15) << "unlink " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
+		 << " inode " << dn->inode << dendl;
 
   // unlink from inode
   if (in) {
@@ -1831,6 +1837,7 @@ void Client::unlink(Dentry *dn, bool keepdir)
       dn->put();        // dir -> dn pin
     dn->inode = 0;
     in->dn_set.erase(dn);
+    ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dn_set << dendl; 
     put_inode(in);
   }
         
