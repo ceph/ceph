@@ -225,6 +225,8 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
+        if not config.get('valgrind'):
+            return
         lookup_procs = list()
         val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
         for remote in ctx.cluster.remotes.iterkeys():
