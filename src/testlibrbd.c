@@ -193,7 +193,7 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
 void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len)
 {
   rbd_completion_t comp;
-  char *result = malloc(sizeof(result) * (len + 1));
+  char *result = malloc(len + 1);
 
   assert(result);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
@@ -213,7 +213,7 @@ void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, s
 void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len)
 {
   ssize_t read;
-  char *result = malloc(sizeof(result) * (len + 1));
+  char *result = malloc(len + 1);
 
   assert(result);
   read = rbd_read(image, off, len, result);
