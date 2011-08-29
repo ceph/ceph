@@ -79,18 +79,20 @@ describe. One job is run at a time.
 
         if job_config.get('last_in_suite', False):
             log.debug('Generating coverage for %s', job_config['name'])
-            subprocess.Popen(
-                args=[
-                    os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-results'),
-                    '--timeout',
-                    job_config.get('results_timeout', '21600'),
-                    '--email',
-                    job_config['email'],
-                    '--archive-dir',
-                    os.path.join(ctx.archive_dir, safe_archive),
-                    '--name',
-                    job_config['name'],
-                    ])
+            args = [
+                os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-results'),
+                '--timeout',
+                job_config.get('results_timeout', '21600'),
+                '--email',
+                job_config['email'],
+                '--archive-dir',
+                os.path.join(ctx.archive_dir, safe_archive),
+                '--name',
+                job_config['name'],
+                ]
+            if job_config.get('email_on_success', False):
+                args.append('--email-on-success')
+            subprocess.Popen(args=args)
         else:
             log.debug('Creating archive dir...')
             safepath.makedirs(ctx.archive_dir, safe_archive)

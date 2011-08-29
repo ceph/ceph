@@ -57,6 +57,12 @@ combination, and will override anything in the suite.
         help='address to email test failures to',
         )
     parser.add_argument(
+        '--email-on-success',
+        action='store_true',
+        default=False,
+        help='email even if all tests pass',
+        )
+    parser.add_argument(
         '--timeout',
         help='how many seconds to wait for jobs to finish before emailing results',
         )
@@ -186,6 +192,12 @@ def results():
         help='address to email test failures to',
         )
     parser.add_argument(
+        '--email-on-success',
+        action='store_true',
+        default=False,
+        help='email even if all tests pass',
+        )
+    parser.add_argument(
         '--timeout',
         help='how many seconds to wait for all tests to finish (default no wait)',
         type=int,
@@ -251,6 +263,7 @@ def results():
             ],
         )
 
+    descriptions = []
     failures = []
     unfinished = []
     for j in sorted(os.listdir(args.archive_dir)):
@@ -265,17 +278,24 @@ def results():
             g = yaml.safe_load_all(f)
             for new in g:
                 summary.update(new)
+        desc = '{test}: {desc}'.format(
+            desc=summary['description'],
+            test=j,
+            )
+        descriptions.append(desc)
         if not summary['success']:
-            failures.append('{test}: {desc}'.format(
-                    desc=summary['description'],
-                    test=j,
-                    ))
-    if (not failures and not unfinished) or not args.email:
+            failures.append(desc)
+
+    if not args.email or not (failures or unfinished or args.email_on_success):
         return
 
-    import smtplib
-    from email.mime.text import MIMEText
-    msg = MIMEText("""
+    if failures or unfinished:
+        subject = '{num_failed} failed and {num_hung} possibly hung tests in {suite}'.format(
+            num_failed=len(failures),
+            num_hung=len(unfinished),
+            suite=args.name,
+            )
+        body = """
 The following tests failed:
 
 {failures}
@@ -285,12 +305,15 @@ These tests may be hung (did not finish in {timeout} seconds after the last test
             failures='\n'.join(failures),
             unfinished='\n'.join(unfinished),
             timeout=args.timeout,
-            ))
-    msg['Subject'] = '{num_failed} failed and {num_hung} possibly hung tests in {suite}'.format(
-        num_failed=len(failures),
-        num_hung=len(unfinished),
-        suite=args.name,
-        )
+            )
+    else:
+        subject = 'All tests passed in {suite}!'.format(suite=args.name)
+        body = '\n'.join(descriptions)
+
+    import smtplib
+    from email.mime.text import MIMEText
+    msg = MIMEText(body)
+    msg['Subject'] = subject
     msg['From'] = args.teuthology_config['results_sending_email']
     msg['To'] = args.email
     log.debug('sending email %s', msg.as_string())
