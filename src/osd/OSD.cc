@@ -1026,14 +1026,6 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   return pg;
 }
 
-PG *OSD::lookup_lock_pg(pg_t pgid)
-{
-  osd_lock.Lock();
-  PG *pg = _lookup_lock_pg(pgid);
-  osd_lock.Unlock();
-  return pg;
-}
-
 PG *OSD::lookup_lock_raw_pg(pg_t pgid)
 {
   osd_lock.Lock();
