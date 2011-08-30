@@ -577,9 +577,9 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
   
-  ldout(cct, 12) << "insert_dentry_inode " << dname << " vino " << in->vino()
-	   << " in dir " << dir->parent_inode->vino()
-           << dendl;
+  ldout(cct, 12) << "insert_dentry_inode '" << dname << "' vino " << in->vino()
+		 << " in dir " << dir->parent_inode->vino() << " dn " << dn
+		 << dendl;
   
   if (dn && dn->inode) {
     if (dn->inode->vino() == in->vino()) {
@@ -602,11 +602,9 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       ldout(cct, 12) << " had vino " << in->vino()
 	       << " linked at the wrong position, relinking"
 	       << dendl;
-      dn = relink_inode(dir, dname, in, old_dentry, dn);
+      dn = relink(dir, dname, in, old_dentry, dn);
     } else {
       // link
-      ldout(cct, 12) << " had vino " << in->vino()
-	       << " unlinked, linking" << dendl;
       dn = link(dir, dname, in, dn);
     }
     if (set_offset) {
@@ -1809,10 +1807,10 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     dir->dentry_map[dn->name] = dn;
     lru.lru_insert_mid(dn);    // mid or top?
 
-    ldout(cct, 15) << "link " << dir->parent_inode << " '" << name << "' to " << in
+    ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (new dn)" << dendl;
   } else {
-    ldout(cct, 15) << "link " << dir->parent_inode << " '" << name << "' to " << in
+    ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
   }
 
@@ -1840,7 +1838,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir)
 {
   Inode *in = dn->inode;
-  ldout(cct, 15) << "unlink " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
+  ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
   // unlink from inode
@@ -1867,8 +1865,8 @@ void Client::unlink(Dentry *dn, bool keepdir)
 
 /* If an inode's been moved from one dentry to another
  * (via rename, for instance), call this function to move it */
-Dentry *Client::relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
-			     Dentry *newdn)
+Dentry *Client::relink(Dir *dir, const string& name, Inode *in,
+		       Dentry *olddn, Dentry *newdn)
 {
   Dir *olddir = olddn->dir;  // note: might == dir!
   bool made_new = false;
@@ -1882,6 +1880,10 @@ Dentry *Client::relink_inode(Dir *dir, const string& name, Inode *in, Dentry *ol
   } else {
     assert(newdn->inode == NULL);
   }
+
+  ldout(cct, 15) << "relink dir " << dir->parent_inode << " '" << name << "' olddn " << olddn
+		 << " newdn " << newdn << " inode " << in << dendl;
+
   newdn->inode = in;
   in->dn_set.erase(olddn);
   in->dn_set.insert(newdn);
