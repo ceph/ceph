@@ -34,11 +34,9 @@ ostream& operator<<(ostream &out, Inode &in)
   if (in.is_file())
     out << " " << in.oset;
 
-  set<Dentry*>::iterator i = in.dn_set.begin();
-  while(i != in.dn_set.end()) {
-      out << " parent=" << *i;
-      ++i;
-  }
+  if (!in.dn_set.empty())
+    out << " parents=" << in.dn_set;
+
   out << ' ' << &in << ")";
   return out;
 }
