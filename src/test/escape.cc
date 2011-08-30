@@ -83,10 +83,10 @@ TEST(EscapeJson, Escapes1) {
 
 TEST(EscapeJson, ControlChars) {
   uint8_t cc1[] = { 0x01, 0x02, 0x03, 0x0 };
-  ASSERT_EQ(escape_json_attrs((char*)cc1), "\\0001\\0002\\0003");
+  ASSERT_EQ(escape_json_attrs((char*)cc1), "\\u0001\\u0002\\u0003");
 
   uint8_t cc2[] = { 0x61, 0x62, 0x63, 0x7f, 0x0 };
-  ASSERT_EQ(escape_json_attrs((char*)cc2), "abc\\007f");
+  ASSERT_EQ(escape_json_attrs((char*)cc2), "abc\\u007f");
 }
 
 TEST(EscapeJson, Utf8) {
