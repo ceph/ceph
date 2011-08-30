@@ -465,7 +465,12 @@ private:
   }
   bool share_space(multimap<uint64_t, ceph_filelock>::iterator& iter,
 		   ceph_filelock& lock) {
-    return share_space(iter, lock.start, lock.start+lock.length-1);
+    uint64_t end = lock.start;
+    if (lock.length)
+      end += lock.length - 1;
+    else // zero length means to end-of-file
+      end = uint64_t(-1);
+    return share_space(iter, lock.start, end);
   }
   
   /*
@@ -481,12 +486,23 @@ private:
     // create a lock starting one earlier and ending one later
     // to check for neighbors
     ceph_filelock neighbor_check_lock = lock;
-    neighbor_check_lock.start = neighbor_check_lock.start - 1;
-    if (neighbor_check_lock.length)
-      neighbor_check_lock.length = neighbor_check_lock.length+ 2;
+    if (neighbor_check_lock.start != 0) {
+      neighbor_check_lock.start = neighbor_check_lock.start - 1;
+      if (neighbor_check_lock.length)
+        neighbor_check_lock.length = neighbor_check_lock.length + 2;
+    } else {
+      if (neighbor_check_lock.length)
+        neighbor_check_lock.length = neighbor_check_lock.length + 1;
+    }
     //find the last held lock starting at the point after lock
+    uint64_t endpoint = lock.start;
+    if (lock.length) {
+      endpoint += lock.length;
+    } else {
+      endpoint = uint64_t(-1); // max offset
+    }
     multimap<uint64_t, ceph_filelock>::iterator iter =
-      get_last_before(lock.start + lock.length, held_locks);
+      get_last_before(endpoint, held_locks);
     bool cont = iter != held_locks.end();
     while(cont) {
       if (share_space(iter, lock)) {
