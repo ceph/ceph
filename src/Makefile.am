@@ -97,6 +97,10 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
+fsconverter_SOURCES = fsconverter.cc
+fsconverter_LDADD = libos.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += fsconverter
+
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 sbin_PROGRAMS += mount.ceph
@@ -114,7 +118,7 @@ csyn_SOURCES = csyn.cc client/SyntheticClient.cc
 csyn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += csyn
 
-core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
+core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn fsconverter
 
 
 # fuse targets?
@@ -627,6 +631,12 @@ test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
+test_store_SOURCES = test/store_test.cc
+test_store_LDFLAGS = ${AM_LDFLAGS}
+test_store_LDADD =  librados.la ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_store
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -905,7 +915,11 @@ noinst_LIBRARIES += libmds.a
 libos_la_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
-	os/JournalingObjectStore.cc
+	os/JournalingObjectStore.cc \
+	os/LFNIndex.cc \
+	os/HashIndex.cc \
+	os/IndexManager.cc \
+	os/FlatIndex.cc
 libos_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libos_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libos.la
@@ -1342,8 +1356,8 @@ noinst_HEADERS = \
 	test/rados-api/test.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
-	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
+	$(fsconverter_SOURCES) $(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
+	$(cosd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_la_SOURCES) $(libosd_la_SOURCES) \

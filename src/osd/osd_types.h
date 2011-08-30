@@ -102,7 +102,7 @@ enum {
   CEPH_RBD_RULE,
 };
 
-#define OSD_SUPERBLOCK_POBJECT sobject_t(object_t("osd_superblock"), 0)
+#define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -264,6 +264,10 @@ public:
 
   const char* c_str() const {
     return str.c_str();
+  }
+
+  int operator<(const coll_t &rhs) const {
+    return str < rhs.str;
   }
 
   bool is_pg(pg_t& pgid, snapid_t& snap) const;
@@ -1164,7 +1168,7 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 
 
 struct object_info_t {
-  sobject_t soid;
+  hobject_t soid;
   object_locator_t oloc;
   string category;
 
@@ -1186,6 +1190,9 @@ struct object_info_t {
 
   void copy_user_bits(const object_info_t& other);
 
+  static ps_t legacy_object_locator_to_ps(const object_t &oid, 
+					  const object_locator_t &loc);
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
@@ -1193,7 +1200,7 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(const sobject_t& s, const object_locator_t& o)
+  object_info_t(const hobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
       lost(false), truncate_seq(0), truncate_size(0) {}
 
@@ -1236,7 +1243,7 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  map<sobject_t,object> objects;
+  map<hobject_t,object> objects;
   map<string,bufferptr> attrs;
   bufferlist logbl;
   eversion_t valid_through;

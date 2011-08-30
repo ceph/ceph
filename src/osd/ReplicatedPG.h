@@ -358,7 +358,7 @@ public:
 
     interval_set<uint64_t> modified_ranges;
     ObjectContext *obc;          // For ref counting purposes
-    map<sobject_t,ObjectContext*> src_obc;
+    map<hobject_t,ObjectContext*> src_obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
@@ -405,7 +405,7 @@ public:
 
     OpContext *ctx;
     ObjectContext *obc;
-    map<sobject_t,ObjectContext*> src_obc;
+    map<hobject_t,ObjectContext*> src_obc;
 
     tid_t rep_tid;
 
@@ -482,10 +482,10 @@ protected:
   friend class C_OSD_OpApplied;
 
   // projected object info
-  map<sobject_t, ObjectContext*> object_contexts;
+  map<hobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
-  ObjectContext *lookup_object_context(const sobject_t& soid) {
+  ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
       ObjectContext *obc = object_contexts[soid];
       obc->ref++;
@@ -493,7 +493,7 @@ protected:
     }
     return NULL;
   }
-  ObjectContext *get_object_context(const sobject_t& soid, const object_locator_t& oloc,
+  ObjectContext *get_object_context(const hobject_t& soid, const object_locator_t& oloc,
 				    bool can_create);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
@@ -504,12 +504,13 @@ protected:
       register_snapset_context(obc->ssc);
   }
   void put_object_context(ObjectContext *obc);
-  void put_object_contexts(map<sobject_t,ObjectContext*>& obcv);
-  int find_object_context(const object_t& oid, const object_locator_t& oloc,
-			  snapid_t snapid, ObjectContext **pobc,
+  void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
+  int find_object_context(const hobject_t& oid,
+			  const object_locator_t& oloc,
+			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
-  SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
+  SnapSetContext *get_snapset_context(const object_t& oid, ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
       ssc->registered = true;
@@ -531,50 +532,50 @@ protected:
     bool need_size;
     interval_set<uint64_t> data_subset, data_subset_pulling;
   };
-  map<sobject_t, pull_info_t> pulling;
+  map<hobject_t, pull_info_t> pulling;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
-  map<int, set<sobject_t> > pull_from_peer;
+  map<int, set<hobject_t> > pull_from_peer;
 
   // push
   struct push_info_t {
     uint64_t size;
     eversion_t version;
     interval_set<uint64_t> data_subset, data_subset_pushing;
-    map<sobject_t, interval_set<uint64_t> > clone_subsets;
+    map<hobject_t, interval_set<uint64_t> > clone_subsets;
   };
-  map<sobject_t, map<int, push_info_t> > pushing;
+  map<hobject_t, map<int, push_info_t> > pushing;
 
-  int recover_object_replicas(const sobject_t& soid, eversion_t v);
-  void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
+  int recover_object_replicas(const hobject_t& soid, eversion_t v);
+  void calc_head_subsets(SnapSet& snapset, const hobject_t& head,
 			 Missing& missing,
 			 interval_set<uint64_t>& data_subset,
-			 map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
+			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, Missing& missing,
 			  interval_set<uint64_t>& data_subset,
-			  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(ObjectContext *obc, const sobject_t& oid, int dest);
-  void push_start(const sobject_t& oid, int dest);
-  void push_start(const sobject_t& soid, int peer,
+			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+  void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);
+  void push_start(const hobject_t& oid, int dest);
+  void push_start(const hobject_t& soid, int peer,
 		  uint64_t size, eversion_t version,
 		  interval_set<uint64_t> &data_subset,
-		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  int send_push_op(const sobject_t& oid, eversion_t version, int dest,
+		  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+  int send_push_op(const hobject_t& oid, eversion_t version, int dest,
 		   uint64_t size, bool first, bool complete,
 		   interval_set<uint64_t>& data_subset, 
-		   map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void send_push_op_blank(const sobject_t& soid, int peer);
+		   map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+  void send_push_op_blank(const hobject_t& soid, int peer);
 
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMap *map);
-  int pull(const sobject_t& oid);
-  void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
+  int pull(const hobject_t& oid);
+  void send_pull_op(const hobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
   // low level ops
 
   void _make_clone(ObjectStore::Transaction& t,
-		   const sobject_t& head, const sobject_t& coid,
+		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
@@ -588,7 +589,7 @@ protected:
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
   // pg on-disk content
-  void remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid);
+  void remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid);
   void clean_up_local(ObjectStore::Transaction& t);
 
   void _clear_recovery_state();
@@ -691,11 +692,11 @@ protected:
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
-  bool pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata);
+  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
 public:
-  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid);
+  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, const hobject_t& ioid);
   ~ReplicatedPG() {}
 
 
@@ -705,8 +706,8 @@ public:
   void do_sub_op_reply(MOSDSubOpReply *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
-		       vector<sobject_t> &obs_to_trim);
-  RepGather *trim_object(const sobject_t &coid, const snapid_t &sn);
+		       vector<hobject_t> &obs_to_trim);
+  RepGather *trim_object(const hobject_t &coid, const snapid_t &sn);
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
@@ -722,7 +723,7 @@ private:
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
     set<RepGather *> repops;
-    vector<sobject_t> obs_to_trim;
+    vector<hobject_t> obs_to_trim;
     snapid_t snap_to_trim;
     coll_t col_to_trim;
     bool need_share_pg_info;
@@ -749,7 +750,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    vector<sobject_t>::iterator position;
+    vector<hobject_t>::iterator position;
     TrimmingObjects(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
@@ -782,11 +783,11 @@ public:
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(const sobject_t& oid);
-  void wait_for_missing_object(const sobject_t& oid, Message *op);
+  bool is_missing_object(const hobject_t& oid);
+  void wait_for_missing_object(const hobject_t& oid, Message *op);
 
-  bool is_degraded_object(const sobject_t& oid);
-  void wait_for_degraded_object(const sobject_t& oid, Message *op);
+  bool is_degraded_object(const hobject_t& oid);
+  void wait_for_degraded_object(const hobject_t& oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

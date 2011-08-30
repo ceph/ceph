@@ -216,7 +216,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<sobject_t, Missing::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(10) << "Missing sobject: " << i->first << dendl;
@@ -287,7 +287,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   might_have_unfound.insert(from);
 
   search_for_missing(oinfo, &omissing, from);
-  for (map<sobject_t, Missing::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(10) << "Final Missing sobject: " << i->first << dendl;
@@ -395,7 +395,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
   // If the logs don't overlap, we need both backlogs
   assert(log.head >= olog.tail || ((log.backlog || log.empty()) && olog.backlog));
 
-  for (map<sobject_t, Missing::item>::iterator i = missing.missing.begin();
+  for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
        ++i) {
     dout(20) << "Missing sobject: " << i->first << dendl;
@@ -405,7 +405,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   if (log.head < olog.tail) {
     // We need to throw away our log and process the backlogs
-    hash_map<sobject_t, Log::Entry*> old_objects;
+    hash_map<hobject_t, Log::Entry*> old_objects;
     old_objects.swap(log.objects);
 
     // swap in other log and index
@@ -419,7 +419,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       if (p->version <= log.head) {
 	dout(10) << "merge_log split point is " << *p << dendl;
 
-	hash_map<sobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
+	hash_map<hobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
 	if (oldobj != old_objects.end() &&
 	    oldobj->second->version == p->version)
 	  p++;       // move past the split point, if it also exists in our old log...
@@ -448,7 +448,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     }
 
     // Remove objects whose removals we missed
-    for (hash_map<sobject_t, Log::Entry*>::iterator i = old_objects.begin();
+    for (hash_map<hobject_t, Log::Entry*>::iterator i = old_objects.begin();
 	 i != old_objects.end();
 	 ++i) {
       if (!log.objects.count(i->first)) {
@@ -589,10 +589,10 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   bool found_missing = false;
 
   // found items?
-  for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
+  for (map<hobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        ++p) {
-    const sobject_t &soid(p->first);
+    const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
@@ -620,9 +620,9 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
     dout(10) << "search_for_missing " << soid << " " << need
 	     << " is on osd" << fromosd << dendl;
 
-    map<sobject_t, set<int> >::iterator ml = missing_loc.find(soid);
+    map<hobject_t, set<int> >::iterator ml = missing_loc.find(soid);
     if (ml == missing_loc.end()) {
-      map<sobject_t, list<class Message*> >::iterator wmo =
+      map<hobject_t, list<class Message*> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
 	osd->take_waiters(wmo->second);
@@ -704,13 +704,13 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
 
   unlock();
 
-  vector<sobject_t> olist;
+  vector<hobject_t> olist;
   osd->store->collection_list(coll, olist);
 
-  for (vector<sobject_t>::iterator it = olist.begin();
+  for (vector<hobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
-    sobject_t poid = *it;
+    hobject_t poid = *it;
 
     Log::Entry e;
     e.soid = poid;
@@ -1080,11 +1080,11 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
 /* Mark an object as lost
  */
 void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
-			  const sobject_t &lost_soid)
+			  const hobject_t &lost_soid)
 {
   // Wake anyone waiting for this object. Now that it's been marked as lost,
   // we will just return an error code.
-  map<sobject_t, list<class Message*> >::iterator wmo =
+  map<hobject_t, list<class Message*> >::iterator wmo =
     waiting_for_missing_object.find(lost_soid);
   if (wmo != waiting_for_missing_object.end()) {
     osd->take_waiters(wmo->second);
@@ -1130,10 +1130,10 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   utime_t mtime = ceph_clock_now(g_ceph_context);
   eversion_t old_last_update = info.last_update;
   info.last_update.epoch = osd->osdmap->get_epoch();
-  map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
-  map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
+  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
   while (m != mend) {
-    const sobject_t &soid(m->first);
+    const hobject_t &soid(m->first);
     if (missing_loc.find(soid) != missing_loc.end()) {
       // We only care about unfound objects
       ++m;
@@ -1840,7 +1840,7 @@ void PG::_finish_recovery(Context *c)
   put();
 }
 
-void PG::start_recovery_op(const sobject_t& soid)
+void PG::start_recovery_op(const hobject_t& soid)
 {
   dout(10) << "start_recovery_op " << soid
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1856,7 +1856,7 @@ void PG::start_recovery_op(const sobject_t& soid)
   osd->start_recovery_op(this, soid);
 }
 
-void PG::finish_recovery_op(const sobject_t& soid, bool dequeue)
+void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 {
   dout(10) << "finish_recovery_op " << soid
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1885,7 +1885,7 @@ void PG::clear_recovery_state()
   log.reset_recovery_pointers();
   finish_sync_event = 0;
 
-  sobject_t soid;
+  hobject_t soid;
   while (recovery_ops_active > 0) {
 #ifdef DEBUG_RECOVERY_OIDS
     soid = *recovering_oids.begin();
@@ -2272,7 +2272,7 @@ void PG::read_log(ObjectStore *store)
     dout(10) << "read_log checking for missing items over interval (" << info.last_complete
 	     << "," << info.last_update << "]" << dendl;
 
-    set<sobject_t> did;
+    set<hobject_t> did;
     for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 i++) {
@@ -2538,9 +2538,9 @@ void PG::adjust_local_snaps()
   }
 }
 
-void PG::take_object_waiters(map<sobject_t, list<Message*> >& m)
+void PG::take_object_waiters(map<hobject_t, list<Message*> >& m)
 {
-  for (map<sobject_t, list<Message*> >::iterator it = m.begin();
+  for (map<hobject_t, list<Message*> >::iterator it = m.begin();
        it != m.end();
        it++)
     osd->take_waiters(it->second);
@@ -2654,14 +2654,14 @@ void PG::sub_op_scrub_map(MOSDSubOp *op)
 /* 
  * pg lock may or may not be held
  */
-void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
+void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
 {
   dout(10) << "_scan_list scanning " << ls.size() << " objects" << dendl;
   int i = 0;
-  for (vector<sobject_t>::iterator p = ls.begin(); 
+  for (vector<hobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
        p++, i++) {
-    sobject_t poid = *p;
+    hobject_t poid = *p;
 
     struct stat st;
     int r = osd->store->stat(coll, poid, &st);
@@ -2777,7 +2777,7 @@ void PG::scrub_reserve_replicas()
     dout(10) << "scrub requesting reserve from osd" << acting[i] << dendl;
     vector<OSDOp> scrub(1);
     scrub[0].op.op = CEPH_OSD_OP_SCRUB_RESERVE;
-    sobject_t poid;
+    hobject_t poid;
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
@@ -2793,7 +2793,7 @@ void PG::scrub_unreserve_replicas()
     dout(10) << "scrub requesting unreserve from osd" << acting[i] << dendl;
     vector<OSDOp> scrub(1);
     scrub[0].op.op = CEPH_OSD_OP_SCRUB_UNRESERVE;
-    sobject_t poid;
+    hobject_t poid;
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
@@ -2821,7 +2821,7 @@ void PG::build_scrub_map(ScrubMap &map)
   osr.flush();
 
   // objects
-  vector<sobject_t> ls;
+  vector<hobject_t> ls;
   osd->store->collection_list(coll, ls);
 
   _scan_list(map, ls);
@@ -2857,7 +2857,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
 {
   map.valid_through = last_update_applied;
   map.incr_since = v;
-  vector<sobject_t> ls;
+  vector<hobject_t> ls;
   list<Log::Entry>::iterator p;
   if (v == log.tail) {
     p = log.log.begin();
@@ -2885,7 +2885,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
 }
 
-void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
+void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
   bufferlist bv;
@@ -2959,7 +2959,7 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 
   vector<OSDOp> scrub(1);
   scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
-  sobject_t poid;
+  hobject_t poid;
   eversion_t v;
   osd_reqid_t reqid;
   MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
@@ -3165,14 +3165,14 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
 }
 
 void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			    map<sobject_t, set<int> > &missing,
-			    map<sobject_t, set<int> > &inconsistent,
-			    map<sobject_t, int> &authoritative,
+			    map<hobject_t, set<int> > &missing,
+			    map<hobject_t, set<int> > &inconsistent,
+			    map<hobject_t, int> &authoritative,
 			    ostream &errorstream)
 {
-  map<sobject_t,ScrubMap::object>::const_iterator i;
+  map<hobject_t,ScrubMap::object>::const_iterator i;
   map<int, ScrubMap *>::const_iterator j;
-  set<sobject_t> master_set;
+  set<hobject_t> master_set;
 
   // Construct master set
   for (j = maps.begin(); j != maps.end(); j++) {
@@ -3182,7 +3182,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   }
 
   // Check maps against master set and each other
-  for (set<sobject_t>::const_iterator k = master_set.begin();
+  for (set<hobject_t>::const_iterator k = master_set.begin();
        k != master_set.end();
        k++) {
     map<int, ScrubMap *>::const_iterator auth = maps.end();
@@ -3255,11 +3255,11 @@ void PG::scrub_finalize() {
     stringstream ss;
 
     // Maps from objects with erros to missing/inconsistent peers
-    map<sobject_t, set<int> > missing;
-    map<sobject_t, set<int> > inconsistent;
+    map<hobject_t, set<int> > missing;
+    map<hobject_t, set<int> > inconsistent;
 
     // Map from object with errors to good peer
-    map<sobject_t, int> authoritative;
+    map<hobject_t, int> authoritative;
     map<int,ScrubMap *> maps;
 
     dout(2) << "scrub   osd" << acting[0] << " has " 
@@ -3281,7 +3281,7 @@ void PG::scrub_finalize() {
       state_set(PG_STATE_INCONSISTENT);
       if (repair) {
 	state_clear(PG_STATE_CLEAN);
-	for (map<sobject_t, int>::iterator i = authoritative.begin();
+	for (map<hobject_t, int>::iterator i = authoritative.begin();
 	     i != authoritative.end();
 	     i++) {
 	  set<int>::iterator j;
@@ -3709,14 +3709,14 @@ void PG::Missing::swap(Missing& o)
   rmissing.swap(o.rmissing);
 }
 
-bool PG::Missing::is_missing(const sobject_t& oid) const
+bool PG::Missing::is_missing(const hobject_t& oid) const
 {
   return (missing.find(oid) != missing.end());
 }
 
-bool PG::Missing::is_missing(const sobject_t& oid, eversion_t v) const
+bool PG::Missing::is_missing(const hobject_t& oid, eversion_t v) const
 {
-  map<sobject_t, item>::const_iterator m = missing.find(oid);
+  map<hobject_t, item>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return false;
   const Missing::item &item(m->second);
@@ -3725,9 +3725,9 @@ bool PG::Missing::is_missing(const sobject_t& oid, eversion_t v) const
   return true;
 }
 
-eversion_t PG::Missing::have_old(const sobject_t& oid) const
+eversion_t PG::Missing::have_old(const hobject_t& oid) const
 {
-  map<sobject_t, item>::const_iterator m = missing.find(oid);
+  map<hobject_t, item>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return eversion_t();
   const Missing::item &item(m->second);
@@ -3766,7 +3766,7 @@ void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
     rm(e.soid, e.version);
 }
 
-void PG::Missing::revise_need(sobject_t oid, eversion_t need)
+void PG::Missing::revise_need(hobject_t oid, eversion_t need)
 {
   if (missing.count(oid)) {
     rmissing.erase(missing[oid].need.version);
@@ -3777,13 +3777,13 @@ void PG::Missing::revise_need(sobject_t oid, eversion_t need)
   rmissing[need.version] = oid;
 }
 
-void PG::Missing::add(const sobject_t& oid, eversion_t need, eversion_t have)
+void PG::Missing::add(const hobject_t& oid, eversion_t need, eversion_t have)
 {
   missing[oid] = item(need, have);
   rmissing[need.version] = oid;
 }
 
-void PG::Missing::rm(const sobject_t& oid, eversion_t v)
+void PG::Missing::rm(const hobject_t& oid, eversion_t v)
 {
   if (missing.count(oid) && missing[oid].need <= v) {
     rmissing.erase(missing[oid].need.version);
@@ -3791,7 +3791,7 @@ void PG::Missing::rm(const sobject_t& oid, eversion_t v)
   }
 }
 
-void PG::Missing::got(const sobject_t& oid, eversion_t v)
+void PG::Missing::got(const hobject_t& oid, eversion_t v)
 {
   assert(missing.count(oid));
   assert(missing[oid].need <= v);
@@ -3799,7 +3799,7 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
   missing.erase(oid);
 }
 
-void PG::Missing::got(const std::map<sobject_t, Missing::item>::iterator &m)
+void PG::Missing::got(const std::map<hobject_t, Missing::item>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);

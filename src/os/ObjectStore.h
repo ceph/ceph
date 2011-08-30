@@ -34,8 +34,6 @@
 using std::vector;
 using std::string;
 
-typedef uint64_t collection_list_handle_t;
-
 /*
  * low-level interface to the local OSD file system
  */
@@ -228,10 +226,10 @@ public:
 	p = tbl.begin();
       ::decode(bl, p);
     }
-    sobject_t get_oid() {
+    hobject_t get_oid() {
       if (p.get_off() == 0)
 	p = tbl.begin();
-      sobject_t soid;
+      hobject_t soid;
       ::decode(soid, p);
       return soid;
     }
@@ -274,14 +272,14 @@ public:
       ::encode(op, tbl);
       ops++;
     }
-    void touch(coll_t cid, const sobject_t& oid) {
+    void touch(coll_t cid, const hobject_t& oid) {
       __u32 op = OP_TOUCH;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ops++;
     }
-    void write(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len, const bufferlist& data) {
+    void write(coll_t cid, const hobject_t& oid, uint64_t off, uint64_t len, const bufferlist& data) {
       __u32 op = OP_WRITE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -297,7 +295,7 @@ public:
       ::encode(data, tbl);
       ops++;
     }
-    void zero(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len) {
+    void zero(coll_t cid, const hobject_t& oid, uint64_t off, uint64_t len) {
       __u32 op = OP_ZERO;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -306,7 +304,7 @@ public:
       ::encode(len, tbl);
       ops++;
     }
-    void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len) {
+    void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t off, uint64_t len) {
       __u32 op = OP_TRIMCACHE;
        ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -315,7 +313,7 @@ public:
       ::encode(len, tbl);
       ops++;
     }
-    void truncate(coll_t cid, const sobject_t& oid, uint64_t off) {
+    void truncate(coll_t cid, const hobject_t& oid, uint64_t off) {
       __u32 op = OP_TRUNCATE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -323,24 +321,24 @@ public:
       ::encode(off, tbl);
       ops++;
     }
-    void remove(coll_t cid, const sobject_t& oid) {
+    void remove(coll_t cid, const hobject_t& oid) {
       __u32 op = OP_REMOVE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ops++;
     }
-    void setattr(coll_t cid, const sobject_t& oid, const char* name, const void* val, int len) {
+    void setattr(coll_t cid, const hobject_t& oid, const char* name, const void* val, int len) {
       string n(name);
       bufferlist bl;
       bl.append((char*)val, len);
       setattr(cid, oid, n, tbl);
     }
-    void setattr(coll_t cid, const sobject_t& oid, const char* name, bufferlist& val) {
+    void setattr(coll_t cid, const hobject_t& oid, const char* name, bufferlist& val) {
       string n(name);
       setattr(cid, oid, n, val);
     }
-    void setattr(coll_t cid, const sobject_t& oid, string& s, bufferlist& val) {
+    void setattr(coll_t cid, const hobject_t& oid, const string& s, bufferlist& val) {
       __u32 op = OP_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -349,7 +347,7 @@ public:
       ::encode(val, tbl);
       ops++;
     }
-    void setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& attrset) {
+    void setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& attrset) {
       __u32 op = OP_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -357,11 +355,11 @@ public:
       ::encode(attrset, tbl);
       ops++;
     }
-    void rmattr(coll_t cid, const sobject_t& oid, const char *name) {
+    void rmattr(coll_t cid, const hobject_t& oid, const char *name) {
       string n(name);
       rmattr(cid, oid, n);
     }
-    void rmattr(coll_t cid, const sobject_t& oid, string& s) {
+    void rmattr(coll_t cid, const hobject_t& oid, const string& s) {
       __u32 op = OP_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -369,14 +367,14 @@ public:
       ::encode(s, tbl);
       ops++;
     }
-    void rmattrs(coll_t cid, const sobject_t& oid) {
+    void rmattrs(coll_t cid, const hobject_t& oid) {
       __u32 op = OP_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
       ops++;
     }
-    void clone(coll_t cid, const sobject_t& oid, sobject_t noid) {
+    void clone(coll_t cid, const hobject_t& oid, hobject_t noid) {
       __u32 op = OP_CLONE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -384,7 +382,7 @@ public:
       ::encode(noid, tbl);
       ops++;
     }
-    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid,
+    void clone_range(coll_t cid, const hobject_t& oid, hobject_t noid,
 		     uint64_t srcoff, uint64_t srclen, uint64_t dstoff) {
       __u32 op = OP_CLONERANGE2;
       ::encode(op, tbl);
@@ -408,7 +406,7 @@ public:
       ::encode(cid, tbl);
       ops++;
     }
-    void collection_add(coll_t cid, coll_t ocid, const sobject_t& oid) {
+    void collection_add(coll_t cid, coll_t ocid, const hobject_t& oid) {
       __u32 op = OP_COLL_ADD;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -416,7 +414,7 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
-    void collection_remove(coll_t cid, const sobject_t& oid) {
+    void collection_remove(coll_t cid, const hobject_t& oid) {
       __u32 op = OP_COLL_REMOVE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -432,7 +430,7 @@ public:
       string n(name);
       collection_setattr(cid, n, val);
     }
-    void collection_setattr(coll_t cid, string& name, bufferlist& val) {
+    void collection_setattr(coll_t cid, const string& name, bufferlist& val) {
       __u32 op = OP_COLL_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -445,7 +443,7 @@ public:
       string n(name);
       collection_rmattr(cid, n);
     }
-    void collection_rmattr(coll_t cid, string& name) {
+    void collection_rmattr(coll_t cid, const string& name) {
       __u32 op = OP_COLL_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -539,6 +537,8 @@ public:
   virtual ~ObjectStore() {}
 
   // mgmt
+  virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
+  virtual int update_version_stamp() = 0;
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
@@ -549,16 +549,16 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   // objects
-  virtual bool exists(coll_t cid, const sobject_t& oid) = 0;                   // useful?
-  virtual int stat(coll_t cid, const sobject_t& oid, struct stat *st) = 0;     // struct stat?
-  virtual int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
-  virtual int fiemap(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual bool exists(coll_t cid, const hobject_t& oid) = 0;                   // useful?
+  virtual int stat(coll_t cid, const hobject_t& oid, struct stat *st) = 0;     // struct stat?
+  virtual int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
   /*
-  virtual int _remove(coll_t cid, sobject_t oid) = 0;
-  virtual int _truncate(coll_t cid, sobject_t oid, uint64_t size) = 0;
-  virtual int _write(coll_t cid, sobject_t oid, uint64_t offset, size_t len, const bufferlist& bl) = 0;
-  virtual int _zero(coll_t cid, sobject_t oid, uint64_t offset, size_t len) {
+  virtual int _remove(coll_t cid, hobject_t oid) = 0;
+  virtual int _truncate(coll_t cid, hobject_t oid, uint64_t size) = 0;
+  virtual int _write(coll_t cid, hobject_t oid, uint64_t offset, size_t len, const bufferlist& bl) = 0;
+  virtual int _zero(coll_t cid, hobject_t oid, uint64_t offset, size_t len) {
     // write zeros.. yuck!
     bufferptr bp(len);
     bufferlist bl;
@@ -567,48 +567,52 @@ public:
   }
   */
 
-  virtual void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) = 0; //{ }
-  virtual int is_cached(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) = 0;  //{ return -1; }
+  virtual void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0; //{ }
+  virtual int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) = 0;  //{ return -1; }
 
-  virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size) = 0;
-  virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& value) = 0;
-  int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferlist& value) {
+  virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, void *value, size_t size) = 0;
+  virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& value) = 0;
+  int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name, bp);
     if (bp.length())
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
+  virtual int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
 
   /*
-  virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const void *value, size_t size) = 0;
-  virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const bufferptr &bp) {
+  virtual int _setattr(coll_t cid, hobject_t oid, const char *name, const void *value, size_t size) = 0;
+  virtual int _setattr(coll_t cid, hobject_t oid, const char *name, const bufferptr &bp) {
     return _setattr(cid, oid, name, bp.c_str(), bp.length());
   }
-  virtual int _setattrs(coll_t cid, sobject_t oid, map<string,bufferptr>& aset) = 0;
-  virtual int _rmattr(coll_t cid, sobject_t oid, const char *name) {return 0;}
-  virtual int _clone(coll_t cid, sobject_t oid, sobject_t noid) {
+  virtual int _setattrs(coll_t cid, hobject_t oid, map<string,bufferptr>& aset) = 0;
+  virtual int _rmattr(coll_t cid, hobject_t oid, const char *name) {return 0;}
+  virtual int _clone(coll_t cid, hobject_t oid, hobject_t noid) {
     return -1;
   }
   */
     
   // collections
   virtual int list_collections(vector<coll_t>& ls) = 0;
+  virtual int collection_version_current(coll_t c, uint32_t *version) { 
+    *version = 0;
+    return 1;
+  }
   virtual bool collection_exists(coll_t c) = 0;
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) = 0;
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
   virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
   virtual bool collection_empty(coll_t c) = 0;
-  virtual int collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& o, int count, collection_list_handle_t *handle) = 0;
-  virtual int collection_list(coll_t c, vector<sobject_t>& o) = 0;
+  virtual int collection_list_partial(coll_t c, snapid_t seq, vector<hobject_t>& o, int count, collection_list_handle_t *handle) = 0;
+  virtual int collection_list(coll_t c, vector<hobject_t>& o) = 0;
 
   /*
   virtual int _create_collection(coll_t c) = 0;
   virtual int _destroy_collection(coll_t c) = 0;
-  virtual int _collection_add(coll_t c, coll_t ocid, sobject_t o) = 0;
-  virtual int _collection_remove(coll_t c, sobject_t o) = 0;
+  virtual int _collection_add(coll_t c, coll_t ocid, hobject_t o) = 0;
+  virtual int _collection_remove(coll_t c, hobject_t o) = 0;
   virtual int _collection_setattr(coll_t cid, const char *name,
                                  const void *value, size_t size) = 0;
   virtual int _collection_rmattr(coll_t cid, const char *name) = 0;

@@ -32,7 +32,7 @@ public:
   
   // subop
   pg_t pgid;
-  sobject_t poid;
+  hobject_t poid;
   object_locator_t oloc;
   
   __u8 acks_wanted;
@@ -63,7 +63,7 @@ public:
   map<string,bufferptr> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t> > clone_subsets;
 
   bool first, complete;
 
@@ -149,7 +149,7 @@ public:
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, const sobject_t& po, bool noop_, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_t p, const hobject_t& po, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),

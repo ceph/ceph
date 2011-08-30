@@ -249,9 +249,65 @@ inline bool operator<=(const sobject_t &l, const sobject_t &r) {
 inline ostream& operator<<(ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
-
 namespace __gnu_cxx {
   template<> struct hash<sobject_t> {
+    size_t operator()(const sobject_t &r) const {
+      static hash<object_t> H;
+      static rjhash<uint64_t> I;
+      return H(r.oid) ^ I(r.snap);
+    }
+  };
+}
+
+struct hobject_t {
+  object_t oid;
+  snapid_t snap;
+  uint32_t hash;
+
+  hobject_t() : snap(0), hash(0) {}
+  hobject_t(object_t oid, snapid_t snap, uint32_t hash) : 
+    oid(oid), snap(snap), hash(hash) {}
+  hobject_t(const sobject_t &soid, uint32_t hash) : 
+    oid(soid.oid), snap(soid.snap), hash(hash) {}
+
+  /* Do not use when a particular hash function is needed */
+  explicit hobject_t(const sobject_t &o) :
+    oid(o.oid), snap(o.snap) {
+    hash = __gnu_cxx::hash<sobject_t>()(o);
+  }
+
+  void swap(hobject_t &o) {
+    hobject_t temp(o);
+    o.oid = oid;
+    o.snap = snap;
+    o.hash = hash;
+    oid = temp.oid;
+    snap = temp.snap;
+    hash = temp.hash;
+  }
+
+  operator sobject_t() const {
+    return sobject_t(oid, snap);
+  }
+
+  void encode(bufferlist& bl) const {
+    __u8 version = 0;
+    ::encode(version, bl);
+    ::encode(oid, bl);
+    ::encode(snap, bl);
+    ::encode(hash, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 version;
+    ::decode(version, bl);
+    ::decode(oid, bl);
+    ::decode(snap, bl);
+    ::decode(hash, bl);
+  }
+};
+WRITE_CLASS_ENCODER(hobject_t)
+namespace __gnu_cxx {
+  template<> struct hash<hobject_t> {
     size_t operator()(const sobject_t &r) const {
       static hash<object_t> H;
       static rjhash<uint64_t> I;

@@ -79,6 +79,7 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
   return true;
 }
 
+
 void coll_t::encode(bufferlist& bl) const
 {
   __u8 struct_v = 3;
@@ -541,9 +542,26 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   category = other.category;
 }
 
+ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
+						const object_locator_t &loc) {
+  ps_t ps;
+  if (loc.key.length())
+    // Hack, we don't have the osd map, so we don't really know the hash...
+    ps = ceph_str_hash(CEPH_STR_HASH_RJENKINS, loc.key.c_str(), 
+		       loc.key.length());
+  else
+    ps = ceph_str_hash(CEPH_STR_HASH_RJENKINS, oid.name.c_str(),
+		       oid.name.length());
+  // mix in preferred osd, so we don't get the same peers for
+  // all of the placement pgs (e.g. 0.0p*)
+  if (loc.get_preferred() >= 0)
+    ps += loc.get_preferred();
+  return ps;
+}
+
 void object_info_t::encode(bufferlist& bl) const
 {
-  const __u8 v = 5;
+  const __u8 v = 6;
   ::encode(v, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
@@ -568,9 +586,16 @@ void object_info_t::decode(bufferlist::iterator& bl)
 {
   __u8 v;
   ::decode(v, bl);
-  ::decode(soid, bl);
-  if (v >= 2)
+  if (v >= 2 && v <= 5) {
+    sobject_t obj;
+    ::decode(obj, bl);
     ::decode(oloc, bl);
+    soid = hobject_t(obj.oid, obj.snap, 0);
+    soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
+  } else if (v >= 6) {
+    ::decode(soid, bl);
+    ::decode(oloc, bl);
+  }
   if (v >= 5)
     ::decode(category, bl);
   ::decode(version, bl);
@@ -618,11 +643,11 @@ void ScrubMap::merge_incr(const ScrubMap &l)
   logbl = l.logbl;
   valid_through = l.valid_through;
 
-  for (map<sobject_t,object>::const_iterator p = l.objects.begin();
+  for (map<hobject_t,object>::const_iterator p = l.objects.begin();
        p != l.objects.end();
        p++){
     if (p->second.negative) {
-      map<sobject_t,object>::iterator q = objects.find(p->first);
+      map<hobject_t,object>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
 	objects.erase(q);
       }
@@ -702,7 +727,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     switch (op.op.op) {
     case CEPH_OSD_OP_PGLS:
     case CEPH_OSD_OP_PGLS_FILTER:
-      out << " cookie " << op.op.pgls.cookie;
       out << " start_epoch " << op.op.pgls.start_epoch;
       break;
     }

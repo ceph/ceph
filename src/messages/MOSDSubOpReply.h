@@ -36,7 +36,7 @@ public:
   // subop metadata
   osd_reqid_t reqid;
   pg_t pgid;
-  sobject_t poid;
+  hobject_t poid;
 
   vector<OSDOp> ops;
 
@@ -89,7 +89,7 @@ public:
   epoch_t get_map_epoch() { return map_epoch; }
 
   pg_t get_pg() { return pgid; }
-  sobject_t get_poid() { return poid; }
+  hobject_t get_poid() { return poid; }
 
   int get_ack_type() { return ack_type; }
   bool is_ondisk() { return ack_type & CEPH_OSD_FLAG_ONDISK; }

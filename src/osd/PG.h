@@ -365,14 +365,14 @@ public:
       };
 
       __s32      op;
-      sobject_t  soid;
+      hobject_t  soid;
       eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       utime_t     mtime;  // this is the _user_ mtime, mind you
       bufferlist snaps;   // only for clone entries
       
       Entry() : op(0) {}
-      Entry(int _op, const sobject_t& _soid,
+      Entry(int _op, const hobject_t& _soid,
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
         op(_op), soid(_soid), version(v),
@@ -495,7 +495,7 @@ public:
    * plus some methods to manipulate it all.
    */
   struct IndexedLog : public Log {
-    hash_map<sobject_t,Entry*> objects;  // ptrs into log.  be careful!
+    hash_map<hobject_t,Entry*> objects;  // ptrs into log.  be careful!
     hash_map<osd_reqid_t,Entry*> caller_ops;
 
     // recovery pointers
@@ -515,7 +515,7 @@ public:
       last_requested = 0;
     }
 
-    bool logged_object(const sobject_t& oid) const {
+    bool logged_object(const hobject_t& oid) const {
       return objects.count(oid);
     }
     bool logged_req(const osd_reqid_t &r) const {
@@ -567,11 +567,11 @@ public:
 
 
     // accessors
-    Entry *is_updated(const sobject_t& oid) {
+    Entry *is_updated(const hobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
       return 0;
     }
-    Entry *is_deleted(const sobject_t& oid) {
+    Entry *is_deleted(const hobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
       return 0;
     }
@@ -658,21 +658,21 @@ public:
     }; 
     WRITE_CLASS_ENCODER(item)
 
-    map<sobject_t, item> missing;         // oid -> (need v, have v)
-    map<version_t, sobject_t> rmissing;  // v -> oid
+    map<hobject_t, item> missing;         // oid -> (need v, have v)
+    map<version_t, hobject_t> rmissing;  // v -> oid
 
     unsigned int num_missing() const;
     bool have_missing() const;
     void swap(Missing& o);
-    bool is_missing(const sobject_t& oid) const;
-    bool is_missing(const sobject_t& oid, eversion_t v) const;
-    eversion_t have_old(const sobject_t& oid) const;
+    bool is_missing(const hobject_t& oid) const;
+    bool is_missing(const hobject_t& oid, eversion_t v) const;
+    eversion_t have_old(const hobject_t& oid) const;
     void add_next_event(Log::Entry& e, const Info &info);
-    void revise_need(sobject_t oid, eversion_t need);
-    void add(const sobject_t& oid, eversion_t need, eversion_t have);
-    void rm(const sobject_t& oid, eversion_t v);
-    void got(const sobject_t& oid, eversion_t v);
-    void got(const std::map<sobject_t, Missing::item>::iterator &m);
+    void revise_need(hobject_t oid, eversion_t need);
+    void add(const hobject_t& oid, eversion_t need, eversion_t have);
+    void rm(const hobject_t& oid, eversion_t v);
+    void got(const hobject_t& oid, eversion_t v);
+    void got(const std::map<hobject_t, Missing::item>::iterator &m);
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
@@ -685,7 +685,7 @@ public:
       ::decode(struct_v, bl);
       ::decode(missing, bl);
 
-      for (map<sobject_t,item>::iterator it = missing.begin();
+      for (map<hobject_t,item>::iterator it = missing.begin();
 	   it != missing.end();
 	   ++it)
 	rmissing[it->second.need.version] = it->first;
@@ -781,11 +781,11 @@ public:
   Info        info;
   const coll_t coll;
   IndexedLog  log;
-  sobject_t    log_oid;
-  sobject_t    biginfo_oid;
+  hobject_t    log_oid;
+  hobject_t    biginfo_oid;
   OndiskLog   ondisklog;
   Missing     missing;
-  map<sobject_t, set<int> > missing_loc;
+  map<hobject_t, set<int> > missing_loc;
   
   interval_set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
@@ -797,7 +797,7 @@ public:
   xlist<PG*>::item recovery_item, backlog_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<sobject_t> recovering_oids;
+  set<hobject_t> recovering_oids;
 #endif
 
   epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
@@ -1303,12 +1303,12 @@ protected:
 
   // pg waiters
   list<class Message*>            waiting_for_active;
-  map<sobject_t, list<class Message*> > waiting_for_missing_object,
+  map<hobject_t, list<class Message*> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
   map<eversion_t,list<Message*> > waiting_for_ondisk;
   map<eversion_t,class MOSDOp*>   replay_queue;
 
-  void take_object_waiters(map<sobject_t, list<Message*> >& m);
+  void take_object_waiters(map<hobject_t, list<Message*> >& m);
   
   bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
@@ -1351,7 +1351,7 @@ public:
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,
-			const sobject_t &lost_soid);
+			const hobject_t &lost_soid);
   void mark_all_unfound_as_lost(ObjectStore::Transaction& t);
 
   bool calc_min_last_complete_ondisk() {
@@ -1437,8 +1437,8 @@ public:
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
   virtual void check_recovery_op_pulls(const OSDMap *newmap) = 0;
-  void start_recovery_op(const sobject_t& soid);
-  void finish_recovery_op(const sobject_t& soid, bool dequeue=false);
+  void start_recovery_op(const hobject_t& soid);
+  void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 
   loff_t get_log_write_pos() {
     return 0;
@@ -1457,20 +1457,20 @@ public:
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
 
-  void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
+  void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
 			      ScrubMap::object &candidate,
 			      ostream &errorstream);
   void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			  map<sobject_t, set<int> > &missing,
-			  map<sobject_t, set<int> > &inconsistent,
-			  map<sobject_t, int> &authoritative,
+			  map<hobject_t, set<int> > &missing,
+			  map<hobject_t, set<int> > &inconsistent,
+			  map<hobject_t, int> &authoritative,
 			  ostream &errorstream);
   void scrub();
   void scrub_finalize();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(ScrubMap &map, vector<sobject_t> &ls);
+  void _scan_list(ScrubMap &map, vector<hobject_t> &ls);
   void _request_scrub_map(int replica, eversion_t version);
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
@@ -1489,7 +1489,7 @@ public:
   void sub_op_scrub_stop(class MOSDSubOp *op);
 
  public:  
-  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& loid, const sobject_t& ioid) : 
+  PG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& loid, const hobject_t& ioid) : 
     osd(o), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
@@ -1636,11 +1636,11 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual bool is_write_in_progress() = 0;
-  virtual bool is_missing_object(const sobject_t& oid) = 0;
-  virtual void wait_for_missing_object(const sobject_t& oid, Message *op) = 0;
+  virtual bool is_missing_object(const hobject_t& oid) = 0;
+  virtual void wait_for_missing_object(const hobject_t& oid, Message *op) = 0;
 
-  virtual bool is_degraded_object(const sobject_t& oid) = 0;
-  virtual void wait_for_degraded_object(const sobject_t& oid, Message *op) = 0;
+  virtual bool is_degraded_object(const hobject_t& oid) = 0;
+  virtual void wait_for_degraded_object(const hobject_t& oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
