@@ -791,12 +791,13 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
     ::decode(complete, p);
     
     ldout(cct, 10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
-	     << ", offset " << request->readdir_offset << dendl;
+		   << ", offset " << request->readdir_offset
+		   << ", readdir_start " << request->readdir_start << dendl;
 
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
+    map<string,Dentry*>::iterator pd = dir->dentry_map.lower_bound(request->readdir_start);
 
     frag_t fg = request->readdir_frag;
     Inode *diri = in;
@@ -807,6 +808,27 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
       ::decode(dname, p);
       ::decode(dlease, p);
       InodeStat ist(p, features);
+
+      ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
+
+      // remove any skipped names
+      while (pd != dir->dentry_map.end() && pd->first < dname) {
+	if (pd->first < dname &&
+	    diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
+						  pd->first.length())] == fg) {  // do not remove items in earlier frags
+	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	  Dentry *dn = pd->second;
+	  pd++;
+	  unlink(dn, true);
+	} else {
+	  pd++;
+	}
+      }
+
+      if (pd == dir->dentry_map.end())
+	ldout(cct, 15) << " pd is at end" << dendl;
+      else
+	ldout(cct, 15) << " pd is '" << pd->first << "' dn " << pd->second << dendl;
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, mds);
       Dentry *dn;
@@ -830,19 +852,6 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
       update_dentry_lease(dn, &dlease, request->sent_stamp, mds);
       dn->offset = dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
-      // remove any extra names
-      while (pd != dir->dentry_map.end() && pd->first <= dname) {
-	if (pd->first < dname &&
-	    diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
-						  pd->first.length())] == fg) {  // do not remove items in earlier frags
-	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
-	  Dentry *dn = pd->second;
-	  pd++;
-	  unlink(dn, true);
-	} else
-	  pd++;
-      }
-      
       // add to cached result list
       in->get();
       request->readdir_result.push_back(pair<string,Inode*>(dname, in));
