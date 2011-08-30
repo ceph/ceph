@@ -753,20 +753,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	     "KB", "objects", "clones", "degraded",
 	     "unfound", "rd", "rd KB", "wr", "wr KB");
     } else {
-      formatter->open_array_section("Pools");
+      formatter->open_array_section("pools");
     }
     for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
       const char *pool_name = c->first.c_str();
       stats_map& m = c->second;
       if (formatter) {
-        formatter->open_object_section("Pool");
+        formatter->open_object_section("pool");
         int64_t pool_id = rados.pool_lookup(pool_name);
-        formatter->dump_string("Name", pool_name);
+        formatter->dump_string("name", pool_name);
         if (pool_id >= 0)
-          formatter->dump_format("ID", "%lld", pool_id);
+          formatter->dump_format("id", "%lld", pool_id);
         else
           cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
-        formatter->open_array_section("Categories");
+        formatter->open_array_section("categories");
       }
       for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
         const char *category = (i->first.size() ? i->first.c_str() : "");
@@ -788,21 +788,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	         (long long)s.num_rd, (long long)s.num_rd_kb,
 	         (long long)s.num_wr, (long long)s.num_wr_kb);
         } else {
-          formatter->open_object_section("Category");
+          formatter->open_object_section("category");
           if (category)
-            formatter->dump_string("Name", category);
-          formatter->dump_format("SizeBytes", "%lld", s.num_bytes);
-          formatter->dump_format("SizeKB", "%lld", s.num_kb);
-          formatter->dump_format("NumObjects", "%lld", s.num_objects);
-          formatter->dump_format("NumObjectClones", "%lld", s.num_object_clones);
-          formatter->dump_format("NumObjectCopies", "%lld", s.num_object_copies);
-          formatter->dump_format("NumObjectsMissingOnPrimary", "%lld", s.num_objects_missing_on_primary);
-          formatter->dump_format("NumObjectsUnfound", "%lld", s.num_objects_unfound);
-          formatter->dump_format("NumObjectsDegraded", "%lld", s.num_objects_degraded);
-          formatter->dump_format("ReadBytes", "%lld", s.num_rd);
-          formatter->dump_format("ReadKB", "%lld", s.num_rd_kb);
-          formatter->dump_format("WriteBytes", "%lld", s.num_wr);
-          formatter->dump_format("WriteKB", "%lld", s.num_wr_kb);
+            formatter->dump_string("name", category);
+          formatter->dump_format("size_bytes", "%lld", s.num_bytes);
+          formatter->dump_format("size_kb", "%lld", s.num_kb);
+          formatter->dump_format("num_objects", "%lld", s.num_objects);
+          formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
+          formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
+          formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
+          formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
+          formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
+          formatter->dump_format("read_bytes", "%lld", s.num_rd);
+          formatter->dump_format("read_kb", "%lld", s.num_rd_kb);
+          formatter->dump_format("write_bytes", "%lld", s.num_wr);
+          formatter->dump_format("write_kb", "%lld", s.num_wr_kb);
           formatter->flush(cout);
         }
         if (formatter) {
@@ -825,10 +825,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
       printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
     } else {
-      formatter->dump_format("TotalObjects", "%lld", (long long unsigned)tstats.num_objects);
-      formatter->dump_format("TotalUsed", "%lld", (long long unsigned)tstats.kb_used);
-      formatter->dump_format("TotalAvail", "%lld", (long long unsigned)tstats.kb_avail);
-      formatter->dump_format("TotalSpace", "%lld", (long long unsigned)tstats.kb);
+      formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
+      formatter->dump_format("total_used", "%lld", (long long unsigned)tstats.kb_used);
+      formatter->dump_format("total_avail", "%lld", (long long unsigned)tstats.kb_avail);
+      formatter->dump_format("total_space", "%lld", (long long unsigned)tstats.kb);
       formatter->close_section();
       formatter->flush(cout);
     }
