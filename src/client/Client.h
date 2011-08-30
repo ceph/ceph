@@ -327,8 +327,8 @@ protected:
 
   /* If an inode's been moved from one dentry to another
    * (via rename, for instance), call this function to move it */
-  Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
-                       Dentry *newdn);
+  Dentry *relink(Dir *dir, const string& name, Inode *in, Dentry *olddn,
+		 Dentry *newdn);
 
   // path traversal for high-level interface
   Inode *cwd;

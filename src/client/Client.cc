@@ -1778,10 +1778,11 @@ void Client::put_inode(Inode *in, int n)
 
 void Client::close_dir(Dir *dir)
 {
-  assert(dir->is_empty());
-  
   Inode *in = dir->parent_inode;
-  assert (in->dn_set.size() < 2); //dirs can't be hard-linked
+  ldout(cct, 15) << "close_dir dir " << dir << " on " << in << dendl;
+  assert(dir->is_empty());
+  assert(in->dir == dir);
+  assert(in->dn_set.size() < 2);     // dirs can't be hard-linked
   if (!in->dn_set.empty())
     in->get_first_parent()->put();   // unpin dentry
   
@@ -1823,7 +1824,9 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 
     // only one parent for directories!
     if (in->is_dir() && !in->dn_set.empty()) {
-      unlink(in->get_first_parent(), false);
+      Dentry *olddn = in->get_first_parent();
+      assert(olddn->dir != dir || olddn->name != name);
+      unlink(olddn, false);
     }
 
     in->dn_set.insert(dn);
