@@ -66,11 +66,11 @@ public:
   */
 
 public:
-  MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, int acktype) :
+  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     set_tid(req->get_tid());
     ops = req->ops;
-    result = result;
+    result = r;
     flags =
       (req->flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
     oid = req->oid;
