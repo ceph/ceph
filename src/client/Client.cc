@@ -830,13 +830,14 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
 	Dentry *olddn = pd->second;
 	if (pd->second->inode != in) {
 	  // replace incorrect dentry
-	  pd++;
+	  pd++;  // we are about to unlink this guy, move past it.
 	  unlink(olddn, true);
 	  dn = link(dir, dname, in, NULL);
 	} else {
 	  // keep existing dn
 	  dn = olddn;
 	  touch_dn(dn);
+	  pd++;  // move past the dentry we just touched.
 	}
       } else {
 	// new dn
@@ -4172,6 +4173,7 @@ void Client::rewinddir(dir_result_t *dirp)
 {
   ldout(cct, 3) << "rewinddir(" << dirp << ")" << dendl;
   dir_result_t *d = (dir_result_t*)dirp;
+  _readdir_drop_dirp_buffer(d);
   d->reset();
 }
  
@@ -4190,6 +4192,7 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
   if (offset == 0 ||
       dir_result_t::fpos_frag(offset) != d->frag() ||
       dir_result_t::fpos_off(offset) < d->fragpos()) {
+    _readdir_drop_dirp_buffer(d);
     d->reset();
   }
 
