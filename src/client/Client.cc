@@ -1820,6 +1820,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (in->dir)
       dn->get();  // dir -> dn pin
 
+    assert(in->dn_set.count(dn) == 0);
+
     // only one parent for directories!
     if (in->is_dir() && !in->dn_set.empty()) {
       Dentry *olddn = in->get_first_parent();
@@ -1846,6 +1848,7 @@ void Client::unlink(Dentry *dn, bool keepdir)
     if (in->dir)
       dn->put();        // dir -> dn pin
     dn->inode = 0;
+    assert(in->dn_set.count(dn));
     in->dn_set.erase(dn);
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dn_set << dendl; 
     put_inode(in);
