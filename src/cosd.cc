@@ -43,7 +43,7 @@ using namespace std;
 void usage() 
 {
   derr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] "
-       << "[--mkfs] [--mkjournal]" << dendl;
+       << "[--mkfs] [--mkjournal] [--convert-filestore]" << dendl;
   derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
   generic_server_usage();
 }
@@ -64,6 +64,7 @@ int main(int argc, const char **argv)
   bool mkjournal = false;
   bool mkkey = false;
   bool flushjournal = false;
+  bool convertfilestore = false;
   char *dump_pg_log = 0;
   FOR_EACH_ARG(args) {
     if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
@@ -74,6 +75,8 @@ int main(int argc, const char **argv)
       mkkey = true;
     } else if (CEPH_ARGPARSE_EQ("flush-journal", '\0')) {
       flushjournal = true;
+    } else if (CEPH_ARGPARSE_EQ("convert-filestore", '\0')) {
+      convertfilestore = true;
     } else if (CEPH_ARGPARSE_EQ("dump-pg-log", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
     } else {
@@ -189,6 +192,17 @@ int main(int argc, const char **argv)
 	 << dendl;
     exit(0);
   }
+
+  int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
+  if (err < 0) {
+    derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
+	 << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+    exit(1);
+  }
+  if (convertfilestore) {
+    derr << "Converted Filestore " << g_conf->osd_data << dendl;
+    exit(0);
+  }
   
   string magic;
   ceph_fsid_t fsid;
@@ -288,7 +302,7 @@ int main(int argc, const char **argv)
 		     messenger_hbin, messenger_hbout,
 		     &mc,
 		     g_conf->osd_data, g_conf->osd_journal);
-  int err = osd->pre_init();
+  err = osd->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;

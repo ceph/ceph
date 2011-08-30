@@ -91,6 +91,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <boost/scoped_ptr.hpp>
 
 #ifdef DARWIN
 #include <sys/param.h>
@@ -147,6 +148,108 @@ create_object_store(const std::string &dev, const std::string &jdev)
 
 #undef dout_prefix
 #define dout_prefix *_dout
+
+static int convert_collection(ObjectStore *store, coll_t cid) {
+  vector<hobject_t> objects;
+  int r = store->collection_list(cid, objects);
+  if (r < 0)
+    return r;
+  string temp_name("temp");
+  map<string, bufferptr> aset;
+  r = store->collection_getattrs(cid, aset);
+  if (r < 0)
+    return r;
+  while (store->collection_exists(coll_t(temp_name)))
+    temp_name = "_" + temp_name;
+  coll_t temp(temp_name);
+  
+  ObjectStore::Transaction t;
+  t.collection_rename(cid, temp);
+  t.create_collection(cid);
+  for (vector<hobject_t>::iterator obj = objects.begin();
+       obj != objects.end();
+       ++obj) {
+    t.collection_add(cid, temp, *obj);
+    t.collection_remove(temp, *obj);
+  }
+  for (map<string,bufferptr>::iterator i = aset.begin();
+       i != aset.end();
+       ++i) {
+    bufferlist bl;
+    bl.append(i->second);
+    t.collection_setattr(cid, i->first, bl);
+  }
+  t.remove_collection(temp);
+  r = store->apply_transaction(t);
+  if (r < 0)
+    return r;
+  store->sync_and_flush();
+  store->sync();
+  return 0;
+}
+
+static int do_convertfs(ObjectStore *store) {
+  g_ceph_context->_conf->filestore_update_collections = true;
+  int r = store->mount();
+  if (r < 0)
+    return -r;
+
+  uint32_t version;
+  r = store->version_stamp_is_valid(&version);
+  if (r < 0)
+    return -r;
+  if (r == 1) {
+    derr << "FileStore is up to date." << dendl;
+    store->umount();
+    return 0;
+  } else {
+    derr << "FileStore is old at version " << version << ".  Updating..." 
+	 << dendl;
+  }
+
+  derr << "Getting collections" << dendl;
+  vector<coll_t> collections;
+  r = store->list_collections(collections);
+  if (r < 0)
+    return -r;
+
+  derr << collections.size() << " to process." << dendl;
+  int processed = 0;
+  for (vector<coll_t>::iterator i = collections.begin();
+       i != collections.end();
+       ++i, ++processed) {
+    derr << processed << "/" << collections.size() << " processed" << dendl;
+    uint32_t collection_version;
+    r = store->collection_version_current(*i, &collection_version);
+    if (r < 0) {
+      return r;
+    } else if (r == 1) {
+      derr << "Collection " << *i << " is up to date" << dendl;
+    } else {
+      derr << "Updating collection " << *i << " current version is " 
+	   << collection_version << dendl;
+      r = convert_collection(store, *i);
+      if (r < 0)
+	return r;
+      derr << "collection " << *i << " updated" << dendl;
+    }
+  }
+  cerr << "All collections up to date, updating version stamp..." << std::endl;
+  r = store->update_version_stamp();
+  if (r < 0)
+    return r;
+  store->sync_and_flush();
+  store->sync();
+  cerr << "Version stamp updated, done!" << std::endl;
+  store->umount();
+  return 0;
+}
+
+int OSD::convertfs(const std::string &dev, const std::string &jdev)
+{
+  boost::scoped_ptr<ObjectStore> store(new FileStore(dev, jdev));
+  return do_convertfs(store.get());
+}
 
 int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
 {
