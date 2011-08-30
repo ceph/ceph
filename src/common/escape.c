@@ -143,7 +143,7 @@ int escape_json_attr_len(const char *buf)
 		default:
 			// Escape control characters.
 			if ((c < 0x20) || (c == 0x7f)) {
-				ret += 5;
+				ret += 6;
 			}
 			else {
 				ret++;
@@ -185,8 +185,8 @@ void escape_json_attr(const char *buf, char *out)
 		default:
 			// Escape control characters.
 			if ((c < 0x20) || (c == 0x7f)) {
-				snprintf(o, 6, "\\%04x", c);
-				o += 5;
+				snprintf(o, 6, "\\u%04x", c);
+				o += 6;
 			}
 			else {
 				*o++ = c;
