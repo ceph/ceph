@@ -149,6 +149,7 @@ public:
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
     bufferlist::iterator p;
+    bool sobject_encoding;
 
   public:
 
@@ -229,9 +230,16 @@ public:
     hobject_t get_oid() {
       if (p.get_off() == 0)
 	p = tbl.begin();
-      hobject_t soid;
-      ::decode(soid, p);
-      return soid;
+      hobject_t hoid;
+      if (sobject_encoding) {
+	sobject_t soid;
+	::decode(soid, p);
+	hoid.snap = soid.snap;
+	hoid.oid = soid.oid;
+      } else {
+	::decode(hoid, p);
+      }
+      return hoid;
     }
     coll_t get_cid() {
       if (p.get_off() == 0)
@@ -468,19 +476,22 @@ public:
 
     // etc.
     Transaction() :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {}
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      sobject_encoding(false) {}
     Transaction(bufferlist::iterator &dp) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      sobject_encoding(false) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0) {
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      sobject_encoding(false) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 3;
+      __u8 struct_v = 4;
       ::encode(struct_v, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
@@ -495,7 +506,11 @@ public:
       if (struct_v == 1) {
 	assert(0 == "dropped support for <= v0.19 transaction format");
       } else {
-	assert(struct_v <= 3);
+	if (struct_v < 4)
+	  sobject_encoding = true;
+	else
+	  sobject_encoding = false;
+	assert(struct_v <= 4);
 	::decode(ops, bl);
 	::decode(pad_unused_bytes, bl);
 	if (struct_v >= 3) {
