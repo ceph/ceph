@@ -16,6 +16,9 @@ html_favicon = 'favicon.ico'
 html_static_path = ['_static']
 html_use_smartypants = True
 html_show_sphinx = False
+html_sidebars = {
+    '**': ['smarttoc.html', 'searchbox.html'],
+    }
 
 # ugly kludge until breathe is distutils-friendly
 import sys; sys.path.append('../build-doc/breathe')

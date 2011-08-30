@@ -1,10 +1,6 @@
-================================
- Ceph -- petabyte scale storage
-================================
-
-
-Welcome to Ceph
-===============
+=================
+ Welcome to Ceph
+=================
 
 Ceph is a distributed network storage and file system with distributed
 metadata management and POSIX semantics.
@@ -89,6 +85,7 @@ Table of Contents
 .. toctree::
    :maxdepth: 3
 
+   self
    tutorial
    architecture
    ops/index
