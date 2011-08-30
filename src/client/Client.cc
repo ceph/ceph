@@ -597,16 +597,11 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   }
   
   if (!dn || dn->inode == 0) {
-    // have inode linked elsewhere?  -> unlink and relink!
-    if (!in->dn_set.empty() && old_dentry) {
-      ldout(cct, 12) << " had vino " << in->vino()
-	       << " linked at the wrong position, relinking"
-	       << dendl;
-      dn = relink(dir, dname, in, old_dentry, dn);
-    } else {
-      // link
-      dn = link(dir, dname, in, dn);
-    }
+    in->get();
+    if (old_dentry)
+      unlink(old_dentry, true);
+    dn = link(dir, dname, in, dn);
+    in->put();
     if (set_offset) {
       ldout(cct, 15) << " setting dn offset to " << dir->max_offset << dendl;
       dn->offset = dir->max_offset++;
@@ -1864,59 +1859,6 @@ void Client::unlink(Dentry *dn, bool keepdir)
   // delete den
   lru.lru_remove(dn);
   dn->put();
-}
-
-/* If an inode's been moved from one dentry to another
- * (via rename, for instance), call this function to move it */
-Dentry *Client::relink(Dir *dir, const string& name, Inode *in,
-		       Dentry *olddn, Dentry *newdn)
-{
-  Dir *olddir = olddn->dir;  // note: might == dir!
-  bool made_new = false;
-
-  // newdn, attach to inode.  don't touch inode ref.
-  if (!newdn) {
-    made_new = true;
-    newdn = new Dentry;
-    newdn->dir = dir;
-    newdn->name = name;
-  } else {
-    assert(newdn->inode == NULL);
-  }
-
-  ldout(cct, 15) << "relink dir " << dir->parent_inode << " '" << name << "' olddn " << olddn
-		 << " newdn " << newdn << " inode " << in << dendl;
-
-  newdn->inode = in;
-  in->dn_set.erase(olddn);
-  in->dn_set.insert(newdn);
-
-  if (in->dir) { // dir -> dn pin
-    newdn->get();
-    olddn->put();
-  }
-
-  // unlink old dn from dir
-  olddir->dentries.erase(olddn->name);
-  olddir->dentry_map.erase(olddn->name);
-  olddn->inode = 0;
-  olddn->dir = 0;
-  lru.lru_remove(olddn);
-  olddn->put();
-    
-  // link new dn to dir
-  dir->dentries[name] = newdn;
-  dir->dentry_map[name] = newdn;
-  if (made_new)
-    lru.lru_insert_mid(newdn);
-  else
-    lru.lru_midtouch(newdn);
-    
-  // olddir now empty?  (remember, olddir might == dir)
-  if (olddir->is_empty()) 
-    close_dir(olddir);
-
-  return newdn;
 }
 
 

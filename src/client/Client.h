@@ -325,11 +325,6 @@ protected:
   Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir);
 
-  /* If an inode's been moved from one dentry to another
-   * (via rename, for instance), call this function to move it */
-  Dentry *relink(Dir *dir, const string& name, Inode *in, Dentry *olddn,
-		 Dentry *newdn);
-
   // path traversal for high-level interface
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
