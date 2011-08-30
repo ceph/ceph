@@ -19,39 +19,79 @@ def task(ctx, config):
         - workunit:
             client.0: [direct_io, xattrs.sh]
             client.1: [snaps]
+
+    You can also run a list of workunits on all clients:
+        tasks:
+        - ceph:
+        - cfuse:
+        - workunit:
+            all: [direct_io, xattrs.sh, snaps]
+
+    If you have an "all" section it will run all the workunits
+    on each client simultaneously, AFTER running any workunits specified
+    for individual clients. (This prevents unintended simultaneous runs.)
     """
     assert isinstance(config, dict)
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.iterkeys():
         assert isinstance(role, basestring)
+        if role == "all":
+            continue
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-        remote.run(
-            args=[
-                # cd first so this will fail if the mount point does
-                # not exist; pure install -d will silently do the
-                # wrong thing
-                'cd',
-                '--',
-                mnt,
-                run.Raw('&&'),
-                'sudo',
-                'install',
-                '-d',
-                '-m', '0755',
-                '--owner={user}'.format(user='ubuntu'), #TODO
-                '--',
-                'client.{id}'.format(id=id_),
-                ],
-            )
-
+        _make_scratch_dir(ctx, role)
+    all_spec = False #is there an all grouping?
     with parallel() as p:
         for role, tests in config.iteritems():
-            p.spawn(_run_tests, ctx, role, tests)
+            if role != "all":
+                p.spawn(_run_tests, ctx, role, tests)
+            else:
+                all_spec = True
+
+    if all_spec:
+        all_tasks = config["all"]
+        _spawn_on_all_clients(ctx, all_tasks)
+
+def _make_scratch_dir(ctx, role):
+    PREFIX = 'client.'
+    id_ = role[len(PREFIX):]
+    log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
+    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+    remote.run(
+        args=[
+            # cd first so this will fail if the mount point does
+            # not exist; pure install -d will silently do the
+            # wrong thing
+            'cd',
+            '--',
+            mnt,
+            run.Raw('&&'),
+            'sudo',
+            'install',
+            '-d',
+            '-m', '0755',
+            '--owner={user}'.format(user='ubuntu'), #TODO
+            '--',
+            'client.{id}'.format(id=id_),
+            ],
+        )
+
+def _spawn_on_all_clients(ctx, tests):
+    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    client_roles = list()
+    client_remotes = list()
+    for client in client_generator:
+        (client_remote,) = ctx.cluster.only('client.{id}'.format(id=client)).remotes.iterkeys()
+        client_remotes.append((client_remote, 'client.{id}'.format(id=client)))
+        client_roles.append("client.{id}".format(id=client))
+        _make_scratch_dir(ctx, "client.{id}".format(id=client))
+        
+    for unit in tests:
+        with parallel() as p:
+            for remote, role in client_remotes:
+                p.spawn(_run_tests, ctx, role, [unit])
 
 def _run_tests(ctx, role, tests):
     assert isinstance(role, basestring)
