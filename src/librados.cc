@@ -3491,14 +3491,14 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   int64_t poolid = radosp->lookup_pool(name);
-  if (poolid >= 0) {
-    librados::IoCtxImpl *ctx = new librados::IoCtxImpl(radosp, poolid, name, CEPH_NOSNAP);
-    if (!ctx)
-      return -ENOMEM;
-    *io = ctx;
-    ctx->get();
-    return 0;
-  }
+  if (poolid < 0)
+    return (int)poolid;
+
+  librados::IoCtxImpl *ctx = new librados::IoCtxImpl(radosp, poolid, name, CEPH_NOSNAP);
+  if (!ctx)
+    return -ENOMEM;
+  *io = ctx;
+  ctx->get();
   return 0;
 }
 
