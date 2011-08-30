@@ -13,7 +13,6 @@ html_theme = 'nature'
 html_title = "Ceph documentation"
 html_logo = 'logo.jpg'
 html_favicon = 'favicon.ico'
-html_static_path = ['_static']
 html_use_smartypants = True
 html_show_sphinx = False
 html_sidebars = {
