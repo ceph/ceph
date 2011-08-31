@@ -65,7 +65,7 @@ Most configuration settings originate in the Ceph configuration file.
 How do we find the configuration file? Well, in order, we check:
  - the default locations
  - the environment variable CEPH_CONF
- - the command line argument -c 
+ - the command line argument -c
 
 Each stanza of the configuration file describes the key-value pairs that will be in
 effect for a particular subset of the daemons. The "global" stanza applies to
@@ -115,3 +115,54 @@ The observer method should be preferred in new code because
 
 For these reasons, reading directly from g_conf should be considered deprecated
 and not done in new code.  Do not ever alter g_conf.
+
+=================================
+ Debug Logs
+=================================
+The main debugging tool for Ceph is the dout and derr logging functions.
+Collectively, these are referred to as "dout logging."
+
+Dout has several log faculties, which can be set at various log
+levels using the configuration management system. So it is possible to enable
+debugging just for the messenger, by setting debug_ms to 10, for example.
+
+Dout is implemented mainly in common/DoutStreambuf.cc
+
+The dout macro avoids even generating log messages which are not going to be
+used, by enclosing them in an "if" statement. What this means is that if you
+have the debug level set at 0, and you run this code
+
+``dout(20) << "myfoo() = " << myfoo() << dendl;``
+
+
+myfoo() will not be called here.
+
+Unfortunately, the performance of debug logging is relatively low. This is
+because there is a single, process-wide mutex which every debug output
+statement takes, and every debug output statement leads to a write() system
+call or a call to syslog(). There is also a computational overhead to using C++
+streams to consider. So you will need to be parsimonius in your logging to get
+the best performance.
+
+Sometimes, enabling logging can hide race conditions and other bugs by changing
+the timing of events. Keep this in mind when debugging.
+
+=================================
+ CephContext
+=================================
+A CephContext represents a single view of the Ceph cluster. It comes complete
+with a configuration, a set of performance counters (PerfCounters), and a
+heartbeat map. You can find more information about CephContext in
+src/common/ceph_context.h.
+
+Generally, you will have only one CephContext in your application, called
+g_ceph_context. However, in library code, it is possible that the library user
+will initialize multiple CephContexts. For example, this would happen if he
+called rados_create more than once.
+
+A ceph context is required to issue log messages. Why is this? Well, without
+the CephContext, we would not know which log messages were disabled and which
+were enabled.  The dout() macro implicitly references g_ceph_context, so it
+can't be used in library code.  It is fine to use dout and derr in daemons, but
+in library code, you must use ldout and lderr, and pass in your own CephContext
+object. The compiler will enforce this restriction.
