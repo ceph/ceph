@@ -207,19 +207,6 @@ def binaries(ctx, config):
                 ),
             )
 
-# return the "first" mon (alphanumerically, for lack of anything better)
-def get_first_mon(ctx, config):
-    mons = []
-    for remote, roles in ctx.cluster.remotes.items():
-        for role in roles:
-            if not role.startswith('mon.'):
-                continue
-            mons.append(role)
-            break
-    firstmon = sorted(mons)[0]
-    assert firstmon
-    return firstmon
-
 @contextlib.contextmanager
 def valgrind_post(ctx, config):
     try:
@@ -294,7 +281,7 @@ def cluster(ctx, config):
 
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
-    firstmon = get_first_mon(ctx, config)
+    firstmon = teuthology.get_first_mon(ctx, config)
 
     log.info('Setting up %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
@@ -710,7 +697,7 @@ def osd(ctx, config):
 @contextlib.contextmanager
 def mds(ctx, config):
     log.info('Starting mds daemons...')
-    firstmon = get_first_mon(ctx, config)
+    firstmon = teuthology.get_first_mon(ctx, config)
     mds_daemons = {}
     mdss = ctx.cluster.only(teuthology.is_type('mds'))
     coverage_dir = '/tmp/cephtest/archive/coverage'
@@ -783,7 +770,7 @@ def mds(ctx, config):
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
-    firstmon = get_first_mon(ctx, config)
+    firstmon = teuthology.get_first_mon(ctx, config)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_healthy(
         remote=mon0_remote,

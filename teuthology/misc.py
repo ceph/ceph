@@ -362,3 +362,16 @@ def read_config(ctx):
         g = yaml.safe_load_all(f)
         for new in g:
             ctx.teuthology_config.update(new)
+
+# return the "first" mon (alphanumerically, for lack of anything better)
+def get_first_mon(ctx, config):
+    mons = []
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in roles:
+            if not role.startswith('mon.'):
+                continue
+            mons.append(role)
+            break
+    firstmon = sorted(mons)[0]
+    assert firstmon
+    return firstmon

@@ -1,6 +1,8 @@
 import contextlib
 import logging
 import ceph_manager
+from teuthology import misc as teuthology
+
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +51,8 @@ def task(ctx, config):
     - interactive:
     """
     log.info('Beginning thrashosds...')
-    (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     manager = ceph_manager.CephManager(
         mon,
         logger=log.getChild('ceph_manager'),
