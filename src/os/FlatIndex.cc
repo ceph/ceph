@@ -220,6 +220,18 @@ static int lfn_get(const char *coll_path, const hobject_t& oid, char *pathname, 
     /* not a long file name, just build it as it is */
     strncpy(filename, lfn, len - path_len);
     *is_lfn = 0;
+    struct stat buf;
+    int r = ::stat(pathname, &buf);
+    if (r < 0) {
+      if (errno == ENOENT) {
+	*exist = 0;
+      } else {
+	return -errno;
+      }
+    } else {
+      *exist = 1;
+    }
+
     return 0;
   }
 
@@ -290,7 +302,6 @@ int FlatIndex::unlink(const hobject_t &o) {
   if (!is_lfn) {
     r = ::unlink(short_fn);
     if (r < 0) {
-      cerr << "failed to unlink: " << short_fn << std::endl;
       return -errno;
     }
     return 0;
