@@ -80,12 +80,10 @@ def _make_scratch_dir(ctx, role):
 
 def _spawn_on_all_clients(ctx, tests):
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
-    client_roles = list()
     client_remotes = list()
     for client in client_generator:
         (client_remote,) = ctx.cluster.only('client.{id}'.format(id=client)).remotes.iterkeys()
         client_remotes.append((client_remote, 'client.{id}'.format(id=client)))
-        client_roles.append("client.{id}".format(id=client))
         _make_scratch_dir(ctx, "client.{id}".format(id=client))
         
     for unit in tests:
