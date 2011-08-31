@@ -802,6 +802,9 @@ bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
     return true;
   }
 
+  // flush pg ops to fs so we can rely on collection_list()
+  osr.flush();
+
   osd->store->collection_list(col_to_trim, obs_to_trim);
 
   return true;
@@ -4739,8 +4742,6 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
   if (log.backlog) {
 
-    // FIXME: sloppy pobject vs object conversions abound!  ***
-    
     // be thorough.
     vector<hobject_t> ls;
     osd->store->collection_list(coll, ls);
