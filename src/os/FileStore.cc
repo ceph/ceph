@@ -12,23 +12,6 @@
  * 
  */
 
-#include "FileStore.h"
-#include "common/BackTrace.h"
-#include "include/types.h"
-
-#include "FileJournal.h"
-
-#include "osd/osd_types.h"
-
-#include "include/color.h"
-
-#include "common/Timer.h"
-#include "common/debug.h"
-#include "common/errno.h"
-#include "common/run_cmd.h"
-#include "common/safe_io.h"
-#include "common/perf_counters.h"
-#include "common/sync_filesystem.h"
 
 #include <inttypes.h>
 #include <unistd.h>
@@ -37,11 +20,13 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <iostream>
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
+#include <iostream>
+#include <map>
 
 #include "include/fiemap.h"
 
@@ -54,20 +39,33 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+
 #include <sstream>
 
-#define ATTR_MAX_NAME_LEN  128
-#define ATTR_MAX_BLOCK_LEN 2048
+#include "FileStore.h"
+#include "common/BackTrace.h"
+#include "include/types.h"
+#include "FileJournal.h"
 
-#define COMMIT_SNAP_ITEM "snap_%lld"
-#define CLUSTER_SNAP_ITEM "clustersnap_%s"
+#include "osd/osd_types.h"
+#include "include/color.h"
+#include "include/buffer.h"
+
+#include "common/Timer.h"
+#include "common/debug.h"
+#include "common/errno.h"
+#include "common/run_cmd.h"
+#include "common/safe_io.h"
+#include "common/perf_counters.h"
+#include "common/sync_filesystem.h"
+#include "HashIndex.h"
+
+#include "common/ceph_crypto.h"
+using ceph::crypto::SHA1;
 
 #ifndef __CYGWIN__
 # ifndef DARWIN
 #  include "btrfs_ioctl.h"
-
-
-
 # endif
 #endif
 
@@ -77,14 +75,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 
-#include "include/buffer.h"
 
-#include <map>
+#define ATTR_MAX_NAME_LEN  128
+#define ATTR_MAX_BLOCK_LEN 2048
 
-#include "common/ceph_crypto.h"
-#include "HashIndex.h"
+#define COMMIT_SNAP_ITEM "snap_%lld"
+#define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
-using ceph::crypto::SHA1;
 
 /*
  * long file names will have the following format:
@@ -2411,7 +2408,6 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0 == "EIO handling not implemented");
     }
   }
-  
   return 0;  // FIXME count errors
 }
 
