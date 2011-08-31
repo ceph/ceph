@@ -24,7 +24,6 @@
 #include "include/utime.h"
 
 #include <values.h>
-#include <assert.h>
 #include <errno.h>
 #include <fstream>
 #include <iostream>
@@ -34,6 +33,8 @@
 #include <streambuf>
 #include <string.h>
 #include <syslog.h>
+
+#include "include/assert.h"
 
 ///////////////////////////// Constants /////////////////////////////
 #define TIME_FMT "%04d-%02d-%02d %02d:%02d:%02d.%06ld"

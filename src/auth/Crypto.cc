@@ -11,7 +11,6 @@
  * 
  */
 
-#include <assert.h>
 #include <sstream>
 #include "Crypto.h"
 #ifdef USE_CRYPTOPP
@@ -24,6 +23,7 @@
 # include <pk11pub.h>
 #endif
 
+#include "include/assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/ceph_crypto.h"

@@ -17,8 +17,8 @@
 #define CEPH_CONTEXT_H
 
 #include "common/dout.h"
+#include "include/assert.h"
 
-#include "assert.h"
 #include <list>
 #include <set>
 

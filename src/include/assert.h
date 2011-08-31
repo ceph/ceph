@@ -14,7 +14,7 @@
  * <assert.h> again later.
  */
 #ifndef NO_ATOMIC_OPS
-#include "atomic_ops.h"
+# include "atomic_ops.h"
 #endif
 
 struct CephContext;
@@ -114,3 +114,5 @@ using namespace ceph;
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+
+#undef _ASSERT_H

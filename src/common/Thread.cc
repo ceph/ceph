@@ -17,7 +17,6 @@
 #include "common/debug.h"
 #include "common/signal.h"
 
-#include <assert.h>
 #include <dirent.h>
 #include <errno.h>
 #include <iostream>
@@ -28,6 +27,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/user.h> // for PAGE_MASK
+
 
 Thread::
 Thread()
