@@ -30,11 +30,11 @@ class Thrasher(gevent.Greenlet):
 
     def remove_osd(self):
         chance_down = 0
-        if self.config.get("chanceDown"):
-            if isinstance(self.config["chanceDown"], int):
-                chance_down = float(self.config["chanceDown"])/100
+        if self.config.get("chance_down"):
+            if isinstance(self.config["chance_down"], int):
+                chance_down = float(self.config["chance_down"])/100
             else:
-                chance_down = self.config["chanceDown"]
+                chance_down = self.config["chance_down"]
         osd = random.choice(self.in_osds)
         if random.uniform(0,1) < chance_down:
             self.log("Marking osd {id_} down".format(id_=osd))
@@ -66,14 +66,14 @@ class Thrasher(gevent.Greenlet):
         delay = DELAY
         minin = 2
         minout = 0
-        if self.config.get("cleanInterval"):
-            cleanint = self.config["cleanInterval"]
-        if self.config.get("opDelay"):
-            delay = self.config["opDelay"]
-        if self.config.get("minIn"):
-            minin = self.config["minIn"]
-        if self.config.get("minOut"):
-            minout = self.config["minOut"]
+        if self.config.get("clean_interval"):
+            cleanint = self.config["clean_interval"]
+        if self.config.get("op_delay"):
+            delay = self.config["op_delay"]
+        if self.config.get("min_in"):
+            minin = self.config["min_in"]
+        if self.config.get("min_out"):
+            minout = self.config["min_out"]
         self.log("starting do_thrash")
         while not self.stopping:
             self.log(" ".join([str(x) for x in ["in_osds: ", self.in_osds, " out_osds: ", self.out_osds]]))
