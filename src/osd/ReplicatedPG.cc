@@ -4885,6 +4885,13 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     bv.push_back(p->second.attrs[OI_ATTR]);
     object_info_t oi(bv);
 
+    if (oi.size != p->second.size) {
+      derr << "on disk size (" << p->second.size
+	   << ") does not match object info size (" << oi.size
+	   << ") for " << soid << dendl;
+      ++errors;
+    }
+
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
     stat.num_bytes += p->second.size;

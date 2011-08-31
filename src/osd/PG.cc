@@ -2872,7 +2872,6 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
     if (p->is_update()) {
       ls.push_back(p->soid);
     } else if (p->is_delete()) {
-      map.objects[p->soid];
       map.objects[p->soid].negative = true;
     }
   }
