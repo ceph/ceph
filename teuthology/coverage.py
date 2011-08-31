@@ -162,7 +162,6 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
         output, _ = proc.communicate()
         desc = summary.get('description', test)
         test_coverage[desc] = read_coverage(output)
-        log.debug('coverage is %s', str(test_coverage[test]))
 
         log.info('adding %s data to total', test)
         proc = subprocess.Popen(
