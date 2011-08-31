@@ -544,7 +544,7 @@ def cluster(ctx, config):
             log.info('Grabbing cluster log from %s %s...' % (mon0_remote,
                                                              firstmon))
             dest = os.path.join(ctx.archive, 'ceph.log')
-            proc = mon0_remote.run(
+            mon0_remote.run(
                 args = [
                     'cat',
                     '--',

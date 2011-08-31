@@ -1,11 +1,9 @@
 from cStringIO import StringIO
 
 import logging
-import socket
-import time
 
 from teuthology import misc as teuthology
-from orchestra import connection, run
+from orchestra import run
 
 log = logging.getLogger(__name__)
 

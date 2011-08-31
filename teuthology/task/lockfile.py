@@ -1,9 +1,7 @@
 import logging
-import threading
 import os
 
 from orchestra import run
-import teuthology.misc as teuthology
 import time
 import gevent
 
@@ -136,13 +134,11 @@ def task(ctx, config):
         log.debug('created files to lock')
 
         # now actually run the locktests
-        spawnwait = 0
         for op in config:
             if not isinstance(op, dict):
                 assert isinstance(op, int) or isinstance(op, float)
                 log.info("sleeping for {sleep} seconds".format(sleep=op))
                 time.sleep(op)
-                spawnwait = 0
                 continue
             greenlet = gevent.spawn(lock_one, op, ctx)
             lock_procs.append((greenlet, op))
