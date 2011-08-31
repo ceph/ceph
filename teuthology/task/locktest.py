@@ -27,6 +27,10 @@ def task(ctx, config):
     log.info('fetching and building locktests...')
     (host,) = ctx.cluster.only(config[0]).remotes
     (client,) = ctx.cluster.only(config[1]).remotes
+    ( _, _, host_id) = config[0].partition('.')
+    ( _, _, client_id) = config[1].partition('.')
+    hostmnt = '/tmp/cephtest/mnt.{id}'.format(id=host_id)
+    clientmnt = '/tmp/cephtest/mnt.{id}'.format(id=client_id)
 
     try:
         for client_name in config:
@@ -41,7 +45,6 @@ def task(ctx, config):
                     run.Raw('&&'),
                     'wget',
                     '-nv',
-                    '--no-check-certificate',
                     'https://raw.github.com/gregsfortytwo/xfstests-ceph/master/src/locktest.c',
                     '-O', '/tmp/cephtest/locktest/locktest.c',
                     run.Raw('&&'),
@@ -53,40 +56,46 @@ def task(ctx, config):
 
         log.info('built locktest on each client')
         
+        host.run(args=['sudo', 'touch',
+                       '{mnt}/locktestfile'.format(mnt=hostmnt),
+                       run.Raw('&&'),
+                       'sudo', 'chown', 'ubuntu.ubuntu',
+                       '{mnt}/locktestfile'.format(mnt=hostmnt)
+                       ]
+                 )
+
         log.info('starting on host')
         hostproc = host.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/daemon-helper',
-                'kill',
                 '/tmp/cephtest/locktest/locktest',
                 '-p', '6788',
-                '-d'
+                '-d',
+                '{mnt}/locktestfile'.format(mnt=hostmnt),
                 ],
             wait=False,
             logger=log.getChild('locktest.host'),
             )
         log.info('starting on client')
-        client.run(
+        (_,_,hostaddr) = host.name.partition('@')
+        clientproc = client.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/daemon-helper',
-                'kill',
                 '/tmp/cephtest/locktest/locktest',
                 '-p', '6788',
                 '-d',
-                '-h', host.name
+                '-h', hostaddr,
+                '{mnt}/locktestfile'.format(mnt=clientmnt),
                 ],
             logger=log.getChild('locktest.client'),
+            wait=False
             )
         
-        run.wait([hostproc])
-        log.info('finished running locktest executable')
-        
+        hostresult = hostproc.exitstatus.get()
+        clientresult = clientproc.exitstatus.get()
+        if (hostresult != 0) or (clientresult != 0):
+            raise Exception("Did not pass locking test!")
+        log.info('finished locktest executable with results {r} and {s}'. \
+                     format(r=hostresult, s=clientresult))
+
     finally:
         log.info('cleaning up host dir')
         host.run(
