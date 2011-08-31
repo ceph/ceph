@@ -42,9 +42,9 @@ static void global_init_set_globals(CephContext *cct)
 static void output_ceph_version()
 {
   char buf[1024];
-  snprintf(buf, sizeof(buf), "ceph version %s.commit: %s. process: %s. "
-	    "pid: %d", ceph_version_to_str(), git_version_to_str(),
-	    get_process_name_cpp().c_str(), getpid());
+  snprintf(buf, sizeof(buf), "%s, process %s, pid %d",
+	   pretty_version_to_str().c_str(),
+	   get_process_name_cpp().c_str(), getpid());
   generic_dout(0) << buf << dendl;
 }
 
