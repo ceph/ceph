@@ -69,14 +69,10 @@ public:
 
   virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
-    sobject_t soid;
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
-    if (header.version < 4)
-      ::decode(soid, p);
-    else
-      ::decode(poid, p);
+    ::decode(poid, p);
 
     __u32 num_ops;
     ::decode(num_ops, p);
@@ -108,16 +104,12 @@ public:
       ::decode(first, p);
       ::decode(complete, p);
     }
-    if (header.version == 3) {
+    if (header.version >= 3)
       ::decode(oloc, p);
-      poid.oid = soid.oid;
-      poid.snap = soid.snap;
-      poid.hash = object_info_t::legacy_object_locator_to_ps(poid.oid, oloc);
-    }
   }
 
   virtual void encode_payload(CephContext *cct) {
-    header.version = 4;
+    header.version = 3;
 
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
