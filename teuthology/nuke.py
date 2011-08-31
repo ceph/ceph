@@ -31,6 +31,12 @@ def parse_args():
         '--owner',
         help='job owner',
         )
+    parser.add_argument(
+        '-r', '--reboot-all',
+        action='store_true',
+        default=False,
+        help='reboot all machines',
+        )
     args = parser.parse_args()
     return args
 
@@ -117,11 +123,10 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
     for remote, proc in nodes:
         proc.exitstatus.get()
 
-def reboot_kernel_mounts(ctx, kernel_mounts, log):
-    from orchestra import run
+def reboot(ctx, remotes, log):
     import time
     nodes = {}
-    for remote in kernel_mounts:
+    for remote in remotes:
         log.info('rebooting %s', remote.name)
         proc = remote.run( # note use of -n to force a no-sync reboot
             args=['sudo', 'reboot', '-f', '-n'],
@@ -133,7 +138,7 @@ def reboot_kernel_mounts(ctx, kernel_mounts, log):
         #for remote, proc in nodes.iteritems():
         #proc.exitstatus.get()
     from teuthology.misc import reconnect
-    if kernel_mounts:
+    if remotes:
         log.info('waiting for nodes to reboot')
         time.sleep(5) #if we try and reconnect too quickly, it succeeds!
         reconnect(ctx, 300)     #allow 5 minutes for the reboots
@@ -191,7 +196,10 @@ def main():
     log.info('Dealing with any kernel mounts...')
     kernel_mounts = find_kernel_mounts(ctx, log)
     #remove_kernel_mounts(ctx, kernel_mounts, log)
-    reboot_kernel_mounts(ctx, kernel_mounts, log)
+    need_reboot = kernel_mounts
+    if ctx.reboot_all:
+        need_reboot = ctx.cluster.remotes.keys()
+    reboot(ctx, need_reboot, log)
     log.info('All kernel mounts gone.')
 
     log.info('Clearing filesystem of test data...')
