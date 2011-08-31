@@ -5083,6 +5083,10 @@ boost::statechart::result ReplicatedPG::RepColTrim::react(const SnapTrim&)
   coll_t col_to_trim(pg->info.pgid, snap_to_trim);
   to_trim.erase(snap_to_trim);
   
+  // flush all operations to fs so we can rely on collection_list
+  // below.
+  pg->osr.flush();
+
   vector<hobject_t> obs_to_trim;
   pg->osd->store->collection_list(col_to_trim, obs_to_trim);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;

@@ -4494,6 +4494,10 @@ void OSD::_remove_pg(PG *pg)
     int tr = store->queue_transaction(&pg->osr, t);
     assert(tr == 0);
   }
+  
+  // flush all pg operations to the fs, so we can rely on
+  // collection_list below.
+  pg->osr.flush();
 
   int n = 0;
 
