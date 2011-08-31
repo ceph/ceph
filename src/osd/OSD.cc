@@ -130,8 +130,7 @@ const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
 
 
 
-ObjectStore *OSD::
-create_object_store(const std::string &dev, const std::string &jdev)
+ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
 {
   struct stat st;
   if (::stat(dev.c_str(), &st) != 0)
@@ -149,7 +148,8 @@ create_object_store(const std::string &dev, const std::string &jdev)
 #undef dout_prefix
 #define dout_prefix *_dout
 
-static int convert_collection(ObjectStore *store, coll_t cid) {
+static int convert_collection(ObjectStore *store, coll_t cid)
+{
   vector<hobject_t> objects;
   int r = store->collection_list(cid, objects);
   if (r < 0)
@@ -188,7 +188,8 @@ static int convert_collection(ObjectStore *store, coll_t cid) {
   return 0;
 }
 
-static int do_convertfs(ObjectStore *store) {
+static int do_convertfs(ObjectStore *store)
+{
   g_ceph_context->_conf->filestore_update_collections = true;
   int r = store->mount();
   if (r < 0)
