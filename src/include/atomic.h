@@ -21,8 +21,12 @@
 #endif
 
 #ifndef NO_ATOMIC_OPS
-//libatomic_ops implementation
+
+// libatomic_ops implementation
 #include <atomic_ops.h>
+
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
 
 namespace ceph {
   class atomic_t {

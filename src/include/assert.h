@@ -7,16 +7,6 @@
 # include "acconfig.h"
 #endif
 
-/*
- * atomic_ops.h includes the system assert.h, which will redefine
- * 'assert' even if it's already been included.  so, make sure we
- * include atomic_ops.h first so that we don't get an #include
- * <assert.h> again later.
- */
-#ifndef NO_ATOMIC_OPS
-# include "atomic_ops.h"
-#endif
-
 struct CephContext;
 
 #ifdef __cplusplus
