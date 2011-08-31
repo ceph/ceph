@@ -1293,6 +1293,7 @@ noinst_HEADERS = \
 	obsync/obsync\
 	obsync/boto_tool\
 	os/btrfs_ioctl.h\
+	os/CollectionIndex.h\
         os/Fake.h\
         os/FileJournal.h\
         os/FileStore.h\
