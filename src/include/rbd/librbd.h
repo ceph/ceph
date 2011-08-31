@@ -37,7 +37,7 @@ extern "C" {
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
 
-typedef void (*librbd_copy_progress_fn_t)(uint64_t offset, uint64_t src_size,
+typedef int (*librbd_copy_progress_fn_t)(uint64_t offset, uint64_t src_size,
 					 void *data);
 
 typedef struct {
