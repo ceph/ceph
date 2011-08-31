@@ -370,6 +370,7 @@ public:
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       utime_t     mtime;  // this is the _user_ mtime, mind you
       bufferlist snaps;   // only for clone entries
+      bool invalid_hash; // only when decoding sobject_t based entries
       
       Entry() : op(0) {}
       Entry(int _op, const hobject_t& _soid,
@@ -377,7 +378,7 @@ public:
 	    const osd_reqid_t& rid, const utime_t& mt) :
         op(_op), soid(_soid), version(v),
 	prior_version(pv), 
-	reqid(rid), mtime(mt) {}
+	reqid(rid), mtime(mt), invalid_hash(false) {}
       
       bool is_delete() const { return op == DELETE; }
       bool is_clone() const { return op == CLONE; }
@@ -392,7 +393,7 @@ public:
       }
 
       void encode(bufferlist &bl) const {
-	__u8 struct_v = 1;
+	__u8 struct_v = 2;
 	::encode(struct_v, bl);
 	::encode(op, bl);
 	::encode(soid, bl);
@@ -407,7 +408,15 @@ public:
 	__u8 struct_v;
 	::decode(struct_v, bl);
 	::decode(op, bl);
-	::decode(soid, bl);
+	if (struct_v < 2) {
+	  sobject_t old_soid;
+	  ::decode(old_soid, bl);
+	  soid.oid = old_soid.oid;
+	  soid.snap = old_soid.snap;
+	  invalid_hash = true;
+	} else {
+	  ::decode(soid, bl);
+	}
 	::decode(version, bl);
 	::decode(prior_version, bl);
 	::decode(reqid, bl);

@@ -52,6 +52,9 @@ public:
 
   virtual void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
+    __u8 version;
+    ::decode(version, payload);
+    assert(version == 1);
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
@@ -70,6 +73,8 @@ public:
     ::decode(attrset, p);
   }
   virtual void encode_payload(CephContext *cct) {
+    __u8 version = 1;
+    ::encode(version, payload);
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);

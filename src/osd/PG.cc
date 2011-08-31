@@ -2175,6 +2175,11 @@ void PG::read_log(ObjectStore *store)
 
   log.backlog = info.log_backlog;
   log.tail = info.log_tail;
+
+  // In case of sobject_t based encoding, may need to list objects in the store
+  // to find hashes
+  bool listed_collection = false;
+  vector<hobject_t> ls;
   
   if (ondisklog.head > 0) {
     // read
@@ -2232,6 +2237,29 @@ void PG::read_log(ObjectStore *store)
 	log.log.pop_back();
 	osd->clog.error() << info.pgid << " read_log got dup "
 	      << e.version << " after " << last << "\n";
+      }
+
+      if (e.invalid_hash) {
+	// We need to find the object in the store to get the hash
+	if (!listed_collection) {
+	  store->collection_list(coll, ls);
+	}
+	bool found = false;
+	for (vector<hobject_t>::iterator i = ls.begin();
+	     i != ls.end();
+	     ++i) {
+	  if (i->oid == e.soid.oid && i->snap == e.soid.snap) {
+	    e.soid.hash = i->hash;
+	    found = true;
+	    break;
+	  }
+	}
+	if (!found) {
+	  // Didn't find the correct hash
+	  std::ostringstream oss;
+	  oss << "Could not find hash for hoid " << e.soid << std::endl;
+	  throw read_log_error(oss.str().c_str());
+	}
       }
       
       uint64_t endpos = ondisklog.tail + p.get_off();
