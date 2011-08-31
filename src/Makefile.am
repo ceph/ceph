@@ -1296,8 +1296,12 @@ noinst_HEADERS = \
         os/Fake.h\
         os/FileJournal.h\
         os/FileStore.h\
+	os/FlatIndex.h\
+	os/HashIndex.h\
+	os/IndexManager.h\
         os/Journal.h\
         os/JournalingObjectStore.h\
+	os/LFNIndex.h\
         os/ObjectStore.h\
         osd/Ager.h\
 	osd/ClassHandler.h\
