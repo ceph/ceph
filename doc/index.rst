@@ -94,6 +94,7 @@ Table of Contents
    man/index
    papers
    glossary
+   appendix/index
 
 
 Indices and tables
