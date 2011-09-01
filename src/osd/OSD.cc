@@ -193,16 +193,15 @@ static int do_convertfs(ObjectStore *store)
   g_ceph_context->_conf->filestore_update_collections = true;
   int r = store->mount();
   if (r < 0)
-    return -r;
+    return r;
 
   uint32_t version;
   r = store->version_stamp_is_valid(&version);
   if (r < 0)
-    return -r;
+    return r;
   if (r == 1) {
     derr << "FileStore is up to date." << dendl;
-    store->umount();
-    return 0;
+    return store->umount();
   } else {
     derr << "FileStore is old at version " << version << ".  Updating..." 
 	 << dendl;
@@ -212,7 +211,7 @@ static int do_convertfs(ObjectStore *store)
   vector<coll_t> collections;
   r = store->list_collections(collections);
   if (r < 0)
-    return -r;
+    return r;
 
   derr << collections.size() << " to process." << dendl;
   int processed = 0;
@@ -242,8 +241,7 @@ static int do_convertfs(ObjectStore *store)
   store->sync_and_flush();
   store->sync();
   cerr << "Version stamp updated, done!" << std::endl;
-  store->umount();
-  return 0;
+  return store->umount();
 }
 
 int OSD::convertfs(const std::string &dev, const std::string &jdev)
