@@ -53,3 +53,4 @@ core
 .project
 .cproject
 /build-doc
+/doc/object_store.png

@@ -25,6 +25,13 @@
 
 .. todo:: write me
 
+====================================
+ Object Store Architecture Overview
+====================================
+.. image:: object_store.png
+
+.. todo:: write more here
+
 =================================
  Library architecture
 =================================

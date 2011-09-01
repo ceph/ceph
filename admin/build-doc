@@ -10,6 +10,8 @@ if [ ! -e build-doc/doxygen/xml ]; then
 fi
 
 dia --filter=png-libart --export=doc/overview.png.tmp doc/overview.dia
+dot -Tpng < doc/object_store.dot > doc/object_store.png
+
 mv -- doc/overview.png.tmp doc/overview.png
 
 cd build-doc
