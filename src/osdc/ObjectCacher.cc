@@ -632,7 +632,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, 
           << dendl;
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
-    assert(0);
   } else {
     Object *ob = objects[poolid][oid];
     
@@ -642,7 +641,8 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start, 
          p++) {
       BufferHead *bh = p->second;
       
-      if (bh->start() > start+(loff_t)length) break;
+      if (bh->start() > start+(loff_t)length)
+	break;
 
       if (bh->start() < start &&
           bh->end() > start+(loff_t)length) {
