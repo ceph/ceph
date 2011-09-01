@@ -1347,6 +1347,18 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   }
 }
 
+void Locker::_finish_xlock(SimpleLock *lock, bool *pneed_issue)
+{
+  assert(!lock->is_stable());
+  lock->get_parent()->auth_unpin(lock);
+  if (lock->get_type() != CEPH_LOCK_DN && ((CInode*)lock->get_parent())->get_loner() >= 0)
+    lock->set_state(LOCK_EXCL);
+  else
+    lock->set_state(LOCK_LOCK);
+  if (lock->get_cap_shift())
+    *pneed_issue = true;
+}
+
 void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
@@ -1386,14 +1398,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 	lock->get_num_rdlocks() == 0 &&
 	lock->get_num_wrlocks() == 0 &&
 	lock->get_num_client_lease() == 0) {
-      assert(!lock->is_stable());
-      lock->get_parent()->auth_unpin(lock);
-      if (lock->get_type() != CEPH_LOCK_DN && ((CInode*)lock->get_parent())->get_loner() >= 0)
-	lock->set_state(LOCK_EXCL);
-      else
-	lock->set_state(LOCK_LOCK);
-      if (lock->get_cap_shift())
-	do_issue = true;
+      _finish_xlock(lock, &do_issue);
     }
 
     // others waiting?
