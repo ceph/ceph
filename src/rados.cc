@@ -1241,7 +1241,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
 int main(int argc, const char **argv)
 {
-  DEFINE_CONF_VARS(usage_exit);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
