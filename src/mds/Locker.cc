@@ -402,8 +402,11 @@ bool Locker::acquire_locks(MDRequest *mdr,
       if (need_issue)
 	issue_set.insert((CInode*)stray->get_parent());
     }
-      
+
     // lock
+    if (mdr->locking && *p != mdr->locking) {
+      cancel_locking(mdr, &issue_set);
+    }
     if (xlocks.count(*p)) {
       if (!xlock_start(*p, mdr)) 
 	goto out;
@@ -491,6 +494,24 @@ void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   }
 }
 
+void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
+{
+  SimpleLock *lock = mut->locking;
+  assert(lock);
+  dout(10) << "cancel_locking " << *lock << " on " << *mut << dendl;
+
+  if (lock->get_type() != CEPH_LOCK_DN) {
+    bool need_issue = false;
+    if (lock->get_state() == LOCK_PREXLOCK)
+      _finish_xlock(lock, &need_issue);
+    if (lock->is_stable())
+      eval(lock, &need_issue);
+    if (need_issue)
+      pneed_issue->insert((CInode *)lock->get_parent());
+  }
+  mut->finish_locking(lock);
+}
+
 void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
 {
   // leftover locks
@@ -498,6 +519,8 @@ void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
   if (!pneed_issue)
     pneed_issue = &my_need_issue;
 
+  if (mut->locking)
+    cancel_locking(mut, pneed_issue);
   _drop_non_rdlocks(mut, pneed_issue);
   _drop_rdlocks(mut, pneed_issue);
 
@@ -1304,6 +1327,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 	lock->get_xlock(mut, client);
 	mut->xlocks.insert(lock);
 	mut->locks.insert(lock);
+	mut->finish_locking(lock);
 	return true;
       }
       
@@ -1311,10 +1335,12 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 				  lock->get_xlock_by_client() == client))
 	break;
 
-      if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE)
+      if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE) {
+	mut->start_locking(lock);
 	simple_xlock(lock);
-      else
+      } else {
 	simple_lock(lock);
+      }
     }
     
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));

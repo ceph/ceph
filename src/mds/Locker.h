@@ -90,6 +90,7 @@ public:
 		     set<SimpleLock*> &xlocks,
 		     map<SimpleLock*,int> *remote_wrlocks=NULL);
 
+  void cancel_locking(Mutation *mut, set<CInode*> *pneed_issue);
   void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(Mutation *mut);
   void drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
