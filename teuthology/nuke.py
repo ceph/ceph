@@ -147,7 +147,6 @@ def reboot(ctx, remotes, log):
         reconnect(ctx, 300)     #allow 5 minutes for the reboots
 
 def remove_testing_tree(ctx, log):
-    from orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
