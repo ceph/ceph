@@ -9,7 +9,7 @@
    */
 
   digraph object_store {
-    size="10,10";
+    size="7,7";
     node [color=lightblue2, style=filled, fontname="Serif"];
 
     "testrados" -> "librados"
