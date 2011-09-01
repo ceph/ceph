@@ -3279,7 +3279,7 @@ void Client::unmount()
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
 
-  //clean up any unclosed files
+  // clean up any unclosed files
   if (!fd_map.empty())
     std::cerr << "Warning: Some files were not closed prior to unmounting;\n"
 	      << "Ceph is closing them now.\n";
@@ -3287,7 +3287,8 @@ void Client::unmount()
     int fd = fd_map.begin()->first;
     assert(fd_map.count(fd));
     Fh *fh = fd_map[fd];
-    _release(fh);
+    lderr(cct) << " destroying lost open file " << fh << " on " << *fh->inode << dendl;
+    _release_fh(fh);
     fd_map.erase(fd);
   }
 
@@ -4823,6 +4824,29 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   return f;
 }
 
+int Client::_release_fh(Fh *f)
+{
+  //ldout(cct, 3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
+  //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
+  Inode *in = f->inode;
+  ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
+
+  if (in->snapid == CEPH_NOSNAP) {
+    if (in->put_open_ref(f->mode)) {
+      _flush(in);
+      check_caps(in, false);
+    }
+  } else {
+    assert(in->snap_cap_refs > 0);
+    in->snap_cap_refs--;
+  }
+
+  put_inode( in );
+  delete f;
+
+  return 0;
+}
+
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
 {
   int cmode = ceph_flags_to_mode(flags);
@@ -4866,9 +4890,6 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
   return result;
 }
 
-
-
-
 int Client::close(int fd)
 {
   ldout(cct, 3) << "close enter(" << fd << ")" << dendl;
@@ -4878,35 +4899,11 @@ int Client::close(int fd)
 
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
-  _release(fh);
+  _release_fh(fh);
   fd_map.erase(fd);
   ldout(cct, 3) << "close exit(" << fd << ")" << dendl;
   return 0;
 }
-
-int Client::_release(Fh *f)
-{
-  //ldout(cct, 3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
-  //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
-  Inode *in = f->inode;
-  ldout(cct, 5) << "_release " << f << " mode " << f->mode << " on " << *in << dendl;
-
-  if (in->snapid == CEPH_NOSNAP) {
-    if (in->put_open_ref(f->mode)) {
-      _flush(in);
-      check_caps(in, false);
-    }
-  } else {
-    assert(in->snap_cap_refs > 0);
-    in->snap_cap_refs--;
-  }
-
-  put_inode( in );
-  delete f;
-
-  return 0;
-}
-
 
 
 // ------------
@@ -6735,7 +6732,7 @@ int Client::ll_release(Fh *fh)
   tout(cct) << "ll_release" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
-  _release(fh);
+  _release_fh(fh);
   return 0;
 }
 
