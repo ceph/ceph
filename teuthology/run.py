@@ -172,7 +172,6 @@ def schedule():
         )
     parser.add_argument(
         '--name',
-        required=True,
         help='name of suite run the job is part of',
         )
     parser.add_argument(
@@ -205,6 +204,13 @@ def schedule():
         help='job owner',
         )
     parser.add_argument(
+        '--delete',
+        metavar='JOBID',
+        type=int,
+        nargs='*',
+        help='list of jobs to remove from the queue',
+        )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         default=False,
@@ -226,6 +232,16 @@ def schedule():
     beanstalk = teuthology.queue.connect(ctx)
 
     beanstalk.use('teuthology')
+
+    if ctx.delete:
+        for jobid in ctx.delete:
+            job = beanstalk.peek(jobid)
+            if job is None:
+                print 'job {jid} is not in the queue'.format(jid=jobid)
+            else:
+                job.delete()
+        return
+
     job = yaml.safe_dump(dict(
             config=ctx.config,
             name=ctx.name,
