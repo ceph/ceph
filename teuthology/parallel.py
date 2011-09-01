@@ -35,9 +35,11 @@ class parallel(object):
         self.group = gevent.pool.Group()
         self.results = gevent.queue.Queue()
         self.count = 0
+        self.any_spawned = False
 
     def spawn(self, func, *args, **kwargs):
         self.count += 1
+        self.any_spawned = True
         greenlet = self.group.spawn(func, *args, **kwargs)
         greenlet.link(self._finish)
 
@@ -63,6 +65,8 @@ class parallel(object):
         return self
 
     def next(self):
+        if not self.any_spawned:
+            raise StopIteration()
         result = self.results.get()
         if isinstance(result, BaseException):
             raise result
