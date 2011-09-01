@@ -31,18 +31,20 @@ static std::ostringstream gss;
 
 static void usage()
 {
-  derr << "usage: gceph [options]" << dendl;
-  derr << dendl;
-  derr << "Runs the ceph graphical monitor" << dendl;
+  cerr << "usage: gceph [options]\n\n";
+  cerr << "Runs the ceph graphical monitor\n";
   generic_client_usage(); // Will exit()
 }
 
-static void parse_gceph_args(const vector<const char*> &args)
+static void parse_gceph_args(vector<const char*> &args)
 {
-  DEFINE_CONF_VARS(usage);
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("help", 'h')) {
+  std::vector<const char*>::iterator i;
+  std::string val;
+  for (i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
+    } else {
+      ++i;
     }
   }
 }
@@ -73,17 +75,14 @@ int main(int argc, const char **argv)
 {
   int ret = 0;
 
-  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  parse_gceph_args(args);
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-
   vec_to_argv(args, argc, argv);
-
-  parse_gceph_args(args);
 
   ctx = ceph_tool_common_init(CEPH_TOOL_MODE_GUI, false);
   if (!ctx) {
