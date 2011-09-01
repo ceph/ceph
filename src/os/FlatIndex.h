@@ -35,7 +35,7 @@ public:
   FlatIndex(string base_path) : base_path(base_path) {}
 
   /// @see CollectionIndex
-  uint32_t collection_version() { return 0; }
+  uint32_t collection_version() { return FLAT_INDEX_TAG; }
 
   /// @see CollectionIndex
   void set_ref(std::tr1::shared_ptr<CollectionIndex> ref);

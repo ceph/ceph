@@ -413,7 +413,7 @@ int LFNIndex::remove_attr_path(const vector<string> &path,
   return do_removexattr(full_path.c_str(), mangled_attr_name.c_str());
 }
   
-string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
+string LFNIndex::lfn_generate_object_name_keyless(const hobject_t &hoid) {
   char s[FILENAME_MAX_LEN];
   char *end = s + sizeof(s);
   char *t = s;
@@ -450,6 +450,10 @@ string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
 
   return string(s);
  }
+
+string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
+  return lfn_generate_object_name_keyless(hoid);
+}
 
 int LFNIndex::lfn_get_name(const vector<string> &path, 
 			   const hobject_t &hoid,
@@ -666,11 +670,15 @@ static int parse_object(const char *s, hobject_t& o)
   return 0;
 }
 
-bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
+bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, hobject_t *out) {
   bool r = parse_object(long_name.c_str(), *out);
   if (!r) return r;
   string temp = lfn_generate_object_name(*out);
   return r;
+}
+
+bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
+  return lfn_parse_object_name_keyless(long_name, out);
 }
 
 bool LFNIndex::lfn_is_hashed_filename(const string &name) {

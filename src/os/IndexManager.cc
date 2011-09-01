@@ -70,7 +70,8 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
   if (r < 0)
     return r;
   HashIndex index(path, g_conf->filestore_merge_threshold, 
-		  g_conf->filestore_split_multiple);
+		  g_conf->filestore_split_multiple,
+		  CollectionIndex::HASH_INDEX_TAG_2);
   return index.init();
 }
 
@@ -84,15 +85,16 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
       return r;
 
     switch (version) {
-    case 0: {
+    case CollectionIndex::FLAT_INDEX_TAG: {
       *index = Index(new FlatIndex(path), 
 		     RemoveOnDelete(c, this));
       return 0;
     }
-    case 1: {
+    case CollectionIndex::HASH_INDEX_TAG: // fall through
+    case CollectionIndex::HASH_INDEX_TAG_2: {
       // Must be a HashIndex
       *index = Index(new HashIndex(path, g_conf->filestore_merge_threshold,
-				   g_conf->filestore_split_multiple), 
+				   g_conf->filestore_split_multiple, version), 
 		     RemoveOnDelete(c, this));
       return 0;
     }
@@ -102,7 +104,8 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
   } else {
     // No need to check
     *index = Index(new HashIndex(path, g_conf->filestore_merge_threshold,
-				 g_conf->filestore_split_multiple), 
+				 g_conf->filestore_split_multiple,
+				 CollectionIndex::HASH_INDEX_TAG_2), 
 		   RemoveOnDelete(c, this));
     return 0;
   }

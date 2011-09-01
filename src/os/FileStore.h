@@ -39,7 +39,7 @@ using namespace __gnu_cxx;
 // fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore {
-  static const uint32_t on_disk_version = 1;
+  static const uint32_t on_disk_version = 2;
   string basedir, journalpath;
   std::string current_fn;
   std::string current_op_seq_fn;
