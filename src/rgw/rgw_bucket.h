@@ -17,6 +17,7 @@ extern int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket);
 extern int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
                       map<std::string, bufferlist>& attrs, bool exclusive = true, uint64_t auid = 0);
 
+extern int rgw_bucket_maintain_pools(void);
 
 #endif
 

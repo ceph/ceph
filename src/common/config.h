@@ -568,6 +568,9 @@ public:
   int rgw_op_thread_timeout;
   int rgw_op_thread_suicide_timeout;
   int rgw_thread_pool_size;
+  double rgw_maintenance_tick_interval;
+  int rgw_pools_preallocate_max;
+  int rgw_pools_preallocate_threshold;
 
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.

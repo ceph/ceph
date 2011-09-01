@@ -434,6 +434,9 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_op_thread_timeout, OPT_INT, 10*60),
   OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60),
   OPTION(rgw_thread_pool_size, OPT_INT, 100),
+  OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0),
+  OPTION(rgw_pools_preallocate_max, OPT_INT, 100),
+  OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70),
 
   // see config.h
   OPTION(internal_safe_to_start_threads, OPT_BOOL, false),

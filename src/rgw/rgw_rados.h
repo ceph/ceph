@@ -2,10 +2,12 @@
 #define CEPH_RGWRADOS_H
 
 #include "include/rados/librados.hpp"
+#include "include/Context.h"
 #include "rgw_access.h"
 #include "rgw_common.h"
 
 class RGWWatcher;
+class SafeTimer;
 
 struct RGWObjState {
   bool is_atomic;
@@ -77,6 +79,19 @@ class RGWRados  : public RGWAccess
 
   int set_buckets_auid(vector<rgw_bucket>& buckets, uint64_t auid);
 
+  Mutex lock;
+  SafeTimer *timer;
+
+  class C_Tick : public Context {
+    RGWRados *rados;
+  public:
+    C_Tick(RGWRados *_r) : rados(_r) {}
+    void finish(int r) {
+      rados->tick();
+    }
+  };
+
+
   RGWWatcher *watcher;
   uint64_t watch_handle;
   librados::IoCtx root_pool_ctx;
@@ -106,7 +121,9 @@ class RGWRados  : public RGWAccess
                  pair<string, bufferlist> *cmp_xattr);
   int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 public:
-  RGWRados() : watcher(NULL), watch_handle(0) {}
+  RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
+
+  void tick();
 
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize(CephContext *cct);

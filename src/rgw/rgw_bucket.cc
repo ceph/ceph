@@ -15,8 +15,6 @@ static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
 static string avail_pools = ".pools.avail";
 static string pool_name_prefix = "p";
 
-#define POOLS_PREALLOCATE_NUM 100
-
 
 int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
 {
@@ -64,11 +62,11 @@ int rgw_remove_bucket_info(string& bucket_name)
   return ret;
 }
 
-static int generate_preallocated_pools(vector<string>& pools)
+static int generate_preallocated_pools(vector<string>& pools, int num)
 {
   vector<string> names;
 
-  for (int i = 0; i < POOLS_PREALLOCATE_NUM; i++) {
+  for (int i = 0; i < num; i++) {
     string name = pool_name_prefix;
     append_rand_alpha(pool_name_prefix, name, 8);
     names.push_back(name);
@@ -98,18 +96,8 @@ static int generate_preallocated_pools(vector<string>& pools)
   return 0;
 }
 
-static int generate_pool(string& bucket_name, rgw_bucket& bucket)
+static int register_available_pools(vector<string>& pools)
 {
-  vector<string> pools;
-  int ret = generate_preallocated_pools(pools);
-  if (ret < 0) {
-    RGW_LOG(0) << "generate_preallocad_pools returned " << ret << dendl;
-    return ret;
-  }
-  bucket.pool = pools.back();
-  pools.pop_back();
-  bucket.name = bucket_name;
-
   map<string, bufferlist> m;
   vector<string>::iterator iter;
 
@@ -119,7 +107,7 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
     m[name] = bl;
   }
   rgw_obj obj(pi_buckets, avail_pools);
-  ret = rgwstore->tmap_set(obj, m);
+  int ret = rgwstore->tmap_set(obj, m);
   if (ret == -ENOENT) {
     rgw_bucket new_bucket;
     map<string,bufferlist> attrs;
@@ -136,11 +124,62 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
   return 0;
 }
 
+static int generate_pool(string& bucket_name, rgw_bucket& bucket)
+{
+  vector<string> pools;
+  int ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max);
+  if (ret < 0) {
+    RGW_LOG(0) << "generate_preallocad_pools returned " << ret << dendl;
+    return ret;
+  }
+  bucket.pool = pools.back();
+  pools.pop_back();
+  bucket.name = bucket_name;
+
+  ret = register_available_pools(pools);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 static int withdraw_pool(string& pool_name)
 {
   rgw_obj obj(pi_buckets, avail_pools);
   bufferlist bl;
   return rgwstore->tmap_set(obj, pool_name, bl);
+}
+
+int rgw_bucket_maintain_pools()
+{
+  bufferlist header;
+  map<string, bufferlist> m;
+  string pool_name;
+
+  rgw_obj obj(pi_buckets, avail_pools);
+  int ret = rgwstore->tmap_get(obj, header, m);
+  if (ret < 0 && ret != -ENOENT) {
+      return ret;
+  }
+
+  if ((int)m.size() < g_conf->rgw_pools_preallocate_threshold) {
+    RGW_LOG(0) << "rgw_bucket_maintain_pools allocating pools (m.size()=" << m.size() << " threshold="
+               << g_conf->rgw_pools_preallocate_threshold << ")" << dendl;
+    vector<string> pools;
+    ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max - m.size());
+    if (ret < 0) {
+      RGW_LOG(0) << "failed to preallocate pools" << dendl;
+      return ret;
+    }
+    ret = register_available_pools(pools);
+    if (ret < 0) {
+      RGW_LOG(0) << "failed to register available pools" << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
 }
 
 int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
