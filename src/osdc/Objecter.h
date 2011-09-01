@@ -466,7 +466,7 @@ public:
     int64_t pool_id;
     int pool_snap_seq;
     int max_entries;
-    std::list<object_t> list;
+    std::list<pair<object_t, string> > list;
 
     bufferlist filter;
 

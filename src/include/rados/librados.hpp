@@ -7,6 +7,7 @@
 #include <map>
 #include <tr1/memory>
 #include <vector>
+#include <utility>
 #include "buffer.h"
 
 #include "librados.h"
@@ -64,14 +65,15 @@ namespace librados
     ~ObjectIterator();
     bool operator==(const ObjectIterator& rhs) const;
     bool operator!=(const ObjectIterator& rhs) const;
-    const std::string& operator*() const;
+    const std::pair<std::string, std::string>& operator*() const;
+    const std::pair<std::string, std::string>* operator->() const;
     ObjectIterator &operator++(); // Preincrement
     ObjectIterator operator++(int); // Postincrement
     friend class IoCtx;
   private:
     void get_next();
     std::tr1::shared_ptr < ObjListCtx > ctx;
-    std::string cur_obj;
+    std::pair<std::string, std::string> cur_obj;
   };
 
   class WatchCtx {

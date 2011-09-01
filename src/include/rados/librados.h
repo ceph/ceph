@@ -147,7 +147,7 @@ int rados_ioctx_get_id(rados_ioctx_t io);
 
 /* objects */
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
-int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry);
+int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key);
 void rados_objects_list_close(rados_list_ctx_t ctx);
 
 /* snapshots */
