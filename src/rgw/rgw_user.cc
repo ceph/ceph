@@ -421,34 +421,49 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
   }
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {
+    RGW_LOG(0) << "removing key index: " << kiter->first << dendl;
     ret = rgw_remove_key_index(kiter->second);
-    if (ret < 0 && ret != -ENOENT)
-      RGW_LOG(0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed manually (err=" << ret << ")" << dendl;
+    if (ret < 0 && ret != -ENOENT) {
+      RGW_LOG(0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed (err=" << ret << ")" << dendl;
+      return ret;
+    }
   }
 
-  rgw_obj uid_obj(ui_uid_bucket, info.user_id);
-  ret = rgwstore->delete_obj(NULL, info.user_id, uid_obj);
-  if (ret < 0 && ret != -ENOENT)
-    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed manually (err=" << ret << ")" << dendl;
+  rgw_obj email_obj(ui_email_bucket, info.user_email);
+  RGW_LOG(0) << "removing email index: " << info.user_email << dendl;
+  ret = rgwstore->delete_obj(NULL, info.user_id, email_obj);
+  if (ret < 0 && ret != -ENOENT) {
+    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    return ret;
+  }
+
+  if (purge_data) {
+    RGW_LOG(0) << "purging user buckets" << dendl;
+    ret = rgwstore->purge_buckets(info.user_id, buckets_vec);
+    if (ret < 0 && ret != -ENOENT) {
+      RGW_LOG(0) << "ERROR: delete_buckets returned " << ret << dendl;
+      return ret;
+    }
+  }
 
   string buckets_obj_id;
   get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_obj uid_bucks(ui_uid_bucket, buckets_obj_id);
+  RGW_LOG(0) << "removing user buckets index" << dendl;
   ret = rgwstore->delete_obj(NULL, info.user_id, uid_bucks);
-  if (ret < 0 && ret != -ENOENT)
-    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed manually (err=" << ret << ")" << dendl;
-  
-
-  rgw_obj email_obj(ui_email_bucket, info.user_email);
-  ret = rgwstore->delete_obj(NULL, info.user_id, email_obj);
-  if (ret < 0 && ret != -ENOENT)
-    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed manually (err=" << ret << ")" << dendl;
-
-  if (purge_data) {
-    ret = rgwstore->purge_buckets(info.user_id, buckets_vec);
-    if (ret < 0)
-      RGW_LOG(0) << "ERROR: delete_buckets returned " << ret << dendl;
+  if (ret < 0 && ret != -ENOENT) {
+    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
+    return ret;
   }
+  
+  rgw_obj uid_obj(ui_uid_bucket, info.user_id);
+  RGW_LOG(0) << "removing user index: " << info.user_id << dendl;
+  ret = rgwstore->delete_obj(NULL, info.user_id, uid_obj);
+  if (ret < 0 && ret != -ENOENT) {
+    RGW_LOG(0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
