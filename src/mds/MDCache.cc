@@ -5232,6 +5232,8 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in << dendl;
 
+  assert(pi->is_truncating());
+
   in->auth_pin(this);
 
   SnapRealm *realm = in->find_snaprealm();

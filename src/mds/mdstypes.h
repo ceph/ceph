@@ -430,6 +430,7 @@ struct inode_t {
 
   bool is_truncating() const { return (truncate_pending > 0); }
   void truncate(uint64_t old_size, uint64_t new_size) {
+    assert(new_size < old_size);
     truncate_from = old_size;
     size = new_size;
     rstat.rbytes = new_size;

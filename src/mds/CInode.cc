@@ -129,6 +129,10 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  inode_t *pi = in.get_projected_inode();
+  if (pi->is_truncating())
+    out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
+
   // anchors
   if (in.is_anchored())
     out << " anc";
