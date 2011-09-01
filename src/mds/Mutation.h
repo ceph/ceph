@@ -58,6 +58,10 @@ struct Mutation {
   set< SimpleLock* > xlocks;   // local or remote.
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
+  // lock we are currently trying to acquire.  if we give up for some reason,
+  // be sure to eval() this.
+  SimpleLock *locking;
+
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
   bool done_locking; 
@@ -72,17 +76,20 @@ struct Mutation {
   list<CInode*> dirty_cow_inodes;
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
-  Mutation() : 
-    attempt(0),
-    ls(0),
-    slave_to_mds(-1),
-    done_locking(false), committing(false), aborted(false) { }
-  Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1) : 
-    reqid(ri), attempt(att),
-    ls(0),
-    slave_to_mds(slave_to), 
-    done_locking(false), committing(false), aborted(false) { }
+  Mutation()
+    : attempt(0),
+      ls(0),
+      slave_to_mds(-1),
+      locking(NULL),
+      done_locking(false), committing(false), aborted(false) { }
+  Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
+    : reqid(ri), attempt(att),
+      ls(0),
+      slave_to_mds(slave_to), 
+      locking(NULL),
+      done_locking(false), committing(false), aborted(false) { }
   virtual ~Mutation() {
+    assert(locking == NULL);
     assert(pins.empty());
     assert(auth_pins.empty());
     assert(xlocks.empty());
@@ -104,6 +111,9 @@ struct Mutation {
   void pin(MDSCacheObject *o);
   void set_stickydirs(CInode *in);
   void drop_pins();
+
+  void start_locking(SimpleLock *lock);
+  void finish_locking(SimpleLock *lock);
 
   // auth pins
   bool is_auth_pinned(MDSCacheObject *object);

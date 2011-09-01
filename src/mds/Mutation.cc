@@ -47,7 +47,21 @@ void Mutation::drop_pins()
   pins.clear();
 }
 
-  // auth pins
+void Mutation::start_locking(SimpleLock *lock)
+{
+  assert(locking == NULL);
+  pin(lock->get_parent());
+  locking = lock;
+}
+
+void Mutation::finish_locking(SimpleLock *lock)
+{
+  assert(locking == lock);
+  locking = NULL;
+}
+
+
+// auth pins
 bool Mutation::is_auth_pinned(MDSCacheObject *object)
 { 
   return auth_pins.count(object) || remote_auth_pins.count(object); 
