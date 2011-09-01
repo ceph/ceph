@@ -1,8 +1,6 @@
 import argparse
 import yaml
 
-from orchestra import run
-
 def parse_args():
     from teuthology.run import config_file
     from teuthology.run import MergeConfig
@@ -41,6 +39,7 @@ def parse_args():
     return args
 
 def shutdown_daemons(ctx, log):
+    from orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -79,6 +78,7 @@ def shutdown_daemons(ctx, log):
         proc.exitstatus.get()
 
 def find_kernel_mounts(ctx, log):
+    from orchestra import run
     nodes = {}
     log.info('Looking for kernel mounts to handle...')
     for remote in ctx.cluster.remotes.iterkeys():
@@ -107,6 +107,7 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
     properly we should be able to just do a forced unmount,
     but that doesn't seem to be working, so you should reboot instead 
     """
+    from orchestra import run
     nodes = {}
     for remote in kernel_mounts:
         log.info('clearing kernel mount from %s', remote.name)
@@ -146,6 +147,7 @@ def reboot(ctx, remotes, log):
         reconnect(ctx, 300)     #allow 5 minutes for the reboots
 
 def remove_testing_tree(ctx, log):
+    from orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
