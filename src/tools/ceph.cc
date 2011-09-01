@@ -50,34 +50,27 @@ static void usage()
   generic_client_usage(); // Will exit()
 }
 
-static void parse_cmd_args(const vector<const char*> &args,
-		const char **in_file, const char ** out_file,
-		ceph_tool_mode_t *mode, vector<const char*> *nargs,
-		bool *concise)
+static void parse_cmd_args(vector<const char*> &args,
+		std::string *in_file, std::string *out_file,
+		ceph_tool_mode_t *mode, bool *concise)
 {
-  DEFINE_CONF_VARS(usage);
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("in_file", 'i')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(in_file, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("concise", '\0')) {
-      *concise = true;
-    } else if (CEPH_ARGPARSE_EQ("out_file", 'o')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(out_file, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("status", 's')) {
-      *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
-    } else if (CEPH_ARGPARSE_EQ("watch", 'w')) {
-      *mode = CEPH_TOOL_MODE_OBSERVER;
-    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
-      usage();
-    } else if (strcmp(args[i], "--") == 0) {
-      for (++i; i < args.size(); i++)
-	nargs->push_back(args[i]);
+  std::vector<const char*>::iterator i;
+  std::string val;
+  for (i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (args[i][0] == '-' && nargs->empty()) {
-      derr << "unrecognized option " << args[i] << dendl;
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--in-file", (char*)NULL)) {
+      *in_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--out-file", (char*)NULL)) {
+      *out_file = val;
+    } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
+      *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
+    } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
+      *mode = CEPH_TOOL_MODE_OBSERVER;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
     } else {
-      nargs->push_back(args[i]);
+      ++i;
     }
   }
 }
@@ -116,28 +109,24 @@ static int get_indata(const char *in_file, bufferlist &indata)
 
 int main(int argc, const char **argv)
 {
+  std::string in_file, out_file;
+  enum ceph_tool_mode_t mode = CEPH_TOOL_MODE_CLI_INPUT;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  // parse user input
+  bool concise = false;
+  parse_cmd_args(args, &in_file, &out_file, &mode, &concise);
+
+  // initialize globals
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  vec_to_argv(args, argc, argv);
-
-  const char *in_file = NULL;
-  const char *out_file = NULL;
-  enum ceph_tool_mode_t mode = CEPH_TOOL_MODE_CLI_INPUT;
-  vector<const char*> nargs;
-
-  // parse user input
-  bool concise = false;
-  parse_cmd_args(args, &in_file, &out_file, &mode, &nargs, &concise);
-
   bufferlist indata;
 
-  if (in_file) {
-    if (get_indata(in_file, indata)) {
+  if (!in_file.empty()) {
+    if (get_indata(in_file.c_str(), indata)) {
       derr << "failed to get data from '" << in_file << "'" << dendl;
       return 1;
     }
@@ -162,23 +151,24 @@ int main(int argc, const char **argv)
     }
 
     case CEPH_TOOL_MODE_CLI_INPUT: {
-      if (nargs.empty()) {
+      if (args.empty()) {
 	if (ceph_tool_do_cli(ctx))
 	  ret = 1;
       }
       else {
-	while (!nargs.empty()) {
+	while (!args.empty()) {
 	  vector<string> cmd;
-	  for (vector<const char*>::iterator n = nargs.begin();
-	       n != nargs.end(); ) {
+	  for (vector<const char*>::iterator n = args.begin();
+	       n != args.end(); ) {
 	    std::string np(*n);
-	    n = nargs.erase(n);
+	    n = args.erase(n);
 	    if (np == ";")
 	      break;
 	    cmd.push_back(np);
 	  }
 
-	  if (ceph_tool_cli_input(ctx, cmd, out_file, indata))
+	  if (ceph_tool_cli_input(ctx, cmd,
+		out_file.empty() ? NULL : out_file.c_str(), indata))
 	    ret = 1;
 	}
       }
