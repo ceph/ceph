@@ -1664,16 +1664,21 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	i = atoi(m->cmd[2].c_str());
 	if (i < 0 || i >= osdmap.get_max_osd()) {
 	  ss << i << " is not a valid osd id";
-	  getline(ss, rs);
-	  return -ERANGE;
+	  err = -ERANGE;
+	  goto out;
 	}
-	if (osdmap.exists(i) ||
-	    pending_inc.new_up_client.count(i) ||
+	if (osdmap.exists(i)) {
+	  ss << i << " already exists";
+	  err = -EEXIST;
+	  goto out;
+	}
+	if (pending_inc.new_up_client.count(i) ||
 	    (pending_inc.new_state.count(i) &&
 	     (pending_inc.new_state[i] & CEPH_OSD_EXISTS))) {
 	  ss << i << " already exists";
 	  getline(ss, rs);
-	  return -EEXIST;
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, -EEXIST, rs, paxos->get_version()));
+	  return true;
 	}
       } else {
 	// allocate a new id
