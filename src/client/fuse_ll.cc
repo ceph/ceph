@@ -317,7 +317,7 @@ static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Fh *fh;
+  Fh *fh = NULL;
   int r = client->ll_open(fino_vino(ino), fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
@@ -443,7 +443,7 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
-  Fh *fh;
+  Fh *fh = NULL;
   int r = client->ll_create(fino_vino(parent), name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
