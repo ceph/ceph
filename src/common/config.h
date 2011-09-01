@@ -567,6 +567,7 @@ public:
   string rgw_socket_path;
   int rgw_op_thread_timeout;
   int rgw_op_thread_suicide_timeout;
+  int rgw_thread_pool_size;
 
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.

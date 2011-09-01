@@ -253,7 +253,7 @@ int main(int argc, const char **argv)
     return EIO;
   }
 
-  RGWProcess process(g_ceph_context, 20);
+  RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
 
   process.run();
 
