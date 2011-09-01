@@ -889,6 +889,7 @@ libmds_a_SOURCES = \
 	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \
+	mds/Mutation.cc \
 	mds/MDCache.cc \
 	mds/Locker.cc \
 	mds/Migrator.cc \
@@ -1145,6 +1146,7 @@ noinst_HEADERS = \
 	mds/MDSTable.h\
 	mds/MDSTableServer.h\
 	mds/MDSTableClient.h\
+	mds/Mutation.h\
         mds/Migrator.h\
 	mds/Resetter.h\
         mds/ScatterLock.h\

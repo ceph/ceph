@@ -18,6 +18,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 #include "CInode.h"
+#include "Mutation.h"
 
 #include "MDSMap.h"
 #include "MDS.h"

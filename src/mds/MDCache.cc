@@ -30,6 +30,8 @@
 #include "CInode.h"
 #include "CDir.h"
 
+#include "Mutation.h"
+
 #include "include/ceph_fs.h"
 #include "include/filepath.h"
 
@@ -10161,4 +10163,18 @@ void MDCache::dump_cache(const char *fn)
   }
 
   myfile.close();
+}
+
+
+
+C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequest *r)
+  : cache(c), mdr(r)
+{
+  mdr->get();
+}
+
+void C_MDS_RetryRequest::finish(int r)
+{
+  cache->dispatch_request(mdr);
+  mdr->put();
 }

@@ -22,6 +22,7 @@
 #include "AnchorClient.h"
 #include "InoTable.h"
 #include "SnapClient.h"
+#include "Mutation.h"
 
 #include "msg/Messenger.h"
 

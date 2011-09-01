@@ -20,6 +20,7 @@
 #include "MDCache.h"
 #include "MDLog.h"
 #include "Locker.h"
+#include "Mutation.h"
 
 #include "events/EUpdate.h"
 
