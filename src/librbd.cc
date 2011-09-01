@@ -1053,7 +1053,7 @@ public:
 class CProgressContext : public librbd::ProgressContext
 {
 public:
-  CProgressContext(librbd_copy_progress_fn_t fn, void *data)
+  CProgressContext(librbd_progress_fn_t fn, void *data)
     : m_fn(fn), m_data(data)
   {
   }
@@ -1062,7 +1062,7 @@ public:
     return m_fn(offset, src_size, m_data);
   }
 private:
-  librbd_copy_progress_fn_t m_fn;
+  librbd_progress_fn_t m_fn;
   void *m_data;
 };
 
@@ -1761,7 +1761,7 @@ extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p, const char *des
 }
 
 extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
-	      const char *destname, librbd_copy_progress_fn_t fn, void *data)
+	      const char *destname, librbd_progress_fn_t fn, void *data)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;

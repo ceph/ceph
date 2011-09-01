@@ -41,12 +41,12 @@ namespace librbd {
 
   typedef rbd_image_info_t image_info_t;
 
-class ProgressContext
-{
-public:
-  virtual ~ProgressContext();
-  virtual int update_progress(uint64_t offset, uint64_t src_size) = 0;
-};
+  class ProgressContext
+  {
+  public:
+    virtual ~ProgressContext();
+    virtual int update_progress(uint64_t offset, uint64_t total) = 0;
+  };
 
 class RBD
 {
