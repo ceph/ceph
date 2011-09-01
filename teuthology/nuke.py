@@ -84,7 +84,9 @@ def find_kernel_mounts(ctx, log):
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
-                'grep', '-q', " ceph " , '/etc/mtab'
+                'grep', '-q', ' ceph ' , '/etc/mtab',
+                run.Raw('||'),
+                'grep', '-q', '^/dev/rbd' , '/etc/mtab',
                 ],
             wait=False,
             )
