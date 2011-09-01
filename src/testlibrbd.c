@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #define TEST_IMAGE "testimg"
+#define TEST_IMAGE2 "testimg2"
 #define TEST_POOL "librbdtest"
 #define TEST_SNAP "testsnap"
 #define TEST_IO_SIZE 512
@@ -325,6 +326,35 @@ void test_io_to_snapshot(rados_ioctx_t io_ctx, rbd_image_t image, size_t isize)
   test_ls_snaps(image, 0);
 }
 
+void test_rbd_copy(rados_ioctx_t io_ctx, rbd_image_t image)
+{
+  int ret;
+  ret = rbd_copy(image, io_ctx, TEST_IMAGE2);
+  if (ret < 0) {
+    fprintf(stderr, "rbd_copy returned %d!\n", ret);
+    abort();
+  }
+}
+
+static int print_progress_percent(uint64_t offset, uint64_t src_size,
+				     void *data)
+{
+  float percent = ((float)offset * 100) / src_size;
+  printf("%3.2f%% done\n", percent);
+  return 0; 
+}
+
+void test_rbd_copy_with_progress(rados_ioctx_t io_ctx, rbd_image_t image)
+{
+  int ret;
+  ret = rbd_copy_with_progress(image, io_ctx, TEST_IMAGE2,
+				 print_progress_percent, NULL);
+  if (ret < 0) {
+    fprintf(stderr, "rbd_copy_with_progress returned %d!\n", ret);
+    abort();
+  }
+}
+
 int main(int argc, const char **argv) 
 {
   rados_t cluster;
@@ -379,6 +409,10 @@ int main(int argc, const char **argv)
 
   test_delete(io_ctx, TEST_IMAGE "1");
   test_ls(io_ctx, 0);
+
+  test_rbd_copy(io_ctx, image);
+  test_delete(io_ctx, TEST_IMAGE2);
+  test_rbd_copy_with_progress(io_ctx, image);
 
   rados_ioctx_destroy(io_ctx);
   rados_shutdown(cluster);

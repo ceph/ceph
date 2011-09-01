@@ -31,6 +31,7 @@
 using namespace std;
 
 #define TEST_IMAGE "testimg"
+#define TEST_IMAGE2 "testimg2"
 #define TEST_POOL "librbdtest"
 #define TEST_SNAP "testsnap"
 #define TEST_IO_SIZE 513
@@ -237,6 +238,39 @@ void test_io(librados::IoCtx& io_ctx, librbd::Image& image)
 
 }
 
+void test_rbd_copy(librados::IoCtx& io_ctx, librbd::Image& image)
+{
+  int ret;
+  ret = image.copy(io_ctx, TEST_IMAGE2);
+  if (ret < 0) {
+    fprintf(stderr, "image.copy returned %d!\n", ret);
+    abort();
+  }
+}
+
+class PrintProgress : public librbd::ProgressContext
+{
+public:
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    float percent = ((float)offset * 100) / src_size;
+    printf("%3.2f%% done\n", percent);
+    return 0;
+  }
+};
+
+
+void test_rbd_copy_with_progress(librados::IoCtx& io_ctx, librbd::Image& image)
+{
+  int ret;
+  PrintProgress prog_ctx;
+  ret = image.copy_with_progress(io_ctx, TEST_IMAGE2, prog_ctx);
+  if (ret < 0) {
+    fprintf(stderr, "image.copy returned %d!\n", ret);
+    abort();
+  }
+}
+
 int main(int argc, const char **argv) 
 {
   librados::Rados rados;
@@ -275,6 +309,9 @@ int main(int argc, const char **argv)
   test_ls(io_ctx, 1, TEST_IMAGE "1");
   test_delete(io_ctx, TEST_IMAGE "1");
   test_ls(io_ctx, 0);
+  test_rbd_copy(io_ctx, image);
+  test_delete(io_ctx, TEST_IMAGE2);
+  test_rbd_copy_with_progress(io_ctx, image);
   delete rbd;
   return 0;
 }

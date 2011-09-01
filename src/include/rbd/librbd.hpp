@@ -41,6 +41,13 @@ namespace librbd {
 
   typedef rbd_image_info_t image_info_t;
 
+class ProgressContext
+{
+public:
+  virtual ~ProgressContext();
+  virtual int update_progress(uint64_t offset, uint64_t src_size) = 0;
+};
+
 class RBD
 {
 public:
@@ -79,6 +86,8 @@ public:
   int resize(uint64_t size);
   int stat(image_info_t &info, size_t infosize);
   int copy(IoCtx& dest_io_ctx, const char *destname);
+  int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
+			 ProgressContext &prog_ctx);
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);

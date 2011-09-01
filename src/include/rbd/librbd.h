@@ -37,6 +37,9 @@ extern "C" {
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
 
+typedef int (*librbd_copy_progress_fn_t)(uint64_t offset, uint64_t src_size,
+					 void *data);
+
 typedef struct {
   uint64_t id;
   uint64_t size;
@@ -69,6 +72,8 @@ int rbd_close(rbd_image_t image);
 int rbd_resize(rbd_image_t image, uint64_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx, const char *destname);
+int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
+	    const char *destname, librbd_copy_progress_fn_t fn, void *data);
 
 /* snapshots */
 int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);
