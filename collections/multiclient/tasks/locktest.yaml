@@ -1,0 +1,6 @@
+kernel:
+  branch: master
+tasks:
+- ceph:
+- kclient:
+- locktest: [client.0, client.1]
