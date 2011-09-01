@@ -22,6 +22,7 @@ html_sidebars = {
 # ugly kludge until breathe is distutils-friendly
 import sys; sys.path.append('../build-doc/breathe')
 extensions = [
+    'sphinx.ext.graphviz',
     'sphinx.ext.todo',
     'breathe',
     ]

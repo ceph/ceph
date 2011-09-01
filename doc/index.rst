@@ -90,6 +90,7 @@ Table of Contents
    architecture
    ops/index
    api/index
+   Internals <dev/index>
    man/index
    papers
    glossary
