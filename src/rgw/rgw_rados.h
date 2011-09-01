@@ -228,7 +228,7 @@ public:
   virtual int get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id);
 
   virtual bool supports_tmap() { return true; }
-  virtual int tmap_get(rgw_obj& obj, bufferlist& bl);
+  virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
   virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl);

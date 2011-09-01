@@ -145,23 +145,18 @@ static int withdraw_pool(string& pool_name)
 
 int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
 {
-  bufferlist bl;
   bufferlist header;
   map<string, bufferlist> m;
   string pool_name;
 
   rgw_obj obj(pi_buckets, avail_pools);
-  int ret = rgwstore->tmap_get(obj, bl);
+  int ret = rgwstore->tmap_get(obj, header, m);
   if (ret < 0) {
     if (ret == -ENOENT) {
       return generate_pool(bucket_name, bucket);
     }
     return ret;
   }
-
-  bufferlist::iterator iter = bl.begin();
-  ::decode(header, iter);
-  ::decode(m, iter);
 
   if (!m.size()) {
     return generate_pool(bucket_name, bucket);

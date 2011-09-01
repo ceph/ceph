@@ -1473,8 +1473,9 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& 
   return 0;
 }
 
-int RGWRados::tmap_get(rgw_obj& obj, bufferlist& bl)
+int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
 {
+  bufferlist bl;
   librados::IoCtx io_ctx;
   rgw_bucket& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -1485,8 +1486,14 @@ int RGWRados::tmap_get(rgw_obj& obj, bufferlist& bl)
   io_ctx.locator_set_key(obj.key);
 
   r = io_ctx.tmap_get(oid, bl);
+  if (r < 0)
+    return r;
 
-  return r;
+  bufferlist::iterator iter = bl.begin();
+  ::decode(header, iter);
+  ::decode(m, iter);
+
+  return 0;
  
 }
 

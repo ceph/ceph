@@ -749,7 +749,6 @@ void RGWPutObj::execute()
         goto done_err;
 
       bl.clear();
-      map<string, bufferlist> meta_attrs;
       RGWUploadPartInfo info;
       string p = "part.";
       p.append(part_num);
@@ -758,13 +757,10 @@ void RGWPutObj::execute()
       info.size = s->obj_size;
       info.modified = ceph_clock_now(g_ceph_context);
       ::encode(info, bl);
-      meta_attrs[p] = bl;
 
       rgw_obj meta_obj(s->bucket, multipart_meta_obj, s->object_str, mp_ns);
 
-      // we don't set a category, since by now a category should have already been assigned
-      string nocategory;
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, meta_obj, NULL, meta_attrs, nocategory, false);
+      ret = rgwstore->tmap_set(meta_obj, p, bl);
     }
   }
 done:
@@ -1191,11 +1187,12 @@ done:
 }
 
 static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32_t, RGWUploadPartInfo>& parts,
-                               RGWAccessControlPolicy& policy, map<string, bufferlist>& new_attrs)
+                               RGWAccessControlPolicy& policy, map<string, bufferlist>& attrs)
 {
   void *handle;
-  map<string, bufferlist> attrs;
+  map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
+  bufferlist header;
 
   rgw_obj obj(s->bucket, meta_oid, s->object_str, mp_ns);
 
@@ -1206,20 +1203,22 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
   if (ret < 0)
     return ret;
 
+  ret = rgwstore->tmap_get(obj, header, parts_map);
+  if (ret < 0)
+    return ret;
+
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     string name = iter->first;
     if (name.compare(RGW_ATTR_ACL) == 0) {
       bufferlist& bl = iter->second;
       bufferlist::iterator bli = bl.begin();
       ::decode(policy, bli);
-      new_attrs[RGW_ATTR_ACL] = bl;
-      continue;
+      break;
     }
-    if (name.compare(0, 5, "part.") != 0) {
-      new_attrs[iter->first] = iter->second;
-      continue;
-    }
+  }
 
+
+  for (iter = parts_map.begin(); iter != parts_map.end(); ++iter) {
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
     RGWUploadPartInfo info;

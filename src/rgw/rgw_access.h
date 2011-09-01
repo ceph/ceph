@@ -232,7 +232,7 @@ public:
 
   virtual bool supports_tmap() { return false; }
 
-  virtual int tmap_get(rgw_obj& obj, bufferlist& bl) { return -ENOTSUP; }
+  virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m) { return -ENOTSUP; }
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
   virtual int tmap_set(rgw_obj& obj, map<std::string, bufferlist>& m) { return -ENOTSUP; }
   virtual int tmap_create(rgw_obj& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
