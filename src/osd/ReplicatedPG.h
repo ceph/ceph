@@ -510,7 +510,8 @@ protected:
 			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
-  SnapSetContext *get_snapset_context(const object_t& oid, ps_t seed, bool can_create);
+  SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
+				      ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
       ssc->registered = true;
