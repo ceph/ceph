@@ -261,14 +261,15 @@ namespace __gnu_cxx {
 
 struct hobject_t {
   object_t oid;
+  string key;
   snapid_t snap;
   uint32_t hash;
 
   hobject_t() : snap(0), hash(0) {}
-  hobject_t(object_t oid, snapid_t snap, uint32_t hash) : 
-    oid(oid), snap(snap), hash(hash) {}
-  hobject_t(const sobject_t &soid, uint32_t hash) : 
-    oid(soid.oid), snap(soid.snap), hash(hash) {}
+  hobject_t(object_t oid, const string &key, snapid_t snap, uint32_t hash) : 
+    oid(oid), key(key), snap(snap), hash(hash) {}
+  hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
+    oid(soid.oid), key(key), snap(soid.snap), hash(hash) {}
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
@@ -279,9 +280,11 @@ struct hobject_t {
   void swap(hobject_t &o) {
     hobject_t temp(o);
     o.oid = oid;
+    o.key = key;
     o.snap = snap;
     o.hash = hash;
     oid = temp.oid;
+    key = temp.key;
     snap = temp.snap;
     hash = temp.hash;
   }
@@ -291,8 +294,9 @@ struct hobject_t {
   }
 
   void encode(bufferlist& bl) const {
-    __u8 version = 0;
+    __u8 version = 1;
     ::encode(version, bl);
+    ::encode(key, bl);
     ::encode(oid, bl);
     ::encode(snap, bl);
     ::encode(hash, bl);
@@ -300,6 +304,8 @@ struct hobject_t {
   void decode(bufferlist::iterator& bl) {
     __u8 version;
     ::decode(version, bl);
+    if (version >= 1)
+      ::decode(key, bl);
     ::decode(oid, bl);
     ::decode(snap, bl);
     ::decode(hash, bl);
