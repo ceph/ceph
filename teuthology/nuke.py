@@ -35,6 +35,12 @@ def parse_args():
         default=False,
         help='reboot all machines',
         )
+    parser.add_argument(
+        '-s', '--synch-clocks',
+        action='store_true',
+        default=False,
+        help='synchronize clocks on all machines',
+        )
     args = parser.parse_args()
     return args
 
@@ -161,6 +167,27 @@ def remove_testing_tree(ctx, log):
         log.info('Waiting for %s to clear filesystem...', name)
         proc.exitstatus.get()
 
+def synch_clocks(remotes, log):
+    from orchestra import run
+    nodes = {}
+    for remote in remotes:
+        proc = remote.run(
+            args=[
+                'sudo', 'service', 'ntp', 'stop',
+                run.Raw('&&'),
+                'sudo', 'ntpdate-debian',
+                run.Raw('&&'),
+                'sudo', 'hwclock', '--systohc', '--utc',
+                run.Raw('&&'),
+                'sudo', 'service', 'ntp', 'start',
+                ],
+            wait=False,
+            )
+        nodes[remote.name] = proc
+    for name, proc in nodes.iteritems():
+        log.info('Waiting for clock to synchronize on %s...', name)
+        proc.exitstatus.get()
+
 def main():
     from gevent import monkey; monkey.patch_all()
     from orchestra import monkey; monkey.patch_all()
@@ -204,6 +231,11 @@ def main():
         need_reboot = ctx.cluster.remotes.keys()
     reboot(ctx, need_reboot, log)
     log.info('All kernel mounts gone.')
+
+    log.info('Synchronizing clocks...')
+    if ctx.synch_clocks:
+        need_reboot = ctx.cluster.remotes.keys()
+    synch_clocks(need_reboot, log)
 
     log.info('Clearing filesystem of test data...')
     remove_testing_tree(ctx, log)
