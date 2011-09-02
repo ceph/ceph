@@ -42,10 +42,6 @@ Installing Ceph using ``mkcephfs``
 Installing the packages
 -----------------------
 
-.. topic:: Status as of 2011-09
-
-  The following commands don't work yet. Patience, my young padawan.
-
 
 .. _install-debs:
 
