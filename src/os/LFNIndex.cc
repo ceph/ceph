@@ -793,7 +793,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
   for (; end != long_name.end() && *end != '_'; ++end);
   if (end == long_name.end())
     return false;
-  if (!append_unescaped(current, end, &(out->oid.name)))
+  if (!append_unescaped(current, end, &(out->key)))
     return false;
 
   current = ++end;
