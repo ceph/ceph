@@ -1,6 +1,6 @@
 tasks:
 - ceph:
 - rbd:
-    all:
+    client.0:
 - workunit:
     all: [misc/trivial_sync.sh]
