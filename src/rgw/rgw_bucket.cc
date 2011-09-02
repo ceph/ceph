@@ -47,7 +47,12 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
   }
 
   bufferlist::iterator iter = bl.begin();
-  ::decode(info, iter);
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
 
   RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << dendl;
 

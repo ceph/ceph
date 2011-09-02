@@ -280,7 +280,12 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
         bufferlist& bl = iter->second;
         bufferlist::iterator i = bl.begin();
         RGWAccessControlPolicy policy;
-        policy.decode_owner(i);
+        try {
+          policy.decode_owner(i);
+        } catch (buffer::error& err) {
+          RGW_LOG(0) << "ERROR: could not decode policy for oid=" << oid << ", caught buffer::error" << dendl;
+          continue;
+        }
         ACLOwner& owner = policy.get_owner();
         obj.owner = owner.get_id();
         obj.owner_display_name = owner.get_display_name();
@@ -793,16 +798,26 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   s->exists = true;
 
   bufferlist::iterator oiter = outbl.begin();
-  ::decode(s->attrset, oiter);
+  try {
+    ::decode(s->attrset, oiter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
+    return -EIO;
+  }
 
   map<string, bufferlist>::iterator aiter;
   for (aiter = s->attrset.begin(); aiter != s->attrset.end(); ++aiter) {
     RGW_LOG(0) << "iter->first=" << aiter->first << dendl;
   }
-  ::decode(s->size, oiter);
-  utime_t ut;
-  ::decode(ut, oiter);
-  s->mtime = ut.sec();
+
+  try {
+    ::decode(s->size, oiter);
+    utime_t ut;
+    ::decode(ut, oiter);
+    s->mtime = ut.sec();
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
+  }
 
   s->has_attrs = true;
   map<string, bufferlist>::iterator iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
@@ -1489,9 +1504,14 @@ int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, buffer
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = bl.begin();
-  ::decode(header, iter);
-  ::decode(m, iter);
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(header, iter);
+    ::decode(m, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: tmap_get failed, caught buffer::error" << dendl;
+    return -EIO;
+  }
 
   return 0;
  

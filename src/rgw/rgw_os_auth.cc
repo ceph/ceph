@@ -83,7 +83,7 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     ::decode(os_user, iter);
     ::decode(nonce, iter);
     ::decode(expiration, iter);
-  } catch (buffer::error *err) {
+  } catch (buffer::error& err) {
     RGW_LOG(0) << "failed to decode token: caught exception" << dendl;
     return -EINVAL;
   }

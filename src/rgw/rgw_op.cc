@@ -148,7 +148,12 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
-      policy->decode(iter);
+      try {
+        policy->decode(iter);
+      } catch (buffer::error& err) {
+        RGW_LOG(0) << "error: could not decode policy, caught buffer::error" << dendl;
+        return -EIO;
+      }
       if (g_conf->rgw_log >= 15) {
         RGW_LOG(15) << "Read AccessControlPolicy" << dendl;
         policy->to_xml(cerr);
@@ -1212,7 +1217,12 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
     if (name.compare(RGW_ATTR_ACL) == 0) {
       bufferlist& bl = iter->second;
       bufferlist::iterator bli = bl.begin();
-      ::decode(policy, bli);
+      try {
+        ::decode(policy, bli);
+      } catch (buffer::error& err) {
+        RGW_LOG(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+        return -EIO;
+      }
       break;
     }
   }
@@ -1222,7 +1232,11 @@ static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
     RGWUploadPartInfo info;
-    ::decode(info, bli);
+    try {
+      ::decode(info, bli);
+    } catch (buffer::error& err) {
+      RGW_LOG(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    }
     parts[info.num] = info;
   }
   return 0;

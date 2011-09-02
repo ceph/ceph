@@ -320,8 +320,11 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
-  } catch (buffer::end_of_buffer *err) {
+  } catch (buffer::end_of_buffer& err) {
     RGW_LOG(0) << "ERROR: got bad notification" << dendl;
+    return -EIO;
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 

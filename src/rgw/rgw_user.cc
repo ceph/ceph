@@ -115,9 +115,14 @@ int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& i
     return ret;
 
   bufferlist::iterator iter = bl.begin();
-  ::decode(uid, iter);
-  if (!iter.end())
-    info.decode(iter);
+  try {
+    ::decode(uid, iter);
+    if (!iter.end())
+      info.decode(iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    return -EIO;
+  }
 
   return 0;
 }
@@ -173,7 +178,12 @@ static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
     return ret;
 
   bufferlist::iterator iter = bl.begin();
-  buckets.decode(iter);
+  try {
+    buckets.decode(iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed to decode buckets info, caught buffer::error" << dendl;
+    return -EIO;
+  }
   return 0;
 }
 
@@ -230,13 +240,18 @@ int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_sta
     bufferlist::iterator p = bl.begin();
     bufferlist header;
     map<string,bufferlist> m;
-    ::decode(header, p);
-    ::decode(m, p);
-    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
-      bufferlist::iterator iter = q->second.begin();
-      RGWBucketEnt bucket;
-      ::decode(bucket, iter);
-      buckets.add(bucket);
+    try {
+      ::decode(header, p);
+      ::decode(m, p);
+      for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+        bufferlist::iterator iter = q->second.begin();
+        RGWBucketEnt bucket;
+        ::decode(bucket, iter);
+        buckets.add(bucket);
+      }
+    } catch (buffer::error& err) {
+      RGW_LOG(0) << "ERROR: failed to decode bucket information, caught buffer::error" << dendl;
+      return -EIO;
     }
   } else {
     ret = rgw_read_buckets_from_attr(user_id, buckets);
@@ -500,7 +515,12 @@ int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info)
     return ret;
   }
   bufferlist::iterator iter = bl.begin();
-  ::decode(pool_info, iter);
+  try {
+    ::decode(pool_info, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed to decode pool information, caught buffer::error" << dendl;
+    return -EIO;
+  }
 
   return 0;
 }

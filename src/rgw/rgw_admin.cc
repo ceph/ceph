@@ -465,7 +465,12 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
   try {
     while (!iter.end()) {
       struct rgw_intent_log_entry entry;
-      ::decode(entry, iter);
+      try {
+        ::decode(entry, iter);
+      } catch (buffer::error& err) {
+        RGW_LOG(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
+        return -EIO;
+      }
       if (entry.op_time.sec() > epoch) {
         cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
         cerr << "skipping intent log" << std::endl; // no use to continue
@@ -905,7 +910,12 @@ int main(int argc, char **argv)
     RGWAccessControlPolicy policy;
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
-      policy.decode(iter);
+      try {
+        policy.decode(iter);
+      } catch (buffer::error& err) {
+        RGW_LOG(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
+        return -EIO;
+      }
       policy.to_xml(cout);
       cout << std::endl;
     }

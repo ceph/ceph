@@ -52,6 +52,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { EEXIST, 409, "BucketAlreadyExists" },
     { ENOTEMPTY, 409, "BucketNotEmpty" },
     { ERANGE, 416, "InvalidRange" },
+    { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
 void set_req_state_err(struct req_state *s, int err_no)
