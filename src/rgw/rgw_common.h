@@ -67,8 +67,8 @@ extern string rgw_obj_category_none;
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
-#define RGW_REST_OPENSTACK      0x1
-#define RGW_REST_OPENSTACK_AUTH 0x2
+#define RGW_REST_SWIFT          0x1
+#define RGW_REST_SWIFT_AUTH     0x2
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 

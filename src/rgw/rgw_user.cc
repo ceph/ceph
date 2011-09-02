@@ -15,7 +15,7 @@ using namespace std;
 
 static rgw_bucket ui_key_bucket(USER_INFO_POOL_NAME);
 static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_POOL_NAME);
-static rgw_bucket ui_openstack_bucket(USER_INFO_OPENSTACK_POOL_NAME);
+static rgw_bucket ui_openstack_bucket(USER_INFO_SWIFT_POOL_NAME);
 static rgw_bucket ui_uid_bucket(USER_INFO_UID_POOL_NAME);
 
 static rgw_bucket pi_pool_bucket(POOL_INFO_POOL_NAME);

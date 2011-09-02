@@ -98,7 +98,7 @@ void dump_content_length(struct req_state *s, size_t len)
 
 void dump_etag(struct req_state *s, const char *etag)
 {
-  if (s->prot_flags & RGW_REST_OPENSTACK)
+  if (s->prot_flags & RGW_REST_SWIFT)
     CGI_PRINTF(s,"etag: %s\n", etag);
   else
     CGI_PRINTF(s,"ETag: \"%s\"\n", etag);
@@ -429,13 +429,13 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *openstack_url_prefix = s->env->get("RGW_OPENSTACK_URL_PREFIX");
+    const char *openstack_url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
     bool cut_url = (openstack_url_prefix != NULL);
     if (!openstack_url_prefix)
       openstack_url_prefix = "v1";
     first = req.substr(0, pos);
     if (first.compare(openstack_url_prefix) == 0) {
-      s->prot_flags |= RGW_REST_OPENSTACK;
+      s->prot_flags |= RGW_REST_SWIFT;
       if (cut_url) {
         next_tok(req, first, '/');
       }
@@ -444,7 +444,7 @@ void init_entities_from_header(struct req_state *s)
     first = req;
   }
 
-  if (s->prot_flags & RGW_REST_OPENSTACK) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     s->format = 0;
     delete s->formatter;
     s->formatter = new RGWFormatter_Plain;
@@ -460,7 +460,7 @@ void init_entities_from_header(struct req_state *s)
     }
   }
 
-  if (s->prot_flags & RGW_REST_OPENSTACK) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     string ver;
     string auth_key;
 
@@ -496,7 +496,7 @@ void init_entities_from_header(struct req_state *s)
   }
 
   if (strcmp(s->bucket_name, "auth") == 0)
-    s->prot_flags |= RGW_REST_OPENSTACK_AUTH;
+    s->prot_flags |= RGW_REST_SWIFT_AUTH;
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
@@ -828,9 +828,9 @@ RGWHandler *RGWRESTMgr::get_handler(struct req_state *s, FCGX_Request *fcgx,
 
   *init_error = RGWHandler_REST::preprocess(s, fcgx);
 
-  if (s->prot_flags & RGW_REST_OPENSTACK)
+  if (s->prot_flags & RGW_REST_SWIFT)
     handler = m_os_handler;
-  else if (s->prot_flags & RGW_REST_OPENSTACK_AUTH)
+  else if (s->prot_flags & RGW_REST_SWIFT_AUTH)
     handler = m_os_auth_handler;
   else
     handler = m_s3_handler;

@@ -125,15 +125,15 @@ void RGW_OS_Auth_Get::execute()
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
-  const char *url_prefix = s->env->get("RGW_OPENSTACK_URL_PREFIX");
-  const char *os_url = s->env->get("RGW_OPENSTACK_URL");
+  const char *url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
+  const char *os_url = s->env->get("RGW_SWIFT_URL");
 
   string user_str = user;
   RGWUserInfo info;
   bufferlist bl;
 
   if (!os_url || !url_prefix) {
-    RGW_LOG(0) << "server is misconfigured, missing RGW_OPENSTACK_URL_PREFIX or RGW_OPENSTACK_URL" << dendl;
+    RGW_LOG(0) << "server is misconfigured, missing RGW_SWIFT_URL_PREFIX or RGW_SWIFT_URL" << dendl;
     ret = -EINVAL;
     goto done;
   }

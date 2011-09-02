@@ -332,7 +332,7 @@ int RGWListBuckets::verify_permission()
 
 void RGWListBuckets::execute()
 {
-  ret = rgw_read_user_buckets(s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_OPENSTACK));
+  ret = rgw_read_user_buckets(s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_SWIFT));
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
@@ -412,7 +412,7 @@ void RGWListBucket::execute()
   }
   url_decode(s->args.get("delimiter"), delimiter);
 
-  if (s->prot_flags & RGW_REST_OPENSTACK) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     string path_args;
     url_decode(s->args.get("path"), path_args);
     if (!path_args.empty()) {
@@ -426,7 +426,7 @@ void RGWListBucket::execute()
   }
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK), no_ns, &is_truncated, NULL);
+                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, &is_truncated, NULL);
 
 done:
   send_response();
@@ -1467,7 +1467,7 @@ void RGWListBucketMultiparts::execute()
   if (ret < 0)
     goto done;
 
-  if (s->prot_flags & RGW_REST_OPENSTACK) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     string path_args;
     url_decode(s->args.get("path"), path_args);
     if (!path_args.empty()) {
@@ -1481,7 +1481,7 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
   ret = rgwstore->list_objects(s->user.user_id, s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_OPENSTACK), mp_ns, &is_truncated, &mp_filter);
+                               !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, &is_truncated, &mp_filter);
   if (objs.size()) {
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;

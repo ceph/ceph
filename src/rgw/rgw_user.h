@@ -11,7 +11,7 @@ using namespace std;
 
 #define USER_INFO_POOL_NAME ".users"
 #define USER_INFO_EMAIL_POOL_NAME ".users.email"
-#define USER_INFO_OPENSTACK_POOL_NAME ".users.openstack"
+#define USER_INFO_SWIFT_POOL_NAME ".users.openstack"
 #define USER_INFO_UID_POOL_NAME ".users.uid"
 #define RGW_USER_ANON_ID "anonymous"
 
