@@ -15,7 +15,7 @@ using namespace std;
 
 static rgw_bucket ui_key_bucket(USER_INFO_POOL_NAME);
 static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_POOL_NAME);
-static rgw_bucket ui_openstack_bucket(USER_INFO_SWIFT_POOL_NAME);
+static rgw_bucket ui_swift_bucket(USER_INFO_SWIFT_POOL_NAME);
 static rgw_bucket ui_uid_bucket(USER_INFO_UID_POOL_NAME);
 
 static rgw_bucket pi_pool_bucket(POOL_INFO_POOL_NAME);
@@ -49,12 +49,12 @@ int rgw_store_user_info(RGWUserInfo& info)
   int ret;
   map<string,bufferlist> attrs;
 
-  if (info.openstack_name.size()) {
-    /* check if openstack mapping exists */
+  if (info.swift_name.size()) {
+    /* check if swift mapping exists */
     RGWUserInfo inf;
-    int r = rgw_get_user_info_by_openstack(info.openstack_name, inf);
+    int r = rgw_get_user_info_by_swift(info.swift_name, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << dendl;
+      RGW_LOG(0) << "can't store user info, swift id already mapped to another user" << dendl;
       return -EEXIST;
     }
   }
@@ -99,8 +99,8 @@ int rgw_store_user_info(RGWUserInfo& info)
     }
   }
 
-  if (info.openstack_name.size())
-    ret = rgw_put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length());
+  if (info.swift_name.size())
+    ret = rgw_put_obj(info.user_id, ui_swift_bucket, info.swift_name, uid_bl.c_str(), uid_bl.length());
 
   return ret;
 }
@@ -146,12 +146,12 @@ int rgw_get_user_info_by_email(string& email, RGWUserInfo& info)
 }
 
 /**
- * Given an openstack username, finds the user_info associated with it.
+ * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_openstack(string& openstack_name, RGWUserInfo& info)
+extern int rgw_get_user_info_by_swift(string& swift_name, RGWUserInfo& info)
 {
-  return rgw_get_user_info_from_index(openstack_name, ui_openstack_bucket, info);
+  return rgw_get_user_info_from_index(swift_name, ui_swift_bucket, info);
 }
 
 /**
@@ -407,9 +407,9 @@ int rgw_remove_email_index(string& uid, string& email)
   return ret;
 }
 
-int rgw_remove_openstack_name_index(string& uid, string& openstack_name)
+int rgw_remove_swift_name_index(string& uid, string& swift_name)
 {
-  rgw_obj obj(ui_openstack_bucket, openstack_name);
+  rgw_obj obj(ui_swift_bucket, swift_name);
   int ret = rgwstore->delete_obj(NULL, uid, obj);
   return ret;
 }

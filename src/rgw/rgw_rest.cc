@@ -9,7 +9,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_os.h"
 #include "rgw_rest_s3.h"
-#include "rgw_os_auth.h"
+#include "rgw_swift_auth.h"
 
 #include "rgw_formats.h"
 
@@ -429,12 +429,12 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *openstack_url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
-    bool cut_url = (openstack_url_prefix != NULL);
-    if (!openstack_url_prefix)
-      openstack_url_prefix = "v1";
+    const char *swift_url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
+    bool cut_url = (swift_url_prefix != NULL);
+    if (!swift_url_prefix)
+      swift_url_prefix = "v1";
     first = req.substr(0, pos);
-    if (first.compare(openstack_url_prefix) == 0) {
+    if (first.compare(swift_url_prefix) == 0) {
       s->prot_flags |= RGW_REST_SWIFT;
       if (cut_url) {
         next_tok(req, first, '/');
@@ -809,8 +809,8 @@ RGWOp *RGWHandler_REST::get_op()
 
 RGWRESTMgr::RGWRESTMgr()
 {
-  m_os_handler = new RGWHandler_REST_OS;
-  m_os_auth_handler = new RGWHandler_OS_Auth;
+  m_os_handler = new RGWHandler_REST_SWIFT;
+  m_os_auth_handler = new RGWHandler_SWIFT_Auth;
   m_s3_handler = new RGWHandler_REST_S3;
 }
 

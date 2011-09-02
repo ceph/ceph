@@ -1,11 +1,11 @@
 
 #include "common/Formatter.h"
-#include "rgw_os.h"
+#include "rgw_swift.h"
 #include "rgw_rest_os.h"
 
 #include <sstream>
 
-void RGWListBuckets_REST_OS::send_response()
+void RGWListBuckets_REST_SWIFT::send_response()
 {
   set_req_state_err(s, ret);
   dump_errno(s);
@@ -57,7 +57,7 @@ void RGWListBuckets_REST_OS::send_response()
   s->formatter->reset();
 }
 
-void RGWListBucket_REST_OS::send_response()
+void RGWListBucket_REST_SWIFT::send_response()
 {
   set_req_state_err(s, (ret < 0 ? ret : 0));
   dump_errno(s);
@@ -125,7 +125,7 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
 }
 
-void RGWStatBucket_REST_OS::send_response()
+void RGWStatBucket_REST_SWIFT::send_response()
 {
   if (ret >= 0)
     dump_container_metadata(s, bucket);
@@ -139,7 +139,7 @@ void RGWStatBucket_REST_OS::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-void RGWCreateBucket_REST_OS::send_response()
+void RGWCreateBucket_REST_SWIFT::send_response()
 {
   if (ret)
     set_req_state_err(s, ret);
@@ -148,7 +148,7 @@ void RGWCreateBucket_REST_OS::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-void RGWDeleteBucket_REST_OS::send_response()
+void RGWDeleteBucket_REST_SWIFT::send_response()
 {
   int r = ret;
   if (!r)
@@ -160,7 +160,7 @@ void RGWDeleteBucket_REST_OS::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-void RGWPutObj_REST_OS::send_response()
+void RGWPutObj_REST_SWIFT::send_response()
 {
   if (!ret)
     ret = 201; // "created"
@@ -171,7 +171,7 @@ void RGWPutObj_REST_OS::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-void RGWDeleteObj_REST_OS::send_response()
+void RGWDeleteObj_REST_SWIFT::send_response()
 {
   int r = ret;
   if (!r)
@@ -183,7 +183,7 @@ void RGWDeleteObj_REST_OS::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
-int RGWGetObj_REST_OS::send_response(void *handle)
+int RGWGetObj_REST_SWIFT::send_response(void *handle)
 {
   const char *content_type = NULL;
   int orig_ret = ret;
@@ -239,14 +239,14 @@ send_data:
   return 0;
 }
 
-RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_SWIFT::get_retrieve_obj_op(bool get_data)
 {
   if (is_acl_op()) {
-    return new RGWGetACLs_REST_OS;
+    return new RGWGetACLs_REST_SWIFT;
   }
 
   if (s->object) {
-    RGWGetObj_REST_OS *get_obj_op = new RGWGetObj_REST_OS;
+    RGWGetObj_REST_SWIFT *get_obj_op = new RGWGetObj_REST_SWIFT;
     get_obj_op->set_get_data(get_data);
     return get_obj_op;
   } else if (!s->bucket_name) {
@@ -254,50 +254,50 @@ RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(bool get_data)
   }
 
   if (get_data)
-    return new RGWListBucket_REST_OS;
+    return new RGWListBucket_REST_SWIFT;
   else
-    return new RGWStatBucket_REST_OS;
+    return new RGWStatBucket_REST_SWIFT;
 }
 
-RGWOp *RGWHandler_REST_OS::get_retrieve_op(bool get_data)
+RGWOp *RGWHandler_REST_SWIFT::get_retrieve_op(bool get_data)
 {
   if (s->bucket_name) {
     if (is_acl_op()) {
-      return new RGWGetACLs_REST_OS;
+      return new RGWGetACLs_REST_SWIFT;
     }
     return get_retrieve_obj_op(get_data);
   }
 
-  return new RGWListBuckets_REST_OS;
+  return new RGWListBuckets_REST_SWIFT;
 }
 
-RGWOp *RGWHandler_REST_OS::get_create_op()
+RGWOp *RGWHandler_REST_SWIFT::get_create_op()
 {
   if (is_acl_op()) {
-    return new RGWPutACLs_REST_OS;
+    return new RGWPutACLs_REST_SWIFT;
   } else if (s->object) {
     if (!s->copy_source)
-      return new RGWPutObj_REST_OS;
+      return new RGWPutObj_REST_SWIFT;
     else
-      return new RGWCopyObj_REST_OS;
+      return new RGWCopyObj_REST_SWIFT;
   } else if (s->bucket_name) {
-    return new RGWCreateBucket_REST_OS;
+    return new RGWCreateBucket_REST_SWIFT;
   }
 
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_OS::get_delete_op()
+RGWOp *RGWHandler_REST_SWIFT::get_delete_op()
 {
   if (s->object)
-    return new RGWDeleteObj_REST_OS;
+    return new RGWDeleteObj_REST_SWIFT;
   else if (s->bucket_name)
-    return new RGWDeleteBucket_REST_OS;
+    return new RGWDeleteBucket_REST_SWIFT;
 
   return NULL;
 }
 
-int RGWHandler_REST_OS::authorize()
+int RGWHandler_REST_SWIFT::authorize()
 {
   bool authorized = rgw_verify_os_token(s);
   if (!authorized)

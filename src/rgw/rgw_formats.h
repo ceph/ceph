@@ -13,7 +13,7 @@ struct plain_stack_entry {
 };
 
 /* FIXME: this class is mis-named.
- * FIXME: This was a hack to send certain openstack messages.
+ * FIXME: This was a hack to send certain swift messages.
  * There is a much better way to do this.
  */
 class RGWFormatter_Plain : public Formatter {

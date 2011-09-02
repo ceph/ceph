@@ -24,7 +24,7 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
-#include "rgw_os.h"
+#include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_bucket.h"
 

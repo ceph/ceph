@@ -1,4 +1,4 @@
-#include "rgw_os_auth.h"
+#include "rgw_swift_auth.h"
 #include "rgw_rest.h"
 
 #include "common/ceph_crypto.h"
@@ -8,7 +8,7 @@
 
 using namespace ceph::crypto;
 
-static RGW_OS_Auth_Get rgw_os_auth_get;
+static RGW_SWIFT_Auth_Get rgw_swift_auth_get;
 
 static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
 {
@@ -45,14 +45,14 @@ static int encode_token(string& os_user, string& key, bufferlist& bl)
     return ret;
 
   utime_t expiration = ceph_clock_now(g_ceph_context);
-  expiration += RGW_OS_TOKEN_EXPIRATION; // 15 minutes
+  expiration += RGW_SWIFT_TOKEN_EXPIRATION; // 15 minutes
 
   ret = build_token(os_user, key, nonce, expiration, bl);
 
   return ret;
 }
 
-int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
+int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -92,13 +92,13 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
     return -EPERM;
   }
 
-  if ((ret = rgw_get_user_info_by_openstack(os_user, info)) < 0)
+  if ((ret = rgw_get_user_info_by_swift(os_user, info)) < 0)
     return ret;
 
   RGW_LOG(10) << "os_user=" << os_user << dendl;
 
   bufferlist tok;
-  ret = build_token(os_user, info.openstack_key, nonce, expiration, tok);
+  ret = build_token(os_user, info.swift_key, nonce, expiration, tok);
   if (ret < 0)
     return ret;
 
@@ -117,11 +117,11 @@ int rgw_os_verify_signed_token(const char *token, RGWUserInfo& info)
   return 0;
 }
 
-void RGW_OS_Auth_Get::execute()
+void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  RGW_LOG(20) << "RGW_OS_Auth_Get::execute()" << dendl;
+  RGW_LOG(20) << "RGW_SWIFT_Auth_Get::execute()" << dendl;
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
@@ -141,18 +141,18 @@ void RGW_OS_Auth_Get::execute()
   if (!key || !user)
     goto done;
 
-  if ((ret = rgw_get_user_info_by_openstack(user_str, info)) < 0)
+  if ((ret = rgw_get_user_info_by_swift(user_str, info)) < 0)
     goto done;
 
-  if (info.openstack_key.compare(key) != 0) {
-    RGW_LOG(0) << "RGW_OS_Auth_Get::execute(): bad openstack key" << dendl;
+  if (info.swift_key.compare(key) != 0) {
+    RGW_LOG(0) << "RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
   }
 
   CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", os_url, url_prefix);
 
-  if ((ret = encode_token(info.openstack_name, info.openstack_key, bl)) < 0)
+  if ((ret = encode_token(info.swift_name, info.swift_key, bl)) < 0)
     goto done;
 
   {
@@ -170,17 +170,17 @@ done:
   end_header(s);
 }
 
-int RGWHandler_OS_Auth::authorize()
+int RGWHandler_SWIFT_Auth::authorize()
 {
   return 0;
 }
 
-RGWOp *RGWHandler_OS_Auth::get_op()
+RGWOp *RGWHandler_SWIFT_Auth::get_op()
 {
   RGWOp *op;
   switch (s->op) {
    case OP_GET:
-     op = &rgw_os_auth_get;
+     op = &rgw_swift_auth_get;
      break;
    default:
      return NULL;
@@ -192,7 +192,7 @@ RGWOp *RGWHandler_OS_Auth::get_op()
   return op;
 }
 
-void RGWHandler_OS_Auth::put_op(RGWOp *op)
+void RGWHandler_SWIFT_Auth::put_op(RGWOp *op)
 {
 }
 

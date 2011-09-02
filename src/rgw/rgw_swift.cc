@@ -6,8 +6,8 @@
 #include <curl/easy.h>
 
 #include "rgw_common.h"
-#include "rgw_os.h"
-#include "rgw_os_auth.h"
+#include "rgw_swift.h"
+#include "rgw_swift_auth.h"
 #include "rgw_user.h"
 
 
@@ -15,7 +15,7 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
 {
   size_t len = size * nmemb;
   char line[len + 1];
-  struct rgw_os_auth_info *info = (struct rgw_os_auth_info *)_info;
+  struct rgw_swift_auth_info *info = (struct rgw_swift_auth_info *)_info;
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
@@ -56,14 +56,14 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
   return len;
 }
 
-static int rgw_os_validate_token(const char *token, struct rgw_os_auth_info *info)
+static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_info *info)
 {
   CURL *curl_handle;
   string auth_url = "http://127.0.0.1:11000/token";
   char url_buf[auth_url.size() + 1 + strlen(token) + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token);
 
-  RGW_LOG(10) << "rgw_os_validate_token url=" << url_buf << dendl;
+  RGW_LOG(10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
   curl_handle = curl_easy_init();
 
@@ -83,37 +83,37 @@ static int rgw_os_validate_token(const char *token, struct rgw_os_auth_info *inf
 bool rgw_verify_os_token(req_state *s)
 {
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
-    int ret = rgw_os_verify_signed_token(s->os_auth_token, s->user);
+    int ret = rgw_swift_verify_signed_token(s->os_auth_token, s->user);
     if (ret < 0)
       return false;
 
     return  true;
   }
 
-  struct rgw_os_auth_info info;
+  struct rgw_swift_auth_info info;
 
   memset(&info, 0, sizeof(info));
 
   info.status = 401; // start with access denied, validate_token might change that
 
-  int ret = rgw_os_validate_token(s->os_auth_token, &info);
+  int ret = rgw_swift_validate_token(s->os_auth_token, &info);
   if (ret < 0)
     return ret;
 
   if (!info.user) {
-    RGW_LOG(0) << "openstack auth didn't authorize a user" << dendl;
+    RGW_LOG(0) << "swift auth didn't authorize a user" << dendl;
     return false;
   }
 
   s->os_user = info.user;
   s->os_groups = info.auth_groups;
 
-  string openstack_user = s->os_user;
+  string swift_user = s->os_user;
 
-  RGW_LOG(10) << "openstack user=" << s->os_user << dendl;
+  RGW_LOG(10) << "swift user=" << s->os_user << dendl;
 
-  if (rgw_get_user_info_by_openstack(openstack_user, s->user) < 0) {
-    RGW_LOG(0) << "couldn't map openstack user" << dendl;
+  if (rgw_get_user_info_by_swift(swift_user, s->user) < 0) {
+    RGW_LOG(0) << "couldn't map swift user" << dendl;
     return false;
   }
 

@@ -272,8 +272,8 @@ struct RGWUserInfo
   string user_id;
   string display_name;
   string user_email;
-  string openstack_name;
-  string openstack_key;
+  string swift_name;
+  string swift_key;
   map<string, RGWAccessKey> access_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
@@ -296,8 +296,8 @@ struct RGWUserInfo
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
      ::encode(user_email, bl);
-     ::encode(openstack_name, bl);
-     ::encode(openstack_key, bl);
+     ::encode(swift_name, bl);
+     ::encode(swift_key, bl);
      ::encode(user_id, bl);
      ::encode(access_keys, bl);
      ::encode(subusers, bl);
@@ -320,8 +320,8 @@ struct RGWUserInfo
     }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
-    if (ver >= 3) ::decode(openstack_name, bl);
-    if (ver >= 4) ::decode(openstack_key, bl);
+    if (ver >= 3) ::decode(swift_name, bl);
+    if (ver >= 4) ::decode(swift_key, bl);
     if (ver >= 5)
       ::decode(user_id, bl);
     else

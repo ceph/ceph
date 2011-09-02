@@ -11,7 +11,7 @@ using namespace std;
 
 #define USER_INFO_POOL_NAME ".users"
 #define USER_INFO_EMAIL_POOL_NAME ".users.email"
-#define USER_INFO_SWIFT_POOL_NAME ".users.openstack"
+#define USER_INFO_SWIFT_POOL_NAME ".users.swift"
 #define USER_INFO_UID_POOL_NAME ".users.uid"
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -53,15 +53,15 @@ extern int rgw_store_user_info(RGWUserInfo& info);
  */
 extern int rgw_get_user_info_by_uid(string& user_id, RGWUserInfo& info);
 /**
- * Given an openstack username, finds the user info associated with it.
+ * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(string& email, RGWUserInfo& info);
 /**
- * Given an openstack username, finds the user info associated with it.
+ * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_openstack(string& openstack_name, RGWUserInfo& info);
+extern int rgw_get_user_info_by_swift(string& swift_name, RGWUserInfo& info);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -147,7 +147,7 @@ extern int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data
 extern int rgw_remove_key_index(RGWAccessKey& access_key);
 extern int rgw_remove_uid_index(string& uid);
 extern int rgw_remove_email_index(string& uid, string& email);
-extern int rgw_remove_openstack_name_index(string& uid, string& openstack_name);
+extern int rgw_remove_swift_name_index(string& uid, string& swift_name);
 
 extern int rgw_store_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);
 extern int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);

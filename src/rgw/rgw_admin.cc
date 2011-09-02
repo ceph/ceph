@@ -292,8 +292,8 @@ static void show_user_info(RGWUserInfo& info, const char *format, Formatter *for
     }
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "Email: " << info.user_email << std::endl;
-    cout << "Swift User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
-    cout << "Swift Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+    cout << "Swift User: " << (info.swift_name.size() ? info.swift_name : "<undefined>")<< std::endl;
+    cout << "Swift Key: " << (info.swift_key.size() ? info.swift_key : "<undefined>")<< std::endl;
   } else {
     formatter->open_object_section("user_info");
 
@@ -301,8 +301,8 @@ static void show_user_info(RGWUserInfo& info, const char *format, Formatter *for
     formatter->dump_format("rados_uid", "%lld", info.auid);
     formatter->dump_string("display_name", info.display_name.c_str());
     formatter->dump_string("email", info.user_email.c_str());
-    formatter->dump_string("swift_user", info.openstack_name.c_str());
-    formatter->dump_string("swift_key", info.openstack_key.c_str());
+    formatter->dump_string("swift_user", info.swift_name.c_str());
+    formatter->dump_string("swift_key", info.swift_key.c_str());
 
     // keys
     formatter->open_array_section("keys");
@@ -402,11 +402,11 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
     }
   }
 
-  if (!old_info.openstack_name.empty() &&
-      old_info.openstack_name.compare(new_info.openstack_name) != 0) {
-    ret = rgw_remove_openstack_name_index(new_info.user_id, old_info.openstack_name);
+  if (!old_info.swift_name.empty() &&
+      old_info.swift_name.compare(new_info.swift_name) != 0) {
+    ret = rgw_remove_swift_name_index(new_info.user_id, old_info.swift_name);
     if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove index for openstack_name " << old_info.openstack_name << " return code: " << ret << std::endl;
+      cerr << "ERROR: could not remove index for swift_name " << old_info.swift_name << " return code: " << ret << std::endl;
       success = false;
     }
   }
@@ -541,8 +541,8 @@ int main(int argc, char **argv)
   const char *bucket_name = 0;
   rgw_bucket bucket;
   const char *object = 0;
-  const char *openstack_user = 0;
-  const char *openstack_key = 0;
+  const char *swift_user = 0;
+  const char *swift_key = 0;
   const char *date = 0;
   const char *time = 0;
   const char *subuser = 0;
@@ -593,9 +593,9 @@ int main(int argc, char **argv)
     } else if (CEPH_ARGPARSE_EQ("auth-uid", 'a')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else if (CEPH_ARGPARSE_EQ("os-user", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&openstack_user, OPT_STR);
+      CEPH_ARGPARSE_SET_ARG_VAL(&swift_user, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("os-secret", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&openstack_key, OPT_STR);
+      CEPH_ARGPARSE_SET_ARG_VAL(&swift_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("time", '\0')) {
@@ -700,12 +700,12 @@ int main(int argc, char **argv)
 	cerr << "could not find user by specified access key" << std::endl;
       }
     }
-    if (!found && openstack_user) {
-      s = openstack_user;
-      if (rgw_get_user_info_by_openstack(s, info) >= 0) {
+    if (!found && swift_user) {
+      s = swift_user;
+      if (rgw_get_user_info_by_swift(s, info) >= 0) {
 	found = true;
       } else
-        cerr << "could not find user by specified openstack username" << std::endl;
+        cerr << "could not find user by specified swift username" << std::endl;
     }
     if (found)
       user_id = info.user_id.c_str();
@@ -847,10 +847,10 @@ int main(int argc, char **argv)
       info.user_email = user_email;
     if (auid != (uint64_t)-1)
       info.auid = auid;
-    if (openstack_user)
-      info.openstack_name = openstack_user;
-    if (openstack_key)
-      info.openstack_key = openstack_key;
+    if (swift_user)
+      info.swift_name = swift_user;
+    if (swift_key)
+      info.swift_key = swift_key;
     if (subuser) {
       RGWSubUser u;
       u.name = subuser;

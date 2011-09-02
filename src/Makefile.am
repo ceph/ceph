@@ -321,8 +321,8 @@ my_radosgw_src = \
 	rgw/rgw_rest_s3.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
-	rgw/rgw_os.cc \
-	rgw/rgw_os_auth.cc \
+	rgw/rgw_swift.cc \
+	rgw/rgw_swift_auth.cc \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
@@ -1333,8 +1333,8 @@ noinst_HEADERS = \
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
 	rgw/rgw_op.h\
-	rgw/rgw_os.h\
-	rgw/rgw_os_auth.h\
+	rgw/rgw_swift.h\
+	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_os.h\

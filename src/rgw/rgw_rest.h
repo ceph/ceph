@@ -147,13 +147,13 @@ public:
   virtual int authorize() = 0;
 };
 
-class RGWHandler_REST_OS;
-class RGWHandler_OS_Auth;
+class RGWHandler_REST_SWIFT;
+class RGWHandler_SWIFT_Auth;
 class RGWHandler_REST_S3;
 
 class RGWRESTMgr {
-  RGWHandler_REST_OS *m_os_handler;
-  RGWHandler_OS_Auth *m_os_auth_handler;
+  RGWHandler_REST_SWIFT *m_os_handler;
+  RGWHandler_SWIFT_Auth *m_os_auth_handler;
   RGWHandler_REST_S3 *m_s3_handler;
 
 public:
