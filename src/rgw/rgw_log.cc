@@ -17,6 +17,7 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 int rgw_log_op(struct req_state *s)
 {
   struct rgw_log_entry entry;
+  uint64_t pool_id;
 
   if (!s->should_log)
     return 0;
@@ -26,8 +27,13 @@ int rgw_log_op(struct req_state *s)
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
-    RGW_LOG(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
-    return 0;
+    if (!g_conf->rgw_log_nonexistent_bucket) {
+      RGW_LOG(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+      return 0;
+    }
+    pool_id = 0;
+  } else {
+    pool_id = s->pool_id;
   }
   entry.bucket = s->bucket_name;
 
@@ -67,7 +73,7 @@ int rgw_log_op(struct req_state *s)
     entry.http_status = "200"; // default
 
   entry.error_code = s->err.s3_code;
-  entry.pool_id = s->pool_id;
+  entry.pool_id = pool_id;
 
   bufferlist bl;
   ::encode(entry, bl);

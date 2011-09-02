@@ -571,6 +571,7 @@ public:
   double rgw_maintenance_tick_interval;
   int rgw_pools_preallocate_max;
   int rgw_pools_preallocate_threshold;
+  bool rgw_log_nonexistent_bucket;
 
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.

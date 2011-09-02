@@ -437,6 +437,7 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0),
   OPTION(rgw_pools_preallocate_max, OPT_INT, 100),
   OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70),
+  OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false),
 
   // see config.h
   OPTION(internal_safe_to_start_threads, OPT_BOOL, false),
