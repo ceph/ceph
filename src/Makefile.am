@@ -885,6 +885,7 @@ libmds_a_SOURCES = \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
 	mds/MDS.cc \
+	mds/flock.cc \
 	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \
@@ -1118,7 +1119,6 @@ noinst_HEADERS = \
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
 	logrotate.conf\
-	mds/flock.h\
 	mds/inode_backtrace.h\
 	mds/locks.c\
 	mds/locks.h\
