@@ -14,3 +14,5 @@
    monitor
    grow/index
    data-placement
+   autobuilt
+   misc
