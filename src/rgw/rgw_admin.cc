@@ -592,9 +592,9 @@ int main(int argc, char **argv)
       CEPH_ARGPARSE_SET_ARG_VAL(&gen_secret, OPT_BOOL);
     } else if (CEPH_ARGPARSE_EQ("auth-uid", 'a')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
-    } else if (CEPH_ARGPARSE_EQ("os-user", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("swift-user", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&swift_user, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("os-secret", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("swift-secret", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&swift_key, OPT_STR);
     } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
       CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
