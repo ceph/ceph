@@ -212,29 +212,29 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
-        if not config.get('valgrind'):
-            return
-        lookup_procs = list()
-        val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(val_dir=config.get('valgrind').get('logs', "valgrind"))
-        for remote in ctx.cluster.remotes.iterkeys():
-            #look at valgrind logs for each node
-            proc = remote.run(
-                args=[
-                    'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
-                    'grep', '-v', '-q', "PossiblyLost"],
-                wait = False,
-                check_status=False
-                )
-            lookup_procs.append((proc, remote))
-            
-        valgrind_exception = None
-        for (proc, remote) in lookup_procs:
-            result = proc.exitstatus.get()
-            if result is not 1:
-                valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
-        
-        if valgrind_exception is not None:
-            raise valgrind_exception
+        if config.get('valgrind'):
+            lookup_procs = list()
+            val_path = '/tmp/cephtest/archive/log/{val_dir}/*'.format(
+                val_dir=config.get('valgrind').get('logs', "valgrind"))
+            for remote in ctx.cluster.remotes.iterkeys():
+                #look at valgrind logs for each node
+                proc = remote.run(
+                    args=[
+                        'grep', "<kind>", run.Raw(val_path), run.Raw('|'),
+                        'grep', '-v', '-q', "PossiblyLost"],
+                    wait = False,
+                    check_status=False
+                    )
+                lookup_procs.append((proc, remote))
+
+            valgrind_exception = None
+            for (proc, remote) in lookup_procs:
+                result = proc.exitstatus.get()
+                if result is not 1:
+                    valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
+
+            if valgrind_exception is not None:
+                raise valgrind_exception
                 
 
 @contextlib.contextmanager
