@@ -555,7 +555,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
   for ( ; ; ++i) {
     candidate = lfn_get_short_name(hoid, i);
     candidate_path = get_full_path(path, candidate);
-    r = do_getxattr(candidate_path.c_str(), LFN_ATTR.c_str(), buf, sizeof(buf));
+    r = do_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(), buf, sizeof(buf));
     if (r < 0) {
       if (errno != ENODATA && errno != ENOENT)
 	return -errno;
@@ -596,7 +596,7 @@ int LFNIndex::lfn_created(const vector<string> &path,
     return 0;
   string full_path = get_full_path(path, mangled_name);
   string full_name = lfn_generate_object_name(hoid);
-  return do_setxattr(full_path.c_str(), LFN_ATTR.c_str(), 
+  return do_setxattr(full_path.c_str(), get_lfn_attr().c_str(), 
 		     full_name.c_str(), full_name.size());
 }
 
@@ -661,7 +661,7 @@ int LFNIndex::lfn_translate(const vector<string> &path,
   // Get lfn_attr
   string full_path = get_full_path(path, short_name);
   char attr[PATH_MAX];
-  int r = do_getxattr(full_path.c_str(), LFN_ATTR.c_str(), attr, sizeof(attr) - 1);
+  int r = do_getxattr(full_path.c_str(), get_lfn_attr().c_str(), attr, sizeof(attr) - 1);
   if (r < 0)
     return -errno;
   if (r < (int)sizeof(attr))

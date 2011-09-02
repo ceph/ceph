@@ -79,12 +79,23 @@ class LFNIndex : public CollectionIndex {
 protected:
   const uint32_t index_version;
 
+private:
+  string lfn_attribute;
+
 public:
   /// Constructor
   LFNIndex(
     const char *base_path, ///< [in] path to Index root
-    int index_version)
-    : base_path(base_path), index_version(index_version) {}
+    uint32_t index_version)
+    : base_path(base_path), index_version(index_version) {
+    if (index_version == HASH_INDEX_TAG) {
+      lfn_attribute = LFN_ATTR;
+    } else {
+      char buf[100];
+      snprintf(buf, sizeof(buf), "%d", index_version);
+      lfn_attribute = LFN_ATTR + string(buf);
+    }
+  }
 
   /// Virtual destructor
   virtual ~LFNIndex() {}
@@ -311,6 +322,14 @@ protected:
 
 private:
   /* lfn translation functions */
+
+  /**
+   * Gets the version specific lfn attribute tag
+   */
+  const string &get_lfn_attr() const {
+    return lfn_attribute;
+  }
+
   /**
    * Gets the filename corresponsing to hoid in path.
    *
