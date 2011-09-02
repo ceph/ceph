@@ -574,7 +574,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
-  const __u8 v = 6;
+  const __u8 v = 7;
   ::encode(v, bl);
   ::encode(soid, bl);
   ::encode(oloc, bl);
@@ -603,12 +603,15 @@ void object_info_t::decode(bufferlist::iterator& bl)
     sobject_t obj;
     ::decode(obj, bl);
     ::decode(oloc, bl);
-    soid = hobject_t(obj.oid, obj.snap, 0);
+    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0);
     soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
   } else if (v >= 6) {
     ::decode(soid, bl);
     ::decode(oloc, bl);
+    if (v == 6)
+      soid.key = oloc.key;
   }
+    
   if (v >= 5)
     ::decode(category, bl);
   ::decode(version, bl);

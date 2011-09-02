@@ -128,12 +128,13 @@ public:
   HashIndex(
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
-    int split_at)	   ///< [in] Split threshhold.
-    : LFNIndex(base_path), merge_threshold(merge_at),
+    int split_at,	   ///< [in] Split threshhold.
+    uint32_t index_version)///< [in] Index version
+    : LFNIndex(base_path, index_version), merge_threshold(merge_at),
       split_threshold(split_at) {}
 
   /// @see CollectionIndex
-  uint32_t collection_version() { return 1; }
+  uint32_t collection_version() { return index_version; }
 
   /// @see CollectionIndex
   int cleanup();

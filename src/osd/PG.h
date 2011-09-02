@@ -393,7 +393,7 @@ public:
       }
 
       void encode(bufferlist &bl) const {
-	__u8 struct_v = 2;
+	__u8 struct_v = 3;
 	::encode(struct_v, bl);
 	::encode(op, bl);
 	::encode(soid, bl);
@@ -417,6 +417,8 @@ public:
 	} else {
 	  ::decode(soid, bl);
 	}
+	if (struct_v < 3)
+	  invalid_hash = true;
 	::decode(version, bl);
 	::decode(prior_version, bl);
 	::decode(reqid, bl);

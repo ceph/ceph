@@ -76,10 +76,26 @@ class LFNIndex : public CollectionIndex {
   /// For reference counting the collection @see Path
   std::tr1::weak_ptr<CollectionIndex> self_ref;
 
+protected:
+  const uint32_t index_version;
+
+private:
+  string lfn_attribute;
+
 public:
   /// Constructor
-  LFNIndex(const char *base_path) ///< [in] path to Index root
-    : base_path(base_path) {}
+  LFNIndex(
+    const char *base_path, ///< [in] path to Index root
+    uint32_t index_version)
+    : base_path(base_path), index_version(index_version) {
+    if (index_version == HASH_INDEX_TAG) {
+      lfn_attribute = LFN_ATTR;
+    } else {
+      char buf[100];
+      snprintf(buf, sizeof(buf), "%d", index_version);
+      lfn_attribute = LFN_ATTR + string(buf);
+    }
+  }
 
   /// Virtual destructor
   virtual ~LFNIndex() {}
@@ -306,6 +322,14 @@ protected:
 
 private:
   /* lfn translation functions */
+
+  /**
+   * Gets the version specific lfn attribute tag
+   */
+  const string &get_lfn_attr() const {
+    return lfn_attribute;
+  }
+
   /**
    * Gets the filename corresponsing to hoid in path.
    *
@@ -359,9 +383,20 @@ private:
     ); ///< @return True if short_name is a subdir, false otherwise
 
   /// Generate object name
+  string lfn_generate_object_name_keyless(
+    const hobject_t &hoid ///< [in] Object for which to generate.
+    ); ///< @return Generated object name.
+
+  /// Generate object name
   string lfn_generate_object_name(
     const hobject_t &hoid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
+
+  /// Parse object name
+  bool lfn_parse_object_name_keyless(
+    const string &long_name, ///< [in] Name to parse
+    hobject_t *out	     ///< [out] Resulting Object
+    ); ///< @return True if successfull, False otherwise.
 
   /// Parse object name
   bool lfn_parse_object_name(

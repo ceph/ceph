@@ -5067,7 +5067,8 @@ void OSD::handle_op(MOSDOp *op)
 
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
     // missing object?
-    hobject_t head(op->get_oid(), CEPH_NOSNAP, op->get_pg().ps());
+    hobject_t head(op->get_oid(), op->get_object_locator().key,
+		   CEPH_NOSNAP, op->get_pg().ps());
     if (pg->is_missing_object(head)) {
       pg->wait_for_missing_object(head, op);
       pg->unlock();
