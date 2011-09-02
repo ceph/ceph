@@ -753,6 +753,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	     "KB", "objects", "clones", "degraded",
 	     "unfound", "rd", "rd KB", "wr", "wr KB");
     } else {
+      formatter->open_object_section("stats");
       formatter->open_array_section("pools");
     }
     for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
@@ -825,6 +826,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
       printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
     } else {
+      formatter->close_section();
       formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
       formatter->dump_format("total_used", "%lld", (long long unsigned)tstats.kb_used);
       formatter->dump_format("total_avail", "%lld", (long long unsigned)tstats.kb_avail);
