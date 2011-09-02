@@ -57,11 +57,11 @@ void _usage()
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
   cerr << "   --access-key=<key>        S3 access key\n";
-  cerr << "   --os-user=<group:name>    OpenStack user\n";
+  cerr << "   --swift-user=<group:name> Swift user\n";
   cerr << "   --email=<email>\n";
   cerr << "   --auth_uid=<auid>         librados uid\n";
   cerr << "   --secret=<key>            S3 key\n";
-  cerr << "   --os-secret=<key>         OpenStack key\n";
+  cerr << "   --swift-secret=<key>      Swift key\n";
   cerr << "   --gen-access-key          generate random access key\n";
   cerr << "   --gen-secret              generate random secret key\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
@@ -266,32 +266,76 @@ string escape_str(string& src, char c)
   return dest;
 }
 
-static void show_user_info( RGWUserInfo& info)
+static void show_user_info(RGWUserInfo& info, const char *format, Formatter *formatter)
 {
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
 
-  cout << "User ID: " << info.user_id << std::endl;
-  cout << "RADOS UID: " << info.auid << std::endl;
-  cout << "Keys:" << std::endl;
-  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
-    cout << "  Access Key: " << k.id << std::endl;
-    cout << "  Secret Key: " << k.key << std::endl;
+
+  if (!format) {
+    cout << "User ID: " << info.user_id << std::endl;
+    cout << "RADOS UID: " << info.auid << std::endl;
+    cout << "Keys:" << std::endl;
+    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+      RGWAccessKey& k = kiter->second;
+      cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
+      cout << "  Access Key: " << k.id << std::endl;
+      cout << "  Secret Key: " << k.key << std::endl;
+    }
+    cout << "Users: " << std::endl;
+    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+      RGWSubUser& u = uiter->second;
+      cout << " Name: " << info.user_id << ":" << u.name << std::endl;
+      char buf[256];
+      perm_to_str(u.perm_mask, buf, sizeof(buf));
+      cout << " Permissions: " << buf << std::endl;
+    }
+    cout << "Display Name: " << info.display_name << std::endl;
+    cout << "Email: " << info.user_email << std::endl;
+    cout << "Swift User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
+    cout << "Swift Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
+  } else {
+    formatter->open_object_section("user_info");
+
+    formatter->dump_string("user_id", info.user_id.c_str());
+    formatter->dump_format("rados_uid", "%lld", info.auid);
+    formatter->dump_string("display_name", info.display_name.c_str());
+    formatter->dump_string("email", info.user_email.c_str());
+    formatter->dump_string("swift_user", info.openstack_name.c_str());
+    formatter->dump_string("swift_key", info.openstack_key.c_str());
+
+    // keys
+    formatter->open_array_section("keys");
+    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+      RGWAccessKey& k = kiter->second;
+      const char *sep = (k.subuser.empty() ? "" : ":");
+      const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
+      formatter->open_object_section("key");
+      formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
+      formatter->dump_string("access_key", k.id);
+      formatter->dump_string("secret_key", k.key);
+      formatter->close_section();
+      formatter->flush(cout);
+    }
+    formatter->close_section();
+
+    // subusers
+    formatter->open_array_section("subusers");
+    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+      RGWSubUser& u = uiter->second;
+      formatter->open_object_section("user");
+      formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
+      char buf[256];
+      perm_to_str(u.perm_mask, buf, sizeof(buf));
+      formatter->dump_string("permissions", buf);
+      formatter->close_section();
+      formatter->flush(cout);
+    }
+    formatter->close_section();
+
+    formatter->close_section();
+    formatter->flush(cout);
   }
-  cout << "Users: " << std::endl;
-  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-    RGWSubUser& u = uiter->second;
-    cout << " Name: " << info.user_id << ":" << u.name << std::endl;
-    char buf[256];
-    perm_to_str(u.perm_mask, buf, sizeof(buf));
-    cout << " Permissions: " << buf << std::endl;
-  }
-  cout << "Display Name: " << info.display_name << std::endl;
-  cout << "Email: " << info.user_email << std::endl;
-  cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
-  cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
@@ -816,7 +860,7 @@ int main(int argc, char **argv)
 
     remove_old_indexes(old_info, info);
 
-    show_user_info(info);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_SUBUSER_RM:
@@ -827,7 +871,7 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
-    show_user_info(info);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_KEY_RM:
@@ -842,11 +886,11 @@ int main(int argc, char **argv)
         break;
       }
     }
-    show_user_info(info);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_USER_INFO:
-    show_user_info(info);
+    show_user_info(info, format, formatter);
     break;
   }
 

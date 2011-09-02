@@ -27,11 +27,11 @@
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
-     --os-user=<group:name>    OpenStack user
+     --swift-user=<group:name> Swift user
      --email=<email>
      --auth_uid=<auid>         librados uid
      --secret=<key>            S3 key
-     --os-secret=<key>         OpenStack key
+     --swift-secret=<key>      Swift key
      --gen-access-key          generate random access key
      --gen-secret              generate random secret key
      --access=<access>         Set access permissions for sub-user, should be one
