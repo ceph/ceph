@@ -482,7 +482,7 @@ struct req_state {
    string bucket_name_str;
    string object_str;
 
-   map<string, string> x_amz_map;
+   map<string, string> x_meta_map;
 
    RGWUserInfo user; 
    RGWAccessControlPolicy *acl;

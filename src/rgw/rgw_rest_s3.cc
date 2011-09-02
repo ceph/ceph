@@ -489,7 +489,7 @@ static void get_canon_amz_hdr(struct req_state *s, string& dest)
 {
   dest = "";
   map<string, string>::iterator iter;
-  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
     dest.append(iter->first);
     dest.append(":");
     dest.append(iter->second);

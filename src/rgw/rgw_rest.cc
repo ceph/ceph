@@ -546,44 +546,44 @@ static void init_auth_info(struct req_state *s)
 {
   const char *p;
 
-  s->x_amz_map.clear();
+  s->x_meta_map.clear();
 
   for (int i=0; (p = s->fcgx->envp[i]); ++i) {
 #define HTTP_X_AMZ "HTTP_X_AMZ"
     if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
-      RGW_LOG(10) << "amz>> " << p << dendl;
-      const char *amz = p+5; /* skip the HTTP_ part */
-      const char *eq = strchr(amz, '=');
+      RGW_LOG(10) << "meta>> " << p << dendl;
+      const char *name = p+5; /* skip the HTTP_ part */
+      const char *eq = strchr(name, '=');
       if (!eq) /* shouldn't happen! */
         continue;
-      int len = eq - amz;
-      char amz_low[len + 1];
+      int len = eq - name;
+      char name_low[len + 1];
       int j;
       for (j=0; j<len; j++) {
-        amz_low[j] = tolower(amz[j]);
-        if (amz_low[j] == '_')
-          amz_low[j] = '-';
+        name_low[j] = tolower(name[j]);
+        if (name_low[j] == '_')
+          name_low[j] = '-';
       }
-      amz_low[j] = 0;
+      name_low[j] = 0;
       string val;
       line_unfold(eq + 1, val);
 
       map<string, string>::iterator iter;
-      iter = s->x_amz_map.find(amz_low);
-      if (iter != s->x_amz_map.end()) {
+      iter = s->x_meta_map.find(name_low);
+      if (iter != s->x_meta_map.end()) {
         string old = iter->second;
         int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
         old = old.substr(0, pos + 1);
         old.append(",");
         old.append(val);
-        s->x_amz_map[amz_low] = old;
+        s->x_meta_map[name_low] = old;
       } else {
-        s->x_amz_map[amz_low] = val;
+        s->x_meta_map[name_low] = val;
       }
     }
   }
   map<string, string>::iterator iter;
-  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
     RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 

@@ -114,7 +114,7 @@ static void format_xattr(std::string &xattr)
 void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
-  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
 #define X_AMZ_META "x-amz-meta"
