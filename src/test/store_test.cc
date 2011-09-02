@@ -253,7 +253,7 @@ public:
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return hobject_t(name, CEPH_NOSNAP, rand());
+    return hobject_t(name, string(), CEPH_NOSNAP, rand());
   }
 };
 
@@ -469,7 +469,7 @@ TEST_F(StoreTest, HashCollisionTest) {
     if (!(i % 5)) {
       cerr << "Object " << i << std::endl;
     }
-    hobject_t hoid(string(buf) + base, CEPH_NOSNAP, 0);
+    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0);
     {
       ObjectStore::Transaction t;
       t.touch(cid, hoid);
