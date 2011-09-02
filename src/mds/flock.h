@@ -34,26 +34,50 @@ public:
   map<client_t, int> client_held_lock_counts;
   map<client_t, int> client_waiting_lock_counts;
 
+  /**
+   * Check if a lock is on the waiting_locks list.
+   *
+   * @param fl The filelock to check for
+   * @returns True if the lock is waiting, false otherwise
+   */
   bool is_waiting(ceph_filelock &fl);
+  /**
+   * Remove a lock from the waiting_locks list
+   *
+   * @param fl The filelock to remove
+   */
   void remove_waiting(ceph_filelock& fl);
 
   /*
    * Try to set a new lock. If it's blocked and wait_on_fail is true,
    * add the lock to waiting_locks.
    * The lock needs to be of type CEPH_LOCK_EXCL or CEPH_LOCK_SHARED.
+   * This may merge previous locks, or convert the type of already-owned
+   * locks.
    *
-   * If we already added ourselves to waiting_locks, did_wait will be
-   * true.  If did_wait==true and we're not on the list, that means we
-   * were canceled and we should return an error.
+   * @param new_lock The lock to set
+   * @param wait_on_fail whether to wait until the lock can be set.
+   * Otherwise it fails immediately when blocked.
    *
-   * Returns true if set, false if not set.
+   * @returns true if set, false if not set.
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail);
+  /**
+   * See if a lock is blocked by existing locks. If the lock is blocked,
+   * it will be set to the value of the first blocking lock. Otherwise,
+   * it will be returned unchanged, except for setting the type field
+   * to CEPH_LOCK_UNLOCK.
+   *
+   * @param testing_lock The lock to check for conflicts on.
+   */
   void look_for_lock(ceph_filelock& testing_lock);
 
   /*
    * Remove lock(s) described in old_lock. This may involve splitting a
    * previous lock or making a previous lock smaller.
+   *
+   * @param removal_lock The lock to remove
+   * @param activated_locks A return parameter, holding activated wait locks.
    */
   void remove_lock(ceph_filelock removal_lock,
                    list<ceph_filelock>& activated_locks);
@@ -70,13 +94,13 @@ private:
    * This function should only be called once you know the lock will be
    * inserted, as it DOES adjust new_lock. You can call this function
    * on an empty list, in which case it does nothing.
-   * This function does not remove elements from the list, so regard the list
+   * This function does not remove elements from old_locks, so regard the list
    * as bad information following function invocation.
    *
-   * new_lock: The new lock the process has requested.
-   * old_locks: list of all locks currently held by same
+   * @param new_lock The new lock the process has requested.
+   * @param old_locks list of all locks currently held by same
    *    client/process that overlap new_lock.
-   * neighbor_locks: locks owned by same process that neighbor new_lock on
+   * @param neighbor_locks locks owned by same process that neighbor new_lock on
    *    left or right side.
    */
   void adjust_locks(list<multimap<uint64_t, ceph_filelock>::iterator> old_locks,
