@@ -13,12 +13,12 @@
  */
 
 #include "auth/Auth.h"
+#include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "global/global_init.h"
-#include "common/ConfUtils.h"
-#include "common/version.h"
 #include "common/config.h"
+#include "common/strtol.h"
+#include "common/version.h"
 #include "include/intarith.h"
 #include "include/str_list.h"
 #include "msg/msg_types.h"
@@ -279,31 +279,32 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   va_start(ap, i);
   while (1) {
     a = va_arg(ap, char*);
-    if (a == NULL)
+    if (a == NULL) {
+      va_end(ap);
       return false;
+    }
     char a2[strlen(a)+1];
     dashes_to_underscores(a, a2);
     if (strcmp(a2, first) == 0) {
       i = args.erase(i);
+      va_end(ap);
       return true;
     }
   }
 }
 
-bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, ...)
+	std::ostringstream *oss, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
   const char *a;
-  va_list ap;
   int strlen_a;
 
   // does this argument match any of the possibilities?
-  va_start(ap, oss);
   while (1) {
     a = va_arg(ap, char*);
     if (a == NULL)
@@ -339,19 +340,29 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
   }
 }
 
-bool ceph_argparse_witharg(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, std::string *ret, ...)
+bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  va_start(ap, oss);
+  r = va_ceph_argparse_binary_flag(args, i, ret, oss, ap);
+  va_end(ap);
+  return r;
+}
+
+static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
   const char *a;
-  va_list ap;
   int strlen_a;
 
   // does this argument match any of the possibilities?
-  va_start(ap, ret);
   while (1) {
     a = va_arg(ap, char*);
     if (a == NULL)
@@ -380,6 +391,40 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   }
 }
 
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, ...)
+{
+  bool r;
+  va_list ap;
+  va_start(ap, ret);
+  r = va_ceph_argparse_witharg(args, i, ret, ap);
+  va_end(ap);
+  return r;
+}
+
+bool ceph_argparse_withint(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  std::string str;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  va_end(ap);
+  if (!r) {
+    return false;
+  }
+
+  std::string err;
+  int myret = strict_strtol(str.c_str(), 10, &err);
+  *ret = myret;
+  if (!err.empty()) {
+    *oss << err;
+  }
+  return true;
+}
+
 CephInitParameters ceph_argparse_early_args
 	  (std::vector<const char*>& args, uint32_t module_type, int flags,
 	   std::string *conf_file_list)
@@ -387,8 +432,9 @@ CephInitParameters ceph_argparse_early_args
   CephInitParameters iparams(module_type);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (strcmp(*i, "--") == 0)
+    if (ceph_argparse_double_dash(args, i)) {
       break;
+    }
     else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
       cout << pretty_version_to_str() << std::endl;
       _exit(0);
