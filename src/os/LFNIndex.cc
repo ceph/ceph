@@ -783,27 +783,27 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
   }
 
   string::const_iterator end = current;
-  for (; end != long_name.end() && *end != '_'; ++end);
+  for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
   if (!append_unescaped(current, end, &(out->oid.name)))
     return false;
 
   current = ++end;
-  for (; end != long_name.end() && *end != '_'; ++end);
+  for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
   if (!append_unescaped(current, end, &(out->key)))
     return false;
 
   current = ++end;
-  for (; end != long_name.end() && *end != '_'; ++end);
+  for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
   string snap(current, end);
 
   current = ++end;
-  for (; end != long_name.end() && *end != '_'; ++end);
+  for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end != long_name.end())
     return false;
   string hash(current, end);
@@ -927,7 +927,7 @@ int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
   while (1) {
     end++;
     beginning = end++;
-    for (; *end != '\0' && *end != '/'; ++end);
+    for ( ; *end != '\0' && *end != '/'; ++end) ;
     if (*end != '\0') {
       out->push_back(demangle_path_component(string(beginning, end - beginning)));
       continue;
