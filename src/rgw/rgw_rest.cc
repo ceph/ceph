@@ -7,7 +7,7 @@
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
-#include "rgw_rest_os.h"
+#include "rgw_rest_swift.h"
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 

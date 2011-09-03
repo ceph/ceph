@@ -1,7 +1,7 @@
 
 #include "common/Formatter.h"
 #include "rgw_swift.h"
-#include "rgw_rest_os.h"
+#include "rgw_rest_swift.h"
 
 #include <sstream>
 
