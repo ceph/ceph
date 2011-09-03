@@ -1120,6 +1120,7 @@ noinst_HEADERS = \
 	include/rbd/librbd.hpp\
 	logrotate.conf\
 	mds/inode_backtrace.h\
+	mds/flock.h\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
