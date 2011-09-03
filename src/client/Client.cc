@@ -2948,11 +2948,13 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
   
-  // reflush any/all caps
-  if (in->cap_snaps.size())
-    flush_snaps(in, true);
-  if (in->flushing_caps)
-    flush_caps(in, mds);
+  if (in->auth_cap && in->auth_cap->session->mds_num == mds) {
+    // reflush any/all caps (if we are now the auth_cap)
+    if (in->cap_snaps.size())
+      flush_snaps(in, true);
+    if (in->flushing_caps)
+      flush_caps(in, mds);
+  }
 
   if (m->get_mseq() > in->exporting_mseq) {
     ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
