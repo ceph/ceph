@@ -106,7 +106,7 @@ Lock, unlock, or query lock status of machines.
         '--list',
         action='store_true',
         default=False,
-        help='Show lock info for all machines, or only machines specified. Can be restricted by --owner and --status.',
+        help='Show lock info for machines owned by you, or only machines specified. Can be restricted by --owner and --status.',
         )
     group.add_argument(
         '--list-targets',
@@ -137,6 +137,12 @@ Lock, unlock, or query lock status of machines.
         action='store_true',
         default=False,
         help='update the description or status of some machines',
+        )
+    parser.add_argument(
+        '-a', '--all',
+        action='store_true',
+        default=False,
+        help='list all machines, not just those owned by you',
         )
     parser.add_argument(
         '--owner',
@@ -211,6 +217,13 @@ Lock, unlock, or query lock status of machines.
     else:
         assert ctx.num_to_lock or ctx.list or ctx.list_targets, \
             'machines must be specified for that operation'
+    if ctx.all:
+        assert ctx.list or ctx.list_targets, \
+            '--all can only be used with --list and --list-targets'
+        assert ctx.owner is None, \
+            '--all and --owner are mutually exclusive'
+        assert not machines, \
+            '--all and listing specific machines are incompatible'
 
     if ctx.list or ctx.list_targets:
         assert ctx.desc is None, '--desc does nothing with --list'
@@ -221,6 +234,8 @@ Lock, unlock, or query lock status of machines.
             statuses = list_locks(ctx)
 
         if statuses:
+            if not machines and ctx.owner is None and not ctx.all:
+                ctx.owner = teuthology.get_user()
             if ctx.owner is not None:
                 statuses = [status for status in statuses \
                                 if status['locked_by'] == ctx.owner]
