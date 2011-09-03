@@ -14,10 +14,29 @@ def config_file(string):
     return config
 
 class MergeConfig(argparse.Action):
+    def deep_merge(self, a, b):
+        if a is None:
+            return b
+        if b is None:
+            return a
+        if isinstance(a, list):
+            assert isinstance(b, list)
+            a.extend(b)
+            return a
+        if isinstance(a, dict):
+            assert isinstance(b, dict)
+            for (k, v) in b.iteritems():
+                if k in a:
+                    a[k] = self.deep_merge(a[k], v)
+                else:
+                    a[k] = v
+            return a
+        return b
+
     def __call__(self, parser, namespace, values, option_string=None):
         config = getattr(namespace, self.dest)
         for new in values:
-            config.update(new)
+            self.deep_merge(config, new)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run ceph integration tests')
