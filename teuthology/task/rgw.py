@@ -92,6 +92,43 @@ exec /tmp/cephtest/binary/usr/local/bin/radosgw -c /tmp/cephtest/ceph.conf
 
 
 @contextlib.contextmanager
+def start_rgw(ctx, config):
+    log.info('Starting rgw...')
+    rgws = {}
+    for client in config:
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        proc = remote.run(
+            args=[
+                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
+                '/tmp/cephtest/enable-coredump',
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                '/tmp/cephtest/archive/coverage',
+                '/tmp/cephtest/daemon-helper',
+                'term',
+                '/tmp/cephtest/binary/usr/local/bin/radosgw',
+                '-c', '/tmp/cephtest/ceph.conf',
+                '/tmp/cephtest/apache/apache.conf',
+                run.Raw('>'),
+                '/tmp/cephtest/archive/log/rgw.log',
+                run.Raw('2>&1'),
+                ],
+            logger=log.getChild(client),
+            stdin=run.PIPE,
+            wait=False,
+            )
+        rgws[client] = proc
+
+    try:
+        yield
+    finally:
+        log.info('Stopping rgw...')
+        for client, proc in rgws.iteritems():
+            proc.stdin.close()
+
+        run.wait(rgws.itervalues())
+
+
+@contextlib.contextmanager
 def start_apache(ctx, config):
     log.info('Starting apache...')
     apaches = {}
@@ -157,6 +194,7 @@ def task(ctx, config):
     with contextutil.nested(
         lambda: create_dirs(ctx=ctx, config=config),
         lambda: ship_config(ctx=ctx, config=config),
+        lambda: start_rgw(ctx=ctx, config=config),
         lambda: start_apache(ctx=ctx, config=config),
         ):
         yield
