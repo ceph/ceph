@@ -2817,7 +2817,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
-	osd->cluster_messenger->send_message(reply, op->get_connection());
+        assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
+	osd->client_messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
 
