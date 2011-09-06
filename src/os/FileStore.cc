@@ -2985,7 +2985,11 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
-      write_op_seq(op_fd, cp);
+      if (write_op_seq(op_fd, cp) < 0) {
+	derr << "Error: " << cpp_strerror(errno) 
+	     << " during write_op_seq" << dendl;
+	assert(0);
+      }
 
       bool do_snap = btrfs && g_conf->filestore_btrfs_snap;
 
