@@ -130,6 +130,8 @@ Verify that you can manage the nodes from the host you intend to run
   using the short hostnames (``myserver`` not
   ``myserver.mydept.example.com``), with no user specified
   [#ssh_config]_.
+- Make sure you can SSH_ from the `admin host` into all the nodes
+  as ``root`` using the short hostnames.
 - Make sure you can run ``sudo`` without passphrase prompts on all
   nodes [#sudo]_.
 
