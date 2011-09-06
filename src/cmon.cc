@@ -52,11 +52,9 @@ void usage()
 int main(int argc, const char **argv) 
 {
   int err;
-  DEFINE_CONF_VARS(usage);
 
   bool mkfs = false;
-  const char *osdmapfn = 0;
-  const char *inject_monmap = 0;
+  std::string osdmapfn, inject_monmap;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -64,15 +62,26 @@ int main(int argc, const char **argv)
 
   global_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
-      mkfs = true;
-    } else if (CEPH_ARGPARSE_EQ("osdmap", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&osdmapfn, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("inject_monmap", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&inject_monmap, OPT_STR);
-    } else
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
+      exit(0);
+    } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
+      mkfs = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
+      osdmapfn = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
+      inject_monmap = val;
+    } else {
+      ++i;
+    }
+  }
+  if (!args.empty()) {
+    cerr << "too many arguments" << std::endl;
+    usage();
   }
 
   if (g_conf->mon_data.empty()) {
@@ -83,7 +92,7 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     common_init_finish(g_ceph_context);
-    if (g_conf->monmap.empty() || !osdmapfn)
+    if (g_conf->monmap.empty() || osdmapfn.empty())
       usage();
 
     // make sure it doesn't already exist
@@ -107,7 +116,7 @@ int main(int argc, const char **argv)
     MonMap monmap(ceph_clock_now(g_ceph_context));
     monmap.decode(monmapbl);
     
-    err = osdmapbl.read_file(osdmapfn, &error);
+    err = osdmapbl.read_file(osdmapfn.c_str(), &error);
     if (err < 0) {
       cout << argv[0] << ": error reading " << osdmapfn << ": "
 	   << error << std::endl;
@@ -174,10 +183,10 @@ int main(int argc, const char **argv)
 
 
   // inject new monmap?
-  if (inject_monmap) {
+  if (!inject_monmap.empty()) {
     bufferlist bl;
     std::string error;
-    int r = bl.read_file(inject_monmap, &error);
+    int r = bl.read_file(inject_monmap.c_str(), &error);
     if (r) {
       cerr << "unable to read monmap from " << inject_monmap << ": "
 	   << error << std::endl;
