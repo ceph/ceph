@@ -1,6 +1,8 @@
 tasks:
 - ceph:
-- rbd: [client.0]
+- rbd:
+    client.0:
+      image_size: 20480
 - workunit:
     all:
       - suites/ffsb.sh
