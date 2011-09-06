@@ -117,16 +117,19 @@ int main(int argc, const char **argv)
       test_map_object = val;
     } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
       test_crush = true;
-    } else if (fn.empty()) {
-      fn = *i++;
     } else {
-      usage();
+      ++i;
     }
   }
-  if (fn.empty()) {
+  if (args.size() < 1) {
     cerr << me << ": must specify osdmap filename" << std::endl;
     usage();
   }
+  else if (args.size() > 1) {
+    cerr << me << ": too many arguments" << std::endl;
+    usage();
+  }
+  fn = args[0];
   
   OSDMap osdmap;
   bufferlist bl;

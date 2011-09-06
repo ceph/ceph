@@ -54,9 +54,6 @@ int main(int argc, const char **argv)
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
-      if (i != args.end()) {
-	fn = *i;
-      }
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
@@ -68,7 +65,8 @@ int main(int argc, const char **argv)
       clobber = true;
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
-      if (++i == args.end())
+      i = args.erase(i);
+      if (i == args.end())
 	usage();
       entity_addr_t addr;
       if (!addr.parse(*i)) {
@@ -79,19 +77,23 @@ int main(int argc, const char **argv)
 	addr.set_port(CEPH_MON_PORT);
       add[name] = addr;
       modified = true;
-      ++i;
+      i = args.erase(i);
     } else if (ceph_argparse_witharg(args, i, &val, "--rm", (char*)NULL)) {
       rm.push_back(val);
       modified = true;
-    } else if (fn.empty()) {
-      fn = *i++;
     } else {
-      cerr << "invalid argument: '" << *i << "'" << std::endl;
-      usage();
+      ++i;
     }
   }
-  if (fn.empty())
+  if (args.size() < 1) {
+    cerr << me << ": must specify monmap filename" << std::endl;
     usage();
+  }
+  else if (args.size() > 1) {
+    cerr << me << ": too many arguments" << std::endl;
+    usage();
+  }
+  fn = args[0];
   
   MonMap monmap(ceph_clock_now(g_ceph_context));
 
