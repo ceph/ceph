@@ -31,45 +31,6 @@
 #include "common/entity_name.h"
 #include "msg/msg_types.h"
 
-/////////////////////// Macros ///////////////////////
-#define FOR_EACH_ARG(args) \
-	__isarg = 1 < args.size(); \
-	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size())
-
-#define DEFINE_CONF_VARS(usage_func) \
-	unsigned int val_pos __attribute__((unused)); \
-	void (*args_usage)() __attribute__((unused)) = usage_func; \
-	bool __isarg __attribute__((unused))
-
-#define CEPH_ARGPARSE_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
-
-#define CEPH_ARGPARSE_VAL args[i]
-
-#define CEPH_ARGPARSE_SET_ARG_VAL(dest, type) \
-	do { \
-          __isarg = i+1 < args.size(); \
-          if (__isarg && !val_pos && \
-              args[i+1][0] == '-' && args[i+1][1] != '\0') \
-              __isarg = false; \
-          if (type == OPT_BOOL) { \
-		if (val_pos) { \
-			ceph_argparse_cmdline_val(dest, type, CEPH_ARGPARSE_NEXT_VAL); \
-		} else \
-			ceph_argparse_cmdline_val(dest, type, "true"); \
-          } else if (__isarg || val_pos) { \
-		ceph_argparse_cmdline_val(dest, type, CEPH_ARGPARSE_NEXT_VAL); \
-	  } else if (args_usage) \
-		args_usage(); \
-	} while (0)
-
-#define CEPH_ARGPARSE_EQ(str_cmd, char_cmd) \
-	ceph_argparse_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
-
-extern bool ceph_argparse_cmdline_val(void *field, int type,
-				      const char *val);
-extern bool ceph_argparse_cmd_equals(const char *cmd, const char *opt,
-				     char char_opt, unsigned int *val_pos);
-
 /////////////////////// Types ///////////////////////
 class CephInitParameters
 {
@@ -83,11 +44,8 @@ public:
 
 /////////////////////// Functions ///////////////////////
 extern void env_to_vec(std::vector<const char*>& args);
-extern void env_to_deq(std::deque<const char*>& args);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
-extern void argv_to_deq(int argc, const char **argv,
-                 std::deque<const char*>& args);
 extern void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
 
