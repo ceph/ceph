@@ -425,6 +425,29 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
   return true;
 }
 
+bool ceph_argparse_withlonglong(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, long long *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  std::string str;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  va_end(ap);
+  if (!r) {
+    return false;
+  }
+
+  std::string err;
+  long long myret = strict_strtoll(str.c_str(), 10, &err);
+  *ret = myret;
+  if (!err.empty()) {
+    *oss << err;
+  }
+  return true;
+}
+
 CephInitParameters ceph_argparse_early_args
 	  (std::vector<const char*>& args, uint32_t module_type, int flags,
 	   std::string *conf_file_list)

@@ -107,6 +107,9 @@ extern CephInitParameters ceph_argparse_early_args
 extern bool ceph_argparse_withint(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostringstream *oss, ...);
+extern bool ceph_argparse_withlonglong(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, long long *ret,
+	std::ostringstream *oss, ...);
 extern void generic_server_usage();
 extern void generic_client_usage();
 
