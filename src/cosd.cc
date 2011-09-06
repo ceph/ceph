@@ -50,7 +50,6 @@ void usage()
 
 int main(int argc, const char **argv) 
 {
-  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -65,31 +64,41 @@ int main(int argc, const char **argv)
   bool mkkey = false;
   bool flushjournal = false;
   bool convertfilestore = false;
-  char *dump_pg_log = 0;
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
-      mkfs = true;
-    } else if (CEPH_ARGPARSE_EQ("mkjournal", '\0')) {
-      mkjournal = true;
-    } else if (CEPH_ARGPARSE_EQ("mkkey", '\0')) {
-      mkkey = true;
-    } else if (CEPH_ARGPARSE_EQ("flush-journal", '\0')) {
-      flushjournal = true;
-    } else if (CEPH_ARGPARSE_EQ("convert-filestore", '\0')) {
-      convertfilestore = true;
-    } else if (CEPH_ARGPARSE_EQ("dump-pg-log", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
-    } else {
-      derr << "unrecognized arg " << args[i] << dendl;
+  std::string dump_pg_log;
+
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
+      exit(0);
+    } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
+      mkfs = true;
+    } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
+      mkjournal = true;
+    } else if (ceph_argparse_flag(args, i, "--mkkey", (char*)NULL)) {
+      mkkey = true;
+    } else if (ceph_argparse_flag(args, i, "--flush-journal", (char*)NULL)) {
+      flushjournal = true;
+    } else if (ceph_argparse_flag(args, i, "--convert-filestore", (char*)NULL)) {
+      convertfilestore = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dump-pg-log", (char*)NULL)) {
+      dump_pg_log = val;
+    } else {
+      ++i;
     }
   }
+  if (!args.empty()) {
+    derr << "unrecognized arg " << args[0] << dendl;
+    usage();
+  }
 
-  if (dump_pg_log) {
+  if (!dump_pg_log.empty()) {
     common_init_finish(g_ceph_context);
     bufferlist bl;
     std::string error;
-    int r = bl.read_file(dump_pg_log, &error);
+    int r = bl.read_file(dump_pg_log.c_str(), &error);
     if (r >= 0) {
       PG::Log::Entry e;
       bufferlist::iterator p = bl.begin();
