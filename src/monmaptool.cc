@@ -37,11 +37,10 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  DEFINE_CONF_VARS(usage);
 
   const char *me = argv[0];
 
-  const char *fn = 0;
+  std::string fn;
   bool print = false;
   bool create = false;
   bool clobber = false;
@@ -52,44 +51,46 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("help", '\0')) {
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      if (i != args.end()) {
+	fn = *i;
+      }
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-    } else if (CEPH_ARGPARSE_EQ("print", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("create", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&create, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&clobber, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("add", '\0')) {
-      if (++i >= args.size())
-	usage();
-      string name = args[i];
-      if (++i >= args.size())
+    } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
+      print = true;
+    } else if (ceph_argparse_flag(args, i, "--create", (char*)NULL)) {
+      create = true;
+    } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
+      clobber = true;
+    } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
+      string name = *i;
+      if (++i == args.end())
 	usage();
       entity_addr_t addr;
-      if (!addr.parse(args[i])) {
-	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
+      if (!addr.parse(*i)) {
+	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
 	return -1;
       }
       if (addr.get_port() == 0)
 	addr.set_port(CEPH_MON_PORT);
       add[name] = addr;
       modified = true;
-    } else if (CEPH_ARGPARSE_EQ("rm", '\0')) {
-      if (++i >= args.size())
-	usage();
-      string name = args[i];
-      rm.push_back(name);
+      ++i;
+    } else if (ceph_argparse_witharg(args, i, &val, "--rm", (char*)NULL)) {
+      rm.push_back(val);
       modified = true;
-    } else if (!fn)
-      fn = args[i];
-    else {
-      cout << "invalid argument: '" << args[i] << "'" << std::endl;
+    } else if (fn.empty()) {
+      fn = *i++;
+    } else {
+      cerr << "invalid argument: '" << *i << "'" << std::endl;
       usage();
     }
   }
-  if (!fn)
+  if (fn.empty())
     usage();
   
   MonMap monmap(ceph_clock_now(g_ceph_context));
@@ -99,7 +100,7 @@ int main(int argc, const char **argv)
   int r = 0;
   if (!(create && clobber)) {
     try {
-      r = monmap.read(fn);
+      r = monmap.read(fn.c_str());
     } catch (...) {
       cerr << me << ": unable to read monmap file" << std::endl;
       return -1;
@@ -158,7 +159,7 @@ int main(int argc, const char **argv)
 	 << " to " << fn
 	 << " (" << monmap.size() << " monitors)" 
 	 << std::endl;
-    int r = monmap.write(fn);
+    int r = monmap.write(fn.c_str());
     if (r < 0) {
       cerr << "monmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
       return 1;
