@@ -22,6 +22,8 @@ the ``mkcephfs`` shell script.
   also simplifies our Chef cookbooks.
 
 
+.. _install-chef:
+
 Installing Ceph using Chef
 ==========================
 
@@ -38,6 +40,11 @@ Installing Ceph using Chef
 
 Installing Ceph using ``mkcephfs``
 ==================================
+
+.. note:: ``mkcephfs`` is meant as a quick bootstrapping tool. It does
+   not handle more complex operations, such as upgrades. For
+   production clusters, you will want to use the :ref:`Chef cookbooks
+   <install-chef>`.
 
 Pick a host that has the Ceph software installed -- it does not have
 to be a part of your cluster, but it does need to have *matching
