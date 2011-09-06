@@ -39,15 +39,11 @@ void usage()
   exit(1);
 }
 
-
-
-
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  DEFINE_CONF_VARS(usage);
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -55,7 +51,7 @@ int main(int argc, const char **argv)
 
   const char *me = argv[0];
 
-  const char *fn = 0;
+  std::string fn;
   bool print = false;
   bool print_json = false;
   bool tree = false;
@@ -66,51 +62,68 @@ int main(int argc, const char **argv)
   int lpg_bits = g_conf->osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
-  const char *export_crush = 0;
-  const char *import_crush = 0;
+  std::string export_crush, import_crush, test_map_pg, test_map_object;
   list<entity_addr_t> add, rm;
-  const char *test_map_pg = 0;
-  const char *test_map_object = 0;
   bool test_crush = false;
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("help", 'h')) {
+  std::string val;
+  std::ostringstream err;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-    } else if (CEPH_ARGPARSE_EQ("print", 'p')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("dump_json", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&print_json, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("tree", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&tree, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("createsimple", '\0')) {
+    } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
+      print = true;
+    } else if (ceph_argparse_flag(args, i, "--dump-json", (char*)NULL)) {
+      print_json = true;
+    } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
+      tree = true;
+    } else if (ceph_argparse_withint(args, i, &num_osd, &err, "--createsimple", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
       createsimple = true;
-      CEPH_ARGPARSE_SET_ARG_VAL(&num_osd, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&clobber, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("pg_bits", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&pg_bits, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("pgp_bits", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&pgp_bits, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("lpg_bits", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&lpg_bits, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("num_dom", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&num_dom, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("export_crush", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&export_crush, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("import_crush", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&import_crush, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("test_map_pg", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&test_map_pg, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("test_map_object", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&test_map_object, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("test_crush", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&test_crush, OPT_BOOL);
-    } else if (!fn)
-      fn = args[i];
-    else 
+    } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
+      clobber = true;
+    } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pg_bits", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &lpg_bits, &err, "--lpg_bits", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &num_dom, &err, "--num_dom", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--export_crush", (char*)NULL)) {
+      export_crush = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--import_crush", (char*)NULL)) {
+      import_crush = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_pg", (char*)NULL)) {
+      test_map_pg = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_object", (char*)NULL)) {
+      test_map_object = val;
+    } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
+      test_crush = true;
+    } else if (fn.empty()) {
+      fn = *i++;
+    } else {
       usage();
+    }
   }
-  if (!fn) {
+  if (fn.empty()) {
     cerr << me << ": must specify osdmap filename" << std::endl;
     usage();
   }
@@ -124,7 +137,7 @@ int main(int argc, const char **argv)
   struct stat st;
   if (!createsimple && !clobber) {
     std::string error;
-    r = bl.read_file(fn, &error);
+    r = bl.read_file(fn.c_str(), &error);
     if (r == 0) {
       try {
 	osdmap.decode(bl);
@@ -139,7 +152,7 @@ int main(int argc, const char **argv)
       return -1;
     }
   }
-  else if (createsimple && !clobber && ::stat(fn, &st) == 0) {
+  else if (createsimple && !clobber && ::stat(fn.c_str(), &st) == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
   }
@@ -155,10 +168,10 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (import_crush) {
+  if (!import_crush.empty()) {
     bufferlist cbl;
     std::string error;
-    r = cbl.read_file(import_crush, &error);
+    r = cbl.read_file(import_crush.c_str(), &error);
     if (r) {
       cerr << me << ": error reading crush map from " << import_crush
 	   << ": " << error << std::endl;
@@ -186,10 +199,10 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (export_crush) {
+  if (!export_crush.empty()) {
     bufferlist cbl;
     osdmap.crush.encode(cbl);
-    r = cbl.write_file(export_crush);
+    r = cbl.write_file(export_crush.c_str());
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;
       exit(1);
@@ -197,7 +210,7 @@ int main(int argc, const char **argv)
     cout << me << ": exported crush map to " << export_crush << std::endl;
   }  
 
-  if (test_map_object) {
+  if (!test_map_object.empty()) {
     object_t oid(test_map_object);
     ceph_object_layout ol = osdmap.make_object_layout(oid, 0);
     
@@ -211,9 +224,9 @@ int main(int argc, const char **argv)
 	 << " -> " << acting
 	 << std::endl;
   }  
-  if (test_map_pg) {
+  if (!test_map_pg.empty()) {
     pg_t pgid;
-    if (pgid.parse(test_map_pg) < 0) {
+    if (pgid.parse(test_map_pg.c_str()) < 0) {
       cerr << me << ": failed to parse pg '" << test_map_pg
 	   << "', r = " << r << std::endl;
       usage();
@@ -256,7 +269,9 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !print_json && !tree && !modified && !export_crush && !import_crush && !test_map_pg && !test_map_object) {
+  if (!print && !print_json && !tree && !modified && 
+      export_crush.empty() && import_crush.empty() && 
+      test_map_pg.empty() && test_map_object.empty()) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
@@ -279,7 +294,7 @@ int main(int argc, const char **argv)
     cout << me << ": writing epoch " << osdmap.get_epoch()
 	 << " to " << fn
 	 << std::endl;
-    int r = bl.write_file(fn);
+    int r = bl.write_file(fn.c_str());
     if (r) {
       cerr << "osdmaptool: error writing to '" << fn << "': "
 	   << cpp_strerror(r) << std::endl;
