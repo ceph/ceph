@@ -117,17 +117,14 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
   for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-#define X_AMZ_META "x-amz-meta"
-    if (name.find(X_AMZ_META) == 0) {
-      RGW_LOG(10) << "x>> " << name << ":" << xattr << dendl;
-      format_xattr(xattr);
-      string attr_name(RGW_ATTR_PREFIX);
-      attr_name.append(name);
-      map<string, bufferlist>::value_type v(attr_name, bufferlist());
-      std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
-      bufferlist& bl(rval.first->second);
-      bl.append(xattr.c_str(), xattr.size() + 1);
-    }
+    RGW_LOG(10) << "x>> " << name << ":" << xattr << dendl;
+    format_xattr(xattr);
+    string attr_name(RGW_ATTR_PREFIX);
+    attr_name.append(name);
+    map<string, bufferlist>::value_type v(attr_name, bufferlist());
+    std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
+    bufferlist& bl(rval.first->second);
+    bl.append(xattr.c_str(), xattr.size() + 1);
   }
 }
 
