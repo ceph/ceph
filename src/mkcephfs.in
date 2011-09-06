@@ -437,7 +437,7 @@ if [ $allhosts -eq 1 ]; then
 	    do_root_cmd "$0 -d $rdir --prepare-osdfs $name"
 	fi
 
-	do_cmd "$0 -d $rdir --init-daemon $name"
+	do_root_cmd "$0 -d $rdir --init-daemon $name"
 
 	# collect the key
 	if [ -n "$ssh" ]; then
@@ -468,7 +468,7 @@ if [ $allhosts -eq 1 ]; then
 	    rdir=$dir
 	fi
 	
-	do_cmd "$0 -d $rdir --init-daemon $name"
+	do_root_cmd "$0 -d $rdir --init-daemon $name"
     done
 
     # admin keyring
