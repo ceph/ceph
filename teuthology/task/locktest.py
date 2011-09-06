@@ -100,6 +100,8 @@ def task(ctx, config):
         log.info('cleaning up host dir')
         host.run(
             args=[
+                'mkdir', '-p', '/tmp/cephtest/locktest',
+                run.Raw('&&'),
                 'rm', '-f', '/tmp/cephtest/locktest/locktest.c',
                 run.Raw('&&'),
                 'rm', '-f', '/tmp/cephtest/locktest/locktest',
@@ -111,6 +113,8 @@ def task(ctx, config):
         log.info('cleaning up client dir')
         client.run(
             args=[
+                'mkdir', '-p', '/tmp/cephtest/locktest',
+                run.Raw('&&'),
                 'rm', '-f', '/tmp/cephtest/locktest/locktest.c',
                 run.Raw('&&'),
                 'rm', '-f', '/tmp/cephtest/locktest/locktest',
