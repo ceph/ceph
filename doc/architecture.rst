@@ -16,6 +16,8 @@ device. Qemu/KVM also has a direct RBD client, that avoids the kernel
 overhead.
 
 
+.. _monitor:
+
 Monitor cluster
 ===============
 
@@ -48,6 +50,9 @@ subgroup for an even number.
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_algorithm
 
 .. todo:: explain monmap
+
+
+.. _rados:
 
 
 RADOS
@@ -84,6 +89,8 @@ attributes should work (see :ref:`xattr`).
 
 .. todo:: explain plugins ("classes")
 
+
+.. _cephfs:
 
 Ceph filesystem
 ===============
