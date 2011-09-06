@@ -105,7 +105,7 @@ Here's a template for a 3-node cluster, where all three machines run a
 :ref:`monitor <monitor>` and an :ref:`object store <rados>`, and the
 first one runs the :ref:`Ceph filesystem daemon <cephfs>`. Replace the
 hostnames and IP addresses with your own, and add/remove hosts as
-appropriate.
+appropriate. All hostnames *must* be short form (no domain).
 
 .. literalinclude:: mycluster.conf
    :language: ini
