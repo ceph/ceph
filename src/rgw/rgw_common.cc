@@ -263,7 +263,10 @@ bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_per
    if (!policy)
      return false;
 
-   int acl_perm = policy->get_perm(g_ceph_context, uid, perm) & user_perm_mask;
+   int policy_perm = policy->get_perm(g_ceph_context, uid, perm);
+   int acl_perm = policy_perm & user_perm_mask;
+
+   RGW_LOG(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
 
    return (perm == acl_perm);
 }

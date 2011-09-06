@@ -303,5 +303,7 @@ int RGWHandler_REST_SWIFT::authorize()
   if (!authorized)
     return -EPERM;
 
+  s->perm_mask = RGW_PERM_FULL_CONTROL;
+
   return 0;
 }
