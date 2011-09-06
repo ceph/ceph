@@ -270,3 +270,70 @@ TEST(CephArgParse, WithDashesAndUnderscores) {
   }
   ASSERT_EQ(found_baz, "");
 }
+
+extern bool ceph_argparse_withint(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...);
+
+TEST(CephArgParse, WithInt) {
+  const char *BAZSTUFF1[] = { "./myprog", "--foo", "50", "--bar", "52", NULL };
+  const char *BAZSTUFF2[] = { "./myprog", "--foo", "--bar", "52", NULL };
+  const char *BAZSTUFF3[] = { "./myprog", "--foo", "40", "--", "--bar", "42", NULL };
+
+  // normal test
+  VectorContainer bazstuff1(BAZSTUFF1);
+  ostringstream err;
+  int foo = -1, bar = -1;
+  for (std::vector<const char*>::iterator i = bazstuff1.arr.begin();
+       i != bazstuff1.arr.end(); )
+  {
+    if (ceph_argparse_double_dash(bazstuff1.arr, i)) {
+      break;
+    } else if (ceph_argparse_withint(bazstuff1.arr, i, &foo, &err, "--foo", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    } else if (ceph_argparse_withint(bazstuff1.arr, i, &bar, &err, "--bar", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    }
+    else {
+      ++i;
+    }
+  }
+  ASSERT_EQ(foo, 50);
+  ASSERT_EQ(bar, 52);
+
+  // parse error test
+  VectorContainer bazstuff2(BAZSTUFF2);
+  ostringstream err2;
+  for (std::vector<const char*>::iterator i = bazstuff2.arr.begin();
+       i != bazstuff2.arr.end(); )
+  {
+    if (ceph_argparse_double_dash(bazstuff2.arr, i)) {
+      break;
+    } else if (ceph_argparse_withint(bazstuff2.arr, i, &foo, &err2, "--foo", (char*)NULL)) {
+      ASSERT_NE(string(""), err2.str());
+    }
+    else {
+      ++i;
+    }
+  }
+
+  // double dash test
+  VectorContainer bazstuff3(BAZSTUFF3);
+  foo = -1, bar = -1;
+  for (std::vector<const char*>::iterator i = bazstuff3.arr.begin();
+       i != bazstuff3.arr.end(); )
+  {
+    if (ceph_argparse_double_dash(bazstuff3.arr, i)) {
+      break;
+    } else if (ceph_argparse_withint(bazstuff3.arr, i, &foo, &err, "--foo", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    } else if (ceph_argparse_withint(bazstuff3.arr, i, &bar, &err, "--bar", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    }
+    else {
+      ++i;
+    }
+  }
+  ASSERT_EQ(foo, 40);
+  ASSERT_EQ(bar, -1);
+}

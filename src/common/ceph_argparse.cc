@@ -13,17 +13,16 @@
  */
 
 #include "auth/Auth.h"
+#include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "global/global_init.h"
-#include "common/ConfUtils.h"
-#include "common/version.h"
 #include "common/config.h"
+#include "common/strtol.h"
+#include "common/version.h"
 #include "include/intarith.h"
 #include "include/str_list.h"
 #include "msg/msg_types.h"
 
-#include <deque>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -45,91 +44,6 @@
 #undef derr
 #undef generic_dout
 #undef dendl
-
-static bool cmd_is_char(const char *cmd)
-{
-  return ((cmd[0] == '-') &&
-    cmd[1] && !cmd[2]);
-}
-
-bool ceph_argparse_cmd_equals(const char *cmd, const char *opt, char char_opt,
-			      unsigned int *val_pos)
-{
-  unsigned int i;
-  unsigned int len = strlen(opt);
-
-  *val_pos = 0;
-
-  if (!*cmd)
-    return false;
-
-  if (char_opt && cmd_is_char(cmd))
-    return (char_opt == cmd[1]);
-
-  if ((cmd[0] != '-') || (cmd[1] != '-'))
-    return false;
-
-  for (i=0; i<len; i++) {
-    if ((opt[i] == '_') || (opt[i] == '-')) {
-      switch (cmd[i+2]) {
-      case '-':
-      case '_':
-        continue;
-      default:
-        break;
-      }
-    }
-
-    if (cmd[i+2] != opt[i])
-      return false;
-  }
-
-  if (cmd[i+2] == '=')
-    *val_pos = i+3;
-  else if (cmd[i+2])
-    return false;
-
-  return true;
-}
-
-bool ceph_argparse_cmdline_val(void *field, int type, const char *val)
-{
-  switch (type) {
-  case OPT_BOOL:
-    if (strcasecmp(val, "false") == 0)
-      *(bool *)field = false;
-    else if (strcasecmp(val, "true") == 0)
-      *(bool *)field = true;
-    else
-      *(bool *)field = (bool)atoi(val);
-    break;
-  case OPT_INT:
-    *(int *)field = atoi(val);
-    break;
-  case OPT_LONGLONG:
-    *(long long *)field = atoll(val);
-    break;
-  case OPT_STR:
-    if (val)
-      *(char **)field = strdup(val);
-    else
-      *(char **)field = NULL;
-    break;
-  case OPT_FLOAT:
-    *(float *)field = atof(val);
-    break;
-  case OPT_DOUBLE:
-    *(double *)field = strtod(val, NULL);
-    break;
-  case OPT_ADDR:
-    ((entity_addr_t *)field)->parse(val);
-    break;
-  default:
-    return false;
-  }
-
-  return true;
-}
 
 void env_to_vec(std::vector<const char*>& args)
 {
@@ -154,36 +68,8 @@ void env_to_vec(std::vector<const char*>& args)
   }
 }
 
-void env_to_deq(std::deque<const char*>& args)
-{
-  char *p = getenv("CEPH_ARGS");
-  if (!p) return;
-
-  static char buf[1000];
-  int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
-  memcpy(buf, p, len);
-  buf[len] = 0;
-
-  p = buf;
-  while (*p && p < buf + len) {
-    char *e = p;
-    while (*e && *e != ' ')
-      e++;
-    *e = 0;
-    args.push_back(p);
-    p = e+1;
-  }
-}
-
 void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args)
-{
-  for (int i=1; i<argc; i++)
-    args.push_back(argv[i]);
-}
-
-void argv_to_deq(int argc, const char **argv,
-                 std::deque<const char*>& args)
 {
   for (int i=1; i<argc; i++)
     args.push_back(argv[i]);
@@ -279,31 +165,32 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   va_start(ap, i);
   while (1) {
     a = va_arg(ap, char*);
-    if (a == NULL)
+    if (a == NULL) {
+      va_end(ap);
       return false;
+    }
     char a2[strlen(a)+1];
     dashes_to_underscores(a, a2);
     if (strcmp(a2, first) == 0) {
       i = args.erase(i);
+      va_end(ap);
       return true;
     }
   }
 }
 
-bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostringstream *oss, ...)
+	std::ostringstream *oss, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
   const char *a;
-  va_list ap;
   int strlen_a;
 
   // does this argument match any of the possibilities?
-  va_start(ap, oss);
   while (1) {
     a = va_arg(ap, char*);
     if (a == NULL)
@@ -339,19 +226,29 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
   }
 }
 
-bool ceph_argparse_witharg(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, std::string *ret, ...)
+bool ceph_argparse_binary_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  va_start(ap, oss);
+  r = va_ceph_argparse_binary_flag(args, i, ret, oss, ap);
+  va_end(ap);
+  return r;
+}
+
+static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
   const char *a;
-  va_list ap;
   int strlen_a;
 
   // does this argument match any of the possibilities?
-  va_start(ap, ret);
   while (1) {
     a = va_arg(ap, char*);
     if (a == NULL)
@@ -380,6 +277,63 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   }
 }
 
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, ...)
+{
+  bool r;
+  va_list ap;
+  va_start(ap, ret);
+  r = va_ceph_argparse_witharg(args, i, ret, ap);
+  va_end(ap);
+  return r;
+}
+
+bool ceph_argparse_withint(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  std::string str;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  va_end(ap);
+  if (!r) {
+    return false;
+  }
+
+  std::string err;
+  int myret = strict_strtol(str.c_str(), 10, &err);
+  *ret = myret;
+  if (!err.empty()) {
+    *oss << err;
+  }
+  return true;
+}
+
+bool ceph_argparse_withlonglong(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, long long *ret,
+	std::ostringstream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  std::string str;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  va_end(ap);
+  if (!r) {
+    return false;
+  }
+
+  std::string err;
+  long long myret = strict_strtoll(str.c_str(), 10, &err);
+  *ret = myret;
+  if (!err.empty()) {
+    *oss << err;
+  }
+  return true;
+}
+
 CephInitParameters ceph_argparse_early_args
 	  (std::vector<const char*>& args, uint32_t module_type, int flags,
 	   std::string *conf_file_list)
@@ -387,8 +341,9 @@ CephInitParameters ceph_argparse_early_args
   CephInitParameters iparams(module_type);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (strcmp(*i, "--") == 0)
+    if (ceph_argparse_double_dash(args, i)) {
       break;
+    }
     else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
       cout << pretty_version_to_str() << std::endl;
       _exit(0);

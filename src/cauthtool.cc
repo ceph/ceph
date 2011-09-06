@@ -15,6 +15,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/strtol.h"
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
@@ -52,82 +53,93 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  DEFINE_CONF_VARS(usage);
 
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(g_ceph_context);
-  EntityName ename(g_conf->name);
-
-  const char *me = argv[0];
-
-  const char *fn = 0;
   bool gen_key = false;
   bool gen_print_key = false;
-  const char *add_key = 0;
+  std::string add_key;
   bool list = false;
   bool print_key = false;
   bool create_keyring = false;
-  const char *caps_fn = NULL;
-  const char *import_keyring = NULL;
+  std::string caps_fn;
+  std::string import_keyring;
   bool set_auid = false;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   map<string,bufferlist> caps;
   bool bin_keyring = false;
+  std::string fn;
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("gen-key", 'g')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&gen_key, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("gen-print-key", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&gen_print_key, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("add-key", 'a')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&add_key, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("list", 'l')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&list, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("caps", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&caps_fn, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("cap", '\0')) {
-      const char *key, *val;
-      CEPH_ARGPARSE_SET_ARG_VAL(&key, OPT_STR);
-      CEPH_ARGPARSE_SET_ARG_VAL(&val, OPT_STR);
-      ::encode(val, caps[key]);
-    } else if (CEPH_ARGPARSE_EQ("print-key", 'p')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&print_key, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("create-keyring", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("import-keyring", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&import_keyring, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("set-uid", 'u')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  std::vector<const char*>::iterator i;
+  for (i = args.begin(); i != args.end(); ) {
+    std::string val;
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-g", "--gen-key", (char*)NULL)) {
+      gen_key = true;
+    } else if (ceph_argparse_flag(args, i, "--gen-print-key", (char*)NULL)) {
+      gen_print_key = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "-a", "--add-key", (char*)NULL)) {
+      add_key = val;
+    } else if (ceph_argparse_flag(args, i, &val, "-l", "--list", (char*)NULL)) {
+      list = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
+      caps_fn = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--cap", (char*)NULL)) {
+      std::string my_key = val;
+      if (i == args.end()) {
+	cerr << "must give two arguments to --cap: key and val." << std::endl;
+	exit(1);
+      }
+      std::string my_val = *i;
+      ++i;
+      ::encode(my_val, caps[my_key]);
+    } else if (ceph_argparse_flag(args, i, "-p", "--print-key", (char*)NULL)) {
+      print_key = true;
+    } else if (ceph_argparse_flag(args, i, "--create-keyring", (char*)NULL)) {
+      create_keyring = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
+      import_keyring = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-u", "--set-uid", (char*)NULL)) {
+      std::string err;
+      auid = strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+	cerr << "error parsing UID: " << err << std::endl;
+	exit(1);
+      }
       set_auid = true;
-    } else if (CEPH_ARGPARSE_EQ("bin", 'b')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&bin_keyring, OPT_BOOL);
-    } else if (!fn) {
-      fn = args[i];
-    } else 
+    } else if (ceph_argparse_flag(args, i, "-b", "--bin", (char*)NULL)) {
+      bin_keyring = true;
+    } else if (fn.empty()) {
+      fn = *i++;
+    } else {
       usage();
+    }
   }
-  if (!fn && !gen_print_key) {
-    cerr << me << ": must specify filename" << std::endl;
+  if (fn.empty() && !gen_print_key) {
+    cerr << argv[0] << ": must specify filename" << std::endl;
     usage();
   }
   if (!(gen_key ||
 	gen_print_key ||
-	add_key ||
+	!add_key.empty() ||
 	list ||
-	caps_fn ||
+	!caps_fn.empty() ||
 	caps.size() ||
 	set_auid ||
 	print_key ||
 	create_keyring ||
-	import_keyring)) {
+	!import_keyring.empty())) {
     cerr << "no command specified" << std::endl;
     usage();
   }
-  if (gen_key && add_key) {
+  if (gen_key && (!add_key.empty())) {
     cerr << "can't both gen_key and add_key" << std::endl;
     usage();
   }	
+
+  common_init_finish(g_ceph_context);
+  EntityName ename(g_conf->name);
 
   if (gen_print_key) {
     CryptoKey key;
@@ -147,7 +159,7 @@ int main(int argc, const char **argv)
     modified = true;
   } else {
     std::string err;
-    r = bl.read_file(fn, &err);
+    r = bl.read_file(fn.c_str(), &err);
     if (r >= 0) {
       try {
 	bufferlist::iterator iter = bl.begin();
@@ -163,11 +175,11 @@ int main(int argc, const char **argv)
   }
 
   // write commands
-  if (import_keyring) {
+  if (!import_keyring.empty()) {
     KeyRing other;
     bufferlist obl;
     std::string err;
-    int r = obl.read_file(import_keyring, &err);
+    int r = obl.read_file(import_keyring.c_str(), &err);
     if (r >= 0) {
       try {
 	bufferlist::iterator iter = obl.begin();
@@ -192,11 +204,10 @@ int main(int argc, const char **argv)
     keyring.add(ename, eauth);
     modified = true;
   }
-  if (add_key) {
+  if (!add_key.empty()) {
     EntityAuth eauth;
-    string ekey(add_key);
     try {
-      eauth.key.decode_base64(ekey);
+      eauth.key.decode_base64(add_key);
     } catch (const buffer::error &err) {
       cerr << "can't decode key '" << add_key << "'" << std::endl;
       exit(1);
@@ -205,7 +216,7 @@ int main(int argc, const char **argv)
     modified = true;
     cout << "added entity " << ename << " auth " << eauth << std::endl;
   }
-  if (caps_fn) {
+  if (!caps_fn.empty()) {
     ConfFile cf;
     std::deque<std::string> parse_errors;
     if (cf.parse_file(caps_fn, &parse_errors) != 0) {
@@ -257,7 +268,7 @@ int main(int argc, const char **argv)
     } else {
       keyring.encode_plaintext(bl);
     }
-    r = bl.write_file(fn, 0600);
+    r = bl.write_file(fn.c_str(), 0600);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
     }

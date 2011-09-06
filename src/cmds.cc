@@ -120,7 +120,6 @@ static int parse_rank(const char *opt_name, const std::string &val)
 
 int main(int argc, const char **argv) 
 {
-  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);

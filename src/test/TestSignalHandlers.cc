@@ -39,7 +39,7 @@ static int* get_null()
 
 static void simple_segv_test()
 {
-  dout(0) << "triggering SIGSEGV..." << dendl;
+  dout(-1) << "triggering SIGSEGV..." << dendl;
   int i = *get_null();
   std::cout << "i = " << i << std::endl;
 }
@@ -55,42 +55,18 @@ static void infinite_recursion_test()
   infinite_recursion_test_impl();
 }
 
-static std::string get_tmp_filename()
-{
-  char tmp[PATH_MAX];
-  memset(tmp, 0, sizeof(tmp));
-
-  const char *tdir = getenv("TMPDIR");
-  if (!tdir)
-    tdir = "/tmp";
-
-  snprintf(tmp, sizeof(tmp), "%s/%s", tdir, "test_signal_handlers_XXXXXX");
-  int fd = TEMP_FAILURE_RETRY(::mkstemp(tmp));
-  if (fd < 0) {
-    std::cout << __PRETTY_FUNCTION__ << ": mkstemp failed: "
-	      << cpp_strerror(errno) << std::endl;
-    return "";
-  }
-  TEMP_FAILURE_RETRY(::close(fd));
-  return string(tmp);
-}
-
 static void usage()
 {
-  derr << "usage: TestSignalHandlers [test]" << dendl;
-  derr << "Tests:" << dendl;
-  derr << "   simple_segv" << dendl;
-  derr << "   infinite_recursion" << dendl;
+  cerr << "usage: TestSignalHandlers [test]" << std::endl;
+  cerr << "--simple_segv: run simple_segv test" << std::endl;
+  cerr << "--infinite_recursion: run infinite_recursion test" << std::endl;
   generic_client_usage(); // Will exit()
 }
 
+typedef void (*test_fn_t)(void);
+
 int main(int argc, const char **argv)
 {
-  string tmp_log_file(get_tmp_filename());
-  if (tmp_log_file.empty())
-    return 1;
-  std::cout << "tmp_log_file = " << tmp_log_file << std::endl;
-
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -98,19 +74,25 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  DEFINE_CONF_VARS(usage);
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("simple_segv", 's')) {
-      simple_segv_test();
-    }
-    else if (CEPH_ARGPARSE_EQ("infinite_recursion", 'r')) {
-      infinite_recursion_test();
-    }
-    else if (CEPH_ARGPARSE_EQ("help", 'h')) {
+  test_fn_t fn = NULL;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+    } else if (ceph_argparse_flag(args, i, "--infinite_recursion", (char*)NULL)) {
+      fn = infinite_recursion_test;
+    } else if (ceph_argparse_flag(args, i, "-s", "--simple_segv", (char*)NULL)) {
+      fn = simple_segv_test;
+    } else {
+      cerr << "Garbage at end of command line." << std::endl;
       usage();
     }
   }
-
-  std::cout << "Please select a test to run." << std::endl;
+  if (!fn) {
+    std::cerr << "Please select a test to run. Type -h for help." << std::endl;
+    usage();
+  }
+  fn();
   return 0;
 }

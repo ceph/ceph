@@ -525,7 +525,6 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
 
 int main(int argc, char **argv) 
 {
-  DEFINE_CONF_VARS(_usage);
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
@@ -533,25 +532,14 @@ int main(int argc, char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  const char *user_id = 0;
-  const char *access_key = 0;
-  const char *secret_key = 0;
-  const char *user_email = 0;
-  const char *display_name = 0;
-  const char *bucket_name = 0;
+  std::string user_id, access_key, secret_key, user_email, display_name;
+  std::string bucket_name, object, swift_user, swift_key;
+  std::string date, time, subuser, access, format;
   rgw_bucket bucket;
-  const char *object = 0;
-  const char *swift_user = 0;
-  const char *swift_key = 0;
-  const char *date = 0;
-  const char *time = 0;
-  const char *subuser = 0;
-  const char *access = 0;
   uint32_t perm_mask = 0;
   uint64_t auid = -1;
   RGWUserInfo info;
   RGWAccess *store;
-  const char *prev_cmd = NULL;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
   bool gen_secret;
@@ -560,86 +548,101 @@ int main(int argc, char **argv)
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
   int64_t bucket_id = -1;
-  const char *format = 0;
   Formatter *formatter = &default_formatter;
   bool purge_data = false;
   RGWPoolInfo pool_info;
   bool pretty_format = false;
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("help", 'h')) {
+  std::string val;
+  std::ostringstream errs;
+  long long tmp = 0;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       return 0;
-    } else if (CEPH_ARGPARSE_EQ("uid", 'i')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("access-key", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&access_key, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("subuser", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&subuser, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("secret", 's')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&secret_key, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("email", 'e')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&user_email, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("display-name", 'n')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&display_name, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("bucket", 'b')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_name, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("object", 'o')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&object, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("gen-access-key", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&gen_key, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("gen-secret", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&gen_secret, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("auth-uid", 'a')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
-    } else if (CEPH_ARGPARSE_EQ("swift-user", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&swift_user, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("swift-secret", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&swift_key, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("time", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&time, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("access", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&access, OPT_STR);
-      perm_mask = str_to_perm(access);
-    } else if (CEPH_ARGPARSE_EQ("bucket-id", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&bucket_id, OPT_LONGLONG);
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
+      user_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
+      access_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
+      subuser = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
+      secret_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
+      user_email = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
+      display_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
+      bucket_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
+      object = val;
+    } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
+      gen_key = true;
+    } else if (ceph_argparse_flag(args, i, "--gen-secret", (char*)NULL)) {
+      gen_secret = true;
+    } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "-a", "--auth-uid", (char*)NULL)) {
+      if (!errs.str().empty()) {
+	cerr << errs.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      auid = tmp;
+    } else if (ceph_argparse_witharg(args, i, &val, "--os-user", (char*)NULL)) {
+      swift_user = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--os-secret", (char*)NULL)) {
+      swift_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
+      date = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--time", (char*)NULL)) {
+      time = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
+      access = val;
+      perm_mask = str_to_perm(access.c_str());
+    } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "--bucket-id", (char*)NULL)) {
+      if (!errs.str().empty()) {
+	cerr << errs.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      bucket_id = tmp;
       if (bucket_id < 0) {
         cerr << "bad bucket-id: " << bucket_id << std::endl;
         return usage();
       }
-    } else if (CEPH_ARGPARSE_EQ("format", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&format, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("pretty-format", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&pretty_format, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("purge-data", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&purge_data, OPT_BOOL);
+    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+      format = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--pretty-format", (char*)NULL)) {
+      pretty_format = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--purge-data", (char*)NULL)) {
+      purge_data = true;
     } else {
-      if (!opt_cmd) {
-        opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
-        if (opt_cmd < 0) {
-          cerr << "unrecognized arg " << args[i] << std::endl;
-          return usage();
-        }
-        if (need_more) {
-          prev_cmd = CEPH_ARGPARSE_VAL;
-          continue;
-        }
-      } else {
-        cerr << "unrecognized arg " << args[i] << std::endl;
-        return usage();
-      }
+      ++i;
     }
   }
 
-  if (opt_cmd == OPT_NO_CMD)
+  if (args.size() == 0) {
     return usage();
+  }
+  else {
+    const char *prev_cmd = NULL;
+    for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
+      opt_cmd = get_cmd(*i, prev_cmd, &need_more);
+      if (opt_cmd < 0) {
+	cerr << "unrecognized arg " << *i << std::endl;
+	return usage();
+      }
+      if (!need_more)
+	break;
+      prev_cmd = *i;
+    }
+    if (opt_cmd == OPT_NO_CMD)
+      return usage();
+  }
 
-  if (format) {
-    if (strcmp(format, "xml") == 0)
+  if (!format.empty()) {
+    if (format ==  "xml")
       formatter = new XMLFormatter(pretty_format);
-    else if (strcmp(format, "json") == 0)
+    else if (format == "json")
       formatter = new JSONFormatter(pretty_format);
     else {
       cerr << "unrecognized format: " << format << std::endl;
@@ -647,25 +650,25 @@ int main(int argc, char **argv)
     }
   }
 
-  if (subuser) {
-    char *suser = strdup(subuser);
+  if (!subuser.empty()) {
+    char *suser = strdup(subuser.c_str());
     char *p = strchr(suser, ':');
-    if (!p) {
-      free(suser);
-    } else {
+    if (p) {
       *p = '\0';
-      if (user_id) {
-        if (strcmp(user_id, suser) != 0) {
+      if (!user_id.empty()) {
+        if (user_id != suser) {
           cerr << "bad subuser " << subuser << " for uid " << user_id << std::endl;
           return 1;
         }
-      } else
+      } else {
         user_id = suser;
+      }
       subuser = p + 1;
     }
+    free(suser);
   }
 
-  if (opt_cmd == OPT_KEY_RM && !access_key) {
+  if (opt_cmd == OPT_KEY_RM && access_key.empty()) {
     cerr << "error: access key was not specified" << std::endl;
     return usage();
   }
@@ -681,10 +684,10 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
-  if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && !user_id) {
+  if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && user_id.empty()) {
     bool found = false;
     string s;
-    if (!found && user_email) {
+    if (!found && (!user_email.empty())) {
       s = user_email;
       if (rgw_get_user_info_by_email(s, info) >= 0) {
 	found = true;
@@ -692,7 +695,7 @@ int main(int argc, char **argv)
 	cerr << "could not find user by specified email" << std::endl;
       }
     }
-    if (!found && access_key) {
+    if (!found && (!access_key.empty())) {
       s = access_key;
       if (rgw_get_user_info_by_access_key(s, info) >= 0) {
 	found = true;
@@ -700,7 +703,7 @@ int main(int argc, char **argv)
 	cerr << "could not find user by specified access key" << std::endl;
       }
     }
-    if (!found && swift_user) {
+    if (!found && (!swift_user.empty())) {
       s = swift_user;
       if (rgw_get_user_info_by_swift(s, info) >= 0) {
 	found = true;
@@ -715,14 +718,12 @@ int main(int argc, char **argv)
   if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
       opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK ||
       opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
-    if (!user_id) {
+    if (user_id.empty()) {
       cerr << "user_id was not specified, aborting" << std::endl;
       return usage();
     }
 
-    string user_id_str = user_id;
-
-    bool found = (rgw_get_user_info_by_uid(user_id_str, info) >= 0);
+    bool found = (rgw_get_user_info_by_uid(user_id, info) >= 0);
 
     if (opt_cmd == OPT_USER_CREATE) {
       if (found) {
@@ -737,7 +738,7 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY ||
       opt_cmd == OPT_SUBUSER_RM) {
-    if (!subuser) {
+    if (subuser.empty()) {
       cerr << "subuser creation was requires specifying subuser name" << std::endl;
       return 1;
     }
@@ -754,18 +755,18 @@ int main(int argc, char **argv)
     }
   }
 
-  bool keys_not_requested = (!access_key && !secret_key && !gen_secret && !gen_key &&
+  bool keys_not_requested = (access_key.empty() && secret_key.empty() && !gen_secret && !gen_key &&
                              opt_cmd != OPT_KEY_CREATE);
 
   if (opt_cmd == OPT_USER_CREATE || (user_modify_op && !keys_not_requested)) {
     int ret;
 
-    if (opt_cmd == OPT_USER_CREATE && !display_name) {
+    if (opt_cmd == OPT_USER_CREATE && display_name.empty()) {
       cerr << "display name was not specified, aborting" << std::endl;
       return 0;
     }
 
-    if (!secret_key || gen_secret) {
+    if (secret_key.empty() || gen_secret) {
       ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
@@ -773,7 +774,7 @@ int main(int argc, char **argv)
       }
       secret_key = secret_key_buf;
     }
-    if (!access_key || gen_key) {
+    if (access_key.empty() || gen_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
@@ -792,7 +793,7 @@ int main(int argc, char **argv)
   map<string, RGWSubUser>::iterator uiter;
   RGWUserInfo old_info = info;
 
-  if (bucket_name || bucket_id >= 0) {
+  if ((!bucket_name.empty()) || bucket_id >= 0) {
     if (bucket_id >= 0) {
       int ret = rgw_retrieve_pool_info(bucket_id, pool_info);
       if (ret < 0) {
@@ -800,7 +801,7 @@ int main(int argc, char **argv)
         return ret;
       }
       bucket = pool_info.bucket;
-      if (bucket_name && bucket.name.compare(bucket_name) != 0) {
+      if ((!bucket_name.empty()) && bucket.name.compare(bucket_name.c_str()) != 0) {
         cerr << "bucket name does not match bucket id (expected bucket name: " << bucket.name << ")" << std::endl;
         return -EINVAL;
       }
@@ -828,30 +829,30 @@ int main(int argc, char **argv)
   case OPT_SUBUSER_CREATE:
   case OPT_SUBUSER_MODIFY:
   case OPT_KEY_CREATE:
-    if (user_id)
+    if (!user_id.empty())
       info.user_id = user_id;
-    if (access_key && secret_key) {
+    if ((!access_key.empty()) && (!secret_key.empty())) {
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
-      if (subuser)
+      if (!subuser.empty())
         k.subuser = subuser;
       info.access_keys[access_key] = k;
-   } else if (access_key || secret_key) {
+   } else if ((!access_key.empty()) || (!secret_key.empty())) {
       cerr << "access key modification requires both access key and secret key" << std::endl;
       return 1;
     }
-    if (display_name)
+    if (!display_name.empty())
       info.display_name = display_name;
-    if (user_email)
+    if (!user_email.empty())
       info.user_email = user_email;
     if (auid != (uint64_t)-1)
       info.auid = auid;
-    if (swift_user)
+    if (!swift_user.empty())
       info.swift_name = swift_user;
-    if (swift_key)
+    if (!swift_key.empty())
       info.swift_key = swift_key;
-    if (subuser) {
+    if (!subuser.empty()) {
       RGWSubUser u;
       u.name = subuser;
       u.perm_mask = perm_mask;
@@ -865,7 +866,7 @@ int main(int argc, char **argv)
 
     remove_old_indexes(old_info, info);
 
-    show_user_info(info, format, formatter);
+    show_user_info(info, format.c_str(), formatter);
     break;
 
   case OPT_SUBUSER_RM:
@@ -876,7 +877,7 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
-    show_user_info(info, format, formatter);
+    show_user_info(info, format.c_str(), formatter);
     break;
 
   case OPT_KEY_RM:
@@ -891,20 +892,17 @@ int main(int argc, char **argv)
         break;
       }
     }
-    show_user_info(info, format, formatter);
+    show_user_info(info, format.c_str(), formatter);
     break;
 
   case OPT_USER_INFO:
-    show_user_info(info, format, formatter);
+    show_user_info(info, format.c_str(), formatter);
     break;
   }
 
   if (opt_cmd == OPT_POLICY) {
     bufferlist bl;
-    if (!object)
-      object = "";
-    string object_str(object);
-    rgw_obj obj(bucket, object_str);
+    rgw_obj obj(bucket, object);
     int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
 
     RGWAccessControlPolicy policy;
@@ -925,7 +923,7 @@ int main(int argc, char **argv)
     string id;
     RGWAccessHandle handle;
 
-    if (user_id) {
+    if (!user_id.empty()) {
       RGWUserBuckets buckets;
       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
         cout << "could not get buckets for uid " << user_id << std::endl;
@@ -952,7 +950,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    if (!bucket_name) {
+    if (bucket_name.empty()) {
       cerr << "bucket name was not specified" << std::endl;
       return usage();
     }
@@ -982,14 +980,14 @@ int main(int argc, char **argv)
       }
     }
 
-    r = create_bucket(bucket_name, uid_str, info.display_name, info.auid);
+    r = create_bucket(bucket_name.c_str(), uid_str, info.display_name, info.auid);
     if (r < 0)
         cerr << "error linking bucket to user: r=" << r << std::endl;
     return -r;
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    if (!bucket_name) {
+    if (bucket_name.empty()) {
       cerr << "bucket name was not specified" << std::endl;
       return usage();
     }
@@ -1001,7 +999,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_TEMP_REMOVE) {
-    if (!date) {
+    if (date.empty()) {
       cerr << "date wasn't specified" << std::endl;
       return usage();
     }
@@ -1015,14 +1013,13 @@ int main(int argc, char **argv)
       return -EINVAL;
     }
 
-    if (time) {
-      string time_str = time;
-      if (time_str.size() != 5 && time_str.size() != 8) {
+    if (!time.empty()) {
+      if (time.size() != 5 && time.size() != 8) {
         cerr << "bad time format" << std::endl;
         return -EINVAL;
       }
       format.append(" %H:%M:%S");
-      datetime.append(time);
+      datetime.append(time.c_str());
     }
     const char *s = strptime(datetime.c_str(), format.c_str(), &tm);
     if (s && *s) {
@@ -1039,7 +1036,7 @@ int main(int argc, char **argv)
 
     int max = 1000;
     bool is_truncated;
-    IntentLogNameFilter filter(date, &tm);
+    IntentLogNameFilter filter(date.c_str(), &tm);
     do {
       int r = store->list_objects(id, bucket, max, prefix, delim, marker,
                           objs, common_prefixes, false, ns,
@@ -1058,14 +1055,14 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    if (!object && (!date || !bucket_name || bucket_id < 0)) {
+    if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id < 0)) {
       cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
       return usage();
     }
 
     rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
     string oid;
-    if (object) {
+    if (!object.empty()) {
       oid = object;
     } else {
       char buf[16];
@@ -1098,7 +1095,7 @@ int main(int argc, char **argv)
     struct rgw_log_entry entry;
     const char *delim = " ";
 
-    if (format) {
+    if (!format.empty()) {
       formatter->reset();
       formatter->open_object_section("log");
 
@@ -1123,7 +1120,7 @@ int main(int argc, char **argv)
 
       uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
 
-      if (!format) { // for now, keeping backward compatibility a bit
+      if (format.empty()) { // for now, keeping backward compatibility a bit
         cout << (entry.owner.size() ? entry.owner : "-" ) << delim
              << entry.bucket << delim
              << entry.time << delim
@@ -1167,7 +1164,7 @@ int main(int argc, char **argv)
       }
     }
 
-    if (format) {
+    if (!format.empty()) {
       formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
@@ -1180,7 +1177,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POOL_INFO) {
-    if (!bucket_name && bucket_id < 0) {
+    if (bucket_name.empty() && bucket_id < 0) {
       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
       return usage();
     }
@@ -1195,7 +1192,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    if (!bucket_name && bucket_id < 0) {
+    if (bucket_name.empty() && bucket_id < 0) {
       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
       return usage();
     }
@@ -1236,7 +1233,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POOL_CREATE) {
-    if (!bucket_name)
+    if (bucket_name.empty())
       return usage();
     string no_object;
     int ret;
@@ -1273,7 +1270,7 @@ int main(int argc, char **argv)
     string id;
     __u8 disable = (opt_cmd == OPT_USER_SUSPEND ? 1 : 0);
 
-    if (!user_id) {
+    if (user_id.empty()) {
       cerr << "uid was not specified" << std::endl;
       return usage();
     }

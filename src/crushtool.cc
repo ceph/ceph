@@ -818,21 +818,16 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
 
   const char *me = argv[0];
-  const char *infn = 0;
-  const char *srcfn = 0;
+  std::string infn, srcfn, outfn, add_name, remove_name, reweight_name;
   bool compile = false;
   bool decompile = false;
   bool test = false;
   bool verbose = false;
-  const char *outfn = 0;
 
   bool reweight = false;
   int add_item = -1;
   float add_weight = 0;
-  const char *add_name = 0;
   map<string,string> add_loc;
-  const char *remove_name = 0;		      
-  const char *reweight_name = 0;
   float reweight_weight = 0;
 
   int build = 0;
@@ -842,92 +837,164 @@ int main(int argc, const char **argv)
   int min_x = 0, max_x = 10000-1;
   int min_rule = 0, max_rule = 1000;
   map<int, int> device_weight;
-  DEFINE_CONF_VARS(usage);
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
   global_init(empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("decompile", 'd')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
+  std::string val;
+  std::ostringstream err;
+  int tmp;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
+      infn = val;
       decompile = true;
-    } else if (CEPH_ARGPARSE_EQ("infn", 'i')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("outfn", 'o')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&outfn, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&verbose, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("compile", 'c')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&srcfn, OPT_STR);
-      compile = true;
-    } else if (CEPH_ARGPARSE_EQ("test", 't')) {
-      test = true;
-    } else if (CEPH_ARGPARSE_EQ("reweight", '\0')) {
-      reweight = true;
-    } else if (CEPH_ARGPARSE_EQ("add_item", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&add_item, OPT_INT);
-      CEPH_ARGPARSE_SET_ARG_VAL(&add_weight, OPT_FLOAT);
-      CEPH_ARGPARSE_SET_ARG_VAL(&add_name, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("loc", '\0')) {
-      const char *type, *name;
-      CEPH_ARGPARSE_SET_ARG_VAL(&type, OPT_STR);
-      CEPH_ARGPARSE_SET_ARG_VAL(&name, OPT_STR);
-      add_loc[type] = name;
-    } else if (CEPH_ARGPARSE_EQ("remove_item", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&remove_name, OPT_STR);
-    } else if (CEPH_ARGPARSE_EQ("reweight_item", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&reweight_name, OPT_STR);
-      CEPH_ARGPARSE_SET_ARG_VAL(&reweight_weight, OPT_FLOAT);      
-    } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infn", (char*)NULL)) {
+      infn = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--outfn", (char*)NULL)) {
+      outfn = val;
+    } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose = true;
-    } else if (CEPH_ARGPARSE_EQ("build", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&build, OPT_BOOL);
-    } else if (CEPH_ARGPARSE_EQ("num_osds", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&num_osds, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("num_rep", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&num_rep, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("max_x", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&max_x, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("min_x", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&min_x, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("x", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&min_x, OPT_INT);
+    } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
+      srcfn = val;
+      compile = true;
+    } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
+      test = true;
+    } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
+      reweight = true;
+    } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      if (i == args.end())
+	usage();
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      add_weight = atof(*i);
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      add_name.assign(*i);
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--loc", (char*)NULL)) {
+      std::string type(val);
+      if (i == args.end())
+	usage();
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      std::string name(*i);
+      i = args.erase(i);
+      add_loc[type] = name;
+    } else if (ceph_argparse_witharg(args, i, &val, "--remove_item", (char*)NULL)) {
+      remove_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--reweight_item", (char*)NULL)) {
+      reweight_name = val;
+      if (i == args.end())
+	usage();
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      reweight_weight = atof(*i);
+      i = args.erase(i);
+    } else if (ceph_argparse_flag(args, i, "--build", (char*)NULL)) {
+      build = true;
+    } else if (ceph_argparse_withint(args, i, &num_osds, &err, "--num_osds", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &num_rep, &err, "--num_rep", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &max_x, &err, "--max_x", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &min_x, &err, "--min_x", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &min_x, &err, "--x", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
       max_x = min_x;
-    } else if (CEPH_ARGPARSE_EQ("max_rule", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&max_rule, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("min_rule", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&min_rule, OPT_INT);
-    } else if (CEPH_ARGPARSE_EQ("rule", '\0')) {
-      CEPH_ARGPARSE_SET_ARG_VAL(&min_rule, OPT_INT);
+    } else if (ceph_argparse_withint(args, i, &max_rule, &err, "--max_rule", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &min_rule, &err, "--min_rule", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_withint(args, i, &min_rule, &err, "--rule", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
       max_rule = min_rule;
-    } else if (CEPH_ARGPARSE_EQ("weight", 'w')) {
-      int dev;
-      CEPH_ARGPARSE_SET_ARG_VAL(&dev, OPT_INT);
-      float f;
-      CEPH_ARGPARSE_SET_ARG_VAL(&f, OPT_FLOAT);
+    } else if (ceph_argparse_withint(args, i, &tmp, &err, "--weight", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      int dev = tmp;
+      if (i == args.end())
+	usage();
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      float f = atof(*i);
       int w = (int)(f * 0x10000);
       if (w < 0)
 	w = 0;
       if (w > 0x10000)
 	w = 0x10000;
       device_weight[dev] = w;
-    } else if (!build)
-      usage();
-    else if (i + 3 <= args.size()) {
-      layer_t l;
-      l.name = args[i++];
-      l.buckettype = args[i++];
-      l.size = atoi(args[i]);
-      layers.push_back(l);
-    }      
+    }
+    else {
+      ++i;
+    }
   }
-  if (decompile + compile + build > 1)
+
+  if (decompile + compile + build > 1) {
     usage();
+  }
   if (!compile && !decompile && !build && !test && !reweight && add_item < 0 &&
-      !remove_name && !reweight_name)
+      remove_name.empty() && reweight_name.empty()) {
     usage();
+  }
+  if ((!build) && (args.size() > 0)) {
+    cerr << "too many arguments!" << std::endl;
+    usage();
+  }
+  else {
+    if ((args.size() % 3) != 0U) {
+      cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
+    	   << std::endl;
+      usage();
+    }
+    for (size_t j = 0; j < args.size(); j += 3) {
+      layer_t l;
+      l.name = args[j];
+      l.buckettype = args[j+1];
+      l.size = atoi(args[j+2]);
+      layers.push_back(l);
+    }
+  }
 
   /*
   if (outfn) cout << "outfn " << outfn << std::endl;
@@ -938,10 +1005,10 @@ int main(int argc, const char **argv)
   CrushWrapper crush;
   bool modified = false;
 
-  if (infn) {
+  if (!infn.empty()) {
     bufferlist bl;
     std::string error;
-    int r = bl.read_file(infn, &error);
+    int r = bl.read_file(infn.c_str(), &error);
     if (r < 0) {
       cerr << me << ": error reading '" << infn << "': " 
 	   << error << std::endl;
@@ -952,9 +1019,9 @@ int main(int argc, const char **argv)
   }
 
   if (decompile) {
-    if (outfn) {
+    if (!outfn.empty()) {
       ofstream o;
-      o.open(outfn, ios::out | ios::binary | ios::trunc);
+      o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
       if (!o.is_open()) {
 	cerr << me << ": error writing '" << outfn << "'" << std::endl;
 	exit(1);
@@ -967,7 +1034,7 @@ int main(int argc, const char **argv)
 
   if (compile) {
     crush.create();
-    int r = compile_crush_file(srcfn, crush);
+    int r = compile_crush_file(srcfn.c_str(), crush);
     crush.finalize();
     if (r < 0) 
       exit(1);
@@ -1081,14 +1148,14 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (reweight_name) {
+  if (!reweight_name.empty()) {
     cout << me << " reweighting item " << reweight_name << " to " << reweight_weight << std::endl;
     int r;
-    if (!crush.name_exists(reweight_name)) {
+    if (!crush.name_exists(reweight_name.c_str())) {
       cerr << " name " << reweight_name << " dne" << std::endl;
       r = -ENOENT;
     } else {
-      int item = crush.get_item_id(reweight_name);
+      int item = crush.get_item_id(reweight_name.c_str());
       r = crush.adjust_item_weightf(item, reweight_weight);
     }
     if (r == 0)
@@ -1099,14 +1166,14 @@ int main(int argc, const char **argv)
     }
         
   }
-  if (remove_name) {
+  if (!remove_name.empty()) {
     cout << me << " removing item " << remove_name << std::endl;
     int r;
-    if (!crush.name_exists(remove_name)) {
+    if (!crush.name_exists(remove_name.c_str())) {
       cerr << " name " << remove_name << " dne" << std::endl;
       r = -ENOENT;
     } else {
-      int remove_item = crush.get_item_id(remove_name);
+      int remove_item = crush.get_item_id(remove_name.c_str());
       r = crush.remove_item(remove_item);
     }
     if (r == 0)
@@ -1119,7 +1186,7 @@ int main(int argc, const char **argv)
   if (add_item >= 0) {
     cout << me << " adding item " << add_item << " weight " << add_weight
 	 << " at " << add_loc << std::endl;
-    int r = crush.insert_item(add_item, (int)(add_weight * (float)0x10000), add_name, add_loc);
+    int r = crush.insert_item(add_item, (int)(add_weight * (float)0x10000), add_name.c_str(), add_loc);
     if (r == 0)
       modified = true;
     else {
@@ -1133,12 +1200,12 @@ int main(int argc, const char **argv)
   }
 
   if (modified) {
-    if (!outfn) {
+    if (outfn.empty()) {
       cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
     } else {
       bufferlist bl;
       crush.encode(bl);
-      int r = bl.write_file(outfn);
+      int r = bl.write_file(outfn.c_str());
       if (r < 0) {
 	char buf[80];
 	cerr << me << ": error writing '" << outfn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;

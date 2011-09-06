@@ -45,7 +45,6 @@ void usage()
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
-  DEFINE_CONF_VARS(usage);
   int filer_flags = 0;
   //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
@@ -54,20 +53,19 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-
-  vector<const char*> nargs;
-  FOR_EACH_ARG(args) {
-    if (CEPH_ARGPARSE_EQ("localize-reads", '\0')) {
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)NULL)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-    }
-    else {
-      nargs.push_back(args[i]);
+    } else {
+      ++i;
     }
   }
 
   // args for fuse
-  vec_to_argv(nargs, argc, argv);
+  vec_to_argv(args, argc, argv);
 
   // FUSE will chdir("/"); be ready.
   g_conf->chdir = "/";

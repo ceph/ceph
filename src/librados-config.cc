@@ -36,7 +36,6 @@ void usage_exit()
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
-  DEFINE_CONF_VARS(usage_exit);
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
@@ -60,9 +59,6 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  FOR_EACH_ARG(args) {
-    usage_exit();
-  }
   if (!opt_version && !opt_vernum)
     usage_exit();
 
