@@ -1617,13 +1617,13 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   int count = 0;
 
   map<string, RGWBucketEnt>::iterator iter;
-  list<string> buckets_list;
+  list<string> pools_list;
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    string bucket_name = iter->first;
-    buckets_list.push_back(bucket_name);
+    string pool_name = iter->second.bucket.pool;
+    pools_list.push_back(pool_name);
   }
   map<std::string,librados::stats_map> sm;
-  int r = rados->get_pool_stats(buckets_list, rgw_obj_category_main, sm);
+  int r = rados->get_pool_stats(pools_list, rgw_obj_category_main, sm);
   if (r < 0)
     return r;
 
@@ -1632,6 +1632,8 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   for (miter = sm.begin(), iter = m.begin(); miter != sm.end(), iter != m.end(); ++iter, ++miter) {
     stats_map stats = miter->second;
     stats_map::iterator stats_iter = stats.begin();
+    if (stats_iter == stats.end())
+      continue;
 
     string bucket_name = miter->first;
     RGWBucketEnt& ent = iter->second;
