@@ -1268,7 +1268,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   }
   bufferptr bp(PATH_MAX);
   int ret = safe_read(fd, bp.c_str(), bp.length());
-  TEMP_FAILURE_RETRY(::close(op_fd));
+  TEMP_FAILURE_RETRY(::close(fd));
   if (ret < 0)
     return -errno;
   bufferlist bl;
@@ -1292,7 +1292,7 @@ int FileStore::write_version_stamp()
   ::encode(on_disk_version, bl);
   
   int ret = safe_write(fd, bl.c_str(), bl.length());
-  TEMP_FAILURE_RETRY(::close(op_fd));
+  TEMP_FAILURE_RETRY(::close(fd));
   if (ret < 0)
     return -errno;
   return 0;
