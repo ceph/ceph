@@ -1,4 +1,4 @@
-Ceph - a scalable distributed file system
+Ceph - a scalable distributed storage system
 -----------------------------------------
 
 Please see http://ceph.newdream.net/ for current info.
@@ -9,10 +9,6 @@ To build the server daemons, and FUSE client,
 
 $ ./autogen.sh
 $ ./configure
-
-$ make
- or
-$ cd src
 $ make
 
 (Note that the FUSE client will only be built if libfuse is present.)
@@ -26,13 +22,12 @@ daemons:
          information.
  cosd -- storage daemon.  stores objects on a given block device.
  cmds -- metadata daemon.  handles file system namespace.
- ceph -- send management commands to the monitor cluster.
-
-userland clients:
  cfuse -- fuse client.
- csyn -- synthetic workload generator client.
 
 tools:
+ ceph -- send management commands to the monitor cluster.
+ rados -- interact with the object store
+ rbd -- manipulate rados block device images
  monmaptool -- create/edit mon map
  osdmaptool -- create/edit osd map 
  crushtool -- create/edit crush map
