@@ -594,15 +594,24 @@ void ReplicatedPG::do_op(MOSDOp *op)
   uint64_t old_size = obc->obs.oi.size;
   eversion_t old_version = obc->obs.oi.version;
 
-  // we are acker.
   if (op->may_read()) {
     dout(10) << " taking ondisk_read_lock" << dendl;
     obc->ondisk_read_lock();
   }
+  for (map<hobject_t,ObjectContext*>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+    dout(10) << " taking ondisk_read_lock for src " << p->first << dendl;
+    p->second->ondisk_read_lock();
+  }
+
   int result = prepare_transaction(ctx);
+
   if (op->may_read()) {
     dout(10) << " dropping ondisk_read_lock" << dendl;
     obc->ondisk_read_unlock();
+  }
+  for (map<hobject_t,ObjectContext*>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+    dout(10) << " dropping ondisk_read_lock for src " << p->first << dendl;
+    p->second->ondisk_read_unlock();
   }
 
   if (result == -EAGAIN) {
