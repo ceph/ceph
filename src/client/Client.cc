@@ -3585,6 +3585,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 			  Dentry **pdn, bool expect_null)
 {
   // lookup
+  ldout(cct, 20) << "get_or_create " << *dir << " name " << name << dendl;
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
     Dentry *dn = dir->dir->dentries[name];
