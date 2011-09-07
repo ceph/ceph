@@ -66,6 +66,7 @@ class IndexManager {
 
     void operator()(CollectionIndex *index) {
       manager->put_index(c);
+      delete index;
     }
   };
 
