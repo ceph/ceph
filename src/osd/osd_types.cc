@@ -608,8 +608,10 @@ void object_info_t::decode(bufferlist::iterator& bl)
   } else if (v >= 6) {
     ::decode(soid, bl);
     ::decode(oloc, bl);
-    if (v == 6)
-      soid.key = oloc.key;
+    if (v == 6) {
+      hobject_t hoid(soid.oid, oloc.key, soid.snap, hoid.hash);
+      soid = hoid;
+    }
   }
     
   if (v >= 5)

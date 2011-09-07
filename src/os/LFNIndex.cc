@@ -502,7 +502,7 @@ string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
   }
   append_escaped(i, hoid.oid.name.end(), &full_name);
   full_name.append("_");
-  append_escaped(hoid.key.begin(), hoid.key.end(), &full_name);
+  append_escaped(hoid.get_key().begin(), hoid.get_key().end(), &full_name);
   full_name.append("_");
 
   char snap_with_hash[PATH_MAX];
@@ -763,6 +763,11 @@ static bool append_unescaped(string::const_iterator begin,
 }
 
 bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
+  string name;
+  string key;
+  uint32_t hash;
+  snapid_t snap;
+
   if (index_version == HASH_INDEX_TAG)
     return lfn_parse_object_name_keyless(long_name, out);
 
@@ -772,10 +777,10 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
     if (current == long_name.end()) {
       return false;
     } else if (*current == 'd') {
-      out->oid.name.append("DIR_");
+      name.append("DIR_");
       ++current;
     } else if (*current == '.') {
-      out->oid.name.append(".");
+      name.append(".");
       ++current;
     } else {
       --current;
@@ -786,35 +791,37 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
-  if (!append_unescaped(current, end, &(out->oid.name)))
+  if (!append_unescaped(current, end, &name))
     return false;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
-  if (!append_unescaped(current, end, &(out->key)))
+  if (!append_unescaped(current, end, &key))
     return false;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
     return false;
-  string snap(current, end);
+  string snap_str(current, end);
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end != long_name.end())
     return false;
-  string hash(current, end);
+  string hash_str(current, end);
 
-  if (snap == "head")
-    out->snap = CEPH_NOSNAP;
-  else if (snap == "snapdir")
-    out->snap = CEPH_SNAPDIR;
+  if (snap_str == "head")
+    snap = CEPH_NOSNAP;
+  else if (snap_str == "snapdir")
+    snap = CEPH_SNAPDIR;
   else
-    out->snap = strtoull(snap.c_str(), NULL, 16);
-  sscanf(hash.c_str(), "%X", &out->hash);
+    snap = strtoull(snap_str.c_str(), NULL, 16);
+  sscanf(hash_str.c_str(), "%X", &hash);
+
+  (*out) = hobject_t(name, key, snap, hash);
   return true;
 }
 
