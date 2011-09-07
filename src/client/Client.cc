@@ -233,7 +233,7 @@ inodeno_t Client::get_root_ino()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  ldout(cct, 1) << "dump_inode: inode " << in->ino << " ref " << in->ref << " dir " << in->dir << dendl;
+  ldout(cct, 1) << "dump_inode: inode " << in->ino << " ref " << in->get_num_ref() << " dir " << in->dir << dendl;
 
   if (in->dir) {
     ldout(cct, 1) << "  dir size " << in->dir->dentries.size() << dendl;
@@ -259,9 +259,9 @@ void Client::dump_cache()
     if (did.count(it->second)) continue;
     
     ldout(cct, 1) << "dump_cache: inode " << it->first
-            << " ref " << it->second->ref 
-            << " dir " << it->second->dir
-	    << " " << *it->second << dendl;
+		  << " ref " << it->second->get_num_ref()
+		  << " dir " << it->second->dir
+		  << " " << *it->second << dendl;
     if (it->second->dir) {
       ldout(cct, 1) << "  dir size " << it->second->dir->dentries.size() << dendl;
     }
@@ -346,7 +346,7 @@ void Client::trim_cache()
   }
 
   // hose root?
-  if (lru.lru_get_size() == 0 && root && root->ref == 0 && inode_map.size() == 1) {
+  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1) {
     ldout(cct, 15) << "trim_cache trimmed root " << root << dendl;
     delete root;
     root = 0;
@@ -1754,8 +1754,8 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
 void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << "put_inode on " << *in << dendl;
-  in->put(n);
-  if (in->ref == 0) {
+  int left = in->put(n);
+  if (left == 0) {
     // release any caps
     remove_all_caps(in);
 

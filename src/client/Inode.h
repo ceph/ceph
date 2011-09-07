@@ -141,7 +141,7 @@ class Inode {
 
   uint64_t     reported_size, wanted_max_size, requested_max_size;
 
-  int       ref;      // ref count. 1 for each dentry, fh that links to me.
+  int       _ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
   Dir       *dir;     // if i'm a dir.
   set<Dentry*> dn_set;      // if i'm linked to a dentry.
@@ -162,15 +162,19 @@ class Inode {
   void make_nosnap_relative_path(filepath& p);
 
   void get() { 
-    ref++; 
+    _ref++; 
     ldout(cct, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-		   << " now " << ref << dendl;
+		   << " now " << _ref << dendl;
   }
-  void put(int n=1) { 
-    ref -= n; 
+  int put(int n=1) { 
+    _ref -= n; 
     ldout(cct, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-		   << " now " << ref << dendl;
-    assert(ref >= 0);
+		   << " now " << _ref << dendl;
+    assert(_ref >= 0);
+    return _ref;
+  }
+  int get_num_ref() {
+    return _ref;
   }
 
   void ll_get() {
@@ -181,21 +185,21 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout) : 
-    cct(cct_), ino(vino.ino), snapid(vino.snapid),
-    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
-    time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-    flags(0),
-    dir_hashed(false), dir_replicated(false), auth_cap(NULL),
-    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
-    snap_caps(0), snap_cap_refs(0),
-    exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_item(this), flushing_cap_item(this), last_flush_tid(0),
-    snaprealm(0), snaprealm_item(this), snapdir_parent(0),
-    oset((void *)this, layout->fl_pg_pool, ino),
-    reported_size(0), wanted_max_size(0), requested_max_size(0),
-    ref(0), ll_ref(0), 
-    dir(0), dn_set()
+  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout)
+    : cct(cct_), ino(vino.ino), snapid(vino.snapid),
+      rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
+      time_warp_seq(0), max_size(0), version(0), xattr_version(0),
+      flags(0),
+      dir_hashed(false), dir_replicated(false), auth_cap(NULL),
+      dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
+      snap_caps(0), snap_cap_refs(0),
+      exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
+      cap_item(this), flushing_cap_item(this), last_flush_tid(0),
+      snaprealm(0), snaprealm_item(this), snapdir_parent(0),
+      oset((void *)this, layout->fl_pg_pool, ino),
+      reported_size(0), wanted_max_size(0), requested_max_size(0),
+      _ref(0), ll_ref(0), 
+      dir(0), dn_set()
   {
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
   }

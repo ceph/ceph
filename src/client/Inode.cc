@@ -7,9 +7,9 @@
 ostream& operator<<(ostream &out, Inode &in)
 {
   out << in.vino() << "("
+      << "ref=" << in._ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
-      << " ref=" << in.ref
       << " mode=" << oct << in.mode << dec
       << " size=" << in.size
       << " mtime=" << in.mtime
