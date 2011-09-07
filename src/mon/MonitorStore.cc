@@ -336,6 +336,8 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
 int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
 {
   int err = write_bl_ss_impl(bl, a, b, append);
+  if (err)
+    derr << "write_bl_ss " << a << "/" << b << " got error " << cpp_strerror(err) << dendl;
   assert(!err);  // for now
   return 0;
 }
