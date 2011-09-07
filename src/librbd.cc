@@ -246,11 +246,11 @@ namespace librbd {
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order);
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
-  int remove(IoCtx& io_ctx, const char *imgname);
-  int resize(ImageCtx *ictx, uint64_t size);
+  int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx);
+  int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
-  int snap_rollback(ImageCtx *ictx, const char *snap_name);
+  int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
   int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name);
@@ -261,7 +261,8 @@ namespace librbd {
   int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name);
   void close_image(ImageCtx *ictx);
 
-  void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize);
+  void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
+		  ProgressContext& prog_ctx);
   int read_rbd_info(IoCtx& io_ctx, const string& info_oid, struct rbd_info *info);
 
   int touch_rbd_info(IoCtx& io_ctx, const string& info_oid);
@@ -272,7 +273,7 @@ namespace librbd {
   int write_header(IoCtx& io_ctx, const string& md_oid, bufferlist& header);
   int tmap_set(IoCtx& io_ctx, const string& imgname);
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
-  int rollback_image(ImageCtx *ictx, uint64_t snapid);
+  int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
   void image_info(const rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
   string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num);
   uint64_t get_max_block(uint64_t size, int obj_order);
@@ -413,18 +414,18 @@ int init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize)
+void trim_image(IoCtx& io_ctx, const rbd_obj_header_ondisk &header, uint64_t newsize,
+		ProgressContext& prog_ctx)
 {
   CephContext *cct = io_ctx.cct();
+  uint64_t bsize = get_block_size(header);
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
   ldout(cct, 2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
   for (uint64_t i=start; i<numseg; i++) {
     string oid = get_block_oid(header, i);
     io_ctx.remove(oid);
-    if ((i & 127) == 0) {
-      ldout(cct, 2) << "\t" << i << "/" << numseg << dendl;
-    }
+    prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
   }
 }
 
@@ -555,16 +556,18 @@ int tmap_rm(IoCtx& io_ctx, const string& imgname)
   return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int rollback_image(ImageCtx *ictx, uint64_t snapid)
+int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx)
 {
   assert(ictx->lock.is_locked());
   uint64_t numseg = get_max_block(ictx->header);
+  uint64_t bsize = get_block_size(ictx->header);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(ictx->header, i);
     r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snapid);
     ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to " << snapid << " returned " << r << dendl;
+    prog_ctx.update_progress(i * bsize, numseg * bsize);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -749,7 +752,7 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   return 0;
 }
 
-int remove(IoCtx& io_ctx, const char *imgname)
+int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 {
   CephContext *cct(io_ctx.cct());
   ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
@@ -760,7 +763,7 @@ int remove(IoCtx& io_ctx, const char *imgname)
   struct rbd_obj_header_ondisk header;
   int r = read_header(io_ctx, md_oid, &header, NULL);
   if (r >= 0) {
-    trim_image(io_ctx, header, 0);
+    trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
@@ -780,7 +783,7 @@ int remove(IoCtx& io_ctx, const char *imgname)
   return 0;
 }
 
-int resize(ImageCtx *ictx, uint64_t size)
+int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
@@ -801,7 +804,7 @@ int resize(ImageCtx *ictx, uint64_t size)
     ictx->header.image_size = size;
   } else {
     ldout(cct, 2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
-    trim_image(ictx->data_ctx, ictx->header, size);
+    trim_image(ictx->data_ctx, ictx->header, size, prog_ctx);
     ictx->header.image_size = size;
   }
 
@@ -980,7 +983,7 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int snap_rollback(ImageCtx *ictx, const char *snap_name)
+int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
@@ -996,7 +999,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
     return -ENOENT;
   }
 
-  r = rollback_image(ictx, snapid);
+  r = rollback_image(ictx, snapid, prog_ctx);
   if (r < 0) {
     lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
     return r;
@@ -1534,7 +1537,14 @@ int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
 
 int RBD::remove(IoCtx& io_ctx, const char *name)
 {
-  int r = librbd::remove(io_ctx, name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::remove(io_ctx, name, prog_ctx);
+  return r;
+}
+
+int RBD::remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx)
+{
+  int r = librbd::remove(io_ctx, name, pctx);
   return r;
 }
 
@@ -1595,7 +1605,15 @@ Image::~Image()
 int Image::resize(uint64_t size)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::resize(ictx, size);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::resize(ictx, size, prog_ctx);
+  return r;
+}
+
+int Image::resize_with_progress(uint64_t size, librbd::ProgressContext& pctx)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::resize(ictx, size, pctx);
   return r;
 }
 
@@ -1639,7 +1657,15 @@ int Image::snap_remove(const char *snap_name)
 int Image::snap_rollback(const char *snap_name)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
-  int r = librbd::snap_rollback(ictx, snap_name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
+  return r;
+}
+
+int Image::snap_rollback_with_progress(const char *snap_name, ProgressContext& prog_ctx)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::snap_rollback(ictx, snap_name, prog_ctx);
   return r;
 }
 
@@ -1748,7 +1774,17 @@ extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::remove(io_ctx, name);
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::remove(io_ctx, name, prog_ctx);
+}
+
+extern "C" int rbd_remove_with_progress(rados_ioctx_t p, const char *name,
+					librbd_progress_fn_t cb, void *cbdata)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::remove(io_ctx, name, prog_ctx);
 }
 
 extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p, const char *destname)
@@ -1800,7 +1836,16 @@ extern "C" int rbd_close(rbd_image_t image)
 extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::resize(ictx, size);
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::resize(ictx, size, prog_ctx);
+}
+
+extern "C" int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
+					librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::resize(ictx, size, prog_ctx);
 }
 
 extern "C" int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
@@ -1825,7 +1870,16 @@ extern "C" int rbd_snap_remove(rbd_image_t image, const char *snap_name)
 extern "C" int rbd_snap_rollback(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::snap_rollback(ictx, snap_name);
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
+}
+
+extern "C" int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snap_name,
+					       librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::snap_rollback(ictx, snap_name, prog_ctx);
 }
 
 extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps)

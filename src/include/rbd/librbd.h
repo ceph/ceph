@@ -64,15 +64,19 @@ void rbd_version(int *major, int *minor, int *extra);
 int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_remove(rados_ioctx_t io, const char *name);
+int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
+			     librbd_progress_fn_t cb, void *cbdata);
 int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname, const char *destname);
 
 int rbd_open(rados_ioctx_t io, const char *name, rbd_image_t *image, const char *snap_name);
 int rbd_close(rbd_image_t image);
 int rbd_resize(rbd_image_t image, uint64_t size);
+int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
+			     librbd_progress_fn_t cb, void *cbdata);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx, const char *destname);
-int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
-			   const char *destname, librbd_progress_fn_t fn, void *data);
+int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p, const char *destname,
+			   librbd_progress_fn_t cb, void *cbdata);
 
 /* snapshots */
 int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);
@@ -80,6 +84,8 @@ void rbd_snap_list_end(rbd_snap_info_t *snaps);
 int rbd_snap_create(rbd_image_t image, const char *snapname);
 int rbd_snap_remove(rbd_image_t image, const char *snapname);
 int rbd_snap_rollback(rbd_image_t image, const char *snapname);
+int rbd_snap_rollback_with_progress(rbd_image_t image, const char *snapname,
+				    librbd_progress_fn_t cb, void *cbdata);
 int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 /* I/O */

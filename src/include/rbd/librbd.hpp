@@ -69,6 +69,7 @@ public:
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int remove(IoCtx& io_ctx, const char *name);
+  int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
 private:
@@ -84,6 +85,7 @@ public:
   ~Image();
 
   int resize(uint64_t size);
+  int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
@@ -94,6 +96,7 @@ public:
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
+  int snap_rollback_with_progress(const char *snap_name, ProgressContext& pctx);
   int snap_set(const char *snap_name);
 
   /* I/O */
