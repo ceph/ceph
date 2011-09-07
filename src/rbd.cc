@@ -748,16 +748,9 @@ enum {
   OPT_SHOWMAPPED,
 };
 
-static int get_cmd(const char *cmd, bool *snapcmd)
+static int get_cmd(const char *cmd, bool snapcmd)
 {
-  if (strcmp(cmd, "snap") == 0) {
-    if (*snapcmd)
-      return -EINVAL;
-    *snapcmd = true;
-    return 0;
-  }
-
-  if (!*snapcmd) {
+  if (!snapcmd) {
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LIST;
@@ -802,7 +795,7 @@ static int get_cmd(const char *cmd, bool *snapcmd)
       return OPT_SNAP_LIST;
   }
 
-  return -EINVAL;
+  return OPT_NO_CMD;
 }
 
 static void set_conf_param(const char *param, const char **var1, const char **var2)
@@ -815,7 +808,7 @@ static void set_conf_param(const char *param, const char **var1, const char **va
     usage_exit();
 }
 
-int main(int argc, const char **argv) 
+int main(int argc, const char **argv)
 {
   librados::Rados rados;
   librbd::RBD rbd;
@@ -835,12 +828,12 @@ int main(int argc, const char **argv)
   uint64_t size = 0;
   int order = 0;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
-  bool is_snap_cmd = false;
 
   std::string val;
   std::ostringstream err;
   long long sizell = 0;
-  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+  std::vector<const char*>::iterator i;
+  for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -874,51 +867,67 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--user", (char*)NULL)) {
       user = strdup(val.c_str());
     } else {
-      const char *v = *i;
-      if (!opt_cmd) {
-        opt_cmd = get_cmd(v, &is_snap_cmd);
-        if (opt_cmd < 0) {
-          cerr << "invalid command: " << v << std::endl;
-          usage_exit();
-        }
-      } else {
-        switch (opt_cmd) {
-          case OPT_LIST:
-            set_conf_param(v, &poolname, NULL);
-            break;
-          case OPT_INFO:
-          case OPT_CREATE:
-          case OPT_RESIZE:
-          case OPT_RM:
-          case OPT_SNAP_CREATE:
-          case OPT_SNAP_ROLLBACK:
-          case OPT_SNAP_REMOVE:
-          case OPT_SNAP_LIST:
-          case OPT_WATCH:
-          case OPT_MAP:
-            set_conf_param(v, &imgname, NULL);
-            break;
-          case OPT_UNMAP:
-            set_conf_param(v, &devpath, NULL);
-            break;
-          case OPT_EXPORT:
-            set_conf_param(v, &imgname, &path);
-            break;
-          case OPT_IMPORT:
-            set_conf_param(v, &path, &destname);
-            break;
-          case OPT_COPY:
-          case OPT_RENAME:
-            set_conf_param(v, &imgname, &destname);
-            break;
-        }
-      }
+      ++i;
     }
-    //  usage_exit();
   }
-  if (!opt_cmd)
-    usage_exit();
 
+  i = args.begin();
+  if (i == args.end()) {
+    cerr << "you must specify a command." << std::endl;
+    usage_exit();
+  }
+  else if (strcmp(*i, "snap") == 0) {
+    i = args.erase(i);
+    if (i == args.end()) {
+      cerr << "which snap command do you want?" << std::endl;
+      usage_exit();
+    }
+    opt_cmd = get_cmd(*i, true);
+  }
+  else {
+    opt_cmd = get_cmd(*i, false);
+  }
+  if (opt_cmd == OPT_NO_CMD) {
+    cerr << "error parsing command '" << *i << "'" << std::endl;
+    usage_exit();
+  }
+
+  for (i = args.erase(i); i != args.end(); ++i) {
+    const char *v = *i;
+    switch (opt_cmd) {
+      case OPT_LIST:
+	set_conf_param(v, &poolname, NULL);
+	break;
+      case OPT_INFO:
+      case OPT_CREATE:
+      case OPT_RESIZE:
+      case OPT_RM:
+      case OPT_SNAP_CREATE:
+      case OPT_SNAP_ROLLBACK:
+      case OPT_SNAP_REMOVE:
+      case OPT_SNAP_LIST:
+      case OPT_WATCH:
+      case OPT_MAP:
+	set_conf_param(v, &imgname, NULL);
+	break;
+      case OPT_UNMAP:
+	set_conf_param(v, &devpath, NULL);
+	break;
+      case OPT_EXPORT:
+	set_conf_param(v, &imgname, &path);
+	break;
+      case OPT_IMPORT:
+	set_conf_param(v, &path, &destname);
+	break;
+      case OPT_COPY:
+      case OPT_RENAME:
+	set_conf_param(v, &imgname, &destname);
+	break;
+      default:
+	assert(0);
+	break;
+    }
+  }
   if (!user)
     user = "admin";
 
