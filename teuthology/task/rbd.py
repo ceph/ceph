@@ -340,18 +340,36 @@ def mount(ctx, config):
                     ]
                 )
 
+def _normalize_config(cluster, config):
+    """
+    Returns a configuration that can be used by rbd subtasks.
+
+    This is either a list of clients or a dict mapping clients
+    to image options. "all" is converted to individual clients.
+    """
+    assert isinstance(config, list) or isinstance(config, dict), \
+        "task rbd only supports a list or dict for configuration"
+    if isinstance(config, list) or 'all' not in config:
+        return config
+    norm_config = {}
+    assert len(config) == 1, \
+        "rbd config cannot have 'all' and specific clients listed"
+    for client in teuthology.all_roles_of_type(cluster, 'client'):
+        norm_config['client.{id}'.format(id=client)] = config['all']
+    return norm_config
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
     Create and mount an rbd image.
 
-    For example::
+    For example, you can specify which clients to run on::
 
         tasks:
         - ceph:
         - rbd: [client.0, client.1]
 
-    Different image options::
+    There are a few image options::
 
         tasks:
         - ceph:
@@ -361,23 +379,38 @@ def task(ctx, config):
                 image_name: foo
                 image_size: 2048
                 fs_type: xfs
+
+    To use default options on all clients::
+
+        tasks:
+        - ceph:
+        - rbd:
+            all:
+
+    To create 20GiB images and format them with xfs on all clients::
+
+        tasks:
+        - ceph:
+        - rbd:
+            all:
+              image_size: 20480
+              fs_type: xfs
     """
-    assert isinstance(config, list) or isinstance(config, dict), \
-        "task rbd only supports a list or dict for configuration"
-    if isinstance(config, dict):
+    norm_config = _normalize_config(ctx.cluster, config)
+    if isinstance(norm_config, dict):
         role_images = {}
-        for role, properties in config.iteritems():
+        for role, properties in norm_config.iteritems():
             if properties is None:
                 properties = {}
             role_images[role] = properties.get('image_name')
     else:
-        role_images = config
+        role_images = norm_config
 
     with contextutil.nested(
-        lambda: create_image(ctx=ctx, config=config),
-        lambda: modprobe(ctx=ctx, config=config),
+        lambda: create_image(ctx=ctx, config=norm_config),
+        lambda: modprobe(ctx=ctx, config=norm_config),
         lambda: dev_create(ctx=ctx, config=role_images),
-        lambda: mkfs(ctx=ctx, config=config),
+        lambda: mkfs(ctx=ctx, config=norm_config),
         lambda: mount(ctx=ctx, config=role_images),
         ):
         yield
