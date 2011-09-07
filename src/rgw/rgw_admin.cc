@@ -588,9 +588,9 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
       auid = tmp;
-    } else if (ceph_argparse_witharg(args, i, &val, "--os-user", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--swift-user", (char*)NULL)) {
       swift_user = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--os-secret", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--swift-secret", (char*)NULL)) {
       swift_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
       date = val;
