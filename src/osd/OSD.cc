@@ -1234,6 +1234,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
 	  creating_pgs[info.pgid].prior.erase(from);
 	  if (!can_create_pg(info.pgid))
 	    return NULL;
+	  history = creating_pgs[info.pgid].history;
 	  create = true;
 	} else {
 	  dout(10) << "get_or_create_pg " << info.pgid
@@ -1251,7 +1252,7 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     *pt = new ObjectStore::Transaction;
     *pfin = new C_Contexts(g_ceph_context);
     if (create) {
-      pg = _create_lock_new_pg(info.pgid, acting, **pt, creating_pgs[info.pgid].history);
+      pg = _create_lock_new_pg(info.pgid, acting, **pt, history);
     } else {
       pg = _create_lock_pg(info.pgid, **pt);
       pg->acting.swap(acting);
