@@ -229,7 +229,6 @@ public:
     std::map<void *, entity_name_t> notifs;
 
     Session() : last_sent_epoch(0), con(0) {}
-    ~Session() { if (con) con->put(); }
     void add_notif(void *n, entity_name_t& name) {
       notifs[n] = name;
     }
