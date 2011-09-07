@@ -3392,6 +3392,19 @@ public:
   }
 };
 
+void Client::flush_cap_releases()
+{
+  // send any cap releases
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++) {
+    if (p->second->release) {
+      messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
+      p->second->release = 0;
+    }
+  }
+}
+
 void Client::tick()
 {
   ldout(cct, 21) << "tick" << dendl;
@@ -3406,15 +3419,7 @@ void Client::tick()
     if (el > mdsmap->get_session_timeout() / 3.0)
       renew_caps();
 
-    // send any cap releases
-    for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
-	 p != mds_sessions.end();
-	 p++) {
-      if (p->second->release) {
-	messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
-	p->second->release = 0;
-      }
-    }
+    flush_cap_releases();
   }
 
   // delayed caps

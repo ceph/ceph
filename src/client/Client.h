@@ -198,6 +198,7 @@ class Client : public Dispatcher {
   utime_t last_cap_renew;
   void renew_caps();
   void renew_caps(int s);
+  void flush_cap_releases();
 public:
   void tick();
 
