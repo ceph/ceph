@@ -67,6 +67,8 @@ static void parse_cmd_args(vector<const char*> &args,
       *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
       *mode = CEPH_TOOL_MODE_OBSERVER;
+    } else if (ceph_argparse_flag(args, i, "--concise", (char*)NULL)) {
+      *concise = true;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
     } else {
