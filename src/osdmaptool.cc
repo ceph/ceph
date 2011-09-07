@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pg_bits", (char*)NULL)) {
+    } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pgp_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
