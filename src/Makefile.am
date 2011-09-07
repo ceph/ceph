@@ -929,6 +929,7 @@ libosd_la_SOURCES = \
 	osd/OSDCaps.cc \
 	osd/Watch.cc \
         osd/ClassHandler.cc
+libosd_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libosd_la_LIBADD = libglobal.la
 noinst_LTLIBRARIES += libosd.la
 
