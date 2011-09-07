@@ -459,6 +459,7 @@ void Client::update_inode_file_bits(Inode *in,
 Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 {
   Inode *in;
+  bool was_new = false;
   if (inode_map.count(st->vino)) {
     in = inode_map[st->vino];
     ldout(cct, 12) << "add_update_inode had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
@@ -476,14 +477,16 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     // immutable bits
     in->ino = st->vino.ino;
     in->snapid = st->vino.snapid;
-    in->rdev = st->rdev;
     in->mode = st->mode & S_IFMT;
-    if (new_root) ldout(cct, 10) << "setting this inode as root! " << *in << "; ino: " << root->ino << "; snapid" << root->snapid << dendl;
-    if (in->is_symlink())
-      in->symlink = st->symlink;
-
-    ldout(cct, 12) << "add_update_inode adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+    was_new = true;
   }
+
+  in->rdev = st->rdev;
+  if (in->is_symlink())
+    in->symlink = st->symlink;
+
+  if (was_new)
+    ldout(cct, 12) << "add_update_inode adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
 
   if (!st->cap.caps)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
@@ -2909,9 +2912,21 @@ void Client::handle_caps(MClientCaps *m)
   if (inode_map.count(vino))
     in = inode_map[vino];
   if (!in) {
-    ldout(cct, 5) << "handle_caps don't have vino " << vino << dendl;
-    m->put();
-    return;
+    if (m->get_op() == CEPH_CAP_OP_IMPORT) {
+      ldout(cct, 5) << "handle_caps adding ino " << vino << " on IMPORT" << dendl;
+      in = new Inode(cct, vino, &m->get_layout());
+      inode_map[vino] = in;
+      in->ino = vino.ino;
+      in->snapid = vino.snapid;
+      in->mode = m->head.mode;
+    } else {
+      ldout(cct, 5) << "handle_caps don't have vino " << vino << ", dropping" << dendl;
+      m->put();
+
+      // in case the mds is waiting on e.g. a revocation
+      flush_cap_releases();
+      return;
+    }
   }
 
   switch (m->get_op()) {
