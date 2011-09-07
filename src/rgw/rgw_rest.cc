@@ -562,7 +562,7 @@ static void init_auth_info(struct req_state *s)
 
   for (int i=0; (p = s->fcgx->envp[i]); ++i) {
     const char *prefix;
-    for (int prefix_num = 0; prefix = meta_prefixes[prefix_num].str; prefix_num++) {
+    for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
       int len = meta_prefixes[prefix_num].len;
       if (strncmp(p, prefix, len) == 0) {
         RGW_LOG(10) << "meta>> " << p << dendl;
