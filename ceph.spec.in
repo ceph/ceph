@@ -132,6 +132,7 @@ install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -222,6 +223,7 @@ fi
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
 %dir %{_localstatedir}/run/ceph/
+%dir %{_sysconfdir}/ceph/
 
 %files fuse
 %defattr(-,root,root,-)
