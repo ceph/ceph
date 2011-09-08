@@ -190,7 +190,6 @@ static int convert_collection(ObjectStore *store, coll_t cid)
 
 static int do_convertfs(ObjectStore *store)
 {
-  g_ceph_context->_conf->filestore_update_collections = true;
   int r = store->mount();
   if (r < 0)
     return r;
@@ -246,8 +245,11 @@ static int do_convertfs(ObjectStore *store)
 
 int OSD::convertfs(const std::string &dev, const std::string &jdev)
 {
+  g_ceph_context->_conf->filestore_update_collections = true;
   boost::scoped_ptr<ObjectStore> store(new FileStore(dev, jdev));
-  return do_convertfs(store.get());
+  int r = do_convertfs(store.get());
+  g_ceph_context->_conf->filestore_update_collections = false;
+  return r;
 }
 
 int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
