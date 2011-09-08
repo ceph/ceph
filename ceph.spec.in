@@ -173,6 +173,9 @@ fi
 %{_bindir}/rados
 %{_bindir}/rbd
 %{_bindir}/cdebugpack
+%{_bindir}/boto_tool
+%{_bindir}/ceph-coverage
+%{_bindir}/obsync
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/librados.so.*
@@ -183,6 +186,10 @@ fi
 %{_libdir}/ceph
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
+%{_sysconfdir}/bash_completion.d/ceph
+%{_sysconfdir}/bash_completion.d/rados
+%{_sysconfdir}/bash_completion.d/radosgw_admin
+%{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/cmon.8*
 %{_mandir}/man8/cmds.8*
@@ -204,9 +211,13 @@ fi
 %{_mandir}/man8/cauthtool.8*
 %{_mandir}/man8/cdebugpack.8*
 %{_mandir}/man8/cclsinfo.8.gz
+%{_mandir}/man8/librados-config.8.gz
 %{python_sitelib}/rados.py
 %{python_sitelib}/rados.pyc
 %{python_sitelib}/rados.pyo
+%{python_sitelib}/rgw.py
+%{python_sitelib}/rgw.pyc
+%{python_sitelib}/rgw.pyo
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
