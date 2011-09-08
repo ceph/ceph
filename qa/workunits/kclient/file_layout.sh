@@ -51,8 +51,17 @@ echo "hello, I'm a file with a custom layout" > layout_test/file2
 touch layout_test/file3
 cephfs layout_test/file3 show_layout > temp
 diff new_layout temp || return 1
+cat /sys/kernel/debug/ceph/*/mdsmap > temp
 ceph osd pool create newpool || true
 ceph mds add_data_pool 3 || true
+cat /sys/kernel/debug/ceph/*/mdsmap > temp2
+while diff -q temp2 temp
+do
+    echo "waiting for mdsmap to update"
+    sleep 1
+    cat /sys/kernel/debug/ceph/*/mdsmap > temp2
+done
+
 cephfs layout_test/file3 set_layout -p 3
 cephfs layout_test/file3 show_layout > temp
 diff file3_layout temp || return 1
