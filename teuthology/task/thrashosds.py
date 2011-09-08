@@ -67,3 +67,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
+        manager.wait_till_clean()

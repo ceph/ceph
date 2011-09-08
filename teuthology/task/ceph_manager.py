@@ -73,6 +73,7 @@ class Thrasher(gevent.Greenlet):
                 x = random.choice([self.remove_osd, self.add_osd])
                 x()
             time.sleep(delay)
+        self.all_up()
 
 class CephManager:
     def __init__(self, controller, logger=None):
