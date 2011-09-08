@@ -261,15 +261,25 @@ namespace __gnu_cxx {
 
 struct hobject_t {
   object_t oid;
-  string key;
   snapid_t snap;
   uint32_t hash;
 
+private:
+  string key;
+
+public:
+  const string &get_key() const {
+    return key;
+  }
+
   hobject_t() : snap(0), hash(0) {}
   hobject_t(object_t oid, const string &key, snapid_t snap, uint32_t hash) : 
-    oid(oid), key(key), snap(snap), hash(hash) {}
+    oid(oid), snap(snap), hash(hash), 
+    key(oid.name == key ? string() : key) {}
+
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
-    oid(soid.oid), key(key), snap(soid.snap), hash(hash) {}
+    oid(soid.oid), snap(soid.snap), hash(hash),
+    key(soid.oid.name == key ? string() : soid.oid.name) {}
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :

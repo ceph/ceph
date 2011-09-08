@@ -490,55 +490,11 @@ int run_command(CephToolCtx *ctx, const char *line)
   return 0;
 }
 
-int ceph_tool_cli_input(CephToolCtx *ctx, std::vector<std::string> &cmd, 
-			const char *outfile, bufferlist &indata)
+int ceph_tool_do_command(CephToolCtx *ctx, std::vector<std::string>& cmd, 
+			 bufferlist& indata, bufferlist& outdata)
 {
   string rs;
-  bufferlist odata;
-  int ret = do_command(ctx, cmd, indata, rs, odata);
-  if (ret)
-    return ret;
-
-  int len = odata.length();
-  if (!len) {
-    // no output
-    return 0;
-  }
-
-  if (!outfile) {
-    // error: no output specified
-    derr << " got " << len << " byte payload, discarding "
-         << "(specify -o <outfile)" << dendl;
-    return 1;
-  }
-  if (strcmp(outfile, "-") == 0) {
-    // write to stdout
-    fwrite(odata.c_str(), len, 1, stdout);
-    return 0;
-  }
-
-  // Write to a file. Don't truncate the file.
-  int fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT, 0644));
-  if (fd < 0) {
-    int err = errno;
-    derr << " failed to create file '" << outfile << "': "
-	 << cpp_strerror(err) << dendl;
-    return 1;
-  }
-  ret = odata.write_fd(fd);
-  if (ret) {
-    derr << " error writing file: " << cpp_strerror(ret) << dendl;
-    close(fd);
-    return 1;
-  }
-  derr << " wrote " << len << " byte payload to " << outfile << dendl;
-  if (close(fd)) {
-    int err = errno;
-    derr << " error while closing file '" << outfile << "': "
-	 << cpp_strerror(err) << dendl;
-    return 1;
-  }
-  return 0;
+  return do_command(ctx, cmd, indata, rs, outdata);
 }
 
 CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)

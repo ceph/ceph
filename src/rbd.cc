@@ -825,7 +825,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   const char *poolname = NULL;
-  uint64_t size = 0;
+  uint64_t size = 0;  // in bytes
   int order = 0;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL, *secretfile = NULL, *user = NULL, *devpath = NULL;
 
@@ -852,7 +852,7 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      size = sizell;
+      size = sizell << 20;   // bytes to MB
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;

@@ -2249,8 +2249,7 @@ void PG::read_log(ObjectStore *store)
 	     i != ls.end();
 	     ++i) {
 	  if (i->oid == e.soid.oid && i->snap == e.soid.snap) {
-	    e.soid.hash = i->hash;
-	    e.soid.key = i->key;
+	    e.soid = *i;
 	    found = true;
 	    break;
 	  }
