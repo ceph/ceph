@@ -1,5 +1,5 @@
 tasks:
 - ceph:
-- cfuse: [client.0]
+- cfuse:
 - autotest:
-    client.0: [dbench]
+    all: [dbench]

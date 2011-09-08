@@ -1,6 +1,6 @@
 tasks:
 - ceph:
-- cfuse: [client.0]
+- cfuse:
 - workunit:
     all:
       - misc
