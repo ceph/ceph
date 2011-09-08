@@ -528,6 +528,15 @@ void Monitor::handle_forward(MForward *m)
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+    /* Because this is a special fake connection, we need to break
+       the ref loop between Connection and MonSession differently
+       than we normally do. Here, the Message refers to the Connection
+       which refers to the Session, and nobody else refers to the Connection
+       or the Session. And due to the special nature of this message,
+       nobody refers to the Connection via the Session. So, clear out that
+       half of the ref loop.*/
+    s->con->put();
+    s->con = NULL;
 
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
