@@ -91,6 +91,9 @@ class CephManager:
                 "/bin/sh", "-c",
                 " ".join([
                         "LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib",
+                        '/tmp/cephtest/enable-coredump',
+                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                        '/tmp/cephtest/archive/coverage',
                         "/tmp/cephtest/binary/usr/local/bin/ceph -k /tmp/cephtest/ceph.keyring -c "+\
                             "/tmp/cephtest/ceph.conf " + suffix
                         ])
