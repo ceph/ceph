@@ -125,11 +125,28 @@ int main(int argc, const char **argv)
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  // input
   bufferlist indata;
-
   if (!in_file.empty()) {
     if (get_indata(in_file.c_str(), indata)) {
       derr << "failed to get data from '" << in_file << "'" << dendl;
+      return 1;
+    }
+  }
+
+  // output
+  int out_fd;
+  if (out_file.empty()) {
+    out_fd = ::open("/dev/null", O_WRONLY);
+    out_file = "/dev/null";
+  } else if (out_file == "-") {
+    out_fd = dup(0);
+  } else {
+    out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    if (out_fd < 0) {
+      int ret = errno;
+      derr << " failed to create file '" << out_file << "': "
+	   << cpp_strerror(ret) << dendl;
       return 1;
     }
   }
@@ -156,8 +173,7 @@ int main(int argc, const char **argv)
       if (args.empty()) {
 	if (ceph_tool_do_cli(ctx))
 	  ret = 1;
-      }
-      else {
+      } else {
 	while (!args.empty()) {
 	  vector<string> cmd;
 	  for (vector<const char*>::iterator n = args.begin();
@@ -169,9 +185,16 @@ int main(int argc, const char **argv)
 	    cmd.push_back(np);
 	  }
 
-	  if (ceph_tool_cli_input(ctx, cmd,
-		out_file.empty() ? NULL : out_file.c_str(), indata))
+	  bufferlist obl;
+	  if (ceph_tool_do_command(ctx, cmd, indata, obl))
 	    ret = 1;
+	  int err = obl.write_fd(out_fd);
+	  if (err) {
+	    derr << " failed to write " << obl.length() << " bytes to " << out_file << ": "
+		 << cpp_strerror(err) << dendl;
+	    goto out;
+	  }
+	  derr << " wrote " << obl.length() << " byte payload to " << out_file << dendl;
 	}
       }
       if (ceph_tool_messenger_shutdown())
@@ -186,6 +209,8 @@ int main(int argc, const char **argv)
     }
   }
 
+ out:
+  ::close(out_fd);
   if (ceph_tool_common_shutdown(ctx))
     ret = 1;
   return ret;
