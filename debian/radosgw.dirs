@@ -1,0 +1,2 @@
+var/run/ceph
+var/log/ceph
