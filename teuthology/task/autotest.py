@@ -25,9 +25,17 @@ def task(ctx, config):
         - autotest:
             client.0: [dbench]
             client.1: [bonnie]
+
+    You can also specify a list of tests to run on all clients::
+
+        tasks:
+        - ceph:
+        - cfuse:
+        - autotest:
+            all: [dbench]
     """
     assert isinstance(config, dict)
-
+    config = teuthology.replace_all_with_clients(ctx.cluster, config)
     log.info('Setting up autotest...')
     with parallel() as p:
         for role in config.iterkeys():

@@ -375,3 +375,18 @@ def get_first_mon(ctx, config):
     firstmon = sorted(mons)[0]
     assert firstmon
     return firstmon
+
+def replace_all_with_clients(cluster, config):
+    """
+    Converts a dict containing a key all to one
+    mapping all clients to the value of config['all']
+    """
+    assert isinstance(config, dict), 'config must be a dict'
+    if 'all' not in config:
+        return config
+    norm_config = {}
+    assert len(config) == 1, \
+        "config cannot have 'all' and specific clients listed"
+    for client in all_roles_of_type(cluster, 'client'):
+        norm_config['client.{id}'.format(id=client)] = config['all']
+    return norm_config

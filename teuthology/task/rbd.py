@@ -340,24 +340,6 @@ def mount(ctx, config):
                     ]
                 )
 
-def _normalize_config(cluster, config):
-    """
-    Returns a configuration that can be used by rbd subtasks.
-
-    This is either a list of clients or a dict mapping clients
-    to image options. "all" is converted to individual clients.
-    """
-    assert isinstance(config, list) or isinstance(config, dict), \
-        "task rbd only supports a list or dict for configuration"
-    if isinstance(config, list) or 'all' not in config:
-        return config
-    norm_config = {}
-    assert len(config) == 1, \
-        "rbd config cannot have 'all' and specific clients listed"
-    for client in teuthology.all_roles_of_type(cluster, 'client'):
-        norm_config['client.{id}'.format(id=client)] = config['all']
-    return norm_config
-
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -396,7 +378,9 @@ def task(ctx, config):
               image_size: 20480
               fs_type: xfs
     """
-    norm_config = _normalize_config(ctx.cluster, config)
+    norm_config = config
+    if isinstance(config, dict):
+        norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
     if isinstance(norm_config, dict):
         role_images = {}
         for role, properties in norm_config.iteritems():
