@@ -140,7 +140,7 @@ int main(int argc, const char **argv)
     out_fd = ::open("/dev/null", O_WRONLY);
     out_file = "/dev/null";
   } else if (out_file == "-") {
-    out_fd = dup(0);
+    out_fd = dup(STDOUT_FILENO);
   } else {
     out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
     if (out_fd < 0) {
