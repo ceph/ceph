@@ -1,6 +1,7 @@
 tasks:
 - ceph:
-- rbd: [client.0]
+- rbd:
+    all:
 - workunit:
     all:
       - suites/iozone.sh

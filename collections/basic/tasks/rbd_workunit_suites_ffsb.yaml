@@ -1,7 +1,7 @@
 tasks:
 - ceph:
 - rbd:
-    client.0:
+    all:
       image_size: 20480
 - workunit:
     all:
