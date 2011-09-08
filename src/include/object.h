@@ -279,7 +279,7 @@ public:
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
     oid(soid.oid), snap(soid.snap), hash(hash),
-    key(soid.oid.name == key ? string() : soid.oid.name) {}
+    key(soid.oid.name == key ? string() : key) {}
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
