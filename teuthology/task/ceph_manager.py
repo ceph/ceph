@@ -4,9 +4,6 @@ import re
 import gevent
 from orchestra import run
 
-CLEANINT=60
-DELAY=5
-
 class Thrasher(gevent.Greenlet):
     def __init__(self, manager, config, logger=None):
         self.ceph_manager = manager
@@ -17,7 +14,7 @@ class Thrasher(gevent.Greenlet):
         self.stopping = False
         self.logger = logger
         self.config = config
-        if self.logger != None:
+        if self.logger is not None:
             self.log = lambda x: self.logger.info(x)
         else:
             def tmp(x):
@@ -29,12 +26,9 @@ class Thrasher(gevent.Greenlet):
         self.start()
 
     def remove_osd(self):
-        chance_down = 0
-        if self.config.get("chance_down"):
-            if isinstance(self.config["chance_down"], int):
-                chance_down = float(self.config["chance_down"])/100
-            else:
-                chance_down = self.config["chance_down"]
+        chance_down = self.config.get("chance_down", 0)
+        if isinstance(chance_down, int):
+            chance_down = float(chance_down) / 100
         osd = random.choice(self.in_osds)
         if random.uniform(0,1) < chance_down:
             self.log("Marking osd {id_} down".format(id_=osd))
@@ -62,22 +56,14 @@ class Thrasher(gevent.Greenlet):
         self.get()
 
     def do_thrash(self):
-        cleanint = CLEANINT
-        delay = DELAY
-        minin = 2
-        minout = 0
-        if self.config.get("clean_interval"):
-            cleanint = self.config["clean_interval"]
-        if self.config.get("op_delay"):
-            delay = self.config["op_delay"]
-        if self.config.get("min_in"):
-            minin = self.config["min_in"]
-        if self.config.get("min_out"):
-            minout = self.config["min_out"]
+        cleanint = self.config.get("clean_interval", 60)
+        delay = self.config.get("op_delay", 5)
+        minin = self.config.get("min_in", 2)
+        minout = self.config.get("min_out", 0)
         self.log("starting do_thrash")
         while not self.stopping:
             self.log(" ".join([str(x) for x in ["in_osds: ", self.in_osds, " out_osds: ", self.out_osds]]))
-            if random.uniform(0,1) < (float(delay)/cleanint):
+            if random.uniform(0,1) < (float(delay) / cleanint):
                 self.ceph_manager.wait_till_clean()
             if (len(self.out_osds) == minout):
                 self.remove_osd()
