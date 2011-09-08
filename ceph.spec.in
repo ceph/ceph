@@ -1,6 +1,12 @@
 %define with_radosgw %{?_with_radosgw: 1} %{!?_with_radosgw: 0}
 %define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
 
+# it seems there is no usable tcmalloc rpm for x86_64; parts of
+# google-perftools don't compile on x86_64, and apparently the
+# decision was to not build the package at all, even if tcmalloc
+# itself would have worked just fine.
+%bcond_with tcmalloc
+
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
@@ -19,6 +25,12 @@ BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel,
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
 BuildRequires: nss-devel, libatomic_ops-devel
 BuildRequires: pkgconfig, python, keyutils-libs-devel
+%if %{with tcmalloc}
+# use isa so this will not be satisfied by
+# google-perftools-devel.i686 on a x86_64 box
+# http://rpm.org/wiki/PackagerDocs/ArchDependencies
+BuildRequires: google-perftools-devel%{?_isa}
+%endif
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires(post): chkconfig, binutils, libedit
 Requires(preun): chkconfig
@@ -100,9 +112,12 @@ MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
 MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
 %endif
 
+# be explicit about --with/without-tcmalloc because the autoconf
+# default differs from what's needed for rpm
 %{configure} --prefix=/usr --sbindir=/sbin \
 --localstatedir=/var --sysconfdir=/etc \
---without-hadoop $MY_CONF_OPT
+--without-hadoop $MY_CONF_OPT \
+%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
 
 make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
