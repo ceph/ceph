@@ -4134,6 +4134,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (pg->old_peering_msg(m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
+      delete t;
+      delete fin;
       continue;
     }
 
@@ -4179,6 +4181,8 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   if (pg->old_peering_msg(m->get_epoch())) {
     dout(10) << "ignoring old peering message " << *m << dendl;
     pg->unlock();
+    delete t;
+    delete fin;
     return;
   }
 
@@ -4224,6 +4228,8 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     if (pg->old_peering_msg(m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
+      delete t;
+      delete fin;
       continue;
     }
 
