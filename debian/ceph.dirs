@@ -1,3 +1,4 @@
 etc/ceph
 var/log/ceph
 var/lib/ceph/tmp
+var/run/ceph
