@@ -188,13 +188,15 @@ int main(int argc, const char **argv)
 	  bufferlist obl;
 	  if (ceph_tool_do_command(ctx, cmd, indata, obl))
 	    ret = 1;
-	  int err = obl.write_fd(out_fd);
-	  if (err) {
-	    derr << " failed to write " << obl.length() << " bytes to " << out_file << ": "
-		 << cpp_strerror(err) << dendl;
-	    goto out;
+	  if (obl.length()) {
+	    int err = obl.write_fd(out_fd);
+	    if (err) {
+	      derr << " failed to write " << obl.length() << " bytes to " << out_file << ": "
+		   << cpp_strerror(err) << dendl;
+	      goto out;
+	    }
+	    derr << " wrote " << obl.length() << " byte payload to " << out_file << dendl;
 	  }
-	  derr << " wrote " << obl.length() << " byte payload to " << out_file << dendl;
 	}
       }
       if (ceph_tool_messenger_shutdown())
