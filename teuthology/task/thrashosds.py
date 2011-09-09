@@ -55,6 +55,10 @@ def task(ctx, config):
         timeout: 600
     - interactive:
     """
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        'thrashosds task only accepts a dict for configuration'
     log.info('Beginning thrashosds...')
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
