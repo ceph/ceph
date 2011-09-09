@@ -51,6 +51,7 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
+        s3tests_conf.setdefault('fixtures', {})
         s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
         for section, user in [('s3 main', 'foo'), ('s3 alt', 'bar')]:
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
