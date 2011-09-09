@@ -91,7 +91,11 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   int whoami = mc.monmap.get_rank(args[0]);
   assert(whoami >= 0);
-  g_conf->public_addr = mc.monmap.get_addr(whoami);
+  ostringstream ss;
+  ss << mc.monmap.get_addr(whoami);
+  std::string sss(ss.str());
+  g_ceph_context->_conf->set_val("public_addr", sss.c_str());
+  g_ceph_context->_conf->apply_changes(NULL);
   SimpleMessenger *rank = new SimpleMessenger(g_ceph_context);
   int err = rank->bind(getpid());
   if (err < 0)
