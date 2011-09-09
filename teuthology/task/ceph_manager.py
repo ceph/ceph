@@ -158,9 +158,13 @@ class CephManager:
     def is_clean(self):
         return self.get_num_active_clean() == self.get_num_pgs()
 
-    def wait_till_clean(self):
+    def wait_till_clean(self, timeout=None):
         self.log("waiting till clean")
+        start = time.time()
         while not self.is_clean():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to become clean before timeout expired'
             time.sleep(3)
         self.log("clean!")
 

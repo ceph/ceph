@@ -39,7 +39,11 @@ def task(ctx, config):
        wrongly marked down will mark itself back up again.) This value
        can be either an integer (eg, 75) or a float probability (eg
        0.75).
-    
+
+    timeout: (360) the number of seconds to wait for the cluster
+       to become clean before the task exits. If this doesn't happen,
+       an exception will be raised.
+
     example:
 
     tasks:
@@ -48,6 +52,7 @@ def task(ctx, config):
         chance_down: 10
         op_delay: 3
         min_in: 1
+        timeout: 600
     - interactive:
     """
     log.info('Beginning thrashosds...')
@@ -67,4 +72,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
-        manager.wait_till_clean()
+        manager.wait_till_clean(config.get('timeout', 360))
