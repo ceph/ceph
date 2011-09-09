@@ -1,0 +1,62 @@
+=====================================
+ cfuse -- FUSE-based client for ceph
+=====================================
+
+.. program:: cfuse
+
+Synopsis
+========
+
+| **cfuse** [ -m *monaddr*:*port* ] *mountpoint* [ *fuse options* ]
+
+
+Description
+===========
+
+**cfuse** is a FUSE (File system in USErspace) client for Ceph
+distributed file system. It will mount a ceph file system (specified
+via the -m option for described by ceph.conf (see below) at the
+specific mount point.
+
+The file system can be unmounted with::
+
+        fusermount -u mountpoint
+
+or by sending ``SIGINT`` to the ``cfuse`` process.
+
+
+Options
+=======
+
+Any options not recognized by cfuse will be passed on to libfuse.
+
+.. option:: -d
+
+   Detach from console and daemonize after startup.
+
+.. option:: -c ceph.conf, --conf=ceph.conf
+
+   Use *ceph.conf* configuration file instead of the default
+   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+
+.. option:: -m monaddress[:port]
+
+   Connect to specified monitor (instead of looking through ceph.conf).
+
+.. option:: -r root_directory
+
+   Use root_directory as the mounted root, rather than the full Ceph tree.
+
+
+Availability
+============
+
+**cfuse** is part of the Ceph distributed file system. Please refer to
+the Ceph wiki at http://ceph.newdream.net/wiki for more information.
+
+
+See also
+========
+
+fusermount(8),
+:doc:`ceph <ceph>`\(8)

@@ -1,0 +1,47 @@
+=========================================
+ cdebugpack -- ceph debug packer utility
+=========================================
+
+.. program:: cdebugpack
+
+Synopsis
+========
+
+| **cdebugpack** [ *options* ] *filename.tar.gz*
+
+
+Description
+===========
+
+**cdebugpack** will build a tarball containing various items that are
+useful for debugging crashes. The resulting tarball can be shared with
+Ceph developers when debugging a problem.
+
+The tarball will include the binaries for cmds, cosd, and cmon, any
+log files, the ceph.conf configuration file, any core files we can
+find, and (if the system is running) dumps of the current osd, mds,
+and pg maps from the monitor.
+
+
+Options
+=======
+
+.. option:: -c ceph.conf, --conf=ceph.conf
+
+   Use *ceph.conf* configuration file instead of the default
+   ``/etc/ceph/ceph.conf`` to determine monitor addresses during
+   startup.
+
+
+Availability
+============
+
+**cdebugpack** is part of the Ceph distributed file system. Please
+refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
+information.
+
+
+See also
+========
+
+:doc:`ceph <ceph>`\(8)

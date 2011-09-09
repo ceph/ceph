@@ -7,8 +7,9 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [ -p | --pool *pool* ] [ --size *size* ] [ --order *bits* ]
-  [ *command* ... ]
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [ -p | --pool *pool* ] [
+  --size *size* ] [ --order *bits* ] [ *command* ... ]
+
 
 Description
 ===========
@@ -168,4 +169,5 @@ the Ceph wiki at http://ceph.newdream.net/wiki for more information.
 See also
 ========
 
-:doc:`ceph <ceph>`\(8), :doc:`rados <rados>`\(8)
+:doc:`ceph <ceph>`\(8),
+:doc:`rados <rados>`\(8)
