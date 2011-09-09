@@ -542,8 +542,8 @@ int main(int argc, char **argv)
   RGWAccess *store;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
-  bool gen_secret;
-  bool gen_key;
+  bool gen_secret = false;
+  bool gen_key = false;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
