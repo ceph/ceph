@@ -24,6 +24,7 @@ class CephContext;
 class ThreadPool {
   CephContext *cct;
   string name;
+  string lockname;
   Mutex _lock;
   Cond _cond;
   bool _stop, _pause;
@@ -129,7 +130,8 @@ private:
 public:
   ThreadPool(CephContext *cct_, string nm, int n=1) :
     cct(cct_), name(nm),
-    _lock((new string(name + "::lock"))->c_str()),  // deliberately leak this
+    lockname(nm + "::lock"),
+    _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
     _pause(false),
     _draining(0),

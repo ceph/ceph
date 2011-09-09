@@ -2578,7 +2578,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     if (!s) {
       s = new Session;
       con->set_priv(s->get());
-      s->con = con->get();
+      s->con = con;
       dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
     }
 
@@ -4137,6 +4137,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (pg->old_peering_msg(m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
+      delete t;
+      delete fin;
       continue;
     }
 
@@ -4182,6 +4184,8 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   if (pg->old_peering_msg(m->get_epoch())) {
     dout(10) << "ignoring old peering message " << *m << dendl;
     pg->unlock();
+    delete t;
+    delete fin;
     return;
   }
 
@@ -4227,6 +4231,8 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     if (pg->old_peering_msg(m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
+      delete t;
+      delete fin;
       continue;
     }
 
@@ -4594,6 +4600,7 @@ void OSD::_remove_pg(PG *pg)
 
   // remove from map
   pg_map.erase(pgid);
+  pg->put(); // since we've taken it out of map
   unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
   _put_pool(pg->pool);

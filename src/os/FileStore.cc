@@ -1065,6 +1065,7 @@ int FileStore::_detect_fs()
     dout(0) << "mount FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
     ioctl_fiemap = false;
   }
+  free(fiemap);
 
   struct statfs st;
   r = ::fstatfs(fd, &st);
