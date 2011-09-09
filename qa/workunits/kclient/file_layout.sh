@@ -61,6 +61,7 @@ do
     sleep 1
     sudo cat /sys/kernel/debug/ceph/*/mdsmap > temp2
 done
+sudo rm temp2
 
 cephfs layout_test/file3 set_layout -p 3
 cephfs layout_test/file3 show_layout > temp
