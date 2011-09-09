@@ -67,7 +67,7 @@ Commands
 
 .. todo:: rst "option" directive seems to require --foo style options, parsing breaks on subcommands.. the args show up as bold too
 
-:command:`ls` [*pool*]
+:command:`ls` [*pool-name*]
   Will list all rbd images listed in the rbd_directory object.
 
 :command:`info` [*image-name*]
