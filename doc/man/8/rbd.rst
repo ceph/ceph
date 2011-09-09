@@ -82,9 +82,6 @@ Commands
 :command:`rm` [*image-name*]
   Deletes rbd image (including all data blocks)
 
-:command:`rm` [*image-name*]
-  Deletes rbd image (including all data blocks)
-
 :command:`export` [*image-name*] [*dest-path*]
   Exports image to dest path.
 
