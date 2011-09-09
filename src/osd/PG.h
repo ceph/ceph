@@ -372,7 +372,7 @@ public:
       bufferlist snaps;   // only for clone entries
       bool invalid_hash; // only when decoding sobject_t based entries
       
-      Entry() : op(0) {}
+      Entry() : op(0), invalid_hash(false) {}
       Entry(int _op, const hobject_t& _soid,
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
