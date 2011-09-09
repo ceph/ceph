@@ -1171,7 +1171,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     ObjectContext *src_obc = 0;
     if (ceph_osd_op_type_multi(op.op)) {
-      src_obc = ctx->src_obc[hobject_t(osd_op.soid, soid.get_key(), soid.hash)];
+      src_obc = ctx->src_obc[hobject_t(osd_op.soid, 
+				       ((MOSDOp *)ctx->op)->get_object_locator().key,
+				       soid.hash)];
       assert(src_obc);
     }
 
@@ -1692,8 +1694,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = -EINVAL;
 	  break;
 	}
-	t.clone_range(coll, hobject_t(osd_op.soid, obs.oi.soid.get_key(), 
-				      obs.oi.soid.hash),
+	t.clone_range(coll, src_obc->obs.oi.soid,
 		      obs.oi.soid, op.clonerange.src_offset,
 		      op.clonerange.length, op.clonerange.offset);
 		      
