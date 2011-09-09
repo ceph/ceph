@@ -1,132 +1,221 @@
-.TH RBD 8
+.TH "RBD" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B rbd
-[ \fB\-c\fI ceph.conf\fR ]
-[ \fB\-m\fI monaddr\fR ]
-[ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
-[ \fB\-\-size\fI size\fR ]
-[ \fB\-\-order\fI bits\fR ]
-[ \fIcommand ...\fR ]
-
+.nf
+\fBrbd\fP [ \-c \fIceph.conf\fP ] [ \-m \fImonaddr\fP ] [ \-p | \-\-pool \fIpool\fP ] [
+\-\-size \fIsize\fP ] [ \-\-order \fIbits\fP ] [ \fIcommand\fP ... ]
+.fi
+.sp
 .SH DESCRIPTION
-.B rbd
-is a utility for manipulating rados block device (RBD) images, used by the Linux
-rbd driver and the rbd storage driver for Qemu/KVM.  RBD images are
-simple block devices that are striped over objects and stored in a RADOS object store.
-The size of the objects the image is striped over must be a power of two.
+.sp
+\fBrbd\fP is a utility for manipulating rados block device (RBD) images,
+used by the Linux rbd driver and the rbd storage driver for Qemu/KVM.
+RBD images are simple block devices that are striped over objects and
+stored in a RADOS object store. The size of the objects the image is
+striped over must be a power of two.
 .SH OPTIONS
+.INDENT 0.0
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf \fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
-to determine monitor addresses during startup.
+.B \-c ceph.conf, \-\-conf ceph.conf
+Use ceph.conf configuration file instead of the default /etc/ceph/ceph.conf to
+determine monitor addresses during startup.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.B \-m monaddress[:port]
+Connect to specified monitor (instead of looking through ceph.conf).
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-p\fI pool\fR, \fB\-\-pool \fIpool\fR
-Interact with the given \fIpool\fP.  Required by most commands.
+.B \-p pool, \-\-pool pool
+Interact with the given pool. Required by most commands.
+.UNINDENT
 .SH PARAMETERS
+.INDENT 0.0
 .TP
-\fB\-\-size \fIsize-in-mb\fP
+.B \-\-size size\-in\-mb
 Specifies the size (in megabytes) of the new rbd image.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-order \fIbits\fP
-Specifies the object size expressed as a number of bits, such that the object size is 1 << \fIorder\fR. The default is 22 (4 MB).
+.B \-\-order bits
+Specifies the object size expressed as a number of bits, such that
+the object size is \fB1 << order\fP. The default is 22 (4 MB).
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-snap \fIsnap\fP
+.B \-\-snap snap
 Specifies the snapshot name for the specific operation.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-user \fIusername\fP
+.B \-\-user username
 Specifies the username to use with the map command.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-secret \fIfilename\fP
+.B \-\-secret filename
 Specifies a file containing the secret to use with the map command.
+.UNINDENT
 .SH COMMANDS
+.INDENT 0.0
 .TP
-\fBls \fR[ \fIpool-name\fP ]
-Will list all rbd images listed in the \fIrbd_directory\fR object.
+.B \fBls\fP [\fIpool\-name\fP]
+Will list all rbd images listed in the rbd_directory object.
 .TP
-\fBinfo \fR[ \fIimage-name\fP ]
+.B \fBinfo\fP [\fIimage\-name\fP]
 Will dump information (such as size and order) about a specific rbd image.
 .TP
-\fBcreate \fR[ \fIimage-name\fP ]
-Will create a new rbd image.  You must also specify the size via \fB\-\-size\fR.
+.B \fBcreate\fP [\fIimage\-name\fP]
+Will create a new rbd image. You must also specify the size via \-\-size.
 .TP
-\fBresize \fR[ \fIimage-name\fP ]
-Resizes rbd image.  The size parameter also needs to be specified.
+.B \fBresize\fP [\fIimage\-name\fP]
+Resizes rbd image. The size parameter also needs to be specified.
 .TP
-\fBrm \fR[ \fIimage-name\fP ]
+.B \fBrm\fP [\fIimage\-name\fP]
 Deletes rbd image (including all data blocks)
 .TP
-\fBexport \fR[ \fIimage-name\fP ] \fR[ \fIdest-path\fP ]
+.B \fBexport\fP [\fIimage\-name\fP] [\fIdest\-path\fP]
 Exports image to dest path.
 .TP
-\fBimport \fR[ \fIpath\fP ] \fR[ \fIdest-image\fP ]
+.B \fBimport\fP [\fIpath\fP] [\fIdest\-image\fP]
 Creates a new image and imports its data from path.
 .TP
-\fBcp \fR[ \fIsrc-image\fP ] \fR[ \fIdest-image\fP ]
-Copies the content of a src-image into the newly created dest-image.
+.B \fBcp\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
+Copies the content of a src\-image into the newly created dest\-image.
 .TP
-\fBmv \fR[ \fIsrc-image\fP ] \fR[ \fIdest-image\fP ]
+.B \fBmv\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Renames an image.
 .TP
-\fBsnap ls \fR[ \fIimage-name\fP ]
+.B \fBsnap\fP ls [\fIimage\-name\fP]
 Dumps the list of snapshots inside a specific image.
 .TP
-\fBsnap create \fR[ \fIimage-name\fP ]
+.B \fBsnap\fP create [\fIimage\-name\fP]
 Creates a new snapshot. Requires the snapshot name parameter specified.
 .TP
-\fBsnap rollback \fR[ \fIimage-name\fP ]
-Rollback image content to snapshot. This will iterate through the entire blocks array and update the data head content to the snapshotted version.
+.B \fBsnap\fP rollback [\fIimage\-name\fP]
+Rollback image content to snapshot. This will iterate through the entire blocks
+array and update the data head content to the snapshotted version.
 .TP
-\fBsnap rm \fR[ \fIimage-name\fP ]
+.B \fBsnap\fP rm [\fIimage\-name\fP]
 Removes the specified snapshot.
 .TP
-\fBmap \fR[ \fIimage-name\fP ]
+.B \fBmap\fP [\fIimage\-name\fP]
 Maps the specified image to a block device via the rbd kernel module.
 .TP
-\fBunmap \fR[ \fIdevice-path\fP ]
+.B \fBunmap\fP [\fIdevice\-path\fP]
 Unmaps the block device that was mapped via the rbd kernel module.
+.UNINDENT
 .SH IMAGE NAME
-In addition to using the \fB\-\-pool\fR and the \fB\-\-snap\fR options, the image name can include both the pool name and the snapshot name. The image name format is as follows:
-.IP
-[\fIpool\fP/]image-name[@\fIsnap\fP]
-.PP
-Thus an image name that contains a slash character ('/') requires specifying the pool name explicitly.
+.sp
+In addition to using the \-\-pool and the \-\-snap options, the image name can include both
+the pool name and the snapshot name. The image name format is as follows:
+.sp
+.nf
+.ft C
+[pool/]image\-name[@snap]
+.ft P
+.fi
+.sp
+Thus an image name that contains a slash character (\(aq/\(aq) requires specifying the pool
+name explicitly.
 .SH EXAMPLES
+.sp
 To create a new rbd image that is 100 GB:
-.IP
-rbd -p mypool create myimage --size 102400
-.PP
-or alternatively
-.IP
-rbd create mypool/myimage --size 102400
-.PP
-To use a non-default object size (8 MB):
-.IP
-rbd create mypool/myimage --size 102400 --order 23
-.PP
+.sp
+.nf
+.ft C
+rbd \-p mypool create myimage \-\-size 102400
+.ft P
+.fi
+.sp
+or alternatively:
+.sp
+.nf
+.ft C
+rbd create mypool/myimage \-\-size 102400
+.ft P
+.fi
+.sp
+To use a non\-default object size (8 MB):
+.sp
+.nf
+.ft C
+rbd create mypool/myimage \-\-size 102400 \-\-order 23
+.ft P
+.fi
+.sp
 To delete an rbd image (be careful!):
-.IP
+.sp
+.nf
+.ft C
 rbd rm mypool/myimage
-.PP
+.ft P
+.fi
+.sp
 To create a new snapshot:
-.IP
+.sp
+.nf
+.ft C
 rbd create mypool/myimage@mysnap
-.PP
+.ft P
+.fi
+.sp
 To map an image via the kernel with cephx enabled:
-.IP
-rbd map myimage --user admin --secret secretfile
-.PP
+.sp
+.nf
+.ft C
+rbd map myimage \-\-user admin \-\-secret secretfile
+.ft P
+.fi
+.sp
 To unmap an image:
-.IP
+.sp
+.nf
+.ft C
 rbd unmap /dev/rbd0
-.PP
+.ft P
+.fi
 .SH AVAILABILITY
-.B rbd
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBrbd\fP is part of the Ceph distributed file system. Please refer to
+the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more information.
 .SH SEE ALSO
-.BR ceph (8), rados (8)
+.sp
+\fBceph\fP(8),
+\fBrados\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

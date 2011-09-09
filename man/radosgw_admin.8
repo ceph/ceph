@@ -1,85 +1,182 @@
-.TH RADOSGW_ADMIN 8
+.TH "RADOSGW_ADMIN" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 radosgw_admin \- rados REST gateway user administration utility
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B radosgw_admin <cmd> [options..]
+.nf
+\fBradosgw_admin\fP \fIcommand\fP [ \fIoptions\fP \fI...\fP ]
+.fi
+.sp
 .SH DESCRIPTION
-.B radosgw_admin
-is a RADOS gateway user administration utility. It allows creating and modifying users.
+.sp
+\fBradosgw_admin\fP is a RADOS gateway user administration utility. It
+allows creating and modifying users.
 .SH COMMANDS
+.sp
+\fIcommand\fP can be one of the following options:
+.INDENT 0.0
 .TP
-\fBcmd\fR can be one of the following options:
-.IP
- user create    Create a new user
- user modify    Modify a user
- user info      Display information of a user
- user rm        Remove a user
- bucket list    List all buckets
- bucket unlink  Remove a bucket
- policy         Display bucket/object policy
- log show       Show the log of a bucket (with a specified date)
-.PP
-.SH OPTIONS
+.B \fBuser create\fP
+Create a new user
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
-to determine monitor addresses during startup.
+.B \fBuser modify\fP
+Modify a user
 .TP
-\fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.B \fBuser info\fP
+Display information of a user
 .TP
-\fB\-\-uid=\fIuid\fR
-The S3 user/access key.
-.TP
-\fB\-\-secret=\fIsecret\fR
-The S3 secret.
-.TP
-\fB\-\-display\-name=\fIname\fR
-Configure the display name of the user.
-.TP
-\fB\-\-email=\fIemail\fR
-The e-mail address of the user
-.TP
-\fB\-\-bucket=\fIbucket\fR
-Specify the bucket name.
-.TP
-\fB\-\-object=\fIobject\fR
-Specify the object name.
-.TP
-\fB\-\-date=\fIyyyy-mm-dd\fR
-The date need for some commands
-.TP
-\fB\-\-os\-user=\fIgroup:name\fR
-The OpenStack user (only needed for use with OpenStack)
-.TP
-\fB\-\-os\-secret=\fIkey\fR
-The OpenStack key
-.TP
-\fB\-\-auth\-uid=\fIauid\fR
-The librados auid
-.SH EXAMPLES
-Generate a new user
-.IP
- $ radosgw_admin user gen --display-name="johnny rotten" --email=johnny@rotten.com
- User ID: CHBQFRTG26I8DGJDGQLW
- Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
- Display Name: johnny rotten
-.PP
+.B \fBuser rm\fP
 Remove a user
-.IP
- $ radosgw_admin user rm --uid=CHBQFRTG26I8DGJDGQLW
-.PP
+.TP
+.B \fBbucket list\fP
+List all buckets
+.TP
+.B \fBbucket unlink\fP
 Remove a bucket
-.IP
- $ radosgw_admin bucket unlink --bucket=foo
-.PP
-Thow the logs of a bucket from April 1st 2011
-.IP
- $ radosgw_admin log show --bucket=foo --date=2011=04-01
-.PP
+.TP
+.B \fBpolicy\fP
+Display bucket/object policy
+.TP
+.B \fBlog show\fP
+Show the log of a bucket (with a specified date)
+.UNINDENT
+.SH OPTIONS
+.INDENT 0.0
+.TP
+.B \-c ceph.conf, \-\-conf=ceph.conf
+Use \fIceph.conf\fP configuration file instead of the default
+\fB/etc/ceph/ceph.conf\fP to determine monitor addresses during
+startup.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-m monaddress[:port]
+Connect to specified monitor (instead of looking through ceph.conf).
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-uid=uid
+The S3 user/access key.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-secret=secret
+The S3 secret.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-display\-name=name
+Configure the display name of the user.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-email=email
+The e\-mail address of the user
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-bucket=bucket
+Specify the bucket name.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-object=object
+Specify the object name.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-date=yyyy\-mm\-dd
+The date need for some commands
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-os\-user=group:name
+The OpenStack user (only needed for use with OpenStack)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-os\-secret=key
+The OpenStack key
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-auth\-uid=auid
+The librados auid
+.UNINDENT
+.SH EXAMPLES
+.sp
+Generate a new user:
+.sp
+.nf
+.ft C
+$ radosgw_admin user gen \-\-display\-name="johnny rotten" \-\-email=johnny@rotten.com
+User ID: CHBQFRTG26I8DGJDGQLW
+Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
+Display Name: johnny rotten
+.ft P
+.fi
+.sp
+Remove a user:
+.sp
+.nf
+.ft C
+$ radosgw_admin user rm \-\-uid=CHBQFRTG26I8DGJDGQLW
+.ft P
+.fi
+.sp
+Remove a bucket:
+.sp
+.nf
+.ft C
+$ radosgw_admin bucket unlink \-\-bucket=foo
+.ft P
+.fi
+.sp
+Show the logs of a bucket from April 1st 2011:
+.sp
+.nf
+.ft C
+$ radosgw_admin log show \-\-bucket=foo \-\-date=2011=04\-01
+.ft P
+.fi
 .SH AVAILABILITY
-.B radosgw_admin
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBradosgw_admin\fP is part of the Ceph distributed file system.  Please
+refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+information.
 .SH SEE ALSO
-.BR ceph (8)
+.sp
+\fBceph\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

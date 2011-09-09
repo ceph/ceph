@@ -1,110 +1,185 @@
-.TH RADOS 8
+.TH "RADOS" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 rados \- rados object storage utility
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B rados
-[ \fB\-m\fI monaddr\fR ]
-[ mkpool  | rmpool \fI foo]
-[ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
-[ \fB\-s\fP | \fB\-\-snap\fI snap\fR ]
-[ \fB\-i\fI infile\fR ]
-[ \fB\-o\fI outfile\fR ]
-\fIcommand ...\fR
-
+.nf
+\fBrados\fP [ \-m \fImonaddr\fP ] [ mkpool | rmpool \fIfoo\fP ] [ \-p | \-\-pool
+\fIpool\fP ] [ \-s | \-\-snap \fIsnap\fP ] [ \-i \fIinfile\fP ] [ \-o \fIoutfile\fP ]
+\fIcommand\fP ...
+.fi
+.sp
 .SH DESCRIPTION
-.B rados
-is a utility for interacting with a Ceph object storage cluster (RADOS), part of the
-Ceph distributed file system.
+.sp
+\fBrados\fP is a utility for interacting with a Ceph object storage
+cluster (RADOS), part of the Ceph distributed file system.
 .SH OPTIONS
+.INDENT 0.0
 .TP
-\fB\-p\fI pool\fR, \fB\-\-pool \fIpool\fR
-Interact with the given \fIpool\fP.  Required by most commands.
+.B \-p pool, \-\-pool pool
+Interact with the given pool. Required by most commands.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-s\fI snap\fR, \fB\-\-snap \fIsnap\fR
-Read from the given pool snapshot.  Valid for all pool-specific read operations.
+.B \-s snap, \-\-snap snap
+Read from the given pool snapshot. Valid for all pool\-specific read operations.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-i \fIinfile\fP
-will specify an input file to be passed along as a payload with the \fIcommand\fP to the
-monitor cluster.  This is only used for specific monitor commands.
+.B \-i infile
+will specify an input file to be passed along as a payload with the
+command to the monitor cluster. This is only used for specific
+monitor commands.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-o \fIoutfile\fP
-will write any payload returned by the monitor cluster with its reply to \fIoutfile\fP.
-Only specific monitor commands (e.g. \fIosd getmap\fP) return a payload.
+.B \-o outfile
+will write any payload returned by the monitor cluster with its
+reply to outfile. Only specific monitor commands (e.g. osd getmap)
+return a payload.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
-to determine monitor addresses during startup.
+.B \-c ceph.conf, \-\-conf=ceph.conf
+Use ceph.conf configuration file instead of the default
+/etc/ceph/ceph.conf to determine monitor addresses during startup.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.B \-m monaddress[:port]
+Connect to specified monitor (instead of looking through ceph.conf).
+.UNINDENT
 .SH GLOBAL COMMANDS
+.INDENT 0.0
 .TP
-\fBlspools\fI
+.B \fBlspools\fP
 List object pools
 .TP
-\fBdf\fI
-Show utilization statistics, including disk usage (bytes) and object counts, over the entire system
-and broken down by pool.
+.B \fBdf\fP
+Show utilization statistics, including disk usage (bytes) and object
+counts, over the entire system and broken down by pool.
 .TP
-\fBmkpool\fI foo
+.B \fBmkpool\fP \fIfoo\fP
 Create a pool with name foo.
 .TP
-\fBrmpool\fI foo
+.B \fBrmpool\fP \fIfoo\fP
 Delete the pool foo (and all its data)
+.UNINDENT
 .SH POOL SPECIFIC COMMANDS
+.INDENT 0.0
 .TP
-\fBget \fIname\fP \fIoutfile\fP
-Read object \fIname\fP from the cluster and write it to \fIoutfile\fP.
+.B \fBget\fP \fIname\fP \fIoutfile\fP
+Read object name from the cluster and write it to outfile.
 .TP
-\fBput \fIname\fP \fIinfile\fP
-Write object \fIname\fP to the cluster with contents from \fIinfile\fP.
+.B \fBput\fP \fIname\fP \fIinfile\fP
+Write object name to the cluster with contents from infile.
 .TP
-\fBrm \fIname\fP
-Remove object \fIname\fP.
+.B \fBrm\fP \fIname\fP
+Remove object name.
 .TP
-\fBls \fIoutfile\fP
-List objects in given pool and write to \fIoutfile\fP.
+.B \fBls\fP \fIoutfile\fP
+List objects in given pool and write to outfile.
 .TP
-\fBlssnap\fP
+.B \fBlssnap\fP
 List snapshots for given pool.
 .TP
-\fBmksnap \fIfoo\fP
+.B \fBmksnap\fP \fIfoo\fP
 Create pool snapshot named \fIfoo\fP.
 .TP
-\fBrmsnap \fIfoo\fP
+.B \fBrmsnap\fP \fIfoo\fP
 Remove pool snapshot names \fIfoo\fP.
 .TP
-\fBbench \fIseconds\fP \fImode\fP [ \fB-b \fIobjsize\fP ] [ \fB-t threads\fP ]
-Benchmark for \fIseconds\fP.  The \fImode\fP can be write or read.  The default object size is 4 KB, and the
-default number of simulated threads (parallel writes) is 16.
+.B \fBbench\fP \fIseconds\fP \fImode\fP [ \-b \fIobjsize\fP ] [ \-t \fIthreads\fP ]
+Benchmark for seconds. The mode can be write or read. The default
+object size is 4 KB, and the default number of simulated threads
+(parallel writes) is 16.
+.UNINDENT
 .SH EXAMPLES
+.sp
 To view cluster utilization:
-.IP
+.sp
+.nf
+.ft C
 rados df
-.PP
-To get a list object in pool \fIfoo\FP sent to stdout:
-.IP
-rados -p foo ls -
-.PP
+.ft P
+.fi
+.sp
+To get a list object in pool foo sent to stdout:
+.sp
+.nf
+.ft C
+rados \-p foo ls \-
+.ft P
+.fi
+.sp
 To write an object:
-.IP
-rados -p foo put myobject blah.txt
-.PP
+.sp
+.nf
+.ft C
+rados \-p foo put myobject blah.txt
+.ft P
+.fi
+.sp
 To create a snapshot:
-.IP
-rados -p foo mksnap mysnap
-.PP
+.sp
+.nf
+.ft C
+rados \-p foo mksnap mysnap
+.ft P
+.fi
+.sp
 To delete the object:
-.IP
-rados -p foo rm myobject
-.PP
+.sp
+.nf
+.ft C
+rados \-p foo rm myobject
+.ft P
+.fi
+.sp
 To read a previously snapshotted version of an object:
-.IP
-rados -p foo -s mysnap get myobject blah.txt.old
-.PP
+.sp
+.nf
+.ft C
+rados \-p foo \-s mysnap get myobject blah.txt.old
+.ft P
+.fi
 .SH AVAILABILITY
-.B rados
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBrados\fP is part of the Ceph distributed file system. Please refer to
+the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more information.
 .SH SEE ALSO
-.BR ceph (8)
+.sp
+\fBceph\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

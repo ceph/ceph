@@ -1,71 +1,122 @@
-.TH CSYN 8
+.TH "CSYN" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 csyn \- ceph synthetic workload generator
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B csyn
-[ \fB\-m monaddr:port\fP ]
-\fB--syn\fI command ...\fP
+.nf
+\fBcsyn\fP [ \-m \fImonaddr\fP:\fIport\fP ] \-\-syn \fIcommand\fP \fI...\fP
+.fi
+.sp
 .SH DESCRIPTION
-.B csyn
-is a simple synthetic workload generator for the Ceph distributed file system.
-It uses the userspace client library to generate simple workloads against
-a currently running file system.  The file system need not be mounted via
-.BR cfuse (8)
-or the kernel client.
-.PP
-One or more \fB--syn\fI command\fR arguments specify the particular workload,
-as documented below.
+.sp
+\fBcsyn\fP is a simple synthetic workload generator for the Ceph
+distributed file system. It uses the userspace client library to
+generate simple workloads against a currently running file system. The
+file system need not be mounted via cfuse(8) or the kernel client.
+.sp
+One or more \fB\-\-syn\fP command arguments specify the particular
+workload, as documented below.
 .SH OPTIONS
+.INDENT 0.0
 .TP
-\fB\-d\fP
+.B \-d
 Detach from console and daemonize after startup.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
-to determine monitor addresses during startup.
+.B \-c ceph.conf, \-\-conf=ceph.conf
+Use \fIceph.conf\fP configuration file instead of the default
+\fB/etc/ceph/ceph.conf\fP to determine monitor addresses during
+startup.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.B \-m monaddress[:port]
+Connect to specified monitor (instead of looking through
+\fBceph.conf\fP).
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-num_client\fI num\fR
-Run \fInum\fR different clients, each in a separate thread.
+.B \-\-num_client num
+Run num different clients, each in a separate thread.
+.UNINDENT
+.INDENT 0.0
 .TP
-\fB\-\-syn\fI workloadspec\fR
-Run the given workload.  May be specified as many times as needed.  Workloads will
-normally run sequentially.
+.B \-\-syn workloadspec
+Run the given workload. May be specified as many times as
+needed. Workloads will normally run sequentially.
+.UNINDENT
 .SH WORKLOADS
-Each workload should be preceded by \fB--syn\fP on the command line.  This is not a
-complete list.
+.sp
+Each workload should be preceded by \fB\-\-syn\fP on the command
+line. This is not a complete list.
+.INDENT 0.0
 .TP
-\fBmknap\fI path snapname\fP
+.B \fBmknap\fP \fIpath\fP \fIsnapname\fP
 Create a snapshot called \fIsnapname\fP on \fIpath\fP.
 .TP
-\fBrmsnap\fI path snapname\fP
+.B \fBrmsnap\fP \fIpath\fP \fIsnapname\fP
 Delete snapshot called \fIsnapname\fP on \fIpath\fP.
 .TP
-\fBrmfile\fI path\fP
+.B \fBrmfile\fP \fIpath\fP
 Delete/unlink \fIpath\fP.
 .TP
-\fBwritefile\fI sizeinmb blocksize\fP
-Create a file, named after our client id, that is \fIsizeinmb\fP MB by writing \fIblocksize\fP chunks.
+.B \fBwritefile\fP \fIsizeinmb\fP \fIblocksize\fP
+Create a file, named after our client id, that is \fIsizeinmb\fP MB by
+writing \fIblocksize\fP chunks.
 .TP
-\fBreadfile\fI sizeinmb blocksize\fP
-Read file, named after our client id, that is \fIsizeinmb\fP MB by writing \fIblocksize\fP chunks.
+.B \fBreadfile\fP \fIsizeinmb\fP \fIblocksize\fP
+Read file, named after our client id, that is \fIsizeinmb\fP MB by
+writing \fIblocksize\fP chunks.
 .TP
-\fBrw\fI sizeinmb blocksize\fP
+.B \fBrw\fP \fIsizeinmb\fP \fIblocksize\fP
 Write file, then read it back, as above.
 .TP
-\fBmakedirs\fI numsubdirs numfiles depth\fP
-Create a hierarchy of directories that is \fIdepth\fP levels deep.  Give each
-directory \fInumsubdirs\fP subdirectories and \fInumfiles\fP files.
+.B \fBmakedirs\fP \fInumsubdirs\fP \fInumfiles\fP \fIdepth\fP
+Create a hierarchy of directories that is \fIdepth\fP levels deep. Give
+each directory \fInumsubdirs\fP subdirectories and \fInumfiles\fP files.
 .TP
-\fBwalk\fP
-Recursively walk the file system (like \fBfind\fP).
-
+.B \fBwalk\fP
+Recursively walk the file system (like find).
+.UNINDENT
 .SH AVAILABILITY
-.B csyn
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBcsyn\fP is part of the Ceph distributed file system. Please refer to
+the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more information.
 .SH SEE ALSO
-.BR ceph (8),
-.BR cfuse (8)
+.sp
+\fBceph\fP(8),
+\fBcfuse\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

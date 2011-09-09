@@ -157,7 +157,7 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
     map<string, bufferlist> caps;
     if (!ename.from_str(name)) {
       ostringstream oss;
-      oss << "bad entity name: " << name;
+      oss << "bad entity name n keyring: " << name;
       throw buffer::malformed_input(oss.str().c_str());
     }
 

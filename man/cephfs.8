@@ -1,68 +1,119 @@
-.TH CEPHFS 8
+.TH "CEPHFS" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 cephfs \- ceph file system options utility
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B cephfs
-[ \fIpath \fIcommand \fBoptions]
+.nf
+\fBcephfs\fP [ \fIpath\fP \fIcommand\fP \fIoptions\fP ]
+.fi
+.sp
 .SH DESCRIPTION
-.B cephfs
-is a control utility for accessing and manipulating file layout
-and location data in the Ceph distributed file system.
-
+.sp
+\fBcephfs\fP is a control utility for accessing and manipulating file
+layout and location data in the Ceph distributed file system.
+.sp
 Choose one of the following three commands:
-.TP
-\fBshow_layout \fPView the layout information on a file or directory
-.TP
-\fBset_layout  \fPSet the layout information on a file or directory.
-.TP
-\fBshow_location \fPView the location information on a file
-
+.INDENT 0.0
+.IP \(bu 2
+\fBshow_layout\fP View the layout information on a file or directory
+.IP \(bu 2
+\fBset_layout\fP Set the layout information on a file or directory
+.IP \(bu 2
+\fBshow_location\fP View the location information on a file
+.UNINDENT
 .SH OPTIONS
-Your applicable options differ depending on whether you are setting
-or viewing layout/location.
+.sp
+Your applicable options differ depending on whether you are setting or viewing layout/location.
+.SS Viewing options:
+.INDENT 0.0
 .TP
-\fBViewing options:
-.IP
-\fB\-l \--offset
-\fPSpecify an offset for which to retrieve location data
-
+.B \-l \-\-offset
+Specify an offset for which to retrieve location data
+.UNINDENT
+.SS Setting options:
+.INDENT 0.0
 .TP
-\fBSetting options:
-.IP
-\fB\-u
-\--stripe_unit \fP
+.B \-u \-\-stripe_unit
 Set the size of each stripe
-.IP
-\fB\-c
-\--stripe_count \fP
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-c \-\-stripe_count
 Set the number of stripes per object
-.IP
-\fB\-s
-\--object_size \fP
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-s \-\-object_size
 Set the size of the objects to stripe across
-.IP
-\fB\-p
-\--pool \fP
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-p \-\-pool
 Set the pool (by numeric value, not name!) to use
-.IP
-\fB\-o
-\--osd \fP
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-o \-\-osd
 Set the preferred OSD to use as the primary
-
+.UNINDENT
 .SH LIMITATIONS
+.sp
 When setting layout data, the specified stripe unit and stripe count
-must multiply to the size of an object. Any parameters you don't set explicitly are left at the system defaults.
-
-Obviously setting the layout of a file and a directory means different things.
-Setting the layout of a file specifies exactly how to place the individual file. This must be done before writing *any* data to it. Truncating a file does not allow you to change the layout either.
-
-Setting the layout of a directory sets the "default layout", which is used to set the file layouts on any files subsequently created in the directory (or any subdirectory). Pre-existing files do not have their layouts changed.
-
-You'll notice that the layout information allows you to specify a preferred OSD for placement. This is allowed but is not recommended since it can dramatically unbalance your storage cluster's space utilization.
-
+must multiply to the size of an object. Any parameters you don\(aqt set
+explicitly are left at the system defaults.
+.sp
+Obviously setting the layout of a file and a directory means different
+things. Setting the layout of a file specifies exactly how to place
+the individual file. This must be done before writing \fIany\fP data to
+it. Truncating a file does not allow you to change the layout either.
+.sp
+Setting the layout of a directory sets the "default layout", which is
+used to set the file layouts on any files subsequently created in the
+directory (or any subdirectory).  Pre\-existing files do not have their
+layouts changed.
+.sp
+You\(aqll notice that the layout information allows you to specify a
+preferred OSD for placement. This is allowed but is not recommended
+since it can dramatically unbalance your storage cluster\(aqs space
+utilization.
 .SH AVAILABILITY
-.B cephfs
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBcephfs\fP is part of the Ceph distributed file system. Please refer
+to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+information.
 .SH SEE ALSO
-.BR ceph (8)
+.sp
+\fBceph\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

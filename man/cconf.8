@@ -1,76 +1,118 @@
-.TH CCONF 8
+.TH "CCONF" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 cconf \- ceph conf file tool
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B cconf
-\fB\-c \fIconffile\fR \fB\--list-all-sections
-.br
-.B cconf
-\fB\-c \fIconffile\fR \fB\-L
-.br
-.B cconf
-\fB\-c \fIconffile\fR \fB\-l \fIprefix\fR
-.br
-.B cconf
-\fIkey\fR \fB\-s \fIsection1\fR ...
-.br
-.B cconf
-[\fB-s\fR \fIsection\fR] \fB--lookup\fR \fIkey\fR
-.br
-.B cconf
-[\fB-s\fR \fIsection\fR] \fIkey\fR
-.br
+.nf
+\fBcconf\fP \-c \fIconffile\fP \-\-list\-all\-sections
+\fBcconf\fP \-c \fIconffile\fP \-L
+\fBcconf\fP \-c \fIconffile\fP \-l \fIprefix\fP
+\fBcconf\fP \fIkey\fP \-s \fIsection1\fP ...
+\fBcconf\fP [\-s \fIsection\fP ] \-\-lookup \fIkey\fP
+\fBcconf\fP [\-s \fIsection\fP ] \fIkey\fP
+.fi
+.sp
 .SH DESCRIPTION
-.B cconf
-is a utility for getting information about a ceph configuration file. As with
-most Ceph programs, you can specify which Ceph configuration file to use with
-the \fB-c\fR flag.
-.PP
+.sp
+\fBcconf\fP is a utility for getting information about a ceph
+configuration file. As with most Ceph programs, you can specify which
+Ceph configuration file to use with the \fB\-c\fP flag.
 .SH ACTIONS
-\fBcconf\fR will perform one of the following actions:
-.PP
-\fB--list-all-sections\fR or \fB-L\fR prints out a list of all the section
-names in the configuration file.
-.PP
-\fB--list-sections\fR or \fB-l\fR prints out a list of all the sections that
-begin with a given prefix. For example, \fB--list-sections \fImon\fR\fR would list all
-sections beginning with \fImon\fR.
-.PP
-\fB--lookup\fR will search the configuration for a given value.
-By default, the sections that are searched are determined by the Ceph name that we are
-using. The Ceph name defaults to client.admin. It can be specified with \fB--name\fR.
-.PP
-For example, if we specify \fB--name\fR \fIosd.0\fR, the following sections will be
-searched: \fI[osd.0], [osd], [global]\fR
-.PP
-You can specify additional sections to search with \fB--section\fR or \fB-s\fR.
-These additional sections will be searched \fIbefore\fR the sections that would
-normally be searched. As always, the first matching entry we find will be returned.
-.PP
-Note: \fB--lookup\fR is the default action. If no other actions are given on the
-command line, we will default to doing a lookup.
-.PP
+.sp
+\fBcconf\fP will perform one of the following actions:
+.sp
+\-\-list\-all\-sections or \-L prints out a list of all the section names in the configuration
+file.
+.sp
+\-\-list\-sections or \-l prints out a list of all the sections that begin
+with a given prefix. For example, \-\-list\-sections mon would list all
+sections beginning with mon.
+.sp
+\-\-lookup will search the configuration for a given value.  By default, the sections  that
+are searched are determined by the Ceph name that we are using. The Ceph name defaults to
+client.admin. It can be specified with \-\-name.
+.sp
+For example, if we specify  \-\-name  osd.0,  the  following  sections  will  be  searched:
+[osd.0], [osd], [global]
+.sp
+You  can  specify  additional  sections to search with \-\-section or \-s.  These additional
+sections will be searched before the sections that would normally be searched. As always,
+the first matching entry we find will be returned.
+.sp
+Note:  \-\-lookup is the default action. If no other actions are given on the command line,
+we will default to doing a lookup.
 .SH EXAMPLES
+.sp
 To find out what value osd 0 will use for the "osd data" option:
-.IP
-cconf -c foo.conf  --name osd.0 --lookup "osd data"
-.PP
+.sp
+.nf
+.ft C
+cconf \-c foo.conf  \-\-name osd.0 \-\-lookup "osd data"
+.ft P
+.fi
+.sp
 To find out what value will mds a use for the "log file" option:
-.IP
-cconf -c foo.conf  --name mds.a "log file"
-.PP
-To list all sections that begin with \fIosd\fP:
-.IP
-cconf -c foo.conf -l osd
-.PP
+.sp
+.nf
+.ft C
+cconf \-c foo.conf  \-\-name mds.a "log file"
+.ft P
+.fi
+.sp
+To list all sections that begin with osd:
+.sp
+.nf
+.ft C
+cconf \-c foo.conf \-l osd
+.ft P
+.fi
+.sp
 To list all sections:
-.IP
-cconf -c foo.conf -L
-.PP
+.sp
+.nf
+.ft C
+cconf \-c foo.conf \-L
+.ft P
+.fi
 .SH AVAILABILITY
-.B cconf
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBcconf\fP is part of the Ceph distributed file system.  Please refer
+to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+information.
 .SH SEE ALSO
-.BR ceph (8),
-.BR mkcephfs (8)
+.sp
+\fBceph\fP(8),
+\fBmkcephfs\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.

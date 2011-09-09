@@ -1,183 +1,197 @@
-.TH MOUNT.CEPH 8
+.TH "MOUNT.CEPH" "8" "September 09, 2011" "dev" "Ceph"
 .SH NAME
 mount.ceph \- mount a ceph file system
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" Man page generated from reStructeredText.
+.
 .SH SYNOPSIS
-.B mount.ceph
-\fImonaddr1\fR[,\fImonaddr2\fR,...]:/[\fIsubdir\fR]
-\fIdir\fR
-[ \fB\-o \fIoptions\fR ]
+.nf
+\fBmount.ceph\fP \fImonaddr1\fP[,\fImonaddr2\fP,...]:/[\fIsubdir\fP] \fIdir\fP [
+\-o \fIoptions\fP ]
+.fi
+.sp
 .SH DESCRIPTION
-.B mount.ceph
-is a simple helper for mounting the Ceph file system on a Linux host.
-The only real purpose it serves is to resolve monitor hostname(s) into
-IP addresses; the Linux kernel client component does most of the real
-work.  In fact, it is possible to mount a Ceph file system without
-.B mount.ceph
-by specifying monitor address(es) by IP:
-.IP
-mount -t ceph 1.2.3.4:/ mountpoint
-.PP
-Each monitor address \fImonaddr\fR takes the form
-\fIhost\fR[:\fIport\fP].  If the port is not specified, the Ceph
-default of \fI6789\fP is assumed.  
-.PP
-Multiple monitor addresses can be separated by commas.  Only one
+.sp
+\fBmount.ceph\fP is a simple helper for mounting the Ceph file system on
+a Linux host. The only real purpose it serves is to resolve monitor
+hostname(s) into IP addresses; the Linux kernel client component does
+most of the real work. In fact, it is possible to mount a Ceph file
+system without mount.ceph by specifying monitor address(es) by IP:
+.sp
+.nf
+.ft C
+mount \-t ceph 1.2.3.4:/ mountpoint
+.ft P
+.fi
+.sp
+Each monitor address monaddr takes the form host[:port]. If the port
+is not specified, the Ceph default of 6789 is assumed.
+.sp
+Multiple monitor addresses can be separated by commas. Only one
 responsible monitor is needed to successfully mount; the client will
-learn about all monitors from any responsive monitor.  However, it is
-a good idea to specify more than one in case one happens to be down at
+learn about all monitors from any responsive monitor. However, it is a
+good idea to specify more than one in case one happens to be down at
 the time of mount.
-.PP
-A subdirectory \fIsubdir\fP may be specified if a subset of the file system is to be
-mounted.
-
+.sp
+A subdirectory subdir may be specified if a subset of the file system
+is to be mounted.
 .SH OPTIONS
-
-wsize
-.IP
-int, max write size.  Default: none (writeback uses smaller of wsize and stripe unit)
-.PP
-
-rsize
-.IP
-int (bytes), max readahead, multiple of 1024, Default: 524288 (512*1024)
-.PP
-
-osdtimeout
-.IP
+.INDENT 0.0
+.TP
+.B \fBwsize\fP
+int, max write size. Default: none (writeback uses smaller of wsize
+and stripe unit)
+.TP
+.B \fBrsize\fP
+int (bytes), max readahead, multiple of 1024, Default: 524288
+(512*1024)
+.TP
+.B \fBosdtimeout\fP
 int (seconds), Default: 60
-.PP
-
-osdkeepalivetimeout
-.IP
+.TP
+.B \fBosdkeepalivetimeout\fP
 int, Default: 5
-.PP
-
-mount_timeout
-.IP
+.TP
+.B \fBmount_timeout\fP
 int (seconds), Default: 60
-.PP
-
-osd_idle_ttl
-.IP
+.TP
+.B \fBosd_idle_ttl\fP
 int (seconds), Default: 60
-.PP
-
-caps_wanted_delay_min
-.IP
+.TP
+.B \fBcaps_wanted_delay_min\fP
 int, cap release delay, Default: 5
-.PP
-
-caps_wanted_delay_max
-.IP
+.TP
+.B \fBcaps_wanted_delay_max\fP
 int, cap release delay, Default: 60
-.PP
-
-cap_release_safety
-.IP
+.TP
+.B \fBcap_release_safety\fP
 int, Default: calculated
-.PP
-
-readdir_max_entries
-.IP
+.TP
+.B \fBreaddir_max_entries\fP
 int, Default: 1024
-.PP
-
-readdir_max_bytes
-.IP
+.TP
+.B \fBreaddir_max_bytes\fP
 int, Default: 524288 (512*1024)
-.PP
-
-write_congestion_kb
-.IP
-int (kb), max writeback in flight. scale with available memory. Default: calculated from available memory
-.PP
-
-snapdirname
-.IP
+.TP
+.B \fBwrite_congestion_kb\fP
+int (kb), max writeback in flight. scale with available
+memory. Default: calculated from available memory
+.TP
+.B \fBsnapdirname\fP
 string, set the name of the hidden snapdir. Default: .snap
-.PP
-
-name
-.IP
+.TP
+.B \fBname\fP
 string, used with authx, Default: guest
-.PP
-
-secret
-.IP
-string, used with authx 
-.PP
-
-ip
-.IP
+.TP
+.B \fBsecret\fP
+string, used with authx
+.TP
+.B \fBip\fP
 my ip
-.PP
-
-noshare
-.IP
-create a new client instance, instead of sharing an existing instance of a client mounting the same cluster
-.PP
-
-dirstat
-.IP
-funky `cat dirname` for stats, Default: off
-.PP
-
-nodirstat
-.IP
-no funky `cat dirname` for stats
-.PP
-
-rbytes
-.IP
-Report the recursive size of the directory contents for st_size on directories.  Default: on
-.PP
-
-norbytes
-.IP
-Do not report the recursive size of the directory contents for st_size on directories.
-.PP
-
-nocrc
-.IP
+.TP
+.B \fBnoshare\fP
+create a new client instance, instead of sharing an existing
+instance of a client mounting the same cluster
+.TP
+.B \fBdirstat\fP
+funky \fIcat dirname\fP for stats, Default: off
+.TP
+.B \fBnodirstat\fP
+no funky \fIcat dirname\fP for stats
+.TP
+.B \fBrbytes\fP
+Report the recursive size of the directory contents for st_size on
+directories.  Default: on
+.TP
+.B \fBnorbytes\fP
+Do not report the recursive size of the directory contents for
+st_size on directories.
+.TP
+.B \fBnocrc\fP
 no data crc on writes
-.PP
-
-noasyncreaddir
-.IP
+.TP
+.B \fBnoasyncreaddir\fP
 no dcache readdir
-.PP
-
-
+.UNINDENT
 .SH EXAMPLES
+.sp
 Mount the full file system:
-.IP
+.sp
+.nf
+.ft C
 mount.ceph monhost:/ /mnt/foo
-.PP
+.ft P
+.fi
+.sp
 If there are multiple monitors:
-.IP
+.sp
+.nf
+.ft C
 mount.ceph monhost1,monhost2,monhost3:/ /mnt/foo
-.PP
-If 
-.BR cmon (8)
-is running on a non-standard port:
-.IP
+.ft P
+.fi
+.sp
+If cmon(8) is running on a non\-standard port:
+.sp
+.nf
+.ft C
 mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
-.PP
+.ft P
+.fi
+.sp
 To mount only part of the namespace:
-.IP
+.sp
+.nf
+.ft C
 mount.ceph monhost1:/some/small/thing /mnt/thing
-.PP
-Assuming
-.BR mount.ceph (8)
-is installed properly, it should be automatically invoked by
-.BR mount (8)
-like so:
-.IP
-mount -t ceph monhost:/ /mnt/foo
+.ft P
+.fi
+.sp
+Assuming mount.ceph(8) is installed properly, it should be
+automatically invoked by mount(8) like so:
+.sp
+.nf
+.ft C
+mount \-t ceph monhost:/ /mnt/foo
+.ft P
+.fi
 .SH AVAILABILITY
-.B mount.ceph
-is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
-http://ceph.newdream.net/wiki for more information.
+.sp
+\fBmount.ceph\fP is part of the Ceph distributed file system. Please
+refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+information.
 .SH SEE ALSO
-.BR cfuse (8),
-.BR ceph (8)
+.sp
+\fBcfuse\fP(8),
+\fBceph\fP(8)
+.SH COPYRIGHT
+2011, New Dream Network
+.\" Generated by docutils manpage writer.
+.\" 
+.
