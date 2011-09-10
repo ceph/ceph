@@ -315,7 +315,7 @@ public:
     boost::uniform_int<> choose(0, available_objects.size() - 1);
     int index = choose(*rng);
     set<hobject_t>::iterator i = available_objects.begin();
-    for (; index > 0; --index, ++i);
+    for ( ; index > 0; --index, ++i) ;
     hobject_t ret = *i;
     available_objects.erase(i);
     return ret;
