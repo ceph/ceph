@@ -1041,12 +1041,14 @@ public:
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
+      boost::statechart::result react(const BacklogComplete&);
     };
 
     struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
