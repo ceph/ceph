@@ -467,10 +467,8 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     if (pg_map.pg_stat.count(pgid) == 0) {
       dout(15) << " got " << pgid << " reported at " << p->second.reported
 	       << " state " << pg_state_string(p->second.state)
-	       << " but DNE in pg_map!!"
+	       << " but DNE in pg_map; pool was probably deleted."
 	       << dendl;
-      mon->clog.error() << "got " << pgid << " pg_stat from osd" << from
-	    << " but dne in pg_map\n";
       continue;
     }
       
