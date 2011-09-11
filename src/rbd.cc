@@ -115,6 +115,31 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
+struct MyProgressContext : public librbd::ProgressContext {
+  const char *operation;
+  int last_pc;
+
+  MyProgressContext(const char *o) : operation(o), last_pc(-1) {
+  }
+  
+  int update_progress(uint64_t offset, uint64_t total) {
+    int pc = total ? (offset * 100ull / total) : 0;
+    if (pc != last_pc) {
+      cout << "\r" << operation << ": "
+	//	   << offset << " / " << total << " "
+	   << pc << "% complete...";
+      cout.flush();
+    }
+    return 0;
+  }
+  void finish() {
+    cout << "\r" << operation << ": 100% complete...done." << std::endl;
+  }
+  void fail() {
+    cout << "\r" << operation << ": " << last_pc << "% complete...failed." << std::endl;
+  }
+};
+
 static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 {
   std::vector<string> names;
@@ -156,21 +181,27 @@ static int do_show_info(const char *imgname, librbd::Image& image)
   return 0;
 }
 
- static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx, const char *imgname)
+static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx, const char *imgname)
 {
-  int r = rbd.remove(io_ctx, imgname);
-  if (r < 0)
+  MyProgressContext pc("Removing image");
+  int r = rbd.remove_with_progress(io_ctx, imgname, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
-
+  }
+  pc.finish();
   return 0;
 }
 
 static int do_resize(librbd::Image& image, uint64_t size)
 {
-  int r = image.resize(size);
-  if (r < 0)
+  MyProgressContext pc("Resizing image");
+  int r = image.resize_with_progress(size, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
-
+  }
+  pc.finish();
   return 0;
 }
 
@@ -207,17 +238,28 @@ static int do_remove_snap(librbd::Image& image, const char *snapname)
 
 static int do_rollback_snap(librbd::Image& image, const char *snapname)
 {
-  int r = image.snap_rollback(snapname);
-  if (r < 0)
+  MyProgressContext pc("Rolling back to snapshot");
+  int r = image.snap_rollback_with_progress(snapname, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
-
+  }
+  pc.finish();
   return 0;
 }
+
+struct ExportContext {
+  int fd;
+  MyProgressContext pc;
+
+  ExportContext(int f) : fd(f), pc("Exporting image") {}
+};
 
 static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 {
   ssize_t ret;
-  int fd = *(int *)arg;
+  ExportContext *ec = (ExportContext *)arg;
+  int fd = ec->fd;
 
   if (!buf) /* a hole */
     return 0;
@@ -237,30 +279,32 @@ static int do_export(librbd::Image& image, const char *path)
 {
   int64_t r;
   librbd::image_info_t info;
-  bufferlist bl;
-  int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-  if (fd < 0)
-    return -errno;
+  int fd;
 
   r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
 
-  r = image.read_iterate(0, info.size, export_read_cb, (void *)&fd);
-  if (r < 0)
-    return r;
+  fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  if (fd < 0)
+    return -errno;
 
-  r = write(fd, bl.c_str(), bl.length());
+  ExportContext ec(fd);
+  r = image.read_iterate(0, info.size, export_read_cb, (void *)&ec);
   if (r < 0)
-    return r;
+    goto out;
 
   r = ftruncate(fd, info.size);
   if (r < 0)
-    return r;
+    goto out;
 
+ out:
   close(fd);
-
-  return 0;
+  if (r < 0)
+    ec.pc.fail();
+  else
+    ec.pc.finish();
+  return r;
 }
 
 static const char *imgname_from_path(const char *path)
@@ -334,6 +378,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   struct stat stat_buf;
   string md_oid;
   struct fiemap *fiemap;
+  MyProgressContext pc("Importing image");
 
   if (fd < 0) {
     r = -errno;
@@ -412,14 +457,15 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       
     } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
 
-    cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
+    //cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
 #define READ_BLOCK_LEN (4 * 1024 * 1024)
     uint64_t left = end_ofs - file_pos;
     while (left) {
+      pc.update_progress(file_pos, size);
       uint64_t cur_seg = (left < READ_BLOCK_LEN ? left : READ_BLOCK_LEN);
       while (cur_seg) {
         bufferptr p(cur_seg);
-        cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
+        //cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
         ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
         if (rval < 0) {
           r = -errno;
@@ -458,7 +504,11 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   r = 0;
 
-done:
+ done:
+  if (r < 0)
+    pc.fail();
+  else
+    pc.finish();
   free(fiemap);
 
   return r;
@@ -467,7 +517,9 @@ done:
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 		   const char *destname)
 {
-  int r = src.copy(dest_pp, destname);
+  MyProgressContext pc("Image copy");
+  int r = src.copy_with_progress(dest_pp, destname, pc);
+  pc.finish();
   if (r < 0)
     return r;
   return 0;
