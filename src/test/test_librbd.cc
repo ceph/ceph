@@ -670,7 +670,7 @@ void aio_write_test_data(librbd::Image& image, const char *test_data, off_t off)
 
 void write_test_data(librbd::Image& image, const char *test_data, off_t off)
 {
-  int written;
+  size_t written;
   size_t len = strlen(test_data);
   ceph::bufferlist bl;
   bl.append(test_data, len);
