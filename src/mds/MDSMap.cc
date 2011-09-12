@@ -22,14 +22,14 @@ using std::stringstream;
 // features
 CompatSet get_mdsmap_compat_set() {
   CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
   CompatSet::FeatureSet feature_incompat;
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
-  CompatSet::FeatureSet feature_ro_compat;
 
-  return CompatSet(feature_compat, feature_incompat, feature_ro_compat);
+  return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
 
 // base (pre v0.20)

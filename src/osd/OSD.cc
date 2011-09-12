@@ -115,15 +115,15 @@ const coll_t coll_t::TEMP_COLL("temp");
 
 static CompatSet get_osd_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
   CompatSet::FeatureSet ceph_osd_feature_incompat;
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_OLOC);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEC);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES);
-  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
-  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_incompat,
-		   ceph_osd_feature_ro_compat);
+  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
+		   ceph_osd_feature_incompat);
 }
 
 ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
