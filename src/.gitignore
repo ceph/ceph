@@ -38,8 +38,6 @@
 /testsignal_handlers
 /testtimers
 /test_libceph_build
-/testlibrbd
-/testlibrbdpp
 /test_librados_build
 /test_librgw_build
 /testsnaps
@@ -102,5 +100,6 @@ test_rados_api_stat
 test_rados_api_watch_notify
 test_rados_api_snapshots
 test_rados_api_misc
+test_librbd
 /scratchtool
 /scratchtoolpp
