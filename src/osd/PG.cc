@@ -2479,11 +2479,12 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
 
-    // Generate a backlog
-    osd->queue_generate_backlog(this);
-    while (!info.log_backlog)
-      wait(); // See RecoverState::Initial, kick() is called in 
-              // the BacklogComplete callback
+    
+    map<eversion_t,Log::Entry> omap;
+    generate_backlog_epoch = osd->osdmap->get_epoch();
+    if (build_backlog_map(omap))
+      assemble_backlog(omap);
+    generate_backlog_epoch = 0;
   }
 
   // log any weirdness
@@ -3953,14 +3954,6 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
   assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
-}
-
-boost::statechart::result
-PG::RecoveryState::Initial::react(const BacklogComplete&) {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->kick(); // See read_state, wakes up thread waiting on backlog for
-              // corrupt log
-  return discard_event();
 }
 
 void PG::RecoveryState::Initial::exit() {
