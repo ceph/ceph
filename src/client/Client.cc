@@ -602,7 +602,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   if (!dn || dn->inode == 0) {
     in->get();
     if (old_dentry)
-      unlink(old_dentry, false);
+      unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
     in->put();
     if (set_offset) {
