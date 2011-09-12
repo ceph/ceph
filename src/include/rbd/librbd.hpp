@@ -108,6 +108,8 @@ public:
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
 
+  int flush();
+
 private:
   friend class RBD;
 

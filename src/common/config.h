@@ -573,6 +573,9 @@ public:
   int rgw_pools_preallocate_threshold;
   bool rgw_log_nonexistent_bucket;
 
+  // rbd
+  int rbd_writeback_window;
+
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.
   bool internal_safe_to_start_threads;

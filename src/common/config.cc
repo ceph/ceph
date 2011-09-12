@@ -438,6 +438,7 @@ struct config_option config_optionsp[] = {
   OPTION(rgw_pools_preallocate_max, OPT_INT, 100),
   OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70),
   OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false),
+  OPTION(rbd_writeback_window, OPT_INT, 0 /*8 << 20*/), // rbd writeback window size, bytes
 
   // see config.h
   OPTION(internal_safe_to_start_threads, OPT_BOOL, false),
