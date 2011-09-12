@@ -294,11 +294,6 @@ rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = libglobal.la librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
-testlibrbdpp_SOURCES = testlibrbdpp.cc
-testlibrbdpp_LDADD = librbd.la librados.la -lpthread -lm \
-		     $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += testlibrbd testlibrbdpp
-
 if WITH_RADOSGW
 my_libradosgw_src = \
 	rgw/librgw.cc \

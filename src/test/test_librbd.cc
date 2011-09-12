@@ -14,6 +14,7 @@
 
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
+#include "include/rbd/librbd.hpp"
 
 #include "gtest/gtest.h"
 
@@ -25,16 +26,20 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <iostream>
+#include <algorithm>
 
 #include "rados-api/test.cc"
+
+using namespace std;
 
 TEST(LibRBD, CreateAndStat)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
 
   rbd_image_info_t info;
   rbd_image_t image;
@@ -54,11 +59,39 @@ TEST(LibRBD, CreateAndStat)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRBD, CreateAndStatPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::image_info_t info;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+    ASSERT_EQ(0, image.stat(info, sizeof(info)));
+    ASSERT_EQ(info.size, size);
+    ASSERT_EQ(info.order, order);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 TEST(LibRBD, ResizeAndStat)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
@@ -85,6 +118,38 @@ TEST(LibRBD, ResizeAndStat)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRBD, ResizeAndStatPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::image_info_t info;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+    
+    ASSERT_EQ(0, image.resize(size * 4));
+    ASSERT_EQ(0, image.stat(info, sizeof(info)));
+    ASSERT_EQ(info.size, size * 4);
+    
+    ASSERT_EQ(0, image.resize(size / 2));
+    ASSERT_EQ(0, image.stat(info, sizeof(info)));
+    ASSERT_EQ(info.size, size / 2);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
 
 int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
 {
@@ -136,7 +201,7 @@ TEST(LibRBD, TestCreateLsDelete)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
@@ -156,6 +221,67 @@ TEST(LibRBD, TestCreateLsDelete)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, ...)
+{
+  int r;
+  size_t i;
+  char *expected;
+  va_list ap;
+  vector<string> names;
+  r = rbd.list(io_ctx, names);
+  if (r == -ENOENT)
+    r = 0;
+  assert(r >= 0);
+  cout << "num images is: " << names.size() << endl
+	    << "expected: " << num_expected << endl;
+  int num = names.size();
+
+  for (i = 0; i < names.size(); i++) {
+    cout << "image: " << names[i] << endl;
+  }
+
+  va_start(ap, num_expected);
+  for (i = num_expected; i > 0; i--) {
+    expected = va_arg(ap, char *);
+    cout << "expected = " << expected << endl;
+    vector<string>::iterator listed_name = find(names.begin(), names.end(), string(expected));
+    assert(listed_name != names.end());
+    names.erase(listed_name);
+  }
+  assert(names.empty());
+
+  return num;
+}
+
+TEST(LibRBD, TestCreateLsDeletePP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    const char *name2 = "testimg2";
+    uint64_t size = 2 << 20;  
+    
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name));
+    ASSERT_EQ(0, rbd.create(ioctx, name2, size, &order));
+    ASSERT_EQ(2, test_ls_pp(rbd, ioctx, 2, name, name2));
+    ASSERT_EQ(0, rbd.remove(ioctx, name));
+    ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name2));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 
 static int print_progress_percent(uint64_t offset, uint64_t src_size,
 				     void *data)
@@ -169,7 +295,7 @@ TEST(LibRBD, TestCopy)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
@@ -193,6 +319,49 @@ TEST(LibRBD, TestCopy)
 
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+class PrintProgress : public librbd::ProgressContext
+{
+public:
+  int update_progress(uint64_t offset, uint64_t src_size)
+  {
+    float percent = ((float)offset * 100) / src_size;
+    printf("%3.2f%% done\n", percent);
+    return 0;
+  }
+};
+
+TEST(LibRBD, TestCopyPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+  
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    const char *name2 = "testimg2";
+    const char *name3 = "testimg3";
+    uint64_t size = 2 << 20;
+    PrintProgress pp;
+
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+    ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name));
+    ASSERT_LT(0, image.copy(ioctx, name2));
+    ASSERT_EQ(2, test_ls_pp(rbd, ioctx, 2, name, name2));
+    ASSERT_LT(0, image.copy_with_progress(ioctx, name3, pp));
+    ASSERT_EQ(3, test_ls_pp(rbd, ioctx, 3, name, name2, name3));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
 int test_ls_snaps(rbd_image_t image, int num_expected, ...)
@@ -242,7 +411,7 @@ TEST(LibRBD, TestCreateLsDeleteSnap)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
@@ -270,6 +439,84 @@ TEST(LibRBD, TestCreateLsDeleteSnap)
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
+{
+  int r;
+  size_t i, j, expected_size;
+  char *expected;
+  va_list ap;
+  vector<librbd::snap_info_t> snaps;
+  r = image.snap_list(snaps);
+  assert(r >= 0);
+  cout << "num snaps is: " << snaps.size() << endl
+	    << "expected: " << num_expected << endl;
+
+  for (i = 0; i < snaps.size(); i++) {
+    cout << "snap: " << snaps[i].name << endl;
+  }
+
+  va_start(ap, num_expected);
+  for (i = num_expected; i > 0; i--) {
+    expected = va_arg(ap, char *);
+    expected_size = va_arg(ap, int);
+    int found = 0;
+    for (j = 0; j < snaps.size(); j++) {
+      if (snaps[j].name == "")
+	continue;
+      if (strcmp(snaps[j].name.c_str(), expected) == 0) {
+	cout << "found " << snaps[j].name << " with size " << snaps[j].size << endl;
+	assert(snaps[j].size == (size_t) expected_size);
+	snaps[j].name = "";
+	found = 1;
+	break;
+      }
+    }
+    assert(found);
+  }
+
+  for (i = 0; i < snaps.size(); i++) {
+    assert(snaps[i].name == "");
+  }
+
+  return snaps.size();
+}
+
+TEST(LibRBD, TestCreateLsDeleteSnapPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    uint64_t size2 = 4 << 20;
+    
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(1, test_ls_snaps(image, 1, "snap1", size));
+    ASSERT_EQ(0, image.resize(size2));
+    ASSERT_EQ(0, image.snap_create("snap2"));
+    ASSERT_EQ(2, test_ls_snaps(image, 2, "snap1", size, "snap2", size2));
+    ASSERT_EQ(0, image.snap_remove("snap1"));
+    ASSERT_EQ(1, test_ls_snaps(image, 1, "snap2", size2));
+    ASSERT_EQ(0, image.snap_remove("snap2"));
+    ASSERT_EQ(0, test_ls_snaps(image, 0));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 
 
 #define TEST_IO_SIZE 512
@@ -347,7 +594,7 @@ TEST(LibRBD, TestIO)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
@@ -394,11 +641,124 @@ TEST(LibRBD, TestIO)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+
+void simple_write_cb_pp(librbd::completion_t cb, void *arg)
+{
+  cout << "write completion cb called!" << endl;
+}
+
+void simple_read_cb_pp(librbd::completion_t cb, void *arg)
+{
+  cout << "read completion cb called!" << endl;
+}
+
+void aio_write_test_data(librbd::Image& image, const char *test_data, off_t off)
+{
+  ceph::bufferlist bl;
+  bl.append(test_data, strlen(test_data));
+  librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_write_cb_pp);
+  printf("created completion\n");
+  image.aio_write(off, strlen(test_data), bl, comp);
+  printf("started write\n");
+  comp->wait_for_complete();
+  int r = comp->get_return_value();
+  printf("return value is: %d\n", r);
+  assert(r >= 0);
+  printf("finished write\n");
+  comp->release();
+}
+
+void write_test_data(librbd::Image& image, const char *test_data, off_t off)
+{
+  int written;
+  size_t len = strlen(test_data);
+  ceph::bufferlist bl;
+  bl.append(test_data, len);
+  written = image.write(off, len, bl);
+  printf("wrote: %u\n", (unsigned int) written);
+  assert(written == bl.length());
+}
+
+void aio_read_test_data(librbd::Image& image, const char *expected, off_t off)
+{
+  librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_read_cb_pp);
+  ceph::bufferlist bl;
+  printf("created completion\n");
+  image.aio_read(off, strlen(expected), bl, comp);
+  printf("started read\n");
+  comp->wait_for_complete();
+  int r = comp->get_return_value();
+  printf("return value is: %d\n", r);
+  assert(r == TEST_IO_SIZE - 1);
+  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE - 1) == 0);
+  printf("finished read\n");
+  comp->release();
+}
+
+void read_test_data(librbd::Image& image, const char *expected, off_t off)
+{
+  int read, total_read = 0;
+  size_t expected_len = strlen(expected);
+  size_t len = expected_len;
+  ceph::bufferlist bl;
+  read = image.read(off + total_read, len, bl);
+  assert(read >= 0);
+  printf("read: %u\n", (unsigned int) read);
+  printf("read: %s\nexpected: %s\n", bl.c_str(), expected);
+  assert(strncmp(bl.c_str(), expected, expected_len) == 0);
+}
+
+TEST(LibRBD, TestIOPP) 
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    
+    ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    char test_data[TEST_IO_SIZE];
+    int i;
+    
+    srand(time(0));
+    for (i = 0; i < TEST_IO_SIZE - 1; ++i) {
+      test_data[i] = (char) (rand() % (126 - 33) + 33);
+    }
+    test_data[TEST_IO_SIZE - 1] = '\0';
+    
+    for (i = 0; i < 5; ++i)
+      write_test_data(image, test_data, strlen(test_data) * i);
+    
+    for (i = 5; i < 10; ++i)
+      aio_write_test_data(image, test_data, strlen(test_data) * i);
+    
+    for (i = 0; i < 5; ++i)
+      read_test_data(image, test_data, strlen(test_data) * i);
+    
+    for (i = 5; i < 10; ++i)
+      aio_read_test_data(image, test_data, strlen(test_data) * i);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+
 TEST(LibRBD, TestIOToSnapshot)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
+  string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
