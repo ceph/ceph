@@ -323,7 +323,7 @@ private:
 };
 
 static int do_command(CephToolCtx *ctx,
-	       vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
+	       vector<string>& cmd, bufferlist& bl, bufferlist& rbl)
 {
   Mutex::Locker l(ctx->lock);
 
@@ -336,7 +336,6 @@ static int do_command(CephToolCtx *ctx,
   while (!reply)
     cmd_cond.Wait(ctx->lock);
 
-  rs = rs;
   rbl = reply_bl;
   if (!ctx->concise)
     *ctx->log << ceph_clock_now(g_ceph_context) << " "
@@ -461,8 +460,7 @@ int run_command(CephToolCtx *ctx, const char *line)
   }
 
   in.clear();
-  string rs;
-  do_command(ctx, cmd, out, rs, in);
+  do_command(ctx, cmd, out, in);
 
   if (in.length() == 0)
     return 0;
@@ -488,13 +486,6 @@ int run_command(CephToolCtx *ctx, const char *line)
 	     << "to dump to terminal, or add '>-' to command." << std::endl;
   }
   return 0;
-}
-
-int ceph_tool_do_command(CephToolCtx *ctx, std::vector<std::string>& cmd, 
-			 bufferlist& indata, bufferlist& outdata)
-{
-  string rs;
-  return do_command(ctx, cmd, indata, rs, outdata);
 }
 
 CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)

@@ -186,7 +186,7 @@ int main(int argc, const char **argv)
 	  }
 
 	  bufferlist obl;
-	  if (ceph_tool_do_command(ctx, cmd, indata, obl))
+	  if (do_command(ctx, cmd, indata, obl))
 	    ret = 1;
 	  if (obl.length()) {
 	    int err = obl.write_fd(out_fd);
