@@ -38,6 +38,7 @@ std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
     oss << "rados_conf_read_file failed with error " << ret;
     return oss.str();
   }
+  rados_conf_parse_env(*cluster, NULL);
   ret = rados_connect(*cluster);
   if (ret) {
     rados_shutdown(*cluster);
@@ -71,6 +72,7 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
     oss << "cluster.conf_read_file failed with error " << ret;
     return oss.str();
   }
+  cluster.conf_parse_env(NULL);
   ret = cluster.connect();
   if (ret) {
     cluster.shutdown();

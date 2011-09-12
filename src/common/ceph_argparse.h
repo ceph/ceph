@@ -43,7 +43,7 @@ public:
 };
 
 /////////////////////// Functions ///////////////////////
-extern void env_to_vec(std::vector<const char*>& args);
+extern void env_to_vec(std::vector<const char*>& args, const char *name=NULL);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
 extern void vec_to_argv(std::vector<const char*>& args,

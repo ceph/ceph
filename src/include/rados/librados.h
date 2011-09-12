@@ -85,6 +85,8 @@ int rados_conf_read_file(rados_t cluster, const char *path);
 /* Parse argv */
 int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
+int rados_conf_parse_env(rados_t cluster, const char *var);
+
 /* Sets a configuration value from a string.
  * Returns 0 on success, error code otherwise. */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);

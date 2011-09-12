@@ -45,10 +45,13 @@
 #undef generic_dout
 #undef dendl
 
-void env_to_vec(std::vector<const char*>& args)
+void env_to_vec(std::vector<const char*>& args, const char *name)
 {
-  char *p = getenv("CEPH_ARGS");
-  if (!p) return;
+  if (!name)
+    name = "CEPH_ARGS";
+  char *p = getenv(name);
+  if (!p)
+    return;
 
   static char buf[1000];
   int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.

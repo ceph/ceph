@@ -587,8 +587,7 @@ parse_config_files_impl(const std::list<std::string> &conf_files,
   return 0;
 }
 
-void md_config_t::
-parse_env()
+void md_config_t::parse_env()
 {
   Mutex::Locker l(lock);
   if (internal_safe_to_start_threads)

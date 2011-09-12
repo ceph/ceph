@@ -3151,6 +3151,11 @@ int librados::Rados::conf_parse_argv(int argc, const char ** argv) const
   return rados_conf_parse_argv((rados_t)client, argc, argv);
 }
 
+int librados::Rados::conf_parse_env(const char *name) const
+{
+  return rados_conf_parse_env((rados_t)client, name);
+}
+
 int librados::Rados::conf_set(const char *option, const char *value)
 {
   return rados_conf_set((rados_t)client, option, value);
@@ -3413,6 +3418,19 @@ extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **arg
   md_config_t *conf = client->cct->_conf;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  int ret = conf->parse_argv(args);
+  if (ret)
+    return ret;
+  conf->apply_changes(NULL);
+  return 0;
+}
+
+extern "C" int rados_conf_parse_env(rados_t cluster, const char *env)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
+  vector<const char*> args;
+  env_to_vec(args, env);
   int ret = conf->parse_argv(args);
   if (ret)
     return ret;
