@@ -58,8 +58,8 @@ using namespace std;
 class md_config_t;
 class CephContext;
 
-extern CompatSet mdsmap_compat;
-extern CompatSet mdsmap_compat_base; // pre v0.20
+extern CompatSet get_mdsmap_compat_set();
+extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 
 #define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
 #define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
@@ -580,7 +580,7 @@ public:
     if (ev >= 3)
       ::decode(compat, p);
     else
-      compat = mdsmap_compat_base;
+      compat = get_mdsmap_compat_set_base();
     if (ev < 5) {
       __u32 n;
       ::decode(n, p);

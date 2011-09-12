@@ -35,9 +35,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 
-extern const CompatSet::Feature ceph_mon_feature_compat[];
-extern const CompatSet::Feature ceph_mon_feature_ro_compat[];
-extern const CompatSet::Feature ceph_mon_feature_incompat[];
+extern CompatSet get_ceph_mon_feature_compat_set();
 
 void usage()
 {
@@ -132,9 +130,7 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  CompatSet mon_features(ceph_mon_feature_compat,
-			 ceph_mon_feature_ro_compat,
-			 ceph_mon_feature_incompat);
+  CompatSet mon_features = get_ceph_mon_feature_compat_set();
   CompatSet ondisk_features;
 
   MonitorStore store(g_conf->mon_data);
@@ -165,9 +161,7 @@ int main(int argc, const char **argv)
     //we only want the baseline ~v.18 features assumed to be on disk.
     //If new features are introduced this code needs to disappear or
     //be made smarter.
-    ondisk_features = CompatSet(ceph_mon_feature_compat,
-				ceph_mon_feature_ro_compat,
-				ceph_mon_feature_incompat);
+    ondisk_features = get_ceph_mon_feature_compat_set();
   } else {
     bufferlist::iterator it = features.begin();
     ondisk_features.decode(it);

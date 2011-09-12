@@ -54,7 +54,7 @@ public:
   const string& get_standby_for_name() { return standby_for_name; }
 
   CompatSet& get_compat() { return compat; }
-  void set_compat(CompatSet& c) { compat = c; }
+  void set_compat(const CompatSet& c) { compat = c; }
 
   void set_standby_for_rank(int r) { standby_for_rank = r; }
   void set_standby_for_name(string& n) { standby_for_name = n; }

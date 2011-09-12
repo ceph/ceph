@@ -19,8 +19,6 @@
 
 #include "common/Formatter.h"
 
-#define END_FEATURE CompatSet::Feature(0, "")
-
 struct CompatSet {
 
   struct Feature {
@@ -76,17 +74,6 @@ struct CompatSet {
 
   CompatSet(FeatureSet& _compat, FeatureSet& _ro_compat, FeatureSet& _incompat) :
     compat(_compat), ro_compat(_ro_compat), incompat(_incompat) {}
-
-  CompatSet(const Feature _compat[], const Feature _ro_compat[], const Feature _incompat[]) :
-    compat(), ro_compat(), incompat()
-  {
-    for (int i = 0; _compat[i].id != 0; ++i)
-      compat.insert(_compat[i]);
-    for (int j = 0; _ro_compat[j].id != 0; ++j)
-      ro_compat.insert(_ro_compat[j]);
-    for (int k = 0; _incompat[k].id != 0; ++k)
-      incompat.insert(_incompat[k]);
-  }
 
   CompatSet() : compat(), ro_compat(), incompat() { }
 

@@ -20,41 +20,27 @@ using std::stringstream;
 
 
 // features
+CompatSet get_mdsmap_compat_set() {
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
+  CompatSet::FeatureSet feature_ro_compat;
 
-const struct CompatSet::Feature feature_compat[] = {
-  END_FEATURE
-};
-const struct CompatSet::Feature feature_incompat[] = {
-  MDS_FEATURE_INCOMPAT_BASE,
-  MDS_FEATURE_INCOMPAT_CLIENTRANGES,
-  MDS_FEATURE_INCOMPAT_FILELAYOUT,
-  MDS_FEATURE_INCOMPAT_DIRINODE,
-  END_FEATURE
-};
-const struct CompatSet::Feature feature_ro_compat[] = {
-  END_FEATURE
-};
-
-CompatSet mdsmap_compat(feature_compat,
-			feature_ro_compat,
-			feature_incompat);
+  return CompatSet(feature_compat, feature_incompat, feature_ro_compat);
+}
 
 // base (pre v0.20)
-const struct CompatSet::Feature feature_compat_base[] = {
-  END_FEATURE
-};
-const struct CompatSet::Feature feature_incompat_base[] = {
-  MDS_FEATURE_INCOMPAT_BASE,
-  END_FEATURE
-};
-const struct CompatSet::Feature feature_ro_compat_base[] = {
-  END_FEATURE
-};
+CompatSet get_mdsmap_compat_set_base() {
+  CompatSet::FeatureSet feature_compat_base;
+  CompatSet::FeatureSet feature_incompat_base;
+  feature_incompat_base.insert(MDS_FEATURE_INCOMPAT_BASE);
+  CompatSet::FeatureSet feature_ro_compat_base;
 
-CompatSet mdsmap_compat_base(feature_compat_base,
-			     feature_ro_compat_base,
-			     feature_incompat_base);
-
+  return CompatSet(feature_compat_base, feature_incompat_base, feature_ro_compat_base);
+}
 
 void MDSMap::mds_info_t::dump(Formatter *f) const
 {

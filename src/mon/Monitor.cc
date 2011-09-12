@@ -82,12 +82,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 		<< " ";
 }
 
-const CompatSet::Feature ceph_mon_feature_compat[] = 
-  {END_FEATURE};
-const CompatSet::Feature ceph_mon_feature_ro_compat[] = 
-  {END_FEATURE};
-const CompatSet::Feature ceph_mon_feature_incompat[] =
-  { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
+CompatSet get_ceph_mon_feature_compat_set()
+{
+  CompatSet::FeatureSet ceph_mon_feature_compat;
+  CompatSet::FeatureSet ceph_mon_feature_ro_compat;
+  CompatSet::FeatureSet ceph_mon_feature_incompat;
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
+  return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
+		   ceph_mon_feature_incompat);
+}
 
 #ifdef ENABLE_COVERAGE
 void handle_signal(int signal)
@@ -1097,9 +1100,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   }
 
   bufferlist features;
-  CompatSet mon_features(ceph_mon_feature_compat,
-			 ceph_mon_feature_ro_compat,
-			 ceph_mon_feature_incompat);
+  CompatSet mon_features = get_ceph_mon_feature_compat_set();
   mon_features.encode(features);
   store->put_bl_ss(features, COMPAT_SET_LOC, 0);
 

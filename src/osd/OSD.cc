@@ -113,22 +113,18 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMap *osdmap) {
 const coll_t coll_t::META_COLL("meta");
 const coll_t coll_t::TEMP_COLL("temp");
 
-const struct CompatSet::Feature ceph_osd_feature_compat[] = {
-  END_FEATURE
-};
-const struct CompatSet::Feature ceph_osd_feature_incompat[] = {
-  CEPH_OSD_FEATURE_INCOMPAT_BASE,
-  CEPH_OSD_FEATURE_INCOMPAT_PGINFO,
-  CEPH_OSD_FEATURE_INCOMPAT_OLOC,
-  CEPH_OSD_FEATURE_INCOMPAT_LEC,
-  CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES, // stat categories
-  END_FEATURE
-};
-const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
-  END_FEATURE
-};
-
-
+static CompatSet get_osd_compat_set() {
+  CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_incompat;
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_OLOC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES);
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
+  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_incompat,
+		   ceph_osd_feature_ro_compat);
+}
 
 ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
 {
@@ -521,9 +517,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
-  osd_compat(ceph_osd_feature_compat,
-	     ceph_osd_feature_ro_compat,
-	     ceph_osd_feature_incompat),
+  osd_compat(get_osd_compat_set()),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads),
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads),
