@@ -294,9 +294,6 @@ rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = libglobal.la librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += rbd
 
-testlibrbd_SOURCES = testlibrbd.c
-testlibrbd_LDADD = librbd.la librados.la -lpthread -lm \
-		   $(CRYPTO_LIBS) $(EXTRALIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
 testlibrbdpp_LDADD = librbd.la librados.la -lpthread -lm \
 		     $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -578,6 +575,11 @@ unittest_librgw_LDADD =  librgw.la ${UNITTEST_LDADD} -lexpat -lfcgi $(LIBGLOBAL_
 unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
+
+test_librbd_SOURCES = test/test_librbd.cc
+test_librbd_LDADD =  librbd.la ${UNITTEST_STATIC_LDADD}
+test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_librbd
 
 test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
