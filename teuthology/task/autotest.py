@@ -4,7 +4,7 @@ import os
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
-from orchestra import run
+from ..orchestra import run
 
 log = logging.getLogger(__name__)
 

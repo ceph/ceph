@@ -1,6 +1,6 @@
 import logging
 
-from orchestra import run
+from ..orchestra import run
 
 log = logging.getLogger(__name__)
 

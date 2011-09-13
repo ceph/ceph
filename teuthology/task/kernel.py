@@ -3,7 +3,7 @@ from cStringIO import StringIO
 import logging
 
 from teuthology import misc as teuthology
-from orchestra import run
+from ..orchestra import run
 
 log = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ import urllib2
 import urlparse
 import yaml
 
-from orchestra import run
+from .orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -300,7 +300,7 @@ def reconnect(ctx, timeout):
     while True:
         for remote in list(need_reconnect):
             try:
-                from orchestra import connection
+                from .orchestra import connection
                 remote.ssh = connection.connect(
                     user_at_host=remote.name,
                     host_key=ctx.config['targets'][remote.name],

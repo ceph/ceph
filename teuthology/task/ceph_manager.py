@@ -2,7 +2,7 @@ import random
 import time
 import re
 import gevent
-from orchestra import run
+from ..orchestra import run
 
 class Thrasher(gevent.Greenlet):
     def __init__(self, manager, config, logger=None):

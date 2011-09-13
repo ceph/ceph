@@ -35,9 +35,9 @@ and then run::
 
 	./bootstrap
 
-You can run Teuthology's (and Orchestra's) internal unit tests with::
+You can run Teuthology's internal unit tests with::
 
-	./virtualenv/bin/nosetests orchestra teuthology
+	./virtualenv/bin/nosetests
 
 
 Test configuration

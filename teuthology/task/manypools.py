@@ -1,5 +1,5 @@
 from teuthology import misc as teuthology
-from orchestra import run
+from ..orchestra import run
 import logging
 
 log = logging.getLogger(__name__)

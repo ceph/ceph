@@ -10,7 +10,7 @@ import yaml
 from teuthology import lock
 from teuthology import misc as teuthology
 from teuthology import safepath
-from orchestra import run
+from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def check_lock(ctx, config):
 
 def connect(ctx, config):
     log.info('Opening connections...')
-    from orchestra import connection, remote
+    from ..orchestra import connection, remote
     import orchestra.cluster
     remotes = []
     for t, key in ctx.config['targets'].iteritems():

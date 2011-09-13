@@ -1,7 +1,7 @@
 import logging
 import os
 
-from orchestra import run
+from ..orchestra import run
 import time
 import gevent
 

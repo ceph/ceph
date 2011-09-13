@@ -1,5 +1,5 @@
 import argparse
-from orchestra import cluster
+from ..orchestra import cluster
 
 from nose.tools import (
     eq_ as eq,

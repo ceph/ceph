@@ -1,7 +1,7 @@
 import contextlib
 import logging
 
-from orchestra import run
+from ..orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 

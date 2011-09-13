@@ -1,4 +1,4 @@
-from orchestra import run
+from . import run
 
 class Remote(object):
     """
