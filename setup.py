@@ -13,13 +13,16 @@ setup(
     keywords='ceph testing ssh cluster',
 
     install_requires=[
-        'orchestra',
+        'gevent ==0.13.6',
+        'paramiko >=1.7.7',
         'configobj',
         'PyYAML',
         'bunch >=1.0.0',
         'argparse >=1.2.1',
         'httplib2',
         'beanstalkc >=0.2.0',
+        'nose >=1.0.0',
+        'fudge >=1.0.3',
         ],
 
     entry_points={
