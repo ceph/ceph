@@ -322,7 +322,7 @@ private:
   CephToolCtx *ctx;
 };
 
-static int do_command(CephToolCtx *ctx,
+int do_command(CephToolCtx *ctx,
 	       vector<string>& cmd, bufferlist& bl, bufferlist& rbl)
 {
   Mutex::Locker l(ctx->lock);

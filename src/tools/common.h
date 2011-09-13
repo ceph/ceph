@@ -81,8 +81,8 @@ int ceph_tool_do_cli(CephToolCtx *data);
 int run_command(CephToolCtx *data, const char *line);
 void send_observe_requests(CephToolCtx *ctx);
 CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise);
-int ceph_tool_do_command(CephToolCtx *ctx, std::vector<std::string>& cmd, 
-			 bufferlist& indata, bufferlist& outdata);
+int do_command(CephToolCtx *ctx,
+	       vector<string>& cmd, bufferlist& bl, bufferlist& rbl);
 int ceph_tool_messenger_shutdown();
 int ceph_tool_common_shutdown(CephToolCtx *ctx);
 
