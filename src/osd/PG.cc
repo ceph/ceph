@@ -4954,7 +4954,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	// did any osds survive _this_ interval?
 	any_survived = true;
       } else if (!pinfo || pinfo->lost_at > interval.first) {
-	down.insert(0);
+	down.insert(o);
 	if (started_since_joining.size()) {
 	  if (pinfo)
 	    dout(10) << "build_prior  prior osd" << o
