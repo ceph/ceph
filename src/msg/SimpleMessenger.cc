@@ -2608,6 +2608,21 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
   return 0;
 }
 
+int SimpleMessenger::send_keepalive(Connection *con)
+{
+  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
+  if (pipe) {
+    ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
+    pipe->pipe_lock.Lock();
+    pipe->_send_keepalive();
+    pipe->pipe_lock.Unlock();
+    pipe->put();
+  } else {
+    ldout(cct,0) << "send_keepalive con " << con << ", no pipe." << dendl;
+  }
+  return 0;
+}
+
 
 
 void SimpleMessenger::wait()

@@ -606,6 +606,7 @@ public:
   void submit_message(Message *m, Pipe *pipe);
 		      
   int send_keepalive(const entity_inst_t& addr);
+  int send_keepalive(Connection *con);
 
   void learned_addr(const entity_addr_t& peer_addr_for_me);
   void init_local_pipe();
