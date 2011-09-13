@@ -19,9 +19,9 @@
 
     "radostool" -> "librados"
 
-    "radosgw_admin" -> "rgw"
+    "radosgw_admin" -> "radosgw"
 
-    "rgw" -> "librados"
+    "radosgw" -> "librados"
 
     "radosacl" -> "librados"
 

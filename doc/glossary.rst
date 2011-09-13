@@ -29,9 +29,6 @@
    cmds
      Ceph MDS, the actual daemon blahblah
 
-   rgw
-     .. todo:: write me
-
    radosgw
      .. todo:: write me
 
