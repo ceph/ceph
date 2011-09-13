@@ -1,10 +1,10 @@
 tasks:
 - ceph:
 - kclient:
-- lockfile: [{client: client.0, lockfile: testfile, holdtime: 5},
+- lockfile: [{client: client.0, lockfile: testfile, holdtime: 5, maxwait: 1},
              {client: client.1, lockfile: testfile, holdtime: 5, maxwait: 11},
              {client: client.1, lockfile: testfile, holdtime: 0, maxwait: 0, expectfail: True},
              10,
-             {client: client.0, lockfile: testfile, holdtime: 5},
+             {client: client.0, lockfile: testfile, holdtime: 5, maxwait: 1},
              {client: client.1, lockfile: testfile, holdtime: 5, maxwait: 1, expectfail: True},
              {client: client.1, lockfile: testfile, holdtime: 5, maxwait: 11}]
