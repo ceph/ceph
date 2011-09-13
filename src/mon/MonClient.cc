@@ -227,7 +227,7 @@ int MonClient::get_monmap_privately()
   while (monmap.epoch == 0) {
     cur_mon = monmap.pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
-    ldout(cct, 10) << "querying mon." << cur_mon << " " << monmap.get_inst(cur_mon) << dendl;
+    ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
     messenger->send_message(new MMonGetMap, cur_con);
     
     if (--attempt == 0)
@@ -310,37 +310,28 @@ bool MonClient::ms_dispatch(Message *m)
 void MonClient::handle_monmap(MMonMap *m)
 {
   ldout(cct, 10) << "handle_monmap " << *m << dendl;
-
-  assert(!cur_mon.empty());
-  entity_addr_t cur_mon_addr = monmap.get_addr(cur_mon);
-
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
+  assert(!cur_mon.empty());
   ldout(cct, 10) << " got monmap " << monmap.epoch
-	   << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
-	   << " at " << monmap.get_inst(cur_mon)
-	   << dendl;
+		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+		 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
   *_dout << dendl;
 
   _sub_got("monmap", monmap.get_epoch());
 
-  map_cond.Signal();
-  want_monmap = false;
-
-  if (!cur_mon.empty()) {
-    if (!monmap.get_addr_name(cur_mon_addr, cur_mon)) {
-      ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
-      cur_mon.clear();
-    }
+  if (!monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon)) {
+    ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
+    _pick_new_mon();  // can't find the mon we were talking to (above)
+  } else {
+    _finish_hunting();
   }
 
-  if (cur_mon.empty())
-    _pick_new_mon();  // can't find the mon we were talking to (above)
-  else
-    _finish_hunting();
+  map_cond.Signal();
+  want_monmap = false;
 
   m->put();
 }
@@ -504,7 +495,9 @@ void MonClient::_send_mon_message(Message *m, bool force)
   assert(monc_lock.is_locked());
   assert(!cur_mon.empty());
   if (force || state == MC_STATE_HAVE_SESSION) {
-    ldout(cct, 10) << "_send_mon_message to mon." << cur_mon << " at " << monmap.get_inst(cur_mon) << dendl;
+    assert(cur_con);
+    ldout(cct, 10) << "_send_mon_message to mon." << cur_mon
+		   << " at " << cur_con->get_peer_addr() << dendl;
     messenger->send_message(m, cur_con);
   } else {
     waiting_for_session.push_back(m);
@@ -528,7 +521,9 @@ void MonClient::_pick_new_mon()
   }
   cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
 
-  ldout(cct, 10) << "_pick_new_mon picked mon." << cur_mon << " con " << cur_con << dendl;
+  ldout(cct, 10) << "_pick_new_mon picked mon." << cur_mon << " con " << cur_con
+		 << " addr " << cur_con->get_peer_addr()
+		 << dendl;
 }
 
 
@@ -567,7 +562,7 @@ bool MonClient::ms_handle_reset(Connection *con)
   Mutex::Locker lock(monc_lock);
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    if (cur_mon.empty() || con->get_peer_addr() != monmap.get_addr(cur_mon)) {
+    if (cur_mon.empty() || con != cur_con) {
       ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
       return true;
     } else {
@@ -607,7 +602,7 @@ void MonClient::tick()
     if (now > sub_renew_after)
       _renew_subs();
 
-    messenger->send_keepalive(monmap.get_inst(cur_mon));
+    messenger->send_keepalive(cur_con);
    
     if (state == MC_STATE_HAVE_SESSION &&
 	log_client) {
