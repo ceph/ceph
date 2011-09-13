@@ -325,7 +325,7 @@ void MonClient::handle_monmap(MMonMap *m)
 
   if (!monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon)) {
     ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
-    _pick_new_mon();  // can't find the mon we were talking to (above)
+    _reopen_session();  // can't find the mon we were talking to (above)
   } else {
     _finish_hunting();
   }
