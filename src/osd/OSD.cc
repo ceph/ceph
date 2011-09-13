@@ -2200,12 +2200,18 @@ void OSD::handle_command(MMonCommand *m)
 
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs") {
-    ostringstream oss;
-    osd_lock.Unlock();
-    g_conf->injectargs(m->cmd[1], &oss);
-    osd_lock.Lock();
-    derr << "injectargs:" << dendl;
-    derr << oss.str() << dendl;
+    if (m->cmd.size() < 2) {
+      derr << "Ignoring empty injectargs! Perhaps you should add -- before "
+	   << "your injectargs argument." << dendl;
+    }
+    else {
+      ostringstream oss;
+      osd_lock.Unlock();
+      g_conf->injectargs(m->cmd[1], &oss);
+      osd_lock.Lock();
+      derr << "injectargs:" << dendl;
+      derr << oss.str() << dendl;
+    }
   }
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
