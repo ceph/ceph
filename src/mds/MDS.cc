@@ -477,7 +477,8 @@ int MDS::init(int wanted_state)
   want_state = wanted_state;
   if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
       wanted_state==MDSMap::STATE_ONESHOT_REPLAY) {
-    g_conf->mds_standby_replay = true;
+    g_conf->set_val_or_die("mds_standby_replay", "true");
+    g_conf->apply_changes(NULL);
     if ( wanted_state == MDSMap::STATE_ONESHOT_REPLAY &&
         (g_conf->mds_standby_for_rank == -1) &&
         g_conf->mds_standby_for_name.empty()) {

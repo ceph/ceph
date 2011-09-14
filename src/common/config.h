@@ -158,14 +158,14 @@ private:
 public:
   EntityName name;
 #define OPTION_OPT_INT(name) const int name;
-#define OPTION_OPT_LONGLONG(name) long long name;
-#define OPTION_OPT_STR(name) std::string name;
-#define OPTION_OPT_DOUBLE(name) double name;
-#define OPTION_OPT_FLOAT(name) float name;
-#define OPTION_OPT_BOOL(name) bool name;
-#define OPTION_OPT_ADDR(name) entity_addr_t name;
-#define OPTION_OPT_U32(name) uint32_t name;
-#define OPTION_OPT_U64(name) uint64_t name;
+#define OPTION_OPT_LONGLONG(name) const long long name;
+#define OPTION_OPT_STR(name) const std::string name;
+#define OPTION_OPT_DOUBLE(name) const double name;
+#define OPTION_OPT_FLOAT(name) const float name;
+#define OPTION_OPT_BOOL(name) const bool name;
+#define OPTION_OPT_ADDR(name) const entity_addr_t name;
+#define OPTION_OPT_U32(name) const uint32_t name;
+#define OPTION_OPT_U64(name) const uint64_t name;
 #define OPTION(name, ty, init) OPTION_##ty(name)
 #include "common/config_opts.h"
 #undef OPTION_OPT_INT

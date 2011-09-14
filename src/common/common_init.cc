@@ -49,7 +49,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // Set some defaults based on code type
   switch (code_env) {
     case CODE_ENVIRONMENT_DAEMON:
-      conf->daemonize = true;
+      conf->set_val_or_die("daemonize", "true");
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
 	conf->set_val_or_die("pid_file", "/var/run/ceph/$type.$id.pid");
 	conf->set_val_or_die("admin_socket", "/var/run/ceph/$name.asok");
