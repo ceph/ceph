@@ -68,7 +68,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   vec_to_argv(args, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf->chdir = "/";
+  g_ceph_context->_conf->set_val("chdir", "/");
+  g_ceph_context->_conf->apply_changes(NULL);
 
   // check for 32-bit arch
   if (sizeof(long) == 4) {

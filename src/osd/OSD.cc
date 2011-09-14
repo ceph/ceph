@@ -241,10 +241,17 @@ static int do_convertfs(ObjectStore *store)
 
 int OSD::convertfs(const std::string &dev, const std::string &jdev)
 {
-  g_ceph_context->_conf->filestore_update_collections = true;
+  // N.B. at some point we should rewrite this to avoid playing games with
+  // g_conf here
+  char buf[16] = { 0 };
+  char *b = buf;
+  g_ceph_context->_conf->get_val("filestore_update_collections", &b, sizeof(buf));
+  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
   boost::scoped_ptr<ObjectStore> store(new FileStore(dev, jdev));
   int r = do_convertfs(store.get());
-  g_ceph_context->_conf->filestore_update_collections = false;
+  g_ceph_context->_conf->set_val_or_die("filestore_update_collections", buf);
+  g_ceph_context->_conf->apply_changes(NULL);
   return r;
 }
 
@@ -792,10 +799,11 @@ void OSD::create_logger()
 
 int OSD::shutdown()
 {
-  g_conf->debug_osd = 100;
-  g_conf->debug_journal = 100;
-  g_conf->debug_filestore = 100;
-  g_conf->debug_ms = 100;
+  g_ceph_context->_conf->set_val("debug_osd", "100");
+  g_ceph_context->_conf->set_val("debug_journal", "100");
+  g_ceph_context->_conf->set_val("debug_filestore", "100");
+  g_ceph_context->_conf->set_val("debug_ms", "100");
+  g_ceph_context->_conf->apply_changes(NULL);
   
   derr << "OSD::shutdown" << dendl;
 
@@ -2333,13 +2341,20 @@ void OSD::handle_command(MMonCommand *m)
       fout.close();
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "kick_recovery_wq") {
-      g_conf->osd_recovery_delay_start = atoi(m->cmd[2].c_str());
-      clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
-		    << "to " << g_conf->osd_recovery_delay_start << "\n";
-
-      defer_recovery_until = ceph_clock_now(g_ceph_context);
-      defer_recovery_until += g_conf->osd_recovery_delay_start;
-      recovery_wq.kick();
+      int r = g_conf->set_val("osd_recovery_delay_start", m->cmd[2].c_str());
+      if (r != 0) {
+	clog.info() << "kick_recovery_wq: error setting "
+	  << "osd_recovery_delay_start to '" << m->cmd[2] << "': error "
+	  << r << "\n";
+      }
+      else {
+	g_conf->apply_changes(NULL);
+	clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
+		      << "to " << g_conf->osd_recovery_delay_start << "\n";
+	defer_recovery_until = ceph_clock_now(g_ceph_context);
+	defer_recovery_until += g_conf->osd_recovery_delay_start;
+	recovery_wq.kick();
+      }
     }
   }
   else if (m->cmd[0] == "cpu_profiler") {

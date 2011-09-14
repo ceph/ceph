@@ -12,7 +12,6 @@
  * 
  */
 
-
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -631,7 +630,33 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
   flusher_queue_len(0), flusher_thread(this),
-  logger(NULL)
+  logger(NULL),
+  m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
+  m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap ),
+  m_filestore_btrfs_trans(g_conf->filestore_btrfs_trans),
+  m_filestore_fake_attrs(g_conf->filestore_fake_attrs),
+  m_filestore_fake_collections(g_conf->filestore_fake_collections),
+  m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
+  m_filestore_fiemap(g_conf->filestore_fiemap),
+  m_filestore_flusher (g_conf->filestore_flusher ),
+  m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
+  m_filestore_journal_parallel(g_conf->filestore_journal_parallel ),
+  m_filestore_journal_trailing(g_conf->filestore_journal_trailing),
+  m_filestore_journal_writeahead(g_conf->filestore_journal_writeahead),
+  m_filestore_dev(g_conf->filestore_dev),
+  m_filestore_fiemap_threshold(g_conf->filestore_fiemap_threshold),
+  m_filestore_sync_flush(g_conf->filestore_sync_flush),
+  m_filestore_flusher_max_fds(g_conf->filestore_flusher_max_fds),
+  m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
+  m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
+  m_filestore_update_collections(g_conf->filestore_update_collections),
+  m_journal_dio(g_conf->journal_dio),
+  m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
+  m_osd_use_stale_snap(g_conf->osd_use_stale_snap),
+  m_filestore_queue_max_ops(g_conf->filestore_queue_max_ops),
+  m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
+  m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
+  m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes)
 {
   ostringstream oss;
   oss << basedir << "/current";
@@ -716,7 +741,7 @@ int FileStore::open_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), g_conf->journal_dio);
+    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
   }
   return 0;
 }
@@ -781,12 +806,12 @@ int FileStore::mkfs()
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
 
-  if (!g_conf->filestore_dev.empty()) {
+  if (!m_filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
-    std::string mret = run_cmd("mount", g_conf->filestore_dev.c_str(), (char*)NULL);
+    std::string mret = run_cmd("mount", m_filestore_dev.c_str(), (char*)NULL);
     if (!mret.empty()) {
-      derr << "FileStore::mkfs: failed to mount g_conf->filestore_dev "
-	   << "'" << g_conf->filestore_dev << "'. " << mret << dendl;
+      derr << "FileStore::mkfs: failed to mount m_filestore_dev "
+	   << "'" << m_filestore_dev << "'. " << mret << dendl;
       ret = -EIO;
       goto out;
     }
@@ -919,9 +944,9 @@ int FileStore::mkfs()
   if (ret)
     goto close_basedir_fd;
 
-  if (!g_conf->filestore_dev.empty()) {
+  if (!m_filestore_dev.empty()) {
     dout(0) << "umounting" << dendl;
-    snprintf(buf, sizeof(buf), "umount %s", g_conf->filestore_dev.c_str());
+    snprintf(buf, sizeof(buf), "umount %s", m_filestore_dev.c_str());
     //system(cmd);
   }
 
@@ -1020,13 +1045,13 @@ int FileStore::_detect_fs()
   char buf[80];
   
   // fake collections?
-  if (g_conf->filestore_fake_collections) {
+  if (m_filestore_fake_collections) {
     dout(0) << "faking collections (in memory)" << dendl;
     fake_collections = true;
   }
 
   // xattrs?
-  if (g_conf->filestore_fake_attrs) {
+  if (m_filestore_fake_attrs) {
     dout(0) << "faking xattrs (in memory)" << dendl;
     fake_attrs = true;
   } else {
@@ -1061,7 +1086,7 @@ int FileStore::_detect_fs()
     dout(0) << "mount FIEMAP ioctl is supported" << dendl;
     ioctl_fiemap = true;
   }
-  if (!g_conf->filestore_fiemap) {
+  if (!m_filestore_fiemap) {
     dout(0) << "mount FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
     ioctl_fiemap = false;
   }
@@ -1079,7 +1104,7 @@ int FileStore::_detect_fs()
     btrfs = true;
 
     // clone_range?
-    if (g_conf->filestore_btrfs_clone_range) {
+    if (m_filestore_btrfs_clone_range) {
       btrfs_clone_range = true;
       int r = _do_clone_range(fsid_fd, -1, 0, 1, 0);
       if (r == -EBADF) {
@@ -1112,14 +1137,14 @@ int FileStore::_detect_fs()
       dout(0) << "mount btrfs SNAP_CREATE failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     }
 
-    if (g_conf->filestore_btrfs_snap && !btrfs_snap_destroy) {
+    if (m_filestore_btrfs_snap && !btrfs_snap_destroy) {
       dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+)" << dendl;
       cerr << TEXT_YELLOW
 	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
 	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
 	   << "             Linux 2.6.32).  Disabling.\n"
 	   << TEXT_NORMAL;
-      g_conf->filestore_btrfs_snap = false;
+      m_filestore_btrfs_snap = false;
     }
 
     // start_sync?
@@ -1178,7 +1203,7 @@ int FileStore::_detect_fs()
       }
     }
 
-    if (g_conf->filestore_btrfs_snap && !btrfs_snap_create_v2) {
+    if (m_filestore_btrfs_snap && !btrfs_snap_create_v2) {
       dout(0) << "mount WARNING: btrfs snaps enabled, but no SNAP_CREATE_V2 ioctl (from kernel 2.6.37+)" << dendl;
       cerr << TEXT_YELLOW
 	   << " ** WARNING: 'filestore btrfs snap' is enabled (for safe transactions,\n"	 
@@ -1200,9 +1225,9 @@ int FileStore::_sanity_check_fs()
 {
   // sanity check(s)
 
-  if ((int)g_conf->filestore_journal_writeahead +
-      (int)g_conf->filestore_journal_parallel +
-      (int)g_conf->filestore_journal_trailing > 1) {
+  if ((int)m_filestore_journal_writeahead +
+      (int)m_filestore_journal_parallel +
+      (int)m_filestore_journal_trailing > 1) {
     dout(0) << "mount ERROR: more than one of filestore journal {writeahead,parallel,trailing} enabled" << dendl;
     cerr << TEXT_RED 
 	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
@@ -1212,7 +1237,7 @@ int FileStore::_sanity_check_fs()
   }
 
   if (!btrfs) {
-    if (!journal || !g_conf->filestore_journal_writeahead) {
+    if (!journal || !m_filestore_journal_writeahead) {
       dout(0) << "mount WARNING: no btrfs, and no journal in writeahead mode; data may be lost" << dendl;
       cerr << TEXT_RED 
 	   << " ** WARNING: no btrfs AND (no journal OR journal not in writeahead mode)\n"
@@ -1333,9 +1358,9 @@ int FileStore::mount()
   uint64_t initial_op_seq;
   set<string> cluster_snaps;
 
-  if (!g_conf->filestore_dev.empty()) {
+  if (!m_filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
-    //run_cmd("mount", g_conf->filestore_dev, (char*)NULL);
+    //run_cmd("mount", m_filestore_dev, (char*)NULL);
   }
 
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
@@ -1360,10 +1385,10 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto done;
   } else if (ret == 0) {
-    if (g_conf->filestore_update_collections) {
+    if (m_filestore_update_collections) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
-	   << ". Proceeding, g_conf->filestore_update_collections "
+	   << ". Proceeding, m_filestore_update_collections "
 	   << "is set, DO NOT USE THIS OPTION IF YOU DO NOT KNOW WHAT IT DOES."
 	   << " More details can be found on the wiki."
 	   << dendl;
@@ -1447,14 +1472,14 @@ int FileStore::mount()
       dout(0) << "mount found cluster snaps " << cluster_snaps << dendl;
   }
 
-  if (g_conf->osd_rollback_to_cluster_snap.length() &&
-      cluster_snaps.count(g_conf->osd_rollback_to_cluster_snap) == 0) {
-    derr << "rollback to cluster snapshot '" << g_conf->osd_rollback_to_cluster_snap << "': not found" << dendl;
+  if (m_osd_rollback_to_cluster_snap.length() &&
+      cluster_snaps.count(m_osd_rollback_to_cluster_snap) == 0) {
+    derr << "rollback to cluster snapshot '" << m_osd_rollback_to_cluster_snap << "': not found" << dendl;
     ret = -ENOENT;
     goto close_basedir_fd;
   }
 
-  if (btrfs && g_conf->filestore_btrfs_snap) {
+  if (btrfs && m_filestore_btrfs_snap) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
     } else if (!btrfs) {
@@ -1462,14 +1487,14 @@ int FileStore::mount()
     } else {
       char s[PATH_MAX];
 
-      if (g_conf->osd_rollback_to_cluster_snap.length()) {
+      if (m_osd_rollback_to_cluster_snap.length()) {
 	derr << TEXT_RED
-	     << " ** NOTE: rolling back to cluster snapshot " << g_conf->osd_rollback_to_cluster_snap << " **"
+	     << " ** NOTE: rolling back to cluster snapshot " << m_osd_rollback_to_cluster_snap << " **"
 	     << TEXT_NORMAL
 	     << dendl;
-	assert(cluster_snaps.count(g_conf->osd_rollback_to_cluster_snap));
+	assert(cluster_snaps.count(m_osd_rollback_to_cluster_snap));
 	snprintf(s, sizeof(s), "%s/" CLUSTER_SNAP_ITEM, basedir.c_str(),
-		 g_conf->osd_rollback_to_cluster_snap.c_str());
+		 m_osd_rollback_to_cluster_snap.c_str());
       } else {
 	uint64_t curr_seq;
 	{
@@ -1483,7 +1508,7 @@ int FileStore::mount()
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
 	
 	if (cp != curr_seq) {
-	  if (!g_conf->osd_use_stale_snap) { 
+	  if (!m_osd_use_stale_snap) { 
 	    derr << TEXT_RED
 		 << " ** ERROR: current volume data version is not equal to snapshotted version\n"
 		 << "           which can lead to data inconsistency. \n"
@@ -1567,31 +1592,31 @@ int FileStore::mount()
 
   // select journal mode?
   if (journal) {
-    if (!g_conf->filestore_journal_writeahead &&
-	!g_conf->filestore_journal_parallel &&
-	!g_conf->filestore_journal_trailing) {
+    if (!m_filestore_journal_writeahead &&
+	!m_filestore_journal_parallel &&
+	!m_filestore_journal_trailing) {
       if (!btrfs) {
-	g_conf->filestore_journal_writeahead = true;
+	m_filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
-      } else if (!g_conf->filestore_btrfs_snap) {
-	g_conf->filestore_journal_writeahead = true;
+      } else if (!m_filestore_btrfs_snap) {
+	m_filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
       } else if (!btrfs_snap_create_v2) {
-	g_conf->filestore_journal_writeahead = true;
+	m_filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_V2 ioctl not detected (v2.6.37+)" << dendl;
       } else {
-	g_conf->filestore_journal_parallel = true;
+	m_filestore_journal_parallel = true;
 	dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_V2 detected and 'filestore btrfs snap' mode is enabled" << dendl;
       }
     } else {
-      if (g_conf->filestore_journal_writeahead)
+      if (m_filestore_journal_writeahead)
 	dout(0) << "mount: WRITEAHEAD journal mode explicitly enabled in conf" << dendl;
-      if (g_conf->filestore_journal_parallel)
+      if (m_filestore_journal_parallel)
 	dout(0) << "mount: PARALLEL journal mode explicitly enabled in conf" << dendl;
-      if (g_conf->filestore_journal_trailing)
+      if (m_filestore_journal_trailing)
 	dout(0) << "mount: TRAILING journal mode explicitly enabled in conf" << dendl;
     }
-    if (g_conf->filestore_journal_writeahead)
+    if (m_filestore_journal_writeahead)
       journal->set_wait_on_full(true);
   }
 
@@ -1700,9 +1725,9 @@ int FileStore::umount()
     basedir_fd = -1;
   }
 
-  if (!g_conf->filestore_dev.empty()) {
+  if (!m_filestore_dev.empty()) {
     dout(0) << "umounting" << dendl;
-    //run_cmd("umount", g_conf->filestore_dev, (char*)NULL);
+    //run_cmd("umount", m_filestore_dev, (char*)NULL);
   }
 
   {
@@ -1845,12 +1870,12 @@ void FileStore::op_queue_reserve_throttle(Op *o)
 void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
 {
   // Do not call while holding the journal lock!
-  uint64_t max_ops = g_conf->filestore_queue_max_ops;
-  uint64_t max_bytes = g_conf->filestore_queue_max_bytes;
+  uint64_t max_ops = m_filestore_queue_max_ops;
+  uint64_t max_bytes = m_filestore_queue_max_bytes;
 
   if (is_committing()) {
-    max_ops += g_conf->filestore_queue_committing_max_ops;
-    max_bytes += g_conf->filestore_queue_committing_max_bytes;
+    max_ops += m_filestore_queue_committing_max_ops;
+    max_bytes += m_filestore_queue_committing_max_bytes;
   }
 
   if (logger) {
@@ -1986,19 +2011,19 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     //logger->inc(l_os_in_bytes, 1); 
   }
 
-  if (journal && journal->is_writeable() && !g_conf->filestore_journal_trailing) {
+  if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync);
     op_queue_reserve_throttle(o);
     journal->throttle();
     o->op = op_submit_start();
-    if (g_conf->filestore_journal_parallel) {
+    if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
       _op_journal_transactions(o->tls, o->op, ondisk);
       
       // queue inside journal lock, to preserve ordering
       queue_op(osr, o);
-    } else if (g_conf->filestore_journal_writeahead) {
+    } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
       
       osr->queue_journal(o->op);
@@ -2128,7 +2153,7 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   return 0;
 #else
   if (!btrfs || !btrfs_trans_start_end ||
-      !g_conf->filestore_btrfs_trans)
+      !m_filestore_btrfs_trans)
     return 0;
 
   char buf[80];
@@ -2162,7 +2187,7 @@ void FileStore::_transaction_finish(int fd)
   return;
 #else
   if (!btrfs || !btrfs_trans_start_end ||
-      !g_conf->filestore_btrfs_trans)
+      !m_filestore_btrfs_trans)
     return;
 
   char fn[PATH_MAX];
@@ -2478,8 +2503,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
-
-  if (!ioctl_fiemap || len <= (size_t)g_conf->filestore_fiemap_threshold) {
+  if (!ioctl_fiemap || len <= (size_t)m_filestore_fiemap_threshold) {
     map<uint64_t, uint64_t> m;
     m[offset] = len;
     ::encode(m, bl);
@@ -2625,9 +2649,9 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
 
   // flush?
 #ifdef HAVE_SYNC_FILE_RANGE
-  if (!g_conf->filestore_flusher ||
+  if (!m_filestore_flusher ||
       !queue_flusher(fd, offset, len)) {
-    if (g_conf->filestore_sync_flush)
+    if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
     ::close(fd);
   }
@@ -2849,7 +2873,7 @@ bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
 {
   bool queued;
   lock.Lock();
-  if (flusher_queue_len < g_conf->filestore_flusher_max_fds) {
+  if (flusher_queue_len < m_filestore_flusher_max_fds) {
     flusher_queue.push_back(sync_epoch);
     flusher_queue.push_back(fd);
     flusher_queue.push_back(off);
@@ -2863,7 +2887,7 @@ bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
   } else {
     dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
 	     << " qlen " << flusher_queue_len 
-	     << " hit flusher_max_fds " << g_conf->filestore_flusher_max_fds
+	     << " hit flusher_max_fds " << m_filestore_flusher_max_fds
 	     << ", skipping async flush" << dendl;
     queued = false;
   }
@@ -2918,17 +2942,22 @@ void FileStore::flusher_entry()
 
 class SyncEntryTimeout : public Context {
 public:
-  SyncEntryTimeout() { }
+  SyncEntryTimeout(int commit_timeo) 
+    : m_commit_timeo(commit_timeo)
+  {
+  }
 
   void finish(int r) {
     BackTrace *bt = new BackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
-	   << g_conf->filestore_commit_timeout << " seconds.\n";
+	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);
     *_dout << dendl;
     delete bt;
     ceph_abort();
   }
+private:
+  int m_commit_timeo;
 };
 
 void FileStore::sync_entry()
@@ -2936,9 +2965,9 @@ void FileStore::sync_entry()
   lock.Lock();
   while (!stop) {
     utime_t max_interval;
-    max_interval.set_from_double(g_conf->filestore_max_sync_interval);
+    max_interval.set_from_double(m_filestore_max_sync_interval);
     utime_t min_interval;
-    min_interval.set_from_double(g_conf->filestore_min_sync_interval);
+    min_interval.set_from_double(m_filestore_min_sync_interval);
 
     utime_t startwait = ceph_clock_now(g_ceph_context);
     if (!force_sync) {
@@ -2974,9 +3003,10 @@ void FileStore::sync_entry()
       utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = committing_seq;
 
-      SyncEntryTimeout *sync_entry_timeo = new SyncEntryTimeout();
       sync_entry_timeo_lock.Lock();
-      timer.add_event_after(g_conf->filestore_commit_timeout, sync_entry_timeo);
+      SyncEntryTimeout *sync_entry_timeo =
+	new SyncEntryTimeout(m_filestore_commit_timeout);
+      timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
       if (logger)
@@ -2992,7 +3022,7 @@ void FileStore::sync_entry()
 	assert(0);
       }
 
-      bool do_snap = btrfs && g_conf->filestore_btrfs_snap;
+      bool do_snap = btrfs && m_filestore_btrfs_snap;
 
       if (do_snap) {
 
@@ -3047,7 +3077,7 @@ void FileStore::sync_entry()
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
-	} else if (g_conf->filestore_fsync_flushes_journal_data) {
+	} else if (m_filestore_fsync_flushes_journal_data) {
 	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
 	  // make the file system's journal commit.
 	  //  this works with ext3, but NOT ext4
@@ -3165,7 +3195,7 @@ void FileStore::flush()
 {
   dout(10) << "flush" << dendl;
  
-  if (g_conf->filestore_journal_writeahead) {
+  if (m_filestore_journal_writeahead) {
     if (journal)
       journal->flush();
     dout(10) << "flush draining ondisk finisher" << dendl;
@@ -3183,11 +3213,11 @@ void FileStore::sync_and_flush()
 {
   dout(10) << "sync_and_flush" << dendl;
 
-  if (g_conf->filestore_journal_writeahead) {
+  if (m_filestore_journal_writeahead) {
     if (journal)
       journal->flush();
     _flush_op_queue();
-  } else if (g_conf->filestore_journal_parallel) {
+  } else if (m_filestore_journal_parallel) {
     _flush_op_queue();
     sync();
   } else {
@@ -3768,6 +3798,31 @@ int FileStore::_collection_remove(coll_t c, const hobject_t& o)
   return r;
 }
 
+const char** FileStore::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "filestore_min_sync_interval",
+    "filestore_max_sync_interval",
+    "filestore_flusher_max_fds",
+    "filestore_commit_timeout",
+    NULL
+  };
+  return KEYS;
+}
 
-
-// eof.
+void FileStore::handle_conf_change(const struct md_config_t *conf,
+			  const std::set <std::string> &changed)
+{
+  if (changed.count("filestore_min_sync_interval") ||
+     changed.count("filestore_max_sync_interval") ||
+     changed.count("filestore_flusher_max_fds")) {
+    Mutex::Locker l(lock);
+    m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
+    m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
+    m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
+  }
+  if (changed.count("filestore_commit_timeout")) {
+    Mutex::Locker l(sync_entry_timeo_lock);
+    m_filestore_commit_timeout = conf->filestore_commit_timeout;
+  }
+}

@@ -527,7 +527,8 @@ int main(int argc, char **argv) {
   
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->osd_journal_size = 400;
+  g_ceph_context->_conf->set_val("osd_journal_size", "400");
+  g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

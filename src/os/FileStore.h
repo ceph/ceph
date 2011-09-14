@@ -38,7 +38,9 @@ using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
-class FileStore : public JournalingObjectStore {
+class FileStore : public JournalingObjectStore,
+                  public md_config_obs_t
+{
   static const uint32_t on_disk_version = 2;
   string basedir, journalpath;
   std::string current_fn;
@@ -359,6 +361,37 @@ public:
 
   void trim_from_cache(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) {}
   int is_cached(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len) { return -1; }
+
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+			  const std::set <std::string> &changed);
+private:
+  bool m_filestore_btrfs_clone_range;
+  bool m_filestore_btrfs_snap;
+  bool m_filestore_btrfs_trans;
+  bool m_filestore_fake_attrs;
+  bool m_filestore_fake_collections;
+  float m_filestore_commit_timeout;
+  bool m_filestore_fiemap;
+  bool m_filestore_flusher;
+  bool m_filestore_fsync_flushes_journal_data;
+  bool m_filestore_journal_parallel;
+  bool m_filestore_journal_trailing;
+  bool m_filestore_journal_writeahead;
+  std::string m_filestore_dev;
+  int m_filestore_fiemap_threshold;
+  bool m_filestore_sync_flush;
+  int m_filestore_flusher_max_fds;
+  double m_filestore_max_sync_interval;
+  double m_filestore_min_sync_interval;
+  bool m_filestore_update_collections;
+  bool m_journal_dio;
+  std::string m_osd_rollback_to_cluster_snap;
+  bool m_osd_use_stale_snap;
+  int m_filestore_queue_max_ops;
+  int m_filestore_queue_max_bytes;
+  int m_filestore_queue_committing_max_ops;
+  int m_filestore_queue_committing_max_bytes;
 };
 
 #endif
