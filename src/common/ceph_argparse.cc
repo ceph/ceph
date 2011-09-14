@@ -105,7 +105,7 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
     }
     //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
     vec.push_back(a);
-    while (*p == ',' || *p == ' ')
+    while (*p == ',' || *p == ' ' || *p == ';')
       p++;
   }
   return true;
