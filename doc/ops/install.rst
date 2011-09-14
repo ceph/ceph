@@ -99,6 +99,48 @@ Run these commands on all nodes::
    libceph-dev librados-dev librbd-dev obsync python-ceph radosgw)
 
 
+Red Hat / CentOS / Fedora
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. topic:: Status as of 2011-09
+
+   We do not currently provide prebuilt RPMs, but we do provide a spec
+   file that should work. The following will guide you to compiling it
+   yourself.
+
+To ensure you have the right build-dependencies, run::
+
+	yum install rpm-build rpmdevtools git fuse-devel libtool \
+	  libtool-ltdl-devel boost-devel libedit-devel openssl-devel \
+	  gcc-c++ nss-devel libatomic_ops-devel make
+
+To setup an RPM compilation environment, run::
+
+	rpmdev-setuptree
+
+To fetch the Ceph source tarball, run::
+
+	wget -P ~/rpmbuild/SOURCES/ http://ceph.newdream.net/download/ceph-0.34.tar.gz
+
+.. topic:: Status as of 2011-09
+
+   Release v0.34 does not contain a ceph.spec yet. Until v0.35 is
+   released, you can fetch a usable spec file and then start the
+   compilation::
+
+	wget https://raw.github.com/gist/1214596/5b6b5b0e978221e36fa2f7c795544ed50b6e9593/ceph.spec
+	rpmbuild -bb ceph.spec
+
+   Once v0.35 is released, this should suffice:
+
+	rpmbuild -tb ~/rpmbuild/SOURCES/ceph-0.35.tar.gz
+
+Finally, install the RPMs::
+
+	rpm -i rpmbuild/RPMS/x86_64/ceph-*.rpm
+
+
+
 .. todo:: Other operating system support.
 
 
