@@ -572,7 +572,7 @@ check_PROGRAMS += unittest_librgw
 endif
 
 test_librbd_SOURCES = test/test_librbd.cc
-test_librbd_LDADD =  librbd.la ${UNITTEST_STATIC_LDADD}
+test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
 
