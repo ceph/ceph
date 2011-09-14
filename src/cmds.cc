@@ -170,7 +170,10 @@ int main(int argc, const char **argv)
       }
       dout(0) << "requesting oneshot_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      g_conf->mds_standby_for_rank = r;
+      char rb[32];
+      snprintf(rb, sizeof(rb), "%d", r);
+      g_conf->set_val("mds_standby_for_rank", rb);
+      g_conf->apply_changes(NULL);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
@@ -180,7 +183,10 @@ int main(int argc, const char **argv)
       }
       dout(0) << "requesting standby_replay for mds" << r << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
-      g_conf->mds_standby_for_rank = r;
+      char rb[32];
+      snprintf(rb, sizeof(rb), "%d", r);
+      g_conf->set_val("mds_standby_for_rank", rb);
+      g_conf->apply_changes(NULL);
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;

@@ -157,7 +157,7 @@ private:
 
 public:
   EntityName name;
-#define OPTION_OPT_INT(name) int name;
+#define OPTION_OPT_INT(name) const int name;
 #define OPTION_OPT_LONGLONG(name) long long name;
 #define OPTION_OPT_STR(name) std::string name;
 #define OPTION_OPT_DOUBLE(name) double name;
