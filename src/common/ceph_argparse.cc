@@ -344,7 +344,10 @@ CephInitParameters ceph_argparse_early_args
   CephInitParameters iparams(module_type);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    if (ceph_argparse_double_dash(args, i)) {
+    if (strcmp(*i, "--") == 0) {
+      /* Normally we would use ceph_argparse_double_dash. However, in this
+       * function we *don't* want to remove the double dash, because later
+       * argument parses will still need to see it. */
       break;
     }
     else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {

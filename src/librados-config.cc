@@ -42,9 +42,15 @@ int main(int argc, const char **argv)
   bool opt_version = false;
   bool opt_vernum = false;
 
+  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
   for (std::vector<const char*>::iterator i = args.begin();
        i != args.end(); ) {
-    if (strcmp(*i, "--version") == 0) {
+    if (strcmp(*i, "--") == 0) {
+      break;
+    }
+    else if (strcmp(*i, "--version") == 0) {
       opt_version = true;
       i = args.erase(i);
     }
@@ -55,9 +61,6 @@ int main(int argc, const char **argv)
     else
       ++i;
   }
-
-  global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
 
   if (!opt_version && !opt_vernum)
     usage_exit();

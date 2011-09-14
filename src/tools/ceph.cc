@@ -117,13 +117,13 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  // parse user input
-  bool concise = false;
-  parse_cmd_args(args, &in_file, &out_file, &mode, &concise);
-
   // initialize globals
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  // parse user input
+  bool concise = false;
+  parse_cmd_args(args, &in_file, &out_file, &mode, &concise);
 
   // input
   bufferlist indata;

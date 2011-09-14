@@ -79,10 +79,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  parse_gceph_args(args);
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  vec_to_argv(args, argc, argv);
+  parse_gceph_args(args);
 
   ctx = ceph_tool_common_init(CEPH_TOOL_MODE_GUI, false);
   if (!ctx) {
@@ -92,6 +91,7 @@ int main(int argc, const char **argv)
 
   atexit(ceph_tool_common_shutdown_wrapper);
 
+  vec_to_argv(args, argc, argv);
   if (cephtool_run_gui(ctx, argc, argv))
     ret = 1;
 
