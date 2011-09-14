@@ -15,6 +15,57 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
+class DaemonState(object):
+    def __init__(self, remote, role, id_, *command_args, **command_kwargs):
+        self.remote = remote
+        self.command_args = command_args
+        self.command_kwargs = command_kwargs
+        self.role = role
+        self.id_ = id_
+        self.logger = command_kwargs.get("logger", None)
+        self.proc = None
+
+    def log(self, msg):
+        if self.logger is not None:
+            self.logger.info("%s.%s: %s"%(self.role, self.id_, msg))
+
+    def stop(self):
+        if self.proc is not None:
+            self.proc.stdin.close()
+            run.wait([self.proc])
+            self.proc = None;
+            self.log("Stopped")
+
+    def restart(self):
+        self.log("Restarting")
+        self.stop()
+        self.proc = self.remote.run(*self.command_args, **self.command_kwargs)
+        self.log("Started")
+
+    def running(self):
+        return self.proc is not None
+
+
+class CephState(object):
+    def __init__(self):
+        self.daemons = {}
+
+    def add_daemon(self, remote, role, id_, *args, **kwargs):
+        if role not in self.daemons:
+            self.daemons[role] = {}
+        if id_ in self.daemons[role]:
+            self.daemons[role][id_].stop()
+            self.daemons[role][id_] = None
+        self.daemons[role][id_] = DaemonState(remote, role, id_, *args, **kwargs)
+        self.daemons[role][id_].restart()
+
+    def get_daemon(self, role, id_):
+        if role not in self.daemons:
+            return None
+        return self.daemons[role].get(str(id_), None)
+
+    def iter_daemons_of_role(self, role):
+        return self.daemons.get(role, {}).values()
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
@@ -615,28 +666,23 @@ def mon(ctx, config):
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
-            proc = remote.run(
+            ctx.daemons.add_daemon(remote, 'mon', id_,
                 args=run_cmd,
                 logger=log.getChild('mon.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
                 )
-            mon_daemons[id_] = proc
 
     try:
         yield
     finally:
         log.info('Shutting down mon daemons...')
-        for id_, proc in mon_daemons.iteritems():
-            proc.stdin.close()
-
-        run.wait(mon_daemons.itervalues())
+        [i.stop() for i in ctx.daemons.iter_daemons_of_role('mon')]
 
 
 @contextlib.contextmanager
 def osd(ctx, config):
     log.info('Starting osd daemons...')
-    osd_daemons = {}
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
@@ -676,23 +722,17 @@ def osd(ctx, config):
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
-            proc = remote.run(
+            ctx.daemons.add_daemon(remote, 'osd', id_,
                 args=run_cmd,
                 logger=log.getChild('osd.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
                 )
-            osd_daemons[id_] = proc
-
     try:
         yield
     finally:
         log.info('Shutting down osd daemons...')
-        for id_, proc in osd_daemons.iteritems():
-            proc.stdin.close()
-
-        run.wait(osd_daemons.itervalues())
-
+        [i.stop() for i in ctx.daemons.iter_daemons_of_role('osd')]
 
 @contextlib.contextmanager
 def mds(ctx, config):
@@ -741,13 +781,12 @@ def mds(ctx, config):
             if extra_args is not None:
                 run_cmd.extend(extra_args)
             run_cmd.extend(run_cmd_tail)
-            proc = remote.run(
+            ctx.daemons.add_daemon(remote, 'mds', id_,
                 args=run_cmd,
                 logger=log.getChild('mds.{id}'.format(id=id_)),
                 stdin=run.PIPE,
                 wait=False,
                 )
-            mds_daemons[id_] = proc
 
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     mon0_remote.run(args=[
@@ -762,11 +801,7 @@ def mds(ctx, config):
         yield
     finally:
         log.info('Shutting down mds daemons...')
-        for id_, proc in mds_daemons.iteritems():
-            proc.stdin.close()
-
-        run.wait(mds_daemons.itervalues())
-
+        [i.stop() for i in ctx.daemons.iter_daemons_of_role('mds')]
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
@@ -857,6 +892,7 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     config.update(overrides.get('ceph', {}))
 
+    ctx.daemons = CephState()
     flavor = None
     if config.get('path'):
         # local dir precludes any other flavors

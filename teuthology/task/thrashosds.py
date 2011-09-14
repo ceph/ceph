@@ -64,6 +64,7 @@ def task(ctx, config):
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     manager = ceph_manager.CephManager(
         mon,
+        ctx=ctx,
         logger=log.getChild('ceph_manager'),
         )
     thrash_proc = ceph_manager.Thrasher(
