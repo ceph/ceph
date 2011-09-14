@@ -292,9 +292,9 @@ for name in $what; do
 
 	status)
 	    if daemon_is_running $name c$type $id $pid_file; then
-                echo "running..."
+                echo "$name: running..."
             else
-                echo "dead."
+                echo "$name: dead."
                 EXIT_STATUS=1
             fi
 	    ;;
