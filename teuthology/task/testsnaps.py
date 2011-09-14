@@ -59,7 +59,7 @@ def task(ctx, config):
                 '/bin/sh', '-c',
                 " ".join([
                     'cd', '/tmp/cephtest/data;',
-                    'export CEPH_CLIENT_ID={id_}; /tmp/cephtest/binary/usr/local/bin/testsnaps'.format(
+                    'export CEPH_CLIENT_ID={id_}; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/testsnaps'.format(
                         id_=id_),
                     str(config.get('ops', '1000')),
                     str(config.get('objects', '25')),
