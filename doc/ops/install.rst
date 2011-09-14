@@ -131,7 +131,7 @@ To fetch the Ceph source tarball, run::
 	wget https://raw.github.com/gist/1214596/5b6b5b0e978221e36fa2f7c795544ed50b6e9593/ceph.spec
 	rpmbuild -bb ceph.spec
 
-   Once v0.35 is released, this should suffice:
+   Once v0.35 is released, this should suffice::
 
 	rpmbuild -tb ~/rpmbuild/SOURCES/ceph-0.35.tar.gz
 
