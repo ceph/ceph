@@ -154,9 +154,10 @@ def task(ctx, config):
 
     finally:
         #cleanup!
-        for (greenlet, op) in lock_procs:
-            log.debug('closing proc for op {op_}'.format(op_=op))
-            greenlet.kill(block=True)
+        if lock_procs:
+            for (greenlet, op) in lock_procs:
+                log.debug('closing proc for op {op_}'.format(op_=op))
+                greenlet.kill(block=True)
 
         for client in clients:
             (client_remote,)  = ctx.cluster.only(client).remotes.iterkeys()
