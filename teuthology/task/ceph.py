@@ -626,7 +626,6 @@ def cluster(ctx, config):
 @contextlib.contextmanager
 def mon(ctx, config):
     log.info('Starting mon daemons...')
-    mon_daemons = {}
     mons = ctx.cluster.only(teuthology.is_type('mon'))
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
@@ -738,7 +737,6 @@ def osd(ctx, config):
 def mds(ctx, config):
     log.info('Starting mds daemons...')
     firstmon = teuthology.get_first_mon(ctx, config)
-    mds_daemons = {}
     mdss = ctx.cluster.only(teuthology.is_type('mds'))
     coverage_dir = '/tmp/cephtest/archive/coverage'
 
