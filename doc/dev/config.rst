@@ -51,7 +51,7 @@ There are a few different metavariables:
  - $name: expands to $type.$id
 
 
-Interfacing with the Configuration Management System
+Readin configuration values
 ====================================================
 
 There are two ways for Ceph code to get configuration values. One way is to
@@ -75,3 +75,16 @@ The observer method should be preferred in new code because
 
 For these reasons, reading directly from g_conf should be considered deprecated
 and not done in new code.  Do not ever alter g_conf.
+
+Changing configuration values
+====================================================
+
+Configuration values can be changed by calling g_conf->set_val. After changing
+the configuration, you should call g_conf->apply_changes to re-run all the
+affected configuration observers. For convenience, you can call
+g_conf->set_val_or_die to make a configuration change which you think should
+never fail.
+
+Injectargs, parse_argv, and parse_env are three other functions which modify
+the configuration. Just like with set_val, you should call apply_changes after
+calling these functions to make sure your changes get applied.
