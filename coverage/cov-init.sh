@@ -18,7 +18,7 @@ SHA1=`cat $TEST_DIR/ceph-sha1`
 mkdir -p $OUTPUT_DIR/ceph
 
 echo "Retrieving source and .gcno files..."
-git archive --format tar --remote git://ceph.newdream.net/git/ceph.git $SHA1 | tar xf - -C $OUTPUT_DIR/ceph
+wget -q -O- "https://github.com/NewDreamNetwork/ceph/tarball/$SHA1" | tar xzf - --strip-components=1 -C $OUTPUT_DIR/ceph
 wget "http://gitbuilder-gcov-amd64.ceph.newdream.net/output/sha1/$SHA1/ceph.x86_64.tgz" -P $OUTPUT_DIR
 tar zxf $OUTPUT_DIR/ceph.x86_64.tgz -C $OUTPUT_DIR
 cp $OUTPUT_DIR/usr/local/lib/ceph/coverage/*.gcno $OUTPUT_DIR/ceph/src
