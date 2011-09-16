@@ -21,7 +21,7 @@ def download(ctx, config):
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                'git://ceph.newdream.net/git/s3-tests.git',
+                'https://github.com/NewDreamNetwork/s3-tests.git',
                 '/tmp/cephtest/s3-tests',
                 ],
             )
