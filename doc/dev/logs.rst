@@ -29,3 +29,30 @@ the best performance.
 
 Sometimes, enabling logging can hide race conditions and other bugs by changing
 the timing of events. Keep this in mind when debugging.
+
+============
+ Performance Counters
+============
+
+Ceph daemons use performance counters to track key statistics like number of
+inodes pinned. Performance counters are essentially sets of integers and floats
+which can be set, incremented, and read using the PerfCounters api.
+
+A PerfCounters object is usually associated with a single subsystem.  It
+contains multiple counters. This object is thread-safe because it is protected
+by an internal mutex. You can create multiple PerfCounters objects.
+
+Currently, three types of performance counters are supported: u64 counters,
+float counters, and long-run floating-point average counters. These are created
+by PerfCountersBuilder::add_u64, PerfCountersBuilder::add_fl, and
+PerfCountersBuilder::add_fl_avg, respectively. u64 and float counters simply
+provide a single value which can be updated, incremented, and read atomically.
+floating-pointer average counters provide two values: the current total, and
+the number of times the total has been changed. This is intended to provide a
+long-run average value.
+
+Performance counter information can be read in JSON format from the
+administrative socket (admin_sock). This is implemented as a UNIX domain
+socket. The Ceph peformance counter plugin for collectd shows an example of how
+to access this information. Another example can be found in the unit tests for
+the administrative sockets.
