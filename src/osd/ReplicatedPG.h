@@ -510,6 +510,8 @@ protected:
 			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
+  void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
+
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {

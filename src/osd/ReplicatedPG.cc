@@ -383,6 +383,13 @@ ReplicatedPG::ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const hobject_t& oid, 
   snap_trimmer_machine.initiate();
 }
 
+void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
+{
+  src_oloc = oloc;
+  if (oloc.key.empty())
+    src_oloc.key = oid.name;
+}
+
 /** do_op - do an op
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
@@ -392,7 +399,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
-  dout(10) << "do_op " << *op << dendl;
+  dout(10) << "do_op " << *op << (op->may_write() ? " may_write" : "") << dendl;
   if (finalizing_scrub && op->may_write()) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
@@ -409,7 +416,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
 					op->get_snapid(), op->get_pg().ps()),
 			      op->get_object_locator(),
 			      &obc, can_create, &snapid);
-
   if (r) {
     if (r == -EAGAIN) {
       // If we're not the primary of this OSD, and we have
@@ -479,19 +485,21 @@ void ReplicatedPG::do_op(MOSDOp *op)
   map<hobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     OSDOp& osd_op = *p;
-    hobject_t toid(osd_op.soid, op->get_object_locator().key, op->get_pg().ps());
+    object_locator_t src_oloc;
+    get_src_oloc(op->get_oid(), op->get_object_locator(), src_oloc);
+    hobject_t toid(osd_op.soid, src_oloc.key, op->get_pg().ps());
     if (osd_op.soid.oid.name.length()) {
       if (!src_obc.count(toid)) {
 	ObjectContext *sobc;
 	snapid_t ssnapid;
-	int r = find_object_context(hobject_t(toid.oid, op->get_object_locator().key,
+
+	int r = find_object_context(hobject_t(toid.oid, src_oloc.key,
 					      toid.snap, op->get_pg().ps()),
-				    op->get_object_locator(),
+				    src_oloc,
 				    &sobc, false, &ssnapid);
 	if (r == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
-	  hobject_t wait_oid(osd_op.soid.oid, op->get_object_locator().key, 
-			     ssnapid, op->get_pg().ps());
+	  hobject_t wait_oid(osd_op.soid.oid, src_oloc.key, ssnapid, op->get_pg().ps());
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
 	  osd->reply_op_error(op, r);
