@@ -71,7 +71,7 @@ char *resolve_addrs(const char *orig_str)
       *firstcolon = 0;
       port_str = firstcolon + 1;
     } else if (bracecolon) {
-      /* {ipv6addr}:port */
+      /* [ipv6addr]:port */
       port_str = bracecolon + 1;
       *port_str = 0;
       port_str++;

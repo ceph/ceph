@@ -9,42 +9,53 @@ bool entity_addr_t::parse(const char *s, const char **end)
 {
   memset(this, 0, sizeof(*this));
 
-  const char *p = s;
+  const char *start = s;
   bool brackets = false;
   bool ipv6 = false;
-  if (*p == '[') {
-    p++;
+  if (*start == '[') {
+    start++;
     brackets = true;
     ipv6 = true;
   }
   
-  char buf[39];
-  char *o = buf;
-
-  while (o < buf + sizeof(buf) &&
+  // inet_pton() requires a null terminated input, so let's fill two
+  // buffers, one with ipv4 allowed characters, and one with ipv6, and
+  // then see which parses.
+  char buf4[39];
+  char *o = buf4;
+  const char *p = start;
+  while (o < buf4 + sizeof(buf4) &&
 	 *p && ((*p == '.') ||
-		(ipv6 && *p == ':') ||
-		(*p >= '0' && *p <= '9') ||
-		(*p >= 'a' && *p <= 'f') ||
-		(*p >= 'A' && *p <= 'F'))) {
-    if (*p == ':')
-      ipv6 = true;
+		(*p >= '0' && *p <= '9'))) {
     *o++ = *p++;
   }
   *o = 0;
-  //cout << "buf is '" << buf << "'" << std::endl;
+
+  char buf6[39];
+  o = buf6;
+  p = start;
+  while (o < buf6 + sizeof(buf6) &&
+	 *p && ((*p == ':') ||
+		(*p >= '0' && *p <= '9') ||
+		(*p >= 'a' && *p <= 'f') ||
+		(*p >= 'A' && *p <= 'F'))) {
+    *o++ = *p++;
+  }
+  *o = 0;
+  //cout << "buf4 is '" << buf4 << "', buf6 is '" << buf6 << "'" << std::endl;
 
   // ipv4?
   struct in_addr a4;
   struct in6_addr a6;
-  if (inet_pton(AF_INET, buf, &a4)) {
+  if (inet_pton(AF_INET, buf4, &a4)) {
     addr4.sin_addr.s_addr = a4.s_addr;
     addr.ss_family = AF_INET;
-  } else if (inet_pton(AF_INET6, buf, &a6)) {
+    p = start + strlen(buf4);
+  } else if (inet_pton(AF_INET6, buf6, &a6)) {
     addr.ss_family = AF_INET6;
     memcpy(&addr6.sin6_addr, &a6, sizeof(a6));
+    p = start + strlen(buf6);
   } else {
-    //cout << "couldn't parse '" << buf << "'" << std::endl;
     return false;
   }
 
@@ -75,5 +86,7 @@ bool entity_addr_t::parse(const char *s, const char **end)
 
   if (end)
     *end = p;
+
+  //cout << *this << std::endl;
   return true;
 }
