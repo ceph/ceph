@@ -1445,8 +1445,6 @@ void OSD::update_heartbeat_peers()
   old_from.swap(heartbeat_from);
   old_con.swap(heartbeat_from_con);
 
-  utime_t now = ceph_clock_now(g_ceph_context);
-
   heartbeat_epoch = osdmap->get_epoch();
 
   // build heartbeat from set

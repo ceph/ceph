@@ -466,9 +466,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   } else {
     in = new Inode(cct, st->vino, &st->layout);
     inode_map[st->vino] = in;
-    bool new_root = false;
     if (!root) {
-      new_root = true;
       root = in;
       cwd = root;
       cwd->get();
