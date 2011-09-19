@@ -33,6 +33,10 @@ void ceph_lock_state_t::remove_waiting(ceph_filelock& fl)
         p->second.pid == fl.pid &&
         p->second.pid_namespace == fl.pid_namespace) {
       waiting_locks.erase(p);
+      --client_waiting_lock_counts[(client_t)fl.client];
+      if (!client_waiting_lock_counts[(client_t)fl.client]) {
+        client_waiting_lock_counts.erase((client_t)fl.client);
+      }
       return;
     }
     ++p;
@@ -81,8 +85,10 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
                       (new_lock.start, new_lock));
     ret = true;
   }
-  if (ret)
+  if (ret) {
     ++client_held_lock_counts[(client_t)new_lock.client];
+    remove_waiting(new_lock);
+  }
   else if (wait_on_fail && !replay)
     ++client_waiting_lock_counts[(client_t)new_lock.client];
   return ret;
