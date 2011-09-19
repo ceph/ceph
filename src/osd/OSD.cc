@@ -4909,6 +4909,11 @@ void OSD::defer_recovery(PG *pg)
 
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
+  reply_op_error(op, err, eversion_t());
+}
+
+void OSD::reply_op_error(MOSDOp *op, int err, eversion_t v)
+{
   int flags;
   if (err == 0)
     // reply with whatever ack/safe flags the caller wanted
@@ -4919,6 +4924,7 @@ void OSD::reply_op_error(MOSDOp *op, int err)
 
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), flags);
   Messenger *msgr = client_messenger;
+  reply->set_version(v);
   if (op->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, op->get_connection());

@@ -564,7 +564,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       put_object_context(obc);
       put_object_contexts(src_obc);
       if (oldv <= last_update_ondisk) {
-	osd->reply_op_error(op, 0);
+	osd->reply_op_error(op, 0, oldv);
       } else {
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
 	waiting_for_ondisk[oldv].push_back(op);
