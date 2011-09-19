@@ -1968,6 +1968,7 @@ bool OSD::ms_handle_reset(Connection *con)
   watch_lock.Unlock();
 #endif
 
+  session->put();
   return true;
 }
 
