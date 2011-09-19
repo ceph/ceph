@@ -1218,6 +1218,7 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
     dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	     << " >= same_since " << info.history.same_acting_since
 	     << ", all is well" << dendl;
+    need_up_thru = false;
   }
 }
 
