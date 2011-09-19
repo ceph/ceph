@@ -1,0 +1,10 @@
+kernel:
+tasks:
+- ceph:
+- kclient:
+- lockfile: [{client: client.0, lockfile: testfile, holdtime: 4, maxwait: 5, offset: 0, length: 5},
+             {client: client.1, lockfile: testfile, holdtime: 4, maxwait: 5, offset: 10, length: 1},
+             {client: client.1, lockfile: testfile, holdtime: 2, maxwait: 4, offset: 0, length: 15, expectfail: True},
+             {client: client.1, lockfile: testfile, holdtime: 4, maxwait: 10, offset: 0, length: 15},
+             10,
+             {client: client.0, lockfile: testfile, holdtime: 3, maxwait: 4, offset: 0, length: 15}]
