@@ -635,6 +635,12 @@ test_store_LDADD =  librados.la ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LD
 test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_store
 
+test_stress_watch_SOURCES = test/test_stress_watch.cc test/rados-api/test.cc
+test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
+test_stress_watch_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
+test_stress_watch_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_stress_watch
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
