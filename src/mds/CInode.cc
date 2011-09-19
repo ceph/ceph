@@ -1440,8 +1440,9 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       bool default_layout_exists;
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
-       default_layout = new default_file_layout;
-       decode(*default_layout, p);
+        delete default_layout;
+        default_layout = new default_file_layout;
+        decode(*default_layout, p);
       }
     }
     break;
