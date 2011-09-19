@@ -144,7 +144,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */

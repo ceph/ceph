@@ -350,30 +350,36 @@ WRITE_CLASS_ENCODER(RGWUserInfo)
 struct rgw_bucket {
   std::string name;
   std::string pool;
+  std::string marker;
 
   rgw_bucket() {}
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     pool = n;
+    marker = "";
   }
-  rgw_bucket(const char *n, const char *p) : name(n), pool(p) {}
+  rgw_bucket(const char *n, const char *p, const char *m) : name(n), pool(p), marker(m) {}
 
   void clear() {
     name = "";
     pool = "";
+    marker = "";
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(pool, bl);
+    ::encode(marker, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(pool, bl);
+    if (struct_v >= 2)
+      ::decode(marker, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -381,7 +387,7 @@ WRITE_CLASS_ENCODER(rgw_bucket)
 inline ostream& operator<<(ostream& out, const rgw_bucket b) {
   out << b.name;
   if (b.name.compare(b.pool))
-    out << "(@" << b.pool << ")";
+    out << "(@" << b.pool << "[" << b.marker << "])";
   return out;
 }
 
@@ -633,7 +639,7 @@ public:
   void init(rgw_bucket& b, std::string& o) {
     bucket = b;
     set_obj(o);
-    orig_key = key = "";
+    orig_key = key = o;
   }
   int set_ns(const char *n) {
     if (!n)
@@ -651,10 +657,7 @@ public:
 
   void set_key(string& k) {
     orig_key = k;
-    if (k.compare(object) == 0)
-      key = "";
-    else
-      key = k;
+    key = k;
   }
 
   void set_obj(string& o) {
@@ -674,7 +677,10 @@ public:
       object.append("_");
       object.append(o);
     }
-    set_key(orig_key);
+    if (orig_key.size())
+      set_key(orig_key);
+    else
+      set_key(orig_obj);
   }
 
   string loc() {

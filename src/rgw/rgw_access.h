@@ -57,7 +57,7 @@ public:
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0) = 0;
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
