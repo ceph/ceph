@@ -37,6 +37,7 @@
 /testdout_streambuf
 /testsignal_handlers
 /testtimers
+/test_addrs
 /test_libceph_build
 /test_librados_build
 /test_librgw_build
