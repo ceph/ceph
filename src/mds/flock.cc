@@ -39,7 +39,8 @@ void ceph_lock_state_t::remove_waiting(ceph_filelock& fl)
   }
 }
 
-bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock, bool wait_on_fail)
+bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
+                                 bool wait_on_fail, bool replay)
 {
   dout(15) << "add_lock " << new_lock << dendl;
   bool ret = false;
@@ -56,13 +57,13 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock, bool wait_on_fail)
       //can't set, we want an exclusive
       dout(15) << "overlapping lock, and this lock is exclusive, can't set"
               << dendl;
-      if (wait_on_fail) {
+      if (wait_on_fail && !replay) {
         waiting_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
       }
     } else { //shared lock, check for any exclusive locks blocking us
       if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
         dout(15) << " blocked by exclusive lock in overlapping_locks" << dendl;
-        if (wait_on_fail) {
+        if (wait_on_fail && !replay) {
           waiting_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
         }
       } else {
@@ -82,7 +83,7 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock, bool wait_on_fail)
   }
   if (ret)
     ++client_held_lock_counts[(client_t)new_lock.client];
-  else if (wait_on_fail)
+  else if (wait_on_fail && !replay)
     ++client_waiting_lock_counts[(client_t)new_lock.client];
   return ret;
 }

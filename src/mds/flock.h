@@ -61,7 +61,7 @@ public:
    *
    * @returns true if set, false if not set.
    */
-  bool add_lock(ceph_filelock& new_lock, bool wait_on_fail);
+  bool add_lock(ceph_filelock& new_lock, bool wait_on_fail, bool replay);
   /**
    * See if a lock is blocked by existing locks. If the lock is blocked,
    * it will be set to the value of the first blocking lock. Otherwise,
