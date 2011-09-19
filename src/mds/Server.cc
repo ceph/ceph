@@ -2936,7 +2936,6 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
 
   dout(10) << " state prior to lock change: " << *lock_state << dendl;;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
-    dout(10) << " unlock attempt on " << set_lock << dendl;
     list<ceph_filelock> activated_locks;
     list<Context*> waiters;
     if (lock_state->is_waiting(set_lock)) {
@@ -2958,7 +2957,7 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
 	!lock_state->is_waiting(set_lock)) {
       dout(10) << " was waiting for lock but not anymore, must have been canceled " << set_lock << dendl;
       reply_request(mdr, -EINTR);
-    } else if (!lock_state->add_lock(set_lock, will_wait)) {
+    } else if (!lock_state->add_lock(set_lock, will_wait, mdr->more()->flock_was_waiting)) {
       dout(10) << " it failed on this attempt" << dendl;
       // couldn't set lock right now
       if (!will_wait) {
