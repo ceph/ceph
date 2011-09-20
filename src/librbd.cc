@@ -847,20 +847,23 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 
   struct rbd_obj_header_ondisk header;
   int r = read_header(io_ctx, md_oid, &header, NULL);
+  if (r < 0) {
+    ldout(cct, 2) << "error reading header: " << strerror(-r) << dendl;
+  }
   if (r >= 0) {
     trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
 
-  ldout(cct, 2) << "removing rbd image to directory..." << dendl;
+  ldout(cct, 2) << "removing rbd image from directory..." << dendl;
   bufferlist cmdbl;
   __u8 c = CEPH_OSD_TMAP_RM;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
   r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   if (r < 0) {
-    lderr(cct) << "error removing img from directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error removing img from directory: " << strerror(-r) << dendl;
     return r;
   }
 
