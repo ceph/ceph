@@ -8,6 +8,7 @@
 #include "rgw_bucket.h"
 #include "rgw_tools.h"
 
+#include "auth/Crypto.h" // get_random_bytes()
 
 
 static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
@@ -138,7 +139,6 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
     return ret;
   }
   bucket.pool = pools.back();
-  pools.pop_back();
   bucket.name = bucket_name;
 
   ret = register_available_pools(pools);
@@ -206,20 +206,19 @@ int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
     return generate_pool(bucket_name, bucket);
   }
 
-  map<string, bufferlist>::iterator miter = m.end();
-  do {
-    --miter;
-
-    pool_name = miter->first;
-    ret = rgwstore->tmap_del(obj, pool_name);
-    if (!ret)
-      break;
-
-  } while (miter != m.begin());
-
-  if (miter == m.begin()) {
-    return generate_pool(bucket_name, bucket);
+  vector<string> v;
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    v.push_back(miter->first);
   }
+
+  uint32_t r;
+  ret = get_random_bytes((char *)&r, sizeof(r));
+  if (ret < 0)
+    return ret;
+
+  int i = r % v.size();
+  pool_name = v[i];
   bucket.pool = pool_name;
   bucket.name = bucket_name;
   
