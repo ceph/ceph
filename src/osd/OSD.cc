@@ -1137,7 +1137,8 @@ PG *OSD::lookup_lock_raw_pg(pg_t pgid)
   Mutex::Locker l(osd_lock);
   if (osdmap->have_pg_pool(pgid.pool())) {
     pgid = osdmap->raw_pg_to_pg(pgid);
-  } else if (!_have_pg(pgid)) {
+  }
+  if (!_have_pg(pgid)) {
     return NULL;
   }
   PG *pg = _lookup_lock_pg(pgid);
