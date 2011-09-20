@@ -5,7 +5,7 @@
 .. toctree::
 
    install/index
-   manage
+   manage/index
    config
    radosgw
    rbd
