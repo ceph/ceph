@@ -2,6 +2,10 @@
  Managing a Ceph cluster
 =========================
 
+.. toctree::
+
+   grow/index
+
 .. todo::
 
    - ./ceph usage

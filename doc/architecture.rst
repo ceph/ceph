@@ -121,7 +121,8 @@ servers.
 Combinations of `standby` and `active` etc are possible, for example
 running 3 `active` ``cmds`` instances for scaling, and one `standby`.
 
-To control the number of `active` ``cmds``\es, see :doc:`/ops/grow/mds`.
+To control the number of `active` ``cmds``\es, see
+:doc:`/ops/manage/grow/mds`.
 
 .. topic:: Status as of 2011-09:
 

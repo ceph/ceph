@@ -127,7 +127,7 @@ services. See :doc:`/ops/config` for more information.
 
 .. todo:: Point to cluster design docs, once they are ready.
 
-.. todo:: At this point, either use 1 or 3 mons, point to :doc:`/ops/grow/mon`
+.. todo:: At this point, either use 1 or 3 mons, point to :doc:`/ops/manage/grow/mon`
 
 
 Running ``mkcephfs``
