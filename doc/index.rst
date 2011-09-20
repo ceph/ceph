@@ -89,6 +89,7 @@ Table of Contents
    tutorial
    architecture
    ops/index
+   rec/index
    api/index
    Internals <dev/index>
    man/index

@@ -9,9 +9,6 @@
    config
    radosgw
    rbd
-   hardware
-   filesystem
    monitor
    data-placement
    autobuilt
-   misc
