@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 cur=`head -1 $1`
 v=`tail -1 $1 | cut -c 2-`
