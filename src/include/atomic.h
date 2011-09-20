@@ -82,7 +82,7 @@ namespace ceph {
     }
     void set(size_t v) {
       pthread_spin_lock(&lock);
-      int r = v;
+      val = v;
       pthread_spin_unlock(&lock);
     }
     int inc() {
