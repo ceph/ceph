@@ -103,7 +103,7 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   if (miter != dir.m.end()) {
     struct rgw_bucket_dir_entry& entry = miter->second;
     CLS_LOG("rgw_bucket_modify(): existing entry: epoch=%lld\n", entry.epoch);
-    if (op.entry.epoch >= entry.epoch) {
+    if (op.entry.epoch <= entry.epoch) {
       CLS_LOG("rgw_bucket_modify(): skipping request, old epoch\n");
       return 0;
     }
