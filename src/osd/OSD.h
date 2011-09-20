@@ -356,7 +356,6 @@ private:
   Cond  op_queue_cond;
   
   void wait_for_no_ops();
-  bool throttle_op_queue(Message *op);
   void enqueue_op(PG *pg, Message *op);
   void dequeue_op(PG *pg);
   static void static_dequeueop(OSD *o, PG *pg) {
