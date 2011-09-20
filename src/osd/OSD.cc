@@ -4982,7 +4982,8 @@ void OSD::handle_op(MOSDOp *op)
 		      (Session *)op->get_connection()->get_priv());
 
   // ...
-  throttle_op_queue();
+  if (throttle_op_queue(op))
+    return;
 
   int r = init_op_flags(op);
   if (r) {
@@ -5165,7 +5166,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   } 
 
-  throttle_op_queue();
+  if (throttle_op_queue(op))
+    return;
 
   PG *pg = _lookup_lock_pg(pgid);
 
@@ -5305,14 +5307,22 @@ void OSD::dequeue_op(PG *pg)
 
 
 
-void OSD::throttle_op_queue()
+bool OSD::throttle_op_queue(Message *op)
 {
   // throttle?  FIXME PROBABLY!
   while (pending_ops > g_conf->osd_max_opq) {
-    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
+    dout(10) << "throttle_op_queue waiting for pending_ops " << pending_ops 
 	     << " to drop to " << g_conf->osd_max_opq << dendl;
     op_queue_cond.Wait(osd_lock);
+    
+    // while we waited, something may have been requeued (e.g.,
+    // because it was on waiting_for_{missing,degraded} list).  we
+    // need to queue ourselves too so we don't sneak in ahead of them
+    // and violate the ordering.
+    take_waiter(op);
+    return true;
   }
+  return false;
 }
 
 void OSD::wait_for_no_ops()
