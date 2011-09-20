@@ -224,8 +224,9 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
     return r;
 
   string bucket_marker = bucket.marker;
-  if (bucket_marker.size())
+  if (bucket_marker.size()) {
     bucket_marker.append("_");
+  }
 
   std::map<string, string> dir_map;
   {
@@ -236,7 +237,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 
         if (bucket_marker.size()) {
           if (obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
-          continue;
+            continue;
 
           obj = obj.substr(bucket_marker.size());
           key = obj;
@@ -656,10 +657,22 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
   if (r < 0)
     return r;
 
+  string bucket_marker = bucket.marker;
+  if (bucket_marker.size()) {
+    bucket_marker.append("_");
+  }
+
   ObjectIterator iter = list_ctx.objects_begin();
   string ns;
   for (; iter != list_ctx.objects_end(); iter++) {
     string obj = *iter;
+    if (bucket_marker.size()) {
+      if (obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
+        continue;
+
+      obj = obj.substr(bucket_marker.size());
+    }
+
     if (rgw_obj::translate_raw_obj(obj, ns))
       return -ENOTEMPTY;
   }
