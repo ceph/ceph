@@ -142,7 +142,7 @@ def task(ctx, config):
                 continue
             greenlet = gevent.spawn(lock_one, op, ctx)
             lock_procs.append((greenlet, op))
-            time.sleep(0.01) # to provide proper ordering
+            time.sleep(0.1) # to provide proper ordering
         #for op in config
         
         for (greenlet, op) in lock_procs:
