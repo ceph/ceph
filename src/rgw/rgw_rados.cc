@@ -36,16 +36,21 @@ public:
   }
 };
 
-static void get_obj_bucket_and_oid(rgw_obj& obj, rgw_bucket& bucket, string& oid)
+static void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
-  bucket = obj.bucket;
-  if (bucket.marker.empty() || obj.object.empty()) {
-    oid = obj.object;
+  if (bucket.marker.empty() || orig_oid.empty()) {
+    oid = orig_oid;
   } else {
     oid = bucket.marker;
     oid.append("_");
-    oid.append(obj.object);
+    oid.append(orig_oid);
   }
+}
+
+static void get_obj_bucket_and_oid(rgw_obj& obj, rgw_bucket& bucket, string& oid)
+{
+  bucket = obj.bucket;
+  prepend_bucket_marker(bucket, obj.object, oid);
 }
 
 
@@ -229,8 +234,13 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
         string obj = *i;
         string key = obj;
 
-        if (bucket_marker.size() && obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
+        if (bucket_marker.size()) {
+          if (obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
           continue;
+
+          obj = obj.substr(bucket_marker.size());
+          key = obj;
+        }
 
         if (!rgw_obj::translate_raw_obj(obj, ns))
           continue;
@@ -279,10 +289,13 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
       oid.append(name);
     }
 
+    string new_oid;
+    prepend_bucket_marker(bucket, oid, new_oid);
+
     uint64_t s;
-    if (key.compare(name) != 0)
-      io_ctx.locator_set_key(key);
-    if (io_ctx.stat(oid, &s, &obj.mtime) < 0)
+    io_ctx.locator_set_key(key);
+
+    if (io_ctx.stat(new_oid, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
 
