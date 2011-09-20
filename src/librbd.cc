@@ -755,12 +755,7 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   bl.append((const char *)&header, sizeof(header));
 
   ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-  bufferlist cmdbl, emptybl;
-  __u8 c = CEPH_OSD_TMAP_SET;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  ::encode(emptybl, cmdbl);
-  r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
+  r = tmap_set(io_ctx, imgname);
   if (r < 0) {
     lderr(cct) << "error adding img to directory: " << strerror(-r)<< dendl;
     return r;
@@ -857,11 +852,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   }
 
   ldout(cct, 2) << "removing rbd image from directory..." << dendl;
-  bufferlist cmdbl;
-  __u8 c = CEPH_OSD_TMAP_RM;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
+  r = tmap_rm(io_ctx, imgname);
   if (r < 0) {
     lderr(cct) << "error removing img from directory: " << strerror(-r) << dendl;
     return r;
