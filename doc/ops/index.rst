@@ -4,7 +4,7 @@
 
 .. toctree::
 
-   install
+   install/index
    manage
    config
    radosgw

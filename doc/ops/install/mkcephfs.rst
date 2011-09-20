@@ -1,45 +1,6 @@
-===========================
- Installing a Ceph cluster
-===========================
-
-For development and really early stage testing, see :doc:`/dev/index`.
-
-For installing the latest development builds, see
-:doc:`/ops/autobuilt`.
-
-Installing any complex distributed software can be a lot of work. We
-support two automated ways of installing Ceph: using Chef_, or with
-the ``mkcephfs`` shell script.
-
-.. _Chef: http://wiki.opscode.com/display/chef
-
-.. topic:: Status as of 2011-09
-
-  This section hides a lot of the tedious underlying details. If you
-  need to, or wish to, roll your own deployment automation, or are
-  doing it manually, you'll have to dig into a lot more intricate
-  details.  We are working on simplifying the installation, as that
-  also simplifies our Chef cookbooks.
-
-
-.. _install-chef:
-
-Installing Ceph using Chef
-==========================
-
-(Try saying that fast 10 times.)
-
-.. topic:: Status as of 2011-09
-
-  While we have Chef cookbooks in use internally, they are not yet
-  ready to handle unsupervised installation of a full cluster. Stay
-  tuned for updates.
-
-.. todo:: write me
-
-
-Installing Ceph using ``mkcephfs``
-==================================
+====================================
+ Installing Ceph using ``mkcephfs``
+====================================
 
 .. note:: ``mkcephfs`` is meant as a quick bootstrapping tool. It does
    not handle more complex operations, such as upgrades. For
@@ -53,13 +14,13 @@ installed. This will be your `admin host`.
 
 
 Installing the packages
------------------------
+=======================
 
 
 .. _install-debs:
 
 Debian/Ubuntu
-~~~~~~~~~~~~~
+-------------
 
 We regularly build Debian and Ubuntu packages for the `amd64` and
 `i386` architectures, for the following distributions:
@@ -100,7 +61,7 @@ Run these commands on all nodes::
 
 
 Red Hat / CentOS / Fedora
-~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------
 
 .. topic:: Status as of 2011-09
 
@@ -145,7 +106,7 @@ Finally, install the RPMs::
 
 
 Creating a ``ceph.conf`` file
------------------------------
+=============================
 
 On the `admin host`, create a file with a name like
 ``mycluster.conf``.
@@ -166,11 +127,11 @@ services. See :doc:`/ops/config` for more information.
 
 .. todo:: Point to cluster design docs, once they are ready.
 
-.. todo:: At this point, either use 1 or 3 mons, point to :doc:`grow/mon`
+.. todo:: At this point, either use 1 or 3 mons, point to :doc:`/ops/grow/mon`
 
 
 Running ``mkcephfs``
---------------------
+====================
 
 Verify that you can manage the nodes from the host you intend to run
 ``mkcephfs`` on:
