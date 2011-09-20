@@ -72,4 +72,64 @@ enum modify_op {
   CLS_RGW_OP_DEL = 1,
 };
 
+struct rgw_cls_obj_op
+{
+  uint8_t op;
+  uint64_t epoch;
+  struct rgw_bucket_dir_entry entry;
+
+  void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(op, bl);
+    ::encode(epoch, bl);
+    ::encode(entry, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(op, bl);
+    ::decode(epoch, bl);
+    ::decode(entry, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_op)
+
+struct rgw_cls_list_op
+{
+  string start_obj;
+  uint32_t num_entries;
+
+  void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(start_obj, bl);
+    ::encode(num_entries, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(start_obj, bl);
+    ::decode(num_entries, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_list_op)
+
+struct rgw_cls_list_ret
+{
+  rgw_bucket_dir dir;
+
+  void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(dir, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(dir, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_list_ret)
+
 #endif

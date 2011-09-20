@@ -55,26 +55,26 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return rc;
 
   bufferlist::iterator iter = in->begin();
-  string start_obj;
-  uint32_t num_entries;
+
+  struct rgw_cls_list_op op;
 
   try {
-    ::decode(start_obj, iter);
-    ::decode(num_entries, iter);
+    ::decode(op, iter);
   } catch (buffer::error& err) {
     CLS_LOG("ERROR: rgw_bucket_list(): failed to decode request\n");
     return -EINVAL;
   }
 
-  struct rgw_bucket_dir new_dir;
+  struct rgw_cls_list_ret ret;
+  struct rgw_bucket_dir& new_dir = ret.dir;
   new_dir.header = dir.header;
   std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter;
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.start_obj);
   uint32_t i;
-  for (i = 0, miter = dir.m.begin(); i !=num_entries && miter != dir.m.end(); ++i, ++miter) {
+  for (i = 0; i != op.num_entries && miter != dir.m.end(); ++i, ++miter) {
     m[miter->first] = miter->second;
   }
-  ::encode(new_dir, *out);
+  ::encode(ret, *out);
 
   return 0;
 }
@@ -87,32 +87,29 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   if (rc < 0)
     return rc;
 
-  uint8_t op;
-  uint64_t epoch;
-  struct rgw_bucket_dir_entry entry;
+  rgw_cls_obj_op op;
 
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(op, iter);
-    ::decode(epoch, iter);
-    ::decode(entry, iter);
   } catch (buffer::error& err) {
     CLS_LOG("ERROR: rgw_bucket_modify(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op, entry.name.c_str(), epoch);
+  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.entry.name.c_str(), op.epoch);
 
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(entry.name);
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.entry.name);
 
   if (miter != dir.m.end()) {
+    struct rgw_bucket_dir_entry& entry = miter->second;
     CLS_LOG("rgw_bucket_modify(): existing entry: epoch=%lld\n", entry.epoch);
-    if (entry.epoch >= epoch) {
+    if (op.entry.epoch >= entry.epoch) {
       CLS_LOG("rgw_bucket_modify(): skipping request, old epoch\n");
       return 0;
     }
   }
 
-  switch (op) {
+  switch (op.op) {
   case CLS_RGW_OP_DEL:
     if (miter != dir.m.end())
       dir.m.erase(miter);
@@ -120,7 +117,7 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
       return -ENOENT;
     break;
   case CLS_RGW_OP_ADD:
-    dir.m[entry.name] = entry;
+    dir.m[op.entry.name] = op.entry;
     break;
   }
 
