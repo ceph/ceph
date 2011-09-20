@@ -1281,7 +1281,6 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-RGW_LOG(0) << "JJJ dst_obj.key=" << dst_obj.key << dendl;
   io_ctx.locator_set_key(dst_obj.key);
   ObjectWriteOperation op;
   if (truncate_dest) {
@@ -1323,7 +1322,9 @@ RGW_LOG(0) << "JJJ dst_obj.key=" << dst_obj.key << dendl;
     if (range.len) {
       RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
       if (xattr_cond) {
-        op.src_cmpxattr(range.src.object, xattr_cond->first.c_str(),
+        string src_cmp_obj;
+        get_obj_bucket_and_oid(range.src, bucket, src_cmp_obj);
+        op.src_cmpxattr(src_cmp_obj, xattr_cond->first.c_str(),
                         LIBRADOS_CMPXATTR_OP_EQ, xattr_cond->second);
       }
       string src_oid;
