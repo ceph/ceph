@@ -1,5 +1,5 @@
 ============
- Debug Logs
+ Debug logs
 ============
 
 The main debugging tool for Ceph is the dout and derr logging functions.
@@ -13,9 +13,9 @@ Dout is implemented mainly in common/DoutStreambuf.cc
 
 The dout macro avoids even generating log messages which are not going to be
 used, by enclosing them in an "if" statement. What this means is that if you
-have the debug level set at 0, and you run this code
+have the debug level set at 0, and you run this code::
 
-``dout(20) << "myfoo() = " << myfoo() << dendl;``
+	dout(20) << "myfoo() = " << myfoo() << dendl;
 
 
 myfoo() will not be called here.
@@ -30,9 +30,8 @@ the best performance.
 Sometimes, enabling logging can hide race conditions and other bugs by changing
 the timing of events. Keep this in mind when debugging.
 
-============
- Performance Counters
-============
+Performance counters
+====================
 
 Ceph daemons use performance counters to track key statistics like number of
 inodes pinned. Performance counters are essentially sets of integers and floats
