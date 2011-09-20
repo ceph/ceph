@@ -121,7 +121,7 @@ appropriate. All hostnames *must* be short form (no domain).
    :language: ini
 
 Note how the ``host`` variables dictate what node runs what
-services. See :doc:`/ops/config` for more information.
+services. See :doc:`/config` for more information.
 
 .. todo:: More specific link for host= convention.
 
