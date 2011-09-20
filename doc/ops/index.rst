@@ -10,5 +10,4 @@
    radosgw
    rbd
    monitor
-   data-placement
    autobuilt

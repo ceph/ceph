@@ -7,6 +7,8 @@
    add-client
    grow/index
    disk-failure
+   pool
+   cephfs
 
 .. todo::
 

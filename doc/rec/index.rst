@@ -12,4 +12,5 @@ cluster.
 
    hardware
    filesystem
+   data-placement
    crypto
