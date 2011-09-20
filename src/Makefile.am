@@ -362,6 +362,17 @@ radoslibdir = $(libdir)/rados-classes
 radoslib_LTLIBRARIES = libcls_rbd.la
 
 
+if WITH_RADOSGW
+# rgw: rados gateway
+libcls_rgw_la_SOURCES = cls_rgw.cc
+libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
+libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_rgw_la_LIBADD = -lpthread $(EXTRALIBS)
+libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_rgw.la
+endif
+
 ## hadoop client
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
@@ -1328,6 +1339,7 @@ noinst_HEADERS = \
 	rgw/rgw_acl.h\
 	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
+	rgw/rgw_cls_api.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_fs.h\
