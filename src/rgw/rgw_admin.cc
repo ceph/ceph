@@ -1208,6 +1208,7 @@ int main(int argc, char **argv)
     formatter->dump_string("bucket", bucket.name.c_str());
     formatter->dump_string("pool", bucket.pool.c_str());
     formatter->dump_int("id", bucket_id);
+    formatter->dump_string("marker", bucket.marker.c_str());
     formatter->dump_string("owner", pool_info.owner.c_str());
     formatter->open_array_section("categories");
     for (iter = stats.begin(); iter != stats.end(); ++iter) {
