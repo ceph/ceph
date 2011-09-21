@@ -485,6 +485,8 @@ protected:
   map<hobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
+  void populate_obc_watchers(ObjectContext *obc);
+
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
       ObjectContext *obc = object_contexts[soid];

@@ -108,12 +108,6 @@ int MonitorStore::mkfs()
   return 0;
 }
 
-void MonitorStore::sync()
-{
-  dout(10) << "sync" << dendl;
-  sync_filesystem(lock_fd);
-}
-
 version_t MonitorStore::get_int(const char *a, const char *b)
 {
   char fn[1024];
@@ -352,8 +346,9 @@ int MonitorStore::put_bl_sn_map(const char *a,
   version_t last = lastp->first;
   dout(15) <<  "put_bl_sn_map " << a << "/[" << first << ".." << last << "]" << dendl;
 
-  // only do a big sync if there are several values.
-  if (last - first < 5) {
+  // only do a big sync if there are several values, or if the feature is disabled.
+  if (g_conf->mon_sync_fs_threshold <= 0 ||
+      last - first < (unsigned)g_conf->mon_sync_fs_threshold) {
     // just do them individually
     for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
       int err = put_bl_sn(p->second, a, p->first);

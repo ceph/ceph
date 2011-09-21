@@ -1002,14 +1002,22 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
-  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
-
+  if (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
+      opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
+      opt_cmd == OPT_SNAP_REMOVE ||
+      opt_cmd == OPT_MAP || opt_cmd == OPT_UNMAP) {
+    set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
+  } else if (snapname) {
+    cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
+    usage_exit();
+  }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
+
+  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
 
   if (!dest_poolname)
     dest_poolname = poolname;
