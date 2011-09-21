@@ -757,14 +757,14 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   ldout(cct, 2) << "adding rbd image to directory..." << dendl;
   r = tmap_set(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error adding img to directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error adding img to directory: " << cpp_strerror(-r)<< dendl;
     return r;
   }
 
   ldout(cct, 2) << "creating rbd image..." << dendl;
   r = io_ctx.write(md_oid, bl, bl.length(), 0);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -787,7 +787,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   bufferlist header;
   int r = read_header_bl(io_ctx, md_oid, header, &ver);
   if (r < 0) {
-    lderr(cct) << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error reading header: " << md_oid << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = io_ctx.stat(dst_md_oid, NULL, NULL);
@@ -797,7 +797,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   }
   r = write_header(io_ctx, dst_md_oid, header);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << dst_md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << dst_md_oid << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = tmap_set(io_ctx, dstname_str);
@@ -843,7 +843,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   struct rbd_obj_header_ondisk header;
   int r = read_header(io_ctx, md_oid, &header, NULL);
   if (r < 0) {
-    ldout(cct, 2) << "error reading header: " << strerror(-r) << dendl;
+    ldout(cct, 2) << "error reading header: " << cpp_strerror(-r) << dendl;
   }
   if (r >= 0) {
     trim_image(io_ctx, header, 0, prog_ctx);
@@ -854,7 +854,7 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   ldout(cct, 2) << "removing rbd image from directory..." << dendl;
   r = tmap_rm(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error removing img from directory: " << strerror(-r) << dendl;
+    lderr(cct) << "error removing img from directory: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -895,7 +895,7 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
-    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   } else {
     notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -937,7 +937,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
-    lderr(ictx->cct) << "failed to create snap id: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "failed to create snap id: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -946,7 +946,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << cpp_strerror(-r) << dendl;
     return r;
   }
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -963,7 +963,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << cpp_strerror(-r) << dendl;
     return r;
   }
 

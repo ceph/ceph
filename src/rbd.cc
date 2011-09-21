@@ -1048,7 +1048,7 @@ int main(int argc, const char **argv)
   if (talk_to_cluster) {
     r = rados.ioctx_create(poolname, io_ctx);
     if (r < 0) {
-      cerr << "error opening pool " << poolname << ": " << strerror(-r) << std::endl;
+      cerr << "error opening pool " << poolname << ": " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
   }
@@ -1060,7 +1060,7 @@ int main(int argc, const char **argv)
        opt_cmd == OPT_COPY)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
-      cerr << "error opening image " << imgname << ": " << strerror(-r) << std::endl;
+      cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
   }
@@ -1068,7 +1068,7 @@ int main(int argc, const char **argv)
   if (snapname) {
     r = image.snap_set(snapname);
     if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
-      cerr << "error setting snapshot context: " << strerror(-r) << std::endl;
+      cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
   }
@@ -1076,7 +1076,7 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
     r = rados.ioctx_create(dest_poolname, dest_io_ctx);
     if (r < 0) {
-      cerr << "error opening pool " << dest_poolname << ": " << strerror(-r) << std::endl;
+      cerr << "error opening pool " << dest_poolname << ": " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
   }
@@ -1090,7 +1090,7 @@ int main(int argc, const char **argv)
         cerr << "pool " << poolname << " doesn't contain rbd images" << std::endl;
         break;
       default:
-        cerr << "error: " << strerror(-r) << std::endl;
+        cerr << "error: " << cpp_strerror(-r) << std::endl;
       }
       exit(1);
     }
@@ -1109,7 +1109,7 @@ int main(int argc, const char **argv)
     }
     r = do_create(rbd, io_ctx, imgname, size, &order);
     if (r < 0) {
-      cerr << "create error: " << strerror(-r) << std::endl;
+      cerr << "create error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1117,7 +1117,7 @@ int main(int argc, const char **argv)
   case OPT_RENAME:
     r = do_rename(rbd, io_ctx, imgname, destname);
     if (r < 0) {
-      cerr << "rename error: " << strerror(-r) << std::endl;
+      cerr << "rename error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1125,7 +1125,7 @@ int main(int argc, const char **argv)
   case OPT_INFO:
     r = do_show_info(imgname, image);
     if (r < 0) {
-      cerr << "error: " << strerror(-r) << std::endl;
+      cerr << "error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1133,7 +1133,7 @@ int main(int argc, const char **argv)
   case OPT_RM:
     r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
-      cerr << "delete error: " << strerror(-r) << std::endl;
+      cerr << "delete error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1141,7 +1141,7 @@ int main(int argc, const char **argv)
   case OPT_RESIZE:
     r = do_resize(image, size);
     if (r < 0) {
-      cerr << "resize error: " << strerror(-r) << std::endl;
+      cerr << "resize error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1153,7 +1153,7 @@ int main(int argc, const char **argv)
     }
     r = do_list_snaps(image);
     if (r < 0) {
-      cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
+      cerr << "failed to list snapshots: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1165,7 +1165,7 @@ int main(int argc, const char **argv)
     }
     r = do_add_snap(image, snapname);
     if (r < 0) {
-      cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
+      cerr << "failed to create snapshot: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1177,7 +1177,7 @@ int main(int argc, const char **argv)
     }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
-      cerr << "rollback failed: " << strerror(-r) << std::endl;
+      cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1189,7 +1189,7 @@ int main(int argc, const char **argv)
     }
     r = do_remove_snap(image, snapname);
     if (r < 0) {
-      cerr << "rollback failed: " << strerror(-r) << std::endl;
+      cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1201,7 +1201,7 @@ int main(int argc, const char **argv)
     }
     r = do_export(image, path);
     if (r < 0) {
-      cerr << "export error: " << strerror(-r) << std::endl;
+      cerr << "export error: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1213,7 +1213,7 @@ int main(int argc, const char **argv)
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path);
     if (r < 0) {
-      cerr << "import failed: " << strerror(-r) << std::endl;
+      cerr << "import failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1221,7 +1221,7 @@ int main(int argc, const char **argv)
   case OPT_COPY:
     r = do_copy(image, dest_io_ctx, destname);
     if (r < 0) {
-      cerr << "copy failed: " << strerror(-r) << std::endl;
+      cerr << "copy failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1229,7 +1229,7 @@ int main(int argc, const char **argv)
   case OPT_WATCH:
     r = do_watch(io_ctx, imgname);
     if (r < 0) {
-      cerr << "watch failed: " << strerror(-r) << std::endl;
+      cerr << "watch failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1237,7 +1237,7 @@ int main(int argc, const char **argv)
   case OPT_MAP:
     r = do_kernel_add(poolname, imgname, secretfile, user);
     if (r < 0) {
-      cerr << "add failed: " << strerror(-r) << std::endl;
+      cerr << "add failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1245,7 +1245,7 @@ int main(int argc, const char **argv)
   case OPT_UNMAP:
     r = do_kernel_rm(devpath);
     if (r < 0) {
-      cerr << "remove failed: " << strerror(-r) << std::endl;
+      cerr << "remove failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;
@@ -1253,7 +1253,7 @@ int main(int argc, const char **argv)
   case OPT_SHOWMAPPED:
     r = do_kernel_showmapped();
     if (r < 0) {
-      cerr << "showmapped failed: " << strerror(-r) << std::endl;
+      cerr << "showmapped failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
     break;

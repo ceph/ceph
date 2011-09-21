@@ -15,6 +15,7 @@
 #ifndef CEPH_MPOOLOPREPLY_H
 #define CEPH_MPOOLOPREPLY_H
 
+#include "common/errno.h"
 
 class MPoolOpReply : public PaxosServiceMessage {
 public:
@@ -46,7 +47,7 @@ public:
   const char *get_type_name() { return "poolopreply"; }
 
   void print(ostream& out) {
-    out << "poolopreply(reply:" << strerror(-replyCode) << ", "
+    out << "poolopreply(reply:" << cpp_strerror(-replyCode) << ", "
 	<< get_tid() << " v" << version << ")";
   }
 

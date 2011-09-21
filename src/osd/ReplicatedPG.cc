@@ -1449,7 +1449,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  break;
 	}
 	if (result < 0) {
-	  dout(10) << "comparison returned " << result << " " << strerror(-result) << dendl;
+	  dout(10) << "comparison returned " << result << " " << cpp_strerror(-result) << dendl;
 	  break;
 	}
 
