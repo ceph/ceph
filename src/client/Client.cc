@@ -555,11 +555,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
     in->flags |= I_COMPLETE;
     if (in->dir) {
-      ldout(cct, 0) << "WARNING: dir is open on empty dir " << in->ino << " with "
-		    << in->dir->dentry_map.size() << " entries" << dendl;
-      in->dir->max_offset = 2;
-      
-      // FIXME: tear down dir?
+      ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
+		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
+      while (!in->dir->dentry_map.empty())
+	unlink(in->dir->dentry_map.begin()->second, true);
+      close_dir(in->dir);
     }
   }  
 
