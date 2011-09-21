@@ -4,7 +4,7 @@
 
 .. toctree::
 
-   add-client
+   key
    grow/index
    disk-failure
    pool
