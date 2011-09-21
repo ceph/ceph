@@ -135,6 +135,7 @@ To control the number of `active` ``cmds``\es, see
 .. todo:: mds.0 vs mds.alpha etc details
 
 
+.. _radosgw:
 
 ``radosgw``
 ===========
