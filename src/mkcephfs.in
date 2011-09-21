@@ -240,6 +240,18 @@ if [ -n "$initdaemon" ]; then
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
     name="$type.$id"
     
+    # create /var/run/ceph (or wherever pid file and/or admin socket live)
+    get_conf pid_file "/var/run/ceph/$name.pid" "pid file"
+    rundir=`dirname $pid_file`
+    if [ "$rundir" != "." ] && [ ! -d "$rundir" ]; then
+	mkdir -p $rundir
+    fi
+    get_conf asok_file "/var/run/ceph/$name.asok" "admin socket"
+    rundir=`dirname $asok_file`
+    if [ "$rundir" != "." ] && [ ! -d "$rundir" ]; then
+	mkdir -p $rundir
+    fi
+
     if [ $type = "osd" ]; then
 	$BINDIR/cosd -c $conf --monmap $dir/monmap -i $id --mkfs
 	create_private_key
