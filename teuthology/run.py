@@ -261,7 +261,7 @@ def schedule():
                 job.delete()
         return
 
-    job = yaml.safe_dump(dict(
+    job_config = dict(
             config=ctx.config,
             name=ctx.name,
             last_in_suite=ctx.last_in_suite,
@@ -270,6 +270,10 @@ def schedule():
             description=ctx.description,
             owner=ctx.owner,
             verbose=ctx.verbose,
-            ))
+            )
+    if ctx.timeout is not None:
+        job_config['results_timeout'] = ctx.timeout
+
+    job = yaml.safe_dump(job_config)
     jid = beanstalk.put(job, ttr=60*60*24)
     print 'Job scheduled with ID {jid}'.format(jid=jid)
