@@ -119,7 +119,7 @@ struct MyProgressContext : public librbd::ProgressContext {
   const char *operation;
   int last_pc;
 
-  MyProgressContext(const char *o) : operation(o), last_pc(-1) {
+  MyProgressContext(const char *o) : operation(o), last_pc(0) {
   }
   
   int update_progress(uint64_t offset, uint64_t total) {
