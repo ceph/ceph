@@ -99,13 +99,21 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % (self.state))
 
-    def __init__(self, rados_id = None):
+    def __init__(self, rados_id=None, conf=None, conffile=None):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
         ret = self.librados.rados_create(byref(self.cluster), c_char_p(rados_id))
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
         self.state = "configuring"
+        if conffile is not None:
+            # read the default conf file when '' is given
+            if conffile == '':
+                conffile = None
+            self.conf_read_file(conffile)
+        if conf is not None:
+            for key, value in conf.iteritems():
+                self.conf_set(key, value)
 
     def shutdown(self):
         if (self.__dict__.has_key("state") and self.state != "shutdown"):
