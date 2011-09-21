@@ -1052,6 +1052,7 @@ noinst_HEADERS = \
 	common/safe_io.h\
         common/config.h\
         common/config_obs.h\
+	common/config_opts.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
 	common/mime.h\
