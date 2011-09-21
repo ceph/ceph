@@ -148,6 +148,8 @@ access control, and so on.
 .. _RESTful: http://en.wikipedia.org/wiki/RESTful
 
 
+.. _rbd:
+
 Rados Block Device (RBD)
 ========================
 

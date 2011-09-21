@@ -56,6 +56,8 @@ and ``btrfs``, and make sure you are running the latest Linux kernel.
 Radosgw is still going through heavy development, but it will likely
 mature next.
 
+.. _cfuse-kernel-tradeoff:
+
 The Ceph filesystem is functionally fairly complete, but has not been
 tested well enough at scale and under load yet. Multi-master MDS is
 still problematic and we recommend running just one active MDS
