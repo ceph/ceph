@@ -47,6 +47,9 @@ class IoctxStateError(Exception):
 class ObjectStateError(Exception):
     pass
 
+class LogicError(Exception):
+    pass
+
 def make_ex(ret, msg):
     ret = abs(ret)
     if (ret == errno.EPERM):
@@ -361,7 +364,7 @@ class Ioctx(object):
             raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % \
                 (ret, length))
         else:
-            raise make_ex("Ioctx.write(%s): logic error: rados_write \
+            raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
