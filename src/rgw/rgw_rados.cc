@@ -868,6 +868,11 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
 
   atomic_write_finish(state, r);
 
+  if (r >= 0 && bucket.marker.size()) {
+    uint64_t epoch = io_ctx.get_last_version();
+    r = cls_obj_del(bucket, epoch, obj.object);
+  }
+
   if (r < 0)
     return r;
 
@@ -1395,7 +1400,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   atomic_write_finish(state, ret);
 
-  if (ret >= 0) {
+  if (ret >= 0 && bucket.marker.size()) {
     uint64_t epoch = io_ctx.get_last_version();
     utime_t ut;
     ret = cls_obj_add(bucket, epoch, dst_obj.object, size, ut);
