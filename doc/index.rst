@@ -18,16 +18,11 @@ overhead.
 .. image:: overview.png
 
 
-Getting started
-===============
-
-- :doc:`tutorial`: how to install a cluster for testing
-- `Ceph Blog <http://ceph.newdream.net/news/>`__: news and status info
-
 
 Mailing lists, bug tracker, IRC channel
 =======================================
 
+- `Ceph Blog <http://ceph.newdream.net/news/>`__: news and status info
 - The development mailing list is at ceph-devel@vger.kernel.org, and
   archived at Gmane_. Send email to subscribe_ or unsubscribe_.
 - `Bug/feature tracker <http://tracker.newdream.net/projects/ceph>`__:
@@ -85,8 +80,7 @@ Table of Contents
 .. toctree::
    :maxdepth: 3
 
-   self
-   tutorial
+   start/index
    architecture
    ops/index
    rec/index
