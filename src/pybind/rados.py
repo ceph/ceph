@@ -112,6 +112,14 @@ Rados object in state %s." % (self.state))
             self.librados.rados_shutdown(self.cluster)
             self.state = "shutdown"
 
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.shutdown()
+        return False
+
     def __del__(self):
         self.shutdown()
 
@@ -321,9 +329,15 @@ class Ioctx(object):
         self.io = io
         self.state = "open"
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.close()
+        return False
+
     def __del__(self):
-        if (self.state == "open"):
-            self.close()
+        self.close()
 
     def require_ioctx_open(self):
         if self.state != "open":
@@ -346,9 +360,10 @@ class Ioctx(object):
                 (self.name, loc_key))
 
     def close(self):
-        self.require_ioctx_open()
-        self.librados.rados_ioctx_destroy(self.io)
-        self.state = "closed"
+        if self.state == "open":
+            self.require_ioctx_open()
+            self.librados.rados_ioctx_destroy(self.io)
+            self.state = "closed"
 
     def write(self, key, data, offset = 0):
         self.require_ioctx_open()
