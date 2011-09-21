@@ -108,12 +108,6 @@ int MonitorStore::mkfs()
   return 0;
 }
 
-void MonitorStore::sync()
-{
-  dout(10) << "sync" << dendl;
-  sync_filesystem(lock_fd);
-}
-
 version_t MonitorStore::get_int(const char *a, const char *b)
 {
   char fn[1024];
