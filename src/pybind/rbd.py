@@ -136,6 +136,13 @@ class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.close()
+        return False
+
     def close(self):
         if not self.closed:
             self.closed = True
