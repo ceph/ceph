@@ -24,6 +24,7 @@ Rados *rados = NULL;
 static string notify_oid = "notify";
 static string shadow_ns = "shadow";
 static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
+static string dir_oid_prefix = ".dir.";
 
 static string shadow_category = "rgw.shadow";
 static string main_category = "rgw.main";
@@ -231,6 +232,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
   }
 
   std::map<string, string> dir_map;
+#if 0
   {
     librados::ObjectIterator i_end = io_ctx.objects_end();
     for (librados::ObjectIterator i = io_ctx.objects_begin(); i != i_end; ++i) {
@@ -255,6 +257,27 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 	    ((obj).compare(0, prefix.size(), prefix) == 0)) {
 	  dir_map[obj] = key;
 	}
+    }
+  }
+#endif
+  std::map<string, RGWObjEnt> ent_map;
+  r = cls_bucket_list(bucket, marker, max, ent_map);
+  if (r < 0)
+    return r;
+
+  std::map<string, RGWObjEnt>::iterator eiter;
+  for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
+    string obj = eiter->first;
+    string key = obj;
+
+    if (!rgw_obj::translate_raw_obj(obj, ns))
+      continue;
+
+    if (filter && !filter->filter(obj, key))
+      continue;
+
+    if (prefix.empty() || ((obj).compare(0, prefix.size(), prefix) == 0)) {
+      dir_map[obj] = key;
     }
   }
 
@@ -357,12 +380,12 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string
 
   bufferlist outbl;
   int ret = root_pool_ctx.operate(bucket.name, &op);
-  if (ret < 0)
+  if (ret < 0 && ret != -EEXIST)
     return ret;
 
   if (create_pool) {
     ret = rados->pool_create(bucket.pool.c_str(), auid);
-    if (ret < 0)
+    if (ret < 0 && ret != -EEXIST)
       root_pool_ctx.remove(bucket.name.c_str());
   }
 
@@ -386,6 +409,19 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
     bucket.marker = buf;
+
+    string dir_oid =  dir_oid_prefix;
+    dir_oid.append(bucket.marker);
+
+    r = io_ctx.create(dir_oid, true);
+    if (r < 0 && r != -EEXIST)
+      return r;
+
+    if (r != -EEXIST) {
+      r = cls_rgw_init_index(bucket, dir_oid);
+      if (r < 0)
+        return r;
+    }
   }
 
   return ret;
@@ -1763,6 +1799,23 @@ int RGWRados::distribute(bufferlist& bl)
   return r;
 }
 
+int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
+  bufferlist in, out;
+  r = io_ctx.exec(oid, "rgw", "bucket_init_index", in, out);
+  return r;
+}
+
 int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
                          string& name, uint64_t size, utime_t& mtime)
 {
@@ -1776,7 +1829,7 @@ int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
     return -EIO;
   }
 
-  string oid = ".dir.";
+  string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
   bufferlist in, out;
@@ -1814,7 +1867,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     return -EIO;
   }
 
-  string oid = ".dir.";
+  string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
   bufferlist in, out;

@@ -277,6 +277,7 @@ public:
 
   int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats);
 
+  int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
                  string& name, uint64_t size, utime_t& mtime);
   int cls_obj_add(rgw_bucket& bucket, uint64_t epoch, string& name, uint64_t size, utime_t& mtime);

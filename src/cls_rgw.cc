@@ -13,6 +13,7 @@ CLS_VER(1,0)
 CLS_NAME(rgw)
 
 cls_handle_t h_class;
+cls_method_handle_t h_rgw_bucket_init_index;
 cls_method_handle_t h_rgw_bucket_list;
 cls_method_handle_t h_rgw_bucket_modify;
 
@@ -21,7 +22,12 @@ static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir
   bufferlist bl;
   bufferlist::iterator iter;
 
-  int rc = cls_cxx_read(hctx, 0, 0, &bl);
+  uint64_t size;
+  int rc = cls_cxx_stat(hctx, &size, NULL);
+  if (rc < 0)
+    return rc;
+
+  rc = cls_cxx_read(hctx, 0, size, &bl);
   if (rc < 0)
     return rc;
 
@@ -79,6 +85,26 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist bl;
+  bufferlist::iterator iter;
+
+  uint64_t size;
+  int rc = cls_cxx_stat(hctx, &size, NULL);
+  if (rc < 0)
+    return rc;
+  if (size != 0) {
+    CLS_LOG("ERROR: index already initialized\n");
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir dir;
+  rc = write_bucket_dir(hctx, dir);
+
+  return rc;
+}
+
 int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist bl;
@@ -131,6 +157,7 @@ void __cls_init()
   CLS_LOG("Loaded rgw class!");
 
   cls_register("rgw", &h_class);
+  cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
   cls_register_cxx_method(h_class, "bucket_modify", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_modify, &h_rgw_bucket_modify);
 
