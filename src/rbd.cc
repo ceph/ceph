@@ -129,6 +129,7 @@ struct MyProgressContext : public librbd::ProgressContext {
 	//	   << offset << " / " << total << " "
 	   << pc << "% complete...";
       cout.flush();
+      last_pc = pc;
     }
     return 0;
   }
