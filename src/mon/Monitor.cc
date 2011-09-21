@@ -1093,7 +1093,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   magicbl.append("\n");
   int r = store->put_bl_ss(magicbl, "magic", 0);
   if (r < 0) {
-    dout(0) << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
+    dout(0) << TEXT_RED << "** ERROR: initializing ceph-mon failed: couldn't "
 	    << "initialize the monitor state machine: " << cpp_strerror(r)
 	    << TEXT_NORMAL << dendl;
     exit(1);

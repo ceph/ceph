@@ -4607,7 +4607,7 @@ struct dirent * Client::readdir(dir_result_t *d)
   sr.full = false;
 
   /*
-   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like cfuse)
+   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like ceph-fuse)
    * readdir_r_cb=0 end of directory reached on prior call
    * readdir_r_cb=0 entry filled and offset now at end of the directory
    * readdir_r_cb=-1 entry is filled successfully, not end of dir

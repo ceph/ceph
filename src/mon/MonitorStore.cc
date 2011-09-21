@@ -65,7 +65,7 @@ int MonitorStore::mount()
   l.l_len = 0;
   int r = ::fcntl(lock_fd, F_SETLK, &l);
   if (r < 0) {
-    dout(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
+    dout(0) << "failed to lock " << t << ", is another ceph-mon still running?" << dendl;
     return -errno;
   }
 

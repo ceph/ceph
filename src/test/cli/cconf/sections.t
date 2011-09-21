@@ -9,10 +9,10 @@
   > bar = yellow
   > EOF
 
-  $ cconf -c test.conf -l bar
+  $ ceph-conf -c test.conf -l bar
   bar
 
-  $ cconf -c test.conf -l b
+  $ ceph-conf -c test.conf -l b
   bar
   baz
 

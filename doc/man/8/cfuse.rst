@@ -1,19 +1,19 @@
 =====================================
- cfuse -- FUSE-based client for ceph
+ ceph-fuse -- FUSE-based client for ceph
 =====================================
 
-.. program:: cfuse
+.. program:: ceph-fuse
 
 Synopsis
 ========
 
-| **cfuse** [ -m *monaddr*:*port* ] *mountpoint* [ *fuse options* ]
+| **ceph-fuse** [ -m *monaddr*:*port* ] *mountpoint* [ *fuse options* ]
 
 
 Description
 ===========
 
-**cfuse** is a FUSE (File system in USErspace) client for Ceph
+**ceph-fuse** is a FUSE (File system in USErspace) client for Ceph
 distributed file system. It will mount a ceph file system (specified
 via the -m option for described by ceph.conf (see below) at the
 specific mount point.
@@ -22,13 +22,13 @@ The file system can be unmounted with::
 
         fusermount -u mountpoint
 
-or by sending ``SIGINT`` to the ``cfuse`` process.
+or by sending ``SIGINT`` to the ``ceph-fuse`` process.
 
 
 Options
 =======
 
-Any options not recognized by cfuse will be passed on to libfuse.
+Any options not recognized by ceph-fuse will be passed on to libfuse.
 
 .. option:: -d
 
@@ -51,7 +51,7 @@ Any options not recognized by cfuse will be passed on to libfuse.
 Availability
 ============
 
-**cfuse** is part of the Ceph distributed file system. Please refer to
+**ceph-fuse** is part of the Ceph distributed file system. Please refer to
 the Ceph wiki at http://ceph.newdream.net/wiki for more information.
 
 

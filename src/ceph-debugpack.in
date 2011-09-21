@@ -62,7 +62,7 @@ done
 # get absolute path for dest_tar
 [ `echo $dest_tar | cut -c 1` != "/" ] && dest_tar="`pwd`/$dest_tar"
 
-bins="cmon cmds cosd"
+bins="ceph-mon ceph-mds ceph-osd"
 core_paths="/ $BINDIR $BINDBGDIR"
 [ "$conf" = "" ] && conf=$ETCDIR/ceph.conf
 log_path=`$CCONF -c $conf "log dir"`

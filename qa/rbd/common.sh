@@ -19,7 +19,7 @@ set_variables() {
     fi
     [ -e $conf ] || die "conf file not found"
 
-    CCONF="cconf -c $conf"
+    CCONF="ceph-conf -c $conf"
 
     [ -z "$mnt" ] && mnt="/c"
     if [ -z "$monhost" ]; then

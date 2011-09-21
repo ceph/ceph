@@ -1,5 +1,5 @@
 =====================================
- cmds -- ceph metadata server daemon
+ ceph-mds -- ceph metadata server daemon
 =====================================
 
 .. program:: cmds
@@ -7,17 +7,17 @@
 Synopsis
 ========
 
-| **cmds** -i *name* [[ --hot-standby [*rank*] ]|[--journal_check *rank*]]
+| **ceph-mds** -i *name* [[ --hot-standby [*rank*] ]|[--journal_check *rank*]]
 
 
 Description
 ===========
 
-**cmds** is the metadata server daemon for the Ceph distributed file
-system. One or more instances of cmds collectively manage the file
+**ceph-mds** is the metadata server daemon for the Ceph distributed file
+system. One or more instances of ceph-mds collectively manage the file
 system namespace, coordinating access to the shared OSD cluster.
 
-Each cmds daemon instance should have a unique name. The name is used
+Each ceph-mds daemon instance should have a unique name. The name is used
 to identify daemon instances in the ceph.conf.
 
 Once the daemon has started, the monitor cluster will normally assign
@@ -38,8 +38,8 @@ Options
 .. option:: -f, --foreground
 
    Foreground: do not daemonize after startup (run in foreground). Do
-   not generate a pid file. Useful when run via :doc:`crun
-   <crun>`\(8).
+   not generate a pid file. Useful when run via :doc:`ceph-run
+   <ceph-run>`\(8).
 
 .. option:: -d
 
@@ -60,7 +60,7 @@ Options
 Availability
 ============
 
-**cmon** is part of the Ceph distributed file system. Please refer to the Ceph wiki at
+**ceph-mon** is part of the Ceph distributed file system. Please refer to the Ceph wiki at
 http://ceph.newdream.net/wiki for more information.
 
 
@@ -68,5 +68,5 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cmon <cmon>`\(8),
-:doc:`cosd <cosd>`\(8)
+:doc:`ceph-mon <cmon>`\(8),
+:doc:`ceph-osd <cosd>`\(8)

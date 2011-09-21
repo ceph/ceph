@@ -61,10 +61,10 @@ mature next.
 The Ceph filesystem is functionally fairly complete, but has not been
 tested well enough at scale and under load yet. Multi-master MDS is
 still problematic and we recommend running just one active MDS
-(standbys are ok). If you have problems with ``kclient`` or ``cfuse``,
+(standbys are ok). If you have problems with ``kclient`` or ``ceph-fuse``,
 you may wish to try the other option; in general, ``kclient`` is
 expected to be faster (but be sure to use the latest Linux kernel!)
-while ``cfuse`` provides better stability by not triggering kernel
+while ``ceph-fuse`` provides better stability by not triggering kernel
 crashes.
 
 As individual systems mature enough, we move to improving their

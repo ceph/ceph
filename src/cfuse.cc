@@ -41,12 +41,12 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cfuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
+  cerr << "usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
   int filer_flags = 0;
-  //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
+  //cerr << "ceph-fuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -102,7 +102,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (g_conf->daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
-      cerr << "cfuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
       exit(1);
     }
 
@@ -115,7 +115,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
 
-    cout << "cfuse[" << getpid() << "]: starting ceph client" << std::endl;
+    cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     messenger->start_with_nonce(getpid());
 
     // start client
@@ -125,13 +125,13 @@ int main(int argc, const char **argv, const char *envp[]) {
     // use my argc, argv (make sure you pass a mount point!)
     int r = client->mount(g_conf->client_mountpoint.c_str());
     if (r < 0) {
-      cerr << "cfuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
       goto out_shutdown;
     }
     
-    cerr << "cfuse[" << getpid() << "]: starting fuse" << std::endl;
+    cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     r = ceph_fuse_ll_main(client, argc, argv, fd[1]);
-    cerr << "cfuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
+    cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
     
     client->unmount();
     //cout << "unmounted" << std::endl;
@@ -165,9 +165,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       ::close(1);
       ::close(2);
     } else if (err)
-      cerr << "cfuse[" << getpid() << "]: mount failed: " << strerror(-err) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << strerror(-err) << std::endl;
     else
-      cerr << "cfuse[" << getpid() << "]: mount failed: " << strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << strerror(-r) << std::endl;
     return r;
   }
 }

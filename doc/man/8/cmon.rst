@@ -1,5 +1,5 @@
 =============================
- cmon -- ceph monitor daemon
+ ceph-mon -- ceph monitor daemon
 =============================
 
 .. program:: cmon
@@ -28,7 +28,7 @@ Options
 .. option:: -f, --foreground
 
    Foreground: do not daemonize after startup (run in foreground). Do
-   not generate a pid file. Useful when run via :doc:`crun <crun>`\(8).
+   not generate a pid file. Useful when run via :doc:`ceph-run <ceph-run>`\(8).
 
 .. option:: -d
 
@@ -52,5 +52,5 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cmds <cmds>`\(8),
-:doc:`cosd <cosd>`\(8)
+:doc:`ceph-mds <cmds>`\(8),
+:doc:`ceph-osd <cosd>`\(8)

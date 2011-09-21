@@ -1,19 +1,19 @@
 ===========================================
- cclsinfo -- show class object information
+ ceph-clsinfo -- show class object information
 ===========================================
 
-.. program:: cclsinfo
+.. program:: ceph-clsinfo
 
 Synopsis
 ========
 
-| **cclsinfo** [ *options* ] ... *filename*
+| **ceph-clsinfo** [ *options* ] ... *filename*
 
 
 Description
 ===========
 
-**cclsinfo** can show name, version, and architecture information
+**ceph-clsinfo** can show name, version, and architecture information
 about a specific class object.
 
 
@@ -36,7 +36,7 @@ Options
 Availability
 ============
 
-**cclsinfo** is part of the Ceph distributed file system. Please
+**ceph-clsinfo** is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

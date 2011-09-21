@@ -16,7 +16,7 @@ Description
 **csyn** is a simple synthetic workload generator for the Ceph
 distributed file system. It uses the userspace client library to
 generate simple workloads against a currently running file system. The
-file system need not be mounted via cfuse(8) or the kernel client.
+file system need not be mounted via ceph-fuse(8) or the kernel client.
 
 One or more ``--syn`` command arguments specify the particular
 workload, as documented below.
@@ -94,4 +94,4 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cfuse <cfuse>`\(8)
+:doc:`ceph-fuse <ceph-fuse>`\(8)

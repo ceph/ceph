@@ -1,24 +1,24 @@
 ==============================
- cconf -- ceph conf file tool
+ ceph-conf -- ceph conf file tool
 ==============================
 
-.. program:: cconf
+.. program:: ceph-conf
 
 Synopsis
 ========
 
-| **cconf** -c *conffile* --list-all-sections
-| **cconf** -c *conffile* -L
-| **cconf** -c *conffile* -l *prefix*
-| **cconf** *key* -s *section1* ...
-| **cconf** [-s *section* ] --lookup *key*
-| **cconf** [-s *section* ] *key*
+| **ceph-conf** -c *conffile* --list-all-sections
+| **ceph-conf** -c *conffile* -L
+| **ceph-conf** -c *conffile* -l *prefix*
+| **ceph-conf** *key* -s *section1* ...
+| **ceph-conf** [-s *section* ] --lookup *key*
+| **ceph-conf** [-s *section* ] *key*
 
 
 Description
 ===========
 
-**cconf** is a utility for getting information about a ceph
+**ceph-conf** is a utility for getting information about a ceph
 configuration file. As with most Ceph programs, you can specify which
 Ceph configuration file to use with the ``-c`` flag.
 
@@ -28,7 +28,7 @@ Actions
 
 .. TODO format this like a proper man page
 
-**cconf** will perform one of the following actions:
+**ceph-conf** will perform one of the following actions:
 
 --list-all-sections or -L prints out a list of all the section names in the configuration
 file.
@@ -57,25 +57,25 @@ Examples
 
 To find out what value osd 0 will use for the "osd data" option::
 
-        cconf -c foo.conf  --name osd.0 --lookup "osd data"
+        ceph-conf -c foo.conf  --name osd.0 --lookup "osd data"
 
 To find out what value will mds a use for the "log file" option::
 
-        cconf -c foo.conf  --name mds.a "log file"
+        ceph-conf -c foo.conf  --name mds.a "log file"
 
 To list all sections that begin with osd::
 
-        cconf -c foo.conf -l osd
+        ceph-conf -c foo.conf -l osd
 
 To list all sections::
 
-        cconf -c foo.conf -L
+        ceph-conf -c foo.conf -L
 
 
 Availability
 ============
 
-**cconf** is part of the Ceph distributed file system.  Please refer
+**ceph-conf** is part of the Ceph distributed file system.  Please refer
 to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

@@ -614,7 +614,7 @@ int OSD::pre_init()
 
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
-         << "currently in use. (Is cosd already running?)" << dendl;
+         << "currently in use. (Is ceph-osd already running?)" << dendl;
     return -EBUSY;
   }
   return 0;

@@ -1,33 +1,33 @@
 ==============================================
- crbdnamer -- udev helper to name RBD devices
+ ceph-rbdnamer -- udev helper to name RBD devices
 ==============================================
 
-.. program:: crbdnamer
+.. program:: ceph-rbdnamer
 
 
 Synopsis
 ========
 
-| **crbdnamer** *num*
+| **ceph-rbdnamer** *num*
 
 
 Description
 ===========
 
-**crbdnamer** prints the pool and image name for the given RBD devices
+**ceph-rbdnamer** prints the pool and image name for the given RBD devices
 to stdout. It is used by `udev` (using a rule like the one below) to
 set up a device symlink.
 
 
 ::
 
-        KERNEL=="rbd[0-9]*", PROGRAM="/usr/bin/crbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
+        KERNEL=="rbd[0-9]*", PROGRAM="/usr/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
 
 
 Availability
 ============
 
-**crbdnamer** is part of the Ceph distributed file system.  Please
+**ceph-rbdnamer** is part of the Ceph distributed file system.  Please
 refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

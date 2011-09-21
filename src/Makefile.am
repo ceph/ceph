@@ -7,7 +7,7 @@ bin_PROGRAMS =
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
-bin_SCRIPTS = crun $(srcdir)/cclsinfo cdebugpack crbdnamer
+bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -25,24 +25,24 @@ endif
 LIBGLOBAL_LDA = libglobal.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
-cmon_SOURCES = cmon.cc
-cmon_LDFLAGS = $(AM_LDFLAGS)
-cmon_LDADD = libmon.la $(LIBGLOBAL_LDA)
-cmon_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += cmon
+ceph_mon_SOURCES = cmon.cc
+ceph_mon_LDFLAGS = $(AM_LDFLAGS)
+ceph_mon_LDADD = libmon.la $(LIBGLOBAL_LDA)
+ceph_mon_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph-mon
 
 # osd
-cosd_SOURCES = cosd.cc objclass/class_debug.cc \
+ceph_osd_SOURCES = cosd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
-bin_PROGRAMS += cosd
-cosd_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
+bin_PROGRAMS += ceph-osd
+ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
-cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
-bin_PROGRAMS += cmds
-cmds_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_mds_SOURCES = cmds.cc
+ceph_mds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph-mds
+ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 ceph_SOURCES = \
@@ -83,11 +83,11 @@ gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 bin_PROGRAMS += gceph
 endif
 
-cconf_SOURCES = cconf.cc
-cconf_LDADD = $(LIBGLOBAL_LDA)
-cauthtool_SOURCES = cauthtool.cc
-cauthtool_LDADD = $(LIBGLOBAL_LDA)
-bin_PROGRAMS += ceph cconf cauthtool
+ceph_conf_SOURCES = cconf.cc
+ceph_conf_LDADD = $(LIBGLOBAL_LDA)
+ceph_authtool_SOURCES = cauthtool.cc
+ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph ceph-conf ceph-authtool
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
@@ -110,42 +110,42 @@ librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS) $(CRYPTO_LIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
-csyn_SOURCES = csyn.cc client/SyntheticClient.cc
-csyn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
-bin_PROGRAMS += csyn
+ceph_syn_SOURCES = csyn.cc client/SyntheticClient.cc
+ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph-syn
 
-core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
+core: ceph-mon ceph-osd ceph-mds ceph cephfs librados-config ceph-conf monmaptool osdmaptool crushtool ceph-syn
 
 
 # fuse targets?
 if WITH_FUSE
-cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
-cfuse_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += cfuse
+ceph_fuse_SOURCES = cfuse.cc client/fuse_ll.cc
+ceph_fuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph-fuse
 
 endif
 
 # tcmalloc?
 if WITH_TCMALLOC
 tcmalloc_safety_flags = -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
-cosd_LDADD += -ltcmalloc
-cosd_CXXFLAGS += ${tcmalloc_safety_flags}
-cosd_SOURCES += perfglue/heap_profiler.cc
-cmds_LDADD += -ltcmalloc
-cmds_CXXFLAGS += ${tcmalloc_safety_flags}
-cmds_SOURCES += perfglue/heap_profiler.cc
-cmon_LDADD += -ltcmalloc
-cmon_CXXFLAGS += ${tcmalloc_safety_flags}
-cmon_SOURCES += perfglue/heap_profiler.cc
+ceph_osd_LDADD += -ltcmalloc
+ceph_osd_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_osd_SOURCES += perfglue/heap_profiler.cc
+ceph_mds_LDADD += -ltcmalloc
+ceph_mds_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_mds_SOURCES += perfglue/heap_profiler.cc
+ceph_mon_LDADD += -ltcmalloc
+ceph_mon_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_mon_SOURCES += perfglue/heap_profiler.cc
 if WITH_FUSE
-cfuse_LDADD += -ltcmalloc
-cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_fuse_LDADD += -ltcmalloc
+ceph_fuse_CXXFLAGS += ${tcmalloc_safety_flags}
 endif #WITH_FUSE
 else
-cosd_SOURCES += perfglue/disabled_heap_profiler.cc
-cmds_SOURCES += perfglue/disabled_heap_profiler.cc
-cmon_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_osd_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_mds_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_mon_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets
@@ -650,7 +650,7 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs cdebugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile cdebugpack.in ceph-coverage.in
+init-ceph mkcephfs ceph-debugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -701,11 +701,11 @@ endif
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
-	$(srcdir)/cdebugpack.in \
+	$(srcdir)/ceph-debugpack.in \
 	$(srcdir)/ceph-coverage.in \
-	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
+	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
-	$(srcdir)/crbdnamer \
+	$(srcdir)/ceph-rbdnamer \
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
