@@ -32,8 +32,7 @@
 using std::auto_ptr;
 using namespace std;
 
-KeyRing *KeyRing::
-from_ceph_context(CephContext *cct)
+KeyRing *KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
   bool found_key = false;
@@ -90,8 +89,7 @@ from_ceph_context(CephContext *cct)
   return keyring.release();
 }
 
-KeyRing *KeyRing::
-create_empty()
+KeyRing *KeyRing::create_empty()
 {
   return new KeyRing();
 }
