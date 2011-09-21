@@ -68,6 +68,7 @@ public:
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
 
+  virtual int complete_put_obj(void *ctx, std::string& id, rgw_obj& obj, size_t len) { return 0; }
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
@@ -76,6 +77,9 @@ public:
     if (ret >= 0) {
       string category;
       ret = put_obj_meta(ctx, id, obj, mtime, attrs, category, false);
+    }
+    if (ret >= 0) {
+      ret = complete_put_obj(ctx, id, obj, len);
     }
     return ret;
   }

@@ -1328,6 +1328,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   get_obj_bucket_and_oid(dst_obj, bucket, dst_oid);
   librados::IoCtx io_ctx;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  uint64_t size = 0;
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -1380,6 +1381,8 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
       }
       string src_oid;
       get_obj_bucket_and_oid(range.src, bucket, src_oid);
+      if (range.dst_ofs + range.len > size)
+        size = range.dst_ofs + range.len;
       op.clone_range(range.dst_ofs, src_oid, range.src_ofs, range.len);
     }
   }
@@ -1391,6 +1394,12 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   int ret = io_ctx.operate(dst_oid, &op);
 
   atomic_write_finish(state, ret);
+
+  if (ret >= 0) {
+    uint64_t epoch = io_ctx.get_last_version();
+    utime_t ut;
+    ret = cls_obj_add(bucket, epoch, dst_obj.object, size, ut);
+  }
 
   return ret;
 }
