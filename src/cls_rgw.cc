@@ -69,7 +69,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   struct rgw_bucket_dir& new_dir = ret.dir;
   new_dir.header = dir.header;
   std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.start_obj);
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.lower_bound(op.start_obj);
   uint32_t i;
   for (i = 0; i != op.num_entries && miter != dir.m.end(); ++i, ++miter) {
     m[miter->first] = miter->second;
