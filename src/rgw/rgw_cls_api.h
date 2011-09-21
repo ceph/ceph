@@ -75,21 +75,18 @@ enum modify_op {
 struct rgw_cls_obj_op
 {
   uint8_t op;
-  uint64_t epoch;
   struct rgw_bucket_dir_entry entry;
 
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(op, bl);
-    ::encode(epoch, bl);
     ::encode(entry, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(op, bl);
-    ::decode(epoch, bl);
     ::decode(entry, bl);
   }
 };

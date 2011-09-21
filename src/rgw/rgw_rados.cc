@@ -6,6 +6,8 @@
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
+#include "rgw_cls_api.h"
+
 #include "include/rados/librados.hpp"
 using namespace librados;
 
@@ -1759,4 +1761,90 @@ int RGWRados::distribute(bufferlist& bl)
   RGW_LOG(10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
+}
+
+int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
+                         string& name, uint64_t size, utime_t& mtime)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
+  string oid = ".dir.";
+  oid.append(bucket.marker);
+
+  bufferlist in, out;
+  struct rgw_cls_obj_op call;
+  call.op = op;
+  call.entry.name = name;
+  call.entry.size = size;
+  call.entry.mtime = mtime;
+  call.entry.epoch = epoch;
+  ::encode(call, in);
+  r = io_ctx.exec(oid, "rgw", "bucket_modify", in, out);
+  return r;
+}
+
+int RGWRados::cls_obj_add(rgw_bucket& bucket, uint64_t epoch, string& name, uint64_t size, utime_t& mtime)
+{
+  return cls_obj_op(bucket, CLS_RGW_OP_ADD, epoch, name, size, mtime);
+}
+
+int RGWRados::cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name)
+{
+  utime_t mtime;
+  return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, name, 0, mtime);
+}
+
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
+  string oid = ".dir.";
+  oid.append(bucket.marker);
+
+  bufferlist in, out;
+  struct rgw_cls_list_op call;
+  call.start_obj = start;
+  call.num_entries = num;
+  ::encode(call, in);
+  r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
+    return -EIO;
+  }
+
+  struct rgw_bucket_dir& dir = ret.dir;
+  map<string, struct rgw_bucket_dir_entry>::iterator miter;
+  for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
+    RGWObjEnt e;
+    rgw_bucket_dir_entry& dirent = miter->second;
+    e.name = dirent.name;
+    e.size = dirent.size;
+    e.mtime = dirent.mtime;
+    m[e.name] = e;
+  }
+
+  return m.size();
 }

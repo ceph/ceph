@@ -276,6 +276,12 @@ public:
   }
 
   int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats);
+
+  int cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
+                 string& name, uint64_t size, utime_t& mtime);
+  int cls_obj_add(rgw_bucket& bucket, uint64_t epoch, string& name, uint64_t size, utime_t& mtime);
+  int cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m);
 };
 
 #endif

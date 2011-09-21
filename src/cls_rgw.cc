@@ -96,7 +96,7 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     CLS_LOG("ERROR: rgw_bucket_modify(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.entry.name.c_str(), op.epoch);
+  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.entry.name.c_str(), op.entry.epoch);
 
   std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.entry.name);
 
@@ -131,8 +131,8 @@ void __cls_init()
   CLS_LOG("Loaded rgw class!");
 
   cls_register("rgw", &h_class);
-  cls_register_cxx_method(h_class, "rgw_bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
-  cls_register_cxx_method(h_class, "rgw_bucket_modify", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_modify, &h_rgw_bucket_modify);
+  cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
+  cls_register_cxx_method(h_class, "bucket_modify", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_modify, &h_rgw_bucket_modify);
 
   return;
 }
