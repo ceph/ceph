@@ -17,6 +17,14 @@ cls_method_handle_t h_rgw_bucket_init_index;
 cls_method_handle_t h_rgw_bucket_list;
 cls_method_handle_t h_rgw_bucket_modify;
 
+
+#define ROUND_BLOCK_SIZE 4096
+
+static uint64_t get_rounded_size(uint64_t size)
+{
+  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
+}
+
 static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir)
 {
   bufferlist bl;
@@ -133,6 +141,11 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
       CLS_LOG("rgw_bucket_modify(): skipping request, old epoch\n");
       return 0;
     }
+
+    struct rgw_bucket_category_stats& stats = dir.header.stats[entry.category];
+    stats.num_entries--;
+    stats.total_size -= entry.size;
+    stats.total_size_rounded -= get_rounded_size(entry.size);
   }
 
   switch (op.op) {
@@ -143,7 +156,13 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
       return -ENOENT;
     break;
   case CLS_RGW_OP_ADD:
-    dir.m[op.entry.name] = op.entry;
+    {
+      struct rgw_bucket_category_stats& stats = dir.header.stats[op.entry.category];
+      dir.m[op.entry.name] = op.entry;
+      stats.num_entries++;
+      stats.total_size += op.entry.size;
+      stats.total_size_rounded += get_rounded_size(op.entry.size);
+    }
     break;
   }
 

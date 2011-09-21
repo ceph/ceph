@@ -8,8 +8,12 @@
 
 struct rgw_bucket_dir_entry {
   std::string name;
+  uint8_t category;
   uint64_t size;
   utime_t mtime;
+  string etag;
+  string owner_id;
+  string owner_display_name;
   uint64_t epoch;
 
   void encode(bufferlist &bl) const {
@@ -18,6 +22,9 @@ struct rgw_bucket_dir_entry {
     ::encode(name, bl);
     ::encode(mtime, bl);
     ::encode(epoch, bl);
+    ::encode(etag, bl);
+    ::encode(owner_id, bl);
+    ::encode(owner_display_name, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -25,12 +32,16 @@ struct rgw_bucket_dir_entry {
     ::decode(name, bl);
     ::decode(mtime, bl);
     ::decode(epoch, bl);
+    ::decode(etag, bl);
+    ::decode(owner_id, bl);
+    ::decode(owner_display_name, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
-struct rgw_bucket_dir_header {
+struct rgw_bucket_category_stats {
   uint64_t total_size;
+  uint64_t total_size_rounded;
   uint64_t num_entries;
 
   void encode(bufferlist &bl) const {
@@ -44,6 +55,22 @@ struct rgw_bucket_dir_header {
     ::decode(struct_v, bl);
     ::decode(total_size, bl);
     ::decode(num_entries, bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
+
+struct rgw_bucket_dir_header {
+  map<uint8_t, rgw_bucket_category_stats> stats;
+
+  void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(stats, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(stats, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
