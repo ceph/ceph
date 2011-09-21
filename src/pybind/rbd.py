@@ -12,31 +12,28 @@ ADMIN_AUID = 0
 class Error(Exception):
     pass
 
-class PermissionError(Exception):
+class PermissionError(Error):
     pass
 
-class ImageNotFound(Exception):
+class ImageNotFound(Error):
     pass
 
-class NoData(Exception):
+class ImageExists(Error):
     pass
 
-class ImageExists(Exception):
+class IOError(Error):
     pass
 
-class IOError(Exception):
+class NoSpace(Error):
     pass
 
-class NoSpace(Exception):
+class IncompleteWriteError(Error):
     pass
 
-class IncompleteWriteError(Exception):
+class InvalidArgument(Error):
     pass
 
-class InvalidArgument(Exception):
-    pass
-
-class LogicError(Exception):
+class LogicError(Error):
     pass
 
 def make_ex(ret, msg):
@@ -51,8 +48,6 @@ def make_ex(ret, msg):
         return NoSpace(msg)
     elif (ret == errno.EEXIST):
         return ImageExists(msg)
-    elif (ret == errno.ENODATA):
-        return NoData(msg)
     elif (ret == errno.EINVAL):
         return InvalidArgument(msg)
     else:
