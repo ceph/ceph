@@ -56,7 +56,7 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    if (i->version <= v) {
+    if (i->version <= v || i->version <= other.tail) {
       tail = i->version;
       break;
     }
@@ -3504,8 +3504,7 @@ void PG::fulfill_log(int from, const Query &query)
       } else
 	mlog->log.copy_after(log, query.since);
     }
-	
-    if (query.type == PG::Query::BACKLOG) {
+    else if (query.type == PG::Query::BACKLOG) {
       dout(10) << "sending info+missing+backlog" << dendl;
       assert(log.backlog);
       mlog->log = log;
