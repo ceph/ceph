@@ -25,7 +25,7 @@
 #include <sys/stat.h>
 #include <vector>
 
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */

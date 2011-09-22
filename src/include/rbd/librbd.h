@@ -20,7 +20,11 @@ extern "C" {
 #endif
 
 #include <netinet/in.h>
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#endif
 #include <string.h>
 #include "../rados/librados.h"
 

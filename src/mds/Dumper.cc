@@ -16,6 +16,7 @@
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
 #endif
 
+#include "include/compat.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"

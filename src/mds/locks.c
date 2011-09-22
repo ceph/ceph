@@ -5,7 +5,12 @@ typedef char bool;
 #define true  1
 
 #include <netinet/in.h>
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
 #include <string.h>
 #include <fcntl.h>
 

@@ -31,7 +31,10 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 
+#if defined(__linux__)
 #include <linux/fs.h>
+#endif
+#include "include/inttypes.h"
 #include "include/fiemap.h"
 
 struct fiemap *read_fiemap(int fd)

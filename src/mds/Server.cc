@@ -49,10 +49,14 @@
 #include "include/filepath.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
+#include "include/compat.h"
 
 #include <errno.h>
 #include <fcntl.h>
+
+#if defined(__linux__)
 #include <sys/xattr.h>
+#endif
 
 #include <list>
 #include <iostream>

@@ -19,7 +19,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#if defined(__linux__)
 #include <sys/prctl.h>
+#endif
 
 code_environment_t g_code_env = CODE_ENVIRONMENT_UTILITY;
 
@@ -52,9 +54,14 @@ int get_process_name(char *buf, int len)
      * null-terminated. */
     return -ENAMETOOLONG;
   }
+#if defined(__FreeBSD__)
+#warning XXX
+    return -ENAMETOOLONG;
+#else
   memset(buf, 0, len);
   ret = prctl(PR_GET_NAME, buf);
   return ret;
+#endif
 }
 
 std::string get_process_name_cpp()

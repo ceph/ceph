@@ -7,7 +7,13 @@
 #ifndef CEPH_BYTEORDER_H
 #define CEPH_BYTEORDER_H
 
+#if defined(__linux__)
 #include <endian.h>
+#elif defined(__FreeBSD__)
+#include <sys/endian.h>
+#else
+#error "Your platform is not yet supported."
+#endif
 
 static __inline__ __u16 swab16(__u16 val) 
 {
