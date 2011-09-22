@@ -39,6 +39,8 @@
 #include "common/safe_io.h"
 #include "include/page.h"
 
+#include "include/compat.h"
+
 #define DOUT_SUBSYS ms
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, msgr)

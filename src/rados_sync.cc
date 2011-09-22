@@ -20,6 +20,7 @@
 #include "global/global_init.h"
 #include "include/rados/librados.hpp"
 #include "rados_sync.h"
+#include "include/compat.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -32,7 +33,9 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if !defined(__FreeBSD__)
 #include <sys/xattr.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -89,7 +92,12 @@ ExportDir* ExportDir::create_for_writing(const std::string path, int version,
   }
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", version);
+#if !defined(__FreeBSD__)
   ret = setxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, strlen(buf) + 1, 0);
+#else
+  ret = -1;
+#warning "Missing implementation!"
+#endif
   if (ret < 0) {
     int err = errno;
     cerr << ERR_PREFIX << "ExportDir: setxattr error :"
@@ -109,7 +117,12 @@ ExportDir* ExportDir::from_file_system(const std::string path)
   int ret;
   char buf[32];
   memset(buf, 0, sizeof(buf));
+#if !defined(__FreeBSD__)
   ret = getxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, sizeof(buf) - 1);
+#else
+  ret = -1;
+#warning "Missing implementation!"
+#endif
   if (ret < 0) {
     ret = errno;
     if (ret == ENODATA) {
@@ -395,7 +408,12 @@ int BackedUpObject::from_path(const char *path, std::auto_ptr<BackedUpObject> &o
   }
 
   // get fullname
+#if !defined(__FreeBSD__)
   ssize_t res = fgetxattr(fd, XATTR_FULLNAME, NULL, 0);
+#else
+  ssize_t res = -1;
+#warning "Missing implementation!"
+#endif
   if (res <= 0) {
     fclose(fp);
     ret = errno;
@@ -415,7 +433,12 @@ int BackedUpObject::from_path(const char *path, std::auto_ptr<BackedUpObject> &o
   }
   char rados_name_[res + 1];
   memset(rados_name_, 0, sizeof(rados_name_));
+#if !defined(__FreeBSD__)
   res = fgetxattr(fd, XATTR_FULLNAME, rados_name_, res);
+#else
+  res = -1;
+#warning "Missing implementation!"
+#endif
   if (res < 0) {
     ret = errno;
     fclose(fp);
@@ -603,7 +626,12 @@ int BackedUpObject::download(IoCtx &io_ctx, const char *path)
       break;
   }
   size_t attr_sz = strlen(rados_name) + 1;
+#if !defined(__FreeBSD__)
   int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
+#else
+  int res = 1;
+#warning "Missing implementation!"
+#endif
   if (res) {
     int err = errno;
     cerr << ERR_PREFIX << "download: fsetxattr(" << tmp_path << ") error: "
@@ -694,7 +722,12 @@ BackedUpObject::BackedUpObject(const char *rados_name_,
 
 int BackedUpObject::read_xattrs_from_file(int fd)
 {
+#if !defined(__FreeBSD__)
   ssize_t blen = flistxattr(fd, NULL, 0);
+#else
+  ssize_t blen = 0;
+#warning "Missing implementation!"
+#endif
   if (blen > 0x1000000) {
     cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: unwilling "
 	 << "to allocate a buffer of size " << blen << " on the stack for "
@@ -703,7 +736,12 @@ int BackedUpObject::read_xattrs_from_file(int fd)
   }
   char buf[blen + 1];
   memset(buf, 0, sizeof(buf));
+#if !defined(__FreeBSD__)
   ssize_t blen2 = flistxattr(fd, buf, blen);
+#else
+  ssize_t blen2 = 0;
+#warning "Missing implementation!"
+#endif
   if (blen != blen2) {
     cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: xattrs changed while "
 	 << "we were trying to "
@@ -716,7 +754,12 @@ int BackedUpObject::read_xattrs_from_file(int fd)
     size_t bs = strlen(b);
     std::string xattr_name = get_user_xattr_name(b);
     if (!xattr_name.empty()) {
+#if !defined(__FreeBSD__)
       ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
+#else
+      ssize_t attr_len = -1;
+#warning "Missing implementation!"
+#endif
       if (attr_len < 0) {
 	int err = errno;
 	cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
@@ -731,7 +774,12 @@ int BackedUpObject::read_xattrs_from_file(int fd)
 	     << xattr_name << "'" << std::endl;
 	return ENOBUFS;
       }
+#if !defined(__FreeBSD__)
       ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
+#else
+      ssize_t attr_len2 = -1;
+#warning "Missing implementation!"
+#endif
       if (attr_len2 < 0) {
 	int err = errno;
 	cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "

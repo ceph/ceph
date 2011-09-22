@@ -1,7 +1,12 @@
 #ifndef CEPH_CRUSH_CRUSH_H
 #define CEPH_CRUSH_CRUSH_H
 
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
 
 /*
  * CRUSH is a pseudo-random data distribution algorithm that

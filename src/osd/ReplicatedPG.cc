@@ -37,6 +37,7 @@
 #include "mds/inode_backtrace.h" // Ugh
 
 #include "common/config.h"
+#include "include/compat.h"
 
 #define DOUT_SUBSYS osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, osd->osdmap

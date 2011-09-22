@@ -19,11 +19,20 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+// FreeBSD compatibility
+#ifdef __FreeBSD__
+typedef off_t loff_t;
+typedef off_t off64_t;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef __USE_FILE_OFFSET64
+/*
+ * On FreeBSD the offset is 64 bit, but libc doesn't announce it in the way glibc does.
+ */
+#if !defined(__FreeBSD__) && !defined(__USE_FILE_OFFSET64)
 # error libceph: must define __USE_FILE_OFFSET64 or readdir results will be corrupted
 #endif
 
