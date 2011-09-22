@@ -4,6 +4,7 @@
 
 .. highlight:: python
 
+.. index:: RADOS, object
 
 Introduction
 ============

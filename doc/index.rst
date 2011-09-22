@@ -91,7 +91,6 @@ Table of Contents
    Internals <dev/index>
    man/index
    papers
-   glossary
    appendix/index
 
 

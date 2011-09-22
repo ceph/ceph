@@ -16,6 +16,7 @@ device. Qemu/KVM also has a direct RBD client, that avoids the kernel
 overhead.
 
 
+.. index:: monitor, ceph-mon
 .. _monitor:
 
 Monitor cluster
@@ -52,8 +53,8 @@ subgroup for an even number.
 .. todo:: explain monmap
 
 
+.. index:: RADOS, OSD, ceph-osd, object
 .. _rados:
-
 
 RADOS
 =====
@@ -90,6 +91,7 @@ attributes should work (see :ref:`xattr`).
 .. todo:: explain plugins ("classes")
 
 
+.. index:: Ceph filesystem, Ceph Distributed File System, MDS, ceph-mds
 .. _cephfs:
 
 Ceph filesystem
@@ -135,6 +137,7 @@ To control the number of `active` ``ceph-mds``\es, see
 .. todo:: mds.0 vs mds.alpha etc details
 
 
+.. index:: RADOS Gateway, radosgw
 .. _radosgw:
 
 ``radosgw``
@@ -148,6 +151,7 @@ access control, and so on.
 .. _RESTful: http://en.wikipedia.org/wiki/RESTful
 
 
+.. index:: RBD, Rados Block Device
 .. _rbd:
 
 Rados Block Device (RBD)

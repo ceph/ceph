@@ -1,3 +1,5 @@
+.. index:: pool
+
 ======================
  Managing RADOS pools
 ======================
@@ -16,6 +18,8 @@ Authorizing access to pools
 
 .. todo:: when and who needs pool access
 
+
+.. index:: CRUSH
 
 Custom pool layouts with CRUSH
 ==============================

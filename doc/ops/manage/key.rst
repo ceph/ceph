@@ -1,12 +1,18 @@
+.. index:: key, cryptography
+
 ======================
  Managing crypto keys
 ======================
+
+.. index:: type, name, id
 
 Types of keys
 =============
 
 .. todo:: client, osd, mds, mon; id, no id
 
+
+.. index:: cap, capability
 
 Capabilities
 ============
