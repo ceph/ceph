@@ -237,19 +237,8 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
-  librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
-  if (r < 0)
-    return r;
-
-  string bucket_marker = bucket.marker;
-  if (bucket_marker.size()) {
-    bucket_marker.append("_");
-  }
-
-  std::map<string, RGWObjEnt> dir_map;
   std::map<string, RGWObjEnt> ent_map;
-  r = cls_bucket_list(bucket, marker, max, ent_map, is_truncated);
+  int r = cls_bucket_list(bucket, marker, max, ent_map, is_truncated);
   if (r < 0)
     return r;
 
@@ -604,25 +593,27 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
   if (r < 0)
     return r;
 
-  string bucket_marker = bucket.marker;
-  if (bucket_marker.size()) {
-    bucket_marker.append("_");
-  }
+  std::map<string, RGWObjEnt> ent_map;
+  string marker;
+  bool is_truncated;
 
-  ObjectIterator iter = list_ctx.objects_begin();
-  string ns;
-  for (; iter != list_ctx.objects_end(); iter++) {
-    string obj = *iter;
-    if (bucket_marker.size()) {
-      if (obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
-        continue;
+  do {
+#define NUM_ENTRIES 1000
+    r = cls_bucket_list(bucket, marker, NUM_ENTRIES, ent_map, &is_truncated);
+    if (r < 0)
+      return r;
 
-      obj = obj.substr(bucket_marker.size());
+    string ns;
+    std::map<string, RGWObjEnt>::iterator eiter;
+    string obj;
+    for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
+      obj = eiter->first;
+
+      if (rgw_obj::translate_raw_obj(obj, ns))
+        return -ENOTEMPTY;
     }
-
-    if (rgw_obj::translate_raw_obj(obj, ns))
-      return -ENOTEMPTY;
-  }
+    marker = obj;
+  } while (is_truncated);
 
   if (remove_pool) {
     r = rados->pool_delete(bucket.pool.c_str());
@@ -1808,7 +1799,6 @@ int RGWRados::cls_obj_add(rgw_bucket& bucket, uint64_t epoch, RGWObjEnt& ent, ui
 
 int RGWRados::cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name)
 {
-  utime_t mtime;
   RGWObjEnt ent;
   ent.name = name;
   return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, ent, 0);
@@ -1858,6 +1848,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     e.name = dirent.name;
     e.size = dirent.size;
     e.mtime = dirent.mtime;
+    e.etag = dirent.etag;
     e.owner = dirent.owner;
     e.owner_display_name = dirent.owner_display_name;
     m[e.name] = e;
