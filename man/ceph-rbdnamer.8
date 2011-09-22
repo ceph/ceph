@@ -1,6 +1,6 @@
-.TH "CRBDNAMER" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-RBDNAMER" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
-crbdnamer \- udev helper to name RBD devices
+ceph-rbdnamer \- udev helper to name RBD devices
 .
 .nr rst2man-indent-level 0
 .
@@ -32,23 +32,23 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcrbdnamer\fP \fInum\fP
+\fBceph\-rbdnamer\fP \fInum\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcrbdnamer\fP prints the pool and image name for the given RBD devices
+\fBceph\-rbdnamer\fP prints the pool and image name for the given RBD devices
 to stdout. It is used by \fIudev\fP (using a rule like the one below) to
 set up a device symlink.
 .sp
 .nf
 .ft C
-KERNEL=="rbd[0\-9]*", PROGRAM="/usr/bin/crbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
+KERNEL=="rbd[0\-9]*", PROGRAM="/usr/bin/ceph\-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
 .ft P
 .fi
 .SH AVAILABILITY
 .sp
-\fBcrbdnamer\fP is part of the Ceph distributed file system.  Please
+\fBceph\-rbdnamer\fP is part of the Ceph distributed file system.  Please
 refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO

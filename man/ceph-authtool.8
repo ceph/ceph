@@ -1,4 +1,4 @@
-.TH "CAUTHTOOL" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-AUTHTOOL" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
 ceph-authtool \- ceph keyring manipulation tool
 .
@@ -32,14 +32,14 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBceph-authtool\fP \fIkeyringfile\fP [ \-l | \-\-list ] [ \-C | \-\-create\-keyring
+\fBceph\-authtool\fP \fIkeyringfile\fP [ \-l | \-\-list ] [ \-C | \-\-create\-keyring
 ] [ \-p | \-\-print ] [ \-n | \-\-name \fIentityname\fP ] [ \-\-gen\-key ] [ \-a |
 \-\-add\-key \fIbase64_key\fP ] [ \-\-caps \fIcapfils\fP ] [ \-b | \-\-bin ]
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBceph-authtool\fP is a utility to create, view, and modify a Ceph keyring
+\fBceph\-authtool\fP is a utility to create, view, and modify a Ceph keyring
 file. A keyring file stores one or more Ceph authentication keys and
 possibly an associated capability specification. Each key is
 associated with an entity name, of the form
@@ -144,7 +144,7 @@ To create a new keyring containing a key for client.foo:
 .sp
 .nf
 .ft C
-ceph-authtool \-c \-n client.foo \-\-gen\-key keyring
+ceph\-authtool \-c \-n client.foo \-\-gen\-key keyring
 .ft P
 .fi
 .sp
@@ -153,7 +153,7 @@ mount a Ceph filesystem):
 .sp
 .nf
 .ft C
-ceph-authtool \-n client.foo \-\-cap mds \(aqallow\(aq \-\-cap osd \(aqallow rw pool=data\(aq \-\-cap mon \(aqallow r\(aq keyring
+ceph\-authtool \-n client.foo \-\-cap mds \(aqallow\(aq \-\-cap osd \(aqallow rw pool=data\(aq \-\-cap mon \(aqallow r\(aq keyring
 .ft P
 .fi
 .sp
@@ -161,7 +161,7 @@ To display the contents of the keyring:
 .sp
 .nf
 .ft C
-ceph-authtool \-l keyring
+ceph\-authtool \-l keyring
 .ft P
 .fi
 .sp
@@ -169,12 +169,12 @@ When mount a Ceph file system, you can grab the appropriately encoded secret key
 .sp
 .nf
 .ft C
-mount \-t ceph serverhost:/ mountpoint \-o name=foo,secret=\(gaceph-authtool \-p \-n client.foo keyring\(ga
+mount \-t ceph serverhost:/ mountpoint \-o name=foo,secret=\(gaceph\-authtool \-p \-n client.foo keyring\(ga
 .ft P
 .fi
 .SH AVAILABILITY
 .sp
-\fBceph-authtool\fP is part of the Ceph distributed file system. Please
+\fBceph\-authtool\fP is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO

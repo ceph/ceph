@@ -1,6 +1,6 @@
-.TH "CDEBUGPACK" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-DEBUGPACK" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
-cdebugpack \- ceph debug packer utility
+ceph-debugpack \- ceph debug packer utility
 .
 .nr rst2man-indent-level 0
 .
@@ -32,16 +32,16 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcdebugpack\fP [ \fIoptions\fP ] \fIfilename.tar.gz\fP
+\fBceph\-debugpack\fP [ \fIoptions\fP ] \fIfilename.tar.gz\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcdebugpack\fP will build a tarball containing various items that are
+\fBceph\-debugpack\fP will build a tarball containing various items that are
 useful for debugging crashes. The resulting tarball can be shared with
 Ceph developers when debugging a problem.
 .sp
-The tarball will include the binaries for ceph-mds, ceph-osd, and ceph-mon, any
+The tarball will include the binaries for ceph\-mds, ceph\-osd, and ceph\-mon, any
 log files, the ceph.conf configuration file, any core files we can
 find, and (if the system is running) dumps of the current osd, mds,
 and pg maps from the monitor.
@@ -55,7 +55,7 @@ startup.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBcdebugpack\fP is part of the Ceph distributed file system. Please
+\fBceph\-debugpack\fP is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO
