@@ -207,4 +207,4 @@ state. We can check that::
 
 .. [#sudo] The relevant ``sudoers`` syntax looks like this::
 
-	%admin ALL=(ALL) NOPASSWD:ALL
+	%admin ALL=(ALL) NOPASSWD: ALL
