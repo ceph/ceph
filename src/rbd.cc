@@ -1020,6 +1020,8 @@ int main(int argc, const char **argv)
 
   set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
 
+  if (!poolname)
+    poolname = "rbd";
   if (!dest_poolname)
     dest_poolname = poolname;
 
