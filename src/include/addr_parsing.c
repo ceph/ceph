@@ -24,6 +24,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 {
   int len2 = strlen(str2);
 
+  //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   while (*plen < pos + len2 + 1) {
     *plen += BUF_SIZE;
     *pstr = (char *)realloc(*pstr, (size_t)*plen);
@@ -32,9 +33,11 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
       printf("Out of memory\n");
       exit(1);
     }
+    //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   }
 
   strncpy((*pstr)+pos, str2, len2);
+  (*pstr)[pos+len2] = '\0';
 
   return pos + len2;
 }
