@@ -34,7 +34,7 @@ set_variables() {
     [ -z "$imgsize" ] && imgsize=1024
     [ -z "$user" ] && user=admin
     [ -z "$keyring" ] && keyring="`$CCONF keyring`"
-    [ -z "$secret" ] && secret="`cauthtool $keyring -n client.$user -p`"
+    [ -z "$secret" ] && secret="`ceph-authtool $keyring -n client.$user -p`"
 
     monip="`echo $monhost | sed 's/:/ /g' | awk '{print $1}'`"
     monport="`echo $monhost | sed 's/:/ /g' | awk '{print $2}'`"

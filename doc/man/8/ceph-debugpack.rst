@@ -1,19 +1,19 @@
 =========================================
- cdebugpack -- ceph debug packer utility
+ ceph-debugpack -- ceph debug packer utility
 =========================================
 
-.. program:: cdebugpack
+.. program:: ceph-debugpack
 
 Synopsis
 ========
 
-| **cdebugpack** [ *options* ] *filename.tar.gz*
+| **ceph-debugpack** [ *options* ] *filename.tar.gz*
 
 
 Description
 ===========
 
-**cdebugpack** will build a tarball containing various items that are
+**ceph-debugpack** will build a tarball containing various items that are
 useful for debugging crashes. The resulting tarball can be shared with
 Ceph developers when debugging a problem.
 
@@ -36,7 +36,7 @@ Options
 Availability
 ============
 
-**cdebugpack** is part of the Ceph distributed file system. Please
+**ceph-debugpack** is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

@@ -38,6 +38,6 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`ceph-mon <cmon>`\(8),
-:doc:`ceph-mds <cmds>`\(8),
-:doc:`ceph-osd <cosd>`\(8)
+:doc:`ceph-mon <ceph-mon>`\(8),
+:doc:`ceph-mds <ceph-mds>`\(8),
+:doc:`ceph-osd <ceph-osd>`\(8)

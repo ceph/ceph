@@ -9,7 +9,7 @@ usr/bin/ceph-run
 usr/bin/ceph-mon
 usr/bin/ceph-mds
 usr/bin/ceph-osd
-usr/bin/cauthtool
+usr/bin/ceph-authtool
 usr/bin/ceph-debugpack
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh

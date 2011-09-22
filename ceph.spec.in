@@ -163,7 +163,7 @@ fi
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
-%{_bindir}/cauthtool
+%{_bindir}/ceph-authtool
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon

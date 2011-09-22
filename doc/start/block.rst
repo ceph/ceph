@@ -56,7 +56,7 @@ And then make that visible as a block device::
 
 	touch secretfile
 	chmod go= secretfile
-	cauthtool --name=bar --print-key /etc/ceph/client.bar.keyring >secretfile
+	ceph-authtool --name=bar --print-key /etc/ceph/client.bar.keyring >secretfile
 	rbd map tengigs --user bar --secret secretfile
 
 .. todo:: the secretfile part is really clumsy

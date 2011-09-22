@@ -54,7 +54,7 @@ Options
 
    Generate a new secret key. This is normally used in combination
    with ``--mkfs`` as it is more convenient than generating a key by
-   hand with :doc:`cauthtool <cauthtool>`\(8).
+   hand with :doc:`ceph-authtool <ceph-authtool>`\(8).
 
 .. option:: --mkjournal
 
@@ -90,6 +90,6 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`ceph-mds <cmds>`\(8),
-:doc:`ceph-mon <cmon>`\(8),
-:doc:`ceph-authtool <cauthtool>`\(8)
+:doc:`ceph-mds <ceph-mds>`\(8),
+:doc:`ceph-mon <ceph-mon>`\(8),
+:doc:`ceph-authtool <ceph-authtool>`\(8)

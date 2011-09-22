@@ -29,7 +29,7 @@ using namespace std;
 
 void usage()
 {
-  cout << "usage: cauthtool keyringfile [OPTIONS]...\n"
+  cout << "usage: ceph-authtool keyringfile [OPTIONS]...\n"
        << "where the options are:\n"
        << "  -l, --list                    will list all keys and capabilities present in\n"
        << "                                the keyring\n"
