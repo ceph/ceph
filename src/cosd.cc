@@ -42,7 +42,7 @@ using namespace std;
 
 void usage() 
 {
-  derr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] "
+  derr << "usage: ceph-osd -i osdid [--osd-data=path] [--osd-journal=path] "
        << "[--mkfs] [--mkjournal] [--convert-filestore]" << dendl;
   derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
   generic_server_usage();
@@ -356,7 +356,7 @@ int main(int argc, const char **argv)
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());
   if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
-    dout(0) << "cosd: gmon.out should be in " << s << dendl;
+    dout(0) << "ceph-osd: gmon.out should be in " << s << dendl;
   }
 
   return 0;

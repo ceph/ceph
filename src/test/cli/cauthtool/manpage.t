@@ -1,6 +1,6 @@
-  $ cauthtool
-  cauthtool: must specify filename
-  usage: cauthtool keyringfile [OPTIONS]...
+  $ ceph-authtool
+  ceph-authtool: must specify filename
+  usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in
                                   the keyring
@@ -20,7 +20,7 @@
 
 # demonstrate that manpage examples fail without config
 # TODO fix the manpage
-  $ cauthtool --create-keyring --name client.foo --gen-key keyring
+  $ ceph-authtool --create-keyring --name client.foo --gen-key keyring
   creating keyring
 
 # work around the above
@@ -28,19 +28,19 @@
 
 To create a new keyring containing a key for client.foo:
 
-  $ cauthtool --create-keyring --id foo --gen-key keyring.bin
+  $ ceph-authtool --create-keyring --id foo --gen-key keyring.bin
   creating keyring.bin
 
-  $ cauthtool --create-keyring --name client.foo --gen-key keyring.bin
+  $ ceph-authtool --create-keyring --name client.foo --gen-key keyring.bin
   creating keyring.bin
 
 To associate some capabilities with the key (namely, the ability to mount a Ceph filesystem):
 
-  $ cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
+  $ ceph-authtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
 
 To display the contents of the keyring:
 
-  $ cauthtool -l keyring.bin
+  $ ceph-authtool -l keyring.bin
   [client.foo]
   \\tkey = [a-zA-Z0-9+/]+=* \(esc\) (re)
   \\tauid = [0-9]{20} \(esc\) (re)

@@ -1,19 +1,19 @@
 =====================================
- crun -- restart daemon on core dump
+ ceph-run -- restart daemon on core dump
 =====================================
 
-.. program:: crun
+.. program:: ceph-run
 
 Synopsis
 ========
 
-| **crun** *command* ...
+| **ceph-run** *command* ...
 
 
 Description
 ===========
 
-**crun** is a simple wrapper that will restart a daemon if it exits
+**ceph-run** is a simple wrapper that will restart a daemon if it exits
 with a signal indicating it crashed and possibly core dumped (that is,
 signals 3, 4, 5, 6, 8, or 11).
 
@@ -30,7 +30,7 @@ None
 Availability
 ============
 
-**crun** is part of the Ceph distributed file system. Please refer to
+**ceph-run** is part of the Ceph distributed file system. Please refer to
 the Ceph wiki at http://ceph.newdream.net/wiki for more information.
 
 
@@ -38,6 +38,6 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cmon <cmon>`\(8),
-:doc:`cmds <cmds>`\(8),
-:doc:`cosd <cosd>`\(8)
+:doc:`ceph-mon <ceph-mon>`\(8),
+:doc:`ceph-mds <ceph-mds>`\(8),
+:doc:`ceph-osd <ceph-osd>`\(8)

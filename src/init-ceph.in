@@ -249,7 +249,7 @@ for name in $what; do
 	    runarg=""
 	    
 	    [ -z "$crun" ] && get_conf_bool crun "0" "restart on core dump"
-	    [ "$crun" -eq 1 ] && wrap="$BINDIR/crun"
+	    [ "$crun" -eq 1 ] && wrap="$BINDIR/ceph-run"
 	    
 	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "" "valgrind"
 	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"

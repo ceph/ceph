@@ -1,6 +1,6 @@
-.TH "CFUSE" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-FUSE" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
-cfuse \- FUSE-based client for ceph
+ceph-fuse \- FUSE-based client for ceph
 .
 .nr rst2man-indent-level 0
 .
@@ -32,12 +32,12 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcfuse\fP [ \-m \fImonaddr\fP:\fIport\fP ] \fImountpoint\fP [ \fIfuse options\fP ]
+\fBceph\-fuse\fP [ \-m \fImonaddr\fP:\fIport\fP ] \fImountpoint\fP [ \fIfuse options\fP ]
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcfuse\fP is a FUSE (File system in USErspace) client for Ceph
+\fBceph\-fuse\fP is a FUSE (File system in USErspace) client for Ceph
 distributed file system. It will mount a ceph file system (specified
 via the \-m option for described by ceph.conf (see below) at the
 specific mount point.
@@ -50,10 +50,10 @@ fusermount \-u mountpoint
 .ft P
 .fi
 .sp
-or by sending \fBSIGINT\fP to the \fBcfuse\fP process.
+or by sending \fBSIGINT\fP to the \fBceph\-fuse\fP process.
 .SH OPTIONS
 .sp
-Any options not recognized by cfuse will be passed on to libfuse.
+Any options not recognized by ceph\-fuse will be passed on to libfuse.
 .INDENT 0.0
 .TP
 .B \-d
@@ -77,7 +77,7 @@ Use root_directory as the mounted root, rather than the full Ceph tree.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBcfuse\fP is part of the Ceph distributed file system. Please refer to
+\fBceph\-fuse\fP is part of the Ceph distributed file system. Please refer to
 the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more information.
 .SH SEE ALSO
 .sp

@@ -17,10 +17,10 @@ sub is_ceph_proc {
         return 0 if $cmdline =~ /\bps-ceph.pl\b/;
 
         return 1 if $cmdline =~ /\bceph\b/;
-        return 1 if $cmdline =~ /\bcfuse\b/;
-        return 1 if $cmdline =~ /\bcmds\b/;
-        return 1 if $cmdline =~ /\bcmon\b/;
-        return 1 if $cmdline =~ /\bcosd\b/;
+        return 1 if $cmdline =~ /\bceph-fuse\b/;
+        return 1 if $cmdline =~ /\bceph-mds\b/;
+        return 1 if $cmdline =~ /\bceph-mon\b/;
+        return 1 if $cmdline =~ /\bceph-osd\b/;
         return 1 if $cmdline =~ /\bosdmaptool\b/;
         return 1 if $cmdline =~ /\brados\b/;
         return 1 if $cmdline =~ /test_/;

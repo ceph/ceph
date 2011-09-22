@@ -34,7 +34,7 @@ class CephTalker extends CephFS {
   public CephTalker(Configuration conf, Log log) {
     super(conf, log);
     System.load(conf.get("fs.ceph.libDir") + "/libhadoopcephfs.so");
-    System.load(conf.get("fs.ceph.libDir") + "/libceph.so");
+    System.load(conf.get("fs.ceph.libDir") + "/libcephfs.so");
     cluster = 0;
   }
 

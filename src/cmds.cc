@@ -41,7 +41,7 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: cmds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
+  derr << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
@@ -201,7 +201,7 @@ int main(int argc, const char **argv)
 
   // Normal startup
   if (g_conf->name.has_default_id()) {
-    derr << "must specify '-i name' with the cmds instance name" << dendl;
+    derr << "must specify '-i name' with the ceph-mds instance name" << dendl;
     usage();
   }
 
@@ -266,7 +266,7 @@ int main(int argc, const char **argv)
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());
   if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
-    dout(0) << "cmds: gmon.out should be in " << s << dendl;
+    dout(0) << "ceph-mds: gmon.out should be in " << s << dendl;
   }
 
   generic_dout(0) << "stopped." << dendl;

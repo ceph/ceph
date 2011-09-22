@@ -1,13 +1,13 @@
 =============================================
- cauthtool -- ceph keyring manipulation tool
+ ceph-authtool -- ceph keyring manipulation tool
 =============================================
 
-.. program:: cauthtool
+.. program:: ceph-authtool
 
 Synopsis
 ========
 
-| **cauthtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
+| **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
   ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
   --add-key *base64_key* ] [ --caps *capfils* ] [ -b | --bin ]
 
@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**cauthtool** is a utility to create, view, and modify a Ceph keyring
+**ceph-authtool** is a utility to create, view, and modify a Ceph keyring
 file. A keyring file stores one or more Ceph authentication keys and
 possibly an associated capability specification. Each key is
 associated with an entity name, of the form
@@ -110,26 +110,26 @@ Example
 
 To create a new keyring containing a key for client.foo::
 
-        cauthtool -c -n client.foo --gen-key keyring
+        ceph-authtool -c -n client.foo --gen-key keyring
 
 To associate some capabilities with the key (namely, the ability to
 mount a Ceph filesystem)::
 
-        cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring
+        ceph-authtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring
 
 To display the contents of the keyring::
 
-        cauthtool -l keyring
+        ceph-authtool -l keyring
 
 When mount a Ceph file system, you can grab the appropriately encoded secret key with::
 
-        mount -t ceph serverhost:/ mountpoint -o name=foo,secret=`cauthtool -p -n client.foo keyring`
+        mount -t ceph serverhost:/ mountpoint -o name=foo,secret=`ceph-authtool -p -n client.foo keyring`
 
 
 Availability
 ============
 
-**cauthtool** is part of the Ceph distributed file system. Please
+**ceph-authtool** is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

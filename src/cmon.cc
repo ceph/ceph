@@ -39,7 +39,7 @@ extern CompatSet get_ceph_mon_feature_compat_set();
 
 void usage()
 {
-  cerr << "usage: cmon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
+  cerr << "usage: ceph-mon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
   cerr << "  --debug_mon n\n";
   cerr << "        debug monitor level (e.g. 10)\n";
   cerr << "  --mkfs\n";
@@ -300,7 +300,7 @@ int main(int argc, const char **argv)
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());
   if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
-    dout(0) << "cmon: gmon.out should be in " << s << dendl;
+    dout(0) << "ceph-mon: gmon.out should be in " << s << dendl;
   }
 
   return 0;

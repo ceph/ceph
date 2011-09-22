@@ -15,7 +15,7 @@
 
 To extract the value of the "osd data" option for the osd0 daemon,
 
-  $ cconf -c foo.conf "osd data" --name osd.0
+  $ ceph-conf -c foo.conf "osd data" --name osd.0
   /mnt/osd0
 
 This is equivalent to doing specifying sections [osd0], [osd.0],
@@ -23,11 +23,11 @@ This is equivalent to doing specifying sections [osd0], [osd.0],
 
 # TODO the "admin" here seems like an actual bug
 
-  $ cconf -c foo.conf "osd data" -s osd0 -s osd.0 -s osd -s global
+  $ ceph-conf -c foo.conf "osd data" -s osd0 -s osd.0 -s osd -s global
   /mnt/osdadmin
 
 To list all sections that begin with osd:
 
-  $ cconf -c foo.conf -l osd
+  $ ceph-conf -c foo.conf -l osd
   osd
   osd.3

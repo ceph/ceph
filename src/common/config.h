@@ -45,7 +45,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
 /** This class represents the current Ceph configuration.
  *
  * For Ceph daemons, this is the daemon configuration.  Log levels, caching
- * settings, btrfs settings, and so forth can all be found here.  For libceph
+ * settings, btrfs settings, and so forth can all be found here.  For libcephfs
  * and librados users, this is the configuration associated with their context.
  *
  * For information about how this class is loaded from a configuration file,

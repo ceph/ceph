@@ -14,7 +14,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "include/ceph/libceph.h"
+#include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include "test/unit.h"
 

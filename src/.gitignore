@@ -1,9 +1,9 @@
-/cfuse
-/cmds
-/cmon
+/ceph-fuse
+/ceph-mds
+/ceph-mon
 /ceph
-/cosd
-/csyn
+/ceph-osd
+/ceph-syn
 /dupstore
 /fakefuse
 /fakesyn
@@ -11,7 +11,7 @@
 /monmaptool
 /newsyn
 /authtool
-/cauthtool
+/ceph-authtool
 /crushtool
 /mkcephfs
 /mount.ceph
@@ -64,8 +64,8 @@ CrushWrapper.pm
 crush/CrushWrapper_wrap.cxx
 
 /.git_version
-/cconf
-/cdebugpack
+/ceph-conf
+/ceph-debugpack
 /cephfs
 /ceph-coverage
 /dumpjournal

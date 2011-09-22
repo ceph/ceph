@@ -1,6 +1,6 @@
-.TH "CRBDNAMER" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-DEBUGPACK" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
-crbdnamer \- udev helper to name RBD devices
+ceph-debugpack \- ceph debug packer utility
 .
 .nr rst2man-indent-level 0
 .
@@ -32,28 +32,34 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcrbdnamer\fP \fInum\fP
+\fBceph\-debugpack\fP [ \fIoptions\fP ] \fIfilename.tar.gz\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcrbdnamer\fP prints the pool and image name for the given RBD devices
-to stdout. It is used by \fIudev\fP (using a rule like the one below) to
-set up a device symlink.
+\fBceph\-debugpack\fP will build a tarball containing various items that are
+useful for debugging crashes. The resulting tarball can be shared with
+Ceph developers when debugging a problem.
 .sp
-.nf
-.ft C
-KERNEL=="rbd[0\-9]*", PROGRAM="/usr/bin/crbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}:%n"
-.ft P
-.fi
+The tarball will include the binaries for ceph\-mds, ceph\-osd, and ceph\-mon, any
+log files, the ceph.conf configuration file, any core files we can
+find, and (if the system is running) dumps of the current osd, mds,
+and pg maps from the monitor.
+.SH OPTIONS
+.INDENT 0.0
+.TP
+.B \-c ceph.conf, \-\-conf=ceph.conf
+Use \fIceph.conf\fP configuration file instead of the default
+\fB/etc/ceph/ceph.conf\fP to determine monitor addresses during
+startup.
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBcrbdnamer\fP is part of the Ceph distributed file system.  Please
+\fBceph\-debugpack\fP is part of the Ceph distributed file system. Please
 refer to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO
 .sp
-\fBrbd\fP(8),
 \fBceph\fP(8)
 .SH COPYRIGHT
 2011, New Dream Network

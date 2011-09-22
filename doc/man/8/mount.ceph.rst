@@ -149,5 +149,5 @@ information.
 See also
 ========
 
-:doc:`cfuse <cfuse>`\(8),
+:doc:`ceph-fuse <ceph-fuse>`\(8),
 :doc:`ceph <ceph>`\(8)

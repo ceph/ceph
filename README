@@ -18,11 +18,11 @@ $ make
 A quick summary of binaries that will be built in src/
 
 daemons:
- cmon -- monitor daemon.  handles cluster state and configuration
+ ceph-mon -- monitor daemon.  handles cluster state and configuration
          information.
- cosd -- storage daemon.  stores objects on a given block device.
- cmds -- metadata daemon.  handles file system namespace.
- cfuse -- fuse client.
+ ceph-osd -- storage daemon.  stores objects on a given block device.
+ ceph-mds -- metadata daemon.  handles file system namespace.
+ ceph-fuse -- fuse client.
 
 tools:
  ceph -- send management commands to the monitor cluster.

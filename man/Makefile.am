@@ -1,25 +1,25 @@
 AUTOMAKE_OPTIONS = gnu
 
 dist_man_MANS = \
-	cosd.8 \
-	cmds.8 \
-	cmon.8 \
+	ceph-osd.8 \
+	ceph-mds.8 \
+	ceph-mon.8 \
 	mkcephfs.8 \
-	cfuse.8 \
-	csyn.8 \
+	ceph-fuse.8 \
+	ceph-syn.8 \
 	crushtool.8 \
 	osdmaptool.8 \
 	monmaptool.8 \
-	cconf.8 \
-	crun.8 \
+	ceph-conf.8 \
+	ceph-run.8 \
 	ceph.8 \
 	mount.ceph.8 \
 	radosgw.8 \
 	radosgw_admin.8 \
-	cauthtool.8 \
+	ceph-authtool.8 \
 	rados.8 \
 	librados-config.8 \
 	rbd.8 \
-	cclsinfo.8 \
-	cdebugpack.8 \
+	ceph-clsinfo.8 \
+	ceph-debugpack.8 \
 	cephfs.8

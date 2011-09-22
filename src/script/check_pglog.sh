@@ -1,7 +1,7 @@
 #!/bin/sh
 
-cosd=`which cosd`
-[ -z "$cosd" ] && cosd="./cosd"
+cosd=`which ceph-osd`
+[ -z "$cosd" ] && cosd="./ceph-osd"
 
 bad=0
 for f in $1/current/meta/pglog*

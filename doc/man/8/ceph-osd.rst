@@ -1,20 +1,20 @@
 ====================================
- cosd -- ceph object storage daemon
+ ceph-osd -- ceph object storage daemon
 ====================================
 
-.. program:: cosd
+.. program:: ceph-osd
 
 Synopsis
 ========
 
-| **cosd** -i *osdnum* [ --osd-data *datapath* ] [ --osd-journal
+| **ceph-osd** -i *osdnum* [ --osd-data *datapath* ] [ --osd-journal
   *journal* ] [ --mkfs ] [ --mkjournal ] [ --mkkey ]
 
 
 Description
 ===========
 
-**cosd** is the object storage daemon for the Ceph distributed file
+**ceph-osd** is the object storage daemon for the Ceph distributed file
 system. It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
@@ -30,7 +30,7 @@ Options
 .. option:: -f, --foreground
 
    Foreground: do not daemonize after startup (run in foreground). Do
-   not generate a pid file. Useful when run via :doc:`crun <crun>`\(8).
+   not generate a pid file. Useful when run via :doc:`ceph-run <ceph-run>`\(8).
 
 .. option:: -d
 
@@ -54,7 +54,7 @@ Options
 
    Generate a new secret key. This is normally used in combination
    with ``--mkfs`` as it is more convenient than generating a key by
-   hand with :doc:`cauthtool <cauthtool>`\(8).
+   hand with :doc:`ceph-authtool <ceph-authtool>`\(8).
 
 .. option:: --mkjournal
 
@@ -83,13 +83,13 @@ Options
 Availability
 ============
 
-**cosd** is part of the Ceph distributed file system. Please refer to
+**ceph-osd** is part of the Ceph distributed file system. Please refer to
 the Ceph wiki at http://ceph.newdream.net/wiki for more information.
 
 See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cmds <cmds>`\(8),
-:doc:`cmon <cmon>`\(8),
-:doc:`cauthtool <cauthtool>`\(8)
+:doc:`ceph-mds <ceph-mds>`\(8),
+:doc:`ceph-mon <ceph-mon>`\(8),
+:doc:`ceph-authtool <ceph-authtool>`\(8)

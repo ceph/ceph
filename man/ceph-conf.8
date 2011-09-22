@@ -1,6 +1,6 @@
-.TH "CCONF" "8" "September 09, 2011" "dev" "Ceph"
+.TH "CEPH-CONF" "8" "September 22, 2011" "dev" "Ceph"
 .SH NAME
-cconf \- ceph conf file tool
+ceph-conf \- ceph conf file tool
 .
 .nr rst2man-indent-level 0
 .
@@ -32,22 +32,22 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcconf\fP \-c \fIconffile\fP \-\-list\-all\-sections
-\fBcconf\fP \-c \fIconffile\fP \-L
-\fBcconf\fP \-c \fIconffile\fP \-l \fIprefix\fP
-\fBcconf\fP \fIkey\fP \-s \fIsection1\fP ...
-\fBcconf\fP [\-s \fIsection\fP ] \-\-lookup \fIkey\fP
-\fBcconf\fP [\-s \fIsection\fP ] \fIkey\fP
+\fBceph\-conf\fP \-c \fIconffile\fP \-\-list\-all\-sections
+\fBceph\-conf\fP \-c \fIconffile\fP \-L
+\fBceph\-conf\fP \-c \fIconffile\fP \-l \fIprefix\fP
+\fBceph\-conf\fP \fIkey\fP \-s \fIsection1\fP ...
+\fBceph\-conf\fP [\-s \fIsection\fP ] \-\-lookup \fIkey\fP
+\fBceph\-conf\fP [\-s \fIsection\fP ] \fIkey\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcconf\fP is a utility for getting information about a ceph
+\fBceph\-conf\fP is a utility for getting information about a ceph
 configuration file. As with most Ceph programs, you can specify which
 Ceph configuration file to use with the \fB\-c\fP flag.
 .SH ACTIONS
 .sp
-\fBcconf\fP will perform one of the following actions:
+\fBceph\-conf\fP will perform one of the following actions:
 .sp
 \-\-list\-all\-sections or \-L prints out a list of all the section names in the configuration
 file.
@@ -75,7 +75,7 @@ To find out what value osd 0 will use for the "osd data" option:
 .sp
 .nf
 .ft C
-cconf \-c foo.conf  \-\-name osd.0 \-\-lookup "osd data"
+ceph\-conf \-c foo.conf  \-\-name osd.0 \-\-lookup "osd data"
 .ft P
 .fi
 .sp
@@ -83,7 +83,7 @@ To find out what value will mds a use for the "log file" option:
 .sp
 .nf
 .ft C
-cconf \-c foo.conf  \-\-name mds.a "log file"
+ceph\-conf \-c foo.conf  \-\-name mds.a "log file"
 .ft P
 .fi
 .sp
@@ -91,7 +91,7 @@ To list all sections that begin with osd:
 .sp
 .nf
 .ft C
-cconf \-c foo.conf \-l osd
+ceph\-conf \-c foo.conf \-l osd
 .ft P
 .fi
 .sp
@@ -99,12 +99,12 @@ To list all sections:
 .sp
 .nf
 .ft C
-cconf \-c foo.conf \-L
+ceph\-conf \-c foo.conf \-L
 .ft P
 .fi
 .SH AVAILABILITY
 .sp
-\fBcconf\fP is part of the Ceph distributed file system.  Please refer
+\fBceph\-conf\fP is part of the Ceph distributed file system.  Please refer
 to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
 information.
 .SH SEE ALSO

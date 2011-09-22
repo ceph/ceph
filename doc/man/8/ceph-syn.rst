@@ -1,22 +1,22 @@
 ===========================================
- csyn -- ceph synthetic workload generator
+ ceph-syn -- ceph synthetic workload generator
 ===========================================
 
-.. program:: csyn
+.. program:: ceph-syn
 
 Synopsis
 ========
 
-| **csyn** [ -m *monaddr*:*port* ] --syn *command* *...*
+| **ceph-syn** [ -m *monaddr*:*port* ] --syn *command* *...*
 
 
 Description
 ===========
 
-**csyn** is a simple synthetic workload generator for the Ceph
+**ceph-syn** is a simple synthetic workload generator for the Ceph
 distributed file system. It uses the userspace client library to
 generate simple workloads against a currently running file system. The
-file system need not be mounted via cfuse(8) or the kernel client.
+file system need not be mounted via ceph-fuse(8) or the kernel client.
 
 One or more ``--syn`` command arguments specify the particular
 workload, as documented below.
@@ -87,11 +87,11 @@ line. This is not a complete list.
 Availability
 ============
 
-**csyn** is part of the Ceph distributed file system. Please refer to
+**ceph-syn** is part of the Ceph distributed file system. Please refer to
 the Ceph wiki at http://ceph.newdream.net/wiki for more information.
 
 See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`cfuse <cfuse>`\(8)
+:doc:`ceph-fuse <ceph-fuse>`\(8)

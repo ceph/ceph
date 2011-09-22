@@ -1,8 +1,8 @@
-  $ cconf --help
+  $ ceph-conf --help
   Ceph configuration query tool
   
   USAGE
-  cconf <flags> <action>
+  ceph-conf <flags> <action>
   
   ACTIONS
     -L|--list-all-sections          List all sections
@@ -25,10 +25,10 @@
   If there is no action given, the action will default to --lookup.
   
   EXAMPLES
-  [$] cconf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr' (re)
+  [$] ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr' (re)
   Find out what the value of 'mon add' is for monitor 0.
   
-  [$] cconf -l mon (re)
+  [$] ceph-conf -l mon (re)
   List sections beginning with 'mon'.
   
   RETURN CODE

@@ -35,7 +35,7 @@ static void usage()
   cerr << "Ceph configuration query tool\n\
 \n\
 USAGE\n\
-cconf <flags> <action>\n\
+ceph-conf <flags> <action>\n\
 \n\
 ACTIONS\n\
   -L|--list-all-sections          List all sections\n\
@@ -58,10 +58,10 @@ FLAGS\n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
-$ cconf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
+$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
 Find out what the value of 'mon add' is for monitor 0.\n\
 \n\
-$ cconf -l mon\n\
+$ ceph-conf -l mon\n\
 List sections beginning with 'mon'.\n\
 \n\
 RETURN CODE\n\
