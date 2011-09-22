@@ -32,6 +32,7 @@
 #include "common/hex.h"
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
+#include "include/compat.h"
 
 #include <errno.h>
 

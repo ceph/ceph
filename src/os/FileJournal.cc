@@ -20,12 +20,18 @@
 #include "common/perf_counters.h"
 #include "os/ObjectStore.h"
 
+#include "include/compat.h"
+
 #include <fcntl.h>
 #include <sstream>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
+
+#if defined(__FreeBSD__)
+#include <sys/disk.h>
+#endif
 
 
 #define DOUT_SUBSYS journal
@@ -99,6 +105,9 @@ int FileJournal::_open_block_device()
 {
   int ret = 0;
   int64_t bdev_sz = 0;
+#if defined(__FreeBSD__)
+  ret = ::ioctl(fd, DIOCGMEDIASIZE, &bdev_sz);
+#elif defined(__linux__)
 #ifdef BLKGETSIZE64
   // ioctl block device
   ret = ::ioctl(fd, BLKGETSIZE64, &bdev_sz);
@@ -107,9 +116,10 @@ int FileJournal::_open_block_device()
   unsigned long sectors = 0;
   ret = ::ioctl(fd, BLKGETSIZE, &sectors);
   bdev_sz = sectors * 512ULL;
+#endif
 #else
 #error "Compile error: we don't know how to get the size of a raw block device."
-#endif
+#endif /* !__FreeBSD__ */
   if (ret) {
     dout(0) << __func__ << ": failed to read block device size." << dendl;
     return -EIO;
@@ -820,7 +830,7 @@ void FileJournal::do_write(bufferlist& bl)
 
   if (!directio) {
     dout(20) << "do_write fsync" << dendl;
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
     ::fsync(fd);
 #else
 # ifdef HAVE_SYNC_FILE_RANGE

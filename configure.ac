@@ -24,7 +24,16 @@ AM_PROG_LIBTOOL
 case "${target_os}" in
 darwin*)
 	AC_DEFINE([DARWIN], [1], [Define if darwin/osx])
+	;;
+linux*)
+	linux="yes"
+	;;
+freebsd*)
+	freebsd="yes"
+	;;
 esac
+AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
+AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -57,7 +66,9 @@ AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
-AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
+if test x"$linux" = x"yes"; then
+	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
+fi
 AC_CHECK_FUNCS([syncfs], AC_DEFINE([HAVE_SYS_SYNCFS], [1], [we have syncfs]), [])
 
 # Find some crypto library for us to use, while letting user to decide which one to use.
@@ -225,8 +236,13 @@ AS_IF([test "x$with_hadoop" != xno],
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 
+#
+# FreeBSD has it in base.
+#
+if test x"$freebsd" != x"yes"; then
 PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
                 [], AC_MSG_FAILURE([No usable version of libedit found.]))
+fi
 
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],

@@ -24,6 +24,9 @@
 
 #include <sys/statvfs.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
 
 #include <iostream>
 using namespace std;
@@ -67,6 +70,8 @@ using namespace std;
 #define DOUT_SUBSYS client
 
 #include "include/lru.h"
+
+#include "include/compat.h"
 
 #include "Client.h"
 #include "Inode.h"
@@ -4243,7 +4248,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
   de->d_name[255] = '\0';
 #ifndef __CYGWIN__
   de->d_ino = ino;
-#ifndef DARWIN
+#if !defined(DARWIN) && !defined(__FreeBSD__)
   de->d_off = next_off;
 #endif
   de->d_reclen = 1;

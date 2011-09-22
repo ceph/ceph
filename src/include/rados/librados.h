@@ -6,7 +6,12 @@ extern "C" {
 #endif
 
 #include <netinet/in.h>
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
 #include <string.h>
 
 #ifndef CEPH_OSD_TMAP_SET

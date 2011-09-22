@@ -27,6 +27,7 @@
 #include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
+#include "include/compat.h"
 #include "include/color.h"
 
 #include <errno.h>
