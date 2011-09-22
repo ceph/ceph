@@ -12,42 +12,39 @@ ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
 class Error(Exception):
-    def __init__(self, code):
-        self.code = code
-    def __repr__(self):
-        return ("rados.Error(code=%d)" % self.code)
-
-class PermissionError(Exception):
     pass
 
-class ObjectNotFound(Exception):
+class PermissionError(Error):
     pass
 
-class NoData(Exception):
+class ObjectNotFound(Error):
     pass
 
-class ObjectExists(Exception):
+class NoData(Error):
     pass
 
-class IOError(Exception):
+class ObjectExists(Error):
     pass
 
-class NoSpace(Exception):
+class IOError(Error):
     pass
 
-class IncompleteWriteError(Exception):
+class NoSpace(Error):
     pass
 
-class RadosStateError(Exception):
+class IncompleteWriteError(Error):
     pass
 
-class IoctxStateError(Exception):
+class RadosStateError(Error):
     pass
 
-class ObjectStateError(Exception):
+class IoctxStateError(Error):
     pass
 
-class LogicError(Exception):
+class ObjectStateError(Error):
+    pass
+
+class LogicError(Error):
     pass
 
 def make_ex(ret, msg):
