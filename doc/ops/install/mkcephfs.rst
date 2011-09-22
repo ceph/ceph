@@ -83,18 +83,9 @@ To setup an RPM compilation environment, run::
 
 To fetch the Ceph source tarball, run::
 
-	wget -P ~/rpmbuild/SOURCES/ http://ceph.newdream.net/download/ceph-0.34.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://ceph.newdream.net/download/ceph-0.35.tar.gz
 
-.. topic:: Status as of 2011-09
-
-   Release v0.34 does not contain a ceph.spec yet. Until v0.35 is
-   released, you can fetch a usable spec file and then start the
-   compilation::
-
-	wget https://raw.github.com/gist/1214596/5b6b5b0e978221e36fa2f7c795544ed50b6e9593/ceph.spec
-	rpmbuild -bb ceph.spec
-
-   Once v0.35 is released, this should suffice::
+To build it, run::
 
 	rpmbuild -tb ~/rpmbuild/SOURCES/ceph-0.35.tar.gz
 
