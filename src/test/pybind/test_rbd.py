@@ -41,6 +41,17 @@ def test_create():
     create_image()
     remove_image()
 
+def test_context_manager():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx('rbd') as ioctx:
+            RBD().create(ioctx, IMG_NAME, IMG_SIZE)
+            with Image(ioctx, IMG_NAME) as image:
+                data = rand_data(256)
+                image.write(data, 0)
+                read = image.read(0, 256)
+            RBD().remove(ioctx, IMG_NAME)
+            eq(data, read)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 

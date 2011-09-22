@@ -94,11 +94,9 @@ class RBD(object):
         The image is split into (1 << order) byte objects.
         """
         if order is None:
-            order = c_void_p()
-        else:
-            order = byref(c_int(order))
+            order = 0
         ret = self.librbd.rbd_create(ioctx.io, name, c_uint64(size),
-                                     order)
+                                     byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
 
