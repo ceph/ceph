@@ -142,16 +142,19 @@ WRITE_CLASS_ENCODER(rgw_cls_list_op)
 struct rgw_cls_list_ret
 {
   rgw_bucket_dir dir;
+  bool is_truncated;
 
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(dir, bl);
+    ::encode(is_truncated, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(dir, bl);
+    ::decode(is_truncated, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_ret)

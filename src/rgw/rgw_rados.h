@@ -284,7 +284,7 @@ public:
                  RGWObjEnt& ent, uint8_t category);
   int cls_obj_add(rgw_bucket& bucket, uint64_t epoch, RGWObjEnt& ent, uint8_t category);
   int cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name);
-  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
 };
 
 #endif

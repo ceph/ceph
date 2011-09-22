@@ -247,39 +247,13 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
     bucket_marker.append("_");
   }
 
-  std::map<string, string> dir_map;
-#if 0
-  {
-    librados::ObjectIterator i_end = io_ctx.objects_end();
-    for (librados::ObjectIterator i = io_ctx.objects_begin(); i != i_end; ++i) {
-        string obj = *i;
-        string key = obj;
-
-        if (bucket_marker.size()) {
-          if (obj.compare(0, bucket_marker.size(), bucket_marker) != 0)
-            continue;
-
-          obj = obj.substr(bucket_marker.size());
-          key = obj;
-        }
-
-        if (!rgw_obj::translate_raw_obj(obj, ns))
-          continue;
-
-        if (filter && !filter->filter(obj, key))
-          continue;
-
-	if (prefix.empty() ||
-	    ((obj).compare(0, prefix.size(), prefix) == 0)) {
-	  dir_map[obj] = key;
-	}
-    }
-  }
-#endif
+  std::map<string, RGWObjEnt> dir_map;
   std::map<string, RGWObjEnt> ent_map;
-  r = cls_bucket_list(bucket, marker, max, ent_map);
+  r = cls_bucket_list(bucket, marker, max, ent_map, is_truncated);
   if (r < 0)
     return r;
+
+  result.clear();
 
   std::map<string, RGWObjEnt>::iterator eiter;
   for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
@@ -293,89 +267,9 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
       continue;
 
     if (prefix.empty() || ((obj).compare(0, prefix.size(), prefix) == 0)) {
-      dir_map[obj] = key;
+      result.push_back(eiter->second);
     }
   }
-
-  std::map<string, string>::iterator p;
-  if (!marker.empty())
-    p = dir_map.upper_bound(marker);
-  else
-    p = dir_map.begin();
-
-  if (max < 0) {
-    max = dir_map.size();
-  }
-
-  result.clear();
-  int i;
-  for (i=0; i<max && p != dir_map.end(); i++, ++p) {
-    RGWObjEnt obj;
-    string name = p->first;
-    string key = p->second;
-    obj.name = name;
-
-    if (!delim.empty()) {
-      int delim_pos = name.find(delim, prefix.size());
-
-      if (delim_pos >= 0) {
-        common_prefixes[name.substr(0, delim_pos + 1)] = true;
-        continue;
-      }
-    }
-    string oid = name;
-    if (!ns.empty()) {
-      oid = "_";
-      oid.append(ns);
-      oid.append("_");
-      oid.append(name);
-    }
-
-    string new_oid;
-    prepend_bucket_marker(bucket, oid, new_oid);
-
-    uint64_t s;
-    io_ctx.locator_set_key(key);
-
-    if (io_ctx.stat(new_oid, &s, &obj.mtime) < 0)
-      continue;
-    obj.size = s;
-
-    obj.etag[0] = '\0';
-    map<string, bufferlist> attrset;
-    if (io_ctx.getxattrs(oid, attrset) >= 0) {
-      map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
-      if (iter != attrset.end()) {
-        bufferlist& bl = iter->second;
-        obj.etag = bl.c_str();
-      }
-      iter = attrset.find(RGW_ATTR_ACL);
-      if (iter != attrset.end()) {
-        bufferlist& bl = iter->second;
-        bufferlist::iterator i = bl.begin();
-        RGWAccessControlPolicy policy;
-        try {
-          policy.decode_owner(i);
-        } catch (buffer::error& err) {
-          RGW_LOG(0) << "ERROR: could not decode policy for oid=" << oid << ", caught buffer::error" << dendl;
-          continue;
-        }
-        ACLOwner& owner = policy.get_owner();
-        obj.owner = owner.get_id();
-        obj.owner_display_name = owner.get_display_name();
-      }
-    }
-    bufferlist bl;
-    if (get_content_type) {
-      obj.content_type = "";
-      if (io_ctx.getxattr(oid, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
-        obj.content_type = bl.c_str();
-      }
-    }
-    result.push_back(obj);
-  }
-  if (is_truncated)
-    *is_truncated = (p != dir_map.end());
 
   return 0;
 }
@@ -1920,7 +1814,7 @@ int RGWRados::cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name)
   return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, ent, 0);
 }
 
-int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m)
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -1952,6 +1846,9 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     RGW_LOG(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
     return -EIO;
   }
+
+  if (is_truncated)
+    *is_truncated = ret.is_truncated;
 
   struct rgw_bucket_dir& dir = ret.dir;
   map<string, struct rgw_bucket_dir_entry>::iterator miter;

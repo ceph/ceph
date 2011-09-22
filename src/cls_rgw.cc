@@ -88,6 +88,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   for (i = 0; i != op.num_entries && miter != dir.m.end(); ++i, ++miter) {
     m[miter->first] = miter->second;
   }
+
+  ret.is_truncated = (miter != dir.m.end());
+
   ::encode(ret, *out);
 
   return 0;
