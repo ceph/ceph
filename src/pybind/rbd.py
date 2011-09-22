@@ -95,7 +95,7 @@ class RBD(object):
         """
         if order is None:
             order = 0
-        ret = self.librbd.rbd_create(ioctx.io, name, c_uint64(size),
+        ret = self.librbd.rbd_create(ioctx.io, c_char_p(name), c_uint64(size),
                                      byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
@@ -112,12 +112,12 @@ class RBD(object):
         return c_names.raw.rstrip('\0').split('\0')
 
     def remove(self, ioctx, name):
-        ret = self.librbd.rbd_remove(ioctx.io, name)
+        ret = self.librbd.rbd_remove(ioctx.io, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error removing image')
 
     def rename(self, ioctx, src, dest):
-        ret = self.librbd.rbd_rename(ioctx.io, src, dest)
+        ret = self.librbd.rbd_rename(ioctx.io, c_char_p(src), c_char_p(dest))
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
 
@@ -170,7 +170,7 @@ class Image(object):
             }
 
     def copy(self, dest_ioctx, dest_name):
-        ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, dest_name)
+        ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
         if ret < 0:
             raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
         return ret
@@ -179,22 +179,22 @@ class Image(object):
         return SnapIterator(self)
 
     def create_snap(self, name):
-        ret = self.librbd.rbd_snap_create(self.image, name)
+        ret = self.librbd.rbd_snap_create(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
     def remove_snap(self, name):
-        ret = self.librbd.rbd_snap_remove(self.image, name)
+        ret = self.librbd.rbd_snap_remove(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s' % (name, self.name))
 
     def rollback_to_snap(self, name):
-        ret = self.librbd.rbd_snap_rollback(self.image, name)
+        ret = self.librbd.rbd_snap_rollback(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error rolling back image %s to snapshot %s' % (self.name, name))
 
     def set_snap(self, name):
-        ret = self.librbd.rbd_snap_set(self.image, name)
+        ret = self.librbd.rbd_snap_set(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %s' % (self.name, name))
 
