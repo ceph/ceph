@@ -199,16 +199,16 @@ test_librgw_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
-test_libceph_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
-			    $(libceph_la_SOURCES) $(libosdc_la_SOURCES)
-test_libceph_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-test_libceph_build_CXXFLAGS = $(AM_CXXFLAGS)
-bin_DEBUGPROGRAMS += test_libceph_build
+test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+			    $(libcephfs_la_SOURCES) $(libosdc_la_SOURCES)
+test_libcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_libcephfs_build
 endif
 
 if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
-         $(libhadoopcephfs_la_SOURCES) $(libceph_la_SOURCES) \
+         $(libhadoopcephfs_la_SOURCES) $(libcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
 test_libhadoopcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
@@ -221,21 +221,21 @@ lib_LTLIBRARIES =
 noinst_LTLIBRARIES = 
 noinst_LIBRARIES =
 
-# libceph
-libceph_la_SOURCES = \
-	libceph.cc \
+# libcephfs
+libcephfs_la_SOURCES = \
+	libcephfs.cc \
 	client/Client.cc \
 	client/Inode.cc \
 	client/MetaRequest.cc
-libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = libosdc.la
-libceph_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
+libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libcephfs_la_LIBADD = libosdc.la
+libcephfs_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
-lib_LTLIBRARIES += libceph.la
+lib_LTLIBRARIES += libcephfs.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testceph_LDADD = libcephfs.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
@@ -371,7 +371,7 @@ radoslib_LTLIBRARIES = libcls_rbd.la
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
-libhadoopcephfs_la_LIBADD = libceph.la
+libhadoopcephfs_la_LIBADD = libcephfs.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
@@ -435,7 +435,7 @@ UNITTEST_STATIC_LDADD = \
 	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libceph.la -lpthread -lm \
+unittest_encoding_LDADD = libcephfs.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
@@ -443,7 +443,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_base64_LDADD = libceph.la -lm ${UNITTEST_LDADD}
+unittest_base64_LDADD = libcephfs.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
@@ -459,7 +459,7 @@ unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_gather
 
 unittest_run_cmd_SOURCES = test/run_cmd.cc
-unittest_run_cmd_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_run_cmd_LDADD = libcephfs.la ${UNITTEST_LDADD}
 unittest_run_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_run_cmd
 
@@ -469,7 +469,7 @@ unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_signals
 
 unittest_simple_spin_SOURCES = test/simple_spin.cc
-unittest_simple_spin_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_simple_spin_LDADD = libcephfs.la ${UNITTEST_LDADD}
 unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_simple_spin
 
@@ -550,11 +550,11 @@ unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
-unittest_libceph_config_SOURCES = test/libceph_config.cc
-unittest_libceph_config_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_libceph_config_LDADD =  libceph.la ${UNITTEST_LDADD}
-unittest_libceph_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_libceph_config
+unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
+unittest_libcephfs_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
+unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_libcephfs_config
 
 unittest_librados_config_SOURCES = test/librados_config.cc
 unittest_librados_config_LDFLAGS = -pthread ${AM_LDFLAGS}
@@ -725,8 +725,8 @@ bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rbd \
                $(srcdir)/bash_completion/radosgw_admin
 
-libceph_includedir = $(includedir)/ceph
-libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
+libcephfs_includedir = $(includedir)/cephfs
+libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
@@ -1086,7 +1086,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
-	include/ceph/libceph.h\
+	include/cephfs/libcephfs.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\

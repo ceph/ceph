@@ -178,7 +178,7 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
 %{_initrddir}/ceph
-%{_libdir}/libceph.so.*
+%{_libdir}/libcephfs.so.*
 %{_libdir}/librados.so.*
 %{_libdir}/librbd.so.*
 %{_libdir}/rados-classes/libcls_rbd.so.*
@@ -234,7 +234,7 @@ fi
 %files devel
 %defattr(-,root,root,-)
 %doc COPYING
-%{_includedir}/ceph/libceph.h
+%{_includedir}/cephfs/libcephfs.h
 %{_includedir}/crush/crush.h
 %{_includedir}/crush/hash.h
 %{_includedir}/crush/mapper.h

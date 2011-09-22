@@ -173,7 +173,7 @@ better than a single server could.
 Client
 ======
 
-.. todo:: cephfs, ceph-fuse, librados, libceph, librbd
+.. todo:: cephfs, ceph-fuse, librados, libcephfs, librbd
 
 
 .. todo:: Summarize how much Ceph trusts the client, for what parts (security vs reliability).

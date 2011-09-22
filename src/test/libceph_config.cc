@@ -13,7 +13,7 @@
  */
 
 #include "gtest/gtest.h"
-#include "include/ceph/libceph.h"
+#include "include/cephfs/libcephfs.h"
 
 #include <sstream>
 #include <string>

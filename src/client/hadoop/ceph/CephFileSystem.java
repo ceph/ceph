@@ -52,9 +52,9 @@ import org.apache.hadoop.fs.CreateFlag;
  * Configuration of the CephFileSystem is handled via a few Hadoop
  * Configuration properties: <br>
  * fs.ceph.monAddr -- the ip address/port of the monitor to connect to. <br>
- * fs.ceph.libDir -- the directory that libceph and libhadoopceph are
+ * fs.ceph.libDir -- the directory that libcephfs and libhadoopceph are
  * located in. This assumes Hadoop is being run on a linux-style machine
- * with names like libceph.so.
+ * with names like libcephfs.so.
  * fs.ceph.commandLine -- if you prefer you can fill in this property
  * just as you would when starting Ceph up from the command line. Specific
  * properties override any configuration specified here.

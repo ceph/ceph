@@ -12,7 +12,7 @@ Standards-Version: 3.9.1
 Package: ceph
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, hdparm, binutils
-Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, btrfs-tools, gceph
+Recommends: ceph-client-tools, ceph-fuse, libcephfs1, librados2, librbd1, btrfs-tools, gceph
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
@@ -186,9 +186,9 @@ Description: RADOS block device client library (development files)
  This package contains development files needed for building applications that
  link against librbd1.
 
-Package: libceph1
-Conflicts: libceph
-Replaces: libceph
+Package: libcephfs1
+Conflicts: libcephfs
+Replaces: libcephfs
 Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -198,25 +198,25 @@ Description: Ceph distributed file system client library
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
 
-Package: libceph1-dbg
+Package: libcephfs1-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: libceph1 (= ${binary:Version}), ${misc:Depends}
-Description: debugging symbols for libceph1
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for libcephfs1
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
  .
- This package contains debugging symbols for libceph1.
+ This package contains debugging symbols for libcephfs1.
 
-Package: libceph-dev
+Package: libcephfs-dev
 Architecture: linux-any
 Section: libdevel
-Depends: ${misc:Depends}, libceph1 (= ${binary:Version})
-Conflicts: libceph1-dev
-Replaces: libceph1-dev
+Depends: ${misc:Depends}, libcephfs1 (= ${binary:Version})
+Conflicts: libcephfs1-dev
+Replaces: libcephfs1-dev
 Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -224,7 +224,7 @@ Description: Ceph distributed file system client library (development files)
  file system via a POSIX-like interface.
  .
  This package contains development files needed for building applications that
- link against libceph.
+ link against libcephfs.
 
 Package: librgw1
 Conflicts: librgw, librgw1

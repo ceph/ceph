@@ -55,9 +55,9 @@ Run these commands on all nodes::
 .. todo:: For older distributions, you may need to make sure your apt-get may read .bz2 compressed files. This works for Debian Lenny 5.0.3: ``apt-get install bzip2``
 
 .. todo:: Ponder packages; ceph.deb currently pulls in gceph (ceph.deb
-   Recommends: ceph-client-tools ceph-fuse libceph1 librados2 librbd1
+   Recommends: ceph-client-tools ceph-fuse libcephfs1 librados2 librbd1
    btrfs-tools gceph) (other interesting: ceph-client-tools ceph-fuse
-   libceph-dev librados-dev librbd-dev obsync python-ceph radosgw)
+   libcephfs-dev librados-dev librbd-dev obsync python-ceph radosgw)
 
 
 Red Hat / CentOS / Fedora

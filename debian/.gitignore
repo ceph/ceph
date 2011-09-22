@@ -10,9 +10,9 @@
 /*.debhelper
 /ceph
 /files
-/libceph1-dbg
-/libceph-dev
-/libceph1
+/libcephfs1-dbg
+/libcephfs-dev
+/libcephfs1
 /librados2-dbg
 /librados-dev
 /librados2
