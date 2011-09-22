@@ -2469,6 +2469,7 @@ void PG::read_state(ObjectStore *store)
     // reset info
     info.log_tail = info.last_update;
     info.log_backlog = false;
+    log.backlog = false;
 
     // Move the corrupt log to a new place and create a new zero-length log entry.
     ObjectStore::Transaction t;
