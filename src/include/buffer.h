@@ -15,7 +15,12 @@
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
 
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
 
 #ifndef _XOPEN_SOURCE
 # define _XOPEN_SOURCE 600
@@ -32,13 +37,14 @@
 void	*valloc(size_t);
 #endif
 
+#endif
 
-
-#else
-
+#if defined(__linux__)	// For malloc(2).
 #include <malloc.h>
 #endif
+
 #include <stdint.h>
+#include <stdio.h>	// snprintf
 #include <string.h>
 
 #ifndef __CYGWIN__

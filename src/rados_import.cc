@@ -21,7 +21,9 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if !defined(__FreeBSD__)
 #include <sys/xattr.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 

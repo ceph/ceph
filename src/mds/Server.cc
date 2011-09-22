@@ -49,10 +49,14 @@
 #include "include/filepath.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
+#include "include/compat.h"
 
 #include <errno.h>
 #include <fcntl.h>
+
+#if defined(__linux__)
 #include <sys/xattr.h>
+#endif
 
 #include <list>
 #include <iostream>
@@ -3373,6 +3377,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   string name(req->get_path2());
   int flags = req->head.args.setxattr.flags;
 
+#if 0
   if ((flags & XATTR_CREATE) && cur->xattrs.count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
     reply_request(mdr, -EEXIST);
@@ -3383,6 +3388,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
     reply_request(mdr, -ENODATA);
     return;
   }
+#endif
 
   int len = req->get_data().length();
   dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;

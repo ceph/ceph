@@ -27,6 +27,8 @@
 
 #include "include/intarith.h"
 
+#include "include/compat.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -41,7 +43,13 @@
 
 #include "include/rbd_types.h"
 
+#if defined(__linux__)
 #include <linux/fs.h>
+#endif
+
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
 
 #include "include/fiemap.h"
 

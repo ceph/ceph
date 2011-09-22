@@ -22,18 +22,26 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+
+#if defined(__linux__)
 #include <linux/fs.h>
+#endif
 
 #include <iostream>
 #include <map>
 
+#if defined(__FreeBSD__)
+#include "include/inttypes.h"
+#endif
+
+#include "include/compat.h"
 #include "include/fiemap.h"
 
-#ifndef __CYGWIN__
+#if !defined(__CYGWIN__) && !defined(__FreeBSD__)
 # include <sys/xattr.h>
 #endif
 
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
@@ -63,7 +71,7 @@
 using ceph::crypto::SHA1;
 
 #ifndef __CYGWIN__
-# ifndef DARWIN
+# if !defined(DARWIN) && !defined(__FreeBSD__)
 #  include "btrfs_ioctl.h"
 # endif
 #endif
@@ -114,7 +122,27 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 int do_listxattr(const char *fn, char *names, size_t len);
 int do_removexattr(const char *fn, const char *name);
 
-#ifdef DARWIN
+#if defined(__FreeBSD__)
+static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
+{
+  return (-1);
+}
+
+static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
+{
+  return (-1);
+}
+
+static int sys_removexattr(const char *fn, const char *name)
+{
+  return (-1);
+}
+
+static int sys_listxattr(const char *fn, char *names, size_t len)
+{
+  return (-1);
+}
+#elif defined(DARWIN)
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
   int r = ::getxattr(fn, name, val, size, 0, 0);
@@ -138,7 +166,7 @@ static int sys_listxattr(const char *fn, char *names, size_t len)
   int r = ::listxattr(fn, names, len, 0);
   return (r < 0 ? -errno : r);
 }
-#else
+#elif defined(__linux__)
 
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
@@ -163,6 +191,8 @@ int sys_listxattr(const char *fn, char *names, size_t len)
   int r = ::listxattr(fn, names, len);
   return (r < 0 ? -errno : r);
 }
+#else
+#error "Your platform is not yet supported!"
 #endif
 
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
@@ -513,6 +543,7 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size) 
 
 int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
 {
+#if !defined(__FreeBSD__)
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
@@ -541,9 +572,14 @@ int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
   }
   
   return ret;
+#else
+#warning "Implementation missing"
+  return (-1);
+#endif
 }
 
 int do_removexattr(const char *fn, const char *name) {
+#if !defined(__FreeBSD__)
   int i = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int r;
@@ -557,6 +593,10 @@ int do_removexattr(const char *fn, const char *name) {
     i++;
   } while (r >= 0);
   return 0;
+#else
+#warning "Implementation missing"
+  return (-1);
+#endif
 }
 
 int do_listxattr(const char *fn, char *names, size_t len) {
@@ -748,6 +788,7 @@ int FileStore::open_journal()
 
 int FileStore::wipe_subvol(const char *s)
 {
+#if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
   strcpy(volargs.name, s);
@@ -764,6 +805,7 @@ int FileStore::wipe_subvol(const char *s)
     dout(0) << "mkfs  removed old subvol " << s << dendl;
     return 0;
   }
+#endif
 
   dout(0) << "mkfs  removing old directory " << s << dendl;
   ostringstream old_dir;
@@ -804,7 +846,9 @@ int FileStore::mkfs()
   DIR *dir;
   struct dirent *de;
   int basedir_fd;
+#if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
+#endif
 
   if (!m_filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
@@ -900,6 +944,7 @@ int FileStore::mkfs()
   }
 
   // current
+#if defined(__linux__)
   memset(&volargs, 0, sizeof(volargs));
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
@@ -911,6 +956,7 @@ int FileStore::mkfs()
       // not fatal
     }
     else if (ret == EOPNOTSUPP || ret == ENOTTY) {
+#endif
       dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
 	      << current_fn << dendl;
       if (::mkdir(current_fn.c_str(), 0755)) {
@@ -921,6 +967,7 @@ int FileStore::mkfs()
 	  goto close_basedir_fd;
 	}
       }
+#if defined(__linux__)
     }
     else {
       derr << "FileStore::mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
@@ -938,6 +985,7 @@ int FileStore::mkfs()
       goto close_basedir_fd;
     }
   }
+#endif
 
   // journal?
   ret = mkjournal();
@@ -1042,8 +1090,6 @@ bool FileStore::test_mount_in_use()
 
 int FileStore::_detect_fs()
 {
-  char buf[80];
-  
   // fake collections?
   if (m_filestore_fake_collections) {
     dout(0) << "faking collections (in memory)" << dendl;
@@ -1098,6 +1144,8 @@ int FileStore::_detect_fs()
     return -errno;
   blk_size = st.f_bsize;
 
+#if defined(__linux__)
+  char buf[80];
   static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
   if (st.f_type == BTRFS_F_TYPE) {
     dout(0) << "mount detected btrfs" << dendl;      
@@ -1213,7 +1261,9 @@ int FileStore::_detect_fs()
 	   << TEXT_NORMAL;
     }
 
-  } else {
+  } else
+#endif /* __linux__ */
+  {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
   }
@@ -1479,6 +1529,7 @@ int FileStore::mount()
     goto close_basedir_fd;
   }
 
+#if defined(__linux__)
   if (btrfs && m_filestore_btrfs_snap) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
@@ -1568,6 +1619,7 @@ int FileStore::mount()
       TEMP_FAILURE_RETRY(::close(vol_args.fd));
     }
   }
+#endif
   initial_op_seq = 0;
 
   current_fd = ::open(current_fn.c_str(), O_RDONLY);
@@ -2149,7 +2201,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 
 int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
 {
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
   return 0;
 #else
   if (!btrfs || !btrfs_trans_start_end ||
@@ -2178,12 +2230,12 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   ::mknod(fn, 0644, 0);
 
   return fd;
-#endif /* DARWIN */
+#endif /* DARWIN || __FreeBSD__ */
 }
 
 void FileStore::_transaction_finish(int fd)
 {
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
   return;
 #else
   if (!btrfs || !btrfs_trans_start_end ||
@@ -2197,7 +2249,7 @@ void FileStore::_transaction_finish(int fd)
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
   ::close(fd);
-#endif /* DARWIN */
+#endif /* DARWIN || __FreeBSD__ */
 }
 
 unsigned FileStore::_do_transaction(Transaction& t)
@@ -2689,11 +2741,11 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     goto out;
   }
   if (btrfs)
-#ifndef DARWIN
+#if !defined(DARWIN) && !defined(__FreeBSD__)
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
 #else 
   ;
-#endif /* DARWIN */
+#endif /* DARWIN || __FreeBSD__ */
   else {
     struct stat st;
     ::fstat(o, &st);
@@ -2750,6 +2802,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
   
   dout(20) << "_do_clone_range cloning " << srcoffclone << "~" << lenclone 
 	   << " to " << dstoffclone << " = " << r << dendl;
+#if defined(__linux__)
   btrfs_ioctl_clone_range_args a;
   a.src_fd = from;
   a.src_offset = srcoffclone;
@@ -2759,12 +2812,15 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
   if (err >= 0) {
     r += err;
   } else if (errno == EINVAL) {
+#endif
     // Still failed, might be compressed
     dout(20) << "_do_clone_range failed CLONE_RANGE call with -EINVAL, using copy" << dendl;
     return _do_copy_range(from, to, srcoff, len, dstoff);
+#if defined(__linux__)
   } else {
     return -errno;
   }
+#endif
 
   // Take care any trimmed from front
   if (srcoffclone != srcoff) {
@@ -3022,6 +3078,7 @@ void FileStore::sync_entry()
 	assert(0);
       }
 
+#if defined(__linux__)
       bool do_snap = btrfs && m_filestore_btrfs_snap;
 
       if (do_snap) {
@@ -3070,14 +3127,19 @@ void FileStore::sync_entry()
 	  
 	  commit_started();
 	}
-      } else {
+      } else
+#endif
+      {
 	commit_started();
 
+#if defined(__linux__)
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
-	} else if (m_filestore_fsync_flushes_journal_data) {
+	} else
+#endif
+        if (m_filestore_fsync_flushes_journal_data) {
 	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
 	  // make the file system's journal commit.
 	  //  this works with ext3, but NOT ext4
@@ -3097,6 +3159,7 @@ void FileStore::sync_entry()
 	logger->set(l_os_committing, 0);
 
       // remove old snaps?
+#if defined(__linux__)
       if (do_snap) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args vol_args;
@@ -3114,6 +3177,7 @@ void FileStore::sync_entry()
 	  }
 	}
       }
+#endif
 
       dout(15) << "sync_entry committed to op_seq " << cp << dendl;
 
@@ -3231,6 +3295,11 @@ int FileStore::snapshot(const string& name)
 {
   dout(10) << "snapshot " << name << dendl;
   sync_and_flush();
+
+#if !defined(__linux__)
+  dout(0) << "snapshot " << name << " failed, no btrfs" << dendl;
+  return -EOPNOTSUPP;
+#else
   
   if (!btrfs) {
     dout(0) << "snapshot " << name << " failed, no btrfs" << dendl;
@@ -3246,6 +3315,7 @@ int FileStore::snapshot(const string& name)
     derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
 
   return r;
+#endif
 }
 
 // -------------------------------

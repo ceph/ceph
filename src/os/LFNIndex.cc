@@ -19,12 +19,18 @@
 #include <errno.h>
 #include <string.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
 #include "osd/osd_types.h"
 #include "include/object.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "include/buffer.h"
 #include "common/ceph_crypto.h"
+
+#include "include/compat.h"
 
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;

@@ -77,6 +77,12 @@ typedef long long off64_t;
 #define O_DIRECT 00040000
 #endif
 
+// FreeBSD compatibility
+#ifdef __FreeBSD__
+typedef off_t loff_t;
+typedef off_t off64_t;
+#endif
+
 // -- stl crap --
 
 namespace __gnu_cxx {

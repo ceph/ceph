@@ -40,6 +40,10 @@
 
 #include <typeinfo>
 
+#ifndef EBADE
+#define EBADE EFTYPE
+#endif
+
 using namespace std;
 
 typedef char const*         iterator_t;                                                                              

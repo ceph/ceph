@@ -30,12 +30,20 @@
 #include <sys/wait.h>
 #include <vector>
 
+#if defined(__FreeBSD__)
+#include <pthread_np.h>
+#endif
+
 using std::ostringstream;
 using std::string;
 
 static pid_t do_gettid(void)
 {
+#if defined(__linux__)
   return static_cast < pid_t >(syscall(SYS_gettid));
+#else
+  return static_cast < pid_t >(pthread_getthreadid_np());
+#endif
 }
 
 ceph::atomic_t m_highest_id(0);
