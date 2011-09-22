@@ -20,6 +20,8 @@ struct rgw_bucket_dir_entry {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(name, bl);
+    ::encode(size, bl);
+    ::encode(category, bl);
     ::encode(mtime, bl);
     ::encode(epoch, bl);
     ::encode(etag, bl);
@@ -30,6 +32,8 @@ struct rgw_bucket_dir_entry {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(name, bl);
+    ::decode(size, bl);
+    ::decode(category, bl);
     ::decode(mtime, bl);
     ::decode(epoch, bl);
     ::decode(etag, bl);
