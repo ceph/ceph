@@ -8,6 +8,8 @@
 
 #include "rgw_cls_api.h"
 
+#include "common/Clock.h"
+
 #include "include/rados/librados.hpp"
 using namespace librados;
 
@@ -203,6 +205,20 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
   return 0;
 }
 
+int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
+{
+  bufferlist::iterator i = bl.begin();
+  RGWAccessControlPolicy policy;
+  try {
+    policy.decode_owner(i);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  *owner = policy.get_owner();
+  return 0;
+}
+
 /** 
  * get listing of the objects in a bucket.
  * id: ignored.
@@ -331,8 +347,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
       map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
       if (iter != attrset.end()) {
         bufferlist& bl = iter->second;
-        strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
-        obj.etag[sizeof(obj.etag)-1] = '\0';
+        obj.etag = bl.c_str();
       }
       iter = attrset.find(RGW_ATTR_ACL);
       if (iter != attrset.end()) {
@@ -1334,6 +1349,8 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   librados::IoCtx io_ctx;
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   uint64_t size = 0;
+  string etag;
+  bufferlist acl_bl;
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -1356,6 +1373,12 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     const string& name = iter->first;
     bufferlist& bl = iter->second;
     op.setxattr(name.c_str(), bl);
+
+    if (name.compare(RGW_ATTR_ETAG) == 0) {
+      etag = bl.c_str();
+    } else if (name.compare(RGW_ATTR_ACL) == 0) {
+      acl_bl = bl;
+    }
   }
   RGWObjState *state;
   r = prepare_atomic_for_write(rctx, dst_obj, io_ctx, dst_oid, op, &state);
@@ -1392,8 +1415,16 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     }
   }
 
-  if (pmtime)
+  time_t mt;
+  utime_t ut;
+  if (pmtime) {
     op.mtime(pmtime);
+    ut = utime_t(*pmtime, 0);
+  } else {
+    ut = ceph_clock_now(g_ceph_context);
+    mt = ut.sec();
+    op.mtime(&mt);
+  }
 
   bufferlist outbl;
   int ret = io_ctx.operate(dst_oid, &op);
@@ -1402,8 +1433,23 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   if (ret >= 0 && bucket.marker.size()) {
     uint64_t epoch = io_ctx.get_last_version();
-    utime_t ut;
-    ret = cls_obj_add(bucket, epoch, dst_obj.object, size, ut);
+
+    RGWObjEnt ent;
+    ent.name = dst_obj.object;
+    ent.size = size;
+    ent.mtime = ut;
+    ent.etag = etag;
+    ACLOwner owner;
+    if (acl_bl.length()) {
+      ret = decode_policy(acl_bl, &owner);
+      if (ret < 0) {
+        RGW_LOG(0) << "WARNING: could not decode policy ret=" << ret << dendl;
+      }
+    }
+    ent.owner = owner.get_id();
+    ent.owner_display_name = owner.get_display_name();
+    
+    ret = cls_obj_add(bucket, epoch, ent, 0);
   }
 
   return ret;
@@ -1830,8 +1876,7 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
   return r;
 }
 
-int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
-                         string& name, uint64_t size, utime_t& mtime)
+int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -1849,24 +1894,30 @@ int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
   bufferlist in, out;
   struct rgw_cls_obj_op call;
   call.op = op;
-  call.entry.name = name;
-  call.entry.size = size;
-  call.entry.mtime = mtime;
+  call.entry.name = ent.name;
+  call.entry.size = ent.size;
+  call.entry.mtime = utime_t(ent.mtime, 0);
   call.entry.epoch = epoch;
+  call.entry.etag = ent.etag;
+  call.entry.owner = ent.owner;
+  call.entry.owner_display_name = ent.owner_display_name;
+  call.entry.category = category;
   ::encode(call, in);
   r = io_ctx.exec(oid, "rgw", "bucket_modify", in, out);
   return r;
 }
 
-int RGWRados::cls_obj_add(rgw_bucket& bucket, uint64_t epoch, string& name, uint64_t size, utime_t& mtime)
+int RGWRados::cls_obj_add(rgw_bucket& bucket, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
 {
-  return cls_obj_op(bucket, CLS_RGW_OP_ADD, epoch, name, size, mtime);
+  return cls_obj_op(bucket, CLS_RGW_OP_ADD, epoch, ent, category);
 }
 
 int RGWRados::cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name)
 {
   utime_t mtime;
-  return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, name, 0, mtime);
+  RGWObjEnt ent;
+  ent.name = name;
+  return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, ent, 0);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m)
@@ -1910,6 +1961,8 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     e.name = dirent.name;
     e.size = dirent.size;
     e.mtime = dirent.mtime;
+    e.owner = dirent.owner;
+    e.owner_display_name = dirent.owner_display_name;
     m[e.name] = e;
   }
 

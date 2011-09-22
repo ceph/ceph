@@ -12,7 +12,7 @@ struct rgw_bucket_dir_entry {
   uint64_t size;
   utime_t mtime;
   string etag;
-  string owner_id;
+  string owner;
   string owner_display_name;
   uint64_t epoch;
 
@@ -23,7 +23,7 @@ struct rgw_bucket_dir_entry {
     ::encode(mtime, bl);
     ::encode(epoch, bl);
     ::encode(etag, bl);
-    ::encode(owner_id, bl);
+    ::encode(owner, bl);
     ::encode(owner_display_name, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -33,7 +33,7 @@ struct rgw_bucket_dir_entry {
     ::decode(mtime, bl);
     ::decode(epoch, bl);
     ::decode(etag, bl);
-    ::decode(owner_id, bl);
+    ::decode(owner, bl);
     ::decode(owner_display_name, bl);
   }
 };

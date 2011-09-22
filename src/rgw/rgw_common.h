@@ -525,8 +525,7 @@ struct RGWObjEnt {
   std::string owner_display_name;
   size_t size;
   time_t mtime;
-  // two md5 digests and a terminator
-  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  string etag;
   string content_type;
 
   void clear() { // not clearing etag
@@ -542,7 +541,7 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   time_t mtime;
-  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  string etag;
   uint64_t count;
 
   void encode(bufferlist& bl) const {
@@ -575,7 +574,7 @@ struct RGWBucketEnt {
     bucket.clear();
     size = 0;
     mtime = 0;
-    memset(etag, 0, sizeof(etag));
+    etag = "";
     count = 0;
   }
 };

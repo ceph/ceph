@@ -158,8 +158,7 @@ int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix,
     obj.size = statbuf.st_size;
     char *etag;
     if (get_attr(RGW_ATTR_ETAG, buf, &etag) >= 0) {
-      strncpy(obj.etag, etag, sizeof(obj.etag));
-      obj.etag[sizeof(obj.etag)-1] = '\0';
+      obj.etag = etag;
       free(etag);
     }
     result.push_back(obj);
