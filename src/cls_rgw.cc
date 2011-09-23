@@ -146,6 +146,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   } else {
     entry = &dir.m[op.name];
     entry->name = op.name;
+    entry->epoch = 0;
     entry->exists = false;
   }
 
@@ -187,6 +188,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
   struct rgw_bucket_dir_entry *entry = NULL;
+
+  CLS_LOG("rgw_bucket_modify(): dir.m.size()=%lld", dir.m.size());
 
   if (miter != dir.m.end()) {
     entry = &miter->second;

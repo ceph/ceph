@@ -765,7 +765,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
     } else {
       append_rand_alpha(tag, tag, 32);
     }
-    int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, oid);
+    int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, obj.object);
     if (ret < 0)
       return ret;
     r = io_ctx.operate(oid, &op);
@@ -1327,7 +1327,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   } else {
     append_rand_alpha(tag, tag, 32);
   }
-  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, dst_oid);
+  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, dst_obj.object);
   if (ret < 0)
     goto done;
 
@@ -1908,7 +1908,6 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
     RGWObjEnt e;
     rgw_bucket_dir_entry& dirent = miter->second;
-
     if (!dirent.exists)
       continue;
 
