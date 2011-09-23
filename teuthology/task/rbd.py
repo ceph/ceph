@@ -147,7 +147,7 @@ def dev_create(ctx, config):
         remote.run(
             args=[
                 'echo',
-                'KERNEL=="rbd[0-9]*", PROGRAM="/tmp/cephtest/binary/usr/local/bin/crbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"',
+                'KERNEL=="rbd[0-9]*", PROGRAM="/tmp/cephtest/binary/usr/local/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"',
                 run.Raw('>'),
                 '/tmp/cephtest/51-rbd.rules',
                 ],

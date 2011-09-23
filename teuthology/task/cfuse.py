@@ -10,12 +10,12 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Mount/unmount a ``cfuse`` client.
+    Mount/unmount a ``ceph-fuse`` client.
 
     The config is optional and defaults to mounting on all clients. If
     a config is given, it is expected to be a list of clients to do
     this operation on. This lets you e.g. set up one client with
-    ``cfuse`` and another with ``kclient``.
+    ``ceph-fuse`` and another with ``kclient``.
 
     Example that mounts all clients::
 
@@ -42,7 +42,7 @@ def task(ctx, config):
         - interactive:
 
     """
-    log.info('Mounting cfuse clients...')
+    log.info('Mounting ceph-fuse clients...')
     cfuse_daemons = {}
 
     if config is None:
@@ -55,7 +55,7 @@ def task(ctx, config):
 
     for id_, remote in clients:
         mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-        log.info('Mounting cfuse client.{id} at {remote} {mnt}...'.format(
+        log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
                 id=id_, remote=remote,mnt=mnt))
 
         client_config = config.get("client.%s" % id_)
@@ -83,11 +83,11 @@ def task(ctx, config):
             '/tmp/cephtest/daemon-helper',
             ]
         run_cmd_tail=[
-            '/tmp/cephtest/binary/usr/local/bin/cfuse',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-fuse',
             '-f',
             '--name', 'client.{id}'.format(id=id_),
             '-c', '/tmp/cephtest/ceph.conf',
-            # TODO cfuse doesn't understand dash dash '--',
+            # TODO ceph-fuse doesn't understand dash dash '--',
             mnt,
             ]
 
@@ -133,7 +133,7 @@ def task(ctx, config):
     try:
         yield
     finally:
-        log.info('Unmounting cfuse clients...')
+        log.info('Unmounting ceph-fuse clients...')
         for id_, remote in clients:
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
             remote.run(

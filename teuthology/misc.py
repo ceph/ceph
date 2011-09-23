@@ -334,7 +334,7 @@ def write_secret_file(remote, role, filename):
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
             '--name={role}'.format(role=role),
             '--print-key',
             '/tmp/cephtest/data/{role}.keyring'.format(role=role),

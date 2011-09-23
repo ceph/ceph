@@ -14,7 +14,7 @@ def task(ctx, config):
     The config is optional and defaults to mounting on all clients. If
     a config is given, it is expected to be a list of clients to do
     this operation on. This lets you e.g. set up one client with
-    ``cfuse`` and another with ``kclient``.
+    ``ceph-fuse`` and another with ``kclient``.
 
     Example that mounts all clients::
 

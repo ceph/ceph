@@ -340,7 +340,7 @@ def cluster(ctx, config):
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
-            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
             '--create-keyring',
             '/tmp/cephtest/ceph.keyring',
             ],
@@ -350,7 +350,7 @@ def cluster(ctx, config):
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
-            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
             '--gen-key',
             '--name=mon.',
             '/tmp/cephtest/ceph.keyring',
@@ -368,7 +368,7 @@ def cluster(ctx, config):
             '/tmp/cephtest/enable-coredump',
             '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
             coverage_dir,
-            '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
             '--gen-key',
             '--name=client.admin',
             '--set-uid=0',
@@ -433,7 +433,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     '--name=osd.{id}'.format(id=id_),
@@ -450,7 +450,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     '--name=mds.{id}'.format(id=id_),
@@ -467,7 +467,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
@@ -512,7 +512,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cauthtool',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
                     '/tmp/cephtest/ceph.keyring',
                     '--name={type}.{id}'.format(
                         type=type_,
@@ -531,7 +531,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cmon',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-mon',
                     '--mkfs',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf',
@@ -555,7 +555,7 @@ def cluster(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
-                    '/tmp/cephtest/binary/usr/local/bin/cosd',
+                    '/tmp/cephtest/binary/usr/local/bin/ceph-osd',
                     '--mkfs',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf',
@@ -643,7 +643,7 @@ def mon(ctx, config):
                     '/tmp/cephtest/daemon-helper'
                        ]
 
-            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmon',
+            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/ceph-mon',
                     '-f',
                     '-i', id_,
                     '-c', '/tmp/cephtest/ceph.conf']
@@ -698,7 +698,7 @@ def osd(ctx, config):
                        '/tmp/cephtest/daemon-helper'
                        ]
             proc_signal = daemon_signal
-            run_cmd_tail = [ '/tmp/cephtest/binary/usr/local/bin/cosd',
+            run_cmd_tail = [ '/tmp/cephtest/binary/usr/local/bin/ceph-osd',
                              '-f',
                              '-i', id_,
                              '-c', '/tmp/cephtest/ceph.conf',
@@ -756,7 +756,7 @@ def mds(ctx, config):
                        '/tmp/cephtest/daemon-helper'
                        ]
             proc_signal = daemon_signal
-            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/cmds',
+            run_cmd_tail = ['/tmp/cephtest/binary/usr/local/bin/ceph-mds',
                             '-f',
                             '-i', id_,
                             '-c', '/tmp/cephtest/ceph.conf',
