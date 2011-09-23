@@ -392,7 +392,7 @@ int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& 
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
+int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs, string& category, bool exclusive)
 {
   rgw_bucket bucket;
@@ -413,22 +413,44 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
   else
     op.create(exclusive);
 
+  string etag;
+  bufferlist acl_bl;
+
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
 
-    if (bl.length()) {
-      op.setxattr(name.c_str(), bl);
+    if (!bl.length())
+      continue;
+
+    op.setxattr(name.c_str(), bl);
+
+    if (name.compare(RGW_ATTR_ETAG) == 0) {
+      etag = bl.c_str();
+    } else if (name.compare(RGW_ATTR_ACL) == 0) {
+      acl_bl = bl;
     }
   }
 
   if (!op.size())
     return 0;
 
+  string tag;
+  r = prepare_update_index(NULL, bucket, obj.object, tag);
+  if (r < 0)
+    return r;
+
   r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
+
+  uint64_t epoch = io_ctx.get_last_version();
+
+  uint8_t index_category = 0;
+  utime_t ut = ceph_clock_now(g_ceph_context);
+  r = complete_update_index(bucket, obj.object, tag, epoch, size,
+                            ut, etag, &acl_bl, index_category);
 
   if (mtime) {
     r = io_ctx.stat(oid, NULL, mtime);
@@ -781,18 +803,9 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   string tag;
   op.remove();
   if (sync) {
-    if (state && state->obj_tag.length()) {
-      int len = state->obj_tag.length();
-      char buf[len + 1];
-      memcpy(buf, state->obj_tag.c_str(), len);
-      buf[len] = '\0';
-      tag = buf;
-    } else {
-      append_rand_alpha(tag, tag, 32);
-    }
-    int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, obj.object);
-    if (ret < 0)
-      return ret;
+    r = prepare_update_index(state, bucket, obj.object, tag);
+    if (r < 0)
+      return r;
     r = io_ctx.operate(oid, &op);
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
@@ -804,7 +817,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
 
   if (r >= 0 && bucket.marker.size()) {
     uint64_t epoch = io_ctx.get_last_version();
-    r = cls_obj_complete_del(bucket, tag, epoch, obj.object);
+    r = complete_update_index_del(bucket, obj.object, tag, epoch);
   }
 
   if (r < 0)
@@ -1253,6 +1266,49 @@ done_err:
   return r;
 }
 
+int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag)
+{
+  if (state && state->obj_tag.length()) {
+    int len = state->obj_tag.length();
+    char buf[len + 1];
+    memcpy(buf, state->obj_tag.c_str(), len);
+    buf[len] = '\0';
+    tag = buf;
+  } else {
+    append_rand_alpha(tag, tag, 32);
+  }
+  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, oid);
+
+  return ret;
+}
+
+int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
+                                    utime_t& ut, string& etag, bufferlist *acl_bl, uint8_t category)
+{
+  if (bucket.marker.empty())
+    return 0;
+
+  RGWObjEnt ent;
+  ent.name = oid;
+  ent.size = size;
+  ent.mtime = ut;
+  ent.etag = etag;
+  ACLOwner owner;
+  if (acl_bl && acl_bl->length()) {
+    int ret = decode_policy(*acl_bl, &owner);
+    if (ret < 0) {
+      RGW_LOG(0) << "WARNING: could not decode policy ret=" << ret << dendl;
+    }
+  }
+  ent.owner = owner.get_id();
+  ent.owner_display_name = owner.get_display_name();
+
+  int ret = cls_obj_complete_add(bucket, tag, epoch, ent, category);
+
+  return ret;
+}
+
+
 int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
@@ -1344,46 +1400,23 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     op.mtime(&mt);
   }
 
-  bufferlist outbl;
   string tag;
-  if (state && state->obj_tag.length()) {
-    int len = state->obj_tag.length();
-    char buf[len + 1];
-    memcpy(buf, state->obj_tag.c_str(), len);
-    buf[len] = '\0';
-    tag = buf;
-  } else {
-    append_rand_alpha(tag, tag, 32);
-  }
-  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, dst_obj.object);
+  uint64_t epoch;
+  int ret = prepare_update_index(state, bucket, dst_obj.object, tag);
   if (ret < 0)
     goto done;
 
   ret = io_ctx.operate(dst_oid, &op);
 
+  epoch = io_ctx.get_last_version();
+
 done:
   atomic_write_finish(state, ret);
 
-  if (ret >= 0 && bucket.marker.size()) {
-    uint64_t epoch = io_ctx.get_last_version();
-
-    RGWObjEnt ent;
-    ent.name = dst_obj.object;
-    ent.size = size;
-    ent.mtime = ut;
-    ent.etag = etag;
-    ACLOwner owner;
-    if (acl_bl.length()) {
-      ret = decode_policy(acl_bl, &owner);
-      if (ret < 0) {
-        RGW_LOG(0) << "WARNING: could not decode policy ret=" << ret << dendl;
-      }
-    }
-    ent.owner = owner.get_id();
-    ent.owner_display_name = owner.get_display_name();
-
-    uint8_t category = 0; 
-    ret = cls_obj_complete_add(bucket, tag, epoch, ent, category);
+  if (ret >= 0) {
+    uint8_t category = 0;
+    ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
+                                ut, etag, &acl_bl, category);
   }
 
   return ret;

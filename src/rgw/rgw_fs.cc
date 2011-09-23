@@ -203,7 +203,7 @@ int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, b
 }
 
 int RGWFS::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs,
+                  uint64_t size, time_t *mtime, map<string, bufferlist>& attrs,
                   string& category, bool exclusive)
 {
   rgw_bucket& bucket = obj.bucket;

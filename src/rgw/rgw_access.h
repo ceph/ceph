@@ -61,14 +61,12 @@ public:
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
                       map<std::string, bufferlist>& attrs, string& category, bool exclusive) = 0;
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
-
-  virtual int complete_put_obj(void *ctx, std::string& id, rgw_obj& obj, size_t len) { return 0; }
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
@@ -76,10 +74,7 @@ public:
     int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
       string category;
-      ret = put_obj_meta(ctx, id, obj, mtime, attrs, category, false);
-    }
-    if (ret >= 0) {
-      ret = complete_put_obj(ctx, id, obj, len);
+      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, category, false);
     }
     return ret;
   }

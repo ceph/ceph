@@ -150,7 +150,7 @@ public:
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, string& category, bool exclusive);
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
@@ -288,6 +288,12 @@ public:
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
   int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
+  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
+  int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
+                            utime_t& ut, string& etag, bufferlist *acl_bl, uint8_t category);
+  int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
+    return cls_obj_complete_del(bucket, tag, epoch, oid);
+  }
 };
 
 #endif

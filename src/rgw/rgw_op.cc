@@ -746,7 +746,7 @@ void RGWPutObj::execute()
           goto done;
       }
     } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, NULL, attrs, rgw_obj_category_main, false);
+      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, rgw_obj_category_main, false);
       if (ret < 0)
         goto done_err;
 
@@ -1182,7 +1182,8 @@ void RGWInitMultipart::execute()
     tmp_obj_name = mp.get_meta();
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
-    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, NULL, attrs, rgw_obj_category_multimeta, true);
+    // the meta object will be indexed with 0 size, we c
+    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, rgw_obj_category_multimeta, true);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1335,7 +1336,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, NULL, attrs, rgw_obj_category_main, false);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, rgw_obj_category_main, false);
   if (ret < 0)
     goto done;
   
