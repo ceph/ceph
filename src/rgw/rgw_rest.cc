@@ -221,7 +221,7 @@ int RGWPutObj_REST::get_params()
 
 int RGWPutObj_REST::get_data()
 {
-  size_t cl = 0;
+  size_t cl;
   if (s->length) {
     cl = atoll(s->length) - ofs;
     if (cl > RGW_MAX_CHUNK_SIZE)
@@ -703,10 +703,6 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   s->content_type = s->env->get("CONTENT_TYPE");
   s->prot_flags = 0;
 
-  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
-  if (cacl)
-    s->canned_acl = cacl;
-
   if (!s->method)
     s->op = OP_UNKNOWN;
   else if (strcmp(s->method, "GET") == 0)
@@ -725,7 +721,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   init_entities_from_header(s);
   switch (s->op) {
   case OP_PUT:
-    if (s->object && !s->canned_acl.length()) { //we can get a canned acl without data
+    if (s->object) {
       if (!s->length)
         ret = -ERR_LENGTH_REQUIRED;
       else if (*s->length == '\0')
@@ -752,6 +748,10 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
 
   init_auth_info(s);
+
+  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
+  if (cacl)
+    s->canned_acl = cacl;
 
   s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
   s->http_auth = s->env->get("HTTP_AUTHORIZATION");
