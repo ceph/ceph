@@ -665,7 +665,7 @@ bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += \
-	cdebugpack \
+	ceph-debugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
