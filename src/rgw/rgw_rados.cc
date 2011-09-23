@@ -761,7 +761,11 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   op.remove();
   if (sync) {
     if (state->obj_tag.length()) {
-      tag = state->obj_tag.c_str();
+      int len = state->obj_tag.length();
+      char buf[len + 1];
+      memcpy(buf, state->obj_tag.c_str(), len);
+      buf[len] = '\0';
+      tag = buf;
     } else {
       append_rand_alpha(tag, tag, 32);
     }
@@ -1308,7 +1312,6 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
       op.clone_range(range.dst_ofs, src_oid, range.src_ofs, range.len);
     }
   }
-
   time_t mt;
   utime_t ut;
   if (pmtime) {
@@ -1322,8 +1325,12 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   bufferlist outbl;
   string tag;
-  if (state->obj_tag.length()) {
-    tag = state->obj_tag.c_str();
+  if (state && state->obj_tag.length()) {
+    int len = state->obj_tag.length();
+    char buf[len + 1];
+    memcpy(buf, state->obj_tag.c_str(), len);
+    buf[len] = '\0';
+    tag = buf;
   } else {
     append_rand_alpha(tag, tag, 32);
   }
