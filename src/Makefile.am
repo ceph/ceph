@@ -1367,7 +1367,8 @@ noinst_HEADERS = \
 	test/system/st_rados_list_objects.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/rados-api/test.h
+	test/rados-api/test.h \
+	test/unit.h
 
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
