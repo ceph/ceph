@@ -32,15 +32,15 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBcmon\fP \-i \fImonid\fP [ \-\-mon\-data \fImondatapath\fP ]
+\fBceph\-mon\fP \-i \fImonid\fP [ \-\-mon\-data \fImondatapath\fP ]
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBcmon\fP is the cluster monitor daemon for the Ceph distributed file
-system. One or more instances of \fBcmon\fP form a Paxos part\-time
-parliament cluster that provides extremely reliable and durable
-storage of cluster membership, configuration, and state.
+\fBceph\-mon\fP is the cluster monitor daemon for the Ceph distributed
+file system. One or more instances of \fBceph\-mon\fP form a Paxos
+part\-time parliament cluster that provides extremely reliable and
+durable storage of cluster membership, configuration, and state.
 .sp
 The \fImondatapath\fP refers to a directory on a local file system storing
 monitor data. It is normally specified via the \fBmon data\fP option in
@@ -66,8 +66,9 @@ startup.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBcmon\fP is part of the Ceph distributed file system. Please refer to
-the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more information.
+\fBceph\-mon\fP is part of the Ceph distributed file system. Please refer
+to the Ceph wiki at \fI\%http://ceph.newdream.net/wiki\fP for more
+information.
 .SH SEE ALSO
 .sp
 \fBceph\fP(8),
