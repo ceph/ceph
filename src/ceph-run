@@ -13,7 +13,7 @@ while [ true ]; do
 	    *)
 		exit;
 	esac
-	echo crun: $1 dumped core, restarting in $sleep seconds...
+	echo ceph-run: $1 dumped core, restarting in $sleep seconds...
 	sleep $sleep
     else
 	exit
