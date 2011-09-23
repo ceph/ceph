@@ -721,7 +721,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   init_entities_from_header(s);
   switch (s->op) {
   case OP_PUT:
-    if (s->object) {
+    if (s->object && !s->object_str.find("?acl")) {
       if (!s->length)
         ret = -ERR_LENGTH_REQUIRED;
       else if (*s->length == '\0')
