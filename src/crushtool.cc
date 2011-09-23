@@ -94,9 +94,6 @@ void parse_device(iter_t const& i, CrushWrapper &crush)
   id_item[id] = name;
 
   if (verbose) cout << "device " << id << " '" << name << "'" << std::endl;
-
-  if (id >= crush.get_max_devices())
-    crush.set_max_devices(id+1);
 }
 
 void parse_bucket_type(iter_t const& i, CrushWrapper &crush)
@@ -872,9 +869,6 @@ int main(int argc, const char **argv)
       }
       if (i == args.end())
 	usage();
-      i = args.erase(i);
-      if (i == args.end())
-	usage();
       add_weight = atof(*i);
       i = args.erase(i);
       if (i == args.end())
@@ -885,9 +879,6 @@ int main(int argc, const char **argv)
       std::string type(val);
       if (i == args.end())
 	usage();
-      i = args.erase(i);
-      if (i == args.end())
-	usage();
       std::string name(*i);
       i = args.erase(i);
       add_loc[type] = name;
@@ -895,9 +886,6 @@ int main(int argc, const char **argv)
       remove_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--reweight_item", (char*)NULL)) {
       reweight_name = val;
-      if (i == args.end())
-	usage();
-      i = args.erase(i);
       if (i == args.end())
 	usage();
       reweight_weight = atof(*i);
@@ -952,9 +940,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       int dev = tmp;
-      if (i == args.end())
-	usage();
-      i = args.erase(i);
       if (i == args.end())
 	usage();
       float f = atof(*i);
@@ -1143,9 +1128,6 @@ int main(int argc, const char **argv)
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, "data");
 
-    crush.finalize();
-    dout(0) << "crush max_devices " << crush.crush->max_devices << dendl;
-
     modified = true;
   }
 
@@ -1201,6 +1183,8 @@ int main(int argc, const char **argv)
   }
 
   if (modified) {
+    crush.finalize();
+
     if (outfn.empty()) {
       cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
     } else {
