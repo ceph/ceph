@@ -237,28 +237,49 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
-  std::map<string, RGWObjEnt> ent_map;
-  int r = cls_bucket_list(bucket, marker, max, ent_map, is_truncated);
-  if (r < 0)
-    return r;
+  int count = 0;
+  string cur_marker = marker;
+  bool truncated;
 
   result.clear();
 
-  std::map<string, RGWObjEnt>::iterator eiter;
-  for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-    string obj = eiter->first;
-    string key = obj;
+  do {
+    std::map<string, RGWObjEnt> ent_map;
+    int r = cls_bucket_list(bucket, cur_marker, max - count, ent_map, &truncated);
+    if (r < 0)
+      return r;
 
-    if (!rgw_obj::translate_raw_obj(obj, ns))
-      continue;
+    std::map<string, RGWObjEnt>::iterator eiter;
+    for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
+      string obj = eiter->first;
+      string key = obj;
+      cur_marker = obj;
 
-    if (filter && !filter->filter(obj, key))
-      continue;
+      if (!rgw_obj::translate_raw_obj(obj, ns))
+        continue;
 
-    if (prefix.empty() || ((obj).compare(0, prefix.size(), prefix) == 0)) {
+      if (filter && !filter->filter(obj, key))
+        continue;
+
+      if (prefix.size() &&  ((obj).compare(0, prefix.size(), prefix) != 0))
+        continue;
+
+      if (!delim.empty()) {
+        int delim_pos = obj.find(delim, prefix.size());
+
+        if (delim_pos >= 0) {
+          common_prefixes[obj.substr(0, delim_pos + 1)] = true;
+          continue;
+        }
+      }
+
       result.push_back(eiter->second);
+      count++;
     }
-  }
+  } while (truncated && count < max);
+
+  if (is_truncated)
+    *is_truncated = truncated;
 
   return 0;
 }
@@ -760,7 +781,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   string tag;
   op.remove();
   if (sync) {
-    if (state->obj_tag.length()) {
+    if (state && state->obj_tag.length()) {
       int len = state->obj_tag.length();
       char buf[len + 1];
       memcpy(buf, state->obj_tag.c_str(), len);
@@ -1790,15 +1811,18 @@ int RGWRados::distribute(bufferlist& bl)
 
 int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
 {
+  if (bucket.marker.empty()) {
+    if (bucket.name[0] == '.')
+      return 0;
+
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-
-  if (bucket.marker.empty()) {
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
 
   bufferlist in, out;
   r = io_ctx.exec(oid, "rgw", "bucket_init_index", in, out);
@@ -1807,15 +1831,18 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
 
 int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name)
 {
+  if (bucket.marker.empty()) {
+    if (bucket.name[0] == '.')
+      return 0;
+
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-
-  if (bucket.marker.empty()) {
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
 
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
@@ -1832,15 +1859,18 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, st
 
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
 {
+  if (bucket.marker.empty()) {
+    if (bucket.name[0] == '.')
+      return 0;
+
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-
-  if (bucket.marker.empty()) {
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
-    return -EIO;
-  }
 
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
