@@ -94,9 +94,6 @@ void parse_device(iter_t const& i, CrushWrapper &crush)
   id_item[id] = name;
 
   if (verbose) cout << "device " << id << " '" << name << "'" << std::endl;
-
-  if (id >= crush.get_max_devices())
-    crush.set_max_devices(id+1);
 }
 
 void parse_bucket_type(iter_t const& i, CrushWrapper &crush)
@@ -1142,9 +1139,6 @@ int main(int argc, const char **argv)
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, "data");
 
-    crush.finalize();
-    dout(0) << "crush max_devices " << crush.crush->max_devices << dendl;
-
     modified = true;
   }
 
@@ -1200,6 +1194,8 @@ int main(int argc, const char **argv)
   }
 
   if (modified) {
+    crush.finalize();
+
     if (outfn.empty()) {
       cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
     } else {
