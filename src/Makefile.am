@@ -1369,21 +1369,6 @@ noinst_HEADERS = \
 	test/system/systest_settings.h \
 	test/rados-api/test.h
 
-all_sources = $(ceph_mon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) \
-	$(ceph_authtool_SOURCES) $(monmaptool_SOURCES) \
-	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(ceph_conf_SOURCES) $(mount_ceph_SOURCES) \
-	$(ceph_mds_SOURCES) \
-	$(ceph_osd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) \
-	$(ceph_syn_SOURCES)  \
-	$(testmsgr_SOURCES) $(ceph_fuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
-	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
-	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
-	$(libosdc_la_SOURCES) $(libclient_la_SOURCES) $(ceph_tool_gui_DATA)
-
-if WITH_RADOSGW
-all_sources += $(librgw_SOURCES)
-endif
-
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
 COV_FILES = $(srcdir)/*.gcno
