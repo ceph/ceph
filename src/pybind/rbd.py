@@ -95,6 +95,8 @@ class RBD(object):
         """
         if order is None:
             order = 0
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_create(ioctx.io, c_char_p(name), c_uint64(size),
                                      byref(c_int(order)))
         if ret < 0:
@@ -112,11 +114,15 @@ class RBD(object):
         return c_names.raw.rstrip('\0').split('\0')
 
     def remove(self, ioctx, name):
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_remove(ioctx.io, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error removing image')
 
     def rename(self, ioctx, src, dest):
+        if not isinstance(src, str) or not isinstance(dest, str):
+            raise TypeError('src and dest must be strings')
         ret = self.librbd.rbd_rename(ioctx.io, c_char_p(src), c_char_p(dest))
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
@@ -129,6 +135,10 @@ class Image(object):
         self.image = c_void_p()
         self.name = name
         self.closed = False
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
+        if snapshot is not None and not isinstance(snapshot, str):
+            raise TypeError('snapshot must be a string or None')
         ret = self.librbd.rbd_open(ioctx.io, c_char_p(name),
                                    byref(self.image), c_char_p(snapshot))
         if ret != 0:
@@ -170,6 +180,8 @@ class Image(object):
             }
 
     def copy(self, dest_ioctx, dest_name):
+        if not isinstance(dest_name, str):
+            raise TypeError('dest_name must be a string')
         ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
         if ret < 0:
             raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
@@ -179,21 +191,29 @@ class Image(object):
         return SnapIterator(self)
 
     def create_snap(self, name):
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_create(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
     def remove_snap(self, name):
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_remove(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s' % (name, self.name))
 
     def rollback_to_snap(self, name):
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_rollback(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error rolling back image %s to snapshot %s' % (self.name, name))
 
     def set_snap(self, name):
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_set(self.image, c_char_p(name))
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %s' % (self.name, name))
@@ -207,6 +227,8 @@ class Image(object):
         return ctypes.string_at(ret_buf, ret)
 
     def write(self, data, offset):
+        if not isinstance(data, str):
+            raise TypeError('data must be a string')
         length = len(data)
         ret = self.librbd.rbd_write(self.image, c_uint64(offset),
                                     c_size_t(length), c_char_p(data))
