@@ -2,6 +2,7 @@ tasks:
 - ceph:
 - rbd:
     all:
+      image_size: 20480
 - workunit:
     all:
       - suites/iozone.sh
