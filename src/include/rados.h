@@ -345,12 +345,8 @@ enum {
 	CEPH_OSD_OP_FLAG_FAILOK = 2,    /* continue despite failure */
 };
 
-#if defined(ERESTART)
-#define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
-#else
-#define EOLDSNAPC    EINTR  /* ORDERSNAP flag set; writer has old snapc*/
-#endif
-#define EBLACKLISTED ESHUTDOWN /* blacklisted */
+#define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
+#define EBLACKLISTED 108 /* blacklisted */
 
 /* xattr comparison */
 enum {
