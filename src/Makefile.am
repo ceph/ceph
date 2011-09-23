@@ -25,21 +25,21 @@ endif
 LIBGLOBAL_LDA = libglobal.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
-ceph_mon_SOURCES = cmon.cc
+ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.la $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
 # osd
-ceph_osd_SOURCES = cosd.cc objclass/class_debug.cc \
+ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
 bin_PROGRAMS += ceph-osd
 ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
-ceph_mds_SOURCES = cmds.cc
+ceph_mds_SOURCES = ceph_mds.cc
 ceph_mds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-mds
 ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
@@ -83,9 +83,9 @@ gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 bin_PROGRAMS += gceph
 endif
 
-ceph_conf_SOURCES = cconf.cc
+ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
-ceph_authtool_SOURCES = cauthtool.cc
+ceph_authtool_SOURCES = ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph ceph-conf ceph-authtool
 
@@ -110,7 +110,7 @@ librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS) $(CRYPTO_LIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
-ceph_syn_SOURCES = csyn.cc client/SyntheticClient.cc
+ceph_syn_SOURCES = ceph_syn.cc client/SyntheticClient.cc
 ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
@@ -119,7 +119,7 @@ core: ceph-mon ceph-osd ceph-mds ceph cephfs librados-config ceph-conf monmaptoo
 
 # fuse targets?
 if WITH_FUSE
-ceph_fuse_SOURCES = cfuse.cc client/fuse_ll.cc
+ceph_fuse_SOURCES = ceph_fuse.cc client/fuse_ll.cc
 ceph_fuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
 ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-fuse
@@ -1369,10 +1369,13 @@ noinst_HEADERS = \
 	test/system/systest_settings.h \
 	test/rados-api/test.h
 
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
-	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(cosd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
-	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
+all_sources = $(ceph_mon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) \
+	$(ceph_authtool_SOURCES) $(monmaptool_SOURCES) \
+	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(ceph_conf_SOURCES) $(mount_ceph_SOURCES) \
+	$(ceph_mds_SOURCES) \
+	$(ceph_osd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) \
+	$(ceph_syn_SOURCES)  \
+	$(testmsgr_SOURCES) $(ceph_fuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
 	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
 	$(libosdc_la_SOURCES) $(libclient_la_SOURCES) $(ceph_tool_gui_DATA)
