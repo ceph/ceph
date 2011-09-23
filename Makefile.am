@@ -5,6 +5,7 @@ SUBDIRS = . src man
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \
+	src/test/run-cli-tests-maybe-unset-ccache \
 	src/test/cli \
 	src/test/downloads \
 	udev/50-rbd.rules
