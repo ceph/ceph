@@ -1377,7 +1377,7 @@ ssize_t handle_sparse_read(CephContext *cct,
     ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
 
     /* a hole? */
-    if (extent_ofs - block_ofs > 0) {
+    if (extent_ofs > block_ofs) {
       ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << extent_ofs << dendl;
       r = cb(buf_ofs, extent_ofs - block_ofs, NULL, arg);
       if (r < 0) {
@@ -1404,7 +1404,7 @@ ssize_t handle_sparse_read(CephContext *cct,
   }
 
   /* last hole */
-  if (buf_len - buf_ofs) {
+  if (buf_len > buf_ofs) {
     ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_len - buf_ofs << dendl;
     r = cb(buf_ofs, buf_len - buf_ofs, NULL, arg);
     if (r < 0) {
