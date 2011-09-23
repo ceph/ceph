@@ -230,8 +230,8 @@ create_private_key()
 {
     get_conf keyring "$dir/keyring.$name" "keyring"
     echo "creating private key for $name keyring $keyring"
-    $BINDIR/cauthtool --create-keyring --gen-key -n $name $keyring
-    $BINDIR/cauthtool -p -n $name $keyring > $dir/key.$name
+    $BINDIR/ceph-authtool --create-keyring --gen-key -n $name $keyring
+    $BINDIR/ceph-authtool -p -n $name $keyring > $dir/key.$name
 }
 
 if [ -n "$initdaemon" ]; then
@@ -240,8 +240,20 @@ if [ -n "$initdaemon" ]; then
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
     name="$type.$id"
     
+    # create /var/run/ceph (or wherever pid file and/or admin socket live)
+    get_conf pid_file "/var/run/ceph/$name.pid" "pid file"
+    rundir=`dirname $pid_file`
+    if [ "$rundir" != "." ] && [ ! -d "$rundir" ]; then
+	mkdir -p $rundir
+    fi
+    get_conf asok_file "/var/run/ceph/$name.asok" "admin socket"
+    rundir=`dirname $asok_file`
+    if [ "$rundir" != "." ] && [ ! -d "$rundir" ]; then
+	mkdir -p $rundir
+    fi
+
     if [ $type = "osd" ]; then
-	$BINDIR/cosd -c $conf --monmap $dir/monmap -i $id --mkfs
+	$BINDIR/ceph-osd -c $conf --monmap $dir/monmap -i $id --mkfs
 	create_private_key
     fi
     
@@ -250,7 +262,7 @@ if [ -n "$initdaemon" ]; then
     fi
 
     if [ $type = "mon" ]; then
-	$BINDIR/cmon -c $conf --mkfs -i $id --monmap $dir/monmap --osdmap $dir/osdmap -k $dir/keyring.mon
+	$BINDIR/ceph-mon -c $conf --mkfs -i $id --monmap $dir/monmap --osdmap $dir/osdmap -k $dir/keyring.mon
     fi
     
     exit 0
@@ -358,18 +370,18 @@ if [ $preparemon -eq 1 ]; then
 
     # admin keyring
     echo Generating admin key at $dir/keyring.admin
-    $BINDIR/cauthtool --create-keyring --gen-key -n client.admin $dir/keyring.admin
+    $BINDIR/ceph-authtool --create-keyring --gen-key -n client.admin $dir/keyring.admin
 
     # mon keyring
     echo Building initial monitor keyring
     cp $dir/keyring.admin $dir/keyring.mon
-    $BINDIR/cauthtool -n client.admin --set-uid=0 \
+    $BINDIR/ceph-authtool -n client.admin --set-uid=0 \
 	--cap mon 'allow *' \
 	--cap osd 'allow *' \
 	--cap mds 'allow' \
 	$dir/keyring.mon
 
-    $BINDIR/cauthtool --gen-key -n mon. $dir/keyring.mon
+    $BINDIR/ceph-authtool --gen-key -n mon. $dir/keyring.mon
 
     for k in $dir/key.*
     do
@@ -379,12 +391,12 @@ if [ $preparemon -eq 1 ]; then
 	kname="$ktype.$kid"
 	secret=`cat $k`
 	if [ "$ktype" = "osd" ]; then
-	    $BINDIR/cauthtool -n $kname --add-key $secret $dir/keyring.mon \
+	    $BINDIR/ceph-authtool -n $kname --add-key $secret $dir/keyring.mon \
 		--cap mon 'allow rwx' \
 		--cap osd 'allow *'
 	fi
 	if [ "$ktype" = "mds" ]; then
-	    $BINDIR/cauthtool -n $kname --add-key $secret $dir/keyring.mon \
+	    $BINDIR/ceph-authtool -n $kname --add-key $secret $dir/keyring.mon \
 		--cap mon "allow rwx" \
 		--cap osd 'allow *' \
 		--cap mds 'allow'

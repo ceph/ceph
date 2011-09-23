@@ -13,7 +13,7 @@
  */
 
 #include "common/errno.h"
-#include "include/ceph/libceph.h"
+#include "include/cephfs/libcephfs.h"
 #include <stdlib.h>
 
 #include <errno.h>

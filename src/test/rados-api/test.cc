@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string>
 #include <time.h>
+#include <unistd.h>
 
 using namespace librados;
 
@@ -58,8 +59,11 @@ std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
 
 std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
 {
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) std::cerr << "Client id is: " << id << std::endl;
+
   int ret;
-  ret = cluster.init(NULL);
+  ret = cluster.init(id);
   if (ret) {
     std::ostringstream oss;
     oss << "cluster.init failed with error " << ret;

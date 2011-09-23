@@ -41,7 +41,7 @@ static char *mount_resolve_src(const char *orig_str)
 	char *src;
 	char *buf = strdup(orig_str);
 
-	mount_path = strrchr(buf, ':');
+	mount_path = strstr(buf, ":/");
 	if (!mount_path) {
 		printf("source mount path was not specified\n");
 		free(buf);
@@ -63,7 +63,6 @@ static char *mount_resolve_src(const char *orig_str)
 	}
 
 	src = resolve_addrs(buf);
-	free(buf);
 	if (!src)
 		return NULL;
 
@@ -71,6 +70,7 @@ static char *mount_resolve_src(const char *orig_str)
 	pos = safe_cat(&src, &len, len, ":");
 	safe_cat(&src, &len, pos, mount_path);
 
+	free(buf);
 	return src;
 }
 

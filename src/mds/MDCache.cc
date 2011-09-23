@@ -6791,9 +6791,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 
       if (forward &&
 	  snapid && mdr && mdr->client_request &&
-	  (int)depth < mdr->client_request->get_retry_attempt()) {
+	  (int)depth < mdr->client_request->get_num_fwd()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
-		<< " < retry " << mdr->client_request->get_retry_attempt()
+		<< " < fwd " << mdr->client_request->get_num_fwd()
 		<< ", discovering instead of forwarding" << dendl;
 	discover = true;
       }

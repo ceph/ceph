@@ -18,16 +18,11 @@ overhead.
 .. image:: overview.png
 
 
-Getting started
-===============
-
-- :doc:`tutorial`: how to install a cluster for testing
-- `Ceph Blog <http://ceph.newdream.net/news/>`__: news and status info
-
 
 Mailing lists, bug tracker, IRC channel
 =======================================
 
+- `Ceph Blog <http://ceph.newdream.net/news/>`__: news and status info
 - The development mailing list is at ceph-devel@vger.kernel.org, and
   archived at Gmane_. Send email to subscribe_ or unsubscribe_.
 - `Bug/feature tracker <http://tracker.newdream.net/projects/ceph>`__:
@@ -61,13 +56,15 @@ and ``btrfs``, and make sure you are running the latest Linux kernel.
 Radosgw is still going through heavy development, but it will likely
 mature next.
 
+.. _cfuse-kernel-tradeoff:
+
 The Ceph filesystem is functionally fairly complete, but has not been
 tested well enough at scale and under load yet. Multi-master MDS is
 still problematic and we recommend running just one active MDS
-(standbys are ok). If you have problems with ``kclient`` or ``cfuse``,
+(standbys are ok). If you have problems with ``kclient`` or ``ceph-fuse``,
 you may wish to try the other option; in general, ``kclient`` is
 expected to be faster (but be sure to use the latest Linux kernel!)
-while ``cfuse`` provides better stability by not triggering kernel
+while ``ceph-fuse`` provides better stability by not triggering kernel
 crashes.
 
 As individual systems mature enough, we move to improving their
@@ -85,10 +82,11 @@ Table of Contents
 .. toctree::
    :maxdepth: 3
 
-   self
-   tutorial
+   start/index
    architecture
    ops/index
+   rec/index
+   config
    api/index
    Internals <dev/index>
    man/index

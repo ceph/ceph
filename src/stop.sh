@@ -3,7 +3,7 @@
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 do_killall() {
-	pg=`pgrep -f crun.*$1`
+	pg=`pgrep -f ceph-run.*$1`
 	[ -n "$pg" ] && kill $pg
 	$SUDO killall $1
 }
@@ -20,15 +20,15 @@ while [ $# -ge 1 ]; do
 	all )
 	    stop_all=1
 	    ;;
-	mon | cmon )
+	mon | ceph-mon )
 	    stop_mon=1
 	    stop_all=0
 	    ;;
-	mds | cmds )
+	mds | ceph-mds )
 	    stop_mds=1
 	    stop_all=0
 	    ;;
-	osd | cosd )
+	osd | ceph-osd )
 	    stop_osd=1
 	    stop_all=0
 	    ;;
@@ -40,12 +40,12 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-	killall cmon cmds cosd
-	pkill -f valgrind.bin.\*cmon
-	$SUDO pkill -f valgrind.bin.\*cosd
-	pkill -f valgrind.bin.\*cmds
+	killall ceph-mon ceph-mds ceph-osd
+	pkill -f valgrind.bin.\*ceph-mon
+	$SUDO pkill -f valgrind.bin.\*ceph-osd
+	pkill -f valgrind.bin.\*ceph-mds
 else
-	[ $stop_mon -eq 1 ] && do_killall cmon
-	[ $stop_mds -eq 1 ] && do_killall cmds
-	[ $stop_osd -eq 1 ] && do_killall cosd
+	[ $stop_mon -eq 1 ] && do_killall ceph-mon
+	[ $stop_mds -eq 1 ] && do_killall ceph-mds
+	[ $stop_osd -eq 1 ] && do_killall ceph-osd
 fi

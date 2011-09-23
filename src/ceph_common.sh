@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CCONF="$BINDIR/cconf"
+CCONF="$BINDIR/ceph-conf"
 
 default_conf=$ETCDIR"/ceph.conf"
 conf=$default_conf

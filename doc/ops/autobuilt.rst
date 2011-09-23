@@ -50,7 +50,7 @@ Run these commands on all nodes::
 	sudo apt-get install ceph
 
 From here on, you can follow the usual set up instructions in
-:doc:`/ops/install`.
+:doc:`/ops/install/index`.
 
 
 

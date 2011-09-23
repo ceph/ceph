@@ -20,13 +20,13 @@
    Object
      .. todo:: write me
 
-   cosd
+   ceph-osd
      .. todo:: write me
 
-   cmon
+   ceph-mon
      .. todo:: write me
 
-   cmds
+   ceph-mds
      Ceph MDS, the actual daemon blahblah
 
    radosgw

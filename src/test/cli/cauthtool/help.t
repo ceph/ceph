@@ -1,7 +1,7 @@
 # TODO synchronize with man page
-  $ cauthtool --help
+  $ ceph-authtool --help
   no command specified
-  usage: cauthtool keyringfile [OPTIONS]...
+  usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in
                                   the keyring

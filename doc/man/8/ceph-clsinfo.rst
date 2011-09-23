@@ -1,0 +1,47 @@
+===========================================
+ ceph-clsinfo -- show class object information
+===========================================
+
+.. program:: ceph-clsinfo
+
+Synopsis
+========
+
+| **ceph-clsinfo** [ *options* ] ... *filename*
+
+
+Description
+===========
+
+**ceph-clsinfo** can show name, version, and architecture information
+about a specific class object.
+
+
+Options
+=======
+
+.. option:: -n, --name
+
+   Shows the class name
+
+.. option:: -v, --version
+
+   Shows the class version
+
+.. option:: -a, --arch
+
+   Shows the class architecture
+
+
+Availability
+============
+
+**ceph-clsinfo** is part of the Ceph distributed file system. Please
+refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
+information.
+
+
+See also
+========
+
+:doc:`ceph <ceph>`\(8)

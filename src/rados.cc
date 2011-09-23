@@ -1276,6 +1276,8 @@ int main(int argc, const char **argv)
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {
       opts["block-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", (char*)NULL)) {
+      opts["block-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
       opts["snap"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {

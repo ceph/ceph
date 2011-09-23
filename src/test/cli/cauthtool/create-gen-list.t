@@ -1,18 +1,18 @@
-  $ cauthtool kring --create-keyring
+  $ ceph-authtool kring --create-keyring
   creating kring
 
-  $ cauthtool kring --list
+  $ ceph-authtool kring --list
 
-  $ cauthtool kring --gen-key
+  $ ceph-authtool kring --gen-key
 
 # cram makes matching escape-containing lines with regexps a bit ugly
-  $ cauthtool kring --list
+  $ ceph-authtool kring --list
   [client.admin]
   \\tkey = [a-zA-Z0-9+/]+=* \(esc\) (re)
   \\tauid = [0-9]{20} \(esc\) (re)
 
 # synonym
-  $ cauthtool kring -l
+  $ ceph-authtool kring -l
   [client.admin]
   \\tkey = [a-zA-Z0-9+/]+=* \(esc\) (re)
   \\tauid = [0-9]{20} \(esc\) (re)

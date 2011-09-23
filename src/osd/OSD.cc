@@ -615,7 +615,7 @@ int OSD::pre_init()
 
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
-         << "currently in use. (Is cosd already running?)" << dendl;
+         << "currently in use. (Is ceph-osd already running?)" << dendl;
     return -EBUSY;
   }
   return 0;
@@ -1138,7 +1138,8 @@ PG *OSD::lookup_lock_raw_pg(pg_t pgid)
   Mutex::Locker l(osd_lock);
   if (osdmap->have_pg_pool(pgid.pool())) {
     pgid = osdmap->raw_pg_to_pg(pgid);
-  } else if (!_have_pg(pgid)) {
+  }
+  if (!_have_pg(pgid)) {
     return NULL;
   }
   PG *pg = _lookup_lock_pg(pgid);
@@ -4908,6 +4909,11 @@ void OSD::defer_recovery(PG *pg)
 
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
+  reply_op_error(op, err, eversion_t());
+}
+
+void OSD::reply_op_error(MOSDOp *op, int err, eversion_t v)
+{
   int flags;
   if (err == 0)
     // reply with whatever ack/safe flags the caller wanted
@@ -4918,6 +4924,7 @@ void OSD::reply_op_error(MOSDOp *op, int err)
 
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), flags);
   Messenger *msgr = client_messenger;
+  reply->set_version(v);
   if (op->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, op->get_connection());
@@ -4975,9 +4982,6 @@ void OSD::handle_op(MOSDOp *op)
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
 		      (Session *)op->get_connection()->get_priv());
-
-  // ...
-  throttle_op_queue();
 
   int r = init_op_flags(op);
   if (r) {
@@ -5160,7 +5164,6 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   } 
 
-  throttle_op_queue();
 
   PG *pg = _lookup_lock_pg(pgid);
 
@@ -5295,19 +5298,6 @@ void OSD::dequeue_op(PG *pg)
       no_pending_ops.Signal();
   }
   osd_lock.Unlock();
-}
-
-
-
-
-void OSD::throttle_op_queue()
-{
-  // throttle?  FIXME PROBABLY!
-  while (pending_ops > g_conf->osd_max_opq) {
-    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
-	     << " to drop to " << g_conf->osd_max_opq << dendl;
-    op_queue_cond.Wait(osd_lock);
-  }
 }
 
 void OSD::wait_for_no_ops()

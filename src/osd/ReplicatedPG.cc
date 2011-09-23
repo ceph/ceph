@@ -565,7 +565,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       put_object_context(obc);
       put_object_contexts(src_obc);
       if (oldv <= last_update_ondisk) {
-	osd->reply_op_error(op, 0);
+	osd->reply_op_error(op, 0, oldv);
       } else {
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
 	waiting_for_ondisk[oldv].push_back(op);
@@ -3013,6 +3013,22 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 // -------------------------------------------------------
 
+void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
+{
+  if (!obc->obs.oi.watchers.empty()) {
+    // populate unconnected_watchers
+    utime_t now = ceph_clock_now(g_ceph_context);
+    for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
+	 p != obc->obs.oi.watchers.end();
+	 p++) {
+      utime_t expire = now;
+      expire += p->second.timeout_seconds;
+      dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
+      obc->unconnected_watchers[p->first] = expire;
+    }
+  }
+}
+
 
 ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
@@ -3057,18 +3073,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
       obc->obs.oi.decode(bv);
       obc->obs.exists = true;
 
-      if (!obc->obs.oi.watchers.empty()) {
-	// populate unconnected_watchers
-	utime_t now = ceph_clock_now(g_ceph_context);
-	for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
-	     p != obc->obs.oi.watchers.end();
-	     p++) {
-	  utime_t expire = now;
-	  expire += p->second.timeout_seconds;
-	  dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
-	  obc->unconnected_watchers[p->first] = expire;
-	}
-      }
+      populate_obc_watchers(obc);
     } else {
       obc->obs.exists = false;
     }
@@ -4264,6 +4269,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       
       obc->obs.exists = true;
       obc->obs.oi.decode(oibl);
+
+      populate_obc_watchers(obc);
       
       // suck in snapset context?
       SnapSetContext *ssc = obc->ssc;

@@ -42,7 +42,7 @@ extern int syn_filer_flags;
 
 int main(int argc, const char **argv, char *envp[]) 
 {
-  //cerr << "csyn starting" << std::endl;
+  //cerr << "ceph-syn starting" << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
@@ -63,7 +63,7 @@ int main(int argc, const char **argv, char *envp[])
   SimpleMessenger* messengers[g_conf->num_client];
   MonClient* mclients[g_conf->num_client];
 
-  cout << "csyn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
+  cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
     messengers[i] = new SimpleMessenger(g_ceph_context);
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));

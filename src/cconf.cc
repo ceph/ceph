@@ -35,7 +35,7 @@ static void usage()
   cerr << "Ceph configuration query tool\n\
 \n\
 USAGE\n\
-cconf <flags> <action>\n\
+ceph-conf <flags> <action>\n\
 \n\
 ACTIONS\n\
   -L|--list-all-sections          List all sections\n\
@@ -58,10 +58,10 @@ FLAGS\n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
-$ cconf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
+$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
 Find out what the value of 'mon add' is for monitor 0.\n\
 \n\
-$ cconf -l mon\n\
+$ ceph-conf -l mon\n\
 List sections beginning with 'mon'.\n\
 \n\
 RETURN CODE\n\
@@ -157,7 +157,11 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
+
+  // do not common_init_finish(); do not start threads; do not do any of thing
+  // wonky things the daemon whose conf we are examining would do (like initialize
+  // the admin socket).
+  //common_init_finish(g_ceph_context);
 
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {

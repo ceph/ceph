@@ -303,6 +303,11 @@ private:
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
+  void take_waiter(Message *o) {
+    finished_lock.Lock();
+    finished.push_back(o);
+    finished_lock.Unlock();
+  }
   void push_waiters(list<class Message*>& ls) {
     assert(osd_lock.is_locked());   // currently, at least.  be careful if we change this (see #743)
     finished_lock.Lock();
@@ -351,7 +356,6 @@ private:
   Cond  op_queue_cond;
   
   void wait_for_no_ops();
-  void throttle_op_queue();
   void enqueue_op(PG *pg, Message *op);
   void dequeue_op(PG *pg);
   static void static_dequeueop(OSD *o, PG *pg) {
@@ -1004,6 +1008,7 @@ public:
   int shutdown();
 
   void reply_op_error(MOSDOp *op, int r);
+  void reply_op_error(MOSDOp *op, int r, eversion_t v);
   void handle_misdirected_op(PG *pg, MOSDOp *op);
 
   void handle_rep_scrub(MOSDRepScrub *m);
