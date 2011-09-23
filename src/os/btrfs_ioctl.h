@@ -18,7 +18,12 @@
 
 #ifndef __IOCTL_
 #define __IOCTL_
+
+#if defined(__linux__)
 #include <linux/ioctl.h>
+#elif defined(__FreeBSD__)
+#include <sys/ioctl.h>
+#endif
 
 #define BTRFS_IOCTL_MAGIC 0x94
 #define BTRFS_VOL_NAME_MAX 255
