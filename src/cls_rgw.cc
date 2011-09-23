@@ -46,7 +46,7 @@ static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir
     bufferlist::iterator iter = bl.begin();
     ::decode(dir, iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_list(): failed to decode buffer\n");
+    CLS_LOG("ERROR: read_bucket_dir(): failed to decode buffer\n");
     return -EIO;
   }
 
@@ -86,7 +86,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   struct rgw_bucket_dir& new_dir = ret.dir;
   new_dir.header = dir.header;
   std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.lower_bound(op.start_obj);
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.upper_bound(op.start_obj);
   uint32_t i;
   for (i = 0; i != op.num_entries && miter != dir.m.end(); ++i, ++miter) {
     m[miter->first] = miter->second;
@@ -136,7 +136,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s\n", op.op, op.name.c_str());
+  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s tag=%s\n", op.op, op.name.c_str(), op.tag.c_str());
 
   std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
   struct rgw_bucket_dir_entry *entry = NULL;
@@ -175,17 +175,18 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (rc < 0)
     return rc;
 
+  CLS_LOG("rgw_bucket_complete_op(): dir.m.size()=%lld", dir.m.size());
+
   rgw_cls_obj_complete_op op;
 
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG("ERROR: rgw_bucket_modify(): failed to decode request\n");
+    CLS_LOG("ERROR: rgw_bucket_complete_op(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.name.c_str(), op.epoch);
-
+  CLS_LOG("rgw_bucket_complete_op(): request: op=%d name=%s epoch=%lld tag=%s\n", op.op, op.name.c_str(), op.epoch, op.tag.c_str());
   std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
   struct rgw_bucket_dir_entry *entry = NULL;
 
@@ -193,9 +194,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   if (miter != dir.m.end()) {
     entry = &miter->second;
-    CLS_LOG("rgw_bucket_modify(): existing entry: epoch=%lld\n", entry->epoch);
+    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld\n", entry->epoch);
     if (op.epoch <= entry->epoch) {
-      CLS_LOG("rgw_bucket_modify(): skipping request, old epoch\n");
+      CLS_LOG("rgw_bucket_complete_op(): skipping request, old epoch\n");
       return 0;
     }
 
