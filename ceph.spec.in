@@ -169,11 +169,11 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
-%{_bindir}/crbdnamer
+%{_bindir}/ceph-rbdnamer
 %{_bindir}/librados-config
 %{_bindir}/rados
 %{_bindir}/rbd
-%{_bindir}/cdebugpack
+%{_bindir}/ceph-debugpack
 %{_bindir}/boto_tool
 %{_bindir}/ceph-coverage
 %{_bindir}/obsync
