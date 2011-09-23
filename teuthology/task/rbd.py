@@ -378,6 +378,8 @@ def task(ctx, config):
               image_size: 20480
               fs_type: xfs
     """
+    if config is None:
+        config = { all: None }
     norm_config = config
     if isinstance(config, dict):
         norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
