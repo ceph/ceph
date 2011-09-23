@@ -70,7 +70,7 @@ log_path=`$CCONF -c $conf "log dir"`
 [ -z "$conf" ] && usage_exit
 
 
-tmp_path=`mktemp -d /tmp/cdebugpack.XXXXXXXXXX`
+tmp_path=`mktemp -d /tmp/ceph-debugpack.XXXXXXXXXX`
 tmp_path_bin=$tmp_path/bin
 tmp_path_bin_dbg=$tmp_path/bin.dbg
 tmp_path_log=$tmp_path/out
