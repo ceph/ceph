@@ -3377,12 +3377,12 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   string name(req->get_path2());
   int flags = req->head.args.setxattr.flags;
 
-  if ((flags & XATTR_CREATE) && cur->xattrs.count(name)) {
+  if ((flags & CEPH_XATTR_CREATE) && cur->xattrs.count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
     reply_request(mdr, -EEXIST);
     return;
   }
-  if ((flags & XATTR_REPLACE) && !cur->xattrs.count(name)) {
+  if ((flags & CEPH_XATTR_REPLACE) && !cur->xattrs.count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
     reply_request(mdr, -ENODATA);
     return;
