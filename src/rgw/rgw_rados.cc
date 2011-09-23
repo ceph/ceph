@@ -760,8 +760,11 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   string tag;
   op.remove();
   if (sync) {
-    if (state->obj_tag.length())
+    if (state->obj_tag.length()) {
       tag = state->obj_tag.c_str();
+    } else {
+      append_rand_alpha(tag, tag, 32);
+    }
     int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, oid);
     if (ret < 0)
       return ret;
@@ -1319,8 +1322,11 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   bufferlist outbl;
   string tag;
-  if (state->obj_tag.length())
+  if (state->obj_tag.length()) {
     tag = state->obj_tag.c_str();
+  } else {
+    append_rand_alpha(tag, tag, 32);
+  }
   int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, dst_oid);
   if (ret < 0)
     goto done;
