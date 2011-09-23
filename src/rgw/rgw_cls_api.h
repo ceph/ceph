@@ -26,6 +26,7 @@ struct rgw_bucket_pending_info {
     ::encode(struct_v, bl);
     uint8_t s = (uint8_t)state;
     ::encode(s, bl);
+    ::encode(timestamp, bl);
     ::encode(op, bl);
   }
   void decode(bufferlist::iterator &bl) {
