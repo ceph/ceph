@@ -5,6 +5,7 @@
 #include "include/Context.h"
 #include "rgw_access.h"
 #include "rgw_common.h"
+#include "rgw_cls_api.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -280,11 +281,13 @@ public:
   int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
-  int cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch,
-                 RGWObjEnt& ent, uint8_t category);
-  int cls_obj_add(rgw_bucket& bucket, uint64_t epoch, RGWObjEnt& ent, uint8_t category);
-  int cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name);
+  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
+  int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
+                          RGWObjEnt& ent, uint8_t category);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category);
+  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
   int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
+  int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
 };
 
 #endif

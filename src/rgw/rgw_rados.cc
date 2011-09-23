@@ -757,8 +757,14 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   if (r < 0)
     return r;
 
+  string tag;
   op.remove();
   if (sync) {
+    if (state->obj_tag.length())
+      tag = state->obj_tag.c_str();
+    int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, oid);
+    if (ret < 0)
+      return ret;
     r = io_ctx.operate(oid, &op);
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
@@ -770,7 +776,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
 
   if (r >= 0 && bucket.marker.size()) {
     uint64_t epoch = io_ctx.get_last_version();
-    r = cls_obj_del(bucket, epoch, obj.object);
+    r = cls_obj_complete_del(bucket, tag, epoch, obj.object);
   }
 
   if (r < 0)
@@ -1312,8 +1318,16 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   }
 
   bufferlist outbl;
-  int ret = io_ctx.operate(dst_oid, &op);
+  string tag;
+  if (state->obj_tag.length())
+    tag = state->obj_tag.c_str();
+  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, dst_oid);
+  if (ret < 0)
+    goto done;
 
+  ret = io_ctx.operate(dst_oid, &op);
+
+done:
   atomic_write_finish(state, ret);
 
   if (ret >= 0 && bucket.marker.size()) {
@@ -1333,8 +1347,9 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     }
     ent.owner = owner.get_id();
     ent.owner_display_name = owner.get_display_name();
-    
-    ret = cls_obj_add(bucket, epoch, ent, 0);
+
+    uint8_t category = 0; 
+    ret = cls_obj_complete_add(bucket, tag, epoch, ent, category);
   }
 
   return ret;
@@ -1689,8 +1704,24 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   map<string, RGWBucketEnt>::iterator iter;
   list<string> pools_list;
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    string pool_name = iter->second.bucket.pool;
-    pools_list.push_back(pool_name);
+    RGWBucketEnt& ent = iter->second;
+    rgw_bucket& bucket = ent.bucket;
+
+    rgw_bucket_dir_header header;
+    int r = cls_bucket_head(bucket, header);
+    if (r < 0)
+      return r;
+
+    ent.count = 0;
+    ent.size = 0;
+
+    uint8_t category = 0;
+    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.find(category);
+    if (iter != header.stats.end()) {
+      struct rgw_bucket_category_stats& stats = iter->second;
+      ent.count = stats.num_entries;
+      ent.size = stats.total_size_rounded;
+    }
   }
   map<std::string,librados::stats_map> sm;
   int r = rados->get_pool_stats(pools_list, rgw_obj_category_main, sm);
@@ -1761,7 +1792,7 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
   return r;
 }
 
-int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
+int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name)
 {
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -1777,31 +1808,57 @@ int RGWRados::cls_obj_op(rgw_bucket& bucket, uint8_t op, uint64_t epoch, RGWObjE
   oid.append(bucket.marker);
 
   bufferlist in, out;
-  struct rgw_cls_obj_op call;
+  struct rgw_cls_obj_prepare_op call;
   call.op = op;
-  call.entry.name = ent.name;
-  call.entry.size = ent.size;
-  call.entry.mtime = utime_t(ent.mtime, 0);
-  call.entry.epoch = epoch;
-  call.entry.etag = ent.etag;
-  call.entry.owner = ent.owner;
-  call.entry.owner_display_name = ent.owner_display_name;
-  call.entry.category = category;
+  call.tag = tag;
+  call.name = name;
   ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "bucket_modify", in, out);
+  r = io_ctx.exec(oid, "rgw", "bucket_prepare_op", in, out);
   return r;
 }
 
-int RGWRados::cls_obj_add(rgw_bucket& bucket, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
+int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
 {
-  return cls_obj_op(bucket, CLS_RGW_OP_ADD, epoch, ent, category);
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
+  string oid = dir_oid_prefix;
+  oid.append(bucket.marker);
+
+  bufferlist in, out;
+  struct rgw_cls_obj_complete_op call;
+  call.op = op;
+  call.tag = tag;
+  call.name = ent.name;
+  call.epoch = epoch;
+  call.meta.size = ent.size;
+  call.meta.mtime = utime_t(ent.mtime, 0);
+  call.meta.etag = ent.etag;
+  call.meta.owner = ent.owner;
+  call.meta.owner_display_name = ent.owner_display_name;
+  call.meta.category = category;
+  ::encode(call, in);
+  r = io_ctx.exec(oid, "rgw", "bucket_complete_op", in, out);
+  return r;
 }
 
-int RGWRados::cls_obj_del(rgw_bucket& bucket, uint64_t epoch, string& name)
+int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
+{
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, epoch, ent, category);
+}
+
+int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_op(bucket, CLS_RGW_OP_DEL, epoch, ent, 0);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, 0);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated)
@@ -1845,14 +1902,56 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
     RGWObjEnt e;
     rgw_bucket_dir_entry& dirent = miter->second;
+
+    if (!dirent.exists)
+      continue;
+
     e.name = dirent.name;
-    e.size = dirent.size;
-    e.mtime = dirent.mtime;
-    e.etag = dirent.etag;
-    e.owner = dirent.owner;
-    e.owner_display_name = dirent.owner_display_name;
+    e.size = dirent.meta.size;
+    e.mtime = dirent.meta.mtime;
+    e.etag = dirent.meta.etag;
+    e.owner = dirent.meta.owner;
+    e.owner_display_name = dirent.meta.owner_display_name;
     m[e.name] = e;
   }
 
   return m.size();
 }
+
+int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    return -EIO;
+  }
+
+  string oid = dir_oid_prefix;
+  oid.append(bucket.marker);
+
+  bufferlist in, out;
+  struct rgw_cls_list_op call;
+  call.num_entries = 0;
+  ::encode(call, in);
+  r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
+    return -EIO;
+  }
+
+  header = ret.dir.header;
+
+  return 0;
+}
+

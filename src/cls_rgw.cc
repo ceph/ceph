@@ -8,6 +8,9 @@
 #include "include/utime.h"
 #include "objclass/objclass.h"
 #include "rgw/rgw_cls_api.h"
+#include "common/Clock.h"
+
+#include "global/global_context.h"
 
 CLS_VER(1,0)
 CLS_NAME(rgw)
@@ -15,7 +18,8 @@ CLS_NAME(rgw)
 cls_handle_t h_class;
 cls_method_handle_t h_rgw_bucket_init_index;
 cls_method_handle_t h_rgw_bucket_list;
-cls_method_handle_t h_rgw_bucket_modify;
+cls_method_handle_t h_rgw_bucket_prepare_op;
+cls_method_handle_t h_rgw_bucket_complete_op;
 
 
 #define ROUND_BLOCK_SIZE 4096
@@ -28,7 +32,6 @@ static uint64_t get_rounded_size(uint64_t size)
 static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir)
 {
   bufferlist bl;
-  bufferlist::iterator iter;
 
   uint64_t size;
   int rc = cls_cxx_stat(hctx, &size, NULL);
@@ -116,7 +119,7 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return rc;
 }
 
-int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist bl;
   struct rgw_bucket_dir dir;
@@ -124,7 +127,54 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   if (rc < 0)
     return rc;
 
-  rgw_cls_obj_op op;
+  rgw_cls_obj_prepare_op op;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode request\n");
+    return -EINVAL;
+  }
+  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s\n", op.op, op.name.c_str());
+
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
+  struct rgw_bucket_dir_entry *entry = NULL;
+
+  if (miter != dir.m.end()) {
+    entry = &miter->second;
+  } else {
+    entry = &dir.m[op.name];
+    entry->name = op.name;
+    entry->exists = false;
+  }
+
+  if (op.tag.empty()) {
+    CLS_LOG("ERROR: tag is empty\n");
+    return -EINVAL;
+  }
+
+  struct rgw_bucket_pending_info& info = entry->pending_map[op.tag];
+  info.timestamp = ceph_clock_now(g_ceph_context);
+  info.state = CLS_RGW_STATE_PENDING_MODIFY;
+  info.op = op.op;
+
+  entry->pending_map[op.tag] = info;
+
+  rc = write_bucket_dir(hctx, dir);
+
+  return rc;
+}
+
+int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist bl;
+  struct rgw_bucket_dir dir;
+  int rc = read_bucket_dir(hctx, dir);
+  if (rc < 0)
+    return rc;
+
+  rgw_cls_obj_complete_op op;
 
   bufferlist::iterator iter = in->begin();
   try {
@@ -133,38 +183,61 @@ int rgw_bucket_modify(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     CLS_LOG("ERROR: rgw_bucket_modify(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.entry.name.c_str(), op.entry.epoch);
+  CLS_LOG("rgw_bucket_modify(): request: op=%d name=%s epoch=%lld\n", op.op, op.name.c_str(), op.epoch);
 
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.entry.name);
+  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
+  struct rgw_bucket_dir_entry *entry = NULL;
 
   if (miter != dir.m.end()) {
-    struct rgw_bucket_dir_entry& entry = miter->second;
-    CLS_LOG("rgw_bucket_modify(): existing entry: epoch=%lld\n", entry.epoch);
-    if (op.entry.epoch <= entry.epoch) {
+    entry = &miter->second;
+    CLS_LOG("rgw_bucket_modify(): existing entry: epoch=%lld\n", entry->epoch);
+    if (op.epoch <= entry->epoch) {
       CLS_LOG("rgw_bucket_modify(): skipping request, old epoch\n");
       return 0;
     }
 
-    struct rgw_bucket_category_stats& stats = dir.header.stats[entry.category];
+    struct rgw_bucket_category_stats& stats = dir.header.stats[entry->meta.category];
     stats.num_entries--;
-    stats.total_size -= entry.size;
-    stats.total_size_rounded -= get_rounded_size(entry.size);
+    stats.total_size -= entry->meta.size;
+    stats.total_size_rounded -= get_rounded_size(entry->meta.size);
+  } else {
+    entry = &dir.m[op.name];
+    entry->name = op.name;
+    entry->epoch = op.epoch;
+    entry->meta = op.meta;
+  }
+
+  if (op.tag.size()) {
+    map<string, struct rgw_bucket_pending_info>::iterator pinter = entry->pending_map.find(op.tag);
+    if (pinter == entry->pending_map.end()) {
+      CLS_LOG("ERROR: couldn't find tag for pending operation\n");
+      return -EINVAL;
+    }
+    entry->pending_map.erase(pinter);
   }
 
   switch (op.op) {
   case CLS_RGW_OP_DEL:
-    if (miter != dir.m.end())
-      dir.m.erase(miter);
-    else
+    if (miter != dir.m.end()) {
+      if (!entry->pending_map.size())
+        dir.m.erase(miter);
+      else
+        entry->exists = false;
+    } else {
       return -ENOENT;
+    }
     break;
   case CLS_RGW_OP_ADD:
     {
-      struct rgw_bucket_category_stats& stats = dir.header.stats[op.entry.category];
-      dir.m[op.entry.name] = op.entry;
+      struct rgw_bucket_dir_entry_meta& meta = op.meta;
+      struct rgw_bucket_category_stats& stats = dir.header.stats[meta.category];
+      entry->meta = meta;
+      entry->name = op.name;
+      entry->epoch = op.epoch;
+      entry->exists = true;
       stats.num_entries++;
-      stats.total_size += op.entry.size;
-      stats.total_size_rounded += get_rounded_size(op.entry.size);
+      stats.total_size += meta.size;
+      stats.total_size_rounded += get_rounded_size(meta.size);
     }
     break;
   }
@@ -181,7 +254,8 @@ void __cls_init()
   cls_register("rgw", &h_class);
   cls_register_cxx_method(h_class, "bucket_init_index", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_init_index, &h_rgw_bucket_init_index);
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, rgw_bucket_list, &h_rgw_bucket_list);
-  cls_register_cxx_method(h_class, "bucket_modify", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_modify, &h_rgw_bucket_modify);
+  cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
+  cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
 
   return;
 }
