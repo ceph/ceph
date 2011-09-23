@@ -2,7 +2,7 @@
  ceph-mds -- ceph metadata server daemon
 =====================================
 
-.. program:: cmds
+.. program:: ceph-mds
 
 Synopsis
 ========

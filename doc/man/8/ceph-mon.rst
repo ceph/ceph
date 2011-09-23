@@ -2,21 +2,21 @@
  ceph-mon -- ceph monitor daemon
 =============================
 
-.. program:: cmon
+.. program:: ceph-mon
 
 Synopsis
 ========
 
-| **cmon** -i *monid* [ --mon-data *mondatapath* ]
+| **ceph-mon** -i *monid* [ --mon-data *mondatapath* ]
 
 
 Description
 ===========
 
-**cmon** is the cluster monitor daemon for the Ceph distributed file
-system. One or more instances of **cmon** form a Paxos part-time
-parliament cluster that provides extremely reliable and durable
-storage of cluster membership, configuration, and state.
+**ceph-mon** is the cluster monitor daemon for the Ceph distributed
+file system. One or more instances of **ceph-mon** form a Paxos
+part-time parliament cluster that provides extremely reliable and
+durable storage of cluster membership, configuration, and state.
 
 The *mondatapath* refers to a directory on a local file system storing
 monitor data. It is normally specified via the ``mon data`` option in
@@ -44,8 +44,9 @@ Options
 Availability
 ============
 
-**cmon** is part of the Ceph distributed file system. Please refer to
-the Ceph wiki at http://ceph.newdream.net/wiki for more information.
+**ceph-mon** is part of the Ceph distributed file system. Please refer
+to the Ceph wiki at http://ceph.newdream.net/wiki for more
+information.
 
 
 See also
