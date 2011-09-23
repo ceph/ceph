@@ -1109,33 +1109,61 @@ void ReplicatedPG::dump_watchers(ObjectContext *obc)
 
 void ReplicatedPG::remove_watcher(ObjectContext *obc, entity_name_t entity)
 {
+  assert_locked();
+  assert(osd->watch_lock.is_locked());
   dout(10) << "remove_watcher " << *obc << " " << entity << dendl;
   map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
   assert(iter != obc->watchers.end());
   OSD::Session *session = iter->second;
   dout(10) << "remove_watcher removing session " << session << dendl;
+
   obc->watchers.erase(iter);
+  assert(session->watches.count(obc));
   session->watches.erase(obc);
+
   put_object_context(obc);
   session->put();
 }
 
-void ReplicatedPG::remove_watchers()
+void ReplicatedPG::remove_notify(ObjectContext *obc, Watch::Notification *notif)
+{
+  assert_locked();
+  assert(osd->watch_lock.is_locked());
+  map<Watch::Notification *, bool>::iterator niter = obc->notifs.find(notif);
+
+  // Cancel notification
+  if (notif->timeout)
+    osd->watch_timer.cancel_event(notif->timeout);
+  osd->watch->remove_notification(notif);
+
+  assert(niter != obc->notifs.end());
+  assert(niter->first->session->notifs.count(notif));
+
+  niter->first->session->del_notif(notif);
+  niter->first->session->put();
+
+  obc->notifs.erase(niter);
+  put_object_context(obc);
+}
+
+void ReplicatedPG::remove_watchers_and_notifies()
 {
   assert_locked();
 
   dout(10) << "remove_watchers" << dendl;
 
   osd->watch_lock.Lock();
-  for (map<hobject_t, ObjectContext*>::iterator iter = object_contexts.begin();
-       iter != object_contexts.end();
-       ++iter) {
+  for (map<hobject_t, ObjectContext*>::iterator oiter = object_contexts.begin();
+       oiter != object_contexts.end();
+       ) {
+    map<hobject_t, ObjectContext *>::iterator iter = oiter++;
     ObjectContext *obc = iter->second;
     for (map<entity_name_t, OSD::Session *>::iterator witer = obc->watchers.begin();
 	 witer != obc->watchers.end();
-	 ++witer) {
-      remove_watcher(obc, witer->first);
-    }
+	 remove_watcher(obc, (witer++)->first));
+    for (map<Watch::Notification *, bool>::iterator niter = obc->notifs.begin();
+	 niter != obc->notifs.end();
+	 remove_notify(obc, (niter++)->first));
   }
   osd->watch_lock.Unlock();
 }
@@ -2485,7 +2513,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       assert(notif);
 
       session->del_notif(notif);
-      osd->ack_notification(entity, notif, obc);
+      osd->ack_notification(entity, notif, obc, this);
     }
 
     osd->watch_lock.Unlock();
@@ -3084,6 +3112,20 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
   }
   obc->ref++;
   return obc;
+}
+
+void ReplicatedPG::context_registry_on_change()
+{
+  remove_watchers_and_notifies();
+  if (object_contexts.size()) {
+    for (map<hobject_t, ObjectContext *>::iterator p = object_contexts.begin();
+	 p != object_contexts.end();
+	 ++p) {
+      dout(0) << "Object " << p->second->obs.oi.soid << " still has ref count of " 
+	      << p->second->ref << dendl;
+    }
+    assert(!object_contexts.size());
+  }
 }
 
 
@@ -4423,7 +4465,7 @@ void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
   apply_and_flush_repops(false);
-  remove_watchers();
+  remove_watchers_and_notifies();
 }
 
 void ReplicatedPG::on_change()
@@ -4465,6 +4507,8 @@ void ReplicatedPG::on_role_change()
        p++)
     osd->take_waiters(p->second);
   waiting_for_ondisk.clear();
+
+  context_registry_on_change();
 }
 
 

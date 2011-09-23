@@ -1895,12 +1895,15 @@ void OSD::complete_notify(void *_notif, void *_obc)
   delete notif;
 }
 
-void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc)
+void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc, ReplicatedPG *pg)
 {
   assert(watch_lock.is_locked());
+  pg->assert_locked();
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  if (watch->ack_notification(name, notif))
+  if (watch->ack_notification(name, notif)) {
     complete_notify(notif, _obc);
+    pg->put_object_context(static_cast<ReplicatedPG::ObjectContext *>(_obc));
+  }
 }
 
 bool OSD::ms_handle_reset(Connection *con)
@@ -1982,30 +1985,10 @@ void OSD::handle_notify_timeout(void *_notif)
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 
-  notif->timeout = NULL; /* need to do it under the watch_lock, so we're not getting cancelled somewhere else */
-
-  watch_lock.Unlock(); /* drop lock to change locking order */
-  obc->lock.Lock();
-  watch_lock.Lock();
-
-  for (std::map<entity_name_t, Watch::WatcherState>::iterator notif_iter = notif->watchers.begin();
-       notif_iter != notif->watchers.end();
-       ++notif_iter) {
-    map<entity_name_t, Session *>::iterator witer = obc->watchers.find(notif_iter->first);
-    if (witer != obc->watchers.end()) {
-      watch_info_t& w = obc->obs.oi.watchers[notif_iter->first];
-      obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
-      utime_t expire = ceph_clock_now(g_ceph_context);
-      expire += w.timeout_seconds;
-      obc->unconnected_watchers[notif_iter->first] = expire;
-    }
-  }
-  obc->lock.Unlock();
-  watch_lock.Unlock(); /* put_object_context takes osd->lock */
-
   complete_notify(_notif, obc);
-  put_object_context(obc, notif->pgid);
+  watch_lock.Unlock(); /* drop lock to change locking order */
 
+  put_object_context(obc, notif->pgid);
   watch_lock.Lock();
   /* exiting with watch_lock held */
 }
@@ -4610,11 +4593,11 @@ void OSD::_remove_pg(PG *pg)
   }
 
 
-  // remove_watchers and the erasure from the pg_map
+  // remove_watchers_and_notifies and the erasure from the pg_map
   // must be done together without unlocking the pg lock,
   // to avoid racing with watcher cleanup in ms_handle_reset
   // and handle_notify_timeout
-  pg->remove_watchers();
+  pg->remove_watchers_and_notifies();
 
   // remove from map
   pg_map.erase(pgid);

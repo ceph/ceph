@@ -505,6 +505,8 @@ protected:
     if (obc->ssc)
       register_snapset_context(obc->ssc);
   }
+
+  void context_registry_on_change();
   void put_object_context(ObjectContext *obc);
   void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
   int find_object_context(const hobject_t& oid,
@@ -606,7 +608,8 @@ protected:
 
   void dump_watchers(ObjectContext *obc);
   void remove_watcher(ObjectContext *obc, entity_name_t entity);
-  void remove_watchers();
+  void remove_notify(ObjectContext *obc, Watch::Notification *notif);
+  void remove_watchers_and_notifies();
 
   struct RepModify {
     ReplicatedPG *pg;
