@@ -869,9 +869,6 @@ int main(int argc, const char **argv)
       }
       if (i == args.end())
 	usage();
-      i = args.erase(i);
-      if (i == args.end())
-	usage();
       add_weight = atof(*i);
       i = args.erase(i);
       if (i == args.end())
@@ -882,9 +879,6 @@ int main(int argc, const char **argv)
       std::string type(val);
       if (i == args.end())
 	usage();
-      i = args.erase(i);
-      if (i == args.end())
-	usage();
       std::string name(*i);
       i = args.erase(i);
       add_loc[type] = name;
@@ -892,9 +886,6 @@ int main(int argc, const char **argv)
       remove_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--reweight_item", (char*)NULL)) {
       reweight_name = val;
-      if (i == args.end())
-	usage();
-      i = args.erase(i);
       if (i == args.end())
 	usage();
       reweight_weight = atof(*i);
@@ -949,9 +940,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       int dev = tmp;
-      if (i == args.end())
-	usage();
-      i = args.erase(i);
       if (i == args.end())
 	usage();
       float f = atof(*i);
