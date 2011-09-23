@@ -509,14 +509,14 @@ protected:
 
   // -- failures --
   set<int> failure_queue;
-  set<int> failure_pending;
+  map<int,entity_inst_t> failure_pending;
 
 
   void queue_failure(int n) {
     failure_queue.insert(n);
   }
   void send_failures();
-  void send_still_alive(int osd);
+  void send_still_alive(entity_inst_t i);
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;

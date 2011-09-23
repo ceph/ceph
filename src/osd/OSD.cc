@@ -1622,7 +1622,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       
       // remove from failure lists if needed
       if (failure_pending.count(from)) {
-	send_still_alive(from);
+	send_still_alive(failure_pending[from]);
 	failure_pending.erase(from);
       }
       failure_queue.erase(from);
@@ -2091,17 +2091,17 @@ void OSD::send_failures()
   }
   while (!failure_queue.empty()) {
     int osd = *failure_queue.begin();
-    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd), osdmap->get_epoch()));
+    entity_inst_t i = osdmap->get_inst(osd);
+    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, osdmap->get_epoch()));
+    failure_pending[osd] = i;
     failure_queue.erase(osd);
-    failure_pending.insert(osd);
   }
   if (locked) heartbeat_lock.Unlock();
 }
 
-void OSD::send_still_alive(int osd)
+void OSD::send_still_alive(entity_inst_t i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd),
-				   osdmap->get_epoch());
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, osdmap->get_epoch());
   m->is_failed = false;
   monc->send_mon_message(m);
 }
