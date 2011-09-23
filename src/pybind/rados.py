@@ -99,6 +99,10 @@ Rados object in state %s." % (self.state))
     def __init__(self, rados_id=None, conf=None, conffile=None):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
+        if rados_id is not None and not isinstance(rados_id, str):
+            raise TypeError('rados_id must be a string or None')
+        if conffile is not None and not isinstance(conffile, str):
+            raise TypeError('conffile must be a string or None')
         ret = self.librados.rados_create(byref(self.cluster), c_char_p(rados_id))
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
@@ -135,14 +139,18 @@ Rados object in state %s." % (self.state))
         self.librados.rados_version(byref(major), byref(minor), byref(extra))
         return Version(major.value, minor.value, extra.value)
 
-    def conf_read_file(self, path = None):
+    def conf_read_file(self, path=None):
         self.require_state("configuring", "connected")
+        if path is not None and not isinstance(path, str):
+            raise TypeError('path must be a string')
         ret = self.librados.rados_conf_read_file(self.cluster, c_char_p(path))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_read_file")
 
     def conf_get(self, option):
         self.require_state("configuring", "connected")
+        if not isinstance(option, str):
+            raise TypeError('option must be a string')
         length = 20
         while True:
             ret_buf = create_string_buffer(length)
@@ -159,6 +167,10 @@ Rados object in state %s." % (self.state))
 
     def conf_set(self, option, val):
         self.require_state("configuring", "connected")
+        if not isinstance(option, str):
+            raise TypeError('option must be a string')
+        if not isinstance(val, str):
+            raise TypeError('val must be a string')
         ret = self.librados.rados_conf_set(self.cluster, c_char_p(option),
                                             c_char_p(val))
         if (ret != 0):
@@ -174,6 +186,8 @@ Rados object in state %s." % (self.state))
     # Returns true if the pool exists; false otherwise.
     def pool_exists(self, pool_name):
         self.require_state("connected")
+        if not isinstance(pool_name, str):
+            raise TypeError('pool_name must be a string')
         pool = c_void_p()
         ret = self.librados.rados_pool_lookup(self.cluster, c_char_p(pool_name))
         if (ret >= 0):
@@ -185,6 +199,10 @@ Rados object in state %s." % (self.state))
 
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         self.require_state("connected")
+        if not isinstance(pool_name, str):
+            raise TypeError('pool_name must be a string')
+        if crush_rule is not None and not isinstance(crush_rule, str):
+            raise TypeError('cruse_rule must be a string')
         if (auid == None):
             if (crush_rule == None):
                 ret = self.librados.rados_pool_create(
@@ -204,12 +222,16 @@ Rados object in state %s." % (self.state))
 
     def delete_pool(self, pool_name):
         self.require_state("connected")
+        if not isinstance(pool_name, str):
+            raise TypeError('pool_name must be a string')
         ret = self.librados.rados_pool_delete(self.cluster, c_char_p(pool_name))
         if ret < 0:
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
     def open_ioctx(self, ioctx_name):
         self.require_state("connected")
+        if not isinstance(ioctx_name, str):
+            raise TypeError('ioctx_name must be a string')
         ioctx = c_void_p()
         ret = self.librados.rados_ioctx_create(self.cluster, c_char_p(ioctx_name), byref(ioctx))
         if ret < 0:
@@ -358,6 +380,8 @@ class Ioctx(object):
 
     def set_locator_key(self, loc_key):
         self.require_ioctx_open()
+        if not isinstance(loc_key, str):
+            raise TypeError('loc_key must be a string')
         ret = self.librados.rados_ioctx_locator_set_key(self.io,\
                 c_char_p(loc_key))
         if ret < 0:
@@ -370,8 +394,10 @@ class Ioctx(object):
             self.librados.rados_ioctx_destroy(self.io)
             self.state = "closed"
 
-    def write(self, key, data, offset = 0):
+    def write(self, key, data, offset=0):
         self.require_ioctx_open()
+        if not isinstance(data, str):
+            raise TypeError('data must be a string')
         length = len(data)
         ret = self.librados.rados_write(self.io, c_char_p(key),
                  c_char_p(data), c_size_t(length), c_uint64(offset))
@@ -390,6 +416,10 @@ written." % (self.name, ret, length))
 
     def write_full(self, key, data):
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        if not isinstance(data, str):
+            raise TypeError('data must be a string')
         length = len(data)
         ret = self.librados.rados_write_full(self.io, c_char_p(key),
                  c_char_p(data), c_size_t(length))
@@ -399,8 +429,10 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Ioctx.write(%s): failed to write_full %s" % \
                 (self.name, key))
 
-    def read(self, key, length = 8192, offset = 0):
+    def read(self, key, length=8192, offset=0):
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
         ret_buf = create_string_buffer(length)
         ret = self.librados.rados_read(self.io, c_char_p(key), ret_buf,
                 c_size_t(length), c_uint64(offset))
@@ -429,14 +461,18 @@ written." % (self.name, ret, length))
 
     def remove_object(self, key):
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
         ret = self.librados.rados_remove(self.io, c_char_p(key))
         if ret < 0:
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
     def stat(self, key):
-        self.require_ioctx_open()
         """Stat object, returns, size/timestamp"""
+        self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
         psize = c_uint64()
         pmtime = c_uint64()
 
@@ -448,6 +484,8 @@ written." % (self.name, ret, length))
 
     def get_xattr(self, key, xattr_name):
         self.require_ioctx_open()
+        if not isinstance(xattr_name, str):
+            raise TypeError('xattr_name must be a string')
         ret_length = 4096
         ret_buf = create_string_buffer(ret_length)
         ret = self.librados.rados_getxattr(self.io, c_char_p(key),
@@ -458,6 +496,8 @@ written." % (self.name, ret, length))
 
     def get_xattrs(self, oid):
         self.require_ioctx_open()
+        if not isinstance(oid, str):
+            raise TypeError('oid must be a string')
         it = c_void_p(0)
         ret = self.librados.rados_getxattrs(self.io, oid, byref(it))
         if ret != 0:
@@ -466,6 +506,12 @@ written." % (self.name, ret, length))
 
     def set_xattr(self, key, xattr_name, xattr_value):
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        if not isinstance(xattr_name, str):
+            raise TypeError('xattr_name must be a string')
+        if not isinstance(xattr_value, str):
+            raise TypeError('xattr_value must be a string')
         ret = self.librados.rados_setxattr(self.io, c_char_p(key),
                     c_char_p(xattr_name), c_char_p(xattr_value),
                     c_size_t(len(xattr_value)))
@@ -475,6 +521,10 @@ written." % (self.name, ret, length))
 
     def rm_xattr(self, key, xattr_name):
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        if not isinstance(xattr_name, str):
+            raise TypeError('xattr_name must be a string')
         ret = self.librados.rados_rmxattr(self.io, c_char_p(key), c_char_p(xattr_name))
         if ret < 0:
             raise make_ex(ret, "Failed to delete key %r xattr %r" %
@@ -491,6 +541,8 @@ written." % (self.name, ret, length))
 
     def create_snap(self, snap_name):
         self.require_ioctx_open()
+        if not isinstance(snap_name, str):
+            raise TypeError('snap_name must be a string')
         ret = self.librados.rados_ioctx_snap_create(self.io,
                                     c_char_p(snap_name))
         if (ret != 0):
@@ -498,6 +550,8 @@ written." % (self.name, ret, length))
 
     def remove_snap(self, snap_name):
         self.require_ioctx_open()
+        if not isinstance(snap_name, str):
+            raise TypeError('snap_name must be a string')
         ret = self.librados.rados_ioctx_snap_remove(self.io,
                                     c_char_p(snap_name))
         if (ret != 0):
@@ -505,6 +559,8 @@ written." % (self.name, ret, length))
 
     def lookup_snap(self, snap_name):
         self.require_ioctx_open()
+        if not isinstance(snap_name, str):
+            raise TypeError('snap_name must be a string')
         snap_id = c_uint64()
         ret = self.librados.rados_ioctx_snap_lookup(self.io,\
                             c_char_p(snap_name), byref(snap_id))
