@@ -266,13 +266,13 @@ string escape_str(string& src, char c)
   return dest;
 }
 
-static void show_user_info(RGWUserInfo& info, const char *format, Formatter *formatter)
+static void show_user_info(RGWUserInfo& info, string& format, Formatter *formatter)
 {
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
 
 
-  if (!format) {
+  if (format.empty()) {
     cout << "User ID: " << info.user_id << std::endl;
     cout << "RADOS UID: " << info.auid << std::endl;
     cout << "Keys:" << std::endl;
@@ -611,9 +611,9 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, &val, "--pretty-format", (char*)NULL)) {
       pretty_format = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--purge-data", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, &val, "--purge-data", (char*)NULL)) {
       purge_data = true;
     } else {
       ++i;
@@ -866,7 +866,7 @@ int main(int argc, char **argv)
 
     remove_old_indexes(old_info, info);
 
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_SUBUSER_RM:
@@ -877,7 +877,7 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_KEY_RM:
@@ -892,11 +892,11 @@ int main(int argc, char **argv)
         break;
       }
     }
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, format, formatter);
     break;
 
   case OPT_USER_INFO:
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, format, formatter);
     break;
   }
 
