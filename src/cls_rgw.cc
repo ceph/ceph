@@ -200,10 +200,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       return 0;
     }
 
-    struct rgw_bucket_category_stats& stats = dir.header.stats[entry->meta.category];
-    stats.num_entries--;
-    stats.total_size -= entry->meta.size;
-    stats.total_size_rounded -= get_rounded_size(entry->meta.size);
+    if (entry.exists) {
+      struct rgw_bucket_category_stats& stats = dir.header.stats[entry->meta.category];
+      stats.num_entries--;
+      stats.total_size -= entry->meta.size;
+      stats.total_size_rounded -= get_rounded_size(entry->meta.size);
+    }
   } else {
     entry = &dir.m[op.name];
     entry->name = op.name;
