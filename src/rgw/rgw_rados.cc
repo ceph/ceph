@@ -1593,7 +1593,7 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
     RGWBucketStats& s = stats[category];
     struct rgw_bucket_category_stats& stats = iter->second;
     s.category = (RGWObjCategory)iter->first;
-    s.num_kb = (stats.total_size_rounded + 1023 / 1024);
+    s.num_kb = ((stats.total_size_rounded + 1023) / 1024);
     s.num_objects = stats.num_entries;
   }
 
