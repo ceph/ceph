@@ -34,11 +34,6 @@ namespace ceph {
 
 using ceph::crypto::MD5;
 
-extern string rgw_obj_category_main;
-extern string rgw_obj_category_shadow;
-extern string rgw_obj_category_multimeta;
-extern string rgw_obj_category_none;
-
 #define RGW_ROOT_BUCKET ".rgw"
 
 #define RGW_CONTROL_BUCKET ".rgw.control"
@@ -124,6 +119,13 @@ extern int gen_rand_alphanumeric_upper(char *dest, int size);
 enum RGWIntentEvent {
   DEL_OBJ,
   DEL_POOL,
+};
+
+enum RGWObjCategory {
+  RGW_OBJ_CATEGORY_NONE      = 0,
+  RGW_OBJ_CATEGORY_MAIN      = 1,
+  RGW_OBJ_CATEGORY_SHADOW    = 2,
+  RGW_OBJ_CATEGORY_MULTIMETA = 3,
 };
 
 /** Store error returns for output at a different point in the program */
@@ -435,17 +437,9 @@ WRITE_CLASS_ENCODER(RGWBucketInfo)
 
 struct RGWBucketStats
 {
-  string pool_name;
-  string category;
+  RGWObjCategory category;
   uint64_t num_kb;
   uint64_t num_objects;
-  uint64_t num_object_clones;
-  uint64_t num_object_copies;  // num_objects * num_replicas
-  uint64_t num_objects_missing_on_primary;
-  uint64_t num_objects_unfound;
-  uint64_t num_objects_degraded;
-  uint64_t num_rd_kb;
-  uint64_t num_wr_kb;
 };
 
 struct req_state;
@@ -810,6 +804,22 @@ static inline void append_rand_alpha(string& src, string& dest, int len)
   gen_rand_alphanumeric(buf, len);
   dest.append("_");
   dest.append(buf);
+}
+
+static inline const char *rgw_obj_category_name(RGWObjCategory category)
+{
+  switch (category) {
+  case RGW_OBJ_CATEGORY_NONE:
+    return "rgw.none";
+  case RGW_OBJ_CATEGORY_MAIN:
+    return "rgw.main";
+  case RGW_OBJ_CATEGORY_SHADOW:
+    return "rgw.shadow";
+  case RGW_OBJ_CATEGORY_MULTIMETA:
+    return "rgw.multimeta";
+  }
+
+  return "unknown";
 }
 
 /** */

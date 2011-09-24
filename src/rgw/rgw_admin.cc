@@ -1196,13 +1196,13 @@ int main(int argc, char **argv)
       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
       return usage();
     }
-    map<string, RGWBucketStats> stats;
+    map<RGWObjCategory, RGWBucketStats> stats;
     int ret = rgwstore->get_bucket_stats(bucket, stats);
     if (ret < 0) {
       cerr << "error getting bucket stats ret=" << ret << std::endl;
       return ret;
     }
-    map<string, RGWBucketStats>::iterator iter;
+    map<RGWObjCategory, RGWBucketStats>::iterator iter;
     formatter->reset();
     formatter->open_object_section("stats");
     formatter->dump_string("bucket", bucket.name.c_str());
@@ -1214,17 +1214,10 @@ int main(int argc, char **argv)
     for (iter = stats.begin(); iter != stats.end(); ++iter) {
       RGWBucketStats& s = iter->second;
       formatter->open_object_section("category");
-      const char *cat_name = (iter->first.size() ? iter->first.c_str() : "");
+      const char *cat_name = rgw_obj_category_name(iter->first);
       formatter->dump_string("name", cat_name);
       formatter->dump_format("size_kb", "%lld", s.num_kb);
       formatter->dump_format("num_objects", "%lld", s.num_objects);
-      formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-      formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-      formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-      formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-      formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-      formatter->dump_format("num_read_kb", "%lld", s.num_rd_kb);
-      formatter->dump_format("num_write_kb", "%lld", s.num_wr_kb);
       formatter->close_section();
       formatter->flush(cout);
     }

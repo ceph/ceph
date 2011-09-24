@@ -737,7 +737,7 @@ void RGWPutObj::execute()
     if (!multipart) {
       rgw_obj dst_obj(s->bucket, s->object_str);
       rgwstore->set_atomic(s->obj_ctx, dst_obj);
-      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, rgw_obj_category_main);
+      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
       if (ret < 0)
         goto done_err;
       if (created_obj) {
@@ -746,7 +746,7 @@ void RGWPutObj::execute()
           goto done;
       }
     } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, rgw_obj_category_main, false);
+      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
       if (ret < 0)
         goto done_err;
 
@@ -918,7 +918,7 @@ void RGWCopyObj::execute()
                         unmod_ptr,
                         if_match,
                         if_nomatch,
-                        attrs, rgw_obj_category_main, &s->err);
+                        attrs, RGW_OBJ_CATEGORY_MAIN, &s->err);
 
 done:
   send_response();
@@ -1183,7 +1183,7 @@ void RGWInitMultipart::execute()
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, rgw_obj_category_multimeta, true);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1336,7 +1336,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, rgw_obj_category_main, false);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
   if (ret < 0)
     goto done;
   
@@ -1353,7 +1353,7 @@ void RGWCompleteMultipart::execute()
 
     ofs += obj_iter->second.size;
   }
-  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, rgw_obj_category_main, NULL, true, false);
+  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, RGW_OBJ_CATEGORY_MAIN, NULL, true, false);
   if (ret < 0)
     goto done;
 

@@ -62,7 +62,7 @@ public:
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
-                      map<std::string, bufferlist>& attrs, string& category, bool exclusive) = 0;
+                      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive) = 0;
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
@@ -73,8 +73,7 @@ public:
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
-      string category;
-      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, category, false);
+      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false);
     }
     return ret;
   }
@@ -107,7 +106,7 @@ public:
                       const char *if_match,
                       const char *if_nomatch,
 		      map<std::string, bufferlist>& attrs,
-                      string& category,
+                      RGWObjCategory category,
                       struct rgw_err *err) = 0;
   /**
    * Delete a bucket.
@@ -179,7 +178,7 @@ public:
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size, time_t *pmtime,
                           map<string, bufferlist> attrs,
-                          string& category) {
+                          RGWObjCategory category) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
@@ -193,7 +192,7 @@ public:
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
-                        string& category,
+                        RGWObjCategory category,
                         time_t *pmtime,
                         bool truncate_dest,
                         bool exclusive) { return -ENOTSUP; }
@@ -258,7 +257,7 @@ public:
   // the upper layer to schedule this operation.. e.g., log intent in intent log
   virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
 
-  virtual int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats) { return -ENOTSUP; }
+  virtual int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats) { return -ENOTSUP; }
 };
 
 class RGWStoreManager {

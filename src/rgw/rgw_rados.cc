@@ -28,8 +28,8 @@ static string shadow_ns = "shadow";
 static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
 static string dir_oid_prefix = ".dir.";
 
-static string shadow_category = "rgw.shadow";
-static string main_category = "rgw.main";
+static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
+static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
@@ -393,7 +393,7 @@ int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& 
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t size,
-                  time_t *mtime, map<string, bufferlist>& attrs, string& category, bool exclusive)
+                  time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive)
 {
   rgw_bucket bucket;
   std::string oid;
@@ -408,10 +408,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
 
   ObjectWriteOperation op;
 
-  if (category.size())
-    op.create(exclusive, category);
-  else
-    op.create(exclusive);
+  op.create(exclusive);
 
   string etag;
   bufferlist acl_bl;
@@ -447,10 +444,9 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
 
   uint64_t epoch = io_ctx.get_last_version();
 
-  uint8_t index_category = 0;
   utime_t ut = ceph_clock_now(g_ceph_context);
   r = complete_update_index(bucket, obj.object, tag, epoch, size,
-                            ut, etag, &acl_bl, index_category);
+                            ut, etag, &acl_bl, category);
 
   if (mtime) {
     r = io_ctx.stat(oid, NULL, mtime);
@@ -556,7 +552,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
                const char *if_match,
                const char *if_nomatch,
                map<string, bufferlist>& attrs,  /* in/out */
-               string& category,
+               RGWObjCategory category,
                struct rgw_err *err)
 {
   int ret, r;
@@ -1283,7 +1279,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket, strin
 }
 
 int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
-                                    utime_t& ut, string& etag, bufferlist *acl_bl, uint8_t category)
+                                    utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category)
 {
   if (bucket.marker.empty())
     return 0;
@@ -1312,7 +1308,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
 int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
-                        string& category,
+                        RGWObjCategory category,
                         time_t *pmtime,
                         bool truncate_dest,
                         bool exclusive,
@@ -1337,10 +1333,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
     op.set_op_flags(OP_FAILOK); // don't fail if object didn't exist
   }
 
-  if (category.size())
-    op.create(exclusive, category);
-  else
-    op.create(exclusive);
+  op.create(exclusive);
 
 
   map<string, bufferlist>::iterator iter;
@@ -1414,7 +1407,6 @@ done:
   atomic_write_finish(state, ret);
 
   if (ret >= 0) {
-    uint8_t category = 0;
     ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
                                 ut, etag, &acl_bl, category);
   }
@@ -1425,7 +1417,7 @@ done:
 int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
-                        string& category,
+                        RGWObjCategory category,
                         time_t *pmtime,
                         bool truncate_dest,
                         bool exclusive,
@@ -1587,51 +1579,24 @@ int RGWRados::get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id)
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats)
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats)
 {
-  list<string> vec;
+  rgw_bucket_dir_header header;
+  int r = cls_bucket_head(bucket, header);
+  if (r < 0)
+    return r;
 
-  string pool_name = bucket.pool;
-
-  if (pool_name.empty())
-    pool_name = bucket.name;
-
-  if (pool_name.empty())
-    return -EINVAL;
-
-  vec.push_back(pool_name.c_str());
-
-  vector<string>::iterator cat_iter;
-  map<string, map<string, pool_stat_t> > pool_stats;
-  string empty_category;
-  int ret = rados->get_pool_stats(vec, empty_category, pool_stats);
-  if (ret < 0)
-    return ret;
-
-  map<string, bool> cats_map;
-  vector<string>::iterator iter;
-
-  for (map<string, librados::stats_map>::iterator c = pool_stats.begin(); c != pool_stats.end(); ++c) {
-    const string& pool_name = c->first;
-    stats_map& m = c->second;
-    for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
-      string cat = (i->first.size() ? i->first.c_str() : empty_category);
-
-      RGWBucketStats& s = stats[cat];
-      pool_stat_t& ps = i->second;
-      s.pool_name = pool_name;
-      s.category = cat;
-      s.num_kb = ps.num_kb;
-      s.num_objects = ps.num_objects;
-      s.num_object_clones = ps.num_object_clones;
-      s.num_object_copies = ps.num_object_copies;
-      s.num_objects_missing_on_primary = ps.num_objects_missing_on_primary;
-      s.num_objects_unfound = ps.num_objects_unfound;
-      s.num_objects_degraded = ps.num_objects_degraded;
-      s.num_rd_kb = ps.num_rd_kb;
-      s.num_wr_kb = ps.num_wr_kb;
-    }
+  stats.clear();
+  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
+  for (; iter != header.stats.end(); ++iter) {
+    RGWObjCategory category = (RGWObjCategory)iter->first;
+    RGWBucketStats& s = stats[category];
+    struct rgw_bucket_category_stats& stats = iter->second;
+    s.category = (RGWObjCategory)iter->first;
+    s.num_kb = (stats.total_size_rounded + 1023 / 1024);
+    s.num_objects = stats.num_entries;
   }
+
   return 0;
 }
 
@@ -1766,10 +1731,7 @@ int RGWRados::tmap_del(rgw_obj& obj, std::string& key)
 }
 int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
 {
-  int count = 0;
-
   map<string, RGWBucketEnt>::iterator iter;
-  list<string> pools_list;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt& ent = iter->second;
     rgw_bucket& bucket = ent.bucket;
@@ -1782,39 +1744,16 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     ent.count = 0;
     ent.size = 0;
 
-    uint8_t category = 0;
-    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.find(category);
+    RGWObjCategory category = main_category;
+    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.find((uint8_t)category);
     if (iter != header.stats.end()) {
       struct rgw_bucket_category_stats& stats = iter->second;
       ent.count = stats.num_entries;
       ent.size = stats.total_size_rounded;
     }
   }
-  map<std::string,librados::stats_map> sm;
-  int r = rados->get_pool_stats(pools_list, rgw_obj_category_main, sm);
-  if (r < 0)
-    return r;
 
-  map<string, librados::stats_map>::iterator miter;
-
-  for (miter = sm.begin(), iter = m.begin(); miter != sm.end(), iter != m.end(); ++iter, ++miter) {
-    stats_map stats = miter->second;
-    stats_map::iterator stats_iter = stats.begin();
-    if (stats_iter == stats.end())
-      continue;
-
-    string bucket_name = miter->first;
-    RGWBucketEnt& ent = iter->second;
-    if (bucket_name.compare(ent.bucket.name) != 0)
-      continue;
-
-    pool_stat_t stat = stats_iter->second;
-    ent.count = stat.num_objects;
-    ent.size = stat.num_bytes;
-    count++;
-  }
-
-  return count;
+  return m.size();
 }
 
 int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
@@ -1890,7 +1829,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, st
   return r;
 }
 
-int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
+int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
 {
   if (bucket.marker.empty()) {
     if (bucket.name[0] == '.')
@@ -1925,7 +1864,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   return r;
 }
 
-int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, uint8_t category)
+int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
 {
   return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, epoch, ent, category);
 }
@@ -1934,7 +1873,7 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epo
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, 0);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated)
