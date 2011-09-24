@@ -3499,8 +3499,8 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
   
   while (since < osdmap->get_epoch()) {
     epoch_t to = osdmap->get_epoch();
-    if (to - since > 100)
-      to = since + 100;
+    if (to - since > g_conf->osd_map_message_max)
+      to = since + g_conf->osd_map_message_max;
     MOSDMap *m = build_incremental_map_msg(since, to);
     Messenger *msgr = client_messenger;
     if (entity_name_t::TYPE_OSD == inst.name._type)
