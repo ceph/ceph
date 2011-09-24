@@ -1394,7 +1394,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   }
 
   string tag;
-  uint64_t epoch;
+  uint64_t epoch = 0;
   int ret = prepare_update_index(state, bucket, dst_obj.object, tag);
   if (ret < 0)
     goto done;
