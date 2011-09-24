@@ -1847,7 +1847,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   string oid = dir_oid_prefix;
   oid.append(bucket.marker);
 
-  bufferlist in, out;
+  bufferlist in;
   struct rgw_cls_obj_complete_op call;
   call.op = op;
   call.tag = tag;
@@ -1860,7 +1860,9 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   call.meta.owner_display_name = ent.owner_display_name;
   call.meta.category = category;
   ::encode(call, in);
-  r = io_ctx.exec(oid, "rgw", "bucket_complete_op", in, out);
+  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  r = io_ctx.aio_exec(oid, c, "rgw", "bucket_complete_op", in, NULL);
+  c->release();
   return r;
 }
 
