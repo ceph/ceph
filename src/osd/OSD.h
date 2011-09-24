@@ -206,6 +206,7 @@ private:
   int state;
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
   epoch_t up_epoch;    // _most_recent_ epoch we were marked up
+  epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
 
 public:
   bool is_booting() { return state == STATE_BOOTING; }

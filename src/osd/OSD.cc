@@ -525,7 +525,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
   osd_compat(get_osd_compat_set()),
-  state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
+  state(STATE_BOOTING), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads),
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads),
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads),
@@ -662,6 +662,8 @@ int OSD::init()
     return -1;
   }
   osdmap = get_map(superblock.current_epoch);
+
+  bind_epoch = osdmap->get_epoch();
 
   clear_temp();
 
@@ -3174,7 +3176,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   C_Contexts *fin = new C_Contexts(g_ceph_context);
   if (osdmap->is_up(whoami) &&
-      osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
+      osdmap->get_addr(whoami) == client_messenger->get_myaddr() &&
+      bind_epoch < osdmap->get_up_from(whoami)) {
 
     if (is_booting()) {
       dout(1) << "state: booting -> active" << dendl;
@@ -3205,16 +3208,17 @@ void OSD::handle_osd_map(MOSDMap *m)
 		    << " != my " << client_messenger->get_myaddr();
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
-		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
+		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
       else if (!osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
-		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
+		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
 		    << " != my " << hbout_messenger->get_myaddr();
       
       state = STATE_BOOTING;
       up_epoch = 0;
       do_restart = true;
+      bind_epoch = osdmap->get_epoch();
 
       int cport = cluster_messenger->get_myaddr().get_port();
       int hbport = hbout_messenger->get_myaddr().get_port();
@@ -3547,6 +3551,7 @@ void OSD::add_map_bl(epoch_t e, bufferlist& bl)
   dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
   map_bl[e] = bl;
 }
+
 void OSD::add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   Mutex::Locker l(map_cache_lock);
