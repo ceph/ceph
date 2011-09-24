@@ -3471,11 +3471,11 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 }
 
 
-MOSDMap *OSD::build_incremental_map_msg(epoch_t since)
+MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid());
   
-  for (epoch_t e = osdmap->get_epoch();
+  for (epoch_t e = to;
        e > since;
        e--) {
     bufferlist bl;
@@ -3497,14 +3497,20 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
-  MOSDMap *m = build_incremental_map_msg(since);
-  Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == inst.name._type)
-    msgr = cluster_messenger;
-  if (lazy)
-    msgr->lazy_send_message(m, inst);  // only if we already have an open connection
-  else
-    msgr->send_message(m, inst);
+  while (since < osdmap->get_epoch()) {
+    epoch_t to = osdmap->get_epoch();
+    if (to - since > 100)
+      to = since + 100;
+    MOSDMap *m = build_incremental_map_msg(since, to);
+    Messenger *msgr = client_messenger;
+    if (entity_name_t::TYPE_OSD == inst.name._type)
+      msgr = cluster_messenger;
+    if (lazy)
+      msgr->lazy_send_message(m, inst);  // only if we already have an open connection
+    else
+      msgr->send_message(m, inst);
+    since = to;
+  }
 }
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
