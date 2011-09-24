@@ -803,6 +803,11 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
     if (r < 0)
       return r;
     r = io_ctx.operate(oid, &op);
+
+    if (r >= 0 && bucket.marker.size()) {
+      uint64_t epoch = io_ctx.get_last_version();
+      r = complete_update_index_del(bucket, obj.object, tag, epoch);
+    }
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
     r = io_ctx.aio_operate(obj.object, completion, &op);
@@ -810,11 +815,6 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   }
 
   atomic_write_finish(state, r);
-
-  if (r >= 0 && bucket.marker.size()) {
-    uint64_t epoch = io_ctx.get_last_version();
-    r = complete_update_index_del(bucket, obj.object, tag, epoch);
-  }
 
   if (r < 0)
     return r;

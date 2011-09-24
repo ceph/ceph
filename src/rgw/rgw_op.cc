@@ -741,7 +741,7 @@ void RGWPutObj::execute()
       if (ret < 0)
         goto done_err;
       if (created_obj) {
-        ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+        ret = rgwstore->delete_obj(NULL, s->user.user_id, obj, false);
         if (ret < 0)
           goto done;
       }
