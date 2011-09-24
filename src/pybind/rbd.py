@@ -67,15 +67,6 @@ class rbd_snap_info_t(Structure):
                 ("size", c_uint64),
                 ("name", c_char_p)]
 
-class Version(object):
-    def __init__(self, major, minor, extra):
-        self.major = major
-        self.minor = minor
-        self.extra = extra
-
-    def __str__(self):
-        return "%d.%d.%d" % (self.major, self.minor, self.extra)
-
 class RBD(object):
     """librbd python wrapper"""
     def __init__(self):
@@ -86,7 +77,7 @@ class RBD(object):
         minor = c_int(0)
         extra = c_int(0)
         self.librbd.rbd_version(byref(major), byref(minor), byref(extra))
-        return Version(major.value, minor.value, extra.value)
+        return (major.value, minor.value, extra.value)
 
     def create(self, ioctx, name, size, order=None):
         """
