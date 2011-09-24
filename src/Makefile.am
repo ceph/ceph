@@ -848,6 +848,7 @@ libcommon_files = \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
 	common/armor.c \
+	common/ceph_extattr.c \
 	common/safe_io.c \
 	common/str_list.cc \
 	common/errno.cc \

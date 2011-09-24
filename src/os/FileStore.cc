@@ -37,9 +37,7 @@
 #include "include/compat.h"
 #include "include/fiemap.h"
 
-#if !defined(__CYGWIN__) && !defined(__FreeBSD__)
-# include <sys/xattr.h>
-#endif
+#include "common/ceph_extattr.h"
 
 #if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
@@ -120,78 +118,29 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 int do_listxattr(const char *fn, char *names, size_t len);
 int do_removexattr(const char *fn, const char *name);
 
-#if defined(__FreeBSD__)
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
-  return (-1);
-}
-
-static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
-{
-  return (-1);
-}
-
-static int sys_removexattr(const char *fn, const char *name)
-{
-  return (-1);
-}
-
-static int sys_listxattr(const char *fn, char *names, size_t len)
-{
-  return (-1);
-}
-#elif defined(DARWIN)
-static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
-{
-  int r = ::getxattr(fn, name, val, size, 0, 0);
+  int r = ::ceph_os_getxattr(fn, name, val, size);
   return (r < 0 ? -errno : r);
 }
 
 static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
 {
-  int r = ::setxattr(fn, name, val, size, 0, 0);
+  int r = ::ceph_os_setxattr(fn, name, val, size);
   return (r < 0 ? -errno : r);
 }
 
 static int sys_removexattr(const char *fn, const char *name)
 {
-  int r = ::removexattr(fn, name, 0);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_listxattr(const char *fn, char *names, size_t len)
-{
-  int r = ::listxattr(fn, names, len, 0);
-  return (r < 0 ? -errno : r);
-}
-#elif defined(__linux__)
-
-static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
-{
-  int r = ::getxattr(fn, name, val, size);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
-{
-  int r = ::setxattr(fn, name, val, size, 0);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_removexattr(const char *fn, const char *name)
-{
-  int r = ::removexattr(fn, name);
+  int r = ::ceph_os_removexattr(fn, name);
   return (r < 0 ? -errno : r);
 }
 
 int sys_listxattr(const char *fn, char *names, size_t len)
 {
-  int r = ::listxattr(fn, names, len);
+  int r = ::ceph_os_listxattr(fn, names, len);
   return (r < 0 ? -errno : r);
 }
-#else
-#error "Your platform is not yet supported!"
-#endif
 
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
@@ -541,7 +490,6 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size) 
 
 int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
 {
-#if !defined(__FreeBSD__)
   int i = 0, pos = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
@@ -552,7 +500,7 @@ int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    int r = ::fsetxattr(fd, raw_name, (char *)val + pos, chunk_size, 0);
+    int r = ::ceph_os_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -566,18 +514,13 @@ int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
      before) */
   if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    ::fremovexattr(fd, raw_name);
+    ::ceph_os_fremovexattr(fd, raw_name);
   }
   
   return ret;
-#else
-#warning "Implementation missing"
-  return (-1);
-#endif
 }
 
 int do_removexattr(const char *fn, const char *name) {
-#if !defined(__FreeBSD__)
   int i = 0;
   char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
   int r;
@@ -591,10 +534,6 @@ int do_removexattr(const char *fn, const char *name) {
     i++;
   } while (r >= 0);
   return 0;
-#else
-#warning "Implementation missing"
-  return (-1);
-#endif
 }
 
 int do_listxattr(const char *fn, char *names, size_t len) {
