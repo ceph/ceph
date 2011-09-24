@@ -110,12 +110,14 @@ struct rgw_bucket_category_stats {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(total_size, bl);
+    ::encode(total_size_rounded, bl);
     ::encode(num_entries, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(total_size, bl);
+    ::decode(total_size_rounded, bl);
     ::decode(num_entries, bl);
   }
 };
