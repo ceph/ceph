@@ -541,7 +541,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
-  map_cache_lock("OSD::map_cache_lock"), map_cache_keep_from(0),
+  map_cache_lock("OSD::map_cache_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -3294,7 +3294,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // everything through current epoch now on disk; keep anything after
   // that in cache
-  keep_map_from(osdmap->get_epoch()+1);
   trim_map_bl_cache(osdmap->get_epoch()+1);
   trim_map_cache(0);
 
@@ -3584,13 +3583,6 @@ OSDMap *OSD::get_map(epoch_t epoch)
   return map;
 }
 
-void OSD::keep_map_from(epoch_t from)
-{
-  Mutex::Locker l(map_cache_lock);
-  dout(10) << "keep_map_from " << from << dendl;
-  map_cache_keep_from = from;
-}
-
 void OSD::trim_map_bl_cache(epoch_t oldest)
 {
   Mutex::Locker l(map_cache_lock);
@@ -3604,7 +3596,7 @@ void OSD::trim_map_bl_cache(epoch_t oldest)
 void OSD::trim_map_cache(epoch_t oldest)
 {
   Mutex::Locker l(map_cache_lock);
-  dout(10) << "trim_map_cache up to MIN(" << oldest << "," << map_cache_keep_from << ")" << dendl;
+  dout(10) << "trim_map_cache prior to " << oldest << dendl;
   while (!map_cache.empty() &&
 	 (map_cache.begin()->first < oldest ||
 	  (int)map_cache.size() > g_conf->osd_map_cache_max)) {
