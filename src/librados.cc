@@ -731,6 +731,8 @@ public:
 		 const bufferlist& bl, size_t len);
   int aio_write_full(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		     const bufferlist& bl);
+  int aio_exec(IoCtxImpl& io, const object_t& oid, AioCompletionImpl *c,
+               const char *cls, const char *method, bufferlist& inbl, bufferlist *outbl);
 
   struct C_PoolAsync_Safe : public Context {
     PoolAsyncCompletionImpl *c;
@@ -2106,6 +2108,21 @@ int librados::RadosClient::exec(IoCtxImpl& io, const object_t& oid,
   return r;
 }
 
+int librados::RadosClient::aio_exec(IoCtxImpl& io, const object_t& oid, AioCompletionImpl *c,
+				const char *cls, const char *method,
+				bufferlist& inbl, bufferlist *outbl)
+{
+  Context *onack = new C_aio_Ack(c);
+
+  Mutex::Locker l(lock);
+  ::ObjectOperation rd;
+  prepare_assert_ops(&io, &rd);
+  rd.call(cls, method, inbl);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, outbl, 0, onack, &c->objver);
+
+  return 0;
+}
+
 int librados::RadosClient::read(IoCtxImpl& io, const object_t& oid,
 				bufferlist& bl, size_t len, uint64_t off)
 {
@@ -3006,6 +3023,13 @@ int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c
 			      bufferlist *pbl, size_t len, uint64_t off)
 {
   return io_ctx_impl->client->aio_read(*io_ctx_impl, oid, c->pc, pbl, len, off);
+}
+
+int librados::IoCtx::aio_exec(const std::string& oid, librados::AioCompletion *c, const char *cls, const char *method,
+			  bufferlist& inbl, bufferlist *outbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->aio_exec(*io_ctx_impl, obj, c->pc, cls, method, inbl, outbl);
 }
 
 int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioCompletion *c,

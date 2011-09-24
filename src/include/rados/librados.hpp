@@ -298,6 +298,9 @@ namespace librados
     
     int aio_flush();
 
+    int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
+	         bufferlist& inbl, bufferlist *outbl);
+
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
