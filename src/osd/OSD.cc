@@ -3296,6 +3296,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // that in cache
   keep_map_from(osdmap->get_epoch()+1);
   trim_map_bl_cache(osdmap->get_epoch()+1);
+  trim_map_cache(0);
 
   op_tp.unpause();
   recovery_tp.unpause();
@@ -3605,7 +3606,8 @@ void OSD::trim_map_cache(epoch_t oldest)
   Mutex::Locker l(map_cache_lock);
   dout(10) << "trim_map_cache up to MIN(" << oldest << "," << map_cache_keep_from << ")" << dendl;
   while (!map_cache.empty() &&
-	 map_cache.begin()->first < oldest) {
+	 (map_cache.begin()->first < oldest ||
+	  (int)map_cache.size() > g_conf->osd_map_cache_max)) {
     epoch_t e = map_cache.begin()->first;
     OSDMap *o = map_cache.begin()->second;
     dout(10) << "trim_map_cache " << e << " " << o << dendl;
