@@ -525,7 +525,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
   osd_compat(get_osd_compat_set()),
-  state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
+  state(STATE_BOOTING), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads),
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads),
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads),
@@ -541,7 +541,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
-  map_cache_lock("OSD::map_cache_lock"), map_cache_keep_from(0),
+  map_cache_lock("OSD::map_cache_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -662,6 +662,8 @@ int OSD::init()
     return -1;
   }
   osdmap = get_map(superblock.current_epoch);
+
+  bind_epoch = osdmap->get_epoch();
 
   clear_temp();
 
@@ -3173,7 +3175,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   C_Contexts *fin = new C_Contexts(g_ceph_context);
   if (osdmap->is_up(whoami) &&
-      osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
+      osdmap->get_addr(whoami) == client_messenger->get_myaddr() &&
+      bind_epoch < osdmap->get_up_from(whoami)) {
 
     if (is_booting()) {
       dout(1) << "state: booting -> active" << dendl;
@@ -3204,16 +3207,17 @@ void OSD::handle_osd_map(MOSDMap *m)
 		    << " != my " << client_messenger->get_myaddr();
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
-		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
+		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		    << " != my " << cluster_messenger->get_myaddr();
       else if (!osdmap->get_hb_addr(whoami).probably_equals(hbout_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
-		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
+		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
 		    << " != my " << hbout_messenger->get_myaddr();
       
       state = STATE_BOOTING;
       up_epoch = 0;
       do_restart = true;
+      bind_epoch = osdmap->get_epoch();
 
       int cport = cluster_messenger->get_myaddr().get_port();
       int hbport = hbout_messenger->get_myaddr().get_port();
@@ -3289,8 +3293,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // everything through current epoch now on disk; keep anything after
   // that in cache
-  keep_map_from(osdmap->get_epoch()+1);
   trim_map_bl_cache(osdmap->get_epoch()+1);
+  trim_map_cache(0);
 
   op_tp.unpause();
   recovery_tp.unpause();
@@ -3466,11 +3470,11 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 }
 
 
-MOSDMap *OSD::build_incremental_map_msg(epoch_t since)
+MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid());
   
-  for (epoch_t e = osdmap->get_epoch();
+  for (epoch_t e = to;
        e > since;
        e--) {
     bufferlist bl;
@@ -3492,14 +3496,20 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
-  MOSDMap *m = build_incremental_map_msg(since);
-  Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == inst.name._type)
-    msgr = cluster_messenger;
-  if (lazy)
-    msgr->lazy_send_message(m, inst);  // only if we already have an open connection
-  else
-    msgr->send_message(m, inst);
+  while (since < osdmap->get_epoch()) {
+    epoch_t to = osdmap->get_epoch();
+    if (to - since > g_conf->osd_map_message_max)
+      to = since + g_conf->osd_map_message_max;
+    MOSDMap *m = build_incremental_map_msg(since, to);
+    Messenger *msgr = client_messenger;
+    if (entity_name_t::TYPE_OSD == inst.name._type)
+      msgr = cluster_messenger;
+    if (lazy)
+      msgr->lazy_send_message(m, inst);  // only if we already have an open connection
+    else
+      msgr->send_message(m, inst);
+    since = to;
+  }
 }
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
@@ -3546,6 +3556,7 @@ void OSD::add_map_bl(epoch_t e, bufferlist& bl)
   dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
   map_bl[e] = bl;
 }
+
 void OSD::add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   Mutex::Locker l(map_cache_lock);
@@ -3577,13 +3588,6 @@ OSDMap *OSD::get_map(epoch_t epoch)
   return map;
 }
 
-void OSD::keep_map_from(epoch_t from)
-{
-  Mutex::Locker l(map_cache_lock);
-  dout(10) << "keep_map_from " << from << dendl;
-  map_cache_keep_from = from;
-}
-
 void OSD::trim_map_bl_cache(epoch_t oldest)
 {
   Mutex::Locker l(map_cache_lock);
@@ -3597,9 +3601,10 @@ void OSD::trim_map_bl_cache(epoch_t oldest)
 void OSD::trim_map_cache(epoch_t oldest)
 {
   Mutex::Locker l(map_cache_lock);
-  dout(10) << "trim_map_cache up to MIN(" << oldest << "," << map_cache_keep_from << ")" << dendl;
+  dout(10) << "trim_map_cache prior to " << oldest << dendl;
   while (!map_cache.empty() &&
-	 map_cache.begin()->first < oldest) {
+	 (map_cache.begin()->first < oldest ||
+	  (int)map_cache.size() > g_conf->osd_map_cache_max)) {
     epoch_t e = map_cache.begin()->first;
     OSDMap *o = map_cache.begin()->second;
     dout(10) << "trim_map_cache " << e << " " << o << dendl;

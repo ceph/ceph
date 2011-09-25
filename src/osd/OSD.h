@@ -206,6 +206,7 @@ private:
   int state;
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
   epoch_t up_epoch;    // _most_recent_ epoch we were marked up
+  epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
 
 public:
   bool is_booting() { return state == STATE_BOOTING; }
@@ -399,7 +400,6 @@ private:
   map<epoch_t,bufferlist> map_inc_bl;
   map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
-  epoch_t map_cache_keep_from;
 
   OSDMap* get_map(epoch_t e);
   void add_map(OSDMap *o);
@@ -408,13 +408,12 @@ private:
   void trim_map_cache(epoch_t oldest);
   void trim_map_bl_cache(epoch_t oldest);
   void clear_map_cache();
-  void keep_map_from(epoch_t from);
 
   bool get_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
-  MOSDMap *build_incremental_map_msg(epoch_t since);
+  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
 
 protected:

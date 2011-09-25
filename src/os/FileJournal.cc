@@ -1084,7 +1084,7 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
     bufferptr bp = buffer::create(len);
     int r = safe_read_exact(fd, bp.c_str(), len);
     if (r) {
-      derr << "FileJournal::wrap_read_bl: safe_read_exact returned "
+      derr << "FileJournal::wrap_read_bl: safe_read_exact " << pos << "~" << len << " returned "
 	   << r << dendl;
       ceph_abort();
     }
