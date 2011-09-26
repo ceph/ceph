@@ -139,10 +139,12 @@ void RGWProcess::run()
     FCGX_InitRequest(fcgx, s, 0);
     int ret = FCGX_Accept_r(fcgx);
     if (ret < 0)
-      return;
+      break;
 
     req_wq.queue(fcgx);
   }
+
+  m_tp.stop();
 }
 
 static int call_log_intent(void *ctx, rgw_obj& obj, RGWIntentEvent intent)
