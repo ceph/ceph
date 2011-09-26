@@ -806,6 +806,7 @@ struct pg_stat_t {
   eversion_t ondisk_log_start;  // there may be more on disk
 
   epoch_t created;
+  epoch_t last_epoch_clean;
   pg_t parent;
   __u32 parent_split_bits;
 
@@ -832,6 +833,7 @@ struct pg_stat_t {
     f->dump_stream("log_start") << log_start;
     f->dump_stream("ondisk_log_start") << ondisk_log_start;
     f->dump_unsigned("created", created);
+    f->dump_unsigned("last_epoch_clean", created);
     f->dump_stream("parent") << parent;
     f->dump_unsigned("parent_split_bits", parent_split_bits);
     f->dump_stream("last_scrub") << last_scrub;
@@ -850,7 +852,7 @@ struct pg_stat_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 6;
+    __u8 v = 7;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -859,6 +861,7 @@ struct pg_stat_t {
     ::encode(log_start, bl);
     ::encode(ondisk_log_start, bl);
     ::encode(created, bl);
+    ::encode(last_epoch_clean, bl);
     ::encode(parent, bl);
     ::encode(parent_split_bits, bl);
     ::encode(last_scrub, bl);
@@ -872,7 +875,7 @@ struct pg_stat_t {
   void decode(bufferlist::iterator &bl) {
     __u8 v;
     ::decode(v, bl);
-    if (v > 6)
+    if (v > 7)
       throw buffer::malformed_input("unknown pg_stat_t encoding version > 4");
 
     ::decode(version, bl);
@@ -881,6 +884,10 @@ struct pg_stat_t {
     ::decode(log_start, bl);
     ::decode(ondisk_log_start, bl);
     ::decode(created, bl);
+    if (v >= 7)
+      ::decode(last_epoch_clean, bl);
+    else
+      last_epoch_clean = 0;
     if (v < 6) {
       old_pg_t opgid;
       ::decode(opgid, bl);

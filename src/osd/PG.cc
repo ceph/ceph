@@ -1947,6 +1947,7 @@ void PG::update_stats()
     info.stats.created = info.history.epoch_created;
     info.stats.last_scrub = info.history.last_scrub;
     info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
+    info.stats.last_epoch_clean = info.history.last_epoch_clean;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.state = state;
