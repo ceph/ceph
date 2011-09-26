@@ -1,0 +1,5 @@
+tasks:
+- ceph:
+- thrashosds:
+    op_delay: 1
+    chance_down: 10

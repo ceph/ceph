@@ -1,0 +1,5 @@
+tasks:
+- cfuse:
+- workunit:
+    all:
+    - suites/bonnie.sh
