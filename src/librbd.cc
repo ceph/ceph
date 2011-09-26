@@ -1255,7 +1255,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t total_read = 0;
   ictx->lock.Lock();
   uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
   ictx->lock.Unlock();
   uint64_t left = len;
