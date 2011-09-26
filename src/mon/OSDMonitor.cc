@@ -1349,9 +1349,14 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
 
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
 {
-  if (osdmap.name_pool.count(name) ||
-      pending_inc.new_pool_names.count(name)) {
+  if (osdmap.name_pool.count(name)) {
     return -EEXIST;
+  }
+  for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
+       p != pending_inc.new_pool_names.end();
+       ++p) {
+    if (p->second == name)
+      return -EEXIST;
   }
 
   if (-1 == pending_inc.new_pool_max)
