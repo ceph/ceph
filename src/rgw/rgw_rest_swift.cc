@@ -91,7 +91,7 @@ void RGWListBucket_REST_SWIFT::send_response()
     if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
       s->formatter->open_object_section("object");
       s->formatter->dump_format("name", iter->name.c_str());
-      s->formatter->dump_format("hash", "\"%s\"", iter->etag);
+      s->formatter->dump_format("hash", "\"%s\"", iter->etag.c_str());
       s->formatter->dump_int("bytes", iter->size);
       if (iter->content_type.size())
         s->formatter->dump_format("content_type", iter->content_type.c_str());
