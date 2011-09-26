@@ -1487,14 +1487,18 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   assert(!is_active());
   // -- crash recovery?
   if (is_crashed()) {
-    replay_until = ceph_clock_now(g_ceph_context);
-    replay_until += g_conf->osd_replay_window;
-    dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
-	     << " until " << replay_until << dendl;
-    state_set(PG_STATE_REPLAY);
-    osd->replay_queue_lock.Lock();
-    osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
-    osd->replay_queue_lock.Unlock();
+    if (g_conf->osd_replay_window > 0) {
+      replay_until = ceph_clock_now(g_ceph_context);
+      replay_until += g_conf->osd_replay_window;
+      dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
+	       << " until " << replay_until << dendl;
+      state_set(PG_STATE_REPLAY);
+      osd->replay_queue_lock.Lock();
+      osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
+      osd->replay_queue_lock.Unlock();
+    } else {
+      dout(10) << "crashed, but osd_replay_window=0.  skipping replay." << dendl;
+    }
   }
 
   // twiddle pg state
