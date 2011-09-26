@@ -834,13 +834,14 @@ public:
   bool        have_master_log;
  protected:
   bool prior_set_built;
+
   struct PgPriorSet {
     set<int>    cur;   // current+prior OSDs, as defined by info.history.last_epoch_started.
     set<int>    down;  // down osds normally exluded from cur
     set<int>    lost;  // osds in the prior set which are lost
     map<int,epoch_t> up_thru;  // osds whose up_thru we care about
     vector<Interval> inter_up_thru;  // intervals whose up_thru we care about
-    bool crashed;
+    bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;
     bool some_down;
     const PG *pg;

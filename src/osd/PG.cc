@@ -4888,6 +4888,8 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 
   // see if i have ever started since joining the pg.  this is important only
   // if we want to exclude lost osds.
+  // FIXME: this check is broken.  it is probably better than nothing (which would allow
+  // us to go active with an empty PG), but it needs a closer look!
   set<int> started_since_joining;
   for (vector<int>::const_iterator q = acting.begin(); q != acting.end(); q++) {
     int o = *q;
@@ -4900,14 +4902,13 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	break;  // we don't care
       if (!interval.maybe_went_rw)
 	continue;
-      if (std::find(interval.acting.begin(), interval.acting.end(), o)
-	  != interval.acting.end())
+      if (std::find(interval.acting.begin(), interval.acting.end(), o) != interval.acting.end())
 	started_since_joining.insert(o);
       break;
     }
   }
-
-  dout(10) << "build_prior " << started_since_joining << " have started since joining this pg" << dendl;
+  dout(10) << "build_prior osds <" << started_since_joining
+	   << "> have started since joining this pg" << dendl;
 
   for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
@@ -4927,7 +4928,6 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     // consider UP osds
     for (unsigned i=0; i<interval.up.size(); i++) {
       int o = interval.up[i];
-
       if (osdmap.is_up(o)) // is up now
 	cur.insert(o);
     }
