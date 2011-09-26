@@ -615,6 +615,15 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
 
+    // fresh osd?
+    if (m->sb.newest_map == 0 && osdmap.exists(from)) {
+      const osd_info_t& i = osdmap.get_info(from);
+      if (i.up_from > i.lost_at) {
+	dout(10) << " fresh osd; marking lost_at too" << dendl;
+	pending_inc.new_lost[from] = osdmap.get_epoch();
+      }
+    }
+
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
     dout(10) << " old osd_info: " << info << dendl;
