@@ -15,8 +15,7 @@ IMG_ORDER = 22 # 4 MiB objects
 
 def setUp():
     global rados
-    rados = Rados()
-    rados.conf_read_file()
+    rados = Rados(conffile='')
     rados.connect()
     assert rados.pool_exists('rbd')
     global ioctx
@@ -102,6 +101,14 @@ class TestImage(object):
     def test_read(self):
         data = self.image.read(0, 20)
         eq(data, '\0' * 20)
+
+    def test_large_write(self):
+        data = rand_data(IMG_SIZE)
+        self.image.write(data, 0)
+
+    def test_large_read(self):
+        data = self.image.read(0, IMG_SIZE)
+        eq(data, '\0' * IMG_SIZE)
 
     def test_write_read(self):
         data = rand_data(256)
