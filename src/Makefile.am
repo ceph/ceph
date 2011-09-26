@@ -701,6 +701,7 @@ endif
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
 	ceph-run $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
+	$(srcdir)/init-radosgw \
 	$(srcdir)/ceph-debugpack.in \
 	$(srcdir)/ceph-coverage.in \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
