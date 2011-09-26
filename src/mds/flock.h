@@ -61,7 +61,7 @@ public:
    *
    * @returns true if set, false if not set.
    */
-  bool add_lock(ceph_filelock& new_lock, bool wait_on_fail);
+  bool add_lock(ceph_filelock& new_lock, bool wait_on_fail, bool replay);
   /**
    * See if a lock is blocked by existing locks. If the lock is blocked,
    * it will be set to the value of the first blocking lock. Otherwise,
@@ -195,5 +195,24 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)
+
+
+inline ostream& operator<<(ostream& out, ceph_lock_state_t& l) {
+  out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
+      << ", waiting_locks.size()=" << l.waiting_locks.size()
+      << ", client_held_lock_counts -- " << l.client_held_lock_counts
+      << "\n client_waiting_lock_counts -- " << l.client_waiting_lock_counts
+      << "\n held_locks -- ";
+    for (multimap<uint64_t, ceph_filelock>::iterator iter = l.held_locks.begin();
+         iter != l.held_locks.end();
+         ++iter)
+      out << iter->second;
+    out << "\n waiting_locks -- ";
+    for (multimap<uint64_t, ceph_filelock>::iterator iter =l.waiting_locks.begin();
+         iter != l.waiting_locks.end();
+         ++iter)
+      out << iter->second << "\n";
+  return out;
+}
 
 #endif

@@ -7,7 +7,7 @@ bin_PROGRAMS =
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
-bin_SCRIPTS = crun $(srcdir)/cclsinfo cdebugpack crbdnamer
+bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -25,24 +25,24 @@ endif
 LIBGLOBAL_LDA = libglobal.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # monitor
-cmon_SOURCES = cmon.cc
-cmon_LDFLAGS = $(AM_LDFLAGS)
-cmon_LDADD = libmon.la $(LIBGLOBAL_LDA)
-cmon_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += cmon
+ceph_mon_SOURCES = ceph_mon.cc
+ceph_mon_LDFLAGS = $(AM_LDFLAGS)
+ceph_mon_LDADD = libmon.la $(LIBGLOBAL_LDA)
+ceph_mon_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph-mon
 
 # osd
-cosd_SOURCES = cosd.cc objclass/class_debug.cc \
+ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
-bin_PROGRAMS += cosd
-cosd_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
+bin_PROGRAMS += ceph-osd
+ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
-cmds_SOURCES = cmds.cc
-cmds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
-bin_PROGRAMS += cmds
-cmds_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_mds_SOURCES = ceph_mds.cc
+ceph_mds_LDADD = libmds.a libosdc.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph-mds
+ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 ceph_SOURCES = \
@@ -83,11 +83,11 @@ gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 bin_PROGRAMS += gceph
 endif
 
-cconf_SOURCES = cconf.cc
-cconf_LDADD = $(LIBGLOBAL_LDA)
-cauthtool_SOURCES = cauthtool.cc
-cauthtool_LDADD = $(LIBGLOBAL_LDA)
-bin_PROGRAMS += ceph cconf cauthtool
+ceph_conf_SOURCES = ceph_conf.cc
+ceph_conf_LDADD = $(LIBGLOBAL_LDA)
+ceph_authtool_SOURCES = ceph_authtool.cc
+ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph ceph-conf ceph-authtool
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
@@ -110,48 +110,53 @@ librados_config_LDADD = libglobal.la librados.la $(EXTRALIBS) $(CRYPTO_LIBS)
 bin_PROGRAMS += librados-config
 
 # synthetic client
-csyn_SOURCES = csyn.cc client/SyntheticClient.cc
-csyn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
-bin_PROGRAMS += csyn
+ceph_syn_SOURCES = ceph_syn.cc client/SyntheticClient.cc
+ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
+bin_PROGRAMS += ceph-syn
 
-core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
+core: ceph-mon ceph-osd ceph-mds ceph cephfs librados-config ceph-conf monmaptool osdmaptool crushtool ceph-syn
 
 
 # fuse targets?
 if WITH_FUSE
-cfuse_SOURCES = cfuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
-cfuse_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += cfuse
+ceph_fuse_SOURCES = ceph_fuse.cc client/fuse_ll.cc
+ceph_fuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph-fuse
 
 endif
 
 # tcmalloc?
 if WITH_TCMALLOC
 tcmalloc_safety_flags = -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
-cosd_LDADD += -ltcmalloc
-cosd_CXXFLAGS += ${tcmalloc_safety_flags}
-cosd_SOURCES += perfglue/heap_profiler.cc
-cmds_LDADD += -ltcmalloc
-cmds_CXXFLAGS += ${tcmalloc_safety_flags}
-cmds_SOURCES += perfglue/heap_profiler.cc
-cmon_LDADD += -ltcmalloc
-cmon_CXXFLAGS += ${tcmalloc_safety_flags}
-cmon_SOURCES += perfglue/heap_profiler.cc
+ceph_osd_LDADD += -ltcmalloc
+ceph_osd_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_osd_SOURCES += perfglue/heap_profiler.cc
+ceph_mds_LDADD += -ltcmalloc
+ceph_mds_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_mds_SOURCES += perfglue/heap_profiler.cc
+ceph_mon_LDADD += -ltcmalloc
+ceph_mon_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_mon_SOURCES += perfglue/heap_profiler.cc
 if WITH_FUSE
-cfuse_LDADD += -ltcmalloc
-cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
+ceph_fuse_LDADD += -ltcmalloc
+ceph_fuse_CXXFLAGS += ${tcmalloc_safety_flags}
 endif #WITH_FUSE
 else
-cosd_SOURCES += perfglue/disabled_heap_profiler.cc
-cmds_SOURCES += perfglue/disabled_heap_profiler.cc
-cmon_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_osd_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_mds_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_mon_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets
 psim_SOURCES = psim.cc
 psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += psim
+
+test_addrs_SOURCES = test/test_addrs.cc
+test_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+test_addrs_LDADD = libglobal.la -lpthread -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_addrs
 
 test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -194,16 +199,16 @@ test_librgw_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
-test_libceph_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
-			    $(libceph_la_SOURCES) $(libosdc_la_SOURCES)
-test_libceph_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-test_libceph_build_CXXFLAGS = $(AM_CXXFLAGS)
-bin_DEBUGPROGRAMS += test_libceph_build
+test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+			    $(libcephfs_la_SOURCES) $(libosdc_la_SOURCES)
+test_libcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
+bin_DEBUGPROGRAMS += test_libcephfs_build
 endif
 
 if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
-         $(libhadoopcephfs_la_SOURCES) $(libceph_la_SOURCES) \
+         $(libhadoopcephfs_la_SOURCES) $(libcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
 test_libhadoopcephfs_build_LDADD = -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
@@ -216,21 +221,21 @@ lib_LTLIBRARIES =
 noinst_LTLIBRARIES = 
 noinst_LIBRARIES =
 
-# libceph
-libceph_la_SOURCES = \
-	libceph.cc \
+# libcephfs
+libcephfs_la_SOURCES = \
+	libcephfs.cc \
 	client/Client.cc \
 	client/Inode.cc \
 	client/MetaRequest.cc
-libceph_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libceph_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libceph_la_LIBADD = libosdc.la
-libceph_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
+libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libcephfs_la_LIBADD = libosdc.la
+libcephfs_la_LDFLAGS =  -lpthread $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
-lib_LTLIBRARIES += libceph.la
+lib_LTLIBRARIES += libcephfs.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+testceph_LDADD = libcephfs.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
@@ -377,7 +382,7 @@ endif
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
-libhadoopcephfs_la_LIBADD = libceph.la
+libhadoopcephfs_la_LIBADD = libcephfs.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
@@ -441,7 +446,7 @@ UNITTEST_STATIC_LDADD = \
 	-lpthread
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libceph.la -lpthread -lm \
+unittest_encoding_LDADD = libcephfs.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 		     -fno-strict-aliasing
@@ -449,7 +454,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_base64_LDADD = libceph.la -lm ${UNITTEST_LDADD}
+unittest_base64_LDADD = libcephfs.la -lm ${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
@@ -465,7 +470,7 @@ unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_gather
 
 unittest_run_cmd_SOURCES = test/run_cmd.cc
-unittest_run_cmd_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_run_cmd_LDADD = libcephfs.la ${UNITTEST_LDADD}
 unittest_run_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_run_cmd
 
@@ -475,7 +480,7 @@ unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_signals
 
 unittest_simple_spin_SOURCES = test/simple_spin.cc
-unittest_simple_spin_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_simple_spin_LDADD = libcephfs.la ${UNITTEST_LDADD}
 unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_simple_spin
 
@@ -556,11 +561,11 @@ unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
-unittest_libceph_config_SOURCES = test/libceph_config.cc
-unittest_libceph_config_LDFLAGS = -pthread ${AM_LDFLAGS}
-unittest_libceph_config_LDADD =  libceph.la ${UNITTEST_LDADD}
-unittest_libceph_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_libceph_config
+unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
+unittest_libcephfs_config_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
+unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_libcephfs_config
 
 unittest_librados_config_SOURCES = test/librados_config.cc
 unittest_librados_config_LDFLAGS = -pthread ${AM_LDFLAGS}
@@ -637,9 +642,15 @@ bin_DEBUGPROGRAMS += test_rados_api_misc
 
 test_store_SOURCES = test/store_test.cc
 test_store_LDFLAGS = ${AM_LDFLAGS}
-test_store_LDADD =  librados.la ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
+test_store_LDADD =  ${UNITTEST_STATIC_LDADD} libos.la $(LIBGLOBAL_LDA)
 test_store_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_store
+
+test_stress_watch_SOURCES = test/test_stress_watch.cc test/rados-api/test.cc
+test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
+test_stress_watch_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
+test_stress_watch_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_stress_watch
 
 # shell scripts
 editpaths = sed \
@@ -650,7 +661,7 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs cdebugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile cdebugpack.in ceph-coverage.in
+init-ceph mkcephfs ceph-debugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -665,7 +676,7 @@ bin_SCRIPTS += obsync/boto_tool
 bin_SCRIPTS += ceph-coverage
 
 CLEANFILES += \
-	cdebugpack \
+	ceph-debugpack \
 	ceph_ver.h \
 	init-ceph \
 	mkcephfs \
@@ -700,12 +711,13 @@ endif
 
 # extra bits
 EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
-	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
-	$(srcdir)/cdebugpack.in \
+	ceph-run $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
+	$(srcdir)/init-radosgw \
+	$(srcdir)/ceph-debugpack.in \
 	$(srcdir)/ceph-coverage.in \
-	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
+	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
-	$(srcdir)/crbdnamer \
+	$(srcdir)/ceph-rbdnamer \
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
@@ -725,8 +737,8 @@ bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rbd \
                $(srcdir)/bash_completion/radosgw_admin
 
-libceph_includedir = $(includedir)/ceph
-libceph_include_DATA = $(srcdir)/include/ceph/libceph.h
+libcephfs_includedir = $(includedir)/cephfs
+libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
@@ -1058,6 +1070,7 @@ noinst_HEADERS = \
 	common/safe_io.h\
         common/config.h\
         common/config_obs.h\
+	common/config_opts.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
 	common/mime.h\
@@ -1085,7 +1098,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
-	include/ceph/libceph.h\
+	include/cephfs/libcephfs.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
         include/ceph_hash.h\
@@ -1367,19 +1380,8 @@ noinst_HEADERS = \
 	test/system/st_rados_list_objects.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/rados-api/test.h
-
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
-	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
-	$(cosd_SOURCES) $(dupstore_SOURCES) $(store_test_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
-	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
-	$(libcommon_files) $(libmon_la_SOURCES) $(libmds_a_SOURCES) \
-	$(libos_la_SOURCES) $(libosd_la_SOURCES) \
-	$(libosdc_la_SOURCES) $(libclient_la_SOURCES) $(ceph_tool_gui_DATA)
-
-if WITH_RADOSGW
-all_sources += $(librgw_SOURCES)
-endif
+	test/rados-api/test.h \
+	test/unit.h
 
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage

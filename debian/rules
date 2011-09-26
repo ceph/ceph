@@ -55,6 +55,7 @@ build-stamp: configure-stamp
 		--sysconfdir=/etc $(extraopts) $(confflags)
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
+	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
 	touch $@
@@ -69,7 +70,7 @@ clean:
 	  ltmain.sh missing
 	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
 	rm -f src/acconfig.h.in
-	rm -f debian/ceph.init debian/ceph.logrotate
+	rm -f debian/ceph.init debian/radosgw.init debian/ceph.logrotate
 
 	dh_clean
 
@@ -106,7 +107,7 @@ binary-arch: build install
 	dh_strip -pceph-client-tools --dbg-package=ceph-client-tools-dbg
 	dh_strip -plibrados2 --dbg-package=librados2-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
-	dh_strip -plibceph1 --dbg-package=libceph1-dbg
+	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pgceph --dbg-package=gceph-dbg
 	dh_strip -plibrgw1 --dbg-package=librgw1-dbg

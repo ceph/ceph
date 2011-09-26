@@ -24,6 +24,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 {
   int len2 = strlen(str2);
 
+  //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   while (*plen < pos + len2 + 1) {
     *plen += BUF_SIZE;
     *pstr = (char *)realloc(*pstr, (size_t)*plen);
@@ -32,9 +33,11 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
       printf("Out of memory\n");
       exit(1);
     }
+    //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   }
 
   strncpy((*pstr)+pos, str2, len2);
+  (*pstr)[pos+len2] = '\0';
 
   return pos + len2;
 }
@@ -42,14 +45,13 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 char *resolve_addrs(const char *orig_str)
 {
   char *new_str;
-  char *tok, *p, *port_str, *saveptr = NULL;
+  char *tok, *port_str, *saveptr = NULL;
   int len, pos;
   char *buf = strdup(orig_str);
 
   len = BUF_SIZE;
   new_str = (char *)malloc(len);
 
-  p = new_str;
   pos = 0;
 
   tok = strtok_r(buf, ",", &saveptr);
@@ -71,7 +73,7 @@ char *resolve_addrs(const char *orig_str)
       *firstcolon = 0;
       port_str = firstcolon + 1;
     } else if (bracecolon) {
-      /* {ipv6addr}:port */
+      /* [ipv6addr]:port */
       port_str = bracecolon + 1;
       *port_str = 0;
       port_str++;

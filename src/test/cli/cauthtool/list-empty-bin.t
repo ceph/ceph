@@ -1,5 +1,5 @@
   $ touch empty
 
-  $ cauthtool --list --bin empty
+  $ ceph-authtool --list --bin empty
 
-  $ cauthtool -l --bin empty
+  $ ceph-authtool -l --bin empty

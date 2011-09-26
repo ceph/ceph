@@ -466,9 +466,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   } else {
     in = new Inode(cct, st->vino, &st->layout);
     inode_map[st->vino] = in;
-    bool new_root = false;
     if (!root) {
-      new_root = true;
       root = in;
       cwd = root;
       cwd->get();
@@ -557,11 +555,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
     in->flags |= I_COMPLETE;
     if (in->dir) {
-      ldout(cct, 0) << "WARNING: dir is open on empty dir " << in->ino << " with "
-		    << in->dir->dentry_map.size() << " entries" << dendl;
-      in->dir->max_offset = 2;
-      
-      // FIXME: tear down dir?
+      ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
+		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
+      while (!in->dir->dentry_map.empty())
+	unlink(in->dir->dentry_map.begin()->second, true);
+      close_dir(in->dir);
     }
   }  
 
@@ -4241,7 +4239,8 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
 //};
 void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off)
 {
-  strncpy(de->d_name, name, 256);
+  strncpy(de->d_name, name, 255);
+  de->d_name[255] = '\0';
 #ifndef __CYGWIN__
   de->d_ino = ino;
 #ifndef DARWIN
@@ -4609,7 +4608,7 @@ struct dirent * Client::readdir(dir_result_t *d)
   sr.full = false;
 
   /*
-   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like cfuse)
+   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like ceph-fuse)
    * readdir_r_cb=0 end of directory reached on prior call
    * readdir_r_cb=0 entry filled and offset now at end of the directory
    * readdir_r_cb=-1 entry is filled successfully, not end of dir

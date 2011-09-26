@@ -1,0 +1,75 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          single
+# Required-Start:    $remote_fs $named $network $time
+# Required-Stop:     $remote_fs $named $network $time
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: radosgw
+### END INIT INFO
+
+PATH=/sbin:/bin:/usr/bin
+
+. /lib/lsb/init-functions
+
+# prefix for radosgw instances in ceph.conf
+PREFIX='client.radosgw.'
+
+# user to run radosgw as
+USER='www-data'
+
+# directory to write logs to
+LOGDIR='/var/log/radosgw'
+
+RADOSGW=`which radosgw`
+if [ ! -x "$RADOSGW" ]; then
+    exit 0
+fi
+
+# make sure log dir exists
+if [ ! -d "$LOGDIR" ]; then
+    mkdir -p $LOGDIR
+    chown $USER $LOGDIR
+fi
+
+case "$1" in
+    start)
+	for name in `ceph-conf --list-sections $PREFIX`;
+	do
+	    auto_start=`ceph-conf -n $name 'auto start'`
+	    if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
+		continue
+	    fi
+
+            # is the socket defined?  if it's not, this instance shouldn't run as a daemon.
+	    rgw_socket=`ceph-conf -n $name 'rgw socket path'`
+	    if [ -z "$rgw_socket" ]; then
+		continue
+	    fi
+
+            # mapped to this host?
+	    host=`ceph-conf -n $name host`
+	    if [ -n "$host" ] && [ "$host" != `hostname` ]; then
+		continue
+	    fi
+
+            echo "Starting $name..."
+            # when radosgw grows support for daemonizing itself and setting up a pidfile, we can do
+            #   start-stop-daemon --start -u $USER -p $pid_file -x $RADOSGW -- -n $name
+            # but until then,
+            su - $USER -c "radosgw -n $name >> /var/log/radosgw/$name.log 2>&1 &"
+	done
+        ;;
+    restart|reload|force-reload)
+        $0 stop
+        $0 start
+        ;;
+    stop)
+        start-stop-daemon --stop -x $RADOSGW
+        ;;
+    *)
+        echo "Usage: $0 start|stop|restart" >&2
+        exit 3
+        ;;
+esac
+

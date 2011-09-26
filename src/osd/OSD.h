@@ -206,6 +206,7 @@ private:
   int state;
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
   epoch_t up_epoch;    // _most_recent_ epoch we were marked up
+  epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
 
 public:
   bool is_booting() { return state == STATE_BOOTING; }
@@ -303,6 +304,11 @@ private:
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
+  void take_waiter(Message *o) {
+    finished_lock.Lock();
+    finished.push_back(o);
+    finished_lock.Unlock();
+  }
   void push_waiters(list<class Message*>& ls) {
     assert(osd_lock.is_locked());   // currently, at least.  be careful if we change this (see #743)
     finished_lock.Lock();
@@ -351,7 +357,6 @@ private:
   Cond  op_queue_cond;
   
   void wait_for_no_ops();
-  void throttle_op_queue();
   void enqueue_op(PG *pg, Message *op);
   void dequeue_op(PG *pg);
   static void static_dequeueop(OSD *o, PG *pg) {
@@ -395,7 +400,6 @@ private:
   map<epoch_t,bufferlist> map_inc_bl;
   map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
-  epoch_t map_cache_keep_from;
 
   OSDMap* get_map(epoch_t e);
   void add_map(OSDMap *o);
@@ -404,13 +408,12 @@ private:
   void trim_map_cache(epoch_t oldest);
   void trim_map_bl_cache(epoch_t oldest);
   void clear_map_cache();
-  void keep_map_from(epoch_t from);
 
   bool get_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
-  MOSDMap *build_incremental_map_msg(epoch_t since);
+  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
 
 protected:
@@ -505,14 +508,14 @@ protected:
 
   // -- failures --
   set<int> failure_queue;
-  set<int> failure_pending;
+  map<int,entity_inst_t> failure_pending;
 
 
   void queue_failure(int n) {
     failure_queue.insert(n);
   }
   void send_failures();
-  void send_still_alive(int osd);
+  void send_still_alive(entity_inst_t i);
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
@@ -1004,6 +1007,7 @@ public:
   int shutdown();
 
   void reply_op_error(MOSDOp *op, int r);
+  void reply_op_error(MOSDOp *op, int r, eversion_t v);
   void handle_misdirected_op(PG *pg, MOSDOp *op);
 
   void handle_rep_scrub(MOSDRepScrub *m);

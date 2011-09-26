@@ -125,7 +125,8 @@ If there are multiple monitors::
 
         mount.ceph monhost1,monhost2,monhost3:/ /mnt/foo
 
-If cmon(8) is running on a non-standard port::
+If :doc:`ceph-mon </man/8/ceph-mon>`\(8) is running on a non-standard
+port::
 
         mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
 
@@ -149,5 +150,5 @@ information.
 See also
 ========
 
-:doc:`cfuse <cfuse>`\(8),
+:doc:`ceph-fuse <ceph-fuse>`\(8),
 :doc:`ceph <ceph>`\(8)

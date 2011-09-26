@@ -40,8 +40,8 @@
 
     "objecter" -> "OSDMap"
 
-    "cosd" -> "PG"
-    "cosd" -> "ObjectStore"
+    "ceph-osd" -> "PG"
+    "ceph-osd" -> "ObjectStore"
 
     "crushtool" -> "CrushWrapper"
 

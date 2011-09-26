@@ -1,2 +1,2 @@
-usr/bin/cfuse
-usr/share/man/man8/cfuse.8
+usr/bin/ceph-fuse
+usr/share/man/man8/ceph-fuse.8

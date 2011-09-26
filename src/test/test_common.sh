@@ -45,7 +45,7 @@ stop_osd() {
         if [ -e $pidfile ]; then
                 kill `cat $pidfile` && return 0
         else
-                echo "cosd process $osd_index is not running"
+                echo "ceph-osd process $osd_index is not running"
         fi
         return 1
 }
@@ -53,7 +53,7 @@ stop_osd() {
 # Restart an OSD started by vstart
 restart_osd() {
         osd_index=$1
-        ./cosd -i $osd_index -c ceph.conf &
+        ./ceph-osd -i $osd_index -c ceph.conf &
 }
 
 # Ask the user a yes/no question and get the response

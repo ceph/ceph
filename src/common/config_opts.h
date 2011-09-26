@@ -78,6 +78,7 @@ OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(mon_data, OPT_STR, "")
+OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
 OPTION(mon_osd_auto_mark_in, OPT_BOOL, true)    // automatically mark new osds 'in'
@@ -233,6 +234,8 @@ OPTION(osd_pool_default_crush_rule, OPT_INT, 0)
 OPTION(osd_pool_default_size, OPT_INT, 2)
 OPTION(osd_pool_default_pg_num, OPT_INT, 8)
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8)
+OPTION(osd_map_cache_max, OPT_INT, 250)
+OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_max_opq, OPT_INT, 10)
 OPTION(osd_disk_threads, OPT_INT, 1)

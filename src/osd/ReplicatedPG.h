@@ -485,6 +485,8 @@ protected:
   map<hobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
+  void populate_obc_watchers(ObjectContext *obc);
+
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
       ObjectContext *obc = object_contexts[soid];
@@ -509,6 +511,8 @@ protected:
 			  const object_locator_t& oloc,
 			  ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
+
+  void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create);

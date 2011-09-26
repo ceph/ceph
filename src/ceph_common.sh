@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CCONF="$BINDIR/cconf"
+CCONF="$BINDIR/ceph-conf"
 
 default_conf=$ETCDIR"/ceph.conf"
 conf=$default_conf
@@ -97,7 +97,12 @@ do_root_cmd() {
     if [ -z "$ssh" ]; then
 	[ $verbose -eq 1 ] && echo "--- $host# $1"
 	ulimit -c unlimited
-	sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	whoami=`whoami`
+	if [ "$whoami" = "root" ]; then
+	    bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	else
+	    sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	fi
     else
 	[ $verbose -eq 1 ] && echo "--- $rootssh $2 \"cd $sshdir ; ulimit -c unlimited ; $1\""
 	$rootssh $2 "cd $sshdir ; ulimit -c unlimited ; $1" || { echo "failed: '$rootssh $1'" ; exit 1; }

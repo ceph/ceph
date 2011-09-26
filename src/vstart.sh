@@ -80,15 +80,15 @@ case $1 in
     --smallmds )
 	    smallmds=1
 	    ;;
-    mon | cmon )
+    mon )
 	    start_mon=1
 	    start_all=0
 	    ;;
-    mds | cmds )
+    mds )
 	    start_mds=1
 	    start_all=0
 	    ;;
-    osd | cosd )
+    osd )
 	    start_osd=1
 	    start_all=0
 	    ;;
@@ -137,8 +137,8 @@ run() {
 	    echo "$*"
 	    $*
 	else
-	    echo "crun $* -f &"
-	    ./crun $* -f &
+	    echo "ceph-run $* -f &"
+	    ./ceph-run $* -f &
 	fi
     fi
 }
@@ -165,7 +165,7 @@ else
         debug osd = 25
         debug monc = 20
         debug journal = 20
-        debug filestore = 10'
+        debug filestore = 20'
     CMDSDEBUG='
         lockdep = 1
         debug ms = 1
@@ -302,8 +302,8 @@ EOF
 			echo
 		fi
 
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mon. $keyring_fn
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --gen-key --name=client.admin --set-uid=0 \
+	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn
+	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
 		    --cap mds allow \
@@ -330,7 +330,7 @@ EOF
 
 		for f in $MONS
 		do
-		    cmd="$CEPH_BIN/cmon --mkfs -c $conf -i $f --monmap=$monmap_fn --osdmap=$osdmap_fn"
+		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn --osdmap=$osdmap_fn"
 		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
 		    $cmd
@@ -343,7 +343,7 @@ EOF
 	if [ "$start_mon" -ne 0 ]; then
 		for f in $MONS
 		do
-		    run 'mon' $CEPH_BIN/cmon -i $f $ARGS $CMON_ARGS
+		    run 'mon' $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
 		done
 		sleep 1
 	fi
@@ -368,7 +368,7 @@ EOF
 EOF
 	    fi
 	    echo mkfs osd$osd
-	    cmd="$SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs --mkkey"
+	    cmd="$SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey"
 	    echo $cmd
 	    $cmd
 
@@ -379,7 +379,7 @@ EOF
 	    fi
 	fi
 	echo start osd$osd
-	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
+	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
     done
 fi
 
@@ -417,26 +417,26 @@ EOF
 EOF
 		fi
 	    fi
-	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name $key_fn
+	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.$name $key_fn
 	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow *' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
-		    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.${name}s \
+		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
 			dev/mds.${name}s.keyring
                     $SUDO $CEPH_ADM -i dev/mds.${name}s.keyring auth add mds.${name}s \
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 	fi
 	
-	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
+	run 'mds' $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
 	if [ "$standby" -eq 1 ]; then
-	    run 'mds' $CEPH_BIN/cmds -i ${name}s $ARGS $CMDS_ARGS
+	    run 'mds' $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
 	fi
 	
 	mds=$(($mds + 1))
 	[ $mds -eq $CEPH_NUM_MDS ] && break
 
-#valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
-#$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+#valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
+#$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_ADM mds set_max_mds 2
     done
     cmd="$CEPH_ADM mds set_max_mds $CEPH_NUM_MDS"

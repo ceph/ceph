@@ -99,6 +99,7 @@ allhosts=0
 debug=0
 monaddr=
 dobtrfs=1
+dobtrfsumount=0
 verbose=0
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
@@ -132,6 +133,9 @@ case $1 in
 	    ;;
     --nobtrfs)
 	    dobtrfs=0
+	    ;;
+    --btrfsumount)
+	    dobtrfsumount=1
 	    ;;
     --conf | -c)
 	    [ -z "$2" ] && usage_exit
@@ -249,7 +253,7 @@ for name in $what; do
 	    runarg=""
 	    
 	    [ -z "$crun" ] && get_conf_bool crun "0" "restart on core dump"
-	    [ "$crun" -eq 1 ] && wrap="$BINDIR/crun"
+	    [ "$crun" -eq 1 ] && wrap="$BINDIR/ceph-run"
 	    
 	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "" "valgrind"
 	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"
@@ -284,7 +288,7 @@ for name in $what; do
 	    stop_daemon $name c$type $pid_file
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
-	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
+	    if [ $dobtrfsumount -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		echo Unmounting Btrfs on $host:$btrfs_path
 		do_root_cmd "umount $btrfs_path || true"
 	    fi

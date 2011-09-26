@@ -1,6 +1,6 @@
 #!/bin/sh -ex
 
-cauthtool --create-keyring k --gen-key -p --name client.xx
+ceph-authtool --create-keyring k --gen-key -p --name client.xx
 ceph auth add -i k client.xx mon "allow command foo; allow command bar *; allow command baz ...; allow command foo add * mon allow\\ rwx osd allow\\ *"
 
 ( ceph -k k -n client.xx foo      || true ) | grep 'unrecog'

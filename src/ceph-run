@@ -1,0 +1,21 @@
+#!/bin/sh
+
+sleep=5
+
+while [ true ]; do
+    "$@"
+    exit_code=$?
+    
+    if [ $exit_code -gt 128 ]; then
+	case $(($exit_code-128)) in
+	    3 | 4 | 5 | 6 | 8 | 11)
+		;;
+	    *)
+		exit;
+	esac
+	echo ceph-run: $1 dumped core, restarting in $sleep seconds...
+	sleep $sleep
+    else
+	exit
+    fi
+done

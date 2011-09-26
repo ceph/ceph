@@ -750,7 +750,7 @@ int FileStore::wipe_subvol(const char *s)
 {
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
-  strcpy(volargs.name, s);
+  strncpy(volargs.name, s, sizeof(volargs.name)-1);
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
     int err = errno;
@@ -1016,7 +1016,7 @@ int FileStore::lock_fsid()
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     char buf[80];
-    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another ceph-osd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   return 0;

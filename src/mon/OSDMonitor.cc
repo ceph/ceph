@@ -933,7 +933,7 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest)
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << dest << dendl;
   while (first <= osdmap.get_epoch()) {
-    epoch_t last = MIN(first + 100, osdmap.get_epoch());
+    epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
     mon->messenger->send_message(m, dest);
     first = last + 1;
@@ -1902,6 +1902,19 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 		return true;
+	      }
+	    } else if (m->cmd[4] == "crush_ruleset") {
+	      if (osdmap.crush.rule_exists(n)) {
+		pending_inc.new_pools[pool] = osdmap.pools[pool];
+		pending_inc.new_pools[pool].v.crush_ruleset = n;
+		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+		ss << "set pool " << pool << " crush_ruleset to " << n;
+		getline(ss, rs);
+		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+		return true;
+	      } else {
+		ss << "crush ruleset " << n << " dne";
+		err = -ENOENT;
 	      }
 	    } else {
 	      ss << "unrecognized pool field " << m->cmd[4];

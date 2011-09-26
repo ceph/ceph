@@ -29,7 +29,7 @@
 #include "Common/Filesystem.h"
 #include "Common/System.h"
 
-#include <ceph/libceph.h>
+#include <cephfs/libcephfs.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>

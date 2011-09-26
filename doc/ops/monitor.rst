@@ -1,3 +1,5 @@
+.. index:: monitoring, metrics
+
 =================
  Monitoring Ceph
 =================

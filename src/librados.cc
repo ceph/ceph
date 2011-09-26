@@ -1734,8 +1734,6 @@ int librados::RadosClient::operate(IoCtxImpl& io, const object_t& oid,
 int librados::RadosClient::operate_read(IoCtxImpl& io, const object_t& oid,
 					::ObjectOperation *o, bufferlist *pbl)
 {
-  utime_t ut = ceph_clock_now(cct);
-
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
@@ -2044,8 +2042,6 @@ int librados::RadosClient::tmap_put(IoCtxImpl& io, const object_t& oid, bufferli
 
 int librados::RadosClient::tmap_get(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 {
-  utime_t ut = ceph_clock_now(cct);
-
   /* can't write to a snapshot */
   if (io.snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -2081,8 +2077,6 @@ int librados::RadosClient::exec(IoCtxImpl& io, const object_t& oid,
 				const char *cls, const char *method,
 				bufferlist& inbl, bufferlist& outbl)
 {
-  utime_t ut = ceph_clock_now(cct);
-
   Mutex mylock("RadosClient::exec::mylock");
   Cond cond;
   bool done;
@@ -2437,8 +2431,6 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
 int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
 				 uint64_t *cookie, librados::WatchCtx *ctx)
 {
-  utime_t ut = ceph_clock_now(cct);
-
   ::ObjectOperation rd;
   Mutex mylock("RadosClient::watch::mylock");
   Cond cond;
@@ -2478,8 +2470,6 @@ int librados::RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ve
 int librados::RadosClient::_notify_ack(IoCtxImpl& io, const object_t& oid,
 				       uint64_t notify_id, uint64_t ver)
 {
-  utime_t ut = ceph_clock_now(cct);
-
   Mutex mylock("RadosClient::watch::mylock");
   Cond cond;
   eversion_t objver;
@@ -2494,7 +2484,6 @@ int librados::RadosClient::_notify_ack(IoCtxImpl& io, const object_t& oid,
 
 int librados::RadosClient::unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 {
-  utime_t ut = ceph_clock_now(cct);
   bufferlist inbl, outbl;
 
   Mutex mylock("RadosClient::watch::mylock");
@@ -2525,7 +2514,6 @@ int librados::RadosClient::unwatch(IoCtxImpl& io, const object_t& oid, uint64_t 
 
 int librados::RadosClient::notify(IoCtxImpl& io, const object_t& oid, uint64_t ver, bufferlist& bl)
 {
-  utime_t ut = ceph_clock_now(cct);
   bufferlist inbl, outbl;
 
   Mutex mylock("RadosClient::notify::mylock");
