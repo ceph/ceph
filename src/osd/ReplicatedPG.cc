@@ -1449,7 +1449,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  break;
 	}
 	if (result < 0) {
-	  dout(10) << "comparison returned " << result << " " << strerror(-result) << dendl;
+	  dout(10) << "comparison returned " << result << " " << cpp_strerror(-result) << dendl;
 	  break;
 	}
 
@@ -1986,8 +1986,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      if (!ip.end()) {
 		::decode(nextkey, ip);
 		::decode(nextval, ip);
-	      } else
+	      } else {
 		have_next = false;
+	      }
 	    }
 	    
 	    if (op == CEPH_OSD_TMAP_SET) {
@@ -2007,6 +2008,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      dout(20) << "   create " << key << " " << val.length() << dendl;
 	      nkeys++;
 	    } else if (op == CEPH_OSD_TMAP_RM) {
+	      if (!key_exists) {
+		return -ENOENT;
+	      }
 	      // do nothing.
 	    }
 	  }

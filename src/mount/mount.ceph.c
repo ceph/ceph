@@ -298,7 +298,9 @@ static void modprobe(void) {
 	int status;
 	status = system("/sbin/modprobe ceph");
 	if (status < 0) {
-		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n", strerror(errno));
+		char error_buf[80];
+		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n",
+				strerror_r(errno, error_buf, sizeof(error_buf)));
 	} else if (WIFEXITED(status)) {
 		status = WEXITSTATUS(status);
 		if (status != 0) {

@@ -18,6 +18,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/errno.h"
 
 #include "client/Client.h"
 #include "client/fuse_ll.h"
@@ -102,7 +103,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (g_conf->daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno) << std::endl;
       exit(1);
     }
 
@@ -125,7 +126,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     // use my argc, argv (make sure you pass a mount point!)
     int r = client->mount(g_conf->client_mountpoint.c_str());
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_shutdown;
     }
     
@@ -164,10 +165,11 @@ int main(int argc, const char **argv, const char *envp[]) {
       ::close(0);
       ::close(1);
       ::close(2);
-    } else if (err)
-      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << strerror(-err) << std::endl;
-    else
-      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << strerror(-r) << std::endl;
+    } else if (err) {
+      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << cpp_strerror(-err) << std::endl;
+    } else {
+      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << cpp_strerror(-r) << std::endl;
+    }
     return r;
   }
 }

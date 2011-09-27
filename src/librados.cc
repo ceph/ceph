@@ -45,6 +45,7 @@ using namespace std;
 #include "include/rados/librados.hpp"
 
 #include "messages/MWatchNotify.h"
+#include "common/errno.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
@@ -955,7 +956,7 @@ int librados::RadosClient::connect()
 
   err = monclient.authenticate(conf->client_mount_timeout);
   if (err) {
-    ldout(cct, 0) << conf->name << " authentication error " << strerror(-err) << dendl;
+    ldout(cct, 0) << conf->name << " authentication error " << cpp_strerror(-err) << dendl;
     shutdown();
     goto out;
   }

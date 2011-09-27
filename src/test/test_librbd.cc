@@ -30,6 +30,7 @@
 #include <algorithm>
 
 #include "rados-api/test.cc"
+#include "common/errno.h"
 
 using namespace std;
 
@@ -806,7 +807,7 @@ TEST(LibRBD, TestIOToSnapshot)
   r = rbd_write(image, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  printf("%s\n", strerror(-r));
+  cout << cpp_strerror(-r) << std::endl;
 
   read_test_data(image, orig_data, 0, TEST_IO_TO_SNAP_SIZE);
   rbd_snap_set(image, "written");
@@ -826,7 +827,7 @@ TEST(LibRBD, TestIOToSnapshot)
   r = rbd_write(image_at_snap, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  printf("%s\n", strerror(-r));
+  cout << cpp_strerror(-r) << std::endl;
   ASSERT_EQ(0, rbd_close(image_at_snap));
 
   ASSERT_EQ(2, test_ls_snaps(image, 2, "orig", isize, "written", isize));

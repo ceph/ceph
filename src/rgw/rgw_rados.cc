@@ -99,6 +99,8 @@ int RGWRados::open_root_pool_ctx()
   int r = rados->ioctx_create(RGW_ROOT_BUCKET, root_pool_ctx);
   if (r == -ENOENT) {
     r = rados->pool_create(RGW_ROOT_BUCKET);
+    if (r == -EEXIST)
+      r = 0;
     if (r < 0)
       return r;
 
@@ -113,6 +115,8 @@ int RGWRados::init_watch()
   int r = rados->ioctx_create(RGW_CONTROL_BUCKET, control_pool_ctx);
   if (r == -ENOENT) {
     r = rados->pool_create(RGW_CONTROL_BUCKET);
+    if (r == -EEXIST)
+      r = 0;
     if (r < 0)
       return r;
 
@@ -289,7 +293,10 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
  * if auid is set, it sets the auid of the underlying rados io_ctx
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive, uint64_t auid)
+int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, 
+			    map<std::string, bufferlist>& attrs, 
+			    bool create_pool, bool assign_marker,
+			    bool exclusive, uint64_t auid)
 {
   librados::ObjectWriteOperation op;
   op.create(exclusive);
@@ -304,7 +311,9 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string
 
   if (create_pool) {
     ret = rados->pool_create(bucket.pool.c_str(), auid);
-    if (ret < 0 && ret != -EEXIST)
+    if (ret == -EEXIST)
+      ret = 0;
+    if (ret < 0)
       root_pool_ctx.remove(bucket.name.c_str());
   }
 

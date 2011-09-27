@@ -36,6 +36,8 @@ using namespace librados;
 #include <errno.h>
 #include <dirent.h>
 
+#include "common/errno.h"
+
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
 
@@ -217,7 +219,7 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
 {
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
-    cerr << "cannot get random bytes: " << strerror(-ret) << std::endl;
+    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
     return -1;
   }
 

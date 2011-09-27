@@ -42,7 +42,7 @@ void _usage()
   cerr << "  subuser rm                 remove subuser\n";
   cerr << "  key create                 create access key\n";
   cerr << "  key rm                     remove access key\n";
-  cerr << "  buckets list               list buckets\n";
+  cerr << "  bucket list                list buckets\n";
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
@@ -222,6 +222,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
   } else if (strcmp(prev_cmd, "bucket") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_BUCKETS_LIST;
     if (strcmp(cmd, "link") == 0)
       return OPT_BUCKET_LINK;
     if (strcmp(cmd, "unlink") == 0)

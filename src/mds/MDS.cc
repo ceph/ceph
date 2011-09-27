@@ -69,6 +69,7 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/DoutStreambuf.h"
 
 #include "perfglue/cpu_profiler.h"
@@ -1613,7 +1614,8 @@ void MDS::respawn()
   unblock_all_signals(NULL);
   execv(orig_argv[0], new_argv);
 
-  dout(0) << "respawn execv " << orig_argv[0] << " failed with " << strerror(errno) << dendl;
+  dout(0) << "respawn execv " << orig_argv[0]
+	  << " failed with " << cpp_strerror(errno) << dendl;
   suicide();
 }
 

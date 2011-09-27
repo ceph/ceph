@@ -12,7 +12,7 @@
     subuser rm                 remove subuser
     key create                 create access key
     key rm                     remove access key
-    buckets list               list buckets
+    bucket list                list buckets
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics

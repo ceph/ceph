@@ -755,21 +755,16 @@ int create(IoCtx& io_ctx, const char *imgname, uint64_t size, int *order)
   bl.append((const char *)&header, sizeof(header));
 
   ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-  bufferlist cmdbl, emptybl;
-  __u8 c = CEPH_OSD_TMAP_SET;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  ::encode(emptybl, cmdbl);
-  r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
+  r = tmap_set(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error adding img to directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error adding img to directory: " << cpp_strerror(-r)<< dendl;
     return r;
   }
 
   ldout(cct, 2) << "creating rbd image..." << dendl;
   r = io_ctx.write(md_oid, bl, bl.length(), 0);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -792,7 +787,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   bufferlist header;
   int r = read_header_bl(io_ctx, md_oid, header, &ver);
   if (r < 0) {
-    lderr(cct) << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error reading header: " << md_oid << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = io_ctx.stat(dst_md_oid, NULL, NULL);
@@ -802,7 +797,7 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   }
   r = write_header(io_ctx, dst_md_oid, header);
   if (r < 0) {
-    lderr(cct) << "error writing header: " << dst_md_oid << ": " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << dst_md_oid << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = tmap_set(io_ctx, dstname_str);
@@ -847,20 +842,19 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
 
   struct rbd_obj_header_ondisk header;
   int r = read_header(io_ctx, md_oid, &header, NULL);
+  if (r < 0) {
+    ldout(cct, 2) << "error reading header: " << cpp_strerror(-r) << dendl;
+  }
   if (r >= 0) {
     trim_image(io_ctx, header, 0, prog_ctx);
     ldout(cct, 2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
 
-  ldout(cct, 2) << "removing rbd image to directory..." << dendl;
-  bufferlist cmdbl;
-  __u8 c = CEPH_OSD_TMAP_RM;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  r = io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
+  ldout(cct, 2) << "removing rbd image from directory..." << dendl;
+  r = tmap_rm(io_ctx, imgname);
   if (r < 0) {
-    lderr(cct) << "error removing img from directory: " << strerror(-r)<< dendl;
+    lderr(cct) << "error removing img from directory: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -901,7 +895,7 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
-    lderr(cct) << "error writing header: " << strerror(-r) << dendl;
+    lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
     return r;
   } else {
     notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -943,7 +937,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
-    lderr(ictx->cct) << "failed to create snap id: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "failed to create snap id: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -952,7 +946,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 
   r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_add execution failed failed: " << cpp_strerror(-r) << dendl;
     return r;
   }
   notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
@@ -969,7 +963,7 @@ int rm_snap(ImageCtx *ictx, const char *snap_name)
 
   int r = ictx->md_ctx.exec(ictx->md_oid(), "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
+    lderr(ictx->cct) << "rbd.snap_remove execution failed: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -1261,7 +1255,7 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
   int64_t total_read = 0;
   ictx->lock.Lock();
   uint64_t start_block = get_block_num(ictx->header, off);
-  uint64_t end_block = get_block_num(ictx->header, off + len);
+  uint64_t end_block = get_block_num(ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(ictx->header);
   ictx->lock.Unlock();
   uint64_t left = len;
@@ -1377,7 +1371,7 @@ ssize_t handle_sparse_read(CephContext *cct,
     ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
 
     /* a hole? */
-    if (extent_ofs - block_ofs > 0) {
+    if (extent_ofs > block_ofs) {
       ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << extent_ofs << dendl;
       r = cb(buf_ofs, extent_ofs - block_ofs, NULL, arg);
       if (r < 0) {
@@ -1404,7 +1398,7 @@ ssize_t handle_sparse_read(CephContext *cct,
   }
 
   /* last hole */
-  if (buf_len - buf_ofs) {
+  if (buf_len > buf_ofs) {
     ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_len - buf_ofs << dendl;
     r = cb(buf_ofs, buf_len - buf_ofs, NULL, arg);
     if (r < 0) {

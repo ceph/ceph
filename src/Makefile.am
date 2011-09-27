@@ -974,7 +974,8 @@ dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
 
 python_PYTHON = pybind/rados.py \
-		pybind/rgw.py
+		pybind/rgw.py \
+		pybind/rbd.py
 
 if WITH_DEBUG
 dist_bin_SCRIPTS += test/ceph-pybind-test.py \

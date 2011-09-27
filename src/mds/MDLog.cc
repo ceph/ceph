@@ -25,6 +25,7 @@
 #include "events/ESubtreeMap.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND
@@ -499,7 +500,7 @@ void MDLog::_replay_thread()
           while (!done)
             cond.Wait(mylock);
           if (err) { // well, crap
-            dout(0) << "got error while reading head: " << strerror(err)
+            dout(0) << "got error while reading head: " << cpp_strerror(err)
                     << dendl;
             mds->suicide();
           }
