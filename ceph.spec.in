@@ -216,6 +216,9 @@ fi
 %{python_sitelib}/rados.py
 %{python_sitelib}/rados.pyc
 %{python_sitelib}/rados.pyo
+%{python_sitelib}/rbd.py
+%{python_sitelib}/rbd.pyc
+%{python_sitelib}/rbd.pyo
 %{python_sitelib}/rgw.py
 %{python_sitelib}/rgw.pyc
 %{python_sitelib}/rgw.pyo
