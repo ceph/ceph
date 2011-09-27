@@ -138,15 +138,6 @@ public:
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
 
-    /*
-    bool is_pg_change() {
-      return (fullmap.length() ||
-	      crush.length() ||
-	      new_pg_num ||
-	      new_lpg_num);
-    }
-    */
-
     // full (rare)
     bufferlist fullmap;  // in leiu of below.
     bufferlist crush;
