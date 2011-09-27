@@ -155,13 +155,6 @@ int RGWRados::open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx)
   return r;
 }
 
-class RGWRadosListState {
-public:
-  std::list<string> list;
-  std::list<string>::iterator pos;
-  RGWRadosListState() : pos(0) {}
-};
-
 /**
  * set up a bucket listing.
  * id is ignored
@@ -170,18 +163,8 @@ public:
  */
 int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
 {
-  RGWRadosListState *state = new RGWRadosListState();
-
-  if (!state)
-    return -ENOMEM;
-
-  int r = rados->pool_list(state->list);
-  if (r < 0)
-    return r;
-  state->pos = state->list.begin();
-
+  librados::ObjectIterator *state = new librados::ObjectIterator(root_pool_ctx.objects_begin());
   *handle = (RGWAccessHandle)state;
-
   return 0;
 }
 
@@ -194,15 +177,17 @@ int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
  */
 int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
 {
-  RGWRadosListState *state = (RGWRadosListState *)*handle;
+  librados::ObjectIterator *state = (librados::ObjectIterator *)*handle;
 
-  if (state->pos == state->list.end()) {
-    delete state;
-    return -ENOENT;
-  }
+  do {
+    if (*state == root_pool_ctx.objects_end()) {
+      delete state;
+      return -ENOENT;
+    }
 
-  obj.name = *state->pos;
-  state->pos++;
+    obj.name = **state;
+    (*state)++;
+  } while (obj.name[0] == '.');
 
   /* FIXME: should read mtime/size vals for bucket */
 
