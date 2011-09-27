@@ -314,7 +314,7 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
     uint32_t nop = 0;
     ::encode(nop, bl);
 
-    r = control_pool_ctx.write(bucket_marker_ver_oid, bl, bl.length(), 0);
+    r = root_pool_ctx.write(bucket_marker_ver_oid, bl, bl.length(), 0);
     if (r < 0)
       return r;
 

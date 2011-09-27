@@ -96,8 +96,8 @@ class RGWRados  : public RGWAccess
 
   RGWWatcher *watcher;
   uint64_t watch_handle;
-  librados::IoCtx root_pool_ctx;
-  librados::IoCtx control_pool_ctx;
+  librados::IoCtx root_pool_ctx;      // .rgw
+  librados::IoCtx control_pool_ctx;   // .rgw.control
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
