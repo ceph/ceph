@@ -495,7 +495,25 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	  r = 0;
 	}
       }
-    } else {
+    }
+    else if ((m->cmd[1] == "print-key" || m->cmd[1] == "print_key") &&
+	     m->cmd.size() == 3) {
+      EntityName ename;
+      if (!ename.from_str(m->cmd[2])) {
+	ss << "failed to identify entity name from " << m->cmd[2];
+	r = -ENOENT;
+	goto done;
+      }
+      EntityAuth auth;
+      if (!mon->key_server.get_auth(ename, auth)) {
+	ss << "don't have " << ename;
+	r = -ENOENT;
+	goto done;
+      }
+      ss << auth.key;
+      r = 0;      
+    }
+    else {
       auth_usage(ss);
       r = -EINVAL;
     }
@@ -504,6 +522,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
     r = -EINVAL;
   }
 
+ done:
   string rs;
   getline(ss, rs, '\0');
   mon->reply_command(m, r, rs, rdata, paxos->get_version());
