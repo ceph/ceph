@@ -566,21 +566,27 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
       bufferlist bl = m->get_data();
       dout(10) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
-      bufferlist::iterator iter = bl.begin();
-      KeyRing keyring;
-      try {
-        ::decode(keyring, iter);
-      } catch (const buffer::error &err) {
-        ss << "error decoding keyring";
-        rs = -EINVAL;
-        goto done;
+      if (bl.length()) {
+	bufferlist::iterator iter = bl.begin();
+	KeyRing keyring;
+	try {
+	  ::decode(keyring, iter);
+	} catch (const buffer::error &err) {
+	  ss << "error decoding keyring";
+	  rs = -EINVAL;
+	  goto done;
+	}
+        if (!keyring.get_auth(auth_inc.name, auth_inc.auth)) {
+	  ss << "key for " << auth_inc.name << " not found in provided keyring";
+	  rs = -EINVAL;
+	  goto done;
+	}
+      } else {
+	// generate a new random key
+	dout(10) << "AuthMonitor::prepare_command generating random key for " << auth_inc.name << dendl;
+	auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
       }
 
-      if (!keyring.get_auth(auth_inc.name, auth_inc.auth)) {
-	ss << "key for " << auth_inc.name << " not found in provided keyring";
-        rs = -EINVAL;
-        goto done;
-      }
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
 
       // suck in any caps too
