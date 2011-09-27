@@ -543,9 +543,9 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       KeyRing keyring;
       try {
         ::decode(keyring, iter);
-      } catch (const buffer::error &err) {
+      } catch (const buffer::error &ex) {
         ss << "error decoding keyring";
-        rs = -EINVAL;
+        rs = err;
         goto done;
       }
       import_keyring(keyring);
@@ -559,7 +559,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       if (m->cmd.size() >= 3) {
         if (!auth_inc.name.from_str(m->cmd[2])) {
           ss << "bad entity name";
-          rs = -EINVAL;
+          err = -EINVAL;
           goto done;
         }
       }
@@ -571,14 +571,14 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	KeyRing keyring;
 	try {
 	  ::decode(keyring, iter);
-	} catch (const buffer::error &err) {
+	} catch (const buffer::error &ex) {
 	  ss << "error decoding keyring";
-	  rs = -EINVAL;
+	  err = -EINVAL;
 	  goto done;
 	}
         if (!keyring.get_auth(auth_inc.name, auth_inc.auth)) {
 	  ss << "key for " << auth_inc.name << " not found in provided keyring";
-	  rs = -EINVAL;
+	  err = -EINVAL;
 	  goto done;
 	}
       } else {
@@ -605,12 +605,12 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       KeyServerData::Incremental auth_inc;
       if (!auth_inc.name.from_str(m->cmd[2])) {
 	ss << "bad entity name";
-	rs = -EINVAL;
+	err = -EINVAL;
 	goto done;
       }
       if (!mon->key_server.contains(auth_inc.name)) {
         ss << "couldn't find entry " << auth_inc.name;
-        rs = -ENOENT;
+        err = -ENOENT;
         goto done;
       }
       mon->key_server.get_auth(auth_inc.name, auth_inc.auth);
@@ -634,7 +634,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       auth_inc.name.from_str(name);
       if (!mon->key_server.contains(auth_inc.name)) {
         ss << "couldn't find entry " << name;
-        rs = -ENOENT;
+        err = -ENOENT;
         goto done;
       }
       auth_inc.op = KeyServerData::AUTH_INC_DEL;
