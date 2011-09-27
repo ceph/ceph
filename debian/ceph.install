@@ -1,4 +1,3 @@
-usr/bin/ceph
 usr/bin/ceph-clsinfo
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -7,7 +6,6 @@ usr/bin/ceph-run
 usr/bin/ceph-mon
 usr/bin/ceph-mds
 usr/bin/ceph-osd
-usr/bin/ceph-authtool
 usr/bin/ceph-debugpack
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
@@ -22,8 +20,6 @@ usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/monmaptool.8
-usr/share/man/man8/ceph.8
-usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
 etc/bash_completion.d/ceph

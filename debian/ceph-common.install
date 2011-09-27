@@ -1,9 +1,13 @@
 sbin/mount.ceph
+usr/bin/ceph
 usr/bin/cephfs
 usr/bin/ceph-conf
 usr/bin/ceph-syn
+usr/bin/ceph-authtool
 usr/bin/rados
 usr/bin/rbd
+usr/share/man/man8/ceph.8
+usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-syn.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/rados.8
