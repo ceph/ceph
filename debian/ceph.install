@@ -1,6 +1,4 @@
 usr/bin/ceph
-usr/bin/cephfs
-usr/bin/ceph-conf
 usr/bin/ceph-clsinfo
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -24,9 +22,7 @@ usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/monmaptool.8
-usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph.8
-usr/share/man/man8/cephfs.8
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
