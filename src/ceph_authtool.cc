@@ -96,7 +96,7 @@ int main(int argc, const char **argv)
       ::encode(my_val, caps[my_key]);
     } else if (ceph_argparse_flag(args, i, "-p", "--print-key", (char*)NULL)) {
       print_key = true;
-    } else if (ceph_argparse_flag(args, i, "--create-keyring", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-C", "--create-keyring", (char*)NULL)) {
       create_keyring = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
