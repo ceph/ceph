@@ -1,13 +1,9 @@
 """librgw Python ctypes wrapper
 Copyright 2011, New Dream Network
 """
-from ctypes import CDLL, c_char_p, c_size_t, c_void_p,\
-    create_string_buffer, byref, Structure, c_uint64, c_ubyte, c_byte,\
-    pointer, c_int
+from ctypes import CDLL, c_char_p, c_void_p,\
+    byref, c_int
 import ctypes
-import datetime
-import errno
-import time
 
 class Rgw(object):
     """librgw python wrapper"""

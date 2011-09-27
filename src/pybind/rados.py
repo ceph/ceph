@@ -2,9 +2,8 @@
 Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, \
-    create_string_buffer, byref, Structure, c_uint64, c_ubyte, c_byte, pointer
+    create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer
 import ctypes
-import datetime
 import errno
 import time
 
@@ -188,7 +187,6 @@ Rados object in state %s." % (self.state))
         self.require_state("connected")
         if not isinstance(pool_name, str):
             raise TypeError('pool_name must be a string')
-        pool = c_void_p()
         ret = self.librados.rados_pool_lookup(self.cluster, c_char_p(pool_name))
         if (ret >= 0):
             return True
@@ -501,7 +499,7 @@ written." % (self.name, ret, length))
         it = c_void_p(0)
         ret = self.librados.rados_getxattrs(self.io, oid, byref(it))
         if ret != 0:
-            raise make_ex(ret, "Failed to get rados xattrs for object %r" % oids)
+            raise make_ex(ret, "Failed to get rados xattrs for object %r" % oid)
         return XattrIterator(self, it, oid)
 
     def set_xattr(self, key, xattr_name, xattr_value):
