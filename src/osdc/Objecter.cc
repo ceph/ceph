@@ -441,7 +441,7 @@ Objecter::OSDSession *Objecter::get_session(int osd)
 void Objecter::reopen_session(OSDSession *s)
 {
   entity_inst_t inst = osdmap->get_inst(s->osd);
-  ldout(cct, 10) << "reopen_session osd" << s->osd << " session, addr now " << inst << dendl;
+  ldout(cct, 10) << "reopen_session osd." << s->osd << " session, addr now " << inst << dendl;
   if (s->con) {
     messenger->mark_down(s->con);
     s->con->put();
@@ -452,7 +452,7 @@ void Objecter::reopen_session(OSDSession *s)
 
 void Objecter::close_session(OSDSession *s)
 {
-  ldout(cct, 10) << "close_session for osd" << s->osd << dendl;
+  ldout(cct, 10) << "close_session for osd." << s->osd << dendl;
   if (s->con) {
     messenger->mark_down(s->con);
     s->con->put();
@@ -497,7 +497,7 @@ void Objecter::maybe_request_map(epoch_t epoch)
 
 void Objecter::kick_requests(OSDSession *session)
 {
-  ldout(cct, 10) << "kick_requests for osd" << session->osd << dendl;
+  ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
 
   // resend ops
   for (xlist<Op*>::iterator p = session->ops.begin(); !p.end(); ++p)
@@ -524,7 +524,7 @@ void Objecter::tick()
        p++) {
     Op *op = p->second;
     if (op->session && op->stamp < cutoff) {
-      ldout(cct, 2) << " tid " << p->first << " on osd" << op->session->osd << " is laggy" << dendl;
+      ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
       toping.insert(op->session);
     }
   }
@@ -613,7 +613,7 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   ldout(cct, 10) << "op_submit oid " << op->oid
            << " " << op->oloc 
 	   << " " << op->ops << " tid " << op->tid
-           << " osd" << (op->session ? op->session->osd : -1)
+           << " osd." << (op->session ? op->session->osd : -1)
            << dendl;
 
   assert(op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
@@ -688,14 +688,14 @@ int Objecter::recalc_op_target(Op *op)
 	if (p)
 	  op->used_replica = true;
 	osd = acting[p];
-	ldout(cct, 10) << " chose random osd" << osd << " of " << acting << dendl;
+	ldout(cct, 10) << " chose random osd." << osd << " of " << acting << dendl;
       } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
 	// look for a local replica
 	unsigned i;
 	for (i = acting.size()-1; i > 0; i++)
 	  if (osdmap->get_addr(i).is_same_host(messenger->get_myaddr())) {
 	    op->used_replica = true;
-	    ldout(cct, 10) << " chose local osd" << acting[i] << " of " << acting << dendl;
+	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
 	    break;
 	  }
 	osd = acting[i];
@@ -749,7 +749,7 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 
 void Objecter::send_op(Op *op)
 {
-  ldout(cct, 15) << "send_op " << op->tid << " to osd" << op->session->osd << dendl;
+  ldout(cct, 15) << "send_op " << op->tid << " to osd." << op->session->osd << dendl;
 
   int flags = op->flags;
   if (op->oncommit)
@@ -1457,7 +1457,7 @@ void Objecter::ms_handle_reset(Connection *con)
     //
     int osd = osdmap->identify_osd(con->get_peer_addr());
     if (osd >= 0) {
-      ldout(cct, 1) << "ms_handle_reset on osd" << osd << dendl;
+      ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
       map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
       if (p != osd_sessions.end()) {
 	OSDSession *session = p->second;
@@ -1485,7 +1485,7 @@ void Objecter::dump_active()
   ldout(cct, 20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
     Op *op = p->second;
-    ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd" << (op->session ? op->session->osd : -1)
+    ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
 	    << "\t" << op->oid << "\t" << op->ops << dendl;
   }
 }

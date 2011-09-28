@@ -43,7 +43,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this, osd->whoami, osd->osdmap)
 static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << "osd" << whoami
+  return *_dout << "osd." << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -3013,13 +3013,13 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
     dout(7) << "repop_ack rep_tid " << repop->rep_tid << " op " << *op
 	    << " result " << result
 	    << " ack_type " << ack_type
-	    << " from osd" << fromosd
+	    << " from osd." << fromosd
 	    << dendl;
   else
     dout(7) << "repop_ack rep_tid " << repop->rep_tid << " (no op) "
 	    << " result " << result
 	    << " ack_type " << ack_type
-	    << " from osd" << fromosd
+	    << " from osd." << fromosd
 	    << dendl;
   
   if (ack_type & CEPH_OSD_FLAG_ONDISK) {
@@ -3458,7 +3458,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 
   // send commit.
   dout(10) << "sub_op_modify_commit on op " << *rm->op
-           << ", sending commit to osd" << rm->ackerosd
+           << ", sending commit to osd." << rm->ackerosd
            << dendl;
 
   log_subop_stats(rm->op, l_osd_sop_w_inb, l_osd_sop_w_lat);
@@ -3654,7 +3654,7 @@ int ReplicatedPG::pull(const hobject_t& soid)
   dout(7) << "pull " << soid
           << " v " << v 
 	  << " on osds " << missing_loc[soid]
-	  << " from osd" << fromosd
+	  << " from osd." << fromosd
 	  << dendl;
 
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
@@ -3735,7 +3735,7 @@ void ReplicatedPG::send_pull_op(const hobject_t& soid, eversion_t v, bool first,
 
   dout(10) << "send_pull_op " << soid << " " << v
 	   << " first=" << first
-	   << " data " << data_subset << " from osd" << fromosd
+	   << " data " << data_subset << " from osd." << fromosd
 	   << " tid " << tid << dendl;
 
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, CEPH_OSD_FLAG_ACK,
@@ -3764,7 +3764,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, in
   const object_info_t& oi = obc->obs.oi;
   uint64_t size = obc->obs.oi.size;
 
-  dout(10) << "push_to_replica " << soid << " v" << oi.version << " size " << size << " to osd" << peer << dendl;
+  dout(10) << "push_to_replica " << soid << " v" << oi.version << " size " << size << " to osd." << peer << dendl;
 
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
@@ -3775,7 +3775,7 @@ void ReplicatedPG::push_to_replica(ObjectContext *obc, const hobject_t& soid, in
     head.snap = CEPH_NOSNAP;
     if (peer_missing[peer].is_missing(head) &&
 	peer_missing[peer].have_old(head) == oi.prior_version) {
-      dout(10) << "push_to_replica osd" << peer << " has correct old " << head
+      dout(10) << "push_to_replica osd." << peer << " has correct old " << head
 	       << " v" << oi.prior_version 
 	       << ", pushing " << soid << " attrs as a clone op" << dendl;
       interval_set<uint64_t> data_subset;
@@ -3889,7 +3889,7 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
   object_info_t oi(bv);
 
   if (oi.version != version) {
-    osd->clog.error() << info.pgid << " push " << soid << " v " << version << " to osd" << peer
+    osd->clog.error() << info.pgid << " push " << soid << " v " << version << " to osd." << peer
 		      << " failed because local copy is " << oi.version << "\n";
     return -1;
   }
@@ -3899,7 +3899,7 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
     	  << " size " << size
 	  << " subset " << data_subset
           << " data " << bl.length()
-          << " to osd" << peer
+          << " to osd." << peer
           << dendl;
 
   osd->logger->inc(l_osd_push);
@@ -3947,11 +3947,11 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
   const hobject_t& soid = reply->get_poid();
   
   if (pushing.count(soid) == 0) {
-    dout(10) << "huh, i wasn't pushing " << soid << " to osd" << peer
+    dout(10) << "huh, i wasn't pushing " << soid << " to osd." << peer
 	     << ", or anybody else"
 	     << dendl;
   } else if (pushing[soid].count(peer) == 0) {
-    dout(10) << "huh, i wasn't pushing " << soid << " to osd" << peer
+    dout(10) << "huh, i wasn't pushing " << soid << " to osd." << peer
 	     << dendl;
   } else {
     push_info_t *pi = &pushing[soid][peer];
@@ -4416,14 +4416,14 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
   int from = op->get_source().num();
   map<hobject_t,set<int> >::iterator p = missing_loc.find(soid);
   if (p != missing_loc.end()) {
-    dout(0) << "_failed_push " << soid << " from osd" << from
+    dout(0) << "_failed_push " << soid << " from osd." << from
 	    << ", reps on " << p->second << dendl;
 
     p->second.erase(from);          // forget about this (bad) peer replica
     if (p->second.empty())
       missing_loc.erase(p);
   } else {
-    dout(0) << "_failed_push " << soid << " from osd" << from
+    dout(0) << "_failed_push " << soid << " from osd." << from
 	    << " but not in missing_loc ???" << dendl;
   }
 
@@ -4543,7 +4543,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
       ++j;
       continue;
     }
-    dout(10) << "Reseting pulls from osd" << j->first
+    dout(10) << "Reseting pulls from osd." << j->first
 	     << ", osdmap has it marked down" << dendl;
     
     for (set<hobject_t>::iterator i = j->second.begin();
@@ -4730,7 +4730,7 @@ int ReplicatedPG::recover_object_replicas(const hobject_t& soid, eversion_t v)
       if (!peer_missing[peer].is_missing(soid, v)) {
 	missing_loc[soid].insert(peer);
 	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
-		 << ", there should be a copy on osd" << peer << dendl;
+		 << ", there should be a copy on osd." << peer << dendl;
 	uhoh = false;
       }
     }
@@ -4775,8 +4775,8 @@ int ReplicatedPG::recover_replicas(int max)
     assert(pm != peer_missing.end());
     size_t m_sz = pm->second.num_missing();
 
-    dout(10) << " peer osd" << peer << " missing " << m_sz << " objects." << dendl;
-    dout(20) << " peer osd" << peer << " missing " << pm->second.missing << dendl;
+    dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
+    dout(20) << " peer osd." << peer << " missing " << pm->second.missing << dendl;
 
     // oldest first!
     const Missing &m(pm->second);

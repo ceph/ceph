@@ -406,7 +406,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
-    dout(1) << " ignoring stats from non-active osd" << dendl;
+    dout(1) << " ignoring stats from non-active osd." << dendl;
     stats->put();
     return false;
   }
@@ -428,9 +428,9 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   pending_inc.osd_stat_updates[from] = stats->osd_stat;
   
   if (pg_map.osd_stat.count(from))
-    dout(10) << " got osd" << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
+    dout(10) << " got osd." << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
   else
-    dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
+    dout(10) << " got osd." << from << " " << stats->osd_stat << " (first report)" << dendl;
 
   // apply to live map too (screw consistency)
   /*
@@ -546,10 +546,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	 p != inc.new_weight.end();
 	 p++)
       if (p->second == CEPH_OSD_OUT) {
-	dout(10) << "check_osd_map  osd" << p->first << " went OUT" << dendl;
+	dout(10) << "check_osd_map  osd." << p->first << " went OUT" << dendl;
 	pending_inc.osd_stat_rm.insert(p->first);
       } else {
-	dout(10) << "check_osd_map  osd" << p->first << " is IN" << dendl;
+	dout(10) << "check_osd_map  osd." << p->first << " is IN" << dendl;
 	pending_inc.osd_stat_rm.erase(p->first);
 	pending_inc.osd_stat_updates[p->first]; 
       }
@@ -732,7 +732,7 @@ void PGMonitor::send_pg_creates()
 	now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd]) 
       continue;
       
-    dout(20) << "send_pg_creates  " << pgid << " -> osd" << osd 
+    dout(20) << "send_pg_creates  " << pgid << " -> osd." << osd 
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
       msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
@@ -744,7 +744,7 @@ void PGMonitor::send_pg_creates()
   for (map<int, MOSDPGCreate*>::iterator p = msg.begin();
        p != msg.end();
        p++) {
-    dout(10) << "sending pg_create to osd" << p->first << dendl;
+    dout(10) << "sending pg_create to osd." << p->first << dendl;
     mon->messenger->send_message(p->second, mon->osdmon()->osdmap.get_inst(p->first));
     last_sent_pg_create[p->first] = ceph_clock_now(g_ceph_context);
   }
@@ -882,10 +882,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	      mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
 						  m->cmd[1] == "repair"),
 				    mon->osdmon()->osdmap.get_inst(osd));
-	      ss << "instructing pg " << pgid << " on osd" << osd << " to " << m->cmd[1];
+	      ss << "instructing pg " << pgid << " on osd." << osd << " to " << m->cmd[1];
 	      r = 0;
 	    } else
-	      ss << "pg " << pgid << " primary osd" << osd << " not up";
+	      ss << "pg " << pgid << " primary osd." << osd << " not up";
 	  } else
 	    ss << "pg " << pgid << " has no primary osd";
 	} else
