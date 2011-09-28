@@ -36,7 +36,7 @@ int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
 int rgw_store_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
 {
   char bucket_char[16];
-  snprintf(bucket_char, sizeof(bucket_char), "%lld",
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld",
            (long long unsigned)bucket_id);
   string bucket_string(bucket_char);
 
@@ -73,7 +73,7 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
 int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
 {
   char bucket_char[16];
-  snprintf(bucket_char, sizeof(bucket_char), "%lld",
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld",
            (long long unsigned)bucket_id);
   string bucket_string(bucket_char);
 
