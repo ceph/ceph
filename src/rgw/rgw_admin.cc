@@ -25,8 +25,6 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static XMLFormatter default_formatter;
-
 void _usage() 
 {
   cerr << "usage: radosgw-admin <cmd> [options...]" << std::endl;
@@ -550,7 +548,7 @@ int main(int argc, char **argv)
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
   int64_t bucket_id = -1;
-  Formatter *formatter = &default_formatter;
+  Formatter *formatter = NULL;
   bool purge_data = false;
   RGWBucketInfo bucket_info;
   bool pretty_format = false;
@@ -641,15 +639,19 @@ int main(int argc, char **argv)
       return usage();
   }
 
-  if (!format.empty()) {
-    if (format ==  "xml")
-      formatter = new XMLFormatter(pretty_format);
-    else if (format == "json")
-      formatter = new JSONFormatter(pretty_format);
-    else {
-      cerr << "unrecognized format: " << format << std::endl;
-      return usage();
-    }
+  // default to pretty json
+  if (format.empty()) {
+    format = "json";
+    pretty_format = true;
+  }
+
+  if (format ==  "xml")
+    formatter = new XMLFormatter(pretty_format);
+  else if (format == "json")
+    formatter = new JSONFormatter(pretty_format);
+  else {
+    cerr << "unrecognized format: " << format << std::endl;
+    return usage();
   }
 
   if (!subuser.empty()) {
