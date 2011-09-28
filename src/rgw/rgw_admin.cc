@@ -266,76 +266,52 @@ string escape_str(string& src, char c)
   return dest;
 }
 
-static void show_user_info(RGWUserInfo& info, string& format, Formatter *formatter)
+static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
 
 
-  if (format.empty()) {
-    cout << "User ID: " << info.user_id << std::endl;
-    cout << "RADOS UID: " << info.auid << std::endl;
-    cout << "Keys:" << std::endl;
-    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-      RGWAccessKey& k = kiter->second;
-      cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
-      cout << "  Access Key: " << k.id << std::endl;
-      cout << "  Secret Key: " << k.key << std::endl;
-    }
-    cout << "Users: " << std::endl;
-    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-      RGWSubUser& u = uiter->second;
-      cout << " Name: " << info.user_id << ":" << u.name << std::endl;
-      char buf[256];
-      perm_to_str(u.perm_mask, buf, sizeof(buf));
-      cout << " Permissions: " << buf << std::endl;
-    }
-    cout << "Display Name: " << info.display_name << std::endl;
-    cout << "Email: " << info.user_email << std::endl;
-    cout << "Swift User: " << (info.swift_name.size() ? info.swift_name : "<undefined>")<< std::endl;
-    cout << "Swift Key: " << (info.swift_key.size() ? info.swift_key : "<undefined>")<< std::endl;
-  } else {
-    formatter->open_object_section("user_info");
+  formatter->open_object_section("user_info");
 
-    formatter->dump_string("user_id", info.user_id.c_str());
-    formatter->dump_format("rados_uid", "%lld", info.auid);
-    formatter->dump_string("display_name", info.display_name.c_str());
-    formatter->dump_string("email", info.user_email.c_str());
-    formatter->dump_string("swift_user", info.swift_name.c_str());
-    formatter->dump_string("swift_key", info.swift_key.c_str());
+  formatter->dump_string("user_id", info.user_id.c_str());
+  formatter->dump_format("rados_uid", "%lld", info.auid);
+  formatter->dump_string("display_name", info.display_name.c_str());
+  formatter->dump_string("email", info.user_email.c_str());
+  formatter->dump_string("swift_user", info.swift_name.c_str());
+  formatter->dump_string("swift_key", info.swift_key.c_str());
 
-    // keys
-    formatter->open_array_section("keys");
-    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-      RGWAccessKey& k = kiter->second;
-      const char *sep = (k.subuser.empty() ? "" : ":");
-      const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-      formatter->open_object_section("key");
-      formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-      formatter->dump_string("access_key", k.id);
-      formatter->dump_string("secret_key", k.key);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-    formatter->close_section();
-
-    // subusers
-    formatter->open_array_section("subusers");
-    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-      RGWSubUser& u = uiter->second;
-      formatter->open_object_section("user");
-      formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
-      char buf[256];
-      perm_to_str(u.perm_mask, buf, sizeof(buf));
-      formatter->dump_string("permissions", buf);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-    formatter->close_section();
-
+  // keys
+  formatter->open_array_section("keys");
+  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+    RGWAccessKey& k = kiter->second;
+    const char *sep = (k.subuser.empty() ? "" : ":");
+    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
+    formatter->open_object_section("key");
+    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
+    formatter->dump_string("access_key", k.id);
+    formatter->dump_string("secret_key", k.key);
     formatter->close_section();
     formatter->flush(cout);
   }
+  formatter->close_section();
+
+  // subusers
+  formatter->open_array_section("subusers");
+  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+    RGWSubUser& u = uiter->second;
+    formatter->open_object_section("user");
+    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
+    char buf[256];
+    perm_to_str(u.perm_mask, buf, sizeof(buf));
+    formatter->dump_string("permissions", buf);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  formatter->close_section();
+
+  formatter->close_section();
+  formatter->flush(cout);
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
@@ -866,7 +842,7 @@ int main(int argc, char **argv)
 
     remove_old_indexes(old_info, info);
 
-    show_user_info(info, format, formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_SUBUSER_RM:
@@ -877,7 +853,7 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
-    show_user_info(info, format, formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_KEY_RM:
@@ -892,11 +868,11 @@ int main(int argc, char **argv)
         break;
       }
     }
-    show_user_info(info, format, formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_USER_INFO:
-    show_user_info(info, format, formatter);
+    show_user_info(info, formatter);
     break;
   }
 
@@ -1097,83 +1073,53 @@ int main(int argc, char **argv)
     bufferlist::iterator iter = bl.begin();
 
     struct rgw_log_entry entry;
-    const char *delim = " ";
 
-    if (!format.empty()) {
-      formatter->reset();
-      formatter->open_object_section("log");
+    formatter->reset();
+    formatter->open_object_section("log");
 
-      bufferlist::iterator first_iter = iter;
-      if (!first_iter.end()) {
-        ::decode(entry, first_iter);
-        int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
-        if (ret >= 0) {
-          formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
-          formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
-          formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
-        } else {
-          cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
-        }
-        formatter->dump_format("bucket_id", "%lld", entry.bucket_id);
+    bufferlist::iterator first_iter = iter;
+    if (!first_iter.end()) {
+      ::decode(entry, first_iter);
+      int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
+      if (ret >= 0) {
+	formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+	formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+	formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
+      } else {
+	cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
       }
-      formatter->open_array_section("log_entries");
+      formatter->dump_format("bucket_id", "%lld", entry.bucket_id);
     }
+    formatter->open_array_section("log_entries");
 
     while (!iter.end()) {
       ::decode(entry, iter);
 
       uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
 
-      if (format.empty()) { // for now, keeping backward compatibility a bit
-        cout << (entry.owner.size() ? entry.owner : "-" ) << delim
-             << entry.bucket << delim
-             << entry.time << delim
-             << entry.remote_addr << delim
-             << entry.user << delim
-             << entry.op << delim
-             << "\"" << escape_str(entry.uri, '"') << "\"" << delim
-             << entry.http_status << delim
-             << "\"" << entry.error_code << "\"" << delim
-             << entry.bytes_sent << delim
-             << entry.bytes_received << delim
-             << entry.obj_size << delim
-             << total_time << delim
-             << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
-             << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
-      } else {
-        formatter->open_object_section("log_entry");
-        formatter->dump_string("bucket", entry.bucket.c_str());
-
-        stringstream ss;
-        ss << entry.time;
-        string s = ss.str();
-
-        formatter->dump_string("time", s.c_str());
-        formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-        if (entry.owner.size())
-          formatter->dump_string("owner", entry.owner.c_str());
-        formatter->dump_string("user", entry.user.c_str());
-        formatter->dump_string("operation", entry.op.c_str());
-        formatter->dump_string("uri", entry.uri.c_str());
-        formatter->dump_string("http_status", entry.http_status.c_str());
-        formatter->dump_string("error_code", entry.error_code.c_str());
-        formatter->dump_format("bytes_sent", "%lld", entry.bytes_sent);
-        formatter->dump_format("bytes_received", "%lld", entry.bytes_received);
-        formatter->dump_format("object_size", "%lld", entry.obj_size);
-        formatter->dump_format("total_time", "%lld", total_time);
-        formatter->dump_string("user_agent",  entry.user_agent.c_str());
-        formatter->dump_string("referrer",  entry.referrer.c_str());
-        formatter->close_section();
-        formatter->flush(cout);
-      }
-    }
-
-    if (!format.empty()) {
-      formatter->close_section();
+      formatter->open_object_section("log_entry");
+      formatter->dump_string("bucket", entry.bucket.c_str());
+      formatter->dump_stream("time") << entry.time;
+      formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+      if (entry.owner.size())
+	formatter->dump_string("owner", entry.owner.c_str());
+      formatter->dump_string("user", entry.user.c_str());
+      formatter->dump_string("operation", entry.op.c_str());
+      formatter->dump_string("uri", entry.uri.c_str());
+      formatter->dump_string("http_status", entry.http_status.c_str());
+      formatter->dump_string("error_code", entry.error_code.c_str());
+      formatter->dump_format("bytes_sent", "%lld", entry.bytes_sent);
+      formatter->dump_format("bytes_received", "%lld", entry.bytes_received);
+      formatter->dump_format("object_size", "%lld", entry.obj_size);
+      formatter->dump_format("total_time", "%lld", total_time);
+      formatter->dump_string("user_agent",  entry.user_agent.c_str());
+      formatter->dump_string("referrer",  entry.referrer.c_str());
       formatter->close_section();
       formatter->flush(cout);
     }
-
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_USER_RM) {
