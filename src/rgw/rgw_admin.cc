@@ -611,9 +611,9 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    } else if (ceph_argparse_flag(args, i, &val, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
       pretty_format = true;
-    } else if (ceph_argparse_flag(args, i, &val, "--purge-data", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--purge-data", (char*)NULL)) {
       purge_data = true;
     } else {
       ++i;
