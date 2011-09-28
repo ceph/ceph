@@ -904,7 +904,7 @@ int main(int argc, char **argv)
     if (!user_id.empty()) {
       RGWUserBuckets buckets;
       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-        cerr << "could not get buckets for uid " << user_id << std::endl;
+        cerr << "list buckets: could not get buckets for uid " << user_id << std::endl;
       } else {
         map<string, RGWBucketEnt>& m = buckets.get_buckets();
         map<string, RGWBucketEnt>::iterator iter;
@@ -916,10 +916,9 @@ int main(int argc, char **argv)
       }
     } else {
       if (store->list_buckets_init(id, &handle) < 0) {
-        cout << "list-buckets: no entries found" << std::endl;
+        cerr << "list buckets: no buckets found" << std::endl;
       } else {
         RGWObjEnt obj;
-        cout << "listing all buckets" << std::endl;
         while (store->list_buckets_next(id, obj, &handle) >= 0) {
           cout << obj.name << std::endl;
         }
