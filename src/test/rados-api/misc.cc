@@ -70,6 +70,23 @@ static std::string add_key_to_tmap(IoCtx &ioctx, const std::string &obj,
   return "";
 }
 
+static int remove_key_from_tmap(IoCtx &ioctx, const std::string &obj,
+					const std::string &key)
+{
+  __u8 c = CEPH_OSD_TMAP_RM;
+
+  bufferlist tmbl;
+  ::encode(c, tmbl);
+  ::encode(key, tmbl);
+  int ret = ioctx.tmap_update(obj, tmbl);
+  if (ret) {
+    ostringstream oss;
+    oss << "ioctx.tmap_update(obj=" << obj << ", key="
+	<< key << ") failed with error " << ret;
+  }
+  return ret;
+}
+
 TEST(LibRadosMisc, TmapUpdatePP) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -98,14 +115,8 @@ TEST(LibRadosMisc, TmapUpdatePP) {
   ASSERT_EQ(string("val1"), read_key_from_tmap(ioctx, "foo", "key1"));
 
   // remove key1 from tmap
-  {
-    __u8 c = CEPH_OSD_TMAP_RM;
-    std::string key1("key1");
-    bufferlist tmbl;
-    ::encode(c, tmbl);
-    ::encode(key1, tmbl);
-    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
-  }
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "key1"));
+  ASSERT_EQ(-ENOENT, remove_key_from_tmap(ioctx, "foo", "key1"));
 
   // key should be removed
   ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "key1"));
