@@ -49,7 +49,7 @@ ceph_SOURCES = \
 	tools/ceph.cc \
 	tools/common.cc \
 	mon/PGMap.cc
-ceph_LDADD = $(LIBGLOBAL_LDA) -ledit
+ceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
 ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_GTK2
@@ -77,7 +77,7 @@ gceph_SOURCES = \
 	mon/PGMap.cc \
 	tools/gceph.cc \
 	tools/gui.cc
-gceph_LDADD = $(LIBGLOBAL_LDA) -ledit $(GTKMM_LIBS)
+gceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS) $(GTKMM_LIBS)
 gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 bin_PROGRAMS += gceph
@@ -956,7 +956,7 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/MetaRequest.cc \
 	client/Trace.cc
-libclient_la_LIBADD = libcommon.la
+libclient_la_LIBADD = libcommon.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
 
 dist-hook:
