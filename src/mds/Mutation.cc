@@ -202,7 +202,7 @@ void MDRequest::print(ostream &out)
 {
   out << "request(" << reqid;
   //if (request) out << " " << *request;
-  if (is_slave()) out << " slave_to mds" << slave_to_mds;
+  if (is_slave()) out << " slave_to mds." << slave_to_mds;
   if (client_request) out << " cr=" << client_request;
   if (slave_request) out << " sr=" << slave_request;
   out << ")";

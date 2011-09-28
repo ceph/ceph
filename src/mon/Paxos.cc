@@ -373,7 +373,7 @@ void Paxos::begin(bufferlist& v)
        ++p) {
     if (*p == mon->rank) continue;
     
-    dout(10) << " sending begin to mon" << *p << dendl;
+    dout(10) << " sending begin to mon." << *p << dendl;
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id);
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
@@ -502,7 +502,7 @@ void Paxos::commit()
        ++p) {
     if (*p == mon->rank) continue;
 
-    dout(10) << " sending commit to mon" << *p << dendl;
+    dout(10) << " sending commit to mon." << *p << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;

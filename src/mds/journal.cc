@@ -59,7 +59,7 @@
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
 			      || l <= cct->_conf->debug_mds_log_expire)
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".journal "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
 
 // -----------------------
@@ -1049,7 +1049,7 @@ void ESlaveUpdate::replay(MDS *mds)
 {
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
-    dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds" << master 
+    dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << master 
 	     << ": applying commit, saving rollback info" << dendl;
     assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
     commit.replay(mds, _segment);
@@ -1059,20 +1059,20 @@ void ESlaveUpdate::replay(MDS *mds)
 
   case ESlaveUpdate::OP_COMMIT:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master << dendl;
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master << dendl;
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
       if (mds->mdcache->uncommitted_slave_updates[master].empty())
 	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master 
 	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
-      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
+      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
 	       << ": applying rollback commit blob" << dendl;
       assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
       commit.replay(mds, _segment);
@@ -1081,7 +1081,7 @@ void ESlaveUpdate::replay(MDS *mds)
       if (mds->mdcache->uncommitted_slave_updates[master].empty())
 	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
-      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
+      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master 
 	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;

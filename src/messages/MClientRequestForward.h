@@ -40,7 +40,7 @@ public:
   const char *get_type_name() { return "client_request_forward"; }
   void print(ostream& o) {
     o << "client_request_forward(" << get_tid()
-      << " to mds" << dest_mds
+      << " to mds." << dest_mds
       << " num_fwd=" << num_fwd
       << (client_must_resend ? " client_must_resend":"")
       << ")";

@@ -80,7 +80,7 @@
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l <= cct->_conf->debug_mds || l <= cct->_conf->debug_mds_migrator)
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".migrator "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".migrator "
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
@@ -179,7 +179,7 @@ void Migrator::export_empty_import(CDir *dir)
   dout(7) << " really empty, exporting to " << dest << dendl;
   assert (dest != mds->get_nodeid());
   
-  dout(7) << "exporting to mds" << dest 
+  dout(7) << "exporting to mds." << dest 
            << " empty import " << *dir << dendl;
   export_dir( dir, dest );
 }
@@ -192,7 +192,7 @@ void Migrator::export_empty_import(CDir *dir)
 
 void Migrator::handle_mds_failure_or_stop(int who)
 {
-  dout(5) << "handle_mds_failure_or_stop mds" << who << dendl;
+  dout(5) << "handle_mds_failure_or_stop mds." << who << dendl;
 
   // check my exports
 
@@ -325,8 +325,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_notify_ack_waiting[dir].erase(who);   // they won't get a notify either.
 	if (p->second == EXPORT_WARNING) {
 	  // exporter waiting for warning acks, let's fake theirs.
-	  dout(10) << "faking export_warning_ack from mds" << who
-		   << " on " << *dir << " to mds" << export_peer[dir] 
+	  dout(10) << "faking export_warning_ack from mds." << who
+		   << " on " << *dir << " to mds." << export_peer[dir] 
 		   << dendl;
 	  if (export_warning_ack_waiting[dir].empty()) 
 	    export_go(dir);
@@ -337,8 +337,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_notify_ack_waiting[dir].erase(who);
 	if (p->second == EXPORT_NOTIFYING) {
 	  // exporter is waiting for notify acks, fake it
-	  dout(10) << "faking export_notify_ack from mds" << who
-		   << " on " << *dir << " to mds" << export_peer[dir] 
+	  dout(10) << "faking export_notify_ack from mds." << who
+		   << " on " << *dir << " to mds." << export_peer[dir] 
 		   << dendl;
 	  if (export_notify_ack_waiting[dir].empty()) 
 	    export_finish(dir);
@@ -432,8 +432,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
     } else {
       if (q->second == IMPORT_ABORTING &&
 	  import_bystanders[dir].count(who)) {
-	dout(10) << "faking export_notify_ack from mds" << who
-		 << " on aborting import " << *dir << " from mds" << import_peer[df] 
+	dout(10) << "faking export_notify_ack from mds." << who
+		 << " on aborting import " << *dir << " from mds." << import_peer[df] 
 		 << dendl;
 	import_bystanders[dir].erase(who);
 	if (import_bystanders[dir].empty()) {
@@ -570,7 +570,7 @@ void Migrator::maybe_do_queued_export()
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
-    dout(0) << "nicely exporting to mds" << dest << " " << *dir << dendl;
+    dout(0) << "nicely exporting to mds." << dest << " " << *dir << dendl;
 
     export_dir(dir, dest);
   }
@@ -760,7 +760,7 @@ void Migrator::export_frozen(CDir *dir)
        p != dir->replicas_end();
        p++) {
     if (p->first != dest) {
-      dout(10) << "bystander mds" << p->first << dendl;
+      dout(10) << "bystander mds." << p->first << dendl;
       prep->add_bystander(p->first);
     }
   }
@@ -1039,7 +1039,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
-    dout(7) << "finish_export_inode telling client" << it->first
+    dout(7) << "finish_export_inode telling client." << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
 				     in->ino(),
@@ -2151,7 +2151,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
   }
   
   // send notify's etc.
-  dout(7) << "sending ack for " << *dir << " to old auth mds" << from << dendl;
+  dout(7) << "sending ack for " << *dir << " to old auth mds." << from << dendl;
 
   // test surviving observer of a failed migration that did not complete
   //assert(dir->replica_map.size() < 2 || mds->whoami != 0);
@@ -2325,7 +2325,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
   for (map<client_t,Capability::Export>::iterator it = cap_map.begin();
        it != cap_map.end();
        it++) {
-    dout(10) << "finish_import_inode_caps for client" << it->first << " on " << *in << dendl;
+    dout(10) << "finish_import_inode_caps for client." << it->first << " on " << *in << dendl;
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(it->first.v));
     assert(session);
 
@@ -2519,7 +2519,7 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
 void Migrator::export_caps(CInode *in)
 {
   int dest = in->authority().first;
-  dout(7) << "export_caps to mds" << dest << " " << *in << dendl;
+  dout(7) << "export_caps to mds." << dest << " " << *in << dendl;
 
   assert(in->is_any_caps());
   assert(!in->is_auth());

@@ -69,14 +69,14 @@ static int do_cmds_special_action(const std::string &action,
     return -1;
 
   if (action == "dump-journal") {
-    dout(0) << "dumping journal for mds" << rank << " to " << dump_file << dendl;
+    dout(0) << "dumping journal for mds." << rank << " to " << dump_file << dendl;
     Dumper *journal_dumper = new Dumper(messenger, &mc);
     journal_dumper->init(rank);
     journal_dumper->dump(dump_file.c_str());
     mc.shutdown();
   }
   else if (action == "undump-journal") {
-    dout(0) << "undumping journal for mds" << rank << " from " << dump_file << dendl;
+    dout(0) << "undumping journal for mds." << rank << " from " << dump_file << dendl;
     Dumper *journal_dumper = new Dumper(messenger, &mc);
     journal_dumper->init(rank);
     journal_dumper->undump(dump_file.c_str());
@@ -168,7 +168,7 @@ int main(int argc, const char **argv)
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
-      dout(0) << "requesting oneshot_replay for mds" << r << dendl;
+      dout(0) << "requesting oneshot_replay for mds." << r << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);
@@ -181,7 +181,7 @@ int main(int argc, const char **argv)
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
-      dout(0) << "requesting standby_replay for mds" << r << dendl;
+      dout(0) << "requesting standby_replay for mds." << r << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);

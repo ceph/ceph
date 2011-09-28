@@ -150,7 +150,7 @@ int main(int argc, const char **argv)
     derr << "created object store " << g_conf->osd_data;
     if (!g_conf->osd_journal.empty())
       *_dout << " journal " << g_conf->osd_journal;
-    *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
+    *_dout << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
     common_init_finish(g_ceph_context);
@@ -256,7 +256,7 @@ int main(int argc, const char **argv)
     hb_addr.set_port(0);
   messenger_hbout->bind(hb_addr, getpid());
 
-  cout << "starting osd" << whoami
+  cout << "starting osd." << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf->osd_data
        << " " << ((g_conf->osd_journal.empty()) ?

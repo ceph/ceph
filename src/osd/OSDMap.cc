@@ -148,7 +148,7 @@ void OSDMap::print(ostream& out) const
   out << "max_osd " << get_max_osd() << "\n";
   for (int i=0; i<get_max_osd(); i++) {
     if (exists(i)) {
-      out << "osd" << i;
+      out << "osd." << i;
       out << (is_up(i) ? " up  ":" down");
       out << (is_in(i) ? " in ":" out");
       if (is_in(i))
@@ -331,7 +331,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
       rweights[i] = 0;
       for (j=0; j<nper; j++, o++) {
 	if (o == nosd) break;
-	ldout(cct, 20) << "added osd" << o << dendl;
+	ldout(cct, 20) << "added osd." << o << dendl;
 	items[j] = o;
 	weights[j] = 0x10000;
 	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;

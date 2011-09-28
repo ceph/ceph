@@ -78,7 +78,7 @@ using namespace std;
 #include "MetaRequest.h"
 
 #undef dout_prefix
-#define dout_prefix *_dout << "client" << whoami << " "
+#define dout_prefix *_dout << "client." << whoami << " "
 
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
 
@@ -675,7 +675,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
 {
   MClientReply *reply = request->reply;
 
-  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds" << mds 
+  ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << mds 
 	   << " is_target=" << (int)reply->head.is_target
 	   << " is_dentry=" << (int)reply->head.is_dentry
 	   << dendl;
@@ -891,7 +891,7 @@ int Client::choose_target_mds(MetaRequest *req)
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
     req->resend_mds = -1;
-    ldout(cct, 10) << "choose_target_mds resend_mds specified as mds" << mds << dendl;
+    ldout(cct, 10) << "choose_target_mds resend_mds specified as mds." << mds << dendl;
     goto out;
   }
 
@@ -984,15 +984,15 @@ out:
 void Client::connect_mds_targets(int mds)
 {
   //this function shouldn't be called unless we lost a connection
-  ldout(cct, 10) << "connect_mds_targets for mds" << mds << dendl;
+  ldout(cct, 10) << "connect_mds_targets for mds." << mds << dendl;
   assert(mds_sessions.count(mds));
   const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
   for (set<int>::const_iterator q = info.export_targets.begin();
        q != info.export_targets.end();
        q++) {
     if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
-      ldout(cct, 10) << "check_mds_sessions opening mds" << mds
-	       << " export target mds" << *q << dendl;
+      ldout(cct, 10) << "check_mds_sessions opening mds." << mds
+	       << " export target mds." << *q << dendl;
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 			      mdsmap->get_inst(*q));
       waiting_for_session[*q].size();
@@ -1036,7 +1036,7 @@ int Client::make_request(MetaRequest *request,
     int mds = choose_target_mds(request);
     if (mds < 0 || !mdsmap->is_active(mds)) {
       Cond cond;
-      ldout(cct, 10) << " target mds" << mds << " not active, waiting for new mdsmap" << dendl;
+      ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
       waiting_for_mdsmap.push_back(&cond);
       cond.Wait(client_lock);
       continue;
@@ -1047,19 +1047,19 @@ int Client::make_request(MetaRequest *request,
       Cond cond;
 
       if (!mdsmap->is_active(mds)) {
-	ldout(cct, 10) << "no address for mds" << mds << ", waiting for new mdsmap" << dendl;
+	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
 	if (!mdsmap->is_active(mds)) {
-	  ldout(cct, 10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << dendl;
+	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
 	  request->resend_mds = mdsmap->get_random_up_mds();
 	  continue;
 	}
       }	
       
       if (waiting_for_session.count(mds) == 0) {
-	ldout(cct, 10) << "opening session to mds" << mds << dendl;
+	ldout(cct, 10) << "opening session to mds." << mds << dendl;
 	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 				mdsmap->get_inst(mds));
       }
@@ -1067,7 +1067,7 @@ int Client::make_request(MetaRequest *request,
       // wait
       waiting_for_session[mds].push_back(&cond);
       while (waiting_for_session.count(mds)) {
-	ldout(cct, 10) << "waiting for session to mds" << mds << " to open" << dendl;
+	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
 	cond.Wait(client_lock);
       }
     }
@@ -1279,7 +1279,7 @@ void Client::send_request(MetaRequest *request, int mds)
 {
   // make the request
   ldout(cct, 10) << "send_request rebuilding request " << request->get_tid()
-	   << " for mds" << mds << dendl;
+	   << " for mds." << mds << dendl;
   MClientRequest *r = build_client_request(request);
   if (request->dentry)
     r->set_dentry_wanted();
@@ -1301,7 +1301,7 @@ void Client::send_request(MetaRequest *request, int mds)
 
   mds_sessions[mds]->requests.push_back(&request->item);
 
-  ldout(cct, 10) << "send_request " << *r << " to mds" << mds << dendl;
+  ldout(cct, 10) << "send_request " << *r << " to mds." << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
 }
 
@@ -1359,7 +1359,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   // resend.
   ldout(cct, 10) << "handle_client_request tid " << tid
 	   << " fwd " << fwd->get_num_fwd() 
-	   << " to mds" << fwd->get_dest_mds() 
+	   << " to mds." << fwd->get_dest_mds() 
 	   << ", resending to " << fwd->get_dest_mds()
 	   << dendl;
   
@@ -1401,7 +1401,7 @@ void Client::handle_client_reply(MClientReply *reply)
   if (-ESTALE == reply->get_result()) { // see if we can get to proper MDS
     request->send_to_auth = true;
     ldout(cct, 20) << "got ESTALE on tid " << request->tid
-		   << " from mds" << request->mds << dendl;
+		   << " from mds." << request->mds << dendl;
     request->resend_mds = choose_target_mds(request);
     if (request->resend_mds >= 0 &&
 	request->resend_mds != request->mds) { // wasn't sent to auth, resend
@@ -1585,7 +1585,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
 void Client::send_reconnect(int mds)
 {
-  ldout(cct, 10) << "send_reconnect to mds" << mds << dendl;
+  ldout(cct, 10) << "send_reconnect to mds." << mds << dendl;
 
   MClientReconnect *m = new MClientReconnect;
 
@@ -1649,7 +1649,7 @@ void Client::send_reconnect(int mds)
 
 void Client::kick_requests(int mds, bool signal)
 {
-  ldout(cct, 10) << "kick_requests for mds" << mds << dendl;
+  ldout(cct, 10) << "kick_requests for mds." << mds << dendl;
 
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
@@ -1686,7 +1686,7 @@ void Client::got_mds_push(int mds)
   MetaSession *s = mds_sessions[mds];
 
   s->seq++;
-  ldout(cct, 10) << " mds" << mds << " seq now " << s->seq << dendl;
+  ldout(cct, 10) << " mds." << mds << " seq now " << s->seq << dendl;
   if (s->closing)
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
 			    s->inst);
@@ -1737,7 +1737,7 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
 
   // dentry?
   if (dn->lease_mds >= 0 && now < dn->lease_ttl && mdsmap->is_up(dn->lease_mds)) {
-    ldout(cct, 10) << "release_lease mds" << dn->lease_mds << " mask " << mask
+    ldout(cct, 10) << "release_lease mds." << dn->lease_mds << " mask " << mask
 	     << " on " << in->ino << " " << dn->name << dendl;
     messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, dn->lease_seq, 
 					     CEPH_LOCK_DN,
@@ -1964,7 +1964,7 @@ void Client::send_cap(Inode *in, int mds, Cap *cap, int used, int want, int reta
   int op = CEPH_CAP_OP_UPDATE;
 
   ldout(cct, 10) << "send_cap " << *in
-	   << " mds" << mds << " seq " << cap->seq
+	   << " mds." << mds << " seq " << cap->seq
 	   << " used " << ccap_string(used)
 	   << " want " << ccap_string(want)
 	   << " flush " << ccap_string(flush)
@@ -2079,7 +2079,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
     int revoking = cap->implemented & ~cap->issued;
     
-    ldout(cct, 10) << " cap mds" << mds
+    ldout(cct, 10) << " cap mds." << mds
 	     << " issued " << ccap_string(cap->issued)
 	     << " implemented " << ccap_string(cap->implemented)
 	     << " revoking " << ccap_string(revoking) << dendl;
@@ -2229,7 +2229,7 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
 	continue;
     }
 
-    ldout(cct, 10) << "flush_snaps mds" << mds
+    ldout(cct, 10) << "flush_snaps mds." << mds
 	     << " follows " << p->first
 	     << " size " << capsnap->size
 	     << " mtime " << capsnap->mtime
@@ -2460,7 +2460,7 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
   cap->issue_seq = seq;
   cap->mseq = mseq;
   ldout(cct, 10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
-	   << " from mds" << mds
+	   << " from mds." << mds
 	   << " on " << *in
 	   << dendl;
 
@@ -2474,7 +2474,7 @@ void Client::remove_cap(Cap *cap)
   MetaSession *session = cap->session;
   int mds = cap->session->mds_num;
 
-  ldout(cct, 10) << "remove_cap mds" << mds << " on " << *in << dendl;
+  ldout(cct, 10) << "remove_cap mds." << mds << " on " << *in << dendl;
   
   if (!session->release)
     session->release = new MClientCapRelease;
@@ -2521,7 +2521,7 @@ void Client::remove_session_caps(MetaSession *mds)
 
 void Client::trim_caps(int mds, int max)
 {
-  ldout(cct, 10) << "trim_caps mds" << mds << " max " << max << dendl;
+  ldout(cct, 10) << "trim_caps mds." << mds << " max " << max << dendl;
   MetaSession *s = mds_sessions[mds];
 
   int trimmed = 0;
@@ -2612,7 +2612,7 @@ void Client::flush_caps()
 
 void Client::flush_caps(Inode *in, int mds)
 {
-  ldout(cct, 10) << "flush_caps " << in << " mds" << mds << dendl;
+  ldout(cct, 10) << "flush_caps " << in << " mds." << mds << dendl;
   Cap *cap = in->auth_cap;
   assert(cap->session->mds_num == mds);
 
@@ -2634,7 +2634,7 @@ void Client::wait_sync_caps(uint64_t want)
 	continue;
     Inode *in = p->second->flushing_caps.front();
     if (in->flushing_cap_seq <= want) {
-      ldout(cct, 10) << " waiting on mds" << p->first << " tid " << in->flushing_cap_seq
+      ldout(cct, 10) << " waiting on mds." << p->first << " tid " << in->flushing_cap_seq
 	       << " (want " << want << ")" << dendl;
       sync_cond.Wait(client_lock);
       goto retry;
@@ -2651,12 +2651,12 @@ void Client::kick_flushing_caps(int mds)
     CapSnap *capsnap = *p;
     Inode *in = capsnap->in;
     ldout(cct, 20) << " reflushing capsnap " << capsnap
-		   << " on " << *in << " to mds" << mds << dendl;
+		   << " on " << *in << " to mds." << mds << dendl;
     flush_snaps(in, false, capsnap);
   }
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    ldout(cct, 20) << " reflushing caps on " << *in << " to mds" << mds << dendl;
+    ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
     if (in->flushing_caps)
       flush_caps(in, mds);
   }
@@ -2934,7 +2934,7 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   if (in->caps.count(mds) == 0) {
-    ldout(cct, 5) << "handle_caps don't have " << *in << " cap on mds" << mds << dendl;
+    ldout(cct, 5) << "handle_caps don't have " << *in << " cap on mds." << mds << dendl;
     m->put();
     return;
   }
@@ -2971,7 +2971,7 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 
   if (m->get_mseq() > in->exporting_mseq) {
     ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
-	    << " IMPORT from mds" << mds
+	    << " IMPORT from mds." << mds
 	    << ", clearing exporting_issued " << ccap_string(in->exporting_issued) 
 	    << " mseq " << in->exporting_mseq << dendl;
     in->exporting_issued = 0;
@@ -2979,9 +2979,9 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
     in->exporting_mds = -1;
   } else {
     ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
-	    << " IMPORT from mds" << mds 
+	    << " IMPORT from mds." << mds 
 	    << ", keeping exporting_issued " << ccap_string(in->exporting_issued) 
-	    << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
+	    << " mseq " << in->exporting_mseq << " by mds." << in->exporting_mds << dendl;
   }
   m->put();
 }
@@ -3001,22 +3001,22 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
     if (p->second->mseq > m->get_mseq()) {
       found_higher_mseq = true;
       ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds" << mds
-	      << ", but mds" << p->first << " has higher mseq " << p->second->mseq << dendl;
+	      << " EXPORT from mds." << mds
+	      << ", but mds." << p->first << " has higher mseq " << p->second->mseq << dendl;
     }
   }
 
   if (cap) {
     if (!found_higher_mseq) {
       ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds" << mds
+	      << " EXPORT from mds." << mds
 	      << ", setting exporting_issued " << ccap_string(cap->issued) << dendl;
       in->exporting_issued = cap->issued;
       in->exporting_mseq = m->get_mseq();
       in->exporting_mds = mds;
     } else 
       ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds" << mds
+	      << " EXPORT from mds." << mds
 	      << ", just removing old cap" << dendl;
 
     remove_cap(cap);
@@ -3059,7 +3059,7 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, Cap *cap, MClientCaps *m)
       cleaned |= 1 << i;
   }
 
-  ldout(cct, 5) << "handle_cap_flush_ack mds" << mds
+  ldout(cct, 5) << "handle_cap_flush_ack mds." << mds
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in
 	  << " with " << ccap_string(dirty) << dendl;
 
@@ -3097,7 +3097,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
     if (m->get_client_tid() != capsnap->flush_tid) {
       ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap->flush_tid << dendl;
     } else {
-      ldout(cct, 5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
+      ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
       capsnap->flushing_item.remove_myself();
       delete capsnap;
@@ -3105,7 +3105,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
       put_inode(in);
     }
   } else {
-    ldout(cct, 5) << "handle_cap_flushedsnap DUP(?) mds" << mds << " flushed snap follows " << follows
+    ldout(cct, 5) << "handle_cap_flushedsnap DUP(?) mds." << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;
     // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
@@ -3121,7 +3121,7 @@ void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
   ldout(cct, 5) << "handle_cap_grant on in " << m->get_ino() 
-          << " mds" << mds << " seq " << m->get_seq() 
+          << " mds." << mds << " seq " << m->get_seq() 
           << " caps now " << ccap_string(new_caps) 
           << " was " << ccap_string(old_caps) << dendl;
 
@@ -3372,7 +3372,7 @@ void Client::unmount()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    ldout(cct, 2) << "sending client_session close to mds" << p->first
+    ldout(cct, 2) << "sending client_session close to mds." << p->first
 	    << " seq " << p->second->seq << dendl;
     if (!p->second->closing) {
       p->second->closing = true;
@@ -3457,14 +3457,14 @@ void Client::renew_caps()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
-    ldout(cct, 15) << "renew_caps requesting from mds" << p->first << dendl;
+    ldout(cct, 15) << "renew_caps requesting from mds." << p->first << dendl;
     if (mdsmap->get_state(p->first) >= MDSMap::STATE_REJOIN)
       renew_caps(p->first);
   }
 }
 
 void Client::renew_caps(const int mds) {
-  ldout(cct, 10) << "renew_caps mds" << mds << dendl;
+  ldout(cct, 10) << "renew_caps mds." << mds << dendl;
   MetaSession *session = mds_sessions[mds];
   session->last_cap_renew_request = ceph_clock_now(cct);
   uint64_t seq = ++session->cap_renew_seq;
@@ -3531,7 +3531,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       dir->dir->dentries.count(dname)) {
     Dentry *dn = dir->dir->dentries[dname];
 
-    ldout(cct, 20) << "_lookup have dn " << dname << " mds" << dn->lease_mds << " ttl " << dn->lease_ttl
+    ldout(cct, 20) << "_lookup have dn " << dname << " mds." << dn->lease_mds << " ttl " << dn->lease_ttl
 	     << " seq " << dn->lease_seq
 	     << dendl;
 

@@ -1092,7 +1092,7 @@ WRITE_CLASS_ENCODER(OSDSuperblock)
 inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 {
   return out << "sb(" << sb.fsid
-             << " osd" << sb.whoami
+             << " osd." << sb.whoami
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"

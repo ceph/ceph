@@ -102,7 +102,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDS *mds) {
-  return *_dout << "mds" << mds->get_nodeid() << ".cache ";
+  return *_dout << "mds." << mds->get_nodeid() << ".cache ";
 }
 
 long g_num_ino = 0;
@@ -1450,7 +1450,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	  oldin->auth_pin(lock);
 	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
 	  lock->get_wrlock(true);
-	  dout(10) << " client" << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
+	  dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
 		   << " wrlock lock " << *lock << " on " << *oldin << dendl;
 	}
       }
@@ -1464,7 +1464,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	in->add_need_snapflush(oldin, *q, client);
       }
     } else {
-      dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
+      dout(10) << " ignoring client." << client << " cap follows " << cap->client_follows << dendl;
     }
   }
 
@@ -2157,7 +2157,7 @@ void MDCache::_logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Cont
 
 void MDCache::committed_master_slave(metareqid_t r, int from)
 {
-  dout(10) << "committed_master_slave mds" << from << " on " << r << dendl;
+  dout(10) << "committed_master_slave mds." << from << " on " << r << dendl;
   assert(uncommitted_masters.count(r));
   uncommitted_masters[r].slaves.erase(from);
   if (uncommitted_masters[r].slaves.empty())
@@ -2186,7 +2186,7 @@ struct C_MDC_SlaveCommit : public Context {
 
 void MDCache::_logged_slave_commit(int from, metareqid_t reqid)
 {
-  dout(10) << "_logged_slave_commit from mds" << from << " " << reqid << dendl;
+  dout(10) << "_logged_slave_commit from mds." << from << " " << reqid << dendl;
   
   // send a message
   MMDSSlaveRequest *req = new MMDSSlaveRequest(reqid, 0, MMDSSlaveRequest::OP_COMMITTED);
@@ -2412,7 +2412,7 @@ void MDCache::send_resolves()
 
 void MDCache::send_resolve_later(int who)
 {
-  dout(10) << "send_resolve_later to mds" << who << dendl;
+  dout(10) << "send_resolve_later to mds." << who << dendl;
   wants_resolve.insert(who);
 }
 
@@ -2451,7 +2451,7 @@ public:
 
 void MDCache::send_resolve_now(int who)
 {
-  dout(10) << "send_resolve_now to mds" << who << dendl;
+  dout(10) << "send_resolve_now to mds." << who << dendl;
   MMDSResolve *m = new MMDSResolve;
 
   show_subtrees();
@@ -2523,7 +2523,7 @@ void MDCache::send_resolve_now(int who)
       dout(10) << " including uncommitted " << p->first << dendl;
       m->add_slave_request(p->first);
     }
-    dout(10) << " will need resolve ack from mds" << who << dendl;
+    dout(10) << " will need resolve ack from mds." << who << dendl;
     need_resolve_ack.insert(who);
   }
 
@@ -2534,12 +2534,12 @@ void MDCache::send_resolve_now(int who)
 
 void MDCache::handle_mds_failure(int who)
 {
-  dout(7) << "handle_mds_failure mds" << who << dendl;
+  dout(7) << "handle_mds_failure mds." << who << dendl;
   
   // make note of recovery set
   mds->mdsmap->get_recovery_mds_set(recovery_set);
   recovery_set.erase(mds->get_nodeid());
-  dout(1) << "handle_mds_failure mds" << who << " : recovery peers are " << recovery_set << dendl;
+  dout(1) << "handle_mds_failure mds." << who << " : recovery peers are " << recovery_set << dendl;
 
   // adjust my recovery lists
   wants_resolve.erase(who);   // MDS will ask again
@@ -2579,14 +2579,14 @@ void MDCache::handle_mds_failure(int who)
     // failed node is slave?
     if (!p->second->committing) {
       if (p->second->more()->witnessed.count(who)) {
-	dout(10) << " master request " << *p->second << " no longer witnessed by slave mds" << who
+	dout(10) << " master request " << *p->second << " no longer witnessed by slave mds." << who
 		 << dendl;
 	// discard this peer's prepare (if any)
 	p->second->more()->witnessed.erase(who);
       }
       
       if (p->second->more()->waiting_on_slave.count(who)) {
-	dout(10) << " master request " << *p->second << " waiting for slave mds" << who
+	dout(10) << " master request " << *p->second << " waiting for slave mds." << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
 	p->second->more()->waiting_on_slave.erase(who);
@@ -2612,7 +2612,7 @@ void MDCache::handle_mds_failure(int who)
  */
 void MDCache::handle_mds_recovery(int who)
 {
-  dout(7) << "handle_mds_recovery mds" << who << dendl;
+  dout(7) << "handle_mds_recovery mds." << who << dendl;
 
   list<Context*> waiters;
 
@@ -2923,7 +2923,7 @@ void MDCache::disambiguate_imports()
        p != other_ambiguous_imports.end();
        ++p) {
     int who = p->first;
-    dout(10) << "ambiguous imports for mds" << who << dendl;
+    dout(10) << "ambiguous imports for mds." << who << dendl;
 
     for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = p->second.begin();
 	 q != p->second.end();
@@ -2934,11 +2934,11 @@ void MDCache::disambiguate_imports()
       if (!dir) continue;
       
       if (dir->is_ambiguous_auth()) {     // works for me_ambig or if i am a surviving bystander
-	dout(10) << "  mds" << who << " did import " << *dir << dendl;
+	dout(10) << "  mds." << who << " did import " << *dir << dendl;
 	adjust_bounded_subtree_auth(dir, q->second, who);
 	try_subtree_merge(dir);
       } else {
-	dout(10) << "  mds" << who << " did not import " << *dir << dendl;
+	dout(10) << "  mds." << who << " did not import " << *dir << dendl;
       }
     }
   }
@@ -3550,7 +3550,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
-	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << dendl;
+	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	rejoin_import_cap(in, q->first, q->second, from);
       }
     }
@@ -3576,7 +3576,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
-	dout(10) << " claiming cap import " << p->first << " client" << q->first << dendl;
+	dout(10) << " claiming cap import " << p->first << " client." << q->first << dendl;
 	cap_imports[p->first][q->first][from] = q->second;
       }
     }
@@ -3862,7 +3862,7 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
  */
 void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes)
 {
-  dout(10) << "rejoin_scour_survivor_replicas from mds" << from << dendl;
+  dout(10) << "rejoin_scour_survivor_replicas from mds." << from << dendl;
 
   // FIXME: what about root and stray inodes.
   
@@ -4482,7 +4482,7 @@ void MDCache::process_imported_caps()
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
-	dout(20) << " add_reconnected_cap " << in->ino() << " client" << q->first << dendl;
+	dout(20) << " add_reconnected_cap " << in->ino() << " client." << q->first << dendl;
 	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
 	rejoin_import_cap(in, q->first, r->second, r->first);
       }
@@ -4541,9 +4541,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 	   q != p->second.end();
 	   q++) {
 	if (q->second == realm->inode->ino()) {
-	  dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
+	  dout(15) << "  client." << q->first << " has correct realm " << q->second << dendl;
 	} else {
-	  dout(15) << "  client" << q->first << " has wrong realm " << q->second
+	  dout(15) << "  client." << q->first << " has wrong realm " << q->second
 		   << " != " << realm->inode->ino() << dendl;
 	  if (realm->have_past_parents_open()) {
 	    // ok, include in a split message _now_.
@@ -4589,13 +4589,13 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
        p++) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first.v));
     if (session) {
-      dout(10) << " client" << p->first
+      dout(10) << " client." << p->first
 	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
       mds->send_message_client_counted(p->second, session);
     } else {
-      dout(10) << " no session for client" << p->first << dendl;
+      dout(10) << " no session for client." << p->first << dendl;
       p->second->put();
     }
   }
@@ -4632,7 +4632,7 @@ void MDCache::clean_open_file_lists()
 
 void MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, int frommds)
 {
-  dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
+  dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
   assert(session);
@@ -4649,7 +4649,7 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
   ceph_mds_cap_reconnect *rc = get_replay_cap_reconnect(in->ino(), client);
   if (rc) {
     in->reconnect_cap(client, *rc, session);
-    dout(10) << "try_reconnect_cap client" << client
+    dout(10) << "try_reconnect_cap client." << client
 	     << " reconnect wanted " << ccap_string(rc->wanted)
 	     << " issue " << ccap_string(rc->issued)
 	     << " on " << *in << dendl;
@@ -4826,7 +4826,7 @@ void MDCache::open_undef_dirfrags()
 void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq)
 {
   if (seq < realm->get_newest_seq()) {
-    dout(10) << "finish_snaprealm_reconnect client" << client << " has old seq " << seq << " < " 
+    dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
 	     << realm->get_newest_seq()
     	     << " on " << *realm << dendl;
     // send an update
@@ -4839,7 +4839,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
       dout(10) << " ...or not, no session for this client!" << dendl;
     }
   } else {
-    dout(10) << "finish_snaprealm_reconnect client" << client << " up to date"
+    dout(10) << "finish_snaprealm_reconnect client." << client << " up to date"
 	     << " on " << *realm << dendl;
   }
 }
@@ -5069,7 +5069,7 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
 	 p++) {
       Capability *cap = in->get_client_cap(p->first);
       if (!cap) {
-	dout(10) << " client" << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
+	dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
 	recover = true;
 	break;
       }
@@ -5450,7 +5450,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
 	  con->is_importing()) break;                // don't send any expire while importing.
       if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
       
-      dout(12) << "  sending expire to mds" << a << " on " << *dn << dendl;
+      dout(12) << "  sending expire to mds." << a << " on " << *dn << dendl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
@@ -5526,7 +5526,7 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, map<int, MCacheExpire*>& expire
 	  con->is_importing()) break;                // don't send any expire while importing.
       if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
 
-      dout(12) << "  sending expire to mds" << a << " on   " << *dir << dendl;
+      dout(12) << "  sending expire to mds." << a << " on   " << *dir << dendl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
@@ -5568,7 +5568,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 	  con->is_importing()) break;                // don't send any expire while importing.
       if (a == mds->get_nodeid()) continue;          // on export, ignore myself.
 
-      dout(12) << "  sending expire to mds" << a << " on " << *in << dendl;
+      dout(12) << "  sending expire to mds." << a << " on " << *in << dendl;
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
@@ -5855,7 +5855,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 {
   int from = m->get_from();
   
-  dout(7) << "cache_expire from mds" << from << dendl;
+  dout(7) << "cache_expire from mds." << from << dendl;
 
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
     m->put();
@@ -5916,13 +5916,13 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       // check nonce
       if (nonce == in->get_replica_nonce(from)) {
 	// remove from our cached_by
-	dout(7) << " inode expire on " << *in << " from mds" << from 
+	dout(7) << " inode expire on " << *in << " from mds." << from 
 		<< " cached_by was " << in->get_replicas() << dendl;
 	inode_remove_replica(in, from);
       } 
       else {
 	// this is an old nonce, ignore expire.
-	dout(7) << " inode expire on " << *in << " from mds" << from
+	dout(7) << " inode expire on " << *in << " from mds." << from
 		<< " with old nonce " << nonce
 		<< " (current " << in->get_replica_nonce(from) << "), dropping" 
 		<< dendl;
@@ -5946,13 +5946,13 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       // check nonce
       if (nonce == dir->get_replica_nonce(from)) {
 	// remove from our cached_by
-	dout(7) << " dir expire on " << *dir << " from mds" << from
+	dout(7) << " dir expire on " << *dir << " from mds." << from
 		<< " replicas was " << dir->replica_map << dendl;
 	dir->remove_replica(from);
       } 
       else {
 	// this is an old nonce, ignore expire.
-	dout(7) << " dir expire on " << *dir << " from mds" << from 
+	dout(7) << " dir expire on " << *dir << " from mds." << from 
 		<< " with old nonce " << nonce << " (current " << dir->get_replica_nonce(from)
 		<< "), dropping" << dendl;
       }
@@ -5994,11 +5994,11 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dn);
 	
 	if (nonce == dn->get_replica_nonce(from)) {
-	  dout(7) << "  dentry_expire on " << *dn << " from mds" << from << dendl;
+	  dout(7) << "  dentry_expire on " << *dn << " from mds." << from << dendl;
 	  dentry_remove_replica(dn, from);
 	} 
 	else {
-	  dout(7) << "  dentry_expire on " << *dn << " from mds" << from
+	  dout(7) << "  dentry_expire on " << *dn << " from mds." << from
 		  << " with old nonce " << nonce << " (current " << dn->get_replica_nonce(from)
 		  << "), dropping" << dendl;
 	}
@@ -6079,7 +6079,7 @@ void MDCache::trim_client_leases()
       ClientLease *r = client_leases[pool].front();
       if (r->ttl > now) break;
       CDentry *dn = (CDentry*)r->parent;
-      dout(10) << " expiring client" << r->client << " lease of " << *dn << dendl;
+      dout(10) << " expiring client." << r->client << " lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
     int after = client_leases[pool].size();
@@ -6258,7 +6258,7 @@ bool MDCache::shutdown_pass()
       int dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
 	dest = 0;
-      dout(7) << "sending " << *dir << " back to mds" << dest << dendl;
+      dout(7) << "sending " << *dir << " back to mds." << dest << dendl;
       migrator->export_dir(dir, dest);
       if (--max == 0)
 	break;
@@ -6717,7 +6717,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	  int from = req->get_source().num();
 	  
 	  if (dn->is_replica(from)) {
-	    dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
+	    dout(15) << "traverse: REP would replicate to mds." << from << ", but already cached_by " 
 		     << req->get_source() << " dn " << *dn << dendl; 
 	  } else {
 	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
@@ -6821,7 +6821,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 #if 0
 	// request replication?
 	if (mdr && mdr->client_request && curdir->is_rep()) {
-	  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under "
+	  dout(15) << "traverse: REP fw to mds." << dauth << ", requesting rep under "
 		   << *curdir << " req " << *(MClientRequest*)req << dendl;
 	  mdr->client_request->set_mds_wants_replica_in_dirino(curdir->ino());
 	  req->clear_payload();  // reencode!
@@ -7301,7 +7301,7 @@ void MDCache::kick_find_ino_peers(int who)
        ++p) {
     find_ino_peer_info_t& fip = p->second;
     if (fip.checking == who) {
-      dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds" << who << dendl;
+      dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds." << who << dendl;
       fip.checking = -1;
       _do_find_ino_peer(fip);
     } else if (fip.checking == -1) {
@@ -7394,7 +7394,7 @@ MDRequest *MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
   MDRequest *mdr = new MDRequest(ri, attempt, by);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start_slave " << *mdr << " by mds" << by << dendl;
+  dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
   return mdr;
 }
 
@@ -7438,7 +7438,7 @@ void MDCache::request_finish(MDRequest *mdr)
 
 void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
-  dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << dendl;
+  dout(7) << "request_forward " << *mdr << " to mds." << who << " req " << *mdr << dendl;
   
   mds->forward_message_mds(mdr->client_request, who);  
   mdr->client_request = 0;
@@ -7502,7 +7502,7 @@ void MDCache::request_drop_foreign_locks(MDRequest *mdr)
   map<SimpleLock*, int>::iterator q = mdr->remote_wrlocks.begin();
   while (q != mdr->remote_wrlocks.end()) {
     dout(10) << "request_drop_foreign_locks forgetting remote_wrlock " << *q->first
-	     << " on mds" << q->second
+	     << " on mds." << q->second
 	     << " on " << *(q->first)->get_parent() << dendl;
     mdr->locks.erase(q->first);
     mdr->remote_wrlocks.erase(q++);
@@ -8268,7 +8268,7 @@ void MDCache::migrate_stray(CDentry *dn, int to)
 {
   CInode *fromino = dn->dir->get_inode();
   dout(10) << "migrate_stray from mds" 
-	   << MDS_INO_STRAY_OWNER(fromino->inode.ino) << " to mds" << to 
+	   << MDS_INO_STRAY_OWNER(fromino->inode.ino) << " to mds." << to 
 	   << " " << *dn << " " << *dn->get_projected_linkage()->get_inode() << dendl;
 
   // rename it to another mds.
@@ -8312,7 +8312,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
 				Context *onfinish,
 				int from) 
 {
-  dout(7) << "discover_base_ino " << want_ino << " from mds" << from << dendl;
+  dout(7) << "discover_base_ino " << want_ino << " from mds." << from << dendl;
   if (waiting_for_base_ino[from].count(want_ino) == 0) {
     discover_info_t& d = _create_discover(from);
     d.ino = want_ino;
@@ -8332,7 +8332,7 @@ void MDCache::discover_dir_frag(CInode *base,
 
   dirfrag_t df(base->ino(), approx_fg);
   dout(7) << "discover_dir_frag " << df
-	  << " from mds" << from << dendl;
+	  << " from mds." << from << dendl;
 
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {  // FIXME: this is kind of weak!
     discover_info_t& d = _create_discover(from);
@@ -8369,7 +8369,7 @@ void MDCache::discover_path(CInode *base,
   if (from < 0)
     from = base->authority().first;
 
-  dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds" << from
+  dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds." << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -8416,7 +8416,7 @@ void MDCache::discover_path(CDir *base,
 {
   int from = base->authority().first;
 
-  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " snap " << snap << " from mds" << from
+  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " snap " << snap << " from mds." << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -8462,7 +8462,7 @@ void MDCache::discover_ino(CDir *base,
 {
   int from = base->authority().first;
 
-  dout(7) << "discover_ino " << base->dirfrag() << " " << want_ino << " from mds" << from
+  dout(7) << "discover_ino " << base->dirfrag() << " " << want_ino << " from mds." << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
   
@@ -8526,7 +8526,7 @@ void MDCache::handle_discover(MDiscover *dis)
   // get started.
   if (MDS_INO_IS_BASE(dis->get_base_ino())) {
     // wants root
-    dout(7) << "handle_discover from mds" << from
+    dout(7) << "handle_discover from mds." << from
 	    << " wants base + " << dis->get_want().get_path()
 	    << " snap " << snapid
 	    << dendl;
@@ -8548,17 +8548,17 @@ void MDCache::handle_discover(MDiscover *dis)
     }
     
     if (!cur) {
-      dout(7) << "handle_discover mds" << from 
+      dout(7) << "handle_discover mds." << from 
 	      << " don't have base ino " << dis->get_base_ino() << "." << snapid
 	      << dendl;
       reply->set_flag_error_dir();
     } else if (dis->wants_base_dir()) {
-      dout(7) << "handle_discover mds" << from 
+      dout(7) << "handle_discover mds." << from 
 	      << " wants basedir+" << dis->get_want().get_path() 
 	      << " has " << *cur 
 	      << dendl;
     } else {
-      dout(7) << "handle_discover mds" << from 
+      dout(7) << "handle_discover mds." << from 
 	      << " wants " << dis->get_want().get_path()
 	      << " has " << *cur
 	      << dendl;
@@ -8778,7 +8778,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
   // how did we do?
   assert(!reply->is_empty());
-  dout(7) << "handle_discover sending result back to asker mds" << from << dendl;
+  dout(7) << "handle_discover sending result back to asker mds." << from << dendl;
   mds->send_message(reply, dis->get_connection());
 
   dis->put();
@@ -9004,7 +9004,7 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
   // i'm assuming this is a subtree root. 
   adjust_subtree_auth(dir, from);
 
-  dout(7) << "forge_replica_dir added " << *dir << " while mds" << from << " is down" << dendl;
+  dout(7) << "forge_replica_dir added " << *dir << " while mds." << from << " is down" << dendl;
 
   return dir;
 }

@@ -107,7 +107,7 @@
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 static ostream& _prefix(std::ostream* _dout, int whoami, OSDMap *osdmap) {
-  return *_dout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+  return *_dout << "osd." << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
 const coll_t coll_t::META_COLL("meta");
@@ -678,11 +678,11 @@ int OSD::init()
   // load up pgs (as they previously existed)
   load_pgs();
 
-  dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
+  dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
     derr << "OSD::init: logic error: superblock says osd"
-	 << superblock.whoami << " but i am osd" << whoami << dendl;
+	 << superblock.whoami << " but i am osd." << whoami << dendl;
     return -EINVAL;
   }
 
@@ -961,8 +961,8 @@ int OSD::read_superblock()
   }
 
   if (whoami != superblock.whoami) {
-    derr << "read_superblock superblock says osd" << superblock.whoami
-         << ", but i (think i) am osd" << whoami << dendl;
+    derr << "read_superblock superblock says osd." << superblock.whoami
+         << ", but i (think i) am osd." << whoami << dendl;
     return -1;
   }
   
@@ -1424,7 +1424,7 @@ void OSD::_add_heartbeat_source(int p, map<int, epoch_t>& old_from, map<int, uti
     // have a stamp _AND_ i'm not new to the set
     heartbeat_from_stamp[p] = old_from_stamp[p];
   } else {
-    dout(10) << "update_heartbeat_peers: new _from osd" << p
+    dout(10) << "update_heartbeat_peers: new _from osd." << p
 	     << " " << con->get_peer_addr() << dendl;
     heartbeat_from_stamp[p] = ceph_clock_now(g_ceph_context);  
     MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch,
@@ -1482,16 +1482,16 @@ void OSD::update_heartbeat_peers()
 
     // share latest map with this peer, just to be nice.
     if (osdmap->is_up(p->first) && !is_booting()) {
-      dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd" << p->first << dendl;
+      dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd." << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
 
-    dout(10) << "update_heartbeat_peers: will mark down old _from peer osd" << p->first
+    dout(10) << "update_heartbeat_peers: will mark down old _from peer osd." << p->first
 	     << " " << con->get_peer_addr()
 	     << " as of " << p->second << dendl;
     
     if (!osdmap->is_up(p->first) && !is_booting()) {
-      dout(10) << "update_heartbeat_peers: telling old peer osd" << p->first
+      dout(10) << "update_heartbeat_peers: telling old peer osd." << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
       hbin_messenger->send_message(new MOSDPing(osdmap->get_fsid(), heartbeat_epoch,
@@ -1678,7 +1678,7 @@ void OSD::heartbeat_check()
        p++) {
     if (heartbeat_from_stamp.count(p->first) &&
 	heartbeat_from_stamp[p->first] < grace) {
-      derr << "heartbeat_check: no heartbeat from osd" << p->first
+      derr << "heartbeat_check: no heartbeat from osd." << p->first
 	   << " since " << heartbeat_from_stamp[p->first]
 	   << " (cutoff " << grace << ")" << dendl;
       queue_failure(p->first);
@@ -1724,12 +1724,12 @@ void OSD::heartbeat()
        i != heartbeat_to.end();
        i++) {
     int peer = i->first;
-    dout(30) << "heartbeat allocating ping for osd" << peer << dendl;
+    dout(30) << "heartbeat allocating ping for osd." << peer << dendl;
     Message *m = new MOSDPing(osdmap->get_fsid(),
 			      map_locked ? osdmap->get_epoch():0, 
 			      i->second, MOSDPing::HEARTBEAT);
     m->set_priority(CEPH_MSG_PRIO_HIGH);
-    dout(30) << "heartbeat sending ping to osd" << peer << dendl;
+    dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     hbout_messenger->send_message(m, heartbeat_to_con[peer]);
   }
 
@@ -2380,14 +2380,14 @@ epoch_t OSD::note_peer_epoch(int peer, epoch_t e)
   map<int,epoch_t>::iterator p = peer_map_epoch.find(peer);
   if (p != peer_map_epoch.end()) {
     if (p->second < e) {
-      dout(10) << "note_peer_epoch osd" << peer << " has " << e << dendl;
+      dout(10) << "note_peer_epoch osd." << peer << " has " << e << dendl;
       p->second = e;
     } else {
-      dout(30) << "note_peer_epoch osd" << peer << " has " << p->second << " >= " << e << dendl;
+      dout(30) << "note_peer_epoch osd." << peer << " has " << p->second << " >= " << e << dendl;
     }
     return p->second;
   } else {
-    dout(10) << "note_peer_epoch osd" << peer << " now has " << e << dendl;
+    dout(10) << "note_peer_epoch osd." << peer << " now has " << e << dendl;
     peer_map_epoch[peer] = e;
     return e;
   }
@@ -2399,11 +2399,11 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
   map<int,epoch_t>::iterator p = peer_map_epoch.find(peer);
   if (p != peer_map_epoch.end()) {
     if (p->second <= as_of) {
-      dout(10) << "forget_peer_epoch osd" << peer << " as_of " << as_of
+      dout(10) << "forget_peer_epoch osd." << peer << " as_of " << as_of
 	       << " had " << p->second << dendl;
       peer_map_epoch.erase(p);
     } else {
-      dout(10) << "forget_peer_epoch osd" << peer << " as_of " << as_of
+      dout(10) << "forget_peer_epoch osd." << peer << " as_of " << as_of
 	       << " has " << p->second << " - not forgetting" << dendl;
     }
   }
@@ -2939,7 +2939,7 @@ void OSD::note_down_osd(int peer)
   // update_heartbeat_peers() will clean out peers i expect heartbeast _from_.
   if (heartbeat_to.count(peer) &&
       heartbeat_to[peer] < osdmap->get_epoch()) {
-    dout(10) << "note_down_osd osd" << peer << " marking down hbout connection "
+    dout(10) << "note_down_osd osd." << peer << " marking down hbout connection "
 	     << heartbeat_to_con[peer]->get_peer_addr() << dendl;
     hbout_messenger->mark_down(heartbeat_to_con[peer]);
     heartbeat_to_con[peer]->put();
@@ -3686,7 +3686,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(0) << "from dead osd" << from << ", dropping, sharing map" << dendl;
+      dout(0) << "from dead osd." << from << ", dropping, sharing map" << dendl;
       send_incremental_map(epoch, m->get_source_inst(), true);
 
       // close after we send the map; don't reconnect
@@ -4059,10 +4059,10 @@ void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list)
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
-      dout(7) << "do_notify osd" << it->first << " is self, skipping" << dendl;
+      dout(7) << "do_notify osd." << it->first << " is self, skipping" << dendl;
       continue;
     }
-    dout(7) << "do_notify osd" << it->first << " on " << it->second.size() << " PGs" << dendl;
+    dout(7) << "do_notify osd." << it->first << " on " << it->second.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(), it->second);
     _share_map_outgoing(osdmap->get_cluster_inst(it->first));
     cluster_messenger->send_message(m, osdmap->get_cluster_inst(it->first));
@@ -4079,7 +4079,7 @@ void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
        pit != query_map.end();
        pit++) {
     int who = pit->first;
-    dout(7) << "do_queries querying osd" << who
+    dout(7) << "do_queries querying osd." << who
             << " on " << pit->second.size() << " PGs" << dendl;
     MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(), pit->second);
     _share_map_outgoing(osdmap->get_cluster_inst(who));
@@ -4096,7 +4096,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
     for (vector<PG::Info>::iterator i = p->second->pg_info.begin();
 	 i != p->second->pg_info.end();
 	 ++i) {
-      dout(20) << "Sending info " << *i << " to osd" << p->first << dendl;
+      dout(20) << "Sending info " << *i << " to osd." << p->first << dendl;
     }
     cluster_messenger->send_message(p->second, osdmap->get_cluster_inst(p->first));
   }
@@ -4277,7 +4277,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
 
     if (pg->is_primary()) {
       // peer is informing us of their last_complete_ondisk
-      dout(10) << *pg << " replica osd" << from << " lcod " << m->trim_to << dendl;
+      dout(10) << *pg << " replica osd." << from << " lcod " << m->trim_to << dendl;
       pg->peer_last_complete_ondisk[from] = m->trim_to;
       if (pg->calc_min_last_complete_ondisk()) {
 	dout(10) << *pg << " min lcod now " << pg->min_last_complete_ondisk << dendl;
@@ -4926,7 +4926,7 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
     clog.warn() << op->get_source_inst() << " misdirected "
-		<< op->get_reqid() << " " << pg->info.pgid << " to osd" << whoami
+		<< op->get_reqid() << " " << pg->info.pgid << " to osd." << whoami
 		<< " not " << pg->acting
 		<< " in e" << op->get_map_epoch() << "/" << osdmap->get_epoch()
 		<< "\n";

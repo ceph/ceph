@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
 
 /* This function DOES put the passed message before returning */
 void MDSTableServer::handle_request(MMDSTableRequest *req)
@@ -151,7 +151,7 @@ void MDSTableServer::finish_recovery()
 void MDSTableServer::handle_mds_recovery(int who)
 {
   if (who >= 0)
-    dout(7) << "handle_mds_recovery mds" << who << dendl;
+    dout(7) << "handle_mds_recovery mds." << who << dendl;
   
   // resend agrees for recovered mds
   for (map<version_t,_pending>::iterator p = pending_for_mds.begin();

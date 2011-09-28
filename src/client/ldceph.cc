@@ -157,7 +157,7 @@ public:
 
       fp_mount_point = mount_point;
 
-      cerr << "ldceph init: mounted on " << mount_point << " as client" << client->get_nodeid() << std::endl;
+      cerr << "ldceph init: mounted on " << mount_point << " as client." << client->get_nodeid() << std::endl;
 
       refresh_cwd();
     }

@@ -27,7 +27,7 @@
 #define dout_prefix _prefix(_dout, mdcache->mds->get_nodeid(), inode, srnode.seq, this)
 static ostream& _prefix(std::ostream *_dout, int whoami, CInode *inode,
 			uint64_t seq, SnapRealm *realm) {
-  return *_dout << " mds" << whoami
+  return *_dout << " mds." << whoami
 		<< ".cache.snaprealm(" << inode->ino()
 		<< " seq " << seq << " " << realm << ") ";
 }

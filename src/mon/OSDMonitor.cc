@@ -114,7 +114,7 @@ bool OSDMonitor::update_from_paxos()
   for (int o = 0; o < osdmap.get_max_osd(); o++)
     if (osdmap.is_down(o) && osdmap.is_in(o) &&
 	down_pending_out.count(o) == 0) {
-      dout(10) << " adding osd" << o << " to down_pending_out map" << dendl;
+      dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
       down_pending_out[o] = ceph_clock_now(g_ceph_context);
     }
 
@@ -248,24 +248,24 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i++) {
     int s = i->second ? i->second : CEPH_OSD_UP;
     if (s & CEPH_OSD_UP)
-      dout(2) << " osd" << i->first << " DOWN" << dendl;
+      dout(2) << " osd." << i->first << " DOWN" << dendl;
     if (s & CEPH_OSD_EXISTS)
-      dout(2) << " osd" << i->first << " DNE" << dendl;
+      dout(2) << " osd." << i->first << " DNE" << dendl;
   }
   for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
        i != pending_inc.new_up_client.end();
        i++) { 
-    dout(2) << " osd" << i->first << " UP " << i->second << dendl; //FIXME: insert cluster addresses too
+    dout(2) << " osd." << i->first << " UP " << i->second << dendl; //FIXME: insert cluster addresses too
   }
   for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
        i != pending_inc.new_weight.end();
        i++) {
     if (i->second == CEPH_OSD_OUT) {
-      dout(2) << " osd" << i->first << " OUT" << dendl;
+      dout(2) << " osd." << i->first << " OUT" << dendl;
     } else if (i->second == CEPH_OSD_IN) {
-      dout(2) << " osd" << i->first << " IN" << dendl;
+      dout(2) << " osd." << i->first << " IN" << dendl;
     } else {
-      dout(2) << " osd" << i->first << " WEIGHT " << hex << i->second << dec << dendl;
+      dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
     }
   }
 
@@ -413,7 +413,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     if (!osdmap.exists(from) ||
 	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
 	osdmap.is_down(from)) {
-      dout(5) << "preprocess_failure from dead osd" << from << ", ignoring" << dendl;
+      dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
       send_incremental(m, m->get_epoch()+1);
       goto didit;
     }
@@ -471,8 +471,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
       while ((i != failed_notes.end()) && (i->first == target_osd)) {
         if (i->second.first == reporter) {
           ++i->second.second;
-          dout(10) << "adding new failure report from osd" << reporter
-                   << " on osd" << target_osd << dendl;
+          dout(10) << "adding new failure report from osd." << reporter
+                   << " on osd." << target_osd << dendl;
           reporter = -1;
         }
         ++reporters;
@@ -485,13 +485,13 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
                           (target_osd, pair<int, int>(reporter, 1)));
       ++reporters;
       ++reports;
-      dout(10) << "osd" << reporter
-               << " is adding failure report on osd" << target_osd << dendl;
+      dout(10) << "osd." << reporter
+               << " is adding failure report on osd." << target_osd << dendl;
     }
 
     if ((reporters >= g_conf->osd_min_down_reporters) &&
         (reports >= g_conf->osd_min_down_reports)) {
-      dout(1) << "have enough reports/reporters to mark osd" << target_osd
+      dout(1) << "have enough reports/reporters to mark osd." << target_osd
               << " as down" << dendl;
       pending_inc.new_state[target_osd] = CEPH_OSD_UP;
       paxos->wait_for_commit(new C_Reported(this, m));
@@ -506,7 +506,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
                                 && (i->second.first != reporter))
       ++i;
     if ((i == failed_notes.end()) || (i->second.first != reporter))
-      dout(0) << "got an OSD not-failed report from osd" << reporter
+      dout(0) << "got an OSD not-failed report from osd." << reporter
               << " that hasn't reported failure! (or in previous epoch?)" << dendl;
     else failed_notes.erase(i);
   }
@@ -578,7 +578,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   
   // does this osd exist?
   if (from >= osdmap.get_max_osd()) {
-    dout(1) << "boot from osd" << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
+    dout(1) << "boot from osd." << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
     m->put();
     return false;
   }
@@ -629,7 +629,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	  (info.down_at-1) > last)
 	last = info.down_at-1;
 
-      dout(10) << "prepare_boot osd" << from << " last_clean_interval "
+      dout(10) << "prepare_boot osd." << from << " last_clean_interval "
 	       << info.last_clean_first << "-" << info.last_clean_last
 	       << " -> " << first << "-" << last
 	       << dendl;
@@ -1005,12 +1005,12 @@ void OSDMonitor::tick()
     if (osdmap.is_down(o) && osdmap.is_in(o)) {
       if (g_conf->mon_osd_down_out_interval > 0 &&
 	  down.sec() >= g_conf->mon_osd_down_out_interval) {
-	dout(10) << "tick marking osd" << o << " OUT after " << down
+	dout(10) << "tick marking osd." << o << " OUT after " << down
 		 << " sec (target " << g_conf->mon_osd_down_out_interval << ")" << dendl;
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;
 	do_propose = true;
 	
-	mon->clog.info() << "osd" << o << " out (down for " << down << ")\n";
+	mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
       } else
 	continue;
     }
@@ -1260,7 +1260,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	    r = 0;
 	    ss << "ok";
 	  } else {
-	    ss << "osd" << who << " not up";
+	    ss << "osd." << who << " not up";
 	    r = -ENOENT;
 	  }
 	} else ss << "specify osd number or *";
@@ -1291,9 +1291,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 					      m->cmd[1] == "repair"),
 				osdmap.get_inst(osd));
 	  r = 0;
-	  ss << "osd" << osd << " instructed to " << m->cmd[1];
+	  ss << "osd." << osd << " instructed to " << m->cmd[1];
 	} else 
-	  ss << "osd" << osd << " is not up";
+	  ss << "osd." << osd << " is not up";
       }
     }
     else if (m->cmd[1] == "lspools") {
@@ -1568,15 +1568,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
-	  ss << "osd" << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist";
 	} else if (osdmap.is_down(osd)) {
-	  ss << "osd" << osd << " is already down";
+	  ss << "osd." << osd << " is already down";
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
 	  if (any)
-	    ss << ", osd" << osd;
+	    ss << ", osd." << osd;
 	  else 
-	    ss << "marked down osd" << osd;
+	    ss << "marked down osd." << osd;
 	  any = true;
 	}
       }
@@ -1591,15 +1591,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
-	  ss << "osd" << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist";
 	} else if (osdmap.is_out(osd)) {
-	  ss << "osd" << osd << " is already out";
+	  ss << "osd." << osd << " is already out";
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	  if (any)
-	    ss << ", osd" << osd;
+	    ss << ", osd." << osd;
 	  else
-	    ss << "marked out osd" << osd;
+	    ss << "marked out osd." << osd;
 	  any = true;
 	}
       }
@@ -1614,15 +1614,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (osdmap.is_in(osd)) {
-	  ss << "osd" << osd << " is already in";
+	  ss << "osd." << osd << " is already in";
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd" << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist";
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
 	  if (any)
-	    ss << ", osd" << osd;
+	    ss << ", osd." << osd;
 	  else
-	    ss << "marked in osd" << osd;
+	    ss << "marked in osd." << osd;
 	  any = true;
 	}
       }
@@ -1638,7 +1638,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long ww = (int)((float)CEPH_OSD_IN*w);
       if (osdmap.exists(osd)) {
 	pending_inc.new_weight[osd] = ww;
-	ss << "reweighted osd" << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
+	ss << "reweighted osd." << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
@@ -1655,7 +1655,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      "--yes-i-really-mean-it if you really do.";
       }
       else if (!osdmap.exists(osd) || !osdmap.is_down(osd)) {
-	ss << "osd" << osd << " is not down or doesn't exist";
+	ss << "osd." << osd << " is not down or doesn't exist";
       } else {
 	epoch_t e = osdmap.get_info(osd).down_at;
 	pending_inc.new_lost[osd] = e;
@@ -1705,7 +1705,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
 
   done:
-      dout(10) << " creating osd" << i << dendl;
+      dout(10) << " creating osd." << i << dendl;
       pending_inc.new_state[i] |= CEPH_OSD_EXISTS;
       ss << i;
       getline(ss, rs);
@@ -1717,15 +1717,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       for (unsigned j = 2; j < m->cmd.size(); j++) {
 	long osd = strtol(m->cmd[j].c_str(), 0, 10);
 	if (!osdmap.exists(osd)) {
-	  ss << "osd" << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist";
 	} else if (osdmap.is_up(osd)) {
-	  ss << "osd" << osd << " is still up";
+	  ss << "osd." << osd << " is still up";
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_EXISTS;
 	  if (any)
-	    ss << ", osd" << osd;
+	    ss << ", osd." << osd;
 	  else 
-	    ss << "marked dne osd" << osd;
+	    ss << "marked dne osd." << osd;
 	  any = true;
 	}
       }

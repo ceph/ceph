@@ -192,7 +192,7 @@ public:
     if (origop == LINK) out << " link";
     if (origop == RENAME) out << " rename";
     out << " " << reqid;
-    out << " for mds" << master;
+    out << " for mds." << master;
     out << commit;
   }
 

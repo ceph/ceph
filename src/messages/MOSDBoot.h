@@ -38,7 +38,7 @@ private:
 public:
   const char *get_type_name() { return "osd_boot"; }
   void print(ostream& out) {
-    out << "osd_boot(osd" << sb.whoami << " v" << version << ")";
+    out << "osd_boot(osd." << sb.whoami << " v" << version << ")";
   }
   
   void encode_payload(CephContext *cct) {

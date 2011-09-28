@@ -78,7 +78,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
+#define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
 
 
 
@@ -325,7 +325,7 @@ void MDS::send_message(Message *m, Connection *c)
 void MDS::send_message_mds(Message *m, int mds)
 {
   if (!mdsmap->is_up(mds)) {
-    dout(10) << "send_message_mds mds" << mds << " not up, dropping " << *m << dendl;
+    dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
     m->put();
     return;
   }
@@ -394,7 +394,7 @@ void MDS::send_message_client_counted(Message *m, client_t client)
   if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     send_message_client_counted(m, sessionmap.get_session(entity_name_t::CLIENT(client.v)));
   } else {
-    dout(10) << "send_message_client_counted no session for client" << client << " " << *m << dendl;
+    dout(10) << "send_message_client_counted no session for client." << client << " " << *m << dendl;
   }
 }
 
@@ -872,7 +872,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   whoami = mdsmap->get_rank_gid(monc->get_global_id());
   state = mdsmap->get_state_gid(monc->get_global_id());
   incarnation = mdsmap->get_inc_gid(monc->get_global_id());
-  dout(10) << "map says i am " << addr << " mds" << whoami << "." << incarnation
+  dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(state) << dendl;
 
   // mark down any failed peers
@@ -933,11 +933,11 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (oldwhoami != whoami || oldstate != state) {
     // update messenger.
     if (state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY) {
-      dout(1) << "handle_mds_map i am now mds" << monc->get_global_id() << "." << incarnation
-	      << "replaying mds" << whoami << "." << incarnation << dendl;
+      dout(1) << "handle_mds_map i am now mds." << monc->get_global_id() << "." << incarnation
+	      << "replaying mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(monc->get_global_id()));
     } else {
-      dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
+      dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(whoami));
     }
   }
@@ -1519,7 +1519,7 @@ void MDS::recovery_done()
 
 void MDS::handle_mds_recovery(int who) 
 {
-  dout(5) << "handle_mds_recovery mds" << who << dendl;
+  dout(5) << "handle_mds_recovery mds." << who << dendl;
   
   mdcache->handle_mds_recovery(who);
 

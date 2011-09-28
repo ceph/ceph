@@ -85,9 +85,9 @@ inline bool operator< (const entity_name_t& l, const entity_name_t& r) {
 inline std::ostream& operator<<(std::ostream& out, const entity_name_t& addr) {
   //if (addr.is_namer()) return out << "namer";
   if (addr.is_new() || addr.num() < 0)
-    return out << addr.type_str() << "?";
+    return out << addr.type_str() << ".?";
   else
-    return out << addr.type_str() << addr.num();
+    return out << addr.type_str() << '.' << addr.num();
 }
 inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr) {
   return out << *(const entity_name_t*)&addr;
