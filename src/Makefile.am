@@ -335,7 +335,7 @@ radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
-bin_PROGRAMS += radosgw radosgw_admin
+bin_PROGRAMS += radosgw radosgw-admin
 
 rgw_multiparser_SOURCES = $(my_radosgw_src) rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -735,7 +735,7 @@ bash_completiondir = $(sysconfdir)/bash_completion.d
 bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rados \
                $(srcdir)/bash_completion/rbd \
-               $(srcdir)/bash_completion/radosgw_admin
+               $(srcdir)/bash_completion/radosgw-admin
 
 libcephfs_includedir = $(includedir)/cephfs
 libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
@@ -1006,7 +1006,7 @@ noinst_HEADERS = \
 	bash_completion/ceph\
 	bash_completion/rados\
 	bash_completion/rbd\
-	bash_completion/radosgw_admin\
+	bash_completion/radosgw-admin\
         client/Client.h\
 	client/Dentry.h\
 	client/Dir.h\

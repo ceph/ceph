@@ -29,7 +29,7 @@ static XMLFormatter default_formatter;
 
 void _usage() 
 {
-  cerr << "usage: radosgw_admin <cmd> [options...]" << std::endl;
+  cerr << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cerr << "commands:\n";
   cerr << "  user create                create a new user\n" ;
   cerr << "  user modify                modify user\n";

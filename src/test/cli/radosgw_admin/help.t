@@ -1,4 +1,4 @@
-  $ radosgw_admin --help
+  $ radosgw-admin --help
   usage: radosgw_admin <cmd> [options...]
   commands:
     user create                create a new user
