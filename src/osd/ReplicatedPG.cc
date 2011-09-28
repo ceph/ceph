@@ -1984,7 +1984,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    ::decode(nextkey, ip);
 	    ::decode(nextval, ip);
 	  }
-	  while (!bp.end()) {
+	  result = 0;
+	  while (!bp.end() && !result) {
 	    __u8 op;
 	    string key;
 	    ::decode(op, bp);
@@ -2025,8 +2026,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      dout(20) << "   set " << key << " " << val.length() << dendl;
 	      nkeys++;
 	    } else if (op == CEPH_OSD_TMAP_CREATE) {
-	      if (key_exists)
-		return -EEXIST;
+	      if (key_exists) {
+		result = -EEXIST;
+		break;
+	      }
 	      bufferlist val;
 	      ::decode(val, bp);
 	      ::encode(key, newkeydata);
@@ -2035,7 +2038,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      nkeys++;
 	    } else if (op == CEPH_OSD_TMAP_RM) {
 	      if (!key_exists) {
-		return -ENOENT;
+		result = -ENOENT;
+		break;
 	      }
 	      // do nothing.
 	    }
@@ -2077,12 +2081,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	// write it out
-	dout(20) << "tmapput write " << obl.length() << dendl;
-	newop.op.op = CEPH_OSD_OP_WRITEFULL;
-	newop.op.extent.offset = 0;
-	newop.op.extent.length = obl.length();
-        newop.data = obl;
-	do_osd_ops(ctx, nops, odata);
+	if (!result) {
+	  dout(20) << "tmapput write " << obl.length() << dendl;
+	  newop.op.op = CEPH_OSD_OP_WRITEFULL;
+	  newop.op.extent.offset = 0;
+	  newop.op.extent.length = obl.length();
+	  newop.data = obl;
+	  do_osd_ops(ctx, nops, odata);
+	}
       }
       break;
 
