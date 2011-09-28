@@ -195,7 +195,8 @@ int main(int argc, const char **argv)
 		   << cpp_strerror(err) << dendl;
 	      goto out;
 	    }
-	    derr << " wrote " << obl.length() << " byte payload to " << out_file << dendl;
+	    if (!concise)
+	      cout << " wrote " << obl.length() << " byte payload to " << out_file << std::endl;
 	  }
 	}
       }
