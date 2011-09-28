@@ -247,7 +247,7 @@ void CInode::print(ostream& out)
 
 void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
-  dout(10) << "add_need_snapflush client" << client << " snapid " << snapid << " on " << snapin << dendl;
+  dout(10) << "add_need_snapflush client." << client << " snapid " << snapid << " on " << snapin << dendl;
 
   if (client_need_snapflush.empty()) {
     get(CInode::PIN_NEEDSNAPFLUSH);
@@ -266,7 +266,7 @@ void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client
 
 void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
-  dout(10) << "remove_need_snapflush client" << client << " snapid " << snapid << " on " << snapin << dendl;
+  dout(10) << "remove_need_snapflush client." << client << " snapid " << snapid << " on " << snapin << dendl;
   set<client_t>& clients = client_need_snapflush[snapid];
   clients.erase(client);
   if (clients.empty()) {

@@ -1039,7 +1039,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
-    dout(7) << "finish_export_inode telling client" << it->first
+    dout(7) << "finish_export_inode telling client." << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
 				     in->ino(),
@@ -2325,7 +2325,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
   for (map<client_t,Capability::Export>::iterator it = cap_map.begin();
        it != cap_map.end();
        it++) {
-    dout(10) << "finish_import_inode_caps for client" << it->first << " on " << *in << dendl;
+    dout(10) << "finish_import_inode_caps for client." << it->first << " on " << *in << dendl;
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(it->first.v));
     assert(session);
 

@@ -538,7 +538,7 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
   if (client_lease_map.count(c))
     l = client_lease_map[c];
   else {
-    dout(20) << "add_client_lease client" << c << " on " << lock << dendl;
+    dout(20) << "add_client_lease client." << c << " on " << lock << dendl;
     if (client_lease_map.empty())
       get(PIN_CLIENTLEASE);
     l = client_lease_map[c] = new ClientLease(c, this);
@@ -556,7 +556,7 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
 
   bool gather = false;
 
-  dout(20) << "remove_client_lease client" << l->client << " on " << lock << dendl;
+  dout(20) << "remove_client_lease client." << l->client << " on " << lock << dendl;
   lock.put_client_lease();
   if (lock.get_num_client_lease() == 0 && !lock.is_stable())
     gather = true;

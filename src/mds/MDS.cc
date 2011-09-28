@@ -394,7 +394,7 @@ void MDS::send_message_client_counted(Message *m, client_t client)
   if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     send_message_client_counted(m, sessionmap.get_session(entity_name_t::CLIENT(client.v)));
   } else {
-    dout(10) << "send_message_client_counted no session for client" << client << " " << *m << dendl;
+    dout(10) << "send_message_client_counted no session for client." << client << " " << *m << dendl;
   }
 }
 

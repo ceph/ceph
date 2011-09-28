@@ -78,7 +78,7 @@ using namespace std;
 #include "MetaRequest.h"
 
 #undef dout_prefix
-#define dout_prefix *_dout << "client" << whoami << " "
+#define dout_prefix *_dout << "client." << whoami << " "
 
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
 

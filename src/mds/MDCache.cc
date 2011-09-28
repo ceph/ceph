@@ -1450,7 +1450,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	  oldin->auth_pin(lock);
 	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
 	  lock->get_wrlock(true);
-	  dout(10) << " client" << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
+	  dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
 		   << " wrlock lock " << *lock << " on " << *oldin << dendl;
 	}
       }
@@ -1464,7 +1464,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	in->add_need_snapflush(oldin, *q, client);
       }
     } else {
-      dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
+      dout(10) << " ignoring client." << client << " cap follows " << cap->client_follows << dendl;
     }
   }
 
@@ -3550,7 +3550,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
-	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << dendl;
+	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	rejoin_import_cap(in, q->first, q->second, from);
       }
     }
@@ -3576,7 +3576,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
-	dout(10) << " claiming cap import " << p->first << " client" << q->first << dendl;
+	dout(10) << " claiming cap import " << p->first << " client." << q->first << dendl;
 	cap_imports[p->first][q->first][from] = q->second;
       }
     }
@@ -4482,7 +4482,7 @@ void MDCache::process_imported_caps()
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
-	dout(20) << " add_reconnected_cap " << in->ino() << " client" << q->first << dendl;
+	dout(20) << " add_reconnected_cap " << in->ino() << " client." << q->first << dendl;
 	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
 	rejoin_import_cap(in, q->first, r->second, r->first);
       }
@@ -4541,9 +4541,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 	   q != p->second.end();
 	   q++) {
 	if (q->second == realm->inode->ino()) {
-	  dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
+	  dout(15) << "  client." << q->first << " has correct realm " << q->second << dendl;
 	} else {
-	  dout(15) << "  client" << q->first << " has wrong realm " << q->second
+	  dout(15) << "  client." << q->first << " has wrong realm " << q->second
 		   << " != " << realm->inode->ino() << dendl;
 	  if (realm->have_past_parents_open()) {
 	    // ok, include in a split message _now_.
@@ -4589,13 +4589,13 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
        p++) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first.v));
     if (session) {
-      dout(10) << " client" << p->first
+      dout(10) << " client." << p->first
 	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
       mds->send_message_client_counted(p->second, session);
     } else {
-      dout(10) << " no session for client" << p->first << dendl;
+      dout(10) << " no session for client." << p->first << dendl;
       p->second->put();
     }
   }
@@ -4632,7 +4632,7 @@ void MDCache::clean_open_file_lists()
 
 void MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, int frommds)
 {
-  dout(10) << "rejoin_import_cap for client" << client << " from mds." << frommds
+  dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
   assert(session);
@@ -4649,7 +4649,7 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
   ceph_mds_cap_reconnect *rc = get_replay_cap_reconnect(in->ino(), client);
   if (rc) {
     in->reconnect_cap(client, *rc, session);
-    dout(10) << "try_reconnect_cap client" << client
+    dout(10) << "try_reconnect_cap client." << client
 	     << " reconnect wanted " << ccap_string(rc->wanted)
 	     << " issue " << ccap_string(rc->issued)
 	     << " on " << *in << dendl;
@@ -4826,7 +4826,7 @@ void MDCache::open_undef_dirfrags()
 void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq)
 {
   if (seq < realm->get_newest_seq()) {
-    dout(10) << "finish_snaprealm_reconnect client" << client << " has old seq " << seq << " < " 
+    dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
 	     << realm->get_newest_seq()
     	     << " on " << *realm << dendl;
     // send an update
@@ -4839,7 +4839,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
       dout(10) << " ...or not, no session for this client!" << dendl;
     }
   } else {
-    dout(10) << "finish_snaprealm_reconnect client" << client << " up to date"
+    dout(10) << "finish_snaprealm_reconnect client." << client << " up to date"
 	     << " on " << *realm << dendl;
   }
 }
@@ -5069,7 +5069,7 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
 	 p++) {
       Capability *cap = in->get_client_cap(p->first);
       if (!cap) {
-	dout(10) << " client" << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
+	dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
 	recover = true;
 	break;
       }
@@ -6079,7 +6079,7 @@ void MDCache::trim_client_leases()
       ClientLease *r = client_leases[pool].front();
       if (r->ttl > now) break;
       CDentry *dn = (CDentry*)r->parent;
-      dout(10) << " expiring client" << r->client << " lease of " << *dn << dendl;
+      dout(10) << " expiring client." << r->client << " lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
     int after = client_leases[pool].size();
