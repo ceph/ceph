@@ -323,6 +323,7 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
     bucket.marker = buf;
+    bucket.bucket_id = ver;
 
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);

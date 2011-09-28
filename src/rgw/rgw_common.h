@@ -353,19 +353,23 @@ struct rgw_bucket {
   std::string name;
   std::string pool;
   std::string marker;
+  uint64_t bucket_id;
 
   rgw_bucket() {}
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     pool = n;
     marker = "";
+    bucket_id = 0;
   }
-  rgw_bucket(const char *n, const char *p, const char *m) : name(n), pool(p), marker(m) {}
+  rgw_bucket(const char *n, const char *p, const char *m, uint64_t id) :
+    name(n), pool(p), marker(m), bucket_id(id) {}
 
   void clear() {
     name = "";
     pool = "";
     marker = "";
+    bucket_id = 0;
   }
 
   void encode(bufferlist& bl) const {
@@ -374,14 +378,17 @@ struct rgw_bucket {
     ::encode(name, bl);
     ::encode(pool, bl);
     ::encode(marker, bl);
+    ::encode(bucket_id, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(pool, bl);
-    if (struct_v >= 2)
+    if (struct_v >= 2) {
       ::decode(marker, bl);
+      ::decode(bucket_id, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -498,8 +505,6 @@ struct req_state {
    char *os_groups;
 
    utime_t time;
-
-   uint64_t pool_id;
 
    struct RGWEnv *env;
 
