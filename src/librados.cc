@@ -2514,14 +2514,16 @@ int librados::RadosClient::notify(IoCtxImpl& io, const object_t& oid, uint64_t v
   prepare_assert_ops(&io, &rd);
 
   lock.Lock();
-  register_watcher(io, oid, ctx, &cookie);
+  WatchContext *wc;
+  register_watcher(io, oid, ctx, &cookie, &wc);
   uint32_t prot_ver = 1;
   uint32_t timeout = io.notify_timeout;
   ::encode(prot_ver, inbl);
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
-  objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &objver);
+  wc->linger_id = objecter->linger(oid, io.oloc, rd, io.snap_seq, inbl, NULL,
+				   0, onack, NULL, &objver);
   lock.Unlock();
 
   mylock_all.Lock();
