@@ -402,29 +402,6 @@ inline ostream& operator<<(ostream& out, const rgw_bucket b) {
 
 extern rgw_bucket rgw_root_bucket;
 
-struct RGWPoolInfo
-{
-  rgw_bucket bucket;
-  string owner;
-
-  void encode(bufferlist& bl) const {
-     __u32 ver = 3;
-     ::encode(ver, bl);
-     ::encode(owner, bl);
-     ::encode(bucket, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-    ::decode(ver, bl);
-    if (ver < 3)
-      ::decode(bucket.name, bl);
-    ::decode(owner, bl);
-    if (ver >= 2)
-      ::decode(bucket, bl);
-  }
-};
-WRITE_CLASS_ENCODER(RGWPoolInfo)
-
 struct RGWBucketInfo
 {
   rgw_bucket bucket;
