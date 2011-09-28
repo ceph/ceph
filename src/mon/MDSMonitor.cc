@@ -253,7 +253,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 	(pending_mdsmap.is_degraded() ||
 	 ((m->get_standby_for_rank() >= 0) &&
 	     pending_mdsmap.get_state(m->get_standby_for_rank()) < MDSMap::STATE_ACTIVE))) {
-      dout(10) << "mds_beacon can't standby-replay mds" << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
+      dout(10) << "mds_beacon can't standby-replay mds." << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
       dout(10) << "pending_mdsmap.is_degraded()==" << pending_mdsmap.is_degraded()
           << " rank state: " << ceph_mds_state_name(pending_mdsmap.get_state(m->get_standby_for_rank())) << dendl;
       goto ignore;
@@ -383,7 +383,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       info.clear_laggy();
     }
   
-    dout(10) << "prepare_beacon mds" << info.rank
+    dout(10) << "prepare_beacon mds." << info.rank
 	     << " " << ceph_mds_state_name(info.state)
 	     << " -> " << ceph_mds_state_name(state)
 	     << "  standby_for_rank=" << m->get_standby_for_rank()
@@ -595,7 +595,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	    r = 0;
 	    ss << "ok";
 	  } else {
-	    ss << "mds" << who << " no up";
+	    ss << "mds." << who << " no up";
 	    r = -ENOENT;
 	  }
 	} else ss << "specify mds number or *";
@@ -653,7 +653,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     }
     pending_mdsmap.up.erase(w);
     pending_mdsmap.failed.insert(w);
-    ss << "failed mds" << w;
+    ss << "failed mds." << w;
   }
   return 0;
 }
@@ -706,7 +706,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       int who = atoi(m->cmd[2].c_str());
       if (!mdsmap.is_active(who)) {
 	r = -EEXIST;
-	ss << "mds" << who << " not active (" 
+	ss << "mds." << who << " not active (" 
 	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
       } else if ((mdsmap.get_root() == who ||
 		  mdsmap.get_tableserver() == who) &&
@@ -717,7 +717,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       } else {
 	r = 0;
 	uint64_t gid = pending_mdsmap.up[who];
-	ss << "telling mds" << who << " " << pending_mdsmap.mds_info[gid].addr << " to stop";
+	ss << "telling mds." << who << " " << pending_mdsmap.mds_info[gid].addr << " to stop";
 	pending_mdsmap.mds_info[gid].state = MDSMap::STATE_STOPPING;
       }
     }
@@ -773,7 +773,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       int w = atoi(m->cmd[2].c_str());
       pending_mdsmap.failed.erase(w);
       stringstream ss;
-      ss << "removed failed mds" << w;
+      ss << "removed failed mds." << w;
       string rs;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -914,7 +914,7 @@ void MDSMonitor::tick()
       break;
 
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[newgid];
-    dout(1) << "adding standby " << info.addr << " as mds" << mds << dendl;
+    dout(1) << "adding standby " << info.addr << " as mds." << mds << dendl;
     
     info.rank = mds;
     if (pending_mdsmap.stopped.count(mds)) {
@@ -939,7 +939,7 @@ void MDSMonitor::tick()
        ++p) {
     if (last_beacon.count(p->first) == 0) {
       const MDSMap::mds_info_t& info = p->second;
-      dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
+      dout(10) << " adding " << p->second.addr << " mds." << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " to last_beacon" << dendl;
       last_beacon[p->first].stamp = ceph_clock_now(g_ceph_context);
@@ -969,7 +969,7 @@ void MDSMonitor::tick()
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
 
-      dout(10) << "no beacon from " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
+      dout(10) << "no beacon from " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
       
@@ -981,7 +981,7 @@ void MDSMonitor::tick()
 	  info.state != MDSMap::STATE_STANDBY_REPLAY &&
 	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
-	dout(10) << " replacing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " replacing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	switch (info.state) {
@@ -1021,7 +1021,7 @@ void MDSMonitor::tick()
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-	dout(10) << " failing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " failing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(gid);
@@ -1031,12 +1031,12 @@ void MDSMonitor::tick()
 	if (info.state == MDSMap::STATE_STANDBY ||
 	    info.state == MDSMap::STATE_STANDBY_REPLAY) {
 	  // remove it
-	  dout(10) << " removing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
+	  dout(10) << " removing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
 		   << " (laggy)" << dendl;
 	  pending_mdsmap.mds_info.erase(gid);
 	} else if (!info.laggy()) {
-	  dout(10) << " marking " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
+	  dout(10) << " marking " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
 		   << " laggy" << dendl;
 	  info.laggy_since = now;
@@ -1064,7 +1064,7 @@ void MDSMonitor::tick()
       sgid = pending_mdsmap.find_replacement_for(f, name);
       if (sgid) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
-	dout(0) << " taking over failed mds" << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
+	dout(0) << " taking over failed mds." << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	si.state = MDSMap::STATE_REPLAY;
 	si.rank = f;
 	si.inc = ++pending_mdsmap.inc[f];
@@ -1130,7 +1130,7 @@ bool MDSMonitor::try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_
   uint64_t lgid = pending_mdsmap.find_standby_for(ainfo.rank, ainfo.name);
   if (lgid) {
     MDSMap::mds_info_t& sinfo = pending_mdsmap.mds_info[lgid];
-    dout(20) << " mds" << ainfo.rank
+    dout(20) << " mds." << ainfo.rank
 	     << " standby gid " << lgid << " with state "
 	     << ceph_mds_state_name(sinfo.state)
 	     << dendl;

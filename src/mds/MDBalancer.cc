@@ -41,7 +41,7 @@ using std::vector;
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_balancer
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".bal "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -211,7 +211,7 @@ void MDBalancer::send_heartbeat()
   mds_import_map[ mds->get_nodeid() ] = import_map;
 
 
-  dout(5) << "mds" << mds->get_nodeid() << " epoch " << beat_epoch << " load " << load << dendl;
+  dout(5) << "mds." << mds->get_nodeid() << " epoch " << beat_epoch << " load " << load << dendl;
   for (map<int, float>::iterator it = import_map.begin();
        it != import_map.end();
        it++) {
@@ -319,7 +319,7 @@ double MDBalancer::try_match(int ex, double& maxex,
   double howmuch = MIN(maxex, maxim);
   if (howmuch <= 0) return 0.0;
 
-  dout(5) << "   - mds" << ex << " exports " << howmuch << " to mds" << im << dendl;
+  dout(5) << "   - mds." << ex << " exports " << howmuch << " to mds." << im << dendl;
 
   if (ex == mds->get_nodeid())
     my_targets[im] += howmuch;
@@ -472,7 +472,7 @@ void MDBalancer::prep_rebalance(int beat)
       mds_meta_load[i] = l;
 
       if (whoami == 0)
-	dout(0) << "  mds" << i
+	dout(0) << "  mds." << i
 		<< " " << load
 		<< " = " << load.mds_load()
 		<< " ~ " << l << dendl;
@@ -519,11 +519,11 @@ void MDBalancer::prep_rebalance(int beat)
 	 it != load_map.end();
 	 it++) {
       if (it->first < target_load) {
-	dout(15) << "   mds" << it->second << " is importer" << dendl;
+	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,int>(it->first,it->second));
 	importer_set.insert(it->second);
       } else {
-	dout(15) << "   mds" << it->second << " is exporter" << dendl;
+	dout(15) << "   mds." << it->second << " is exporter" << dendl;
 	exporters.insert(pair<double,int>(it->first,it->second));
 	exporter_set.insert(it->second);
       }
@@ -628,7 +628,7 @@ void MDBalancer::try_rebalance()
 	im->inode != mds->mdcache->get_root() &&
 	im->inode->authority().first != mds->get_nodeid()) {
       dout(0) << " exporting idle (" << pop << ") import " << *im
-	      << " back to mds" << im->inode->authority().first
+	      << " back to mds." << im->inode->authority().first
 	      << dendl;
       mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
       continue;
@@ -668,7 +668,7 @@ void MDBalancer::try_rebalance()
     if (amount < MIN_OFFLOAD) continue;
     if (amount / target_load < .2) continue;
 
-    dout(5) << "want to send " << amount << " to mds" << target
+    dout(5) << "want to send " << amount << " to mds." << target
       //<< " .. " << (*it).second << " * " << load_fac
 	    << " -> " << amount
 	    << dendl;//" .. fudge is " << fudge << dendl;
@@ -679,7 +679,7 @@ void MDBalancer::try_rebalance()
 
     // search imports from target
     if (import_from_map.count(target)) {
-      dout(5) << " aha, looking through imports from target mds" << target << dendl;
+      dout(5) << " aha, looking through imports from target mds." << target << dendl;
       pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
 	import_from_map.equal_range(target);
       while (p.first != p.second) {
@@ -697,7 +697,7 @@ void MDBalancer::try_rebalance()
 	if (pop <= amount-have) {
 	  dout(0) << "reexporting " << *dir
 		  << " pop " << pop
-		  << " back to mds" << target << dendl;
+		  << " back to mds." << target << dendl;
 	  mds->mdcache->migrator->export_dir_nicely(dir, target);
 	  have += pop;
 	  import_from_map.erase(plast);
@@ -727,7 +727,7 @@ void MDBalancer::try_rebalance()
 	if (pop < amount-have || pop < MIN_REEXPORT) {
 	  dout(0) << "reexporting " << *imp
 		  << " pop " << pop
-		  << " back to mds" << imp->inode->authority()
+		  << " back to mds." << imp->inode->authority()
 		  << dendl;
 	  have += pop;
 	  mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
@@ -762,7 +762,7 @@ void MDBalancer::try_rebalance()
 	       << (*it)->pop_auth_subtree
 	       << " "
 	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
-	       << " to mds" << target
+	       << " to mds." << target
 	       << " " << **it
 	       << dendl;
       mds->mdcache->migrator->export_dir_nicely(*it, target);
@@ -801,7 +801,7 @@ bool MDBalancer::check_targets()
     old_prev_targets[i->first] = 0;
 
     if (!map_targets.count(i->first)) {
-      dout(20) << " target mds" << i->first << " not in map's export_targets" << dendl;
+      dout(20) << " target mds." << i->first << " not in map's export_targets" << dendl;
       send = true;
       ok = false;
     }
@@ -815,7 +815,7 @@ bool MDBalancer::check_targets()
       old_prev_targets.erase(p++);
       continue;
     }
-    dout(20) << " target mds" << p->first << " has been non-target for " << p->second << dendl;
+    dout(20) << " target mds." << p->first << " has been non-target for " << p->second << dendl;
     if (p->second < g_conf->mds_bal_target_removal_min)
       want_targets.insert(p->first);
     if (p->second >= g_conf->mds_bal_target_removal_max)

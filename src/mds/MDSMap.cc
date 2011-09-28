@@ -150,7 +150,7 @@ void MDSMap::print(ostream& out)
     out << p->second << ":\t"
 	<< info.addr
 	<< " '" << info.name << "'"
-	<< " mds" << info.rank
+	<< " mds." << info.rank
 	<< "." << info.inc
 	<< " " << ceph_mds_state_name(info.state)
 	<< " seq " << info.state_seq;

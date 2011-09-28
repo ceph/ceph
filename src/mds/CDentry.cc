@@ -28,12 +28,12 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
+#define dout_prefix *_dout << "mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 
 ostream& CDentry::print_db_line_prefix(ostream& out) 
 {
-  return out << ceph_clock_now(g_ceph_context) << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+  return out << ceph_clock_now(g_ceph_context) << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
 boost::pool<> CDentry::pool(sizeof(CDentry));

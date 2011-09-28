@@ -62,7 +62,7 @@ using namespace std;
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".server "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
 void Server::create_logger()
 {
@@ -1253,7 +1253,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       mdcache->request_finish(mdr);
       mdr = NULL;
     } else if (mdr->slave_to_mds != from) {
-      dout(10) << "local request " << *mdr << " not slave to mds" << from << dendl;
+      dout(10) << "local request " << *mdr << " not slave to mds." << from << dendl;
       m->put();
       return;
     }
@@ -1701,7 +1701,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
     mds->clog.error() << mdr->client_request->get_source()
        << " specified ino " << useino
-       << " but mds" << mds->whoami << " allocated " << in->inode.ino << "\n";
+       << " but mds." << mds->whoami << " allocated " << in->inode.ino << "\n";
     //assert(0); // just for now.
   }
     
@@ -2041,7 +2041,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
   // not open and inode not mine?
   if (!dir && !diri->is_auth()) {
     int inauth = diri->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds" << inauth << dendl;
+    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
     mdcache->request_forward(mdr, inauth);
     return 0;
   }
@@ -2062,7 +2062,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
   if (!dir->is_auth()) {
     int auth = dir->authority().first;
     dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
-	    << ", fw to mds" << auth << dendl;
+	    << ", fw to mds." << auth << dendl;
     mdcache->request_forward(mdr, auth);
     return 0;
   }
@@ -4466,7 +4466,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
       CDir *dir = *p;
       int auth = dir->authority().first;
       witnesses.insert(auth);
-      dout(10) << " need mds" << auth << " to witness for dirfrag " << *dir << dendl;      
+      dout(10) << " need mds." << auth << " to witness for dirfrag " << *dir << dendl;      
     } 
     dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
@@ -4474,9 +4474,9 @@ void Server::handle_client_unlink(MDRequest *mdr)
 	 p != witnesses.end();
 	 ++p) {
       if (mdr->more()->witnessed.count(*p)) {
-	dout(10) << " already witnessed by mds" << *p << dendl;
+	dout(10) << " already witnessed by mds." << *p << dendl;
       } else if (mdr->more()->waiting_on_slave.count(*p)) {
-	dout(10) << " already waiting on witness mds" << *p << dendl;      
+	dout(10) << " already waiting on witness mds." << *p << dendl;      
       } else {
 	_rmdir_prepare_witness(mdr, *p, dn, straydn);
       }
@@ -4638,7 +4638,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
 void Server::_rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn)
 {
-  dout(10) << "_rmdir_prepare_witness mds" << who << " for " << *mdr << dendl;
+  dout(10) << "_rmdir_prepare_witness mds." << who << " for " << *mdr << dendl;
   
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RMDIRPREP);
@@ -5154,7 +5154,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   xlocks.insert(&srcdn->lock);
   int srcdirauth = srcdn->get_dir()->authority().first;
   if (srcdirauth != mds->whoami) {
-    dout(10) << " will remote_wrlock srcdir scatterlocks on mds" << srcdirauth << dendl;
+    dout(10) << " will remote_wrlock srcdir scatterlocks on mds." << srcdirauth << dendl;
     remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
     remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
   } else {
@@ -5270,9 +5270,9 @@ void Server::handle_client_rename(MDRequest *mdr)
        ++p) {
     if (*p == last) continue;  // do it last!
     if (mdr->more()->witnessed.count(*p)) {
-      dout(10) << " already witnessed by mds" << *p << dendl;
+      dout(10) << " already witnessed by mds." << *p << dendl;
     } else if (mdr->more()->waiting_on_slave.count(*p)) {
-      dout(10) << " already waiting on witness mds" << *p << dendl;      
+      dout(10) << " already waiting on witness mds." << *p << dendl;      
     } else {
       _rename_prepare_witness(mdr, *p, srcdn, destdn, straydn);
     }
@@ -5400,7 +5400,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
 void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_rename_prepare_witness mds" << who << dendl;
+  dout(10) << "_rename_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RENAMEPREP);
   srcdn->make_path(req->srcdnpath);

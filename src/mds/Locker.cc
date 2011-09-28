@@ -62,7 +62,7 @@
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_locker
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDS *mds) {
-  return *_dout << "mds" << mds->get_nodeid() << ".locker ";
+  return *_dout << "mds." << mds->get_nodeid() << ".locker ";
 }
 
 /* This function DOES put the passed message before returning */
@@ -243,7 +243,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
   // remote_wrlocks
   if (remote_wrlocks) {
     for (map<SimpleLock*,int>::iterator p = remote_wrlocks->begin(); p != remote_wrlocks->end(); ++p) {
-      dout(20) << " must remote_wrlock on mds" << p->second << " "
+      dout(20) << " must remote_wrlock on mds." << p->second << " "
 	       << *p->first << " " << *(p->first)->get_parent() << dendl;
       sorted.insert(p->first);
       mustpin.insert(p->first);
@@ -321,7 +321,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     for (map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
 	 p != mustpin_remote.end();
 	 ++p) {
-      dout(10) << "requesting remote auth_pins from mds" << p->first << dendl;
+      dout(10) << "requesting remote auth_pins from mds." << p->first << dendl;
       
       MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						   MMDSSlaveRequest::OP_AUTHPIN);
@@ -373,8 +373,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	  dout(10) << " already remote_wrlocked " << *have << " " << *have->get_parent() << dendl;
 	  continue;
 	}
-	dout(10) << " unlocking remote_wrlock on wrong mds" << mdr->remote_wrlocks[have]
-		 << " (want mds" << (*remote_wrlocks)[have] << ") " 
+	dout(10) << " unlocking remote_wrlock on wrong mds." << mdr->remote_wrlocks[have]
+		 << " (want mds." << (*remote_wrlocks)[have] << ") " 
 		 << *have << " " << *have->get_parent() << dendl;
 	remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr);
 	// continue...
@@ -1267,7 +1267,7 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 
 void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
 {
-  dout(7) << "remote_wrlock_start mds" << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
+  dout(7) << "remote_wrlock_start mds." << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // wait for single auth
   if (lock->get_parent()->is_ambiguous_auth()) {
@@ -1294,7 +1294,7 @@ void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
   mut->remote_wrlocks.erase(lock);
   mut->locks.erase(lock);
   
-  dout(7) << "remote_wrlock_finish releasing remote wrlock on mds" << target
+  dout(7) << "remote_wrlock_finish releasing remote wrlock on mds." << target
 	  << " " << *lock->get_parent()  << dendl;
   if (mds->mdsmap->get_state(target) >= MDSMap::STATE_REJOIN) {
     MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, mut->attempt,
@@ -1848,7 +1848,7 @@ void Locker::request_inode_file_caps(CInode *in)
     int auth = in->authority().first;
     dout(7) << "request_inode_file_caps " << ccap_string(wanted)
             << " was " << ccap_string(in->replica_caps_wanted) 
-            << " on " << *in << " to mds" << auth << dendl;
+            << " on " << *in << " to mds." << auth << dendl;
 
     in->replica_caps_wanted = wanted;
 
@@ -1879,7 +1879,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   }
 
   
-  dout(7) << "handle_inode_file_caps replica mds" << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
+  dout(7) << "handle_inode_file_caps replica mds." << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
   if (m->get_caps())
     in->mds_caps_wanted[from] = m->get_caps();
@@ -4298,7 +4298,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 
   dout(7) << "handle_file_lock a=" << get_lock_action_name(m->get_action())
 	  << " on " << *lock
-	  << " from mds" << from << " " 
+	  << " from mds." << from << " " 
 	  << *in << dendl;
 
   bool caps = lock->get_cap_shift();

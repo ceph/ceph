@@ -32,7 +32,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".tableclient(" << get_mdstable_name(table) << ") "
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".tableclient(" << get_mdstable_name(table) << ") "
 
 
 void MDSTableClient::handle_request(class MMDSTableRequest *m)
@@ -147,7 +147,7 @@ void MDSTableClient::send_to_tableserver(MMDSTableRequest *req)
   if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_CLIENTREPLAY)
     mds->send_message_mds(req, ts);
   else {
-    dout(10) << " deferring request to not-yet-active tableserver mds" << ts << dendl;
+    dout(10) << " deferring request to not-yet-active tableserver mds." << ts << dendl;
   }
 }
 
@@ -204,7 +204,7 @@ void MDSTableClient::resend_commits()
 
 void MDSTableClient::handle_mds_recovery(int who)
 {
-  dout(7) << "handle_mds_recovery mds" << who << dendl;
+  dout(7) << "handle_mds_recovery mds." << who << dendl;
 
   if (who != mds->mdsmap->get_tableserver()) 
     return; // do nothing.
