@@ -498,6 +498,43 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
   return 0;
 }
 
+int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
+{
+  RGWBucketInfo bucket_info;
+  int r = rgw_get_bucket_info(bucket.name, bucket_info);
+  if (r < 0)
+    return r;
+
+  map<RGWObjCategory, RGWBucketStats> stats;
+  int ret = rgwstore->get_bucket_stats(bucket, stats);
+  if (ret < 0) {
+    cerr << "error getting bucket stats ret=" << ret << std::endl;
+    return ret;
+  }
+  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  formatter->reset();
+  formatter->open_object_section("stats");
+  formatter->dump_string("bucket", bucket.name.c_str());
+  formatter->dump_string("pool", bucket.pool.c_str());
+  
+  formatter->dump_int("id", bucket.bucket_id);
+  formatter->dump_string("marker", bucket.marker.c_str());
+  formatter->dump_string("owner", bucket_info.owner.c_str());
+  formatter->open_array_section("categories");
+  for (iter = stats.begin(); iter != stats.end(); ++iter) {
+    RGWBucketStats& s = iter->second;
+    formatter->open_object_section("category");
+    const char *cat_name = rgw_obj_category_name(iter->first);
+    formatter->dump_string("name", cat_name);
+    formatter->dump_format("size_kb", "%lld", s.num_kb);
+    formatter->dump_format("num_objects", "%lld", s.num_objects);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  formatter->close_section();
+  formatter->close_section();
+  return 0;
+}
 
 int main(int argc, char **argv) 
 {
@@ -1141,37 +1178,28 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && bucket_id < 0) {
-      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
+    if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
+      cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
       return usage();
     }
-    map<RGWObjCategory, RGWBucketStats> stats;
-    int ret = rgwstore->get_bucket_stats(bucket, stats);
-    if (ret < 0) {
-      cerr << "error getting bucket stats ret=" << ret << std::endl;
-      return ret;
+    if (user_id.empty()) {
+      bucket_stats(bucket, formatter);
+    } else {
+      RGWUserBuckets buckets;
+      if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
+        cerr << "could not get buckets for uid " << user_id << std::endl;
+      } else {
+	formatter->open_array_section("buckets");
+        map<string, RGWBucketEnt>& m = buckets.get_buckets();
+        map<string, RGWBucketEnt>::iterator iter;
+	
+        for (iter = m.begin(); iter != m.end(); ++iter) {
+          RGWBucketEnt obj = iter->second;
+	  bucket_stats(obj.bucket, formatter);
+        }
+	formatter->close_section();
+      }
     }
-    map<RGWObjCategory, RGWBucketStats>::iterator iter;
-    formatter->reset();
-    formatter->open_object_section("stats");
-    formatter->dump_string("bucket", bucket.name.c_str());
-    formatter->dump_string("pool", bucket.pool.c_str());
-    formatter->dump_int("id", bucket.bucket_id);
-    formatter->dump_string("marker", bucket.marker.c_str());
-    formatter->dump_string("owner", bucket_info.owner.c_str());
-    formatter->open_array_section("categories");
-    for (iter = stats.begin(); iter != stats.end(); ++iter) {
-      RGWBucketStats& s = iter->second;
-      formatter->open_object_section("category");
-      const char *cat_name = rgw_obj_category_name(iter->first);
-      formatter->dump_string("name", cat_name);
-      formatter->dump_format("size_kb", "%lld", s.num_kb);
-      formatter->dump_format("num_objects", "%lld", s.num_objects);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-    formatter->close_section();
-    formatter->close_section();
     formatter->flush(cout);
   }
 
