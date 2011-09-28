@@ -669,6 +669,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
   RepGather *repop = new_repop(ctx, obc, rep_tid);  // new repop claims our obc, src_obc refs
   // note: repop now owns ctx AND ctx->op
 
+  repop->src_obc.swap(src_obc); // and src_obc.
+
   issue_repop(repop, now, old_last_update, old_exists, old_size, old_version);
 
   eval_repop(repop);
@@ -3256,6 +3258,9 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
 void ReplicatedPG::put_object_contexts(map<hobject_t,ObjectContext*>& obcv)
 {
+  if (obcv.empty())
+    return;
+  dout(10) << "put_object_contexts " << obcv << dendl;
   for (map<hobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
     put_object_context(p->second);
   obcv.clear();
