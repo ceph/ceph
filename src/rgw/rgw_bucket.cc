@@ -33,6 +33,16 @@ int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
   return 0;
 }
 
+int rgw_store_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
+{
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), "%lld",
+           (long long unsigned)bucket_id);
+  string bucket_string(bucket_char);
+
+  return rgw_store_bucket_info(bucket_string, info);
+}
+
 int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
 {
   bufferlist bl;
@@ -58,6 +68,16 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
   RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << dendl;
 
   return 0;
+}
+
+int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
+{
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), "%lld",
+           (long long unsigned)bucket_id);
+  string bucket_string(bucket_char);
+
+  return rgw_get_bucket_info(bucket_string, info);
 }
 
 int rgw_remove_bucket_info(string& bucket_name)

@@ -9,8 +9,9 @@
 
 #define BUCKETS_POOL_NAME ".buckets"
 
-
+extern int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info);
 extern int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info);
+extern int rgw_store_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info);
 extern int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info);
 extern int rgw_remove_bucket_info(string& bucket_name);
 extern int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket);

@@ -552,7 +552,7 @@ int main(int argc, char **argv)
   int64_t bucket_id = -1;
   Formatter *formatter = &default_formatter;
   bool purge_data = false;
-  RGWPoolInfo pool_info;
+  RGWBucketInfo bucket_info;
   bool pretty_format = false;
 
   std::string val;
@@ -797,12 +797,12 @@ int main(int argc, char **argv)
 
   if ((!bucket_name.empty()) || bucket_id >= 0) {
     if (bucket_id >= 0) {
-      int ret = rgw_retrieve_pool_info(bucket_id, pool_info);
+      int ret = rgw_get_bucket_info_id(bucket_id, bucket_info);
       if (ret < 0) {
-        cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
+        cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
         return ret;
       }
-      bucket = pool_info.bucket;
+      bucket = bucket_info.bucket;
       if ((!bucket_name.empty()) && bucket.name.compare(bucket_name.c_str()) != 0) {
         cerr << "bucket name does not match bucket id (expected bucket name: " << bucket.name << ")" << std::endl;
         return -EINVAL;
@@ -1100,13 +1100,13 @@ int main(int argc, char **argv)
       bufferlist::iterator first_iter = iter;
       if (!first_iter.end()) {
         ::decode(entry, first_iter);
-        int ret = rgw_retrieve_pool_info(entry.bucket_id, pool_info);
+        int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
         if (ret >= 0) {
-          formatter->dump_string("bucket", pool_info.bucket.name.c_str());
-          formatter->dump_string("pool", pool_info.bucket.pool.c_str());
-          formatter->dump_string("bucket_owner", pool_info.owner.c_str());
+          formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+          formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+          formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
         } else {
-          cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
+          cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
         }
         formatter->dump_format("bucket_id", "%lld", entry.bucket_id);
       }
@@ -1182,9 +1182,9 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_object_section("pool_info");
     formatter->dump_int("id", bucket_id);
-    formatter->dump_string("bucket", pool_info.bucket.name.c_str());
-    formatter->dump_string("pool", pool_info.bucket.pool.c_str());
-    formatter->dump_string("owner", pool_info.owner.c_str());
+    formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+    formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+    formatter->dump_string("owner", bucket_info.owner.c_str());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -1207,7 +1207,7 @@ int main(int argc, char **argv)
     formatter->dump_string("pool", bucket.pool.c_str());
     formatter->dump_int("id", bucket.bucket_id);
     formatter->dump_string("marker", bucket.marker.c_str());
-    formatter->dump_string("owner", pool_info.owner.c_str());
+    formatter->dump_string("owner", bucket_info.owner.c_str());
     formatter->open_array_section("categories");
     for (iter = stats.begin(); iter != stats.end(); ++iter) {
       RGWBucketStats& s = iter->second;
@@ -1241,7 +1241,7 @@ int main(int argc, char **argv)
     bufferlist::iterator iter = bl.begin();
     policy.decode(iter);
 
-    RGWPoolInfo info;
+    RGWBucketInfo info;
     info.bucket = bucket;
     info.owner = policy.get_owner().get_id();
 
@@ -1251,7 +1251,7 @@ int main(int argc, char **argv)
       RGW_LOG(0) << "get_bucket_id returned " << ret << dendl;
       return ret;
     }
-    ret = rgw_store_pool_info(bucket_id, info);
+    ret = rgw_store_bucket_info_id(bucket_id, info);
     if (ret < 0) {
       RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket_id << " ret=" << ret << dendl;
       return ret;

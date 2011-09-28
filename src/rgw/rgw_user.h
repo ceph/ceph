@@ -15,8 +15,6 @@ using namespace std;
 #define USER_INFO_UID_POOL_NAME ".users.uid"
 #define RGW_USER_ANON_ID "anonymous"
 
-#define POOL_INFO_POOL_NAME ".pool"
-
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
@@ -148,8 +146,4 @@ extern int rgw_remove_key_index(RGWAccessKey& access_key);
 extern int rgw_remove_uid_index(string& uid);
 extern int rgw_remove_email_index(string& uid, string& email);
 extern int rgw_remove_swift_name_index(string& uid, string& swift_name);
-
-extern int rgw_store_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);
-extern int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info);
-
 #endif

@@ -445,7 +445,7 @@ void RGWCreateBucket::execute()
   bool existed;
   bool pol_ret;
   uint64_t bucket_id;
-  RGWPoolInfo info;
+  RGWBucketInfo info;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
 
@@ -493,7 +493,7 @@ void RGWCreateBucket::execute()
 
   info.owner = s->user.user_id;
   info.bucket = s->bucket;
-  rgw_store_pool_info(bucket_id, info);
+  rgw_store_bucket_info_id(bucket_id, info);
 
 done:
   send_response();

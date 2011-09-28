@@ -428,6 +428,7 @@ WRITE_CLASS_ENCODER(RGWPoolInfo)
 struct RGWBucketInfo
 {
   rgw_bucket bucket;
+  string owner;
 
   void encode(bufferlist& bl) const {
      __u32 ver = 1;
