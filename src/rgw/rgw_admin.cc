@@ -343,7 +343,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, false, auid);
+  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, true, auid);
   if (ret && ret != -EEXIST)   
     goto done;
 
