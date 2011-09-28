@@ -921,17 +921,19 @@ int main(int argc, char **argv)
     string id;
     RGWAccessHandle handle;
 
+    formatter->reset();
+    formatter->open_array_section("buckets");
     if (!user_id.empty()) {
       RGWUserBuckets buckets;
       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-        cout << "could not get buckets for uid " << user_id << std::endl;
+        cerr << "could not get buckets for uid " << user_id << std::endl;
       } else {
         map<string, RGWBucketEnt>& m = buckets.get_buckets();
         map<string, RGWBucketEnt>::iterator iter;
 
         for (iter = m.begin(); iter != m.end(); ++iter) {
           RGWBucketEnt obj = iter->second;
-          cout << obj.bucket.name << std::endl;
+	  formatter->dump_string("bucket", obj.bucket.name);
         }
       }
     } else {
@@ -945,6 +947,8 @@ int main(int argc, char **argv)
         }
       }
     }
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
