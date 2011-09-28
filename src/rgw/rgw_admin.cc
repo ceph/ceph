@@ -1223,15 +1223,9 @@ int main(int argc, char **argv)
     info.bucket = bucket;
     info.owner = policy.get_owner().get_id();
 
-    uint64_t bucket_id;
-    ret = rgwstore->get_bucket_id(bucket, &bucket_id);
+    ret = rgw_store_bucket_info_id(bucket.bucket_id, info);
     if (ret < 0) {
-      RGW_LOG(0) << "get_bucket_id returned " << ret << dendl;
-      return ret;
-    }
-    ret = rgw_store_bucket_info_id(bucket_id, info);
-    if (ret < 0) {
-      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket_id << " ret=" << ret << dendl;
+      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
       return ret;
     }
   }

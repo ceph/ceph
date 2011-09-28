@@ -1562,19 +1562,6 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
   return r;
 }
 
-int RGWRados::get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id)
-{
-  librados::IoCtx io_ctx;
-  int r = open_bucket_ctx(bucket, io_ctx);
-  if (r == -ENOENT)
-    r = -ERR_NO_SUCH_BUCKET;
-  if (r < 0)
-    return r;
-
-  *bucket_id = io_ctx.get_id();
-  return 0;
-}
-
 int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats)
 {
   rgw_bucket_dir_header header;

@@ -244,8 +244,6 @@ public:
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
 
-  virtual int get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id);
-
   virtual bool supports_tmap() { return true; }
   virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
