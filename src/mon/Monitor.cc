@@ -633,7 +633,7 @@ void Monitor::resend_routed_requests()
     bufferlist::iterator q = rr->request_bl.begin();
     PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, q);
 
-    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
+    dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
     MForward *forward = new MForward(rr->tid, req, rr->session->caps);
     forward->client = rr->client;
     forward->set_priority(req->get_priority());
