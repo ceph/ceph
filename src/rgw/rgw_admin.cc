@@ -419,6 +419,7 @@ enum IntentFlags { // bitmask
 
 int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags, bool purge)
 {
+  cout << "processing intent log " << oid << std::endl;
   uint64_t size;
   rgw_obj obj(bucket, oid);
   int r = rgwstore->obj_stat(NULL, obj, &size, NULL);
@@ -988,7 +989,7 @@ int main(int argc, char **argv)
 	dout(10) << "couldn't decode policy" << dendl;
 	return -EINVAL;
       }
-      cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
+      //cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
       r = rgw_remove_bucket(owner.get_id(), bucket, false);
       if (r < 0) {
 	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
@@ -1064,7 +1065,6 @@ int main(int argc, char **argv)
       }
       vector<RGWObjEnt>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        cout << "processing intent log " << (*iter).name << std::endl;
         process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
       }
     } while (is_truncated);
@@ -1247,7 +1247,7 @@ int main(int argc, char **argv)
     }
     RGWUserBuckets buckets;
     if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-      cout << "could not get buckets for uid " << user_id << std::endl;
+      cerr << "could not get buckets for uid " << user_id << std::endl;
     }
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
     map<string, RGWBucketEnt>::iterator iter;

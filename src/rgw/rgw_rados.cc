@@ -36,7 +36,7 @@ class RGWWatcher : public librados::WatchCtx {
 public:
   RGWWatcher(RGWRados *r) : rados(r) {}
   void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
-    cout << "RGWWatcher::notify() opcode=" << (int)opcode << " ver=" << ver << " bl.length()=" << bl.length() << std::endl;
+    dout(10) << "RGWWatcher::notify() opcode=" << (int)opcode << " ver=" << ver << " bl.length()=" << bl.length() << dendl;
     rados->watch_cb(opcode, ver, bl);
   }
 };

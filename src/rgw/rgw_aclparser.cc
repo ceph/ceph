@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
   if (policy) {
     string id="79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be";
-    cout << hex << policy->get_perm(g_ceph_context, id, RGW_PERM_ALL) << dec << endl;
+    dout(10) << hex << policy->get_perm(g_ceph_context, id, RGW_PERM_ALL) << dec << dendl;
     policy->to_xml(cout);
   }
 
