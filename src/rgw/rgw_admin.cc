@@ -280,6 +280,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->dump_string("email", info.user_email.c_str());
   formatter->dump_string("swift_user", info.swift_name.c_str());
   formatter->dump_string("swift_key", info.swift_key.c_str());
+  formatter->dump_int("suspended", (int)info.suspended);
 
   // keys
   formatter->open_array_section("keys");
