@@ -40,21 +40,18 @@ class ReadOnlyImage(Error):
     pass
 
 def make_ex(ret, msg):
+    errors = {
+        errno.EPERM  : PermissionError,
+        errno.ENOENT : ImageNotFound,
+        errno.EIO    : IOError,
+        errno.ENOSPC : NoSpace,
+        errno.EEXIST : ImageExists,
+        errno.EINVAL : InvalidArgument,
+        errno.EROFS  : ReadOnlyImage,
+        }
     ret = abs(ret)
-    if (ret == errno.EPERM):
-        return PermissionError(msg)
-    elif (ret == errno.ENOENT):
-        return ImageNotFound(msg)
-    elif (ret == errno.EIO):
-        return IOError(msg)
-    elif (ret == errno.ENOSPC):
-        return NoSpace(msg)
-    elif (ret == errno.EEXIST):
-        return ImageExists(msg)
-    elif (ret == errno.EINVAL):
-        return InvalidArgument(msg)
-    elif ret == errno.EROFS:
-        return ReadOnlyImage(msg)
+    if ret in errors:
+        return errors[ret](msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
