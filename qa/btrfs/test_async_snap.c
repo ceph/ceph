@@ -26,7 +26,7 @@ void check_return(int r)
 
 int main(int argc, char **argv)
 {
-	int num = 100;
+	int num = 1000;
 
 	if (argc > 1)
 		num = atoi(argv[1]);
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
 
         int cwd = open(".", O_RDONLY);
         printf("cwd = %d\n", cwd);
-        while (1) {
+        while (num-- > 0) {
 		if (rand() % 10 == 0) {
 			__u64 transid;
 			int r;
@@ -79,4 +79,5 @@ int main(int argc, char **argv)
 			check_return(r);
                 }
         }
+	return 0;
 }
