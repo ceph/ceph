@@ -43,20 +43,29 @@ class Cond {
   }
 
   int Wait(Mutex &mutex)  { 
+    assert(mutex.is_locked());
+    --mutex.nlock;
     int r = pthread_cond_wait(&_c, &mutex._m);
+    ++mutex.nlock;
     return r;
   }
 
   int Wait(Mutex &mutex, char* s)  { 
     //cout << "Wait: " << s << endl;
+    assert(mutex.is_locked());
+    --mutex.nlock;
     int r = pthread_cond_wait(&_c, &mutex._m);
+    ++mutex.nlock;
     return r;
   }
 
   int WaitUntil(Mutex &mutex, utime_t when) {
+    assert(mutex.is_locked());
     struct timespec ts;
     when.to_timespec(&ts);
+    --mutex.nlock;
     int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
+    ++mutex.nlock;
     return r;
   }
   int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {

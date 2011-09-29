@@ -108,12 +108,16 @@ public:
     int r = pthread_mutex_lock(&_m);
     if (lockdep && g_lockdep) _locked();
     assert(r == 0);
+    if (!recursive)
+      assert(nlock == 0);
     nlock++;
   }
 
   void Unlock() {
     assert(nlock > 0);
     --nlock;
+    if (!recursive)
+      assert(nlock == 0);
     if (lockdep && g_lockdep) _will_unlock();
     int r = pthread_mutex_unlock(&_m);
     assert(r == 0);
