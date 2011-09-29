@@ -408,14 +408,17 @@ struct RGWBucketInfo
   string owner;
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 1;
+     __u32 ver = 2;
      ::encode(ver, bl);
      ::encode(bucket, bl);
+     ::encode(owner, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(bucket, bl);
+     if (ver > 1)
+       ::decode(owner, bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
