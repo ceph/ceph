@@ -1,3 +1,4 @@
 tasks:
+- ceph:
 - thrashosds:
     chance_down: 50
