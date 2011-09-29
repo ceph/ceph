@@ -1148,19 +1148,14 @@ int main(int argc, char **argv)
       
       formatter->reset();
       formatter->open_object_section("log");
-      
+
+      // peek at first entry to get bucket metadata
       bufferlist::iterator first_iter = iter;
       if (!first_iter.end()) {
 	::decode(entry, first_iter);
-	int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
-	if (ret >= 0) {
-	  formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
-	  formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
-	  formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
-	} else {
-	  cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
-	}
 	formatter->dump_int("bucket_id", entry.bucket_id);
+	formatter->dump_string("owner", entry.owner);
+	formatter->dump_string("bucket", entry.bucket);
       }
       formatter->open_array_section("log_entries");
       
@@ -1249,6 +1244,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POOL_CREATE) {
+#if 0
     if (bucket_name.empty())
       return usage();
     string no_object;
@@ -1274,6 +1270,7 @@ int main(int argc, char **argv)
       RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
       return ret;
     }
+#endif
   }
 
  if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {

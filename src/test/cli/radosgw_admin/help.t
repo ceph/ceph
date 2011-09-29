@@ -1,5 +1,5 @@
   $ radosgw-admin --help
-  usage: radosgw_admin <cmd> [options...]
+  usage: radosgw-admin <cmd> [options...]
   commands:
     user create                create a new user
     user modify                modify user
