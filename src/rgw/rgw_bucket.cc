@@ -17,30 +17,23 @@ static string avail_pools = ".pools.avail";
 static string pool_name_prefix = "p";
 
 
-int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
+int rgw_store_bucket_info(RGWBucketInfo& info)
 {
   bufferlist bl;
-
   ::encode(info, bl);
 
-  string uid;
-  int ret = rgw_put_obj(uid, pi_buckets, bucket_name, bl.c_str(), bl.length());
+  string unused;
+  int ret = rgw_put_obj(unused, pi_buckets, info.bucket.name, bl.c_str(), bl.length());
   if (ret < 0)
     return ret;
 
-  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << dendl;
-
-  return 0;
-}
-
-int rgw_store_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
-{
   char bucket_char[16];
-  snprintf(bucket_char, sizeof(bucket_char), ".%lld",
-           (long long unsigned)bucket_id);
-  string bucket_string(bucket_char);
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
+  string bucket_id_string(bucket_char);
+  ret = rgw_put_obj(unused, pi_buckets, bucket_id_string, bl.c_str(), bl.length());
 
-  return rgw_store_bucket_info(bucket_string, info);
+  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  return 0;
 }
 
 int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
@@ -65,7 +58,7 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
     return -EIO;
   }
 
-  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << dendl;
+  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
 
   return 0;
 }
@@ -270,7 +263,8 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
 
   RGWBucketInfo info;
   info.bucket = bucket;
-  ret = rgw_store_bucket_info(bucket_name, info);
+  info.owner = id;
+  ret = rgw_store_bucket_info(info);
   if (ret < 0) {
     RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
     rgwstore->delete_bucket(id, bucket, true);

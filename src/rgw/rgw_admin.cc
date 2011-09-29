@@ -1244,6 +1244,7 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POOL_CREATE) {
+#if 0
     if (bucket_name.empty())
       return usage();
     string no_object;
@@ -1269,6 +1270,7 @@ int main(int argc, char **argv)
       RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
       return ret;
     }
+#endif
   }
 
  if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {

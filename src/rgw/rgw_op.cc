@@ -444,7 +444,6 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   bool pol_ret;
-  RGWBucketInfo info;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
 
@@ -485,10 +484,6 @@ void RGWCreateBucket::execute()
 
   if (ret == -EEXIST)
     ret = 0;
-
-  info.owner = s->user.user_id;
-  info.bucket = s->bucket;
-  rgw_store_bucket_info_id(info.bucket.bucket_id, info);
 
 done:
   send_response();
