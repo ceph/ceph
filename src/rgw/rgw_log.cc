@@ -60,6 +60,8 @@ int rgw_log_op(struct req_state *s)
   entry.user = s->user.user_id;
   if (s->acl)
     entry.owner = s->acl->get_owner().get_id();
+  else
+    entry.user = s->user.user_id;  // FIXME: this is probably wrong!
 
   entry.time = s->time;
   entry.total_time = ceph_clock_now(g_ceph_context) - s->time;
