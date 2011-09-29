@@ -514,7 +514,6 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
     return ret;
   }
   map<RGWObjCategory, RGWBucketStats>::iterator iter;
-  formatter->reset();
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name.c_str());
   formatter->dump_string("pool", bucket.pool.c_str());
@@ -1183,6 +1182,7 @@ int main(int argc, char **argv)
       cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
       return usage();
     }
+    formatter->reset();
     if (user_id.empty()) {
       bucket_stats(bucket, formatter);
     } else {
@@ -1192,9 +1192,7 @@ int main(int argc, char **argv)
       } else {
 	formatter->open_array_section("buckets");
         map<string, RGWBucketEnt>& m = buckets.get_buckets();
-        map<string, RGWBucketEnt>::iterator iter;
-	
-        for (iter = m.begin(); iter != m.end(); ++iter) {
+        for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
           RGWBucketEnt obj = iter->second;
 	  bucket_stats(obj.bucket, formatter);
         }
