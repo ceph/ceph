@@ -208,7 +208,7 @@ class Image(object):
             raise make_ex(ret, 'error rolling back image %s to snapshot %s' % (self.name, name))
 
     def set_snap(self, name):
-        if not isinstance(name, str):
+        if name is not None and not isinstance(name, str):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_set(self.image, c_char_p(name))
         if ret != 0:

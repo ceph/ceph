@@ -204,6 +204,22 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
 
+    def test_set_no_snap(self):
+        self.image.write('\0' * 256, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, '\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.set_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, '\0' * 256)
+        self.image.set_snap(None)
+        read = self.image.read(0, 256)
+        eq(read, data)
+
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
