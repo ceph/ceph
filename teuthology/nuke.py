@@ -64,6 +64,8 @@ def shutdown_daemons(ctx, log):
                 '/tmp/cephtest/binary/usr/local/bin/ceph-osd',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-mds',
                 '/tmp/cephtest/binary/usr/local/bin/ceph-fuse',
+                '/tmp/cephtest/binary/usr/local/bin/radosgw',
+                'apache2',
                 run.Raw(';'),
                 'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
                 run.Raw(';'),
