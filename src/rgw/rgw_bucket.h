@@ -7,7 +7,7 @@
 #include "rgw_common.h"
 
 
-#define BUCKETS_POOL_NAME ".buckets"
+#define BUCKETS_POOL_NAME ".rgw"
 
 extern int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info);
 extern int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info);
