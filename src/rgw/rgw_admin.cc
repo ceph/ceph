@@ -957,7 +957,7 @@ int main(int argc, char **argv)
       } else {
         RGWObjEnt obj;
         while (store->list_buckets_next(id, obj, &handle) >= 0) {
-          cout << obj.name << std::endl;
+          formatter->dump_string("bucket", obj.name);
         }
       }
     }
