@@ -36,6 +36,9 @@ class InvalidArgument(Error):
 class LogicError(Error):
     pass
 
+class ReadOnlyImage(Error):
+    pass
+
 def make_ex(ret, msg):
     ret = abs(ret)
     if (ret == errno.EPERM):
@@ -50,6 +53,8 @@ def make_ex(ret, msg):
         return ImageExists(msg)
     elif (ret == errno.EINVAL):
         return InvalidArgument(msg)
+    elif ret == errno.EROFS:
+        return ReadOnlyImage(msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
