@@ -166,19 +166,19 @@ class CephManager:
 
     def get_osd_status(self):
         osd_lines = filter(
-            lambda x: x[:3] == 'osd' and (("up" in x) or ("down" in x)),
+            lambda x: x.startswith('osd.') and (("up" in x) or ("down" in x)),
             self.raw_osd_status().split('\n'))
         self.log(osd_lines)
-        in_osds = [int(i[3:].split()[0]) for i in filter(
+        in_osds = [int(i[4:].split()[0]) for i in filter(
                 lambda x: " in " in x,
                 osd_lines)]
-        out_osds = [int(i[3:].split()[0]) for i in filter(
+        out_osds = [int(i[4:].split()[0]) for i in filter(
                 lambda x: " out " in x,
                 osd_lines)]
-        up_osds = [int(i[3:].split()[0]) for i in filter(
+        up_osds = [int(i[4:].split()[0]) for i in filter(
                 lambda x: " up " in x,
                 osd_lines)]
-        down_osds = [int(i[3:].split()[0]) for i in filter(
+        down_osds = [int(i[4:].split()[0]) for i in filter(
                 lambda x: " down " in x,
                 osd_lines)]
         dead_osds = [int(x.id_) for x in
