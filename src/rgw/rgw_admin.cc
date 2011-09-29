@@ -293,7 +293,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
     formatter->dump_string("access_key", k.id);
     formatter->dump_string("secret_key", k.key);
     formatter->close_section();
-    formatter->flush(cout);
   }
   formatter->close_section();
 
@@ -521,14 +520,13 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_int("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker.c_str());
   formatter->dump_string("owner", bucket_info.owner.c_str());
-  formatter->open_array_section("categories");
+  formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
     RGWBucketStats& s = iter->second;
-    formatter->open_object_section("category");
     const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->dump_string("name", cat_name);
-    formatter->dump_format("size_kb", "%lld", s.num_kb);
-    formatter->dump_format("num_objects", "%lld", s.num_objects);
+    formatter->open_object_section(cat_name);
+    formatter->dump_int("size_kb", s.num_kb);
+    formatter->dump_int("num_objects", s.num_objects);
     formatter->close_section();
     formatter->flush(cout);
   }
