@@ -1778,7 +1778,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
         }
-	dump_watchers(obc);
       }
       break;
 
@@ -2407,6 +2406,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
     dout(10) << "do_osd_op_effects applying watch/notify effects on session " << session << dendl;
 
     osd->watch_lock.Lock();
+    dump_watchers(obc);
     
     map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
     if (ctx->watch_connect) {
