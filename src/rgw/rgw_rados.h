@@ -137,6 +137,10 @@ public:
    */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
+  /* raw object list interface */
+  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle);
+  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle);
+
   /** get listing of the objects in a bucket */
   virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,

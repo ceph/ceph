@@ -38,6 +38,9 @@ public:
   /** get the next bucket in the provided listing context. */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
 
+  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) = 0;
+  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
+
   /** 
    * get listing of the objects in a bucket.
    * id: ignored in current implementations

@@ -59,6 +59,7 @@ namespace librados
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
     static const ObjectIterator __EndObjectIterator;
+    ObjectIterator() {}
     ObjectIterator(ObjListCtx *ctx_);
     ~ObjectIterator();
     bool operator==(const ObjectIterator& rhs) const;

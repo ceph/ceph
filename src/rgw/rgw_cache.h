@@ -120,6 +120,13 @@ class RGWCache  : public T
 {
   ObjectCache cache;
 
+  int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) {
+    return T::list_objects_raw_init(bucket, handle);
+  }
+  int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) {
+    return T::list_objects_raw_next(obj, handle);
+  }
+
   string normal_name(rgw_bucket& bucket, std::string& oid) {
     string& bucket_name = bucket.name;
     char buf[bucket_name.size() + 1 + oid.size() + 1];

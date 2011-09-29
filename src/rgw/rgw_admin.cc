@@ -47,8 +47,10 @@ void _usage()
   cerr << "  pool info                  show pool information\n";
   cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
+  cerr << "  log list                   list log objects\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
   cerr << "                             + bucket-id)\n";
+  cerr << "  log rm                     remove log object\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
@@ -109,7 +111,9 @@ enum {
   OPT_POLICY,
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
+  OPT_LOG_LIST,
   OPT_LOG_SHOW,
+  OPT_LOG_RM,
   OPT_TEMP_REMOVE,
 };
 
@@ -229,8 +233,12 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "stats") == 0)
       return OPT_BUCKET_STATS;
   } else if (strcmp(prev_cmd, "log") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_LOG_LIST;
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_LOG_RM;
   } else if (strcmp(prev_cmd, "temp") == 0) {
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
@@ -700,7 +708,9 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
-  if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && user_id.empty()) {
+  if (opt_cmd != OPT_USER_CREATE && 
+      opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 
+      user_id.empty()) {
     bool found = false;
     string s;
     if (!found && (!user_email.empty())) {
@@ -1068,7 +1078,33 @@ int main(int argc, char **argv)
     } while (is_truncated);
   }
 
-  if (opt_cmd == OPT_LOG_SHOW) {
+  if (opt_cmd == OPT_LOG_LIST) {
+    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
+
+    formatter->reset();
+    formatter->open_array_section("logs");
+    RGWAccessHandle h;
+    int r = store->list_objects_raw_init(log_bucket, &h);
+    if (r < 0) {
+      cerr << "log list: error " << r << std::endl;
+      return r;
+    }
+    while (true) {
+      RGWObjEnt obj;
+      int r = store->list_objects_raw_next(obj, &h);
+      if (r == -ENOENT)
+	break;
+      if (r < 0) {
+	cerr << "log list: error " << r << std::endl;
+	return r;
+      }
+      formatter->dump_string("object", obj.name);
+    };
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id < 0)) {
       cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
       return usage();
@@ -1087,73 +1123,85 @@ int main(int argc, char **argv)
       oid += "-";
       oid += string(bucket.name);
     }
-
-    uint64_t size;
     rgw_obj obj(log_bucket, oid);
-    int r = store->obj_stat(NULL, obj, &size, NULL);
-    if (r < 0) {
-      cerr << "error while doing stat on " <<  log_bucket << ":" << oid
-	   << " " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-    bufferlist bl;
-    r = store->read(NULL, obj, 0, size, bl);
-    if (r < 0) {
-      cerr << "error while reading from " <<  log_bucket << ":" << oid
-	   << " " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
 
-    bufferlist::iterator iter = bl.begin();
-
-    struct rgw_log_entry entry;
-
-    formatter->reset();
-    formatter->open_object_section("log");
-
-    bufferlist::iterator first_iter = iter;
-    if (!first_iter.end()) {
-      ::decode(entry, first_iter);
-      int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
-      if (ret >= 0) {
-	formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
-	formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
-	formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
-      } else {
-	cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
+    if (opt_cmd == OPT_LOG_SHOW) {
+      uint64_t size;
+      int r = store->obj_stat(NULL, obj, &size, NULL);
+      if (r < 0) {
+	cerr << "error while doing stat on " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
       }
-      formatter->dump_int("bucket_id", entry.bucket_id);
-    }
-    formatter->open_array_section("log_entries");
 
-    while (!iter.end()) {
-      ::decode(entry, iter);
-
-      uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
-
-      formatter->open_object_section("log_entry");
-      formatter->dump_string("bucket", entry.bucket.c_str());
-      formatter->dump_stream("time") << entry.time;
-      formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-      if (entry.owner.size())
-	formatter->dump_string("owner", entry.owner.c_str());
-      formatter->dump_string("user", entry.user.c_str());
-      formatter->dump_string("operation", entry.op.c_str());
-      formatter->dump_string("uri", entry.uri.c_str());
-      formatter->dump_string("http_status", entry.http_status.c_str());
-      formatter->dump_string("error_code", entry.error_code.c_str());
-      formatter->dump_int("bytes_sent", entry.bytes_sent);
-      formatter->dump_int("bytes_received", entry.bytes_received);
-      formatter->dump_int("object_size", entry.obj_size);
-      formatter->dump_int("total_time", total_time);
-      formatter->dump_string("user_agent",  entry.user_agent.c_str());
-      formatter->dump_string("referrer",  entry.referrer.c_str());
+      bufferlist bl;
+      r = store->read(NULL, obj, 0, size, bl);
+      if (r < 0) {
+	cerr << "error while reading from " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+      
+      bufferlist::iterator iter = bl.begin();
+      
+      struct rgw_log_entry entry;
+      
+      formatter->reset();
+      formatter->open_object_section("log");
+      
+      bufferlist::iterator first_iter = iter;
+      if (!first_iter.end()) {
+	::decode(entry, first_iter);
+	int ret = rgw_get_bucket_info_id(entry.bucket_id, bucket_info);
+	if (ret >= 0) {
+	  formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+	  formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+	  formatter->dump_string("bucket_owner", bucket_info.owner.c_str());
+	} else {
+	  cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
+	}
+	formatter->dump_int("bucket_id", entry.bucket_id);
+      }
+      formatter->open_array_section("log_entries");
+      
+      while (!iter.end()) {
+	::decode(entry, iter);
+	
+	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+	
+	formatter->open_object_section("log_entry");
+	formatter->dump_string("bucket", entry.bucket.c_str());
+	formatter->dump_stream("time") << entry.time;
+	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+	if (entry.owner.size())
+	  formatter->dump_string("owner", entry.owner.c_str());
+	formatter->dump_string("user", entry.user.c_str());
+	formatter->dump_string("operation", entry.op.c_str());
+	formatter->dump_string("uri", entry.uri.c_str());
+	formatter->dump_string("http_status", entry.http_status.c_str());
+	formatter->dump_string("error_code", entry.error_code.c_str());
+	formatter->dump_int("bytes_sent", entry.bytes_sent);
+	formatter->dump_int("bytes_received", entry.bytes_received);
+	formatter->dump_int("object_size", entry.obj_size);
+	formatter->dump_int("total_time", total_time);
+	formatter->dump_string("user_agent",  entry.user_agent.c_str());
+	formatter->dump_string("referrer",  entry.referrer.c_str());
+	formatter->close_section();
+	formatter->flush(cout);
+      }
+      formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
     }
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(cout);
+    if (opt_cmd == OPT_LOG_RM) {
+      std::string id;
+      int r = store->delete_obj(NULL, id, obj);
+      if (r < 0) {
+	cerr << "error removing " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+    }
   }
 
   if (opt_cmd == OPT_USER_RM) {

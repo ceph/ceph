@@ -195,6 +195,35 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
   return 0;
 }
 
+struct raw_list_object_state {
+  librados::IoCtx io_ctx;
+  librados::ObjectIterator obit;
+};
+
+int RGWRados::list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle)
+{
+  raw_list_object_state *state = new raw_list_object_state;
+  int r = open_bucket_ctx(bucket, state->io_ctx);
+  if (r < 0)
+    return r;
+  state->obit = state->io_ctx.objects_begin();
+  *handle = (RGWAccessHandle*)state;
+  return 0;
+}
+
+int RGWRados::list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle)
+{
+  raw_list_object_state *state = (raw_list_object_state *)*handle;
+  if (state->obit == state->io_ctx.objects_end()) {
+    delete state;
+    return -ENOENT;
+  }
+  obj.name = *state->obit;
+  state->obit++;
+  return 0;
+}
+
+
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
 {
   bufferlist::iterator i = bl.begin();
