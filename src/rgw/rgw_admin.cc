@@ -275,7 +275,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->open_object_section("user_info");
 
   formatter->dump_string("user_id", info.user_id.c_str());
-  formatter->dump_format("rados_uid", "%lld", info.auid);
+  formatter->dump_int("rados_uid", info.auid);
   formatter->dump_string("display_name", info.display_name.c_str());
   formatter->dump_string("email", info.user_email.c_str());
   formatter->dump_string("swift_user", info.swift_name.c_str());
@@ -1122,7 +1122,7 @@ int main(int argc, char **argv)
       } else {
 	cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
       }
-      formatter->dump_format("bucket_id", "%lld", entry.bucket_id);
+      formatter->dump_int("bucket_id", entry.bucket_id);
     }
     formatter->open_array_section("log_entries");
 
@@ -1142,10 +1142,10 @@ int main(int argc, char **argv)
       formatter->dump_string("uri", entry.uri.c_str());
       formatter->dump_string("http_status", entry.http_status.c_str());
       formatter->dump_string("error_code", entry.error_code.c_str());
-      formatter->dump_format("bytes_sent", "%lld", entry.bytes_sent);
-      formatter->dump_format("bytes_received", "%lld", entry.bytes_received);
-      formatter->dump_format("object_size", "%lld", entry.obj_size);
-      formatter->dump_format("total_time", "%lld", total_time);
+      formatter->dump_int("bytes_sent", entry.bytes_sent);
+      formatter->dump_int("bytes_received", entry.bytes_received);
+      formatter->dump_int("object_size", entry.obj_size);
+      formatter->dump_int("total_time", total_time);
       formatter->dump_string("user_agent",  entry.user_agent.c_str());
       formatter->dump_string("referrer",  entry.referrer.c_str());
       formatter->close_section();
