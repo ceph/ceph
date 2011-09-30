@@ -1154,7 +1154,7 @@ int main(int argc, char **argv)
       if (!first_iter.end()) {
 	::decode(entry, first_iter);
 	formatter->dump_int("bucket_id", entry.bucket_id);
-	formatter->dump_string("owner", entry.owner);
+	formatter->dump_string("bucket_owner", entry.bucket_owner);
 	formatter->dump_string("bucket", entry.bucket);
       }
       formatter->open_array_section("log_entries");
@@ -1168,8 +1168,8 @@ int main(int argc, char **argv)
 	formatter->dump_string("bucket", entry.bucket.c_str());
 	formatter->dump_stream("time") << entry.time;
 	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-	if (entry.owner.size())
-	  formatter->dump_string("owner", entry.owner.c_str());
+	if (entry.object_owner.length())
+	  formatter->dump_string("object_owner", entry.object_owner.c_str());
 	formatter->dump_string("user", entry.user.c_str());
 	formatter->dump_string("operation", entry.op.c_str());
 	formatter->dump_string("uri", entry.uri.c_str());
@@ -1198,72 +1198,72 @@ int main(int argc, char **argv)
       }
     }
   }
-
+  
   if (opt_cmd == OPT_USER_RM) {
     rgw_delete_user(info, purge_data);
   }
-
+  
   if (opt_cmd == OPT_POOL_INFO) {
-    if (bucket_name.empty() && bucket_id < 0) {
-      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
-      return usage();
-    }
-    formatter->reset();
-    formatter->open_object_section("pool_info");
-    formatter->dump_int("id", bucket_id);
-    formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
-    formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
-    formatter->dump_string("owner", bucket_info.owner.c_str());
-    formatter->close_section();
-    formatter->flush(cout);
-  }
+     if (bucket_name.empty() && bucket_id < 0) {
+       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
+       return usage();
+     }
+     formatter->reset();
+     formatter->open_object_section("pool_info");
+     formatter->dump_int("id", bucket_id);
+     formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+     formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+     formatter->dump_string("owner", bucket_info.owner.c_str());
+     formatter->close_section();
+     formatter->flush(cout);
+   }
 
-  if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
-      cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
-      return usage();
-    }
-    formatter->reset();
-    if (user_id.empty()) {
-      bucket_stats(bucket, formatter);
-    } else {
-      RGWUserBuckets buckets;
-      if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-        cerr << "could not get buckets for uid " << user_id << std::endl;
-      } else {
-	formatter->open_array_section("buckets");
-        map<string, RGWBucketEnt>& m = buckets.get_buckets();
-        for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
-          RGWBucketEnt obj = iter->second;
-	  bucket_stats(obj.bucket, formatter);
-        }
-	formatter->close_section();
-      }
-    }
-    formatter->flush(cout);
-  }
+   if (opt_cmd == OPT_BUCKET_STATS) {
+     if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
+       cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
+       return usage();
+     }
+     formatter->reset();
+     if (user_id.empty()) {
+       bucket_stats(bucket, formatter);
+     } else {
+       RGWUserBuckets buckets;
+       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
+	 cerr << "could not get buckets for uid " << user_id << std::endl;
+       } else {
+	 formatter->open_array_section("buckets");
+	 map<string, RGWBucketEnt>& m = buckets.get_buckets();
+	 for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
+	   RGWBucketEnt obj = iter->second;
+	   bucket_stats(obj.bucket, formatter);
+	 }
+	 formatter->close_section();
+       }
+     }
+     formatter->flush(cout);
+   }
 
-  if (opt_cmd == OPT_POOL_CREATE) {
-#if 0
-    if (bucket_name.empty())
-      return usage();
-    string no_object;
-    int ret;
-    bufferlist bl;
-    rgw_obj obj(bucket, no_object);
+   if (opt_cmd == OPT_POOL_CREATE) {
+ #if 0
+     if (bucket_name.empty())
+       return usage();
+     string no_object;
+     int ret;
+     bufferlist bl;
+     rgw_obj obj(bucket, no_object);
 
-    ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-    if (ret < 0) {
-      RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
-      return ret;
-    }
-    RGWAccessControlPolicy policy;
-    bufferlist::iterator iter = bl.begin();
-    policy.decode(iter);
+     ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
+     if (ret < 0) {
+       RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
+       return ret;
+     }
+     RGWAccessControlPolicy policy;
+     bufferlist::iterator iter = bl.begin();
+     policy.decode(iter);
 
-    RGWBucketInfo info;
-    info.bucket = bucket;
-    info.owner = policy.get_owner().get_id();
+     RGWBucketInfo info;
+     info.bucket = bucket;
+     info.owner = policy.get_owner().get_id();
 
     ret = rgw_store_bucket_info_id(bucket.bucket_id, info);
     if (ret < 0) {

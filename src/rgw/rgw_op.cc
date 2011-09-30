@@ -241,6 +241,7 @@ int read_acls(struct req_state *s, bool only_bucket)
       return ret;
     }
     s->bucket = bucket_info.bucket;
+    s->bucket_owner = bucket_info.owner;
   }
 
   ret = read_acls(s, s->acl, s->bucket, obj_str);
@@ -446,6 +447,8 @@ void RGWCreateBucket::execute()
   bool pol_ret;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
+
+  s->bucket_owner = s->user.user_id;
 
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {

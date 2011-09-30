@@ -4,7 +4,7 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
-#define LOG_ENTRY_VER 3
+#define LOG_ENTRY_VER 4
 #define INTENT_LOG_ENTRY_VER 1
 
 #define RGW_SHOULD_LOG_DEFAULT 1
@@ -13,7 +13,8 @@
 #define RGW_INTENT_LOG_POOL_NAME ".intent-log"
 
 struct rgw_log_entry {
-  string owner;
+  string object_owner;
+  string bucket_owner;
   string bucket;
   utime_t time;
   string remote_addr;
@@ -35,7 +36,8 @@ struct rgw_log_entry {
     uint8_t ver;
     ver = LOG_ENTRY_VER;
     ::encode(ver, bl);
-    ::encode(owner, bl);
+    ::encode(object_owner, bl);
+    ::encode(bucket_owner, bl);
     ::encode(bucket, bl);
     ::encode(time, bl);
     ::encode(remote_addr, bl);
@@ -56,7 +58,9 @@ struct rgw_log_entry {
   void decode(bufferlist::iterator &p) {
     uint8_t ver;
     ::decode(ver, p);
-    ::decode(owner, p);
+    ::decode(object_owner, p);
+    if (ver > 3)
+      ::decode(bucket_owner, p);
     ::decode(bucket, p);
     ::decode(time, p);
     ::decode(remote_addr, p);

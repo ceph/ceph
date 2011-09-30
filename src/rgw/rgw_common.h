@@ -473,6 +473,7 @@ struct req_state {
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
+   string bucket_owner;
 
    map<string, string> x_meta_map;
 
