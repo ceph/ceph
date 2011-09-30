@@ -690,10 +690,16 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
       return r;
   }
 
+  /*
+
+    rgw_remove_bucket_info does this, and that's called by rgw_remove_bucket() (our caller).
+    at least for now. 
+
   rgw_obj obj(rgw_root_bucket, bucket.name);
   r = delete_obj(NULL, id, obj, true);
   if (r < 0)
     return r;
+  */
 
   return 0;
 }
@@ -1895,8 +1901,11 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epo
   return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE);
 }
 
-int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated)
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
+			      bool *is_truncated)
 {
+  dout(0) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
+
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -1946,6 +1955,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     e.owner = dirent.meta.owner;
     e.owner_display_name = dirent.meta.owner_display_name;
     m[e.name] = e;
+    dout(0) << " got " << e.name << dendl;
   }
 
   return m.size();
