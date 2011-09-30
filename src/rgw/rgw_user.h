@@ -137,7 +137,7 @@ extern int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool n
 extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 
 extern int rgw_add_bucket(string user_id, rgw_bucket& bucket);
-extern int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data);
+extern int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_data);
 
 /*
  * remove the different indexes

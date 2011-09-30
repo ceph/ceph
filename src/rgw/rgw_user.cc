@@ -343,7 +343,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
   return ret;
 }
 
-int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
+int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_data)
 {
   int ret;
 
@@ -368,10 +368,6 @@ int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
       buckets.remove(bucket.name);
       ret = rgw_write_buckets_attr(user_id, buckets);
     }
-  }
-
-  if (ret == 0) {
-    ret = rgw_remove_bucket_info(bucket.name);
   }
 
   if (ret == 0 && purge_data) {

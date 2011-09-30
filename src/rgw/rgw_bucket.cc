@@ -73,14 +73,6 @@ int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
   return rgw_get_bucket_info(bucket_string, info);
 }
 
-int rgw_remove_bucket_info(string& bucket_name)
-{
-  string uid;
-  rgw_obj obj(pi_buckets, bucket_name);
-  int ret = rgwstore->delete_obj(NULL, uid, obj);
-  return ret;
-}
-
 static int generate_preallocated_pools(vector<string>& pools, int num)
 {
   vector<string> names;

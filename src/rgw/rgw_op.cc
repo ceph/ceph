@@ -483,7 +483,7 @@ void RGWCreateBucket::execute()
 
   ret = rgw_add_bucket(s->user.user_id, s->bucket);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
-    rgw_remove_bucket(s->user.user_id, s->bucket, false);
+    rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
 
   if (ret == -EEXIST)
     ret = 0;
@@ -508,7 +508,7 @@ void RGWDeleteBucket::execute()
     ret = rgwstore->delete_bucket(s->user.user_id, s->bucket, false);
 
     if (ret == 0) {
-      ret = rgw_remove_bucket(s->user.user_id, s->bucket, false);
+      ret = rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
       if (ret < 0) {
         RGW_LOG(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
       }

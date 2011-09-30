@@ -998,7 +998,7 @@ int main(int argc, char **argv)
 	return -EINVAL;
       }
       //cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
-      r = rgw_remove_bucket(owner.get_id(), bucket, false);
+      r = rgw_remove_user_bucket_info(owner.get_id(), bucket, false);
       if (r < 0) {
 	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
 	return r;
@@ -1017,7 +1017,7 @@ int main(int argc, char **argv)
       return usage();
     }
 
-    int r = rgw_remove_bucket(user_id, bucket, false);
+    int r = rgw_remove_user_bucket_info(user_id, bucket, false);
     if (r < 0)
       cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
     return -r;
