@@ -343,11 +343,16 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
     uint32_t nop = 0;
     ::encode(nop, bl);
 
-    r = root_pool_ctx.write(bucket_marker_ver_oid, bl, bl.length(), 0);
+    librados::IoCtx id_io_ctx;
+    r = rados->ioctx_create(RGW_ROOT_BUCKET, id_io_ctx);
     if (r < 0)
       return r;
 
-    uint64_t ver = control_pool_ctx.get_last_version();
+    r = id_io_ctx.write(bucket_marker_ver_oid, bl, bl.length(), 0);
+    if (r < 0)
+      return r;
+
+    uint64_t ver = id_io_ctx.get_last_version();
     RGW_LOG(0) << "got obj version=" << ver << dendl;
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
