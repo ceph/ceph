@@ -61,7 +61,7 @@ def create_users(ctx, config):
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/radosgw_admin',
+                    '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
                     '-c', '/tmp/cephtest/ceph.conf',
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
