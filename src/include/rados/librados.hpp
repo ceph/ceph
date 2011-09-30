@@ -59,6 +59,7 @@ namespace librados
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
     static const ObjectIterator __EndObjectIterator;
+    ObjectIterator() {}
     ObjectIterator(ObjListCtx *ctx_);
     ~ObjectIterator();
     bool operator==(const ObjectIterator& rhs) const;
@@ -297,6 +298,9 @@ namespace librados
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
     
     int aio_flush();
+
+    int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
+	         bufferlist& inbl, bufferlist *outbl);
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);

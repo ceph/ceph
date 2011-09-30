@@ -4,7 +4,7 @@
 #include "rgw_common.h"
 #include "include/utime.h"
 
-#define LOG_ENTRY_VER 3
+#define LOG_ENTRY_VER 4
 #define INTENT_LOG_ENTRY_VER 1
 
 #define RGW_SHOULD_LOG_DEFAULT 1
@@ -13,7 +13,8 @@
 #define RGW_INTENT_LOG_POOL_NAME ".intent-log"
 
 struct rgw_log_entry {
-  string owner;
+  string object_owner;
+  string bucket_owner;
   string bucket;
   utime_t time;
   string remote_addr;
@@ -29,13 +30,14 @@ struct rgw_log_entry {
   utime_t total_time;
   string user_agent;
   string referrer;
-  uint64_t pool_id;
+  uint64_t bucket_id;
 
   void encode(bufferlist &bl) const {
     uint8_t ver;
     ver = LOG_ENTRY_VER;
     ::encode(ver, bl);
-    ::encode(owner, bl);
+    ::encode(object_owner, bl);
+    ::encode(bucket_owner, bl);
     ::encode(bucket, bl);
     ::encode(time, bl);
     ::encode(remote_addr, bl);
@@ -51,12 +53,14 @@ struct rgw_log_entry {
     ::encode(user_agent, bl);
     ::encode(referrer, bl);
     ::encode(bytes_received, bl);
-    ::encode(pool_id, bl);
+    ::encode(bucket_id, bl);
   }
   void decode(bufferlist::iterator &p) {
     uint8_t ver;
     ::decode(ver, p);
-    ::decode(owner, p);
+    ::decode(object_owner, p);
+    if (ver > 3)
+      ::decode(bucket_owner, p);
     ::decode(bucket, p);
     ::decode(time, p);
     ::decode(remote_addr, p);
@@ -77,9 +81,9 @@ struct rgw_log_entry {
       bytes_received = 0;
 
     if (ver >= 3)
-      ::decode(pool_id, p);
+      ::decode(bucket_id, p);
     else
-      pool_id = -1;
+      bucket_id = -1;
   }
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)

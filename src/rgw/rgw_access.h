@@ -38,6 +38,9 @@ public:
   /** get the next bucket in the provided listing context. */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
 
+  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) = 0;
+  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
+
   /** 
    * get listing of the objects in a bucket.
    * id: ignored in current implementations
@@ -57,25 +60,23 @@ public:
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0) = 0;
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-                      map<std::string, bufferlist>& attrs, string& category, bool exclusive) = 0;
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+                      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive) = 0;
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
-
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
   int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
-      string category;
-      ret = put_obj_meta(ctx, id, obj, mtime, attrs, category, false);
+      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false);
     }
     return ret;
   }
@@ -108,7 +109,7 @@ public:
                       const char *if_match,
                       const char *if_nomatch,
 		      map<std::string, bufferlist>& attrs,
-                      string& category,
+                      RGWObjCategory category,
                       struct rgw_err *err) = 0;
   /**
    * Delete a bucket.
@@ -180,7 +181,7 @@ public:
                           rgw_obj& src_obj, off_t src_ofs,
                           uint64_t size, time_t *pmtime,
                           map<string, bufferlist> attrs,
-                          string& category) {
+                          RGWObjCategory category) {
     RGWCloneRangeInfo info;
     vector<RGWCloneRangeInfo> v;
     info.src = src_obj;
@@ -194,7 +195,7 @@ public:
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj,
                         vector<RGWCloneRangeInfo>& ranges,
                         map<string, bufferlist> attrs,
-                        string& category,
+                        RGWObjCategory category,
                         time_t *pmtime,
                         bool truncate_dest,
                         bool exclusive) { return -ENOTSUP; }
@@ -222,8 +223,6 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl) = 0;
-
-  virtual int get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id) { return -ENOTSUP; }
 
  /**
   * stat an object
@@ -259,7 +258,7 @@ public:
   // the upper layer to schedule this operation.. e.g., log intent in intent log
   virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
 
-  virtual int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats) { return -ENOTSUP; }
+  virtual int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats) { return -ENOTSUP; }
 };
 
 class RGWStoreManager {

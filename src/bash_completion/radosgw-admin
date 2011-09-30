@@ -54,4 +54,4 @@ _radosgw_admin()
             ;;
         esac
 }
-complete -F _radosgw_admin radosgw_admin
+complete -F _radosgw_admin radosgw-admin

@@ -14,13 +14,17 @@ public:
   int list_buckets_init(std::string& id, RGWAccessHandle *handle);
   int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
+  // not implemented here
+  int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) { assert(0); }
+  int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) { assert(0); }
+
   int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                    bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
-  int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive, uint64_t auid=0);
-  int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-	      map<std::string, bufferlist>& attrs, string& category, bool exclusive);
+  int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive, uint64_t auid=0);
+  int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+	      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive);
   int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t size);
   int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
@@ -31,7 +35,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                map<std::string, bufferlist>& attrs,
-               string& category,
+               RGWObjCategory category,
                struct rgw_err *err);
   int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
   int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);

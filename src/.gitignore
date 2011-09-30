@@ -20,7 +20,7 @@
 /rados_sync
 /radosacl
 /radosgw
-/radosgw_admin
+/radosgw-admin
 /rbdtool
 /rgw_multiparser
 /streamtest

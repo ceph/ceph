@@ -17,7 +17,7 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 int rgw_log_op(struct req_state *s)
 {
   struct rgw_log_entry entry;
-  uint64_t pool_id;
+  uint64_t bucket_id;
 
   if (!s->should_log)
     return 0;
@@ -31,9 +31,9 @@ int rgw_log_op(struct req_state *s)
       RGW_LOG(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
-    pool_id = 0;
+    bucket_id = 0;
   } else {
-    pool_id = s->pool_id;
+    bucket_id = s->bucket.bucket_id;
   }
   entry.bucket = s->bucket_name;
 
@@ -59,7 +59,8 @@ int rgw_log_op(struct req_state *s)
 
   entry.user = s->user.user_id;
   if (s->acl)
-    entry.owner = s->acl->get_owner().get_id();
+    entry.object_owner = s->acl->get_owner().get_id();
+  entry.bucket_owner = s->bucket_owner;
 
   entry.time = s->time;
   entry.total_time = ceph_clock_now(g_ceph_context) - s->time;
@@ -73,7 +74,7 @@ int rgw_log_op(struct req_state *s)
     entry.http_status = "200"; // default
 
   entry.error_code = s->err.s3_code;
-  entry.pool_id = pool_id;
+  entry.bucket_id = bucket_id;
 
   bufferlist bl;
   ::encode(entry, bl);
@@ -83,19 +84,19 @@ int rgw_log_op(struct req_state *s)
   gmtime_r(&t, &bdt);
   
   char buf[entry.bucket.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, (long long)s->pool_id, entry.bucket.c_str());
+  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
+	  (long long)s->bucket.bucket_id, entry.bucket.c_str());
   string oid(buf);
   rgw_obj obj(log_bucket, oid);
 
   int ret = rgwstore->append_async(obj, bl.length(), bl);
-
   if (ret == -ENOENT) {
     string id;
     map<std::string, bufferlist> attrs;
     ret = rgw_create_bucket(id, log_bucket.name, log_bucket, attrs);
     if (ret < 0)
       goto done;
-    obj.object = entry.bucket;
+    // retry
     ret = rgwstore->append_async(obj, bl.length(), bl);
   }
 done:
@@ -119,7 +120,8 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
   gmtime_r(&t, &bdt);
 
   char buf[obj.bucket.name.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday, (long long)s->pool_id, obj.bucket.name.c_str());
+  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
+	  (long long)s->bucket.bucket_id, obj.bucket.name.c_str());
   string oid(buf);
   rgw_obj log_obj(intent_log_bucket, oid);
 

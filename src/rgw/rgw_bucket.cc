@@ -8,6 +8,7 @@
 #include "rgw_bucket.h"
 #include "rgw_tools.h"
 
+#include "auth/Crypto.h" // get_random_bytes()
 
 
 static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
@@ -16,19 +17,22 @@ static string avail_pools = ".pools.avail";
 static string pool_name_prefix = "p";
 
 
-int rgw_store_bucket_info(string& bucket_name, RGWBucketInfo& info)
+int rgw_store_bucket_info(RGWBucketInfo& info)
 {
   bufferlist bl;
-
   ::encode(info, bl);
 
-  string uid;
-  int ret = rgw_put_obj(uid, pi_buckets, bucket_name, bl.c_str(), bl.length());
+  string unused;
+  int ret = rgw_put_obj(unused, pi_buckets, info.bucket.name, bl.c_str(), bl.length());
   if (ret < 0)
     return ret;
 
-  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << dendl;
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
+  string bucket_id_string(bucket_char);
+  ret = rgw_put_obj(unused, pi_buckets, bucket_id_string, bl.c_str(), bl.length());
 
+  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
 }
 
@@ -54,17 +58,19 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
     return -EIO;
   }
 
-  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << dendl;
+  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
 
   return 0;
 }
 
-int rgw_remove_bucket_info(string& bucket_name)
+int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
 {
-  string uid;
-  rgw_obj obj(pi_buckets, bucket_name);
-  int ret = rgwstore->delete_obj(NULL, uid, obj);
-  return ret;
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld",
+           (long long unsigned)bucket_id);
+  string bucket_string(bucket_char);
+
+  return rgw_get_bucket_info(bucket_string, info);
 }
 
 static int generate_preallocated_pools(vector<string>& pools, int num)
@@ -138,7 +144,6 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
     return ret;
   }
   bucket.pool = pools.back();
-  pools.pop_back();
   bucket.name = bucket_name;
 
   ret = register_available_pools(pools);
@@ -206,20 +211,19 @@ int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
     return generate_pool(bucket_name, bucket);
   }
 
-  map<string, bufferlist>::iterator miter = m.end();
-  do {
-    --miter;
-
-    pool_name = miter->first;
-    ret = rgwstore->tmap_del(obj, pool_name);
-    if (!ret)
-      break;
-
-  } while (miter != m.begin());
-
-  if (miter == m.begin()) {
-    return generate_pool(bucket_name, bucket);
+  vector<string> v;
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    v.push_back(miter->first);
   }
+
+  uint32_t r;
+  ret = get_random_bytes((char *)&r, sizeof(r));
+  if (ret < 0)
+    return ret;
+
+  int i = r % v.size();
+  pool_name = v[i];
   bucket.pool = pool_name;
   bucket.name = bucket_name;
   
@@ -235,14 +239,14 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
   if (bucket_name[0] == '.') {
     bucket.name = bucket_name;
     bucket.pool = bucket_name;
-    return rgwstore->create_bucket(id, bucket, attrs, true, exclusive, auid);
+    return rgwstore->create_bucket(id, bucket, attrs, true, false, exclusive, auid);
   }
 
   int ret = rgw_bucket_allocate_pool(bucket_name, bucket);
   if (ret < 0)
      return ret;
 
-  ret = rgwstore->create_bucket(id, bucket, attrs, false, exclusive, auid);
+  ret = rgwstore->create_bucket(id, bucket, attrs, false, true, exclusive, auid);
   if (ret == -EEXIST) {
     return withdraw_pool(bucket.pool);
   }
@@ -251,7 +255,8 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
 
   RGWBucketInfo info;
   info.bucket = bucket;
-  ret = rgw_store_bucket_info(bucket_name, info);
+  info.owner = id;
+  ret = rgw_store_bucket_info(info);
   if (ret < 0) {
     RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
     rgwstore->delete_bucket(id, bucket, true);

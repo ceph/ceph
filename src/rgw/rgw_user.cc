@@ -18,8 +18,6 @@ static rgw_bucket ui_email_bucket(USER_INFO_EMAIL_POOL_NAME);
 static rgw_bucket ui_swift_bucket(USER_INFO_SWIFT_POOL_NAME);
 static rgw_bucket ui_uid_bucket(USER_INFO_UID_POOL_NAME);
 
-static rgw_bucket pi_pool_bucket(POOL_INFO_POOL_NAME);
-
 rgw_bucket rgw_root_bucket(RGW_ROOT_BUCKET);
 
 /**
@@ -345,7 +343,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
   return ret;
 }
 
-int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
+int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_data)
 {
   int ret;
 
@@ -370,10 +368,6 @@ int rgw_remove_bucket(string user_id, rgw_bucket& bucket, bool purge_data)
       buckets.remove(bucket.name);
       ret = rgw_write_buckets_attr(user_id, buckets);
     }
-  }
-
-  if (ret == 0) {
-    ret = rgw_remove_bucket_info(bucket.name);
   }
 
   if (ret == 0 && purge_data) {
@@ -481,48 +475,3 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
 
   return 0;
 }
-
-
-int rgw_store_pool_info(int64_t pool_id, RGWPoolInfo& pool_info)
-{
-  bufferlist bl;
-
-  ::encode(pool_info, bl);
-
-  string uid;
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%lld", (long long unsigned)pool_id);
-  string pool_id_str(buf);
-
-  int ret = rgw_put_obj(uid, pi_pool_bucket, pool_id_str, bl.c_str(), bl.length());
-  if (ret < 0) {
-    RGW_LOG(0) << "ERROR: could not write to pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
-  }
-  return ret;
-}
-
-int rgw_retrieve_pool_info(int64_t pool_id, RGWPoolInfo& pool_info)
-{
-  bufferlist bl;
-
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%lld", (long long unsigned)pool_id);
-  string pool_id_str(buf);
-
-  int ret = rgw_get_obj(pi_pool_bucket, pool_id_str, bl);
-  if (ret < 0) {
-    RGW_LOG(0) << "ERROR: could not read from pool=" << pi_pool_bucket.name << " obj=" << pool_id_str << " ret=" << ret << dendl;
-    return ret;
-  }
-  bufferlist::iterator iter = bl.begin();
-  try {
-    ::decode(pool_info, iter);
-  } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: failed to decode pool information, caught buffer::error" << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
-

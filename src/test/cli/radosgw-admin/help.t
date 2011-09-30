@@ -1,5 +1,5 @@
-  $ radosgw_admin --help
-  usage: radosgw_admin <cmd> [options...]
+  $ radosgw-admin --help
+  usage: radosgw-admin <cmd> [options...]
   commands:
     user create                create a new user
     user modify                modify user
@@ -19,8 +19,10 @@
     pool info                  show pool information
     pool create                generate pool information (requires bucket)
     policy                     read bucket/object policy
+    log list                   list log objects
     log show                   dump a log from specific object or (bucket + date
                                + bucket-id)
+    log rm                     remove log object
     temp remove                remove temporary objects that were created up to
                                specified date (and optional time)
   options:

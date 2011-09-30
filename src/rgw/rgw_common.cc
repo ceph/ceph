@@ -14,11 +14,6 @@
 
 using namespace ceph::crypto;
 
-string rgw_obj_category_main = "rgw.main";
-string rgw_obj_category_shadow = "rgw.shadow";
-string rgw_obj_category_multimeta = "rgw.multimeta";
-string rgw_obj_category_none;
-
 rgw_err::
 rgw_err()
 {

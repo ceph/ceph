@@ -241,6 +241,7 @@ int read_acls(struct req_state *s, bool only_bucket)
       return ret;
     }
     s->bucket = bucket_info.bucket;
+    s->bucket_owner = bucket_info.owner;
   }
 
   ret = read_acls(s, s->acl, s->bucket, obj_str);
@@ -444,10 +445,10 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   bool pol_ret;
-  uint64_t pool_id;
-  RGWPoolInfo info;
 
   rgw_obj obj(rgw_root_bucket, s->bucket_name_str);
+
+  s->bucket_owner = s->user.user_id;
 
   int r = get_policy_from_attr(s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
@@ -482,19 +483,10 @@ void RGWCreateBucket::execute()
 
   ret = rgw_add_bucket(s->user.user_id, s->bucket);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
-    rgw_remove_bucket(s->user.user_id, s->bucket, false);
+    rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
 
   if (ret == -EEXIST)
     ret = 0;
-
-  ret = rgwstore->get_bucket_id(s->bucket, &pool_id);
-  if (ret < 0)
-    goto done;
-
-  s->pool_id = pool_id;
-  info.owner = s->user.user_id;
-  info.bucket = s->bucket;
-  rgw_store_pool_info(pool_id, info);
 
 done:
   send_response();
@@ -516,7 +508,7 @@ void RGWDeleteBucket::execute()
     ret = rgwstore->delete_bucket(s->user.user_id, s->bucket, false);
 
     if (ret == 0) {
-      ret = rgw_remove_bucket(s->user.user_id, s->bucket, false);
+      ret = rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
       if (ret < 0) {
         RGW_LOG(0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
       }
@@ -737,16 +729,16 @@ void RGWPutObj::execute()
     if (!multipart) {
       rgw_obj dst_obj(s->bucket, s->object_str);
       rgwstore->set_atomic(s->obj_ctx, dst_obj);
-      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, rgw_obj_category_main);
+      ret = rgwstore->clone_obj(s->obj_ctx, dst_obj, 0, obj, 0, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN);
       if (ret < 0)
         goto done_err;
       if (created_obj) {
-        ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+        ret = rgwstore->delete_obj(NULL, s->user.user_id, obj, false);
         if (ret < 0)
           goto done;
       }
     } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, NULL, attrs, rgw_obj_category_main, false);
+      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
       if (ret < 0)
         goto done_err;
 
@@ -918,7 +910,7 @@ void RGWCopyObj::execute()
                         unmod_ptr,
                         if_match,
                         if_nomatch,
-                        attrs, rgw_obj_category_main, &s->err);
+                        attrs, RGW_OBJ_CATEGORY_MAIN, &s->err);
 
 done:
   send_response();
@@ -1182,7 +1174,8 @@ void RGWInitMultipart::execute()
     tmp_obj_name = mp.get_meta();
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
-    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, NULL, attrs, rgw_obj_category_multimeta, true);
+    // the meta object will be indexed with 0 size, we c
+    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1335,7 +1328,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, NULL, attrs, rgw_obj_category_main, false);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
   if (ret < 0)
     goto done;
   
@@ -1352,7 +1345,7 @@ void RGWCompleteMultipart::execute()
 
     ofs += obj_iter->second.size;
   }
-  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, rgw_obj_category_main, NULL, true, false);
+  ret = rgwstore->clone_objs(s->obj_ctx, target_obj, ranges, attrs, RGW_OBJ_CATEGORY_MAIN, NULL, true, false);
   if (ret < 0)
     goto done;
 
@@ -1524,12 +1517,6 @@ int RGWHandler::do_read_permissions(bool only_bucket)
     RGW_LOG(10) << "read_permissions on " << s->bucket << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
-  }
-
-  if (ret == 0 && !s->bucket.name.empty()) {
-    ret = rgwstore->get_bucket_id(s->bucket, &s->pool_id);
-    if (ret < 0)
-      return ret;
   }
 
   return ret;

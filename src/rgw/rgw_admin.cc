@@ -25,11 +25,9 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static XMLFormatter default_formatter;
-
 void _usage() 
 {
-  cerr << "usage: radosgw_admin <cmd> [options...]" << std::endl;
+  cerr << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cerr << "commands:\n";
   cerr << "  user create                create a new user\n" ;
   cerr << "  user modify                modify user\n";
@@ -49,8 +47,10 @@ void _usage()
   cerr << "  pool info                  show pool information\n";
   cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
+  cerr << "  log list                   list log objects\n";
   cerr << "  log show                   dump a log from specific object or (bucket + date\n";
   cerr << "                             + bucket-id)\n";
+  cerr << "  log rm                     remove log object\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
@@ -111,7 +111,9 @@ enum {
   OPT_POLICY,
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
+  OPT_LOG_LIST,
   OPT_LOG_SHOW,
+  OPT_LOG_RM,
   OPT_TEMP_REMOVE,
 };
 
@@ -231,8 +233,12 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "stats") == 0)
       return OPT_BUCKET_STATS;
   } else if (strcmp(prev_cmd, "log") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_LOG_LIST;
     if (strcmp(cmd, "show") == 0)
       return OPT_LOG_SHOW;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_LOG_RM;
   } else if (strcmp(prev_cmd, "temp") == 0) {
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
@@ -268,76 +274,52 @@ string escape_str(string& src, char c)
   return dest;
 }
 
-static void show_user_info(RGWUserInfo& info, const char *format, Formatter *formatter)
+static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
   map<string, RGWAccessKey>::iterator kiter;
   map<string, RGWSubUser>::iterator uiter;
 
 
-  if (!format) {
-    cout << "User ID: " << info.user_id << std::endl;
-    cout << "RADOS UID: " << info.auid << std::endl;
-    cout << "Keys:" << std::endl;
-    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-      RGWAccessKey& k = kiter->second;
-      cout << " User: " << info.user_id << (k.subuser.empty() ? "" : ":") << k.subuser << std::endl;
-      cout << "  Access Key: " << k.id << std::endl;
-      cout << "  Secret Key: " << k.key << std::endl;
-    }
-    cout << "Users: " << std::endl;
-    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-      RGWSubUser& u = uiter->second;
-      cout << " Name: " << info.user_id << ":" << u.name << std::endl;
-      char buf[256];
-      perm_to_str(u.perm_mask, buf, sizeof(buf));
-      cout << " Permissions: " << buf << std::endl;
-    }
-    cout << "Display Name: " << info.display_name << std::endl;
-    cout << "Email: " << info.user_email << std::endl;
-    cout << "Swift User: " << (info.swift_name.size() ? info.swift_name : "<undefined>")<< std::endl;
-    cout << "Swift Key: " << (info.swift_key.size() ? info.swift_key : "<undefined>")<< std::endl;
-  } else {
-    formatter->open_object_section("user_info");
+  formatter->open_object_section("user_info");
 
-    formatter->dump_string("user_id", info.user_id.c_str());
-    formatter->dump_format("rados_uid", "%lld", info.auid);
-    formatter->dump_string("display_name", info.display_name.c_str());
-    formatter->dump_string("email", info.user_email.c_str());
-    formatter->dump_string("swift_user", info.swift_name.c_str());
-    formatter->dump_string("swift_key", info.swift_key.c_str());
+  formatter->dump_string("user_id", info.user_id.c_str());
+  formatter->dump_int("rados_uid", info.auid);
+  formatter->dump_string("display_name", info.display_name.c_str());
+  formatter->dump_string("email", info.user_email.c_str());
+  formatter->dump_string("swift_user", info.swift_name.c_str());
+  formatter->dump_string("swift_key", info.swift_key.c_str());
+  formatter->dump_int("suspended", (int)info.suspended);
 
-    // keys
-    formatter->open_array_section("keys");
-    for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-      RGWAccessKey& k = kiter->second;
-      const char *sep = (k.subuser.empty() ? "" : ":");
-      const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-      formatter->open_object_section("key");
-      formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-      formatter->dump_string("access_key", k.id);
-      formatter->dump_string("secret_key", k.key);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
+  // keys
+  formatter->open_array_section("keys");
+  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+    RGWAccessKey& k = kiter->second;
+    const char *sep = (k.subuser.empty() ? "" : ":");
+    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
+    formatter->open_object_section("key");
+    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
+    formatter->dump_string("access_key", k.id);
+    formatter->dump_string("secret_key", k.key);
     formatter->close_section();
+  }
+  formatter->close_section();
 
-    // subusers
-    formatter->open_array_section("subusers");
-    for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-      RGWSubUser& u = uiter->second;
-      formatter->open_object_section("user");
-      formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
-      char buf[256];
-      perm_to_str(u.perm_mask, buf, sizeof(buf));
-      formatter->dump_string("permissions", buf);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-    formatter->close_section();
-
+  // subusers
+  formatter->open_array_section("subusers");
+  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+    RGWSubUser& u = uiter->second;
+    formatter->open_object_section("user");
+    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
+    char buf[256];
+    perm_to_str(u.perm_mask, buf, sizeof(buf));
+    formatter->dump_string("permissions", buf);
     formatter->close_section();
     formatter->flush(cout);
   }
+  formatter->close_section();
+
+  formatter->close_section();
+  formatter->flush(cout);
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name, uint64_t auid)
@@ -361,7 +343,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
+  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, true, auid);
   if (ret && ret != -EEXIST)   
     goto done;
 
@@ -445,6 +427,7 @@ enum IntentFlags { // bitmask
 
 int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags, bool purge)
 {
+  cout << "processing intent log " << oid << std::endl;
   uint64_t size;
   rgw_obj obj(bucket, oid);
   int r = rgwstore->obj_stat(NULL, obj, &size, NULL);
@@ -524,6 +507,41 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
   return 0;
 }
 
+int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
+{
+  RGWBucketInfo bucket_info;
+  int r = rgw_get_bucket_info(bucket.name, bucket_info);
+  if (r < 0)
+    return r;
+
+  map<RGWObjCategory, RGWBucketStats> stats;
+  int ret = rgwstore->get_bucket_stats(bucket, stats);
+  if (ret < 0) {
+    cerr << "error getting bucket stats ret=" << ret << std::endl;
+    return ret;
+  }
+  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  formatter->open_object_section("stats");
+  formatter->dump_string("bucket", bucket.name.c_str());
+  formatter->dump_string("pool", bucket.pool.c_str());
+  
+  formatter->dump_int("id", bucket.bucket_id);
+  formatter->dump_string("marker", bucket.marker.c_str());
+  formatter->dump_string("owner", bucket_info.owner.c_str());
+  formatter->open_object_section("usage");
+  for (iter = stats.begin(); iter != stats.end(); ++iter) {
+    RGWBucketStats& s = iter->second;
+    const char *cat_name = rgw_obj_category_name(iter->first);
+    formatter->open_object_section(cat_name);
+    formatter->dump_int("size_kb", s.num_kb);
+    formatter->dump_int("num_objects", s.num_objects);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  formatter->close_section();
+  formatter->close_section();
+  return 0;
+}
 
 int main(int argc, char **argv) 
 {
@@ -550,9 +568,9 @@ int main(int argc, char **argv)
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
   int64_t bucket_id = -1;
-  Formatter *formatter = &default_formatter;
+  Formatter *formatter = NULL;
   bool purge_data = false;
-  RGWPoolInfo pool_info;
+  RGWBucketInfo bucket_info;
   bool pretty_format = false;
 
   std::string val;
@@ -613,9 +631,9 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
       pretty_format = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--purge-data", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--purge-data", (char*)NULL)) {
       purge_data = true;
     } else {
       ++i;
@@ -641,15 +659,19 @@ int main(int argc, char **argv)
       return usage();
   }
 
-  if (!format.empty()) {
-    if (format ==  "xml")
-      formatter = new XMLFormatter(pretty_format);
-    else if (format == "json")
-      formatter = new JSONFormatter(pretty_format);
-    else {
-      cerr << "unrecognized format: " << format << std::endl;
-      return usage();
-    }
+  // default to pretty json
+  if (format.empty()) {
+    format = "json";
+    pretty_format = true;
+  }
+
+  if (format ==  "xml")
+    formatter = new XMLFormatter(pretty_format);
+  else if (format == "json")
+    formatter = new JSONFormatter(pretty_format);
+  else {
+    cerr << "unrecognized format: " << format << std::endl;
+    return usage();
   }
 
   if (!subuser.empty()) {
@@ -686,7 +708,9 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
-  if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && user_id.empty()) {
+  if (opt_cmd != OPT_USER_CREATE && 
+      opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 
+      user_id.empty()) {
     bool found = false;
     string s;
     if (!found && (!user_email.empty())) {
@@ -797,12 +821,12 @@ int main(int argc, char **argv)
 
   if ((!bucket_name.empty()) || bucket_id >= 0) {
     if (bucket_id >= 0) {
-      int ret = rgw_retrieve_pool_info(bucket_id, pool_info);
+      int ret = rgw_get_bucket_info_id(bucket_id, bucket_info);
       if (ret < 0) {
-        cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
+        cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
         return ret;
       }
-      bucket = pool_info.bucket;
+      bucket = bucket_info.bucket;
       if ((!bucket_name.empty()) && bucket.name.compare(bucket_name.c_str()) != 0) {
         cerr << "bucket name does not match bucket id (expected bucket name: " << bucket.name << ")" << std::endl;
         return -EINVAL;
@@ -816,11 +840,7 @@ int main(int argc, char **argv)
         return r;
       }
       bucket = bucket_info.bucket;
-      int ret = rgwstore->get_bucket_id(bucket, (uint64_t *)&bucket_id);
-      if (ret < 0) {
-        cerr << "could not get bucket id for bucket" << bucket << std::endl;
-        return ret;
-      }
+      bucket_id = bucket.bucket_id;
     }
   }
 
@@ -868,7 +888,7 @@ int main(int argc, char **argv)
 
     remove_old_indexes(old_info, info);
 
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_SUBUSER_RM:
@@ -879,7 +899,7 @@ int main(int argc, char **argv)
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_KEY_RM:
@@ -894,11 +914,11 @@ int main(int argc, char **argv)
         break;
       }
     }
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, formatter);
     break;
 
   case OPT_USER_INFO:
-    show_user_info(info, format.c_str(), formatter);
+    show_user_info(info, formatter);
     break;
   }
 
@@ -925,30 +945,33 @@ int main(int argc, char **argv)
     string id;
     RGWAccessHandle handle;
 
+    formatter->reset();
+    formatter->open_array_section("buckets");
     if (!user_id.empty()) {
       RGWUserBuckets buckets;
       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-        cout << "could not get buckets for uid " << user_id << std::endl;
+        cerr << "list buckets: could not get buckets for uid " << user_id << std::endl;
       } else {
         map<string, RGWBucketEnt>& m = buckets.get_buckets();
         map<string, RGWBucketEnt>::iterator iter;
 
         for (iter = m.begin(); iter != m.end(); ++iter) {
           RGWBucketEnt obj = iter->second;
-          cout << obj.bucket.name << std::endl;
+	  formatter->dump_string("bucket", obj.bucket.name);
         }
       }
     } else {
       if (store->list_buckets_init(id, &handle) < 0) {
-        cout << "list-buckets: no entries found" << std::endl;
+        cerr << "list buckets: no buckets found" << std::endl;
       } else {
         RGWObjEnt obj;
-        cout << "listing all buckets" << std::endl;
         while (store->list_buckets_next(id, obj, &handle) >= 0) {
-          cout << obj.name << std::endl;
+          formatter->dump_string("bucket", obj.name);
         }
       }
     }
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
@@ -974,8 +997,8 @@ int main(int argc, char **argv)
 	dout(10) << "couldn't decode policy" << dendl;
 	return -EINVAL;
       }
-      cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
-      r = rgw_remove_bucket(owner.get_id(), bucket, false);
+      //cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
+      r = rgw_remove_user_bucket_info(owner.get_id(), bucket, false);
       if (r < 0) {
 	cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
 	return r;
@@ -994,7 +1017,7 @@ int main(int argc, char **argv)
       return usage();
     }
 
-    int r = rgw_remove_bucket(user_id, bucket, false);
+    int r = rgw_remove_user_bucket_info(user_id, bucket, false);
     if (r < 0)
       cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
     return -r;
@@ -1050,13 +1073,38 @@ int main(int argc, char **argv)
       }
       vector<RGWObjEnt>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        cout << "processing intent log " << (*iter).name << std::endl;
         process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
       }
     } while (is_truncated);
   }
 
-  if (opt_cmd == OPT_LOG_SHOW) {
+  if (opt_cmd == OPT_LOG_LIST) {
+    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
+
+    formatter->reset();
+    formatter->open_array_section("logs");
+    RGWAccessHandle h;
+    int r = store->list_objects_raw_init(log_bucket, &h);
+    if (r < 0) {
+      cerr << "log list: error " << r << std::endl;
+      return r;
+    }
+    while (true) {
+      RGWObjEnt obj;
+      int r = store->list_objects_raw_next(obj, &h);
+      if (r == -ENOENT)
+	break;
+      if (r < 0) {
+	cerr << "log list: error " << r << std::endl;
+	return r;
+      }
+      formatter->dump_string("object", obj.name);
+    };
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id < 0)) {
       cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
       return usage();
@@ -1075,197 +1123,154 @@ int main(int argc, char **argv)
       oid += "-";
       oid += string(bucket.name);
     }
-
-    uint64_t size;
     rgw_obj obj(log_bucket, oid);
-    int r = store->obj_stat(NULL, obj, &size, NULL);
-    if (r < 0) {
-      cerr << "error while doing stat on " <<  log_bucket << ":" << oid
-	   << " " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-    bufferlist bl;
-    r = store->read(NULL, obj, 0, size, bl);
-    if (r < 0) {
-      cerr << "error while reading from " <<  log_bucket << ":" << oid
-	   << " " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
 
-    bufferlist::iterator iter = bl.begin();
+    if (opt_cmd == OPT_LOG_SHOW) {
+      uint64_t size;
+      int r = store->obj_stat(NULL, obj, &size, NULL);
+      if (r < 0) {
+	cerr << "error while doing stat on " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
 
-    struct rgw_log_entry entry;
-    const char *delim = " ";
-
-    if (!format.empty()) {
+      bufferlist bl;
+      r = store->read(NULL, obj, 0, size, bl);
+      if (r < 0) {
+	cerr << "error while reading from " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+      
+      bufferlist::iterator iter = bl.begin();
+      
+      struct rgw_log_entry entry;
+      
       formatter->reset();
       formatter->open_object_section("log");
 
+      // peek at first entry to get bucket metadata
       bufferlist::iterator first_iter = iter;
       if (!first_iter.end()) {
-        ::decode(entry, first_iter);
-        int ret = rgw_retrieve_pool_info(entry.pool_id, pool_info);
-        if (ret >= 0) {
-          formatter->dump_string("bucket", pool_info.bucket.name.c_str());
-          formatter->dump_string("pool", pool_info.bucket.pool.c_str());
-          formatter->dump_string("bucket_owner", pool_info.owner.c_str());
-        } else {
-          cerr << "could not retrieve pool info for bucket_id=" << bucket_id << std::endl;
-        }
-        formatter->dump_format("bucket_id", "%lld", entry.pool_id);
+	::decode(entry, first_iter);
+	formatter->dump_int("bucket_id", entry.bucket_id);
+	formatter->dump_string("bucket_owner", entry.bucket_owner);
+	formatter->dump_string("bucket", entry.bucket);
       }
       formatter->open_array_section("log_entries");
-    }
-
-    while (!iter.end()) {
-      ::decode(entry, iter);
-
-      uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
-
-      if (format.empty()) { // for now, keeping backward compatibility a bit
-        cout << (entry.owner.size() ? entry.owner : "-" ) << delim
-             << entry.bucket << delim
-             << entry.time << delim
-             << entry.remote_addr << delim
-             << entry.user << delim
-             << entry.op << delim
-             << "\"" << escape_str(entry.uri, '"') << "\"" << delim
-             << entry.http_status << delim
-             << "\"" << entry.error_code << "\"" << delim
-             << entry.bytes_sent << delim
-             << entry.bytes_received << delim
-             << entry.obj_size << delim
-             << total_time << delim
-             << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
-             << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
-      } else {
-        formatter->open_object_section("log_entry");
-        formatter->dump_string("bucket", entry.bucket.c_str());
-
-        stringstream ss;
-        ss << entry.time;
-        string s = ss.str();
-
-        formatter->dump_string("time", s.c_str());
-        formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-        if (entry.owner.size())
-          formatter->dump_string("owner", entry.owner.c_str());
-        formatter->dump_string("user", entry.user.c_str());
-        formatter->dump_string("operation", entry.op.c_str());
-        formatter->dump_string("uri", entry.uri.c_str());
-        formatter->dump_string("http_status", entry.http_status.c_str());
-        formatter->dump_string("error_code", entry.error_code.c_str());
-        formatter->dump_format("bytes_sent", "%lld", entry.bytes_sent);
-        formatter->dump_format("bytes_received", "%lld", entry.bytes_received);
-        formatter->dump_format("object_size", "%lld", entry.obj_size);
-        formatter->dump_format("total_time", "%lld", total_time);
-        formatter->dump_string("user_agent",  entry.user_agent.c_str());
-        formatter->dump_string("referrer",  entry.referrer.c_str());
-        formatter->close_section();
-        formatter->flush(cout);
+      
+      while (!iter.end()) {
+	::decode(entry, iter);
+	
+	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+	
+	formatter->open_object_section("log_entry");
+	formatter->dump_string("bucket", entry.bucket.c_str());
+	formatter->dump_stream("time") << entry.time;
+	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+	if (entry.object_owner.length())
+	  formatter->dump_string("object_owner", entry.object_owner.c_str());
+	formatter->dump_string("user", entry.user.c_str());
+	formatter->dump_string("operation", entry.op.c_str());
+	formatter->dump_string("uri", entry.uri.c_str());
+	formatter->dump_string("http_status", entry.http_status.c_str());
+	formatter->dump_string("error_code", entry.error_code.c_str());
+	formatter->dump_int("bytes_sent", entry.bytes_sent);
+	formatter->dump_int("bytes_received", entry.bytes_received);
+	formatter->dump_int("object_size", entry.obj_size);
+	formatter->dump_int("total_time", total_time);
+	formatter->dump_string("user_agent",  entry.user_agent.c_str());
+	formatter->dump_string("referrer",  entry.referrer.c_str());
+	formatter->close_section();
+	formatter->flush(cout);
       }
-    }
-
-    if (!format.empty()) {
       formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
     }
-
+    if (opt_cmd == OPT_LOG_RM) {
+      std::string id;
+      int r = store->delete_obj(NULL, id, obj);
+      if (r < 0) {
+	cerr << "error removing " <<  log_bucket << ":" << oid
+	     << " " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+    }
   }
-
+  
   if (opt_cmd == OPT_USER_RM) {
     rgw_delete_user(info, purge_data);
   }
-
+  
   if (opt_cmd == OPT_POOL_INFO) {
-    if (bucket_name.empty() && bucket_id < 0) {
-      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
-      return usage();
-    }
-    formatter->reset();
-    formatter->open_object_section("pool_info");
-    formatter->dump_int("id", bucket_id);
-    formatter->dump_string("bucket", pool_info.bucket.name.c_str());
-    formatter->dump_string("pool", pool_info.bucket.pool.c_str());
-    formatter->dump_string("owner", pool_info.owner.c_str());
-    formatter->close_section();
-    formatter->flush(cout);
-  }
+     if (bucket_name.empty() && bucket_id < 0) {
+       cerr << "either bucket or bucket-id needs to be specified" << std::endl;
+       return usage();
+     }
+     formatter->reset();
+     formatter->open_object_section("pool_info");
+     formatter->dump_int("id", bucket_id);
+     formatter->dump_string("bucket", bucket_info.bucket.name.c_str());
+     formatter->dump_string("pool", bucket_info.bucket.pool.c_str());
+     formatter->dump_string("owner", bucket_info.owner.c_str());
+     formatter->close_section();
+     formatter->flush(cout);
+   }
 
-  if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && bucket_id < 0) {
-      cerr << "either bucket or bucket-id needs to be specified" << std::endl;
-      return usage();
-    }
-    map<string, RGWBucketStats> stats;
-    int ret = rgwstore->get_bucket_stats(bucket, stats);
+   if (opt_cmd == OPT_BUCKET_STATS) {
+     if (bucket_name.empty() && bucket_id < 0 && user_id.empty()) {
+       cerr << "either bucket or bucket-id or uid needs to be specified" << std::endl;
+       return usage();
+     }
+     formatter->reset();
+     if (user_id.empty()) {
+       bucket_stats(bucket, formatter);
+     } else {
+       RGWUserBuckets buckets;
+       if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
+	 cerr << "could not get buckets for uid " << user_id << std::endl;
+       } else {
+	 formatter->open_array_section("buckets");
+	 map<string, RGWBucketEnt>& m = buckets.get_buckets();
+	 for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
+	   RGWBucketEnt obj = iter->second;
+	   bucket_stats(obj.bucket, formatter);
+	 }
+	 formatter->close_section();
+       }
+     }
+     formatter->flush(cout);
+   }
+
+   if (opt_cmd == OPT_POOL_CREATE) {
+ #if 0
+     if (bucket_name.empty())
+       return usage();
+     string no_object;
+     int ret;
+     bufferlist bl;
+     rgw_obj obj(bucket, no_object);
+
+     ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
+     if (ret < 0) {
+       RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
+       return ret;
+     }
+     RGWAccessControlPolicy policy;
+     bufferlist::iterator iter = bl.begin();
+     policy.decode(iter);
+
+     RGWBucketInfo info;
+     info.bucket = bucket;
+     info.owner = policy.get_owner().get_id();
+
+    ret = rgw_store_bucket_info_id(bucket.bucket_id, info);
     if (ret < 0) {
-      cerr << "error getting bucket stats ret=" << ret << std::endl;
+      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
       return ret;
     }
-    map<string, RGWBucketStats>::iterator iter;
-    formatter->reset();
-    formatter->open_object_section("stats");
-    formatter->dump_string("bucket", bucket.name.c_str());
-    formatter->dump_string("pool", bucket.pool.c_str());
-    formatter->dump_int("id", bucket_id);
-    formatter->dump_string("owner", pool_info.owner.c_str());
-    formatter->open_array_section("categories");
-    for (iter = stats.begin(); iter != stats.end(); ++iter) {
-      RGWBucketStats& s = iter->second;
-      formatter->open_object_section("category");
-      const char *cat_name = (iter->first.size() ? iter->first.c_str() : "");
-      formatter->dump_string("name", cat_name);
-      formatter->dump_format("size_kb", "%lld", s.num_kb);
-      formatter->dump_format("num_objects", "%lld", s.num_objects);
-      formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-      formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-      formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-      formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-      formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-      formatter->dump_format("num_read_kb", "%lld", s.num_rd_kb);
-      formatter->dump_format("num_write_kb", "%lld", s.num_wr_kb);
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT_POOL_CREATE) {
-    if (bucket_name.empty())
-      return usage();
-    string no_object;
-    int ret;
-    bufferlist bl;
-    rgw_obj obj(bucket, no_object);
-
-    ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-    if (ret < 0) {
-      RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
-      return ret;
-    }
-    RGWAccessControlPolicy policy;
-    bufferlist::iterator iter = bl.begin();
-    policy.decode(iter);
-
-    RGWPoolInfo info;
-    info.bucket = bucket;
-    info.owner = policy.get_owner().get_id();
-
-    uint64_t bucket_id;
-    ret = rgwstore->get_bucket_id(bucket, &bucket_id);
-    if (ret < 0) {
-      RGW_LOG(0) << "get_bucket_id returned " << ret << dendl;
-      return ret;
-    }
-    ret = rgw_store_pool_info(bucket_id, info);
-    if (ret < 0) {
-      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket_id << " ret=" << ret << dendl;
-      return ret;
-    }
+#endif
   }
 
  if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
@@ -1278,7 +1283,7 @@ int main(int argc, char **argv)
     }
     RGWUserBuckets buckets;
     if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
-      cout << "could not get buckets for uid " << user_id << std::endl;
+      cerr << "could not get buckets for uid " << user_id << std::endl;
     }
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
     map<string, RGWBucketEnt>::iterator iter;

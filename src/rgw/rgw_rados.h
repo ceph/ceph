@@ -5,9 +5,11 @@
 #include "include/Context.h"
 #include "rgw_access.h"
 #include "rgw_common.h"
+#include "rgw_cls_api.h"
 
 class RGWWatcher;
 class SafeTimer;
+class ACLOwner;
 
 struct RGWObjState {
   bool is_atomic;
@@ -94,8 +96,8 @@ class RGWRados  : public RGWAccess
 
   RGWWatcher *watcher;
   uint64_t watch_handle;
-  librados::IoCtx root_pool_ctx;
-  librados::IoCtx control_pool_ctx;
+  librados::IoCtx root_pool_ctx;      // .rgw
+  librados::IoCtx control_pool_ctx;   // .rgw.control
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx,
@@ -114,7 +116,7 @@ class RGWRados  : public RGWAccess
   int clone_objs_impl(void *ctx, rgw_obj& dst_obj, 
                  vector<RGWCloneRangeInfo>& ranges,
                  map<string, bufferlist> attrs,
-                 string& category,
+                 RGWObjCategory category,
                  time_t *pmtime,
                  bool truncate_dest,
                  bool exclusive,
@@ -135,6 +137,10 @@ public:
    */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
+  /* raw object list interface */
+  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle);
+  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle);
+
   /** get listing of the objects in a bucket */
   virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
@@ -144,12 +150,12 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, time_t *mtime,
-              map<std::string, bufferlist>& attrs, string& category, bool exclusive);
+  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+              map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive);
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
@@ -159,7 +165,7 @@ public:
   virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
                          vector<RGWCloneRangeInfo>& ranges,
                          map<string, bufferlist> attrs,
-                         string& category,
+                         RGWObjCategory category,
                          time_t *pmtime, bool truncate_dest, bool exclusive) {
     return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, NULL);
   }
@@ -167,7 +173,7 @@ public:
   int clone_objs(void *ctx, rgw_obj& dst_obj, 
                  vector<RGWCloneRangeInfo>& ranges,
                  map<string, bufferlist> attrs,
-                 string& category,
+                 RGWObjCategory category,
                  time_t *pmtime,
                  bool truncate_dest,
                  bool exclusive,
@@ -176,7 +182,7 @@ public:
   int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
                 rgw_obj& src_obj, off_t src_ofs,
                 uint64_t size, map<string, bufferlist> attrs,
-                string& category,
+                RGWObjCategory category,
                 time_t *pmtime,
                 bool truncate_dest,
                 bool exclusive,
@@ -200,7 +206,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                map<std::string, bufferlist>& attrs,
-               string& category,
+               RGWObjCategory category,
                struct rgw_err *err);
   /** delete a bucket*/
   virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
@@ -242,8 +248,6 @@ public:
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
 
-  virtual int get_bucket_id(rgw_bucket& bucket, uint64_t *bucket_id);
-
   virtual bool supports_tmap() { return true; }
   virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
@@ -275,7 +279,23 @@ public:
     rctx->set_intent_cb(cb);
   }
 
-  int get_bucket_stats(rgw_bucket& bucket, map<string, RGWBucketStats>& stats);
+  int decode_policy(bufferlist& bl, ACLOwner *owner);
+  int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
+
+  int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
+  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
+  int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
+                          RGWObjEnt& ent, RGWObjCategory category);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
+  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
+  int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
+  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
+  int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
+                            utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category);
+  int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
+    return cls_obj_complete_del(bucket, tag, epoch, oid);
+  }
 };
 
 #endif

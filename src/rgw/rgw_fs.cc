@@ -158,8 +158,7 @@ int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix,
     obj.size = statbuf.st_size;
     char *etag;
     if (get_attr(RGW_ATTR_ETAG, buf, &etag) >= 0) {
-      strncpy(obj.etag, etag, sizeof(obj.etag));
-      obj.etag[sizeof(obj.etag)-1] = '\0';
+      obj.etag = etag;
       free(etag);
     }
     result.push_back(obj);
@@ -171,7 +170,7 @@ int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix,
 }
 
 
-int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool exclusive, uint64_t auid)
+int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive, uint64_t auid)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.name.size() + 1;
   char buf[len];
@@ -204,8 +203,8 @@ int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, b
 }
 
 int RGWFS::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
-                  time_t *mtime, map<string, bufferlist>& attrs,
-                  string& category, bool exclusive)
+                  uint64_t size, time_t *mtime, map<string, bufferlist>& attrs,
+                  RGWObjCategory category, bool exclusive)
 {
   rgw_bucket& bucket = obj.bucket;
   std::string& oid = obj.object;
@@ -300,7 +299,7 @@ int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
                const char *if_match,
                const char *if_nomatch,
                map<string, bufferlist>& attrs,
-               string& category,
+               RGWObjCategory category,
                struct rgw_err *err)
 {
   int ret;

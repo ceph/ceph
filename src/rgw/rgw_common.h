@@ -34,11 +34,6 @@ namespace ceph {
 
 using ceph::crypto::MD5;
 
-extern string rgw_obj_category_main;
-extern string rgw_obj_category_shadow;
-extern string rgw_obj_category_multimeta;
-extern string rgw_obj_category_none;
-
 #define RGW_ROOT_BUCKET ".rgw"
 
 #define RGW_CONTROL_BUCKET ".rgw.control"
@@ -126,6 +121,13 @@ enum RGWIntentEvent {
   DEL_POOL,
 };
 
+enum RGWObjCategory {
+  RGW_OBJ_CATEGORY_NONE      = 0,
+  RGW_OBJ_CATEGORY_MAIN      = 1,
+  RGW_OBJ_CATEGORY_SHADOW    = 2,
+  RGW_OBJ_CATEGORY_MULTIMETA = 3,
+};
+
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
@@ -163,21 +165,25 @@ class XMLArgs
   map<string, string> val_map;
   map<string, string> sub_resources;
  public:
-   XMLArgs() {}
-   XMLArgs(string s) : str(s) {}
-   /** Set the arguments; as received */
-   void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
-   /** parse the received arguments */
-   int parse();
-   /** Get the value for a specific argument parameter */
-   string& get(string& name);
-   string& get(const char *name);
-   /** see if a parameter is contained in this XMLArgs */
-   bool exists(const char *name) {
-     map<string, string>::iterator iter = val_map.find(name);
-     return (iter != val_map.end());
-   }
-   map<string, string>& get_sub_resources() { return sub_resources; }
+  XMLArgs() {}
+  XMLArgs(string s) : str(s) {}
+  /** Set the arguments; as received */
+  void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
+  /** parse the received arguments */
+  int parse();
+  /** Get the value for a specific argument parameter */
+  string& get(string& name);
+  string& get(const char *name);
+  /** see if a parameter is contained in this XMLArgs */
+  bool exists(const char *name) {
+    map<string, string>::iterator iter = val_map.find(name);
+    return (iter != val_map.end());
+  }
+  bool sub_resource_exists(const char *name) {
+    map<string, string>::iterator iter = sub_resources.find(name);
+    return (iter != sub_resources.end());
+  }
+  map<string, string>& get_sub_resources() { return sub_resources; }
 };
 
 class RGWConf;
@@ -350,30 +356,43 @@ WRITE_CLASS_ENCODER(RGWUserInfo)
 struct rgw_bucket {
   std::string name;
   std::string pool;
+  std::string marker;
+  uint64_t bucket_id;
 
   rgw_bucket() {}
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     pool = n;
+    marker = "";
+    bucket_id = 0;
   }
-  rgw_bucket(const char *n, const char *p) : name(n), pool(p) {}
+  rgw_bucket(const char *n, const char *p, const char *m, uint64_t id) :
+    name(n), pool(p), marker(m), bucket_id(id) {}
 
   void clear() {
     name = "";
     pool = "";
+    marker = "";
+    bucket_id = 0;
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(pool, bl);
+    ::encode(marker, bl);
+    ::encode(bucket_id, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(pool, bl);
+    if (struct_v >= 2) {
+      ::decode(marker, bl);
+      ::decode(bucket_id, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -381,13 +400,13 @@ WRITE_CLASS_ENCODER(rgw_bucket)
 inline ostream& operator<<(ostream& out, const rgw_bucket b) {
   out << b.name;
   if (b.name.compare(b.pool))
-    out << "(@" << b.pool << ")";
+    out << "(@" << b.pool << "[" << b.marker << "])";
   return out;
 }
 
 extern rgw_bucket rgw_root_bucket;
 
-struct RGWPoolInfo
+struct RGWBucketInfo
 {
   rgw_bucket bucket;
   string owner;
@@ -395,51 +414,24 @@ struct RGWPoolInfo
   void encode(bufferlist& bl) const {
      __u32 ver = 2;
      ::encode(ver, bl);
-     ::encode(bucket.name, bl);
+     ::encode(bucket, bl);
      ::encode(owner, bl);
-     ::encode(bucket, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-    ::decode(ver, bl);
-    ::decode(bucket.name, bl);
-    ::decode(owner, bl);
-    if (ver >= 2)
-      ::decode(bucket, bl);
-  }
-};
-WRITE_CLASS_ENCODER(RGWPoolInfo)
-
-struct RGWBucketInfo
-{
-  rgw_bucket bucket;
-
-  void encode(bufferlist& bl) const {
-     __u32 ver = 1;
-     ::encode(ver, bl);
-     ::encode(bucket, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(bucket, bl);
+     if (ver > 1)
+       ::decode(owner, bl);
   }
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
 struct RGWBucketStats
 {
-  string pool_name;
-  string category;
+  RGWObjCategory category;
   uint64_t num_kb;
   uint64_t num_objects;
-  uint64_t num_object_clones;
-  uint64_t num_object_copies;  // num_objects * num_replicas
-  uint64_t num_objects_missing_on_primary;
-  uint64_t num_objects_unfound;
-  uint64_t num_objects_degraded;
-  uint64_t num_rd_kb;
-  uint64_t num_wr_kb;
 };
 
 struct req_state;
@@ -481,6 +473,7 @@ struct req_state {
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
+   string bucket_owner;
 
    map<string, string> x_meta_map;
 
@@ -498,8 +491,6 @@ struct req_state {
    char *os_groups;
 
    utime_t time;
-
-   uint64_t pool_id;
 
    struct RGWEnv *env;
 
@@ -519,8 +510,7 @@ struct RGWObjEnt {
   std::string owner_display_name;
   size_t size;
   time_t mtime;
-  // two md5 digests and a terminator
-  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  string etag;
   string content_type;
 
   void clear() { // not clearing etag
@@ -536,7 +526,7 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   time_t mtime;
-  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  string etag;
   uint64_t count;
 
   void encode(bufferlist& bl) const {
@@ -569,7 +559,7 @@ struct RGWBucketEnt {
     bucket.clear();
     size = 0;
     mtime = 0;
-    memset(etag, 0, sizeof(etag));
+    etag = "";
     count = 0;
   }
 };
@@ -633,7 +623,7 @@ public:
   void init(rgw_bucket& b, std::string& o) {
     bucket = b;
     set_obj(o);
-    orig_key = key = "";
+    orig_key = key = o;
   }
   int set_ns(const char *n) {
     if (!n)
@@ -651,10 +641,7 @@ public:
 
   void set_key(string& k) {
     orig_key = k;
-    if (k.compare(object) == 0)
-      key = "";
-    else
-      key = k;
+    key = k;
   }
 
   void set_obj(string& o) {
@@ -674,7 +661,10 @@ public:
       object.append("_");
       object.append(o);
     }
-    set_key(orig_key);
+    if (orig_key.size())
+      set_key(orig_key);
+    else
+      set_key(orig_obj);
   }
 
   string loc() {
@@ -805,6 +795,22 @@ static inline void append_rand_alpha(string& src, string& dest, int len)
   gen_rand_alphanumeric(buf, len);
   dest.append("_");
   dest.append(buf);
+}
+
+static inline const char *rgw_obj_category_name(RGWObjCategory category)
+{
+  switch (category) {
+  case RGW_OBJ_CATEGORY_NONE:
+    return "rgw.none";
+  case RGW_OBJ_CATEGORY_MAIN:
+    return "rgw.main";
+  case RGW_OBJ_CATEGORY_SHADOW:
+    return "rgw.shadow";
+  case RGW_OBJ_CATEGORY_MULTIMETA:
+    return "rgw.multimeta";
+  }
+
+  return "unknown";
 }
 
 /** */

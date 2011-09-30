@@ -335,7 +335,7 @@ radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = $(my_radosgw_src) rgw/rgw_admin.cc
 radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
-bin_PROGRAMS += radosgw radosgw_admin
+bin_PROGRAMS += radosgw radosgw-admin
 
 rgw_multiparser_SOURCES = $(my_radosgw_src) rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -366,6 +366,17 @@ libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 
 radoslibdir = $(libdir)/rados-classes
 radoslib_LTLIBRARIES = libcls_rbd.la
 
+
+if WITH_RADOSGW
+# rgw: rados gateway
+libcls_rgw_la_SOURCES = cls_rgw.cc
+libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
+libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_rgw_la_LIBADD = -lpthread $(EXTRALIBS)
+libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_rgw.la
+endif
 
 ## hadoop client
 if WITH_HADOOPCLIENT
@@ -724,7 +735,7 @@ bash_completiondir = $(sysconfdir)/bash_completion.d
 bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rados \
                $(srcdir)/bash_completion/rbd \
-               $(srcdir)/bash_completion/radosgw_admin
+               $(srcdir)/bash_completion/radosgw-admin
 
 libcephfs_includedir = $(includedir)/cephfs
 libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
@@ -995,7 +1006,7 @@ noinst_HEADERS = \
 	bash_completion/ceph\
 	bash_completion/rados\
 	bash_completion/rbd\
-	bash_completion/radosgw_admin\
+	bash_completion/radosgw-admin\
         client/Client.h\
 	client/Dentry.h\
 	client/Dir.h\
@@ -1342,6 +1353,7 @@ noinst_HEADERS = \
 	rgw/rgw_acl.h\
 	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
+	rgw/rgw_cls_api.h\
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_fs.h\

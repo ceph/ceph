@@ -162,6 +162,32 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   return *outdatalen;
 }
 
+int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  int ret;
+  bufferlist outbl;
+  ops[0].op.op = CEPH_OSD_OP_STAT;
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
+  if (ret < 0)
+    return ret;
+  bufferlist::iterator iter = outbl.begin();
+  utime_t ut;
+  uint64_t s;
+  try {
+    ::decode(s, iter);
+    ::decode(ut, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  if (size)
+    *size = s;
+  if (mtime)
+    *mtime = ut.sec();
+  return 0;
+}
+
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
