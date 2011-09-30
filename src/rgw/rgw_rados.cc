@@ -690,16 +690,10 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
       return r;
   }
 
-  /*
-
-    rgw_remove_bucket_info does this, and that's called by rgw_remove_bucket() (our caller).
-    at least for now. 
-
   rgw_obj obj(rgw_root_bucket, bucket.name);
   r = delete_obj(NULL, id, obj, true);
   if (r < 0)
     return r;
-  */
 
   return 0;
 }
