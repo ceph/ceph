@@ -133,9 +133,11 @@ void MDLog::open(Context *c)
 
 void MDLog::append()
 {
-  dout(5) << "append positioning at end" << dendl;
+  dout(5) << "append positioning at end and marking writeable" << dendl;
   journaler->set_read_pos(journaler->get_write_pos());
   journaler->set_expire_pos(journaler->get_write_pos());
+  
+  journaler->set_writeable();
 
   logger->set(l_mdl_expos, journaler->get_write_pos());
 }
