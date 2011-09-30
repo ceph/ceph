@@ -2234,7 +2234,6 @@ ESubtreeMap *MDCache::create_subtree_map()
   CDir *mydir = 0;
   if (myin) {
     mydir = myin->get_dirfrag(frag_t());
-    assert(mydir);
   }
 
   // include all auth subtrees, and their bounds.
