@@ -694,9 +694,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   s->path_name = s->env->get("SCRIPT_NAME");
   s->path_name_url = s->env->get("REQUEST_URI");
   int pos = s->path_name_url.find('?');
-  string path_arg;
   if (pos >= 0) {
-    path_arg = s->path_name_url.substr(pos+1);
     s->path_name_url = s->path_name_url.substr(0, pos);
   }
   s->method = s->env->get("REQUEST_METHOD");
@@ -724,7 +722,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   init_entities_from_header(s);
   switch (s->op) {
   case OP_PUT:
-    if (s->object && path_arg != "acl") {
+    if (s->object && !s->args.sub_resource_exists("acl")) {
       if (!s->length)
         ret = -ERR_LENGTH_REQUIRED;
       else if (*s->length == '\0')

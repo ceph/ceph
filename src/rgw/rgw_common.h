@@ -165,21 +165,25 @@ class XMLArgs
   map<string, string> val_map;
   map<string, string> sub_resources;
  public:
-   XMLArgs() {}
-   XMLArgs(string s) : str(s) {}
-   /** Set the arguments; as received */
-   void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
-   /** parse the received arguments */
-   int parse();
-   /** Get the value for a specific argument parameter */
-   string& get(string& name);
-   string& get(const char *name);
-   /** see if a parameter is contained in this XMLArgs */
-   bool exists(const char *name) {
-     map<string, string>::iterator iter = val_map.find(name);
-     return (iter != val_map.end());
-   }
-   map<string, string>& get_sub_resources() { return sub_resources; }
+  XMLArgs() {}
+  XMLArgs(string s) : str(s) {}
+  /** Set the arguments; as received */
+  void set(string s) { val_map.clear(); sub_resources.clear(); str = s; }
+  /** parse the received arguments */
+  int parse();
+  /** Get the value for a specific argument parameter */
+  string& get(string& name);
+  string& get(const char *name);
+  /** see if a parameter is contained in this XMLArgs */
+  bool exists(const char *name) {
+    map<string, string>::iterator iter = val_map.find(name);
+    return (iter != val_map.end());
+  }
+  bool sub_resource_exists(const char *name) {
+    map<string, string>::iterator iter = sub_resources.find(name);
+    return (iter != sub_resources.end());
+  }
+  map<string, string>& get_sub_resources() { return sub_resources; }
 };
 
 class RGWConf;
