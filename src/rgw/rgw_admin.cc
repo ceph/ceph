@@ -1085,21 +1085,25 @@ int main(int argc, char **argv)
     formatter->open_array_section("logs");
     RGWAccessHandle h;
     int r = store->list_objects_raw_init(log_bucket, &h);
-    if (r < 0) {
-      cerr << "log list: error " << r << std::endl;
-      return r;
-    }
-    while (true) {
-      RGWObjEnt obj;
-      int r = store->list_objects_raw_next(obj, &h);
-      if (r == -ENOENT)
-	break;
+    if (r == -ENOENT) {
+      // no logs.
+    } else {
       if (r < 0) {
 	cerr << "log list: error " << r << std::endl;
 	return r;
       }
-      formatter->dump_string("object", obj.name);
-    };
+      while (true) {
+	RGWObjEnt obj;
+	int r = store->list_objects_raw_next(obj, &h);
+	if (r == -ENOENT)
+	  break;
+	if (r < 0) {
+	  cerr << "log list: error " << r << std::endl;
+	  return r;
+	}
+	formatter->dump_string("object", obj.name);
+      }
+    }
     formatter->close_section();
     formatter->flush(cout);
   }
