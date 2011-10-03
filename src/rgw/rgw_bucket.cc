@@ -8,13 +8,8 @@
 #include "rgw_bucket.h"
 #include "rgw_tools.h"
 
-#include "auth/Crypto.h" // get_random_bytes()
-
-
 static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
-static string default_storage_pool(DEFAULT_BUCKET_STORE_POOL);
 
-static string avail_pools = ".pools.avail";
 static string pool_name_prefix = "p";
 
 
@@ -74,50 +69,6 @@ int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
   return rgw_get_bucket_info(bucket_string, info);
 }
 
-int rgw_bucket_select_host_pool(string& bucket_name, rgw_bucket& bucket)
-{
-  bufferlist header;
-  map<string, bufferlist> m;
-  string pool_name;
-
-  rgw_obj obj(pi_buckets, avail_pools);
-  int ret = rgwstore->tmap_get(obj, header, m);
-  if (ret < 0 || !m.size()) {
-    string id;
-    vector<string> names;
-    names.push_back(default_storage_pool);
-    vector<int> retcodes;
-    bufferlist bl;
-    ret = rgwstore->create_pools(id, names, retcodes);
-    if (ret < 0)
-      return ret;
-    ret = rgwstore->tmap_set(obj, default_storage_pool, bl);
-    if (ret < 0)
-      return ret;
-    m[default_storage_pool] = bl;
-  }
-
-  vector<string> v;
-  map<string, bufferlist>::iterator miter;
-  for (miter = m.begin(); miter != m.end(); ++miter) {
-    v.push_back(miter->first);
-  }
-
-  uint32_t r;
-  ret = get_random_bytes((char *)&r, sizeof(r));
-  if (ret < 0)
-    return ret;
-
-  int i = r % v.size();
-  pool_name = v[i];
-  bucket.pool = pool_name;
-  bucket.name = bucket_name;
-  
-  return 0;
-}
-
-
-
 int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
                       map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
 {
@@ -128,7 +79,7 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
     return rgwstore->create_bucket(id, bucket, attrs, true, false, exclusive, auid);
   }
 
-  int ret = rgw_bucket_select_host_pool(bucket_name, bucket);
+  int ret = rgwstore->select_bucket_placement(bucket_name, bucket);
   if (ret < 0)
      return ret;
 

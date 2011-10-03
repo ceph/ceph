@@ -18,6 +18,7 @@ using namespace librados;
 #include <vector>
 #include <list>
 #include <map>
+#include "auth/Crypto.h" // get_random_bytes()
 
 using namespace std;
 
@@ -27,6 +28,12 @@ static string notify_oid = "notify";
 static string shadow_ns = "shadow";
 static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
 static string dir_oid_prefix = ".dir.";
+static string default_storage_pool(DEFAULT_BUCKET_STORE_POOL);
+static string avail_pools = ".pools.avail";
+
+#include "rgw/rgw_bucket.h"
+static rgw_bucket pi_buckets_rados(BUCKETS_POOL_NAME);
+
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
@@ -374,6 +381,49 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
   }
 
   return ret;
+}
+
+int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
+{
+  bufferlist header;
+  map<string, bufferlist> m;
+  string pool_name;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_get(obj, header, m);
+  if (ret < 0 || !m.size()) {
+    string id;
+    vector<string> names;
+    names.push_back(default_storage_pool);
+    vector<int> retcodes;
+    bufferlist bl;
+    ret = create_pools(id, names, retcodes);
+    if (ret < 0)
+      return ret;
+    ret = tmap_set(obj, default_storage_pool, bl);
+    if (ret < 0)
+      return ret;
+    m[default_storage_pool] = bl;
+  }
+
+  vector<string> v;
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    v.push_back(miter->first);
+  }
+
+  uint32_t r;
+  ret = get_random_bytes((char *)&r, sizeof(r));
+  if (ret < 0)
+    return ret;
+
+  int i = r % v.size();
+  pool_name = v[i];
+  bucket.pool = pool_name;
+  bucket.name = bucket_name;
+
+  return 0;
+
 }
 
 int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid)

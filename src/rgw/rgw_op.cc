@@ -466,7 +466,7 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgw_bucket_select_host_pool(s->bucket_name_str, s->bucket);
+  ret = rgwstore->select_bucket_placement(s->bucket_name_str, s->bucket);
   if (ret < 0)
     goto done;
 

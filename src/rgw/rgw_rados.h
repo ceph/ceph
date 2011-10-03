@@ -11,6 +11,8 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 
+#define DEFAULT_BUCKET_STORE_POOL ".rgw.buckets"
+
 struct RGWObjState {
   bool is_atomic;
   bool has_attrs;
@@ -151,6 +153,7 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0);
+  virtual int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
