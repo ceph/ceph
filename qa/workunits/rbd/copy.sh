@@ -38,4 +38,6 @@ rbd export testimg3 /tmp/img3.new
 cmp /tmp/img2 /tmp/img2.new
 cmp /tmp/img3 /tmp/img3.new
 
+rm /tmp/img1 /tmp/img2 /tmp/img3 /tmp/img1.new /tmp/img2.new /tmp/img3.new
+
 echo OK
