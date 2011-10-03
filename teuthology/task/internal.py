@@ -267,6 +267,9 @@ def coredump(ctx, config):
             if r.stdout.getvalue() != 'OK\n':
                 log.warning('Found coredumps on %s, flagging run as failed', remote)
                 ctx.summary['success'] = False
+                if 'failure_reason' not in ctx.summary:
+                    ctx.summary['failure_reason'] = \
+                        'Found coredumps on {remote}'.format(remote=remote)
 
 @contextlib.contextmanager
 def syslog(ctx, config):

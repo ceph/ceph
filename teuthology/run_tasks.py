@@ -26,8 +26,10 @@ def run_tasks(tasks, ctx):
             if hasattr(manager, '__enter__'):
                 manager.__enter__()
                 stack.append(manager)
-    except:
+    except Exception, e:
         ctx.summary['success'] = False
+        if 'failure_reason' not in ctx.summary:
+            ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks')
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
@@ -41,8 +43,10 @@ def run_tasks(tasks, ctx):
                 log.debug('Unwinding manager %s', manager)
                 try:
                     suppress = manager.__exit__(*exc_info)
-                except:
+                except Exception, e:
                     ctx.summary['success'] = False
+                    if 'failure_reason' not in ctx.summary:
+                        ctx.summary['failure_reason'] = str(e)
                     log.exception('Manager failed: %s', manager)
                 else:
                     if suppress:

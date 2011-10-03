@@ -652,18 +652,40 @@ def cluster(ctx, config):
                 )
 
         log.info('Checking cluster ceph.log for badness...')
-        r = mon0_remote.run(args=[
-                'if', run.Raw('!'),
-                'egrep', '-q', '\[ERR\]|\[WRN\]|\[SEC\]',
-                '/tmp/cephtest/data/%s/log' % firstmon,
-                run.Raw(';'), 'then', 'echo', 'OK', run.Raw(';'),
-                'fi',
-                ],
+        def first_in_ceph_log(pattern):
+            r = mon0_remote.run(
+                args=[
+                    'if', run.Raw('!'),
+                    'egrep', '-q', pattern,
+                    '/tmp/cephtest/data/%s/log' % firstmon,
+                    run.Raw(';'), 'then', 'echo', 'OK', run.Raw(';'),
+                    'else',
+                    'egrep', pattern,
+                    '/tmp/cephtest/data/%s/log' % firstmon,
+                    run.Raw('|'),
+                    'head', '-n', '1', run.Raw(';'),
+                    'fi',
+                    ],
                 stdout=StringIO(),
                 )
-        if r.stdout.getvalue() != "OK\n":
+            stdout = r.stdout.getvalue()
+            if stdout != "OK\n":
+                return stdout
+            return None
+
+        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]') is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
+            # use the most severe problem as the failure reason
+            if 'failure_reason' not in ctx.summary:
+                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
+                    match = first_in_ceph_log(pattern)
+                    if match is not None:
+                        ctx.summary['failure_reason'] = \
+                            '"{match}" in cluster log'.format(
+                            match=match.rstrip('\n'),
+                            )
+                        break
 
         for remote, dirs in devs_to_clean.iteritems():
             for dir_ in dirs:
