@@ -74,13 +74,6 @@ int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
   return rgw_get_bucket_info(bucket_string, info);
 }
 
-static int withdraw_pool(string& pool_name)
-{
-  rgw_obj obj(pi_buckets, avail_pools);
-  bufferlist bl;
-  return rgwstore->tmap_set(obj, pool_name, bl);
-}
-
 int rgw_bucket_select_host_pool(string& bucket_name, rgw_bucket& bucket)
 {
   bufferlist header;
@@ -140,11 +133,7 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
      return ret;
 
   ret = rgwstore->create_bucket(id, bucket, attrs, false, true, exclusive, auid);
-  if (ret == -EEXIST) {
-    // wow, isn't that horribly broken due to multiple EEXIST returns?
-    // or is something else going on here?
-    return withdraw_pool(bucket.pool);
-  }
+
   if (ret < 0)
     return ret;
 
