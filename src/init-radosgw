@@ -15,8 +15,8 @@ PATH=/sbin:/bin:/usr/bin
 # prefix for radosgw instances in ceph.conf
 PREFIX='client.radosgw.'
 
-# user to run radosgw as
-USER='www-data'
+# user to run radosgw as (it not specified in ceph.conf)
+DEFAULT_USER='www-data'
 
 # directory to write logs to
 LOGDIR='/var/log/radosgw'
@@ -29,7 +29,6 @@ fi
 # make sure log dir exists
 if [ ! -d "$LOGDIR" ]; then
     mkdir -p $LOGDIR
-    chown $USER $LOGDIR
 fi
 
 case "$1" in
@@ -53,11 +52,17 @@ case "$1" in
 		continue
 	    fi
 
+	    user=`ceph-conf -n $name user`
+	    if [ -n "$user" ]; then
+		user=$DEFAULT_USER
+	    fi
+
             echo "Starting $name..."
             # when radosgw grows support for daemonizing itself and setting up a pidfile, we can do
-            #   start-stop-daemon --start -u $USER -p $pid_file -x $RADOSGW -- -n $name
+            #   start-stop-daemon --start -u $user -p $pid_file -x $RADOSGW -- -n $name
             # but until then,
-            su - $USER -c "radosgw -n $name >> /var/log/radosgw/$name.log 2>&1 &"
+	    chown $user $LOGDIR
+            su - $user -c "radosgw -n $name >> /var/log/radosgw/$name.log 2>&1 &"
 	done
         ;;
     restart|reload|force-reload)
