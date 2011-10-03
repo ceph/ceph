@@ -1481,7 +1481,7 @@ void OSD::update_heartbeat_peers()
     }
 
     // share latest map with this peer, just to be nice.
-    if (osdmap->is_up(p->first) && !is_booting()) {
+    if (osdmap->is_up(p->first) && is_active()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd." << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1490,7 +1490,7 @@ void OSD::update_heartbeat_peers()
 	     << " " << con->get_peer_addr()
 	     << " as of " << p->second << dendl;
     
-    if (!osdmap->is_up(p->first) && !is_booting()) {
+    if (!osdmap->is_up(p->first) && is_active()) {
       dout(10) << "update_heartbeat_peers: telling old peer osd." << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
@@ -1589,7 +1589,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       heartbeat_to_con[from] = m->get_connection();
       heartbeat_to_con[from]->get();
       
-      if (locked && m->map_epoch && !is_booting()) {
+      if (locked && m->map_epoch && is_active()) {
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
       }
@@ -1617,7 +1617,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       dout(20) << "handle_osd_ping " << m->get_source_inst() << dendl;
 
       note_peer_epoch(from, m->map_epoch);
-      if (locked && !is_booting())
+      if (locked && is_active())
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
       heartbeat_from_stamp[from] = ceph_clock_now(g_ceph_context);  // don't let _my_ lag interfere.
@@ -2417,7 +2417,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
   //assert(osd_lock.is_locked());
 
-  assert(!is_booting());
+  assert(is_active());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -2467,7 +2467,7 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 
   int peer = inst.name.num();
 
-  assert(!is_booting());
+  assert(is_active());
 
   // send map?
   epoch_t pe = get_peer_epoch(peer);
