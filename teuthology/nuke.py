@@ -50,9 +50,9 @@ def shutdown_daemons(ctx, log):
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
-                'if', 'grep', '-q', 'cfuse', '/etc/mtab', run.Raw(';'),
+                'if', 'grep', '-q', 'ceph-fuse', '/etc/mtab', run.Raw(';'),
                 'then',
-                'grep', 'cfuse', '/etc/mtab', run.Raw('|'),
+                'grep', 'ceph-fuse', '/etc/mtab', run.Raw('|'),
                 'grep', '-o', " /.* fuse", run.Raw('|'),
                 'grep', '-o', "/.* ", run.Raw('|'),
                 'xargs', 'sudo', 'fusermount', '-u', run.Raw(';'),
@@ -221,7 +221,7 @@ def main():
     check_lock(ctx, None)
     connect(ctx, None)
 
-    log.info('Unmount cfuse and killing daemons...')
+    log.info('Unmount ceph-fuse and killing daemons...')
     shutdown_daemons(ctx, log)
     log.info('All daemons killed.')
 
