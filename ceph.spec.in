@@ -190,7 +190,7 @@ fi
 %{_docdir}/ceph/sample.fetch_config
 %{_sysconfdir}/bash_completion.d/ceph
 %{_sysconfdir}/bash_completion.d/rados
-%{_sysconfdir}/bash_completion.d/radosgw_admin
+%{_sysconfdir}/bash_completion.d/radosgw-admin
 %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/ceph-mon.8*
@@ -207,7 +207,7 @@ fi
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/radosgw_admin.8*
+%{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/ceph-authtool.8*
@@ -259,7 +259,7 @@ fi
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
-%{_bindir}/radosgw_admin
+%{_bindir}/radosgw-admin
 %{_initrddir}/radosgw
 %endif
 

@@ -1,19 +1,19 @@
 =================================================================
- radosgw_admin -- rados REST gateway user administration utility
+ radosgw-admin -- rados REST gateway user administration utility
 =================================================================
 
-.. program:: radosgw_admin
+.. program:: radosgw-admin
 
 Synopsis
 ========
 
-| **radosgw_admin** *command* [ *options* *...* ]
+| **radosgw-admin** *command* [ *options* *...* ]
 
 
 Description
 ===========
 
-**radosgw_admin** is a RADOS gateway user administration utility. It
+**radosgw-admin** is a RADOS gateway user administration utility. It
 allows creating and modifying users.
 
 
@@ -106,27 +106,27 @@ Examples
 
 Generate a new user::
 
-        $ radosgw_admin user gen --display-name="johnny rotten" --email=johnny@rotten.com
+        $ radosgw-admin user gen --display-name="johnny rotten" --email=johnny@rotten.com
         User ID: CHBQFRTG26I8DGJDGQLW
         Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
         Display Name: johnny rotten
 
 Remove a user::
 
-        $ radosgw_admin user rm --uid=CHBQFRTG26I8DGJDGQLW
+        $ radosgw-admin user rm --uid=CHBQFRTG26I8DGJDGQLW
 
 Remove a bucket::
 
-        $ radosgw_admin bucket unlink --bucket=foo
+        $ radosgw-admin bucket unlink --bucket=foo
 
 Show the logs of a bucket from April 1st 2011::
 
-        $ radosgw_admin log show --bucket=foo --date=2011=04-01
+        $ radosgw-admin log show --bucket=foo --date=2011=04-01
 
 Availability
 ============
 
-**radosgw_admin** is part of the Ceph distributed file system.  Please
+**radosgw-admin** is part of the Ceph distributed file system.  Please
 refer to the Ceph wiki at http://ceph.newdream.net/wiki for more
 information.
 

@@ -19,7 +19,7 @@
 
     "radostool" -> "librados"
 
-    "radosgw_admin" -> "radosgw"
+    "radosgw-admin" -> "radosgw"
 
     "radosgw" -> "librados"
 
