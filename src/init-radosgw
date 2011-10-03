@@ -65,7 +65,7 @@ case "$1" in
         $0 start
         ;;
     stop)
-        start-stop-daemon --stop -x $RADOSGW
+        start-stop-daemon --stop -x $RADOSGW --oknodo
         ;;
     *)
         echo "Usage: $0 start|stop|restart" >&2
