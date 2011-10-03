@@ -540,6 +540,12 @@ void MonClient::_reopen_session()
     waiting_for_session.pop_front();
   }
 
+  // throw out version check requests
+  while (!version_requests.empty()) {
+    version_requests.begin()->second->context->complete(-1);  // watch out for deadlock
+    version_requests.erase(version_requests.begin());
+  }
+
   // restart authentication handshake
   state = MC_STATE_NEGOTIATING;
 

@@ -351,6 +351,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::C_Op_Map_Latest::finish(int r)
 {
+  if (r < 0)
+    return;
+
   map<tid_t, Op*>::iterator iter =
     objecter->check_latest_map_ops.find(tid);
   if (iter == objecter->check_latest_map_ops.end()) {
@@ -375,6 +378,9 @@ void Objecter::C_Op_Map_Latest::finish(int r)
 
 void Objecter::C_Linger_Map_Latest::finish(int r)
 {
+  if (r < 0)
+    return;
+
   map<uint64_t, LingerOp*>::iterator iter =
     objecter->check_latest_map_lingers.find(linger_id);
   if (iter == objecter->check_latest_map_lingers.end()) {
