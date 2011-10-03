@@ -136,11 +136,9 @@ int main(int argc, const char **argv)
 
   // output
   int out_fd;
-  if (out_file.empty()) {
-    out_fd = ::open("/dev/null", O_WRONLY);
-    out_file = "/dev/null";
-  } else if (out_file == "-") {
-    out_fd = dup(STDOUT_FILENO);
+  bool close_out_fd = false;
+  if (out_file.empty() || out_file == "-") {
+    out_fd = STDOUT_FILENO;
   } else {
     out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
     if (out_fd < 0) {
@@ -149,6 +147,7 @@ int main(int argc, const char **argv)
 	   << cpp_strerror(ret) << dendl;
       return 1;
     }
+    close_out_fd = true;
   }
 
   CephToolCtx *ctx = ceph_tool_common_init(mode, concise);
@@ -195,7 +194,8 @@ int main(int argc, const char **argv)
 		   << cpp_strerror(err) << dendl;
 	      goto out;
 	    }
-	    derr << " wrote " << obl.length() << " byte payload to " << out_file << dendl;
+	    if (!concise && !out_file.empty())
+	      cerr << " wrote " << obl.length() << " byte payload to " << out_file << std::endl;
 	  }
 	}
       }
@@ -212,7 +212,8 @@ int main(int argc, const char **argv)
   }
 
  out:
-  ::close(out_fd);
+  if (close_out_fd)
+    ::close(out_fd);
   if (ceph_tool_common_shutdown(ctx))
     ret = 1;
   return ret;
