@@ -234,6 +234,31 @@ def get_file(remote, path):
     data = proc.stdout.getvalue()
     return data
 
+def get_scratch_devices(remote):
+    """
+    Read the scratch disk list from remote host
+    """
+    devs = []
+    try:
+        file_data = get_file(remote, "/scratch_devs")
+        devs = file_data.split()
+    except:
+        devs = ['/dev/sdb']
+
+    retval = []
+    for dev in devs:
+        try:
+            remote.run(
+                args=[
+                    'stat',
+                    dev
+                    ]
+                )
+            retval.append(dev)
+        except:
+            pass
+    return retval
+
 def wait_until_healthy(remote):
     """Wait until a Ceph cluster is healthy."""
     while True:

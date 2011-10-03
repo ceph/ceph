@@ -258,6 +258,10 @@ def binaries(ctx, config):
                 ),
             )
 
+
+def assign_devs(roles, devs):
+    return dict(zip(roles, devs))
+
 @contextlib.contextmanager
 def valgrind_post(ctx, config):
     try:
@@ -542,7 +546,19 @@ def cluster(ctx, config):
                 )
 
     log.info('Running mkfs on osd nodes...')
+    devs_to_clean = {}
     for remote, roles_for_host in osds.remotes.iteritems():
+        roles_to_devs = {}
+        if config.get('btrfs'):
+            log.info('btrfs option selected, checkin for scrach devs')
+            devs = teuthology.get_scratch_devices(remote)
+            log.info('found devs: %s' % (str(devs),))
+            roles_to_devs = assign_devs(
+                teuthology.roles_of_type(roles_for_host, 'osd'), devs
+                )
+            log.info('dev map: %s' % (str(roles_to_devs),))
+            devs_to_clean[remote] = []
+
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
@@ -550,6 +566,50 @@ def cluster(ctx, config):
                     os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
                     ],
                 )
+            if roles_to_devs.get(id_):
+                dev = roles_to_devs[id_]
+                log.info('mkfs.btrfs on %s on %s' % (dev, remote))
+                remote.run(
+                    args=[
+                        'sudo',
+                        'apt-get', 'install', '-y', 'btrfs-tools'
+                        ]
+                    )
+                remote.run(
+                    args=[
+                        'sudo',
+                        'mkfs.btrfs',
+                        dev
+                        ]
+                    )
+                log.info('mount %s on %s' % (dev, remote))
+                remote.run(
+                    args=[
+                        'sudo',
+                        'mount',
+                        dev,
+                        os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)),
+                        ]
+                    )
+                remote.run(
+                    args=[
+                        'sudo', 'chown', '-R', 'ubuntu.ubuntu',
+                        os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_))
+                        ]
+                    )
+                remote.run(
+                    args=[
+                        'sudo', 'chmod', '-R', '755',
+                        os.path.join('/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_))
+                        ]
+                    )
+                devs_to_clean[remote].append(
+                    os.path.join(
+                        '/tmp/cephtest/data', 'osd.{id}.data'.format(id=id_)
+                        )
+                    )
+
+        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
                     '/tmp/cephtest/enable-coredump',
@@ -604,6 +664,18 @@ def cluster(ctx, config):
         if r.stdout.getvalue() != "OK\n":
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
+
+        for remote, dirs in devs_to_clean.iteritems():
+            for dir_ in dirs:
+                log.info('Unmounting %s on %s' % (dir_, remote))
+                remote.run(
+                    args=[
+                        "sudo",
+                        "umount",
+                        "-f",
+                        dir_
+                        ]
+                    )
 
         log.info('Cleaning ceph cluster...')
         run.wait(
@@ -851,6 +923,13 @@ def task(ctx, config):
         - ceph:
             coverage: true
 
+    To use btrfs on the osds, use::
+        tasks:
+        - ceph:
+            btrfs: true
+    Note, this will cause the task to check the /scratch_devs file on each node
+    for available devices.  If no such file is found, /dev/sdb will be used.
+
     To run some daemons under valgrind, include their names
     and the tool to use in a valgrind section::
         tasks:
@@ -942,7 +1021,8 @@ def task(ctx, config):
                 )),
         lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(
-                conf=config.get('conf', {})
+                conf=config.get('conf', {}),
+                btrfs=config.get('btrfs', False)
                 )),
         lambda: mon(ctx=ctx, config=config),
         lambda: osd(ctx=ctx, config=config),
