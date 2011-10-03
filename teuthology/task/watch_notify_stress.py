@@ -48,15 +48,20 @@ def task(ctx, config):
             wait=True,
             )
 
-        proc = remote.run(
-            args=[
-                '/bin/sh', '-c',
+        args =[ '/bin/sh', '-c',
                 " ".join([
                     'cd', '/tmp/cephtest/data;',
-                    'export CEPH_CLIENT_ID={id_}; export CEPH_CONF=ceph.conf; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/test_stress_watch'.format(
-                        id_=id_),
+                    'export CEPH_CLIENT_ID={id_}; export CEPH_CONF=ceph.conf; export CEPH_ARGS="{flags}"; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/test_stress_watch {flags}'.format(
+                        id_=id_,
+                        flags=config.get('flags', ''),
+                        )
                     ])
-                ],
+                ]
+
+        log.info("args are %s" % (args,))
+
+        proc = remote.run(
+            args=args,
             logger=log.getChild('testsnaps.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False
