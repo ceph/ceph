@@ -15,7 +15,7 @@ dist_man_MANS = \
 	ceph.8 \
 	mount.ceph.8 \
 	radosgw.8 \
-	radosgw_admin.8 \
+	radosgw-admin.8 \
 	ceph-authtool.8 \
 	rados.8 \
 	librados-config.8 \
