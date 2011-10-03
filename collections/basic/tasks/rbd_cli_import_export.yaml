@@ -1,0 +1,6 @@
+tasks:
+- ceph:
+- cfuse:
+- workunit:
+    client.0:
+      - rbd/import_export.sh
