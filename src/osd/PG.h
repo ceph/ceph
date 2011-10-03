@@ -1567,13 +1567,13 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
-  void add_log_entry(Log::Entry& e, bufferlist& log_bl);
-
   // pg on-disk state
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
-  void append_log(ObjectStore::Transaction &t, bufferlist& bl,
-		  eversion_t log_version);
+
+  void add_log_entry(Log::Entry& e, bufferlist& log_bl);
+  void append_log(vector<Log::Entry>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
+
   void read_log(ObjectStore *store);
   bool check_log_for_corruption(ObjectStore *store);
   void trim(ObjectStore::Transaction& t, eversion_t v);

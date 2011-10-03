@@ -593,7 +593,6 @@ protected:
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);  
 
   int prepare_transaction(OpContext *ctx);
-  void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
   // pg on-disk content
   void remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid);

@@ -2146,24 +2146,36 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 }
 
 
-void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
-		    eversion_t log_version)
+void PG::append_log(vector<Log::Entry>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
 {
-  dout(10) << "append_log " << ondisklog.tail << "~" << ondisklog.length()
-	   << " adding " << bl.length() <<  dendl;
- 
+  dout(10) << "append_log " << log << " " << logv << dendl;
+
+  bufferlist bl;
+  for (vector<Log::Entry>::iterator p = logv.begin();
+       p != logv.end();
+       p++) {
+    add_log_entry(*p, bl);
+  }
+
+  dout(10) << "append_log  " << ondisklog.tail << "~" << ondisklog.length()
+	   << " adding " << bl.length() << dendl;
+
   // update block map?
   if (ondisklog.head % 4096 < (ondisklog.head + bl.length()) % 4096)
-    ondisklog.block_map[ondisklog.head] = log_version;  // log_version is last event in prev. block
+    ondisklog.block_map[ondisklog.head] = logv[0].version;  // log_version is last event in prev. block
 
   t.write(coll_t::META_COLL, log_oid, ondisklog.head, bl.length(), bl );
-  
   ondisklog.head += bl.length();
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
   t.collection_setattr(coll, "ondisklog", blb);
   dout(10) << "append_log  now " << ondisklog.tail << "~" << ondisklog.length() << dendl;
+
+  trim(t, trim_to);
+
+  // update the local pg, pg log
+  write_info(t);
 }
 
 void PG::read_log(ObjectStore *store)

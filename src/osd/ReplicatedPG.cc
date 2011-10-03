@@ -659,7 +659,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // trim log?
   calc_trim_to();
 
-  log_op(ctx->log, pg_trim_to, ctx->local_t);
+  append_log(ctx->log, pg_trim_to, ctx->local_t);
   
   // continuing on to write path, make sure object context is registered
   assert(obc->registered);
@@ -2656,26 +2656,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::log_op(vector<Log::Entry>& logv, eversion_t trim_to,
-			  ObjectStore::Transaction& t)
-{
-  dout(10) << "log_op " << log << dendl;
-
-  bufferlist log_bl;
-  for (vector<Log::Entry>::iterator p = logv.begin();
-       p != logv.end();
-       p++)
-    add_log_entry(*p, log_bl);
-  append_log(t, log_bl, logv[0].version);
-  trim(t, trim_to);
-
-  // update the local pg, pg log
-  write_info(t);
-}
-
-
-
-
 
 
 // ========================================================================
@@ -3365,7 +3345,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       
       info.stats = op->pg_stats;
       update_snap_collections(log);
-      log_op(log, op->pg_trim_to, rm->localt);
+      append_log(log, op->pg_trim_to, rm->localt);
 
       rm->tls.push_back(&rm->opt);
       rm->tls.push_back(&rm->localt);
@@ -3394,7 +3374,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       rm->ctx->obc->ssc = &ssc;
       
       prepare_transaction(rm->ctx);
-      log_op(rm->ctx->log, op->pg_trim_to, rm->ctx->local_t);
+      append_log(rm->ctx->log, op->pg_trim_to, rm->ctx->local_t);
     
       rm->tls.push_back(&rm->ctx->op_t);
       rm->tls.push_back(&rm->ctx->local_t);
@@ -5234,7 +5214,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
     uint64_t old_size = repop->obc->obs.oi.size;
     eversion_t old_version = repop->obc->obs.oi.version;
     
-    pg->log_op(repop->ctx->log, eversion_t(), repop->ctx->local_t);
+    pg->append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
     pg->issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
     pg->eval_repop(repop);
     
