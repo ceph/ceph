@@ -937,13 +937,15 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 
   MMonGetVersionReply *reply = new MMonGetVersionReply();
   reply->handle = m->handle;
-
   if (m->what == "mdsmap") {
     reply->version = mdsmon()->mdsmap.get_epoch();
+    reply->oldest_version = mdsmon()->paxos->get_first_committed();
   } else if (m->what == "osdmap") {
     reply->version = osdmon()->osdmap.get_epoch();
+    reply->oldest_version = osdmon()->paxos->get_first_committed();
   } else if (m->what == "monmap") {
     reply->version = monmap->get_epoch();
+    reply->oldest_version = monmon()->paxos->get_first_committed();
   } else {
     derr << "invalid map type " << m->what << dendl;
   }

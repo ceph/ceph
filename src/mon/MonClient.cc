@@ -744,14 +744,31 @@ int MonClient::wait_auth_rotating(double timeout)
 
 // ---------
 
+struct C_IsLatestMap : public Context {
+  Context *onfinish;
+  version_t newest;
+  version_t have;
+  C_IsLatestMap(Context *f, version_t h) : onfinish(f), have(h) {}
+  void finish(int r) {
+    onfinish->complete(have != newest);
+  }
+};
+
 void MonClient::is_latest_map(string map, version_t cur_ver, Context *onfinish)
 {
   ldout(cct, 10) << "is_latest_map " << map << " current " << cur_ver << dendl;;
+  C_IsLatestMap *c = new C_IsLatestMap(onfinish, cur_ver);
+  get_version(map, &c->newest, NULL, c);
+}
+
+void MonClient::get_version(string map, version_t *newest, version_t *oldest, Context *onfinish)
+{
+  ldout(cct, 10) << "get_version " << map << dendl;
   Mutex::Locker l(monc_lock);
   MMonGetVersion *m = new MMonGetVersion();
   m->what = map;
   m->handle = ++version_req_id;
-  version_requests[m->handle] = new version_req_d(onfinish, cur_ver);
+  version_requests[m->handle] = new version_req_d(onfinish, newest, oldest);
   _send_mon_message(m);
 }
 
@@ -764,8 +781,12 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 		  << " not found" << dendl;
   } else {
     version_req_d *req = iter->second;
-    req->context->complete(m->version != req->version);
     version_requests.erase(iter);
+    if (req->newest)
+      *req->newest = m->version;
+    if (req->oldest)
+      *req->oldest = m->oldest_version;
+    req->context->complete(0);
     delete req;
   }
 }
