@@ -125,7 +125,8 @@ void RGWListBucket_REST_S3::send_response()
   if (ret < 0)
     return;
 
-  s->formatter->open_object_section("ListBucketResult");
+  s->formatter->open_object_section_in_ns("ListBucketResult",
+					  "http://s3.amazonaws.com/doc/2006-03-01/");
   s->formatter->dump_format("Name", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_format("Prefix", prefix.c_str());
