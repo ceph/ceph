@@ -371,6 +371,8 @@ public:
       utime_t     mtime;  // this is the _user_ mtime, mind you
       bufferlist snaps;   // only for clone entries
       bool invalid_hash; // only when decoding sobject_t based entries
+
+      uint64_t offset;   // [soft state] my offset on disk
       
       Entry() : op(0), invalid_hash(false) {}
       Entry(int _op, const hobject_t& _soid,
@@ -617,7 +619,6 @@ public:
     uint64_t tail;                     // first byte of log. 
     uint64_t head;                        // byte following end of log.
     bool has_checksums;
-    map<uint64_t,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
     OndiskLog() : tail(0), head(0) {}
 
@@ -627,7 +628,6 @@ public:
     void zero() {
       tail = 0;
       head = 0;
-      block_map.clear();
     }
 
     void encode(bufferlist& bl) const {
@@ -1577,7 +1577,7 @@ public:
   void read_log(ObjectStore *store);
   bool check_log_for_corruption(ObjectStore *store);
   void trim(ObjectStore::Transaction& t, eversion_t v);
-  void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
+  void trim_ondisklog(ObjectStore::Transaction& t);
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;

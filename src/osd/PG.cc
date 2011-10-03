@@ -2024,7 +2024,6 @@ void PG::write_log(ObjectStore::Transaction& t)
 
   // build buffer
   ondisklog.tail = 0;
-  ondisklog.block_map.clear();
   for (list<Log::Entry>::iterator p = log.log.begin();
        p != log.log.end();
        p++) {
@@ -2035,11 +2034,8 @@ void PG::write_log(ObjectStore::Transaction& t)
     __u32 crc = ebl.crc32c(0);
     ::encode(ebl, bl);
     ::encode(crc, bl);
-    uint64_t endoff = ebl.length();
-    if (startoff / 4096 != endoff / 4096) {
-      // we reached a new block. *p was the last entry with bytes in previous block
-      ondisklog.block_map[startoff] = p->version;
-    }
+
+    p->offset = startoff;
   }
   ondisklog.head = bl.length();
   ondisklog.has_checksums = true;
@@ -2067,46 +2063,36 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
     log.trim(t, trim_to);
     info.log_tail = log.tail;
     info.log_backlog = log.backlog;
-    trim_ondisklog_to(t, trim_to);
+    trim_ondisklog(t);
   }
 }
 
-void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 
+void PG::trim_ondisklog(ObjectStore::Transaction& t) 
 {
-  dout(15) << "trim_ondisk_log_to v " << v << dendl;
-
-  map<uint64_t,eversion_t>::iterator p = ondisklog.block_map.begin();
-  while (p != ondisklog.block_map.end()) {
-    //dout(15) << "    " << p->first << " -> " << p->second << dendl;
-    p++;
-    if (p == ondisklog.block_map.end() ||
-        p->second > v) {  // too far!
-      p--;                // back up
-      break;
-    }
+  uint64_t new_tail;
+  if (log.empty()) {
+    new_tail = ondisklog.head;
+  } else {
+    new_tail = log.log.front().offset;
   }
-  //dout(15) << "  * " << p->first << " -> " << p->second << dendl;
-  if (p == ondisklog.block_map.begin()) 
-    return;  // can't trim anything!
-  
-  // we can trim!
-  uint64_t trim = p->first;
-  dout(10) << "  " << ondisklog.tail << "~" << ondisklog.length()
-	   << " -> " << trim << "~" << (ondisklog.head-trim)
+  bool same_block = (new_tail & ~4095) == (ondisklog.tail & ~4095);
+  dout(15) << "trim_ondisklog tail " << ondisklog.tail << " -> " << new_tail
+	   << ", now " << new_tail << "~" << (ondisklog.head - new_tail)
+	   << " " << (same_block ? "(same block)" : "(different block)")
 	   << dendl;
-  assert(trim >= ondisklog.tail);
-  ondisklog.tail = trim;
-
-  // adjust block_map
-  while (p != ondisklog.block_map.begin()) 
-    ondisklog.block_map.erase(ondisklog.block_map.begin());
+  assert(new_tail >= ondisklog.tail);
   
-  bufferlist blb(sizeof(ondisklog));
-  ::encode(ondisklog, blb);
-  t.collection_setattr(coll, "ondisklog", blb);
+  if (same_block)
+    return;
+
+  ondisklog.tail = new_tail;
 
   if (!g_conf->osd_preserve_trimmed_log)
     t.zero(coll_t::META_COLL, log_oid, 0, ondisklog.tail & ~4095);
+
+  bufferlist blb(sizeof(ondisklog));
+  ::encode(ondisklog, blb);
+  t.collection_setattr(coll, "ondisklog", blb);
 }
 
 void PG::trim_peers()
@@ -2154,15 +2140,12 @@ void PG::append_log(vector<Log::Entry>& logv, eversion_t trim_to, ObjectStore::T
   for (vector<Log::Entry>::iterator p = logv.begin();
        p != logv.end();
        p++) {
+    p->offset = ondisklog.head + bl.length();
     add_log_entry(*p, bl);
   }
 
   dout(10) << "append_log  " << ondisklog.tail << "~" << ondisklog.length()
 	   << " adding " << bl.length() << dendl;
-
-  // update block map?
-  if (ondisklog.head % 4096 < (ondisklog.head + bl.length()) % 4096)
-    ondisklog.block_map[ondisklog.head] = logv[0].version;  // log_version is last event in prev. block
 
   t.write(coll_t::META_COLL, log_oid, ondisklog.head, bl.length(), bl );
   ondisklog.head += bl.length();
@@ -2278,10 +2261,9 @@ void PG::read_log(ObjectStore *store)
 	  throw read_log_error(oss.str().c_str());
 	}
       }
-      
+
+      e.offset = pos;
       uint64_t endpos = ondisklog.tail + p.get_off();
-      if (endpos / 4096 != pos / 4096)
-	ondisklog.block_map[pos] = e.version;  // last event in prior block
       log.log.push_back(e);
       last = e.version;
 
@@ -2352,8 +2334,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
   bufferlist::iterator p = blb.begin();
   ::decode(bounds, p);
 
-  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head
-	   << " block_map " << bounds.block_map << dendl;
+  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head << dendl;
 
   stringstream ss;
   ss << "CORRUPT pg " << info.pgid << " log: ";
