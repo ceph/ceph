@@ -12,6 +12,7 @@
 
 
 static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
+static string default_storage_pool(DEFAULT_BUCKET_STORE_POOL);
 
 static string avail_pools = ".pools.avail";
 static string pool_name_prefix = "p";
@@ -73,87 +74,6 @@ int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
   return rgw_get_bucket_info(bucket_string, info);
 }
 
-static int generate_preallocated_pools(vector<string>& pools, int num)
-{
-  vector<string> names;
-
-  for (int i = 0; i < num; i++) {
-    string name = pool_name_prefix;
-    append_rand_alpha(pool_name_prefix, name, 8);
-    names.push_back(name);
-  }
-  string uid;
-  vector<int> retcodes;
-  int ret = rgwstore->create_pools(uid, names, retcodes);
-  if (ret < 0)
-    return ret;
-
-  vector<int>::iterator riter;
-  vector<string>::iterator niter;
-
-  ret = -ENOENT;
-
-  for (riter = retcodes.begin(), niter = names.begin(); riter != retcodes.end(); ++riter, ++niter) {
-    int r = *riter;
-    if (!r) {
-      pools.push_back(*niter);
-    } else if (!ret) {
-      ret = r;
-    }
-  }
-  if (!pools.size())
-    return ret;
-
-  return 0;
-}
-
-static int register_available_pools(vector<string>& pools)
-{
-  map<string, bufferlist> m;
-  vector<string>::iterator iter;
-
-  for (iter = pools.begin(); iter != pools.end(); ++iter) {
-    bufferlist bl;
-    string& name = *iter;
-    m[name] = bl;
-  }
-  rgw_obj obj(pi_buckets, avail_pools);
-  int ret = rgwstore->tmap_set(obj, m);
-  if (ret == -ENOENT) {
-    rgw_bucket new_bucket;
-    map<string,bufferlist> attrs;
-    string uid;
-    ret = rgw_create_bucket(uid, pi_buckets.name, new_bucket, attrs, false);
-    if (ret >= 0)
-      ret = rgwstore->tmap_set(obj, m);
-  }
-  if (ret < 0) {
-    RGW_LOG(0) << "rgwstore->tmap_set() failed" << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-static int generate_pool(string& bucket_name, rgw_bucket& bucket)
-{
-  vector<string> pools;
-  int ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max);
-  if (ret < 0) {
-    RGW_LOG(0) << "generate_preallocad_pools returned " << ret << dendl;
-    return ret;
-  }
-  bucket.pool = pools.back();
-  bucket.name = bucket_name;
-
-  ret = register_available_pools(pools);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
-}
-
 static int withdraw_pool(string& pool_name)
 {
   rgw_obj obj(pi_buckets, avail_pools);
@@ -161,7 +81,7 @@ static int withdraw_pool(string& pool_name)
   return rgwstore->tmap_set(obj, pool_name, bl);
 }
 
-int rgw_bucket_maintain_pools()
+int rgw_bucket_select_host_pool(string& bucket_name, rgw_bucket& bucket)
 {
   bufferlist header;
   map<string, bufferlist> m;
@@ -169,46 +89,19 @@ int rgw_bucket_maintain_pools()
 
   rgw_obj obj(pi_buckets, avail_pools);
   int ret = rgwstore->tmap_get(obj, header, m);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret < 0 || !m.size()) {
+    string id;
+    vector<string> names;
+    names.push_back(default_storage_pool);
+    vector<int> retcodes;
+    bufferlist bl;
+    ret = rgwstore->create_pools(id, names, retcodes);
+    if (ret < 0)
       return ret;
-  }
-
-  if ((int)m.size() < g_conf->rgw_pools_preallocate_threshold) {
-    RGW_LOG(0) << "rgw_bucket_maintain_pools allocating pools (m.size()=" << m.size() << " threshold="
-               << g_conf->rgw_pools_preallocate_threshold << ")" << dendl;
-    vector<string> pools;
-    ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max - m.size());
-    if (ret < 0) {
-      RGW_LOG(0) << "failed to preallocate pools" << dendl;
+    ret = rgwstore->tmap_set(obj, default_storage_pool, bl);
+    if (ret < 0)
       return ret;
-    }
-    ret = register_available_pools(pools);
-    if (ret < 0) {
-      RGW_LOG(0) << "failed to register available pools" << dendl;
-      return ret;
-    }
-  }
-
-  return 0;
-}
-
-int rgw_bucket_allocate_pool(string& bucket_name, rgw_bucket& bucket)
-{
-  bufferlist header;
-  map<string, bufferlist> m;
-  string pool_name;
-
-  rgw_obj obj(pi_buckets, avail_pools);
-  int ret = rgwstore->tmap_get(obj, header, m);
-  if (ret < 0) {
-    if (ret == -ENOENT) {
-      return generate_pool(bucket_name, bucket);
-    }
-    return ret;
-  }
-
-  if (!m.size()) {
-    return generate_pool(bucket_name, bucket);
+    m[default_storage_pool] = bl;
   }
 
   vector<string> v;
@@ -242,12 +135,14 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
     return rgwstore->create_bucket(id, bucket, attrs, true, false, exclusive, auid);
   }
 
-  int ret = rgw_bucket_allocate_pool(bucket_name, bucket);
+  int ret = rgw_bucket_select_host_pool(bucket_name, bucket);
   if (ret < 0)
      return ret;
 
   ret = rgwstore->create_bucket(id, bucket, attrs, false, true, exclusive, auid);
   if (ret == -EEXIST) {
+    // wow, isn't that horribly broken due to multiple EEXIST returns?
+    // or is something else going on here?
     return withdraw_pool(bucket.pool);
   }
   if (ret < 0)
