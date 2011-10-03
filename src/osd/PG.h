@@ -1664,8 +1664,18 @@ public:
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
+  virtual void on_activate() = 0;
   virtual void on_shutdown() = 0;
   virtual void remove_watchers_and_notifies() = 0;
+
+  virtual void register_unconnected_watcher(void *obc,
+					    entity_name_t entity,
+					    utime_t expire) = 0;
+  virtual void unregister_unconnected_watcher(void *obc,
+					      entity_name_t entity) = 0;
+  virtual void handle_watch_timeout(void *obc,
+				    entity_name_t entity,
+				    utime_t expire) = 0;
 };
 
 //WRITE_CLASS_ENCODER(PG::Info::History)

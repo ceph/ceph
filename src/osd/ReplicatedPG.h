@@ -273,7 +273,7 @@ public:
 
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
-    map<entity_name_t, utime_t> unconnected_watchers;
+    map<entity_name_t, Context *> unconnected_watchers;
     map<Watch::Notification *, bool> notifs;
 
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
@@ -487,6 +487,14 @@ protected:
   map<object_t, SnapSetContext*> snapset_contexts;
 
   void populate_obc_watchers(ObjectContext *obc);
+  void register_unconnected_watcher(void *obc,
+				    entity_name_t entity,
+				    utime_t expire);
+  void unregister_unconnected_watcher(void *obc,
+				      entity_name_t entity);
+  void handle_watch_timeout(void *obc,
+			    entity_name_t entity,
+			    utime_t expire);
 
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
@@ -801,6 +809,7 @@ public:
   void on_acker_change();
   void on_role_change();
   void on_change();
+  void on_activate();
   void on_shutdown();
 };
 

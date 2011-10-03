@@ -28,3 +28,9 @@ void Watch::C_NotifyTimeout::finish(int r)
   osd->handle_notify_timeout(notif);
 }
 
+void Watch::C_WatchTimeout::finish(int r)
+{
+  osd->handle_watch_timeout(obc, static_cast<ReplicatedPG *>(pg), entity,
+			    expire);
+}
+

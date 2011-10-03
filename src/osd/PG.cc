@@ -1685,6 +1685,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   if (!is_replay()) {
     osd->take_waiters(waiting_for_active);
   }
+
+  on_activate();
 }
 
 

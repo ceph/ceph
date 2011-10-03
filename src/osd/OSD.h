@@ -112,7 +112,6 @@ class MOSDPGMissing;
 
 class Watch;
 class Notification;
-class ObjectContext;
 class ReplicatedPG;
 
 extern const coll_t meta_coll;
@@ -1034,6 +1033,11 @@ public:
   Mutex watch_lock;
   SafeTimer watch_timer;
   void handle_notify_timeout(void *notif);
+  void disconnect_session_watches(Session *session);
+  void handle_watch_timeout(void *obc,
+			    ReplicatedPG *pg,
+			    entity_name_t entity,
+			    utime_t expire);
 };
 
 //compatibility of the executable
