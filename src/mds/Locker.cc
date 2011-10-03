@@ -2666,7 +2666,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
-	  need_issue = false;  // loner!
 	} else
 	  simple_lock(&in->filelock, &need_issue);
 	if (need_issue)
