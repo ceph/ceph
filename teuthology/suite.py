@@ -159,6 +159,11 @@ def ls():
         help='path under which to archive results',
         required=True,
         )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true', default=False,
+        help='show reasons tests failed',
+        )
     args = parser.parse_args()
 
     for j in sorted(os.listdir(args.archive_dir)):
@@ -184,6 +189,8 @@ def ls():
             desc=summary.get('description', '-'),
             success='pass' if summary['success'] else 'FAIL',
             )
+        if args.verbose and 'failure_reason' in summary:
+            print '    {reason}'.format(reason=summary['failure_reason'])
 
 def results():
     parser = argparse.ArgumentParser(description='Email teuthology suite results')
