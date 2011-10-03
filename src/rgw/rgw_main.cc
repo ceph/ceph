@@ -222,16 +222,6 @@ done:
   RGW_LOG(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
 }
 
-class C_RGWMaintenanceTick : public Context {
-  SafeTimer *timer;
-public:
-  C_RGWMaintenanceTick(SafeTimer *t) : timer(t) {}
-  void finish(int r) {
-    rgw_bucket_maintain_pools();
-    RGW_LOG(20) << "C_RGWMaintenanceTick::finish()" << dendl;
-    timer->add_event_after(g_conf->rgw_maintenance_tick_interval, new C_RGWMaintenanceTick(timer));
-  }
-};
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -269,19 +259,7 @@ int main(int argc, const char **argv)
 
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
 
-  Mutex lock("rgw_timer_lock");
-  SafeTimer timer(g_ceph_context, lock);
-
-  lock.Lock();
-  timer.init();
-  timer.add_event_after(g_conf->rgw_maintenance_tick_interval, new C_RGWMaintenanceTick(&timer));
-  lock.Unlock();
-
   process.run();
-
-  lock.Lock();
-  timer.shutdown();
-  lock.Unlock();
 
   return 0;
 }
