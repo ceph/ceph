@@ -21,6 +21,7 @@
 #include "MonMap.h"
 
 #include "common/Timer.h"
+#include "common/Finisher.h"
 
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
@@ -62,6 +63,7 @@ private:
 
   Mutex monc_lock;
   SafeTimer timer;
+  Finisher finisher;
 
   LogClient *log_client;
 

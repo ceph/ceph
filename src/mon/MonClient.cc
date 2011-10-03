@@ -50,7 +50,7 @@ MonClient::MonClient(CephContext *cct_) :
   messenger(NULL),
   cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
-  timer(cct_, monc_lock),
+  timer(cct_, monc_lock), finisher(cct_),
   log_client(NULL),
   hunting(true),
   want_monmap(true),
@@ -355,6 +355,7 @@ int MonClient::init()
   
   Mutex::Locker l(monc_lock);
   timer.init();
+  finisher.start();
   schedule_tick();
 
   // seed rng so we choose a different monitor each time
@@ -380,9 +381,9 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
+  finisher.stop();
   monc_lock.Lock();
   timer.shutdown();
-
   if (cur_con) {
     cur_con->put();
     cur_con = NULL;
@@ -542,7 +543,7 @@ void MonClient::_reopen_session()
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    version_requests.begin()->second->context->complete(-1);  // watch out for deadlock
+    finisher.queue(version_requests.begin()->second->context, -1);
     version_requests.erase(version_requests.begin());
   }
 
@@ -792,7 +793,7 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
       *req->newest = m->version;
     if (req->oldest)
       *req->oldest = m->oldest_version;
-    req->context->complete(0);
+    finisher.queue(req->context, 0);
     delete req;
   }
 }
