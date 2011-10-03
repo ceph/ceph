@@ -2168,6 +2168,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       dout(20) << "_rollback_to deleting head on " << soid.oid
 	       << " because got ENOENT on find_object_context" << dendl;
       _delete_head(ctx);
+      ret = 0;
     } else if (-EAGAIN == ret) {
       /* a different problem, like degraded pool
        * with not-yet-restored object. We shouldn't have been able
