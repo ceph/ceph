@@ -76,14 +76,14 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
   if (bucket_name[0] == '.') {
     bucket.name = bucket_name;
     bucket.pool = bucket_name;
-    return rgwstore->create_bucket(id, bucket, attrs, true, false, exclusive, auid);
+    return rgwstore->create_bucket(id, bucket, attrs, true, exclusive, auid);
   }
 
   int ret = rgwstore->select_bucket_placement(bucket_name, bucket);
   if (ret < 0)
      return ret;
 
-  ret = rgwstore->create_bucket(id, bucket, attrs, false, true, exclusive, auid);
+  ret = rgwstore->create_bucket(id, bucket, attrs, false, exclusive, auid);
 
   if (ret < 0)
     return ret;

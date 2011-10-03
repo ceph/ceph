@@ -317,7 +317,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
  */
 int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, 
 			    map<std::string, bufferlist>& attrs, 
-			    bool create_pool, bool assign_marker,
+			    bool system_bucket,
 			    bool exclusive, uint64_t auid)
 {
   librados::ObjectWriteOperation op;
@@ -331,15 +331,13 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
   if (ret < 0 && ret != -EEXIST)
     return ret;
 
-  if (create_pool) {
+  if (system_bucket) {
     ret = rados->pool_create(bucket.pool.c_str(), auid);
     if (ret == -EEXIST)
       ret = 0;
     if (ret < 0)
       root_pool_ctx.remove(bucket.name.c_str());
-  }
-
-  if (assign_marker) {
+  } else {
     librados::IoCtx io_ctx; // context for new bucket
 
     int r = open_bucket_ctx(bucket, io_ctx);
