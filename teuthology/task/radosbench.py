@@ -42,6 +42,9 @@ def task(ctx, config):
             args=[
                 "/bin/sh", "-c",
                 " ".join(['LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
+                          '/tmp/cephtest/enable-coredump',
+                          '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                          '/tmp/cephtest/archive/coverage',
                           '/tmp/cephtest/binary/usr/local/bin/rados',
                           '-c', '/tmp/cephtest/ceph.conf',
                           '-k', '/tmp/cephtest/data/{role}.keyring'.format(role=role),
