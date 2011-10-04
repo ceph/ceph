@@ -64,7 +64,6 @@ public:
                             map<std::string, bufferlist>& attrs,
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0) = 0;
-  virtual int select_bucket_placement(string& bucket_name, rgw_bucket& bucket) { return 0; }
   virtual int add_bucket_placement(std::string& new_placement) { return 0; }
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool

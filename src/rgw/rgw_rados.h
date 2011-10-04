@@ -124,6 +124,9 @@ class RGWRados  : public RGWAccess
                  bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
   int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
+
+  int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
 
@@ -156,7 +159,6 @@ public:
                             map<std::string,bufferlist>& attrs,
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0);
-  virtual int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
