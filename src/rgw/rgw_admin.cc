@@ -342,7 +342,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
-  ret = rgw_get_bucket_info(bucket_str, bucket_info);
+  ret = rgwstore->get_bucket_info(bucket_str, bucket_info);
   if (ret < 0)
     return ret;
 
@@ -515,7 +515,7 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  int r = rgw_get_bucket_info(bucket.name, bucket_info);
+  int r = rgwstore->get_bucket_info(bucket.name, bucket_info);
   if (r < 0)
     return r;
 
@@ -828,7 +828,12 @@ int main(int argc, char **argv)
 
   if ((!bucket_name.empty()) || bucket_id >= 0) {
     if (bucket_id >= 0) {
-      int ret = rgw_get_bucket_info_id(bucket_id, bucket_info);
+      char bucket_char[16];
+      snprintf(bucket_char, sizeof(bucket_char), ".%lld",
+               (long long unsigned)bucket_id);
+      string bucket_string(bucket_char);
+      int ret = rgwstore->get_bucket_info(bucket_string, bucket_info);
+
       if (ret < 0) {
         cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
         return ret;
@@ -841,7 +846,7 @@ int main(int argc, char **argv)
     } else {
       string bucket_name_str = bucket_name;
       RGWBucketInfo bucket_info;
-      int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+      int r = rgwstore->get_bucket_info(bucket_name_str, bucket_info);
       if (r < 0) {
         cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
         return r;

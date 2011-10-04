@@ -660,3 +660,7 @@ done:
   return r;
 }
 
+int RGWFS::get_bucket_info(string& bucket_name, RGWBucketInfo& info)
+{
+  return -ENOTSUP;
+}

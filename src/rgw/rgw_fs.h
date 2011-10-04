@@ -64,6 +64,8 @@ public:
   void finish_get_obj(void **handle);
   int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
+
+  virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 };
 
 #endif

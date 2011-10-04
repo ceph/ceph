@@ -291,6 +291,7 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
+  virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);

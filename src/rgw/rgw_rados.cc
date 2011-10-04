@@ -1715,6 +1715,34 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
   return 0;
 }
 
+int RGWRados::get_bucket_info(string& bucket_name, RGWBucketInfo& info)
+{
+  bufferlist bl;
+
+  int ret = rgw_get_obj(pi_buckets_rados, bucket_name, bl);
+  if (ret < 0) {
+    if (ret != -ENOENT)
+      return ret;
+
+    info.bucket.name = bucket_name;
+    info.bucket.pool = bucket_name; // for now
+    return 0;
+  }
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+
+  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+
+  return 0;
+}
+
+
 int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
 {
   bufferlist bl;

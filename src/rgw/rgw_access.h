@@ -263,6 +263,10 @@ public:
   virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
 
   virtual int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats) { return -ENOTSUP; }
+
+  /* The bucket here can either be the bucket name identifier, or the ID
+   * in period format: ".123" */
+  virtual int get_bucket_info(string& bucket, RGWBucketInfo& info) = 0;
 };
 
 class RGWStoreManager {
