@@ -272,6 +272,7 @@ def results():
 
     descriptions = []
     failures = []
+    num_failures = 0
     unfinished = []
     for j in sorted(os.listdir(args.archive_dir)):
         if j.startswith('.'):
@@ -292,13 +293,18 @@ def results():
         descriptions.append(desc)
         if not summary['success']:
             failures.append(desc)
+            num_failures += 1
+            if 'failure_reason' in summary:
+                failures.append('    {reason}'.format(
+                        reason=summary['failure_reason'],
+                        ))
 
     if not args.email or not (failures or unfinished or args.email_on_success):
         return
 
     if failures or unfinished:
         subject = '{num_failed} failed and {num_hung} possibly hung tests in {suite}'.format(
-            num_failed=len(failures),
+            num_failed=num_failures,
             num_hung=len(unfinished),
             suite=args.name,
             )
