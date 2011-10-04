@@ -68,7 +68,7 @@ class RGWProcess {
 
     bool _enqueue(FCGX_Request *req) {
       process->m_fcgx_queue.push_back(req);
-      RGW_LOG(20) << "enqueued request fcgx=" << hex << req << dec << dendl;
+      dout(20) << "enqueued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
       return true;
     }
@@ -83,7 +83,7 @@ class RGWProcess {
 	return NULL;
       FCGX_Request *req = process->m_fcgx_queue.front();
       process->m_fcgx_queue.pop_front();
-      RGW_LOG(20) << "dequeued request fcgx=" << hex << req << dec << dendl;
+      dout(20) << "dequeued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
       return req;
     }
@@ -93,12 +93,12 @@ class RGWProcess {
     void _dump_queue() {
       deque<FCGX_Request *>::iterator iter;
       if (process->m_fcgx_queue.size() == 0) {
-        RGW_LOG(20) << "RGWWQ: empty" << dendl;
+        dout(20) << "RGWWQ: empty" << dendl;
         return;
       }
-      RGW_LOG(20) << "RGWWQ:" << dendl;
+      dout(20) << "RGWWQ:" << dendl;
       for (iter = process->m_fcgx_queue.begin(); iter != process->m_fcgx_queue.end(); ++iter) {
-        RGW_LOG(20) << "fcgx: " << hex << *iter << dec << dendl;
+        dout(20) << "fcgx: " << hex << *iter << dec << dendl;
       }
     }
     void _clear() {
@@ -123,11 +123,11 @@ void RGWProcess::run()
     const char *path = path_str.c_str();
     s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
     if (s < 0) {
-      RGW_LOG(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << s << dendl;
+      dout(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << s << dendl;
       return;
     }
     if (chmod(path, 0777) < 0) {
-      RGW_LOG(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
+      dout(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
     }
   }
 
@@ -135,7 +135,7 @@ void RGWProcess::run()
 
   for (;;) {
     FCGX_Request *fcgx = new FCGX_Request;
-    RGW_LOG(10) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
+    dout(10) << "allocated request fcgx=" << hex << fcgx << dec << dendl;
     FCGX_InitRequest(fcgx, s, 0);
     int ret = FCGX_Accept_r(fcgx);
     if (ret < 0)
@@ -159,7 +159,7 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   int ret;
   RGWEnv rgw_env;
 
-  RGW_LOG(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
+  dout(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
 
   rgw_env.init(fcgx->envp);
 
@@ -178,12 +178,12 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
 
   ret = handler->authorize();
   if (ret < 0) {
-    RGW_LOG(10) << "failed to authorize request" << dendl;
+    dout(10) << "failed to authorize request" << dendl;
     abort_early(s, ret);
     goto done;
   }
   if (s->user.suspended) {
-    RGW_LOG(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
     abort_early(s, -ERR_USER_SUSPENDED);
     goto done;
   }
@@ -219,7 +219,7 @@ done:
   FCGX_Finish_r(fcgx);
   delete fcgx;
 
-  RGW_LOG(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
+  dout(0) << "====== req done fcgx=" << hex << fcgx << dec << " http_status=" << http_ret << " ======" << dendl;
 }
 
 class C_RGWMaintenanceTick : public Context {
@@ -228,7 +228,7 @@ public:
   C_RGWMaintenanceTick(SafeTimer *t) : timer(t) {}
   void finish(int r) {
     rgw_bucket_maintain_pools();
-    RGW_LOG(20) << "C_RGWMaintenanceTick::finish()" << dendl;
+    dout(20) << "C_RGWMaintenanceTick::finish()" << dendl;
     timer->add_event_after(g_conf->rgw_maintenance_tick_interval, new C_RGWMaintenanceTick(timer));
   }
 };

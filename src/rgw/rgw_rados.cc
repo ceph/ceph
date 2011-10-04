@@ -231,7 +231,7 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
   try {
     policy.decode_owner(i);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    dout(0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
   *owner = policy.get_owner();
@@ -353,7 +353,7 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
       return r;
 
     uint64_t ver = id_io_ctx.get_last_version();
-    RGW_LOG(0) << "got obj version=" << ver << dendl;
+    dout(0) << "got obj version=" << ver << dendl;
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (unsigned long long)ver);
     bucket.marker = buf;
@@ -401,7 +401,7 @@ int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& 
       c->wait();
       r = c->get_return_value();
       if (r < 0) {
-        RGW_LOG(0) << "async pool_create returned " << r << dendl;
+        dout(0) << "async pool_create returned " << r << dendl;
       }
       c->release();
     }
@@ -600,7 +600,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
 
   rgw_obj tmp_dest;
 
-  RGW_LOG(5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
+  dout(5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
   void *handle = NULL;
 
@@ -638,7 +638,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
 
   r = rgwstore->delete_obj(ctx, id, tmp_obj, false);
   if (r < 0)
-    RGW_LOG(0) << "ERROR: could not remove " << tmp_obj << dendl;
+    dout(0) << "ERROR: could not remove " << tmp_obj << dendl;
 
   finish_get_obj(&handle);
 
@@ -716,7 +716,7 @@ int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
     librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
     r = rados->pool_delete_async(bucket.pool.c_str(), c);
     if (r < 0) {
-      RGW_LOG(0) << "WARNING: rados->pool_delete_async(bucket=" << bucket << ") returned err=" << r << dendl;
+      dout(0) << "WARNING: rados->pool_delete_async(bucket=" << bucket << ") returned err=" << r << dendl;
       ret = r;
     } else {
       completions.push_back(c);
@@ -725,7 +725,7 @@ int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
     rgw_obj obj(rgw_root_bucket, bucket.name);
     r = delete_obj(NULL, id, obj, true);
     if (r < 0) {
-      RGW_LOG(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
+      dout(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
       ret = r;
       continue;
     }
@@ -737,7 +737,7 @@ int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
     c->wait();
     r = c->get_return_value();
     if (r < 0) {
-      RGW_LOG(0) << "WARNING: async pool_removal returned " << r << dendl;
+      dout(0) << "WARNING: async pool_removal returned " << r << dendl;
       ret = r;
     }
     c->release();
@@ -888,13 +888,13 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   try {
     ::decode(s->attrset, oiter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
+    dout(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
     return -EIO;
   }
 
   map<string, bufferlist>::iterator aiter;
   for (aiter = s->attrset.begin(); aiter != s->attrset.end(); ++aiter) {
-    RGW_LOG(0) << "iter->first=" << aiter->first << dendl;
+    dout(0) << "iter->first=" << aiter->first << dendl;
   }
 
   try {
@@ -903,7 +903,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     ::decode(ut, oiter);
     s->mtime = ut.sec();
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
+    dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
   }
 
   s->has_attrs = true;
@@ -1001,10 +1001,10 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 
   if (state->obj_tag.length() == 0 ||
       state->shadow_obj.size() == 0) {
-    RGW_LOG(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
+    dout(0) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
     // FIXME: need to test object does not exist
   } else {
-    RGW_LOG(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
+    dout(0) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
     rgw_obj dest_obj(obj.bucket, state->shadow_obj);
     dest_obj.set_ns(shadow_ns);
     if (obj.key.size())
@@ -1013,24 +1013,24 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
       dest_obj.set_key(obj.object);
 
     pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    RGW_LOG(0) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
+    dout(0) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
     r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, false, true, &cond);
     if (r == -EEXIST)
       r = 0;
     if (r == -ECANCELED) {
       /* we lost in a race here, original object was replaced, we assume it was cloned
          as required */
-      RGW_LOG(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
+      dout(0) << "clone_obj_cond was cancelled, lost in a race" << dendl;
       state->clear();
       return r;
     } else {
       int ret = rctx->notify_intent(dest_obj, DEL_OBJ);
       if (ret < 0) {
-        RGW_LOG(0) << "WARNING: failed to log intent ret=" << ret << dendl;
+        dout(0) << "WARNING: failed to log intent ret=" << ret << dendl;
       }
     }
     if (r < 0) {
-      RGW_LOG(0) << "ERROR: failed to clone object r=" << r << dendl;
+      dout(0) << "ERROR: failed to clone object r=" << r << dendl;
       return r;
     }
 
@@ -1210,7 +1210,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     *attrs = astate->attrset;
     if (g_conf->rgw_log >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
-        RGW_LOG(20) << "Read xattr: " << iter->first << dendl;
+        dout(20) << "Read xattr: " << iter->first << dendl;
       }
     }
     if (r < 0)
@@ -1222,7 +1222,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     struct tm mtm;
     struct tm *gmtm = gmtime_r(&astate->mtime, &mtm);
     if (!gmtm) {
-       RGW_LOG(0) << "could not get translate mtime for object" << dendl;
+       dout(0) << "could not get translate mtime for object" << dendl;
        r = -EINVAL;
        goto done_err;
     }
@@ -1230,7 +1230,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
     r = -ECANCELED;
     if (mod_ptr) {
-      RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
+      dout(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
       if (ctime < *mod_ptr) {
         err->http_ret = 304;
         err->s3_code = "NotModified";
@@ -1240,7 +1240,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
 
     if (unmod_ptr) {
-      RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
+      dout(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
       if (ctime > *unmod_ptr) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -1255,7 +1255,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
     r = -ECANCELED;
     if (if_match) {
-      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
+      dout(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
       if (strcmp(if_match, etag.c_str())) {
         err->http_ret = 412;
         err->s3_code = "PreconditionFailed";
@@ -1264,7 +1264,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
 
     if (if_nomatch) {
-      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
+      dout(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
         err->http_ret = 304;
         err->s3_code = "NotModified";
@@ -1323,7 +1323,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
   if (acl_bl && acl_bl->length()) {
     int ret = decode_policy(*acl_bl, &owner);
     if (ret < 0) {
-      RGW_LOG(0) << "WARNING: could not decode policy ret=" << ret << dendl;
+      dout(0) << "WARNING: could not decode policy ret=" << ret << dendl;
     }
   }
   ent.owner = owner.get_id();
@@ -1398,7 +1398,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
       range.len += next.len;
     }
     if (range.len) {
-      RGW_LOG(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
+      dout(20) << "calling op.clone_range(dst_ofs=" << range.dst_ofs << ", src.object=" <<  range.src.object << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
       if (xattr_cond) {
         string src_cmp_obj, src_cmp_key;
         get_obj_bucket_and_oid_key(range.src, bucket, src_cmp_obj, src_cmp_key);
@@ -1490,11 +1490,11 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   if (r < 0)
     return r;
 
-  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
+  dout(20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   op.read(ofs, len);
 
   r = state->io_ctx.operate(oid, &op, &bl);
-  RGW_LOG(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
+  dout(20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r == -ECANCELED) {
     /* a race! object was replaced, we need to set attr on the original obj */
@@ -1639,7 +1639,7 @@ int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, buffer
     ::decode(header, iter);
     ::decode(m, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: tmap_get failed, caught buffer::error" << dendl;
+    dout(0) << "ERROR: tmap_get failed, caught buffer::error" << dendl;
     return -EIO;
   }
 
@@ -1659,7 +1659,7 @@ int RGWRados::tmap_set(rgw_obj& obj, std::string& key, bufferlist& bl)
   ::encode(key, cmdbl);
   ::encode(bl, cmdbl);
 
-  RGW_LOG(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << key << dendl;
+  dout(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << key << dendl;
 
   librados::IoCtx io_ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -1686,7 +1686,7 @@ int RGWRados::tmap_set(rgw_obj& obj, std::map<std::string, bufferlist>& m)
     ::encode(c, cmdbl);
     ::encode(iter->first, cmdbl);
     ::encode(iter->second, cmdbl);
-    RGW_LOG(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << iter->first << dendl;
+    dout(15) << "tmap_set bucket=" << bucket << " oid=" << oid << " key=" << iter->first << dendl;
   }
 
 
@@ -1793,7 +1793,7 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
 
 int RGWRados::distribute(bufferlist& bl)
 {
-  RGW_LOG(10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
+  dout(10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   int r = control_pool_ctx.notify(notify_oid, 0, bl);
   return r;
 }
@@ -1804,7 +1804,7 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
     if (bucket.name[0] == '.')
       return 0;
 
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
 
@@ -1824,7 +1824,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, st
     if (bucket.name[0] == '.')
       return 0;
 
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
 
@@ -1852,7 +1852,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
     if (bucket.name[0] == '.')
       return 0;
 
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
 
@@ -1906,7 +1906,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     return r;
 
   if (bucket.marker.empty()) {
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
 
@@ -1927,7 +1927,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     bufferlist::iterator iter = out.begin();
     ::decode(ret, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
+    dout(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
     return -EIO;
   }
 
@@ -1963,7 +1963,7 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
     return r;
 
   if (bucket.marker.empty()) {
-    RGW_LOG(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
+    dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
 
@@ -1983,7 +1983,7 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
     bufferlist::iterator iter = out.begin();
     ::decode(ret, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
+    dout(0) << "ERROR: failed to decode bucket_list returned buffer" << dendl;
     return -EIO;
   }
 

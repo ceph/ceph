@@ -116,7 +116,7 @@ void calc_hmac_sha1(const char *key, int key_len,
   char hex_str[(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2) + 1];
   buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 
-  RGW_LOG(15) << "hmac=" << hex_str << dendl;
+  dout(15) << "hmac=" << hex_str << dendl;
 }
 
 int gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
@@ -200,7 +200,7 @@ int NameVal::parse()
     val = str.substr(delim_pos + 1);
   }
 
-  RGW_LOG(10) << "parsed: name=" << name << " val=" << val << dendl;
+  dout(10) << "parsed: name=" << name << " val=" << val << dendl;
   return ret; 
 }
 
@@ -261,7 +261,7 @@ bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_per
    int policy_perm = policy->get_perm(g_ceph_context, uid, perm);
    int acl_perm = policy_perm & user_perm_mask;
 
-   RGW_LOG(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
+   dout(10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
 
    return (perm == acl_perm);
 }
@@ -292,13 +292,13 @@ static char hex_to_num(char c)
 
 bool url_decode(string& src_str, string& dest_str)
 {
-  RGW_LOG(10) << "in url_decode with " << src_str << dendl;
+  dout(10) << "in url_decode with " << src_str << dendl;
   const char *src = src_str.c_str();
   char dest[src_str.size()];
   int pos = 0;
   char c;
 
-  RGW_LOG(10) << "src=" << (void *)src << dendl;
+  dout(10) << "src=" << (void *)src << dendl;
 
   while (*src) {
     if (*src != '%') {

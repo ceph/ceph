@@ -11,7 +11,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
-    RGW_LOG(10) << "cache get: name=" << name << " : miss" << dendl;
+    dout(10) << "cache get: name=" << name << " : miss" << dendl;
     return -ENOENT;
   }
 
@@ -19,10 +19,10 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
-    RGW_LOG(10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << dendl;
+    dout(10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << dendl;
     return -ENOENT;
   }
-  RGW_LOG(10) << "cache get: name=" << name << " : hit" << dendl;
+  dout(10) << "cache get: name=" << name << " : hit" << dendl;
 
   info = src;
 
@@ -33,7 +33,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 {
   Mutex::Locker l(lock);
 
-  RGW_LOG(10) << "cache put: name=" << name << dendl;
+  dout(10) << "cache put: name=" << name << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ObjectCacheEntry entry;
@@ -77,7 +77,7 @@ void ObjectCache::remove(string& name)
   if (iter == cache_map.end())
     return;
 
-  RGW_LOG(10) << "removing " << name << " from cache" << dendl;
+  dout(10) << "removing " << name << " from cache" << dendl;
 
   remove_lru(name, iter->second.lru_iter);
   cache_map.erase(iter);
@@ -88,7 +88,7 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
   while (lru.size() > (size_t)g_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
     map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
-    RGW_LOG(10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
+    dout(10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
     if (map_iter != cache_map.end())
       cache_map.erase(map_iter);
     lru.pop_front();
@@ -97,9 +97,9 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
   if (lru_iter == lru.end()) {
     lru.push_back(name);
     lru_iter--;
-    RGW_LOG(10) << "adding " << name << " to cache LRU end" << dendl;
+    dout(10) << "adding " << name << " to cache LRU end" << dendl;
   } else {
-    RGW_LOG(10) << "moving " << name << " to cache LRU end" << dendl;
+    dout(10) << "moving " << name << " to cache LRU end" << dendl;
     lru.erase(lru_iter);
     lru.push_back(name);
     lru_iter = lru.end();

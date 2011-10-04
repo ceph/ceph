@@ -356,7 +356,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
 
   ret = rgw_add_bucket(user_id, bucket);
 
-  RGW_LOG(20) << "ret=" << ret << dendl;
+  dout(20) << "ret=" << ret << dendl;
 
   if (ret == -EEXIST)
     ret = 0;
@@ -453,7 +453,7 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
       try {
         ::decode(entry, iter);
       } catch (buffer::error& err) {
-        RGW_LOG(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
+        dout(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
         return -EIO;
       }
       if (entry.op_time.sec() > epoch) {
@@ -933,7 +933,7 @@ int main(int argc, char **argv)
       try {
         policy.decode(iter);
       } catch (buffer::error& err) {
-        RGW_LOG(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
+        dout(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
         return -EIO;
       }
       policy.to_xml(cout);
@@ -1258,7 +1258,7 @@ int main(int argc, char **argv)
 
      ret = rgwstore->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
      if (ret < 0) {
-       RGW_LOG(0) << "can't read bucket acls: " << ret << dendl;
+       dout(0) << "can't read bucket acls: " << ret << dendl;
        return ret;
      }
      RGWAccessControlPolicy policy;
@@ -1271,7 +1271,7 @@ int main(int argc, char **argv)
 
     ret = rgw_store_bucket_info_id(bucket.bucket_id, info);
     if (ret < 0) {
-      RGW_LOG(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
+      dout(0) << "can't store pool info: bucket_id=" << bucket.bucket_id << " ret=" << ret << dendl;
       return ret;
     }
 #endif
@@ -1301,9 +1301,9 @@ int main(int argc, char **argv)
     }
      
     if (disable)
-      RGW_LOG(0) << "disabling user buckets" << dendl;
+      dout(0) << "disabling user buckets" << dendl;
     else
-      RGW_LOG(0) << "enabling user buckets" << dendl;
+      dout(0) << "enabling user buckets" << dendl;
 
     vector<rgw_bucket> bucket_names;
     for (iter = m.begin(); iter != m.end(); ++iter) {

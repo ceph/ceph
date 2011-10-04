@@ -251,7 +251,7 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
       if (r < 0)
-        RGW_LOG(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
      cache.remove(name);
     }
@@ -328,10 +328,10 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
-    RGW_LOG(0) << "ERROR: got bad notification" << dendl;
+    dout(0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: buffer::error" << dendl;
+    dout(0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 
@@ -345,7 +345,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
     cache.remove(name);
     break;
   default:
-    RGW_LOG(0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    dout(0) << "WARNING: got unknown notification op: " << info.op << dendl;
     return -EINVAL;
   }
 

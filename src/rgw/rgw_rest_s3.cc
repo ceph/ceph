@@ -523,7 +523,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
       dest.append(iter->second);
     }
   }
-  RGW_LOG(10) << "get_canon_resource(): dest=" << dest << dendl;
+  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
 }
 
 static bool check_str_end(const char *s)
@@ -578,7 +578,7 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (md5) {
     for (const char *p = md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
-        RGW_LOG(0) << "bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+        dout(0) << "bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
     }
@@ -602,18 +602,18 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
     } else {
       req_date = s->env->get("HTTP_X_AMZ_DATE");
       if (!req_date) {
-        RGW_LOG(0) << "missing date for auth header" << dendl;
+        dout(0) << "missing date for auth header" << dendl;
         return false;
       }
     }
 
     struct tm t;
     if (!parse_rfc2616(req_date, &t)) {
-      RGW_LOG(0) << "failed to parse date for auth header" << dendl;
+      dout(0) << "failed to parse date for auth header" << dendl;
       return false;
     }
     if (t.tm_year < 70) {
-      RGW_LOG(0) << "bad date (predates epoch): " << req_date << dendl;
+      dout(0) << "bad date (predates epoch): " << req_date << dendl;
       return false;
     }
     s->header_time = utime_t(timegm(&t), 0);
@@ -678,7 +678,7 @@ int RGWHandler_REST_S3::authorize()
 
   /* first get the user info */
   if (rgw_get_user_info_by_access_key(auth_id, s->user) < 0) {
-    RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
+    dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
     return -EPERM;
   }
 
@@ -686,22 +686,22 @@ int RGWHandler_REST_S3::authorize()
    
   string auth_hdr;
   if (!get_auth_header(s, auth_hdr, qsr)) {
-    RGW_LOG(10) << "failed to create auth header\n" << auth_hdr << dendl;
+    dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
     return -EPERM;
   }
-  RGW_LOG(10) << "auth_hdr:\n" << auth_hdr << dendl;
+  dout(10) << "auth_hdr:\n" << auth_hdr << dendl;
 
   time_t req_sec = s->header_time.sec();
   if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    RGW_LOG(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    RGW_LOG(0) << "request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
+    dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+    dout(0) << "request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
   map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
   if (iter == s->user.access_keys.end()) {
-    RGW_LOG(0) << "ERROR: access key not encoded in user info" << dendl;
+    dout(0) << "ERROR: access key not encoded in user info" << dendl;
     return -EPERM;
   }
   RGWAccessKey& k = iter->second;
@@ -711,7 +711,7 @@ int RGWHandler_REST_S3::authorize()
   if (!k.subuser.empty()) {
     map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
     if (uiter == s->user.subusers.end()) {
-      RGW_LOG(0) << "ERROR: could not find subuser: " << k.subuser << dendl;
+      dout(0) << "ERROR: could not find subuser: " << k.subuser << dendl;
       return -EPERM;
     }
     RGWSubUser& subuser = uiter->second;
@@ -726,14 +726,14 @@ int RGWHandler_REST_S3::authorize()
   int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
 		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   if (ret < 0) {
-    RGW_LOG(10) << "ceph_armor failed" << dendl;
+    dout(10) << "ceph_armor failed" << dendl;
     return -EPERM;
   }
   b64[ret] = '\0';
 
-  RGW_LOG(15) << "b64=" << b64 << dendl;
-  RGW_LOG(15) << "auth_sign=" << auth_sign << dendl;
-  RGW_LOG(15) << "compare=" << auth_sign.compare(b64) << dendl;
+  dout(15) << "b64=" << b64 << dendl;
+  dout(15) << "auth_sign=" << auth_sign << dendl;
+  dout(15) << "compare=" << auth_sign.compare(b64) << dendl;
   if (auth_sign.compare(b64) != 0)
     return -EPERM;
 

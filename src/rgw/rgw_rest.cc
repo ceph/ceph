@@ -68,7 +68,7 @@ void set_req_state_err(struct req_state *s, int err_no)
       return;
     }
   }
-  RGW_LOG(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
+  dout(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
   s->err.http_ret = 500;
   s->err.s3_code = "UnknownError";
@@ -372,7 +372,7 @@ void init_entities_from_header(struct req_state *s)
 
   gateway_dns_name = s->env->get("RGW_DNS_NAME", "s3.");
 
-  RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
+  dout(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
   s->bucket_name = NULL;
   s->bucket.clear();
@@ -392,7 +392,7 @@ void init_entities_from_header(struct req_state *s)
   if (s->host) {
     string h(s->host);
 
-    RGW_LOG(10) << "host=" << s->host << dendl;
+    dout(10) << "host=" << s->host << dendl;
     pos = h.find(gateway_dns_name);
 
     if (pos > 0 && h[pos - 1] == '.') {
@@ -465,13 +465,13 @@ void init_entities_from_header(struct req_state *s)
     string auth_key;
 
     next_tok(req, ver, '/');
-    RGW_LOG(10) << "ver=" << ver << dendl;
+    dout(10) << "ver=" << ver << dendl;
     next_tok(req, auth_key, '/');
-    RGW_LOG(10) << "auth_key=" << auth_key << dendl;
+    dout(10) << "auth_key=" << auth_key << dendl;
     s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
     next_tok(req, first, '/');
 
-    RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
+    dout(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
     if (first.size() == 0)
       goto done;
 
@@ -565,7 +565,7 @@ static void init_auth_info(struct req_state *s)
     for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
       int len = meta_prefixes[prefix_num].len;
       if (strncmp(p, prefix, len) == 0) {
-        RGW_LOG(10) << "meta>> " << p << dendl;
+        dout(10) << "meta>> " << p << dendl;
         const char *name = p+5; /* skip the HTTP_ part */
         const char *eq = strchr(name, '=');
         if (!eq) /* shouldn't happen! */
@@ -599,7 +599,7 @@ static void init_auth_info(struct req_state *s)
   }
   map<string, string>::iterator iter;
   for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
-    RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << dendl;
+    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 
 }
@@ -746,7 +746,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   ret = validate_object_name(s->object_str.c_str());
   if (ret)
     return ret;
-  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
 
   init_auth_info(s);
 

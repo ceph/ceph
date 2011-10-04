@@ -20,7 +20,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
 
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
-  RGW_LOG(20) << "build_token token=" << buf << dendl;
+  dout(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   memset(k, 0, sizeof(k));
@@ -61,7 +61,7 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
 
   int len = strlen(token);
   if (len & 1) {
-    RGW_LOG(0) << "failed to verify token: invalid token length len=" << len << dendl;
+    dout(0) << "failed to verify token: invalid token length len=" << len << dendl;
     return -EINVAL;
   }
 
@@ -84,18 +84,18 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     ::decode(nonce, iter);
     ::decode(expiration, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "failed to decode token: caught exception" << dendl;
+    dout(0) << "failed to decode token: caught exception" << dendl;
     return -EINVAL;
   }
   if (expiration < ceph_clock_now(g_ceph_context)) {
-    RGW_LOG(0) << "old timed out token was used now=" << ceph_clock_now(g_ceph_context) << " token.expiration=" << expiration << dendl;
+    dout(0) << "old timed out token was used now=" << ceph_clock_now(g_ceph_context) << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 
   if ((ret = rgw_get_user_info_by_swift(os_user, info)) < 0)
     return ret;
 
-  RGW_LOG(10) << "os_user=" << os_user << dendl;
+  dout(10) << "os_user=" << os_user << dendl;
 
   bufferlist tok;
   ret = build_token(os_user, info.swift_key, nonce, expiration, tok);
@@ -103,14 +103,14 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     return ret;
 
   if (tok.length() != bl.length()) {
-    RGW_LOG(0) << "tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
+    dout(0) << "tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
     return -EPERM;
   }
 
   if (memcmp(tok.c_str(), bl.c_str(), tok.length()) != 0) {
     char buf[tok.length() * 2 + 1];
     buf_to_hex((const unsigned char *)tok.c_str(), tok.length(), buf);
-    RGW_LOG(0) << "WARNING: tokens mismatch tok=" << buf << dendl;
+    dout(0) << "WARNING: tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
 
@@ -121,7 +121,7 @@ void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  RGW_LOG(20) << "RGW_SWIFT_Auth_Get::execute()" << dendl;
+  dout(20) << "RGW_SWIFT_Auth_Get::execute()" << dendl;
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
@@ -133,7 +133,7 @@ void RGW_SWIFT_Auth_Get::execute()
   bufferlist bl;
 
   if (!os_url || !url_prefix) {
-    RGW_LOG(0) << "server is misconfigured, missing RGW_SWIFT_URL_PREFIX or RGW_SWIFT_URL" << dendl;
+    dout(0) << "server is misconfigured, missing RGW_SWIFT_URL_PREFIX or RGW_SWIFT_URL" << dendl;
     ret = -EINVAL;
     goto done;
   }
@@ -145,7 +145,7 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
 
   if (info.swift_key.compare(key) != 0) {
-    RGW_LOG(0) << "RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
+    dout(0) << "RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
   }

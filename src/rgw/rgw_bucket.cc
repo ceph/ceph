@@ -32,7 +32,7 @@ int rgw_store_bucket_info(RGWBucketInfo& info)
   string bucket_id_string(bucket_char);
   ret = rgw_put_obj(unused, pi_buckets, bucket_id_string, bl.c_str(), bl.length());
 
-  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(0) << "rgw_store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
 }
 
@@ -54,11 +54,11 @@ int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
   try {
     ::decode(info, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    dout(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
 
-  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
 
   return 0;
 }
@@ -128,7 +128,7 @@ static int register_available_pools(vector<string>& pools)
       ret = rgwstore->tmap_set(obj, m);
   }
   if (ret < 0) {
-    RGW_LOG(0) << "rgwstore->tmap_set() failed" << dendl;
+    dout(0) << "rgwstore->tmap_set() failed" << dendl;
     return ret;
   }
 
@@ -140,7 +140,7 @@ static int generate_pool(string& bucket_name, rgw_bucket& bucket)
   vector<string> pools;
   int ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max);
   if (ret < 0) {
-    RGW_LOG(0) << "generate_preallocad_pools returned " << ret << dendl;
+    dout(0) << "generate_preallocad_pools returned " << ret << dendl;
     return ret;
   }
   bucket.pool = pools.back();
@@ -174,17 +174,17 @@ int rgw_bucket_maintain_pools()
   }
 
   if ((int)m.size() < g_conf->rgw_pools_preallocate_threshold) {
-    RGW_LOG(0) << "rgw_bucket_maintain_pools allocating pools (m.size()=" << m.size() << " threshold="
+    dout(0) << "rgw_bucket_maintain_pools allocating pools (m.size()=" << m.size() << " threshold="
                << g_conf->rgw_pools_preallocate_threshold << ")" << dendl;
     vector<string> pools;
     ret = generate_preallocated_pools(pools, g_conf->rgw_pools_preallocate_max - m.size());
     if (ret < 0) {
-      RGW_LOG(0) << "failed to preallocate pools" << dendl;
+      dout(0) << "failed to preallocate pools" << dendl;
       return ret;
     }
     ret = register_available_pools(pools);
     if (ret < 0) {
-      RGW_LOG(0) << "failed to register available pools" << dendl;
+      dout(0) << "failed to register available pools" << dendl;
       return ret;
     }
   }
@@ -258,7 +258,7 @@ int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
   info.owner = id;
   ret = rgw_store_bucket_info(info);
   if (ret < 0) {
-    RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
+    dout(0) << "failed to store bucket info, removing bucket" << dendl;
     rgwstore->delete_bucket(id, bucket, true);
     return ret;
   }
