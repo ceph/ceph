@@ -151,8 +151,7 @@ void OSDMap::print(ostream& out) const
       out << "osd." << i;
       out << (is_up(i) ? " up  ":" down");
       out << (is_in(i) ? " in ":" out");
-      if (is_in(i))
-	out << " weight " << get_weightf(i);
+      out << " weight " << get_weightf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
       out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
