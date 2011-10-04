@@ -4,6 +4,9 @@
 #include "rgw_rados.h"
 #include "rgw_cache.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 static RGWCache<RGWFS> cached_fs_provider;
 static RGWCache<RGWRados> cached_rados_provider;
 static RGWFS fs_provider;

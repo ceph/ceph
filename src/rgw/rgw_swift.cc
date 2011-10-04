@@ -10,6 +10,8 @@
 #include "rgw_swift_auth.h"
 #include "rgw_user.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
 
 static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
 {

@@ -12,6 +12,9 @@
 
 #include <sstream>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace ceph::crypto;
 
 rgw_err::

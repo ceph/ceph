@@ -5,6 +5,9 @@
 
 #include <sstream>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 void RGWListBuckets_REST_SWIFT::send_response()
 {
   set_req_state_err(s, ret);

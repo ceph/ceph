@@ -6,6 +6,9 @@
 
 #include "auth/Crypto.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace ceph::crypto;
 
 static RGW_SWIFT_Auth_Get rgw_swift_auth_get;

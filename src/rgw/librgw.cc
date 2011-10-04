@@ -25,6 +25,9 @@
 #include <sstream>
 #include <string.h>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 int librgw_create(librgw_t *rgw, const char * const id)
 {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);

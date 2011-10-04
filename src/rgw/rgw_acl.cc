@@ -8,6 +8,9 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;

@@ -19,6 +19,9 @@ using namespace librados;
 #include <list>
 #include <map>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 
 Rados *rados = NULL;

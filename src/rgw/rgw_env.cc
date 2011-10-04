@@ -4,6 +4,9 @@
 #include <string>
 #include <map>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 RGWEnv::RGWEnv()
 {
   conf = new RGWConf;

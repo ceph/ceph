@@ -9,6 +9,9 @@
 #include "rgw_tools.h"
 #include "rgw_bucket.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 #define READ_CHUNK_LEN (16 * 1024)
 
 int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size)

@@ -37,6 +37,9 @@
 #include "include/types.h"
 #include "common/BackTrace.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 
 static sighandler_t sighandler_usr1;
@@ -160,6 +163,7 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   RGWEnv rgw_env;
 
   dout(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
+  dout(0) << "rgw_log = " << g_conf->rgw_log << dendl;
 
   rgw_env.init(fcgx->envp);
 
@@ -257,6 +261,8 @@ int main(int argc, const char **argv)
 
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
+
+  dout(0) << "rgw_log = " << g_conf->rgw_log << dendl;
 
   FCGX_Init();
 

@@ -21,6 +21,8 @@ using namespace std;
 #include "rgw_formats.h"
 #include "auth/Crypto.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20

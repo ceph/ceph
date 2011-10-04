@@ -18,6 +18,9 @@
 #include "rgw_log.h"
 #include "rgw_multi.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 using ceph::crypto::MD5;
 
@@ -1492,14 +1495,6 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
-  RGWConf *conf = s->env->conf;
-
-  if (conf->log_level >= 0) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d", conf->log_level);
-    g_conf->set_val("rgw_log", buf);
-    g_conf->apply_changes(NULL);
-  }
   if (g_conf->rgw_log >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {

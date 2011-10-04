@@ -2,6 +2,9 @@
 
 #include <errno.h>
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 
 

@@ -11,6 +11,9 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 using namespace std;
 
 static rgw_bucket ui_key_bucket(USER_INFO_POOL_NAME);

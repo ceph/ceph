@@ -19,6 +19,9 @@
 
 #define LARGE_SIZE 8192
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+
 RGWFormatter_Plain::RGWFormatter_Plain()
   : buf(NULL), len(0), max_len(0), min_stack_level(0)
 {

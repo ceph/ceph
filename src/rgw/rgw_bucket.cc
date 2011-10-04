@@ -10,6 +10,8 @@
 
 #include "auth/Crypto.h" // get_random_bytes()
 
+#undef DOUT_CONDVAR
+#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
 
 static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
 
