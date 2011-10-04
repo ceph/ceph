@@ -1,3 +1,4 @@
+from cStringIO import StringIO
 import random
 import time
 import re
@@ -131,38 +132,31 @@ class CephManager:
                 print x
             self.log = tmp
 
-    def raw_cluster_cmd(self, suffix):
+    def raw_cluster_cmd(self, *args):
+        ceph_args = [
+                'LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib',
+                '/tmp/cephtest/enable-coredump',
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                '/tmp/cephtest/archive/coverage',
+                '/tmp/cephtest/binary/usr/local/bin/ceph',
+                '-k', '/tmp/cephtest/ceph.keyring',
+                '-c', '/tmp/cephtest/ceph.conf',
+                ]
+        ceph_args.extend(args)
         proc = self.controller.run(
-            args=[
-                "/bin/sh", "-c",
-                " ".join([
-                        "LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib",
-                        '/tmp/cephtest/enable-coredump',
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        '/tmp/cephtest/archive/coverage',
-                        "/tmp/cephtest/binary/usr/local/bin/ceph -k /tmp/cephtest/ceph.keyring -c "+\
-                            "/tmp/cephtest/ceph.conf " + suffix
-                        ])
-                ],
-            stdout=run.PIPE,
-            wait=False
+            args=ceph_args,
+            stdout=StringIO(),
             )
-
-        out = ""
-        tmp = proc.stdout.read(1)
-        while tmp:
-            out += tmp
-            tmp = proc.stdout.read(1)
-        return out
+        return proc.stdout.getvalue()
 
     def raw_cluster_status(self):
-        return self.raw_cluster_cmd("-s")
+        return self.raw_cluster_cmd('-s')
 
     def raw_osd_status(self):
-        return self.raw_cluster_cmd("osd dump -o -")
+        return self.raw_cluster_cmd('osd', 'dump')
 
     def raw_pg_status(self):
-        return self.controller.do_ssh("pg dump -o -")
+        return self.controller.do_ssh('pg', 'dump')
 
     def get_osd_status(self):
         osd_lines = filter(
@@ -219,7 +213,7 @@ class CephManager:
         self.log("clean!")
 
     def mark_out_osd(self, osd):
-        self.raw_cluster_cmd("osd out %s"%(str(osd,)))
+        self.raw_cluster_cmd('osd', 'out', str(osd))
 
     def kill_osd(self, osd):
         self.ctx.daemons.get_daemon('osd', osd).stop()
@@ -228,7 +222,7 @@ class CephManager:
         self.ctx.daemons.get_daemon('osd', osd).restart()
 
     def mark_down_osd(self, osd):
-        self.raw_cluster_cmd("osd down %s"%(str(osd,)))
+        self.raw_cluster_cmd('osd', 'down', str(osd))
 
     def mark_in_osd(self, osd):
-        self.raw_cluster_cmd("osd in %s"%(str(osd,)))
+        self.raw_cluster_cmd('osd', 'in', str(osd))
