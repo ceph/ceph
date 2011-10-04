@@ -129,14 +129,14 @@ int gen_rand_base64(char *dest, int size) /* size should be the required string 
 
   ret = get_random_bytes(buf, sizeof(buf));
   if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
+    derr << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
     return -1;
   }
 
   ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
-    cerr << "ceph_armor failed" << std::endl;
+    derr << "ceph_armor failed" << dendl;
     return -1;
   }
   tmp_dest[ret] = '\0';
@@ -152,7 +152,7 @@ int gen_rand_alphanumeric_upper(char *dest, int size) /* size should be the requ
 {
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
+    derr << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
     return -1;
   }
 
@@ -174,7 +174,7 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
 {
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
+    derr << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
     return -1;
   }
 

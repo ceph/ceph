@@ -154,9 +154,9 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
         return -EIO;
       }
       if (g_conf->debug_rgw >= 15) {
-        dout(15) << "Read AccessControlPolicy" << dendl;
-        policy->to_xml(cerr);
-        dout(15) << dendl;
+        dout(15) << "Read AccessControlPolicy";
+        policy->to_xml(*_dout);
+        *_dout << dendl;
       }
     }
   }
@@ -1100,9 +1100,9 @@ void RGWPutACLs::execute()
   }
 
   if (g_conf->debug_rgw >= 15) {
-    dout(15) << "Old AccessControlPolicy" << dendl;
-    policy->to_xml(cout);
-    dout(15) << dendl;
+    dout(15) << "Old AccessControlPolicy";
+    policy->to_xml(*_dout);
+    *_dout << dendl;
   }
 
   ret = rebuild_policy(&owner, *policy, new_policy);
@@ -1110,9 +1110,9 @@ void RGWPutACLs::execute()
     goto done;
 
   if (g_conf->debug_rgw >= 15) {
-    dout(15) << "New AccessControlPolicy" << dendl;
-    new_policy.to_xml(cout);
-    dout(15) << dendl;
+    dout(15) << "New AccessControlPolicy:";
+    new_policy.to_xml(*_dout);
+    *_dout << dendl;
   }
 
   new_policy.encode(bl);
