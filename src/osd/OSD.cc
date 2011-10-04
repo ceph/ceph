@@ -1748,7 +1748,7 @@ void OSD::heartbeat()
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
   if (heartbeat_from.empty() || heartbeat_to.empty()) {
-    if (now - last_mon_heartbeat > g_conf->osd_mon_heartbeat_interval) {
+    if (now - last_mon_heartbeat > g_conf->osd_mon_heartbeat_interval && is_active()) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
       monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
