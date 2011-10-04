@@ -10,6 +10,7 @@
  */
 
 #if defined(__FreeBSD__)
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -73,8 +74,22 @@ void *value, size_t size)
 	ssize_t error = -1;
 
 #if defined(__FreeBSD__)
-	error = extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, value,
-	    size);
+	if (value == NULL || size == 0) {
+		error = extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, value,
+		    size);
+	} else {
+		error = extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, NULL,
+		    0);
+		if (error > 0) {
+			if (error > size) {
+				errno = ERANGE;
+				error = -1;
+			} else  {
+				error = extattr_get_file(path, EXTATTR_NAMESPACE_USER,
+				    name, value, size);
+			}
+		}
+	}
 #elif defined(__linux__)
 	error = getxattr(path, name, value, size);
 #elif defined(DARWIN)
@@ -91,8 +106,22 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 	ssize_t error = -1;
 
 #if defined(__FreeBSD__)
-	error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
-	    size);
+	if (value == NULL || size == 0) {
+		error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
+		    size);
+	} else {
+		error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER, name, NULL,
+		    0);
+		if (error > 0) {
+			if (error > size) {
+				errno = ERANGE;
+				error = -1;
+			} else  {
+				error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER,
+				    name, value, size);
+			}
+		}
+	}
 #elif defined(__linux__)
 	error = fgetxattr(fd, name, value, size);
 #elif defined(DARWIN)
@@ -185,6 +214,7 @@ ceph_os_flistxattr(int fd, char *list, size_t size)
 				}
 				error = p1 - list;
 			}
+			free(newlist);
 		}
 	} else {
 		error = extattr_list_fd(fd, EXTATTR_NAMESPACE_USER,
