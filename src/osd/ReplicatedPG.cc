@@ -991,20 +991,7 @@ bool ReplicatedPG::snap_trimmer()
       queue_snap_trim();
       unlock();
       return true;
-      /*
-	Cond cond;
-	list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
-	while (!mode.try_write(nobody))
-	cond.Wait(_lock);
-	mode.waiting_cond.erase(q);
-	dout(10) << " done waiting" << dendl;
-	if (!(current_set_started == info.history.last_epoch_started &&
-	is_active())) {
-	break;
-	}
-      */
     }
-
     if (!finalizing_scrub) {
       dout(10) << "snap_trimmer posting" << dendl;
       snap_trimmer_machine.process_event(SnapTrim());
