@@ -8,6 +8,8 @@
 
 #include "rgw_cls_api.h"
 
+#include "rgw_tools.h"
+
 #include "common/Clock.h"
 
 #include "include/rados/librados.hpp"
@@ -385,7 +387,7 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
       RGWBucketInfo info;
       info.bucket = bucket;
       info.owner = id;
-      ret = rgw_store_bucket_info(info);
+      ret = store_bucket_info(info);
       if (ret < 0) {
         RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
         delete_bucket(id, bucket, true);
@@ -396,6 +398,26 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
 
   return ret;
 }
+
+int RGWRados::store_bucket_info(RGWBucketInfo& info)
+{
+  bufferlist bl;
+  ::encode(info, bl);
+
+  string unused;
+  int ret = rgw_put_obj(unused, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length());
+  if (ret < 0)
+    return ret;
+
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
+  string bucket_id_string(bucket_char);
+  ret = rgw_put_obj(unused, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
+
+  RGW_LOG(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  return 0;
+}
+
 
 int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 {

@@ -12,26 +12,6 @@ static rgw_bucket pi_buckets(BUCKETS_POOL_NAME);
 
 static string pool_name_prefix = "p";
 
-
-int rgw_store_bucket_info(RGWBucketInfo& info)
-{
-  bufferlist bl;
-  ::encode(info, bl);
-
-  string unused;
-  int ret = rgw_put_obj(unused, pi_buckets, info.bucket.name, bl.c_str(), bl.length());
-  if (ret < 0)
-    return ret;
-
-  char bucket_char[16];
-  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
-  string bucket_id_string(bucket_char);
-  ret = rgw_put_obj(unused, pi_buckets, bucket_id_string, bl.c_str(), bl.length());
-
-  RGW_LOG(0) << "rgw_store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
-  return 0;
-}
-
 int rgw_get_bucket_info(string& bucket_name, RGWBucketInfo& info)
 {
   bufferlist bl;

@@ -126,6 +126,7 @@ class RGWRados  : public RGWAccess
   int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
 
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
+  int store_bucket_info(RGWBucketInfo& info);
 
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
