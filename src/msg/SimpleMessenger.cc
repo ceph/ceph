@@ -93,7 +93,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
     int on = 1;
     ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
-    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
+    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
     if (rc < 0) {
       char buf[80];
       ldout(msgr->cct,0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
@@ -108,7 +108,7 @@ int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, in
       if (port == avoid_port1 || port == avoid_port2)
 	continue;
       listen_addr.set_port(port);
-      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
+      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
       if (rc == 0)
 	break;
     }
@@ -1039,7 +1039,7 @@ int SimpleMessenger::Pipe::connect()
 
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
-  rc = ::connect(sd, (sockaddr*)&peer_addr.addr, sizeof(peer_addr.addr));
+  rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
   if (rc < 0) {
     ldout(msgr->cct,2) << "connect error " << peer_addr
 	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
