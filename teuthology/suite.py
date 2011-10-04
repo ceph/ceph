@@ -274,7 +274,9 @@ def results():
     failures = []
     num_failures = 0
     unfinished = []
-    for j in sorted(os.listdir(args.archive_dir)):
+    passed = []
+    all_jobs = sorted(os.listdir(args.archive_dir))
+    for j in all_jobs:
         if j.startswith('.'):
             continue
         summary_fn = os.path.join(args.archive_dir, j, 'summary.yaml')
@@ -291,7 +293,9 @@ def results():
             test=j,
             )
         descriptions.append(desc)
-        if not summary['success']:
+        if summary['success']:
+            passed.append(desc)
+        else:
             failures.append(desc)
             num_failures += 1
             if 'failure_reason' in summary:
@@ -303,20 +307,26 @@ def results():
         return
 
     if failures or unfinished:
-        subject = '{num_failed} failed and {num_hung} possibly hung tests in {suite}'.format(
-            num_failed=num_failures,
-            num_hung=len(unfinished),
-            suite=args.name,
-            )
+        subject = ('{num_failed} failed, {num_hung} possibly hung, '
+                   'and {num_passed} passed tests in {suite}'.format(
+                num_failed=num_failures,
+                num_hung=len(unfinished),
+                num_passed=len(passed),
+                suite=args.name,
+                ))
         body = """
 The following tests failed:
 
 {failures}
 
 These tests may be hung (did not finish in {timeout} seconds after the last test in the suite):
-{unfinished}""".format(
+{unfinished}
+
+These tests passed:
+{passed}""".format(
             failures='\n'.join(failures),
             unfinished='\n'.join(unfinished),
+            passed='\n'.join(passed),
             timeout=args.timeout,
             )
     else:
