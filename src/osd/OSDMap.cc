@@ -64,6 +64,9 @@ void OSDMap::dump(Formatter *f) const
       f->dump_int("up", is_up(i));
       f->dump_int("in", is_in(i));
       get_info(i).dump(f);
+      f->dump_stream("public_addr") << get_addr(i);
+      f->dump_stream("cluster_addr") << get_cluster_addr(i);
+      f->dump_stream("heartbeat_addr") << get_hb_addr(i);
       f->close_section();
     }
   f->close_section();
