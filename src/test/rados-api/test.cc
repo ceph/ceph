@@ -14,7 +14,6 @@ std::string get_temp_pool_name()
 {
   char out[17];
   memset(out, 0, sizeof(out));
-  srand(time(NULL));
   for (size_t i = 0; i < sizeof(out) - 1; ++i) {
     out[i] = 'A' + (rand() % 26);
   }
