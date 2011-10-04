@@ -99,7 +99,7 @@ describe. One job is run at a time.
             archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
             log.info('Running job %d', job.jid)
             run_job(job_config, archive_path)
-            job.delete()
+        job.delete()
 
 def run_job(job_config, archive_path):
     arg = [
