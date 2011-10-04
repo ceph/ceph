@@ -5,6 +5,8 @@
 
 #include <sstream>
 
+#define DOUT_SUBSYS rgw
+
 void RGWListBuckets_REST_SWIFT::send_response()
 {
   set_req_state_err(s, ret);

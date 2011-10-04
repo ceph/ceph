@@ -4,6 +4,8 @@
 #include "rgw_rados.h"
 #include "rgw_cache.h"
 
+#define DOUT_SUBSYS rgw
+
 static RGWCache<RGWFS> cached_fs_provider;
 static RGWCache<RGWRados> cached_rados_provider;
 static RGWFS fs_provider;

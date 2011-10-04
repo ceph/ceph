@@ -7,6 +7,8 @@
 #include <iostream>
 #include <map>
 
+#define DOUT_SUBSYS rgw
+
 int main(int argc, char **argv) {
   RGWACLXMLParser parser;
 

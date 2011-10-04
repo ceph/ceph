@@ -34,6 +34,7 @@ namespace ceph {
 
 using ceph::crypto::MD5;
 
+
 #define RGW_ROOT_BUCKET ".rgw"
 
 #define RGW_CONTROL_BUCKET ".rgw.control"
@@ -55,10 +56,6 @@ using ceph::crypto::MD5;
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
 
-#define RGW_LOG_BEGIN "RADOS S3 Gateway:"
-#define RGW_LOG(x) pdout(x, g_conf->rgw_log)
-#define LRGW_LOG(cct, x) lpdout(cct, x, cct->_conf->rgw_log)
-
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
@@ -76,7 +73,7 @@ using ceph::crypto::MD5;
      char __buf[l]; \
      n = snprintf(__buf, sizeof(__buf), format, __VA_ARGS__); \
      if (n != l) \
-       RGW_LOG(0) << "--> " << __buf << dendl; \
+       dout(0) << "--> " << __buf << dendl; \
        break; \
      l *= 2; \
    } \
@@ -208,10 +205,8 @@ protected:
   void init(RGWEnv * env);
 public:
   RGWConf() :
-    log_level(0),
     should_log(1) {}
 
-  int log_level;
   int should_log;
 };
 

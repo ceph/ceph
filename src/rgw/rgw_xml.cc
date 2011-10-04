@@ -8,6 +8,8 @@
 #include "rgw_common.h"
 #include "rgw_xml.h"
 
+#define DOUT_SUBSYS rgw
+
 using namespace std;
 
 XMLObjIter::

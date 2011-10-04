@@ -4,6 +4,8 @@
 #include <string>
 #include <map>
 
+#define DOUT_SUBSYS rgw
+
 RGWEnv::RGWEnv()
 {
   conf = new RGWConf;
@@ -74,6 +76,5 @@ size_t RGWEnv::get_size(const char *name, size_t def_val)
 
 void RGWConf::init(RGWEnv *env)
 {
-  log_level = env->get_int("RGW_LOG_LEVEL", g_conf->rgw_log);
   should_log = env->get_bool("RGW_SHOULD_LOG", RGW_SHOULD_LOG_DEFAULT);
 }

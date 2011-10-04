@@ -8,6 +8,8 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 
+#define DOUT_SUBSYS rgw
+
 using namespace std;
 
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
@@ -312,10 +314,10 @@ int RGWAccessControlList::get_perm(CephContext *cct, string& id, int perm_mask) 
     init_user_map();
   map<string, int>::iterator iter = acl_user_map.find(id);
   if (iter != acl_user_map.end()) {
-    LRGW_LOG(cct, 5) << "Found permission: " << iter->second << dendl;
+    ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  LRGW_LOG(cct, 5) << "Permissions for user not found" << dendl;
+  ldout(cct, 5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
@@ -401,7 +403,7 @@ int RGWAccessControlPolicy::get_perm(CephContext *cct, string& id, int perm_mask
     }
   }
 
-  LRGW_LOG(cct, 5) << "Getting permissions id=" << id << " owner=" << owner << " perm=" << perm << dendl;
+  ldout(cct, 5) << "Getting permissions id=" << id << " owner=" << owner << " perm=" << perm << dendl;
 
   return perm;
 }

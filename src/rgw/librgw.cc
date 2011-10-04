@@ -25,6 +25,8 @@
 #include <sstream>
 #include <string.h>
 
+#define DOUT_SUBSYS rgw
+
 int librgw_create(librgw_t *rgw, const char * const id)
 {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);

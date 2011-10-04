@@ -8,6 +8,8 @@
 #include "rgw_xml.h"
 #include "rgw_multi.h"
 
+#define DOUT_SUBSYS rgw
+
 using namespace std;
 
 

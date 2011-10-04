@@ -7,6 +7,8 @@
 
 #include "rgw_multi.h"
 
+#define DOUT_SUBSYS rgw
+
 using namespace std;
                                   
 int main(int argc, char **argv) {

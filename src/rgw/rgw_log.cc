@@ -5,6 +5,8 @@
 #include "rgw_access.h"
 #include "rgw_bucket.h"
 
+#define DOUT_SUBSYS rgw
+
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
@@ -23,12 +25,12 @@ int rgw_log_op(struct req_state *s)
     return 0;
 
   if (!s->bucket_name) {
-    RGW_LOG(0) << "nothing to log for operation" << dendl;
+    dout(0) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
     if (!g_conf->rgw_log_nonexistent_bucket) {
-      RGW_LOG(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+      dout(0) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = 0;
@@ -101,7 +103,7 @@ int rgw_log_op(struct req_state *s)
   }
 done:
   if (ret < 0)
-    RGW_LOG(0) << "failed to log entry" << dendl;
+    dout(0) << "failed to log entry" << dendl;
 
   return ret;
 }
