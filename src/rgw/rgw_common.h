@@ -34,6 +34,7 @@ namespace ceph {
 
 using ceph::crypto::MD5;
 
+
 #define RGW_ROOT_BUCKET ".rgw"
 
 #define RGW_CONTROL_BUCKET ".rgw.control"
@@ -204,10 +205,8 @@ protected:
   void init(RGWEnv * env);
 public:
   RGWConf() :
-    log_level(0),
     should_log(1) {}
 
-  int log_level;
   int should_log;
 };
 
