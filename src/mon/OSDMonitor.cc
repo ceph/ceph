@@ -1080,6 +1080,20 @@ void OSDMonitor::tick()
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
+
+  if (mon->pgmon()->paxos->is_readable() &&
+      mon->pgmon()->pg_map.creating_pgs.empty()) {
+    epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
+    dout(10) << " min_last_epoch_clean " << floor << dendl;
+    if (floor < paxos->get_version() - 10) {
+      epoch_t of = paxos->get_first_committed();
+      paxos->trim_to(floor);
+      while (of < floor) {
+	mon->store->erase_sn("osdmap_full", of);
+	of++;
+      }
+    }
+  }    
 }
 
 

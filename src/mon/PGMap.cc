@@ -154,6 +154,19 @@ void PGMap::stat_osd_sub(const osd_stat_t &s)
   osd_sum.sub(s);
 }
 
+epoch_t PGMap::calc_min_last_epoch_clean() const
+{
+  if (pg_stat.empty())
+    return 0;
+  hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin();
+  epoch_t min = p->second.last_epoch_clean;
+  for (++p; p != pg_stat.end(); ++p) {
+    if (p->second.last_epoch_clean < min)
+      min = p->second.last_epoch_clean;
+  }
+  return min;
+}
+
 void PGMap::encode(bufferlist &bl)
 {
   __u8 v = 3;
@@ -395,3 +408,4 @@ void PGMap::print_summary(ostream& out) const
   if (ssr.str().length())
     out << "; " << ssr.str();
 }
+
