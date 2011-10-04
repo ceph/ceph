@@ -99,7 +99,8 @@ void global_init(std::vector < const char* >& args,
   block_signals(siglist, NULL);
   install_standard_sighandlers();
 
-  if (code_env == CODE_ENVIRONMENT_DAEMON) {
+  if (code_env == CODE_ENVIRONMENT_DAEMON &&
+      (flags & CINIT_FLAG_NO_BANNER) == 0) {
     cout << TEXT_YELLOW
 	 << " ** WARNING: Ceph is still under development.  Any feedback can be directed  **"
 	 << TEXT_NORMAL << "\n" << TEXT_YELLOW
