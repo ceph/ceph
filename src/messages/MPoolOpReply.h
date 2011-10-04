@@ -47,8 +47,9 @@ public:
   const char *get_type_name() { return "poolopreply"; }
 
   void print(ostream& out) {
-    out << "poolopreply(reply:" << cpp_strerror(-replyCode) << ", "
-	<< get_tid() << " v" << version << ")";
+    out << "pool_op_reply(tid " << get_tid()
+	<< " " << cpp_strerror(-replyCode)
+	<< " v" << version << ")";
   }
 
   void encode_payload(CephContext *cct) {

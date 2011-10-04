@@ -47,9 +47,11 @@ private:
 public:
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
-    out << "poolop(" << ceph_pool_op_name(op) << ",pool " << pool
-	<< ",auid " << auid
-	<< ", tid" << get_tid() << " " << name << " v" << version << ")";
+    out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
+	<< " auid " << auid
+	<< " tid " << get_tid()
+	<< " name " << name
+	<< " v" << version << ")";
   }
 
   void encode_payload(CephContext *cct) {
