@@ -11,13 +11,8 @@ namespace ceph {
 #endif
 
 
-#undef PAGE_SIZE
-#define PAGE_SIZE ceph::_page_size
-
-#undef PAGE_MASK
-#define PAGE_MASK ceph::_page_mask
-
-#undef PAGE_SHIFT
-#define PAGE_SHIFT ceph::_page_shift
+#define CEPH_PAGE_SIZE ceph::_page_size
+#define CEPH_PAGE_MASK ceph::_page_mask
+#define CEPH_PAGE_SHIFT ceph::_page_shift
 
 

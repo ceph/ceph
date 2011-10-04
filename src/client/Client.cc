@@ -5574,7 +5574,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_files = stats.num_objects;
-  stbuf->f_frsize = PAGE_SIZE;
+  stbuf->f_frsize = CEPH_PAGE_SIZE;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??

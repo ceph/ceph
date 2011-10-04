@@ -166,8 +166,8 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const;
 
-    bool is_page_aligned() const { return ((long)c_str() & ~PAGE_MASK) == 0; }
-    bool is_n_page_sized() const { return (length() & ~PAGE_MASK) == 0; }
+    bool is_page_aligned() const { return ((long)c_str() & ~CEPH_PAGE_MASK) == 0; }
+    bool is_n_page_sized() const { return (length() & ~CEPH_PAGE_MASK) == 0; }
 
     // accessors
     raw *get_raw() const { return _raw; }
