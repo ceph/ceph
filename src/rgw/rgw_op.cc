@@ -14,7 +14,6 @@
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
 

@@ -11,8 +11,6 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 
-#define DEFAULT_BUCKET_STORE_POOL ".rgw.buckets"
-
 struct RGWObjState {
   bool is_atomic;
   bool has_attrs;

@@ -9,7 +9,6 @@
 
 #include "include/types.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 
 using namespace std;
 

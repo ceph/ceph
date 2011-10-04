@@ -7,7 +7,6 @@
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_tools.h"
-#include "rgw_bucket.h"
 
 #define READ_CHUNK_LEN (16 * 1024)
 

@@ -14,7 +14,6 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"

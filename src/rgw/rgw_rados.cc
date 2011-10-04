@@ -30,11 +30,10 @@ static string notify_oid = "notify";
 static string shadow_ns = "shadow";
 static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
 static string dir_oid_prefix = ".dir.";
-static string default_storage_pool(DEFAULT_BUCKET_STORE_POOL);
+static string default_storage_pool = ".rgw.buckets";
 static string avail_pools = ".pools.avail";
 
-#include "rgw/rgw_bucket.h"
-static rgw_bucket pi_buckets_rados(BUCKETS_POOL_NAME);
+static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
 
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;

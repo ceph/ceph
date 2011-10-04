@@ -3,7 +3,6 @@
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_access.h"
-#include "rgw_bucket.h"
 
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 
