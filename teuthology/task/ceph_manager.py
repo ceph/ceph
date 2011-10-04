@@ -155,9 +155,6 @@ class CephManager:
     def raw_osd_status(self):
         return self.raw_cluster_cmd('osd', 'dump')
 
-    def raw_pg_status(self):
-        return self.controller.do_ssh('pg', 'dump')
-
     def get_osd_status(self):
         osd_lines = filter(
             lambda x: x.startswith('osd.') and (("up" in x) or ("down" in x)),
