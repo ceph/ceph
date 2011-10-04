@@ -899,7 +899,8 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       reply = true;
 
     session_map.add_update_sub(s, p->first, p->second.start, 
-			       p->second.flags & CEPH_SUBSCRIBE_ONETIME);
+			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
+			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
     if (p->first == "mdsmap") {
       if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {

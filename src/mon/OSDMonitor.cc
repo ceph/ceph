@@ -660,7 +660,10 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
     mon->clog.info() << m->get_orig_source_inst() << " boot\n";
   }
 
-  send_latest(m, m->sb.current_epoch+1);
+  if (m->sb.current_epoch)
+    send_latest(m, m->sb.current_epoch+1);
+  else
+    send_latest(m, 0);
 }
 
 
@@ -972,6 +975,8 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
     MOSDMap *m = build_incremental(first, last);
     mon->messenger->send_message(m, dest);
     first = last + 1;
+    if (onetime)
+      break;
   }
 }
 
@@ -1003,7 +1008,7 @@ void OSDMonitor::check_sub(Subscription *sub)
 {
   if (sub->next <= osdmap.get_epoch()) {
     if (sub->next >= 1)
-      send_incremental(sub->next, sub->session->inst, sub->onetime);
+      send_incremental(sub->next, sub->session->inst, sub->incremental_onetime);
     else
       mon->messenger->send_message(build_latest_full(),
 				   sub->session->inst);

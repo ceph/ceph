@@ -60,7 +60,8 @@ using namespace __gnu_cxx;
   CEPH_FEATURE_RECONNECT_SEQ |   \
   CEPH_FEATURE_DIRLAYOUTHASH |   \
   CEPH_FEATURE_OBJECTLOCATOR |	 \
-  CEPH_FEATURE_PGID64
+  CEPH_FEATURE_PGID64 |		 \
+  CEPH_FEATURE_INCSUBOSDMAP
 
 class SimpleMessenger : public Messenger {
 public:
