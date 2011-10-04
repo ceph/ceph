@@ -1,11 +1,11 @@
 #! /bin/sh
 ### BEGIN INIT INFO
-# Provides:          single
+# Provides:          radosgw
 # Required-Start:    $remote_fs $named $network $time
 # Required-Stop:     $remote_fs $named $network $time
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: radosgw
+# Short-Description: radosgw RESTful rados gateway
 ### END INIT INFO
 
 PATH=/sbin:/bin:/usr/bin
@@ -70,7 +70,7 @@ case "$1" in
         $0 start
         ;;
     stop)
-        start-stop-daemon --stop -x $RADOSGW
+        start-stop-daemon --stop -x $RADOSGW --oknodo
         ;;
     *)
         echo "Usage: $0 start|stop|restart" >&2

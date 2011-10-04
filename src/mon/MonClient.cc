@@ -50,7 +50,7 @@ MonClient::MonClient(CephContext *cct_) :
   messenger(NULL),
   cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
-  timer(cct_, monc_lock),
+  timer(cct_, monc_lock), finisher(cct_),
   log_client(NULL),
   hunting(true),
   want_monmap(true),
@@ -355,6 +355,7 @@ int MonClient::init()
   
   Mutex::Locker l(monc_lock);
   timer.init();
+  finisher.start();
   schedule_tick();
 
   // seed rng so we choose a different monitor each time
@@ -380,9 +381,9 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
+  finisher.stop();
   monc_lock.Lock();
   timer.shutdown();
-
   if (cur_con) {
     cur_con->put();
     cur_con = NULL;
@@ -538,6 +539,12 @@ void MonClient::_reopen_session()
   while (!waiting_for_session.empty()) {
     waiting_for_session.front()->put();
     waiting_for_session.pop_front();
+  }
+
+  // throw out version check requests
+  while (!version_requests.empty()) {
+    finisher.queue(version_requests.begin()->second->context, -1);
+    version_requests.erase(version_requests.begin());
   }
 
   // restart authentication handshake
@@ -744,14 +751,31 @@ int MonClient::wait_auth_rotating(double timeout)
 
 // ---------
 
+struct C_IsLatestMap : public Context {
+  Context *onfinish;
+  version_t newest;
+  version_t have;
+  C_IsLatestMap(Context *f, version_t h) : onfinish(f), have(h) {}
+  void finish(int r) {
+    onfinish->complete(have != newest);
+  }
+};
+
 void MonClient::is_latest_map(string map, version_t cur_ver, Context *onfinish)
 {
   ldout(cct, 10) << "is_latest_map " << map << " current " << cur_ver << dendl;;
+  C_IsLatestMap *c = new C_IsLatestMap(onfinish, cur_ver);
+  get_version(map, &c->newest, NULL, c);
+}
+
+void MonClient::get_version(string map, version_t *newest, version_t *oldest, Context *onfinish)
+{
+  ldout(cct, 10) << "get_version " << map << dendl;
   Mutex::Locker l(monc_lock);
   MMonGetVersion *m = new MMonGetVersion();
   m->what = map;
   m->handle = ++version_req_id;
-  version_requests[m->handle] = new version_req_d(onfinish, cur_ver);
+  version_requests[m->handle] = new version_req_d(onfinish, newest, oldest);
   _send_mon_message(m);
 }
 
@@ -764,8 +788,12 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 		  << " not found" << dendl;
   } else {
     version_req_d *req = iter->second;
-    req->context->complete(m->version != req->version);
     version_requests.erase(iter);
+    if (req->newest)
+      *req->newest = m->version;
+    if (req->oldest)
+      *req->oldest = m->oldest_version;
+    finisher.queue(req->context, 0);
     delete req;
   }
 }

@@ -297,6 +297,8 @@ public:
   void stash_latest(version_t v, bufferlist& bl);
   version_t get_latest(bufferlist& bl);
 
+  version_t get_first_committed() { return first_committed; }
+
   void register_observer(entity_inst_t inst, version_t v);
   void update_observers();
 };

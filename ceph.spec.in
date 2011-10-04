@@ -250,7 +250,7 @@ fi
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
-%{_libdir}/libceph.so
+%{_libdir}/libcephfs.so
 %{_libdir}/librados.so
 %{_libdir}/librbd.so
 %{_libdir}/rados-classes/libcls_rbd.so

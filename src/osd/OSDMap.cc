@@ -64,6 +64,9 @@ void OSDMap::dump(Formatter *f) const
       f->dump_int("up", is_up(i));
       f->dump_int("in", is_in(i));
       get_info(i).dump(f);
+      f->dump_stream("public_addr") << get_addr(i);
+      f->dump_stream("cluster_addr") << get_cluster_addr(i);
+      f->dump_stream("heartbeat_addr") << get_hb_addr(i);
       f->close_section();
     }
   f->close_section();
@@ -151,12 +154,10 @@ void OSDMap::print(ostream& out) const
       out << "osd." << i;
       out << (is_up(i) ? " up  ":" down");
       out << (is_in(i) ? " in ":" out");
-      if (is_in(i))
-	out << " weight " << get_weightf(i);
+      out << " weight " << get_weightf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
-      if (is_up(i))
-	out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
+      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
       out << "\n";
     }
   }

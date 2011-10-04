@@ -37,18 +37,23 @@ public:
   }
 
   void encode_payload(CephContext *cct) {
+    header.version = 2;
     ::encode(handle, payload);
     ::encode(version, payload);
+    ::encode(oldest_version, payload);
   }
 
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(handle, p);
     ::decode(version, p);
+    if (header.version > 1)
+      ::decode(oldest_version, p);
   }
 
   tid_t handle;
   version_t version;
+  version_t oldest_version;
 
 private:
   ~MMonGetVersionReply() {}

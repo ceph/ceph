@@ -933,10 +933,10 @@ public:
     };
 
     struct AdvMap : boost::statechart::event< AdvMap > {
-      OSDMap &osdmap;
-      OSDMap &lastmap;
+      OSDMap *osdmap;
+      OSDMap *lastmap;
       vector<int> newup, newacting;
-      AdvMap(OSDMap &osdmap, OSDMap &lastmap, vector<int>& newup, vector<int>& newacting):
+      AdvMap(OSDMap *osdmap, OSDMap *lastmap, vector<int>& newup, vector<int>& newacting):
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
@@ -1282,7 +1282,7 @@ public:
 		    MOSDPGLog *msg,
 		    RecoveryCtx *ctx);
     void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx);
-    void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+    void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
@@ -1594,7 +1594,7 @@ public:
   void share_pg_info();
   void share_pg_log(const eversion_t &oldver);
 
-  void warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting);
+  void warm_restart(const OSDMap *lastmap, const vector<int>& newup, const vector<int>& newacting);
   void reset_last_warm_restart();
 		    
   void fulfill_info(int from, const Query &query, 
@@ -1618,7 +1618,7 @@ public:
   void handle_query(int from, const PG::Query& q, RecoveryCtx *rctx) {
     recovery_state.handle_query(from, q, rctx);
   }
-  void handle_advance_map(OSDMap &osdmap, OSDMap &lastmap, 
+  void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
 			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx) {
     recovery_state.handle_advance_map(osdmap, lastmap, newup, newacting, rctx);

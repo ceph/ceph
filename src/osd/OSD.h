@@ -489,8 +489,12 @@ protected:
   void do_mon_report();
 
   // -- boot --
+  void start_boot();
+  void _got_boot_version(epoch_t oldest, epoch_t newest);
   void send_boot();
   
+  friend class C_OSD_GetVersion;
+
   void clear_temp();
 
   // -- alive --

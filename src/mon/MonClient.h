@@ -21,6 +21,7 @@
 #include "MonMap.h"
 
 #include "common/Timer.h"
+#include "common/Finisher.h"
 
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
@@ -62,6 +63,7 @@ private:
 
   Mutex monc_lock;
   SafeTimer timer;
+  Finisher finisher;
 
   LogClient *log_client;
 
@@ -242,12 +244,13 @@ public:
   // version requests
 public:
   void is_latest_map(string map, version_t cur_ver, Context *onfinish);
+  void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
 
 private:
   struct version_req_d {
     Context *context;
-    version_t version;
-    version_req_d(Context *con, version_t ver) : context(con), version(ver) {}
+    version_t *newest, *oldest;
+    version_req_d(Context *con, version_t *n, version_t *o) : context(con),newest(n), oldest(o) {}
   };
 
   map<tid_t, version_req_d*> version_requests;

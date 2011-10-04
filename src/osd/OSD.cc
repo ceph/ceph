@@ -1481,7 +1481,7 @@ void OSD::update_heartbeat_peers()
     }
 
     // share latest map with this peer, just to be nice.
-    if (osdmap->is_up(p->first) && !is_booting()) {
+    if (osdmap->is_up(p->first) && is_active()) {
       dout(10) << "update_heartbeat_peers: sharing map with old _from peer osd." << p->first << dendl;
       _share_map_outgoing(osdmap->get_cluster_inst(p->first));
     }
@@ -1490,7 +1490,7 @@ void OSD::update_heartbeat_peers()
 	     << " " << con->get_peer_addr()
 	     << " as of " << p->second << dendl;
     
-    if (!osdmap->is_up(p->first) && !is_booting()) {
+    if (!osdmap->is_up(p->first) && is_active()) {
       dout(10) << "update_heartbeat_peers: telling old peer osd." << p->first
 	       << " " << old_con[p->first]->get_peer_addr()
 	       << " they are down" << dendl;
@@ -1589,7 +1589,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       heartbeat_to_con[from] = m->get_connection();
       heartbeat_to_con[from]->get();
       
-      if (locked && m->map_epoch && !is_booting()) {
+      if (locked && m->map_epoch && is_active()) {
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
       }
@@ -1617,7 +1617,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       dout(20) << "handle_osd_ping " << m->get_source_inst() << dendl;
 
       note_peer_epoch(from, m->map_epoch);
-      if (locked && !is_booting())
+      if (locked && is_active())
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
       
       heartbeat_from_stamp[from] = ceph_clock_now(g_ceph_context);  // don't let _my_ lag interfere.
@@ -1748,7 +1748,7 @@ void OSD::heartbeat()
   // hmm.. am i all alone?
   dout(30) << "heartbeat lonely?" << dendl;
   if (heartbeat_from.empty() || heartbeat_to.empty()) {
-    if (now - last_mon_heartbeat > g_conf->osd_mon_heartbeat_interval) {
+    if (now - last_mon_heartbeat > g_conf->osd_mon_heartbeat_interval && is_active()) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
       monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
@@ -1857,12 +1857,14 @@ void OSD::ms_handle_connect(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     Mutex::Locker l(osd_lock);
     dout(10) << "ms_handle_connect on mon" << dendl;
-    if (is_booting())
-      send_boot();
-    send_alive();
-    send_pg_temp();
-    send_failures();
-    send_pg_stats(ceph_clock_now(g_ceph_context));
+    if (is_booting()) {
+      start_boot();
+    } else {
+      send_alive();
+      send_pg_temp();
+      send_failures();
+      send_pg_stats(ceph_clock_now(g_ceph_context));
+    }
   }
 }
 
@@ -1991,6 +1993,43 @@ void OSD::handle_notify_timeout(void *_notif)
   put_object_context(obc, notif->pgid);
   watch_lock.Lock();
   /* exiting with watch_lock held */
+}
+
+struct C_OSD_GetVersion : public Context {
+  OSD *osd;
+  uint64_t oldest, newest;
+  C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
+  void finish(int r) {
+    if (r >= 0)
+      osd->_got_boot_version(oldest, newest);
+  }
+};
+
+void OSD::start_boot()
+{
+  dout(10) << "start_boot - have maps " << superblock.oldest_map << ".." << superblock.newest_map << dendl;
+  C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
+  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+}
+
+void OSD::_got_boot_version(epoch_t oldest, epoch_t newest)
+{
+  Mutex::Locker l(osd_lock);
+  dout(10) << "_got_boot_version mon has osdmaps " << oldest << ".." << newest << dendl;
+
+  // if our map within recent history, try to add ourselves to the osdmap.
+  if (osdmap->get_epoch() >= oldest &&
+      osdmap->get_epoch() < newest + g_conf->osd_map_message_max) {
+    send_boot();
+    return;
+  }
+  
+  // get all the latest maps
+  if (osdmap->get_epoch() > oldest)
+    monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
+  else
+    monc->sub_want("osdmap", oldest - 1, CEPH_SUBSCRIBE_ONETIME);
+  monc->renew_subs();
 }
 
 void OSD::send_boot()
@@ -2417,7 +2456,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
   //assert(osd_lock.is_locked());
 
-  assert(!is_booting());
+  assert(is_active());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -2467,7 +2506,7 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 
   int peer = inst.name.num();
 
-  assert(!is_booting());
+  assert(is_active());
 
   // send map?
   epoch_t pe = get_peer_epoch(peer);
@@ -2996,12 +3035,17 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   // missing some?
+  bool skip_maps = false;
   if (first > osdmap->get_epoch() + 1) {
-    dout(10) << "handle_osd_map message skips epoch " << osdmap->get_epoch() + 1 << dendl;
-    monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
-    monc->renew_subs();
-    m->put();
-    return;
+    dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
+	     << ".." << (first-1) << dendl;
+    if (m->oldest_map && m->oldest_map <= osdmap->get_epoch()) {
+      monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
+      monc->renew_subs();
+      m->put();
+      return;
+    }
+    skip_maps = true;
   }
 
   if (map_in_progress_cond) {
@@ -3046,7 +3090,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  for (epoch_t e = osdmap->get_epoch() + 1; e <= last; e++) {
+  epoch_t start = MAX(osdmap->get_epoch() + 1, first);
+  for (epoch_t e = start; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
@@ -3103,7 +3148,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for cluster snapshot
   string cluster_snap;
-  for (epoch_t cur = superblock.current_epoch + 1; cur <= last && cluster_snap.length() == 0; cur++) {
+  for (epoch_t cur = start; cur <= last && cluster_snap.length() == 0; cur++) {
     OSDMap *newmap = get_map(cur);
     cluster_snap = newmap->get_cluster_snapshot();
   }
@@ -3125,7 +3170,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   assert(osd_lock.is_locked());
 
 
-  if (!superblock.oldest_map)
+  if (!superblock.oldest_map || skip_maps)
     superblock.oldest_map = first;
   superblock.newest_map = last;
 
@@ -3134,7 +3179,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   map_lock.get_write();
 
   // advance through the new maps
-  for (epoch_t cur = superblock.current_epoch + 1; cur <= superblock.newest_map; cur++) {
+  for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
 
     OSDMap *newmap = get_map(cur);
@@ -3283,12 +3328,21 @@ void OSD::handle_osd_map(MOSDMap *m)
   recovery_tp.unpause();
   disk_tp.unpause();
 
-  m->put();
+  if (m->newest_map && m->newest_map > last) {
+    dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
+    monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
+    monc->renew_subs();
+  }
+  else if (is_booting()) {
+    start_boot();  // retry
+  }
+  else if (do_restart)
+    start_boot();
 
-  if (do_restart)
-    send_boot();
   if (do_shutdown)
     shutdown();
+
+  m->put();
 
   if (map_in_progress_cond) {
     map_in_progress = false;
@@ -3374,7 +3428,10 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
   }
 
-  OSDMap *lastmap = get_map(osdmap->get_epoch() - 1);
+  // if we skipped a discontinuity and are the first epoch, we won't have a previous map.
+  OSDMap *lastmap = NULL;
+  if (osdmap->get_epoch() > superblock.oldest_map)
+    lastmap = get_map(osdmap->get_epoch() - 1);
 
   // scan existing pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -3387,7 +3444,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     pg->lock();
     dout(10) << "Scanning pg " << *pg << dendl;
-    pg->handle_advance_map(*osdmap, *lastmap, newup, newacting, 0);
+    pg->handle_advance_map(osdmap, lastmap, newup, newacting, 0);
     pg->unlock();
   }
 }
@@ -3700,7 +3757,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
   }
 
   // ok, we have at least as new a map as they do.  are we (re)booting?
-  if (is_booting()) {
+  if (!is_active()) {
     dout(7) << "still in boot state, dropping message " << *m << dendl;
     m->put();
     return false;

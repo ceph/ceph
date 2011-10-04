@@ -147,6 +147,7 @@ public:
   void recovery_summary(ostream& out) const;
   void print_summary(ostream& out) const;
 
+  epoch_t calc_min_last_epoch_clean() const;
 };
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {

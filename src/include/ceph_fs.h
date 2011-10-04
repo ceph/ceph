@@ -49,7 +49,7 @@
 #define CEPH_FEATURE_DIRLAYOUTHASH  (1<<7)
 #define CEPH_FEATURE_OBJECTLOCATOR  (1<<8)
 #define CEPH_FEATURE_PGID64         (1<<9)
-
+#define CEPH_FEATURE_INCSUBOSDMAP   (1<<10)
 
 /*
  * ceph_file_layout - describe data layout for a file/inode

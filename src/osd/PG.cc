@@ -1947,6 +1947,7 @@ void PG::update_stats()
     info.stats.created = info.history.epoch_created;
     info.stats.last_scrub = info.history.last_scrub;
     info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
+    info.stats.last_epoch_clean = info.history.last_epoch_clean;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.state = state;
@@ -3540,9 +3541,9 @@ void PG::reset_last_warm_restart() {
 }
 
 /* Called before initializing peering during advance_map */
-void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vector<int>& newacting)
+void PG::warm_restart(const OSDMap *lastmap, const vector<int>& newup, const vector<int>& newacting)
 {
-  const OSDMap &osdmap = *osd->osdmap;
+  const OSDMap *osdmap = osd->osdmap;
 
   // -- there was a change! --
   kick();
@@ -3558,36 +3559,39 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
   up = newup;
   acting = newacting;
 
-  int role = osdmap.calc_pg_role(osd->whoami, acting, acting.size());
+  int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
 
   // did acting, up, primary|acker change?
-  if (acting != oldacting || up != oldup) {
+  if (!lastmap) {
+    dout(10) << " no lastmap" << dendl;
+    dirty_info = true;
+  } else if (acting != oldacting || up != oldup) {
     // remember past interval
     PG::Interval& i = past_intervals[info.history.same_acting_since];
     i.first = info.history.same_acting_since;
-    i.last = osdmap.get_epoch() - 1;
+    i.last = osdmap->get_epoch() - 1;
     i.acting = oldacting;
     i.up = oldup;
 
     if (oldacting != acting || oldup != up) {
-      info.history.same_acting_since = osdmap.get_epoch();
+      info.history.same_acting_since = osdmap->get_epoch();
     }
     if (oldup != up) {
-      info.history.same_up_since = osdmap.get_epoch();
+      info.history.same_up_since = osdmap->get_epoch();
     }
 
     if (i.acting.size()) {
       i.maybe_went_rw = 
-	(lastmap.get_up_thru(i.acting[0]) >= i.first &&
-	 lastmap.get_up_from(i.acting[0]) <= i.first) ||
+	(lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	 lastmap->get_up_from(i.acting[0]) <= i.first) ||
 	i.first == info.history.epoch_created;
     } else {
       i.maybe_went_rw = 0;
     }
 
     if (oldprimary != get_primary()) {
-      info.history.same_primary_since = osdmap.get_epoch();
+      info.history.same_primary_since = osdmap->get_epoch();
     }
 
     dout(10) << " noting past " << i << dendl;
@@ -3611,7 +3615,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
   peer_missing.clear();
 
   if (is_primary()) {
-    if (osdmap.get_pg_size(info.pgid) != acting.size())
+    if (osdmap->get_pg_size(info.pgid) != acting.size())
       state_set(PG_STATE_DEGRADED);
   }
 
@@ -3624,7 +3628,7 @@ void PG::warm_restart(const OSDMap& lastmap, const vector<int>& newup, const vec
   /* TODO on_osd_failure does NOTHING! */
 #if 0
   for (unsigned i=0; i<oldacting.size(); i++)
-    if (osdmap.is_down(oldacting[i]))
+    if (osdmap->is_down(oldacting[i]))
       ->on_osd_failure(oldacting[i]);
 #endif
 
@@ -4072,12 +4076,12 @@ boost::statechart::result
 PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
-  OSDMap &osdmap = advmap.osdmap;
+  OSDMap *osdmap = advmap.osdmap;
 
   // Remove any downed osds from peer_info
   map<int,PG::Info>::iterator p = pg->peer_info.begin();
   while (p != pg->peer_info.end()) {
-    if (!osdmap.is_up(p->first)) {
+    if (!osdmap->is_up(p->first)) {
       dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
       pg->peer_missing.erase(p->first);
       pg->peer_info.erase(p++);
@@ -4108,14 +4112,14 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Peering advmap" << dendl;
-  if (pg->prior_set_affected(*prior_set.get(), &advmap.osdmap)) {
+  if (pg->prior_set_affected(*prior_set.get(), advmap.osdmap)) {
     dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
     pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
   }
   
-  pg->adjust_need_up_thru(&advmap.osdmap);
+  pg->adjust_need_up_thru(advmap.osdmap);
   
   return forward_event();
 }
@@ -4777,7 +4781,7 @@ void PG::RecoveryState::handle_query(int from, const PG::Query& q,
   end_handle();
 }
 
-void PG::RecoveryState::handle_advance_map(OSDMap &osdmap, OSDMap &lastmap,
+void PG::RecoveryState::handle_advance_map(OSDMap *osdmap, OSDMap *lastmap,
 					   vector<int>& newup, vector<int>& newacting,
 					   RecoveryCtx *rctx)
 {

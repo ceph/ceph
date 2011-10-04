@@ -25,6 +25,7 @@ class MOSDMap : public Message {
   ceph_fsid_t fsid;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
+  epoch_t oldest_map, newest_map;
 
   epoch_t get_first() {
     epoch_t e = 0;
@@ -47,8 +48,10 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
-  MOSDMap(const ceph_fsid_t &f, OSDMap *oc=0) : Message(CEPH_MSG_OSD_MAP),
-						fsid(f) {
+  MOSDMap(const ceph_fsid_t &f, OSDMap *oc=0)
+    : Message(CEPH_MSG_OSD_MAP), fsid(f),
+      oldest_map(0), newest_map(0)
+  {
     if (oc)
       oc->encode(maps[oc->get_epoch()]);
   }
@@ -62,9 +65,14 @@ public:
     ::decode(fsid, p);
     ::decode(incremental_maps, p);
     ::decode(maps, p);
+    if (header.version > 1) {
+      ::decode(oldest_map, p);
+      ::decode(newest_map, p);
+    }
   }
   void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
+    header.version = 2;
     if (connection && !connection->has_feature(CEPH_FEATURE_PGID64)) {
       // reencode maps using old format
       //
@@ -88,9 +96,14 @@ public:
 	p->second.clear();
 	m.encode_client_old(p->second);
       }
+      header.version = 1;
     }
     ::encode(incremental_maps, payload);
     ::encode(maps, payload);
+    if (header.version >= 2) {
+      ::encode(oldest_map, payload);
+      ::encode(newest_map, payload);
+    }
   }
 
   const char *get_type_name() { return "omap"; }
