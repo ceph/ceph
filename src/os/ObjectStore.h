@@ -200,7 +200,7 @@ public:
     int get_data_alignment() {
       if (!largest_data_len)
 	return -1;
-      return (largest_data_off - get_data_offset()) & ~PAGE_MASK;
+      return (largest_data_off - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
 
     bool empty() {

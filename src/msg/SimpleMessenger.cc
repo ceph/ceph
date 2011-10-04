@@ -1808,14 +1808,14 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   // create a buffer to read into that matches the data alignment
   unsigned left = len;
   unsigned head = 0;
-  if (off & ~PAGE_MASK) {
+  if (off & ~CEPH_PAGE_MASK) {
     // head
-    head = MIN(PAGE_SIZE - (off & ~PAGE_MASK), left);
+    head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
     bufferptr bp = buffer::create(head);
     data.push_back(bp);
     left -= head;
   }
-  unsigned middle = left & PAGE_MASK;
+  unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
     bufferptr bp = buffer::create_page_aligned(middle);
     data.push_back(bp);

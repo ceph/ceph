@@ -78,10 +78,10 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     }
 
     bool is_page_aligned() {
-      return ((long)data & ~PAGE_MASK) == 0;
+      return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
     bool is_n_page_sized() {
-      return (len & ~PAGE_MASK) == 0;
+      return (len & ~CEPH_PAGE_MASK) == 0;
     }
   };
 
@@ -136,7 +136,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
       data = (char *) valloc (len);
 #else
       data = 0;
-      int r = ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
+      int r = ::posix_memalign((void**)(void*)&data, CEPH_PAGE_SIZE, len);
       if (r)
 	throw bad_alloc();
 #endif /* DARWIN */
@@ -161,21 +161,21 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     char *realdata;
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
-      realdata = new char[len+PAGE_SIZE-1];
-      unsigned off = ((unsigned)realdata) & ~PAGE_MASK;
+      realdata = new char[len+CEPH_PAGE_SIZE-1];
+      unsigned off = ((unsigned)realdata) & ~CEPH_PAGE_MASK;
       if (off)
-	data = realdata + PAGE_SIZE - off;
+	data = realdata + CEPH_PAGE_SIZE - off;
       else
 	data = realdata;
-      inc_total_alloc(len+PAGE_SIZE-1);
+      inc_total_alloc(len+CEPH_PAGE_SIZE-1);
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      assert(((unsigned)data & (PAGE_SIZE-1)) == 0);
+      assert(((unsigned)data & (CEPH_PAGE_SIZE-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-      dec_total_alloc(len+PAGE_SIZE-1);
+      dec_total_alloc(len+CEPH_PAGE_SIZE-1);
     }
     raw* clone_empty() {
       return new raw_hack_aligned(len);
@@ -668,7 +668,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   void buffer::list::rebuild()
   {
     ptr nb;
-    if ((_len & ~PAGE_MASK) == 0)
+    if ((_len & ~CEPH_PAGE_MASK) == 0)
       nb = buffer::create_page_aligned(_len);
     else
       nb = buffer::create(_len);
@@ -690,9 +690,9 @@ void buffer::list::rebuild_page_aligned()
     // keep anything that's already page sized+aligned
     if (p->is_page_aligned() && p->is_n_page_sized()) {
       /*cout << " segment " << (void*)p->c_str()
-	     << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
+	     << " offset " << ((unsigned long)p->c_str() & ~CEPH_PAGE_MASK)
 	     << " length " << p->length()
-	     << " " << (p->length() & ~PAGE_MASK) << " ok" << std::endl;
+	     << " " << (p->length() & ~CEPH_PAGE_MASK) << " ok" << std::endl;
       */
       p++;
       continue;
@@ -703,9 +703,9 @@ void buffer::list::rebuild_page_aligned()
     unsigned offset = 0;
     do {
       /*cout << " segment " << (void*)p->c_str()
-	     << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
-	     << " length " << p->length() << " " << (p->length() & ~PAGE_MASK)
-	     << " overall offset " << offset << " " << (offset & ~PAGE_MASK)
+	     << " offset " << ((unsigned long)p->c_str() & ~CEPH_PAGE_MASK)
+	     << " length " << p->length() << " " << (p->length() & ~CEPH_PAGE_MASK)
+	     << " overall offset " << offset << " " << (offset & ~CEPH_PAGE_MASK)
 	     << " not ok" << std::endl;
       */
       offset += p->length();
@@ -714,7 +714,7 @@ void buffer::list::rebuild_page_aligned()
     } while (p != _buffers.end() &&
 	     (!p->is_page_aligned() ||
 	      !p->is_n_page_sized() ||
-	      (offset & ~PAGE_MASK)));
+	      (offset & ~CEPH_PAGE_MASK)));
     unaligned.rebuild();
     _buffers.insert(p, unaligned._buffers.front());
   }
@@ -786,7 +786,7 @@ void buffer::list::rebuild_page_aligned()
     unsigned gap = append_buffer.unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      unsigned alen = PAGE_SIZE;
+      unsigned alen = CEPH_PAGE_SIZE;
       append_buffer = create_page_aligned(alen);
       append_buffer.set_length(0);   // unused, so far.
     }
@@ -811,7 +811,7 @@ void buffer::list::rebuild_page_aligned()
 	break;  // done!
       
       // make a new append_buffer!
-      unsigned alen = PAGE_SIZE * (((len-1) / PAGE_SIZE) + 1);
+      unsigned alen = CEPH_PAGE_SIZE * (((len-1) / CEPH_PAGE_SIZE) + 1);
       append_buffer = create_page_aligned(alen);
       append_buffer.set_length(0);   // unused, so far.
     }
@@ -1083,7 +1083,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
 ssize_t buffer::list::read_fd(int fd, size_t len) 
 {
-  int s = ROUND_UP_TO(len, PAGE_SIZE);
+  int s = ROUND_UP_TO(len, CEPH_PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {

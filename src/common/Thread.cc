@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/user.h> // for PAGE_MASK
 
 
 Thread::
@@ -110,7 +109,7 @@ int Thread::
 try_create(size_t stacksize)
 {
   pthread_attr_t *thread_attr = NULL;
-  stacksize &= PAGE_MASK;  // must be multiple of page
+  stacksize &= CEPH_PAGE_MASK;  // must be multiple of page
   if (stacksize) {
     thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
     pthread_attr_init(thread_attr);
