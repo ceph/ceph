@@ -424,6 +424,18 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 
 }
 
+int RGWRados::add_bucket_placement(std::string& new_pool)
+{
+  int ret = rados->pool_lookup(new_pool.c_str());
+  if (ret < 0) // DNE, or something
+    return ret;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  bufferlist empty_bl;
+  ret = tmap_set(obj, new_pool, empty_bl);
+  return ret;
+}
+
 int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid)
 {
   vector<string>::iterator iter;

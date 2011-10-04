@@ -44,6 +44,7 @@ void _usage()
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
+  cerr << "  pool add                   add an existing pool to those which can store buckets\n";
   cerr << "  pool info                  show pool information\n";
   cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
@@ -68,6 +69,7 @@ void _usage()
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
   cerr << "   --bucket=<bucket>\n";
+  cerr << "   --pool=<pool>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
   cerr << "   --time=<HH:MM:SS>\n";
@@ -109,6 +111,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_POLICY,
+  OPT_POOL_ADD,
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
   OPT_LOG_LIST,
@@ -243,6 +246,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
   } else if (strcmp(prev_cmd, "pool") == 0) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_POOL_ADD;
     if (strcmp(cmd, "info") == 0)
       return OPT_POOL_INFO;
     if (strcmp(cmd, "create") == 0)
@@ -553,7 +558,7 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   std::string user_id, access_key, secret_key, user_email, display_name;
-  std::string bucket_name, object, swift_user, swift_key;
+  std::string bucket_name, pool_name, object, swift_user, swift_key;
   std::string date, time, subuser, access, format;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -596,6 +601,8 @@ int main(int argc, char **argv)
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+      pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
     } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
@@ -1203,6 +1210,15 @@ int main(int argc, char **argv)
     rgw_delete_user(info, purge_data);
   }
   
+  if (opt_cmd == OPT_POOL_ADD) {
+    if (pool_name.empty()) {
+      cerr << "need to specify pool to add!" << std::endl;
+      return usage();
+    }
+
+    rgwstore->add_bucket_placement(pool_name);
+  }
+
   if (opt_cmd == OPT_POOL_INFO) {
      if (bucket_name.empty() && bucket_id < 0) {
        cerr << "either bucket or bucket-id needs to be specified" << std::endl;
