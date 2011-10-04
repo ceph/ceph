@@ -56,7 +56,7 @@ if exitstatus > 0:
         )
     sys.exit(exitstatus)
 elif exitstatus < 0:
-    if saw_eof and exitstatus == -signal.SIGKILL:
+    if saw_eof and exitstatus == -end_signal:
         # suppress error from the exit we intentionally caused
         pass
     else:
