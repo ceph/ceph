@@ -68,35 +68,3 @@ int rgw_get_bucket_info_id(uint64_t bucket_id, RGWBucketInfo& info)
 
   return rgw_get_bucket_info(bucket_string, info);
 }
-
-int rgw_create_bucket(std::string& id, string& bucket_name, rgw_bucket& bucket,
-                      map<std::string, bufferlist>& attrs, bool exclusive, uint64_t auid)
-{
-  /* system bucket name? */
-  if (bucket_name[0] == '.') {
-    bucket.name = bucket_name;
-    bucket.pool = bucket_name;
-    return rgwstore->create_bucket(id, bucket, attrs, true, exclusive, auid);
-  }
-
-  int ret = rgwstore->select_bucket_placement(bucket_name, bucket);
-  if (ret < 0)
-     return ret;
-
-  ret = rgwstore->create_bucket(id, bucket, attrs, false, exclusive, auid);
-
-  if (ret < 0)
-    return ret;
-
-  RGWBucketInfo info;
-  info.bucket = bucket;
-  info.owner = id;
-  ret = rgw_store_bucket_info(info);
-  if (ret < 0) {
-    RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
-    rgwstore->delete_bucket(id, bucket, true);
-    return ret;
-  }
-
-  return 0; 
-}

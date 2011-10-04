@@ -20,7 +20,7 @@ int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, 
   int ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
 
   if (ret == -ENOENT) {
-    ret = rgw_create_bucket(uid, bucket.name, bucket, attrs);
+    ret = rgwstore->create_bucket(uid, bucket, attrs, true); //all callers are using system buckets
     if (ret >= 0)
       ret = rgwstore->put_obj(NULL, uid, obj, data, size, NULL, attrs);
   }

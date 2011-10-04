@@ -466,12 +466,9 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgwstore->select_bucket_placement(s->bucket_name_str, s->bucket);
-  if (ret < 0)
-    goto done;
-
-  ret = rgw_create_bucket(s->user.user_id, s->bucket_name_str, s->bucket, attrs, true,
-			  s->user.auid);
+  s->bucket.name = s->bucket_name_str;
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket, attrs, false,
+                                true, s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   RGW_LOG(0) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;

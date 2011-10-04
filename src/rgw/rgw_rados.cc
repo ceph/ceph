@@ -335,9 +335,15 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
     ret = rados->pool_create(bucket.pool.c_str(), auid);
     if (ret == -EEXIST)
       ret = 0;
-    if (ret < 0)
+    if (ret < 0) {
       root_pool_ctx.remove(bucket.name.c_str());
+    } else {
+      bucket.pool = bucket.name;
+    }
   } else {
+    ret = select_bucket_placement(bucket.name, bucket);
+    if (ret < 0)
+      return ret;
     librados::IoCtx io_ctx; // context for new bucket
 
     int r = open_bucket_ctx(bucket, io_ctx);
@@ -375,6 +381,16 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
       r = cls_rgw_init_index(bucket, dir_oid);
       if (r < 0)
         return r;
+
+      RGWBucketInfo info;
+      info.bucket = bucket;
+      info.owner = id;
+      ret = rgw_store_bucket_info(info);
+      if (ret < 0) {
+        RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
+        delete_bucket(id, bucket, true);
+        return ret;
+      }
     }
   }
 
