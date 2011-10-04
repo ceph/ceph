@@ -66,10 +66,11 @@ private:
 
   // ...
   void send_to_waiting();     // send current map to waiters.
-  void send_full(PaxosServiceMessage *m);
+  MOSDMap *build_latest_full();
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
+  void send_full(PaxosServiceMessage *m);
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
-  void send_incremental(epoch_t first, entity_inst_t& dest);
+  void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
   void remove_redundant_pg_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
