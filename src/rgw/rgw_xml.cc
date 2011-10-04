@@ -8,8 +8,7 @@
 #include "rgw_common.h"
 #include "rgw_xml.h"
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 using namespace std;
 

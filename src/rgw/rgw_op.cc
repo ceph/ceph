@@ -18,8 +18,7 @@
 #include "rgw_log.h"
 #include "rgw_multi.h"
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 using namespace std;
 using ceph::crypto::MD5;
@@ -154,7 +153,7 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
         dout(0) << "error: could not decode policy, caught buffer::error" << dendl;
         return -EIO;
       }
-      if (g_conf->rgw_log >= 15) {
+      if (g_conf->debug_rgw >= 15) {
         dout(15) << "Read AccessControlPolicy" << dendl;
         policy->to_xml(cerr);
         dout(15) << dendl;
@@ -1100,7 +1099,7 @@ void RGWPutACLs::execute()
     goto done;
   }
 
-  if (g_conf->rgw_log >= 15) {
+  if (g_conf->debug_rgw >= 15) {
     dout(15) << "Old AccessControlPolicy" << dendl;
     policy->to_xml(cout);
     dout(15) << dendl;
@@ -1110,7 +1109,7 @@ void RGWPutACLs::execute()
   if (ret < 0)
     goto done;
 
-  if (g_conf->rgw_log >= 15) {
+  if (g_conf->debug_rgw >= 15) {
     dout(15) << "New AccessControlPolicy" << dendl;
     new_policy.to_xml(cout);
     dout(15) << dendl;
@@ -1495,7 +1494,7 @@ int RGWHandler::init(struct req_state *_s, FCGX_Request *fcgx)
 {
   s = _s;
 
-  if (g_conf->rgw_log >= 20) {
+  if (g_conf->debug_rgw >= 20) {
     char *p;
     for (int i=0; (p = fcgx->envp[i]); ++i) {
       dout(20) << p << dendl;

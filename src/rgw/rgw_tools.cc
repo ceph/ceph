@@ -9,8 +9,7 @@
 #include "rgw_tools.h"
 #include "rgw_bucket.h"
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 #define READ_CHUNK_LEN (16 * 1024)
 

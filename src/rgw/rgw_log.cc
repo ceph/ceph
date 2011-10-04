@@ -5,8 +5,7 @@
 #include "rgw_access.h"
 #include "rgw_bucket.h"
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 static rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
 

@@ -10,8 +10,7 @@
 
 #include "common/armor.h"
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 using namespace ceph::crypto;
 

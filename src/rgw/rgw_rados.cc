@@ -19,8 +19,7 @@ using namespace librados;
 #include <list>
 #include <map>
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 using namespace std;
 
@@ -1211,7 +1210,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
   if (attrs) {
     *attrs = astate->attrset;
-    if (g_conf->rgw_log >= 20) {
+    if (g_conf->debug_rgw >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         dout(20) << "Read xattr: " << iter->first << dendl;
       }

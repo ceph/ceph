@@ -25,8 +25,7 @@
 #include <sstream>
 #include <string.h>
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 int librgw_create(librgw_t *rgw, const char * const id)
 {

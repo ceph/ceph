@@ -7,8 +7,7 @@
 #include <iostream>
 #include <map>
 
-#undef DOUT_CONDVAR
-#define DOUT_CONDVAR(cct, x) cct->_conf->rgw_log
+#define DOUT_SUBSYS rgw
 
 int main(int argc, char **argv) {
   RGWACLXMLParser parser;
