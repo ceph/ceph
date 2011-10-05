@@ -325,6 +325,7 @@ OPTION(debug_rgw, OPT_INT, 20)                 // log level for the Rados gatewa
 OPTION(rgw_cache_enabled, OPT_BOOL, false)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
+OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
