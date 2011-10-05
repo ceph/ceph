@@ -228,8 +228,6 @@ done:
  */
 int main(int argc, const char **argv)
 {
-  curl_global_init(CURL_GLOBAL_ALL);
-
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
@@ -247,22 +245,43 @@ int main(int argc, const char **argv)
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS | CINIT_FLAG_NO_BANNER);
   g_conf->set_val("daemonize", false);
 
-  common_init_finish(g_ceph_context);
+  pid_t childpid = 0;
+  if (g_conf->daemonize) {
+    if (g_conf->rgw_socket_path.empty()) {
+      cerr << "radosgw: must specify 'rgw socket path' to run as a daemon" << std::endl;
+      exit(1);
+    }
+    childpid = fork();
+    if (childpid) {
+      // i am the parent
+      cout << "radosgw daemon started with pid " << childpid << std::endl;
+      exit(0);
+    }
 
+    // i am child
+    close(0);
+    close(1);
+    close(2);
+    chdir("/");
+  }
+  
+  common_init_finish(g_ceph_context);
+  
+  curl_global_init(CURL_GLOBAL_ALL);
+  
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
-
+  
   FCGX_Init();
-
+  
   RGWStoreManager store_manager;
-
+  
   if (!store_manager.init("rados", g_ceph_context)) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
   }
-
+  
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
-
   process.run();
 
   return 0;

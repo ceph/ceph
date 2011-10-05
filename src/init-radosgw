@@ -57,12 +57,14 @@ case "$1" in
 		user=$DEFAULT_USER
 	    fi
 
+	    log_file=`ceph-conf -n $name log_file`
+	    if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
+		touch "$log_file"
+		chown $user $log_file
+	    fi
+
             echo "Starting $name..."
-            # when radosgw grows support for daemonizing itself and setting up a pidfile, we can do
-            #   start-stop-daemon --start -u $user -p $pid_file -x $RADOSGW -- -n $name
-            # but until then,
-	    chown $user $LOGDIR
-            su - $user -c "radosgw -n $name >> /var/log/radosgw/$name.log 2>&1 &"
+	    start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
 	done
         ;;
     restart|reload|force-reload)
