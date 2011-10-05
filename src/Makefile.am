@@ -1043,6 +1043,7 @@ noinst_HEADERS = \
 	common/WorkQueue.h\
 	common/ceph_argparse.h\
 	common/ceph_context.h\
+	common/ceph_extattr.h\
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\
