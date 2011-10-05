@@ -660,10 +660,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
     mon->clog.info() << m->get_orig_source_inst() << " boot\n";
   }
 
-  if (m->sb.current_epoch)
-    send_latest(m, m->sb.current_epoch+1);
-  else
-    send_latest(m, 0);
+  send_latest(m, m->sb.current_epoch+1);
 }
 
 
