@@ -676,7 +676,7 @@ struct object_stat_sum_t {
     f->dump_unsigned("num_write_kb", num_wr_kb);
   }
   void encode(bufferlist& bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
@@ -685,6 +685,7 @@ struct object_stat_sum_t {
     ::encode(num_object_copies, bl);
     ::encode(num_objects_missing_on_primary, bl);
     ::encode(num_objects_degraded, bl);
+    ::encode(num_objects_unfound, bl);
     ::encode(num_rd, bl);
     ::encode(num_rd_kb, bl);
     ::encode(num_wr, bl);
@@ -700,6 +701,8 @@ struct object_stat_sum_t {
     ::decode(num_object_copies, bl);
     ::decode(num_objects_missing_on_primary, bl);
     ::decode(num_objects_degraded, bl);
+    if (v >= 2)
+      ::decode(num_objects_unfound, bl);
     ::decode(num_rd, bl);
     ::decode(num_rd_kb, bl);
     ::decode(num_wr, bl);
