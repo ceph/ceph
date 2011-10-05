@@ -3018,7 +3018,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
-  dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have " << osdmap->get_epoch() << dendl;
+  dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
+	  << osdmap->get_epoch()
+	  << ", src has [" << m->oldest_map << "," << m->newest_map << "]"
+	  << dendl;
 
   if (logger) {
     logger->inc(l_osd_map);
@@ -3039,7 +3042,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (first > osdmap->get_epoch() + 1) {
     dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
 	     << ".." << (first-1) << dendl;
-    if (m->oldest_map && m->oldest_map <= osdmap->get_epoch()) {
+    if ((m->oldest_map < first && osdmap->get_epoch() == 0) ||
+	m->oldest_map <= osdmap->get_epoch()) {
       monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
       m->put();

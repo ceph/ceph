@@ -108,7 +108,10 @@ public:
 
   const char *get_type_name() { return "omap"; }
   void print(ostream& out) {
-    out << "osd_map(" << get_first() << "," << get_last() << ")";
+    out << "osd_map(" << get_first() << ".." << get_last();
+    if (oldest_map || newest_map)
+      out << " src has " << oldest_map << ".." << newest_map;
+    out << ")";
   }
 };
 
