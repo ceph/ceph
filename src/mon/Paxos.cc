@@ -23,9 +23,10 @@
 
 #define DOUT_SUBSYS paxos
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, machine_name, state, last_committed)
+#define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, machine_name, state, first_committed, last_committed)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, int rank,
-			const char *machine_name, int state, version_t last_committed) {
+			const char *machine_name, int state,
+			version_t first_committed, version_t last_committed) {
   return *_dout << "mon." << name << "@" << rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" :
@@ -33,7 +34,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, i
 		     (const char*)"(leader)" : 
 		     (mon->is_peon() ?
 		      (const char*)"(peon)" : (const char*)"(?\?)"))) 
-		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state) << " lc " << last_committed
+		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state)
+		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
 }
 
@@ -225,6 +227,8 @@ void Paxos::store_state(MMonPaxos *m)
   while (end != m->values.end() &&
 	 end->first <= m->last_committed) {
     last_committed = end->first;
+    if (!first_committed)
+      first_committed = last_committed;
     ++end;
   }
 
@@ -234,6 +238,7 @@ void Paxos::store_state(MMonPaxos *m)
     dout(10) << "store_state [" << start->first << ".." << last_committed << "]" << dendl;
     mon->store->put_bl_sn_map(machine_name, start, end);
     mon->store->put_int(last_committed, machine_name, "last_committed");
+    mon->store->put_int(first_committed, machine_name, "first_committed");
   }
 }
 
@@ -495,6 +500,10 @@ void Paxos::commit()
   last_committed++;
   last_commit_time = ceph_clock_now(g_ceph_context);
   mon->store->put_int(last_committed, machine_name, "last_committed");
+  if (!first_committed) {
+    first_committed = last_committed;
+    mon->store->put_int(last_committed, machine_name, "first_committed");
+  }
 
   // tell everyone
   for (set<int>::const_iterator p = mon->get_quorum().begin();

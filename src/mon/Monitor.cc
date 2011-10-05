@@ -1129,6 +1129,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     // commit to paxos
     svc->encode_pending(bl);
     store->put_bl_sn(bl, svc->get_machine_name(), 1);
+    store->put_int(1, svc->get_machine_name(), "first_committed");
     store->put_int(1, svc->get_machine_name(), "last_committed");
   }
 
