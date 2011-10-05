@@ -14,7 +14,6 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
@@ -45,6 +44,7 @@ void _usage()
   cerr << "  bucket link                link bucket to specified user\n";
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
+  cerr << "  pool add                   add an existing pool to those which can store buckets\n";
   cerr << "  pool info                  show pool information\n";
   cerr << "  pool create                generate pool information (requires bucket)\n";
   cerr << "  policy                     read bucket/object policy\n";
@@ -69,6 +69,7 @@ void _usage()
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
   cerr << "   --bucket=<bucket>\n";
+  cerr << "   --pool=<pool>\n";
   cerr << "   --object=<object>\n";
   cerr << "   --date=<yyyy-mm-dd>\n";
   cerr << "   --time=<HH:MM:SS>\n";
@@ -110,6 +111,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_POLICY,
+  OPT_POOL_ADD,
   OPT_POOL_INFO,
   OPT_POOL_CREATE,
   OPT_LOG_LIST,
@@ -244,6 +246,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
   } else if (strcmp(prev_cmd, "pool") == 0) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_POOL_ADD;
     if (strcmp(cmd, "info") == 0)
       return OPT_POOL_INFO;
     if (strcmp(cmd, "create") == 0)
@@ -338,13 +342,13 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
-  ret = rgw_get_bucket_info(bucket_str, bucket_info);
+  ret = rgwstore->get_bucket_info(bucket_str, bucket_info);
   if (ret < 0)
     return ret;
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, true, auid);
+  ret = rgwstore->create_bucket(user_id, bucket, attrs, false, auid);
   if (ret && ret != -EEXIST)   
     goto done;
 
@@ -511,7 +515,7 @@ int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags,
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  int r = rgw_get_bucket_info(bucket.name, bucket_info);
+  int r = rgwstore->get_bucket_info(bucket.name, bucket_info);
   if (r < 0)
     return r;
 
@@ -554,7 +558,7 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   std::string user_id, access_key, secret_key, user_email, display_name;
-  std::string bucket_name, object, swift_user, swift_key;
+  std::string bucket_name, pool_name, object, swift_user, swift_key;
   std::string date, time, subuser, access, format;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -597,6 +601,8 @@ int main(int argc, char **argv)
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+      pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
     } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
@@ -822,7 +828,12 @@ int main(int argc, char **argv)
 
   if ((!bucket_name.empty()) || bucket_id >= 0) {
     if (bucket_id >= 0) {
-      int ret = rgw_get_bucket_info_id(bucket_id, bucket_info);
+      char bucket_char[16];
+      snprintf(bucket_char, sizeof(bucket_char), ".%lld",
+               (long long unsigned)bucket_id);
+      string bucket_string(bucket_char);
+      int ret = rgwstore->get_bucket_info(bucket_string, bucket_info);
+
       if (ret < 0) {
         cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
         return ret;
@@ -835,7 +846,7 @@ int main(int argc, char **argv)
     } else {
       string bucket_name_str = bucket_name;
       RGWBucketInfo bucket_info;
-      int r = rgw_get_bucket_info(bucket_name_str, bucket_info);
+      int r = rgwstore->get_bucket_info(bucket_name_str, bucket_info);
       if (r < 0) {
         cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
         return r;
@@ -1208,6 +1219,15 @@ int main(int argc, char **argv)
     rgw_delete_user(info, purge_data);
   }
   
+  if (opt_cmd == OPT_POOL_ADD) {
+    if (pool_name.empty()) {
+      cerr << "need to specify pool to add!" << std::endl;
+      return usage();
+    }
+
+    rgwstore->add_bucket_placement(pool_name);
+  }
+
   if (opt_cmd == OPT_POOL_INFO) {
      if (bucket_name.empty() && bucket_id < 0) {
        cerr << "either bucket or bucket-id needs to be specified" << std::endl;

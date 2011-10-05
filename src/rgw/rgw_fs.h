@@ -22,7 +22,7 @@ public:
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                    bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
-  int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive, uint64_t auid=0);
+  int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool system_bucket, bool exclusive, uint64_t auid=0);
   int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
 	      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive);
   int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
@@ -64,6 +64,8 @@ public:
   void finish_get_obj(void **handle);
   int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
+
+  virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 };
 
 #endif

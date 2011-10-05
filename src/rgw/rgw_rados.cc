@@ -8,6 +8,8 @@
 
 #include "rgw_cls_api.h"
 
+#include "rgw_tools.h"
+
 #include "common/Clock.h"
 
 #include "include/rados/librados.hpp"
@@ -18,6 +20,7 @@ using namespace librados;
 #include <vector>
 #include <list>
 #include <map>
+#include "auth/Crypto.h" // get_random_bytes()
 
 #define DOUT_SUBSYS rgw
 
@@ -29,6 +32,11 @@ static string notify_oid = "notify";
 static string shadow_ns = "shadow";
 static string bucket_marker_ver_oid = ".rgw.bucket-marker-ver";
 static string dir_oid_prefix = ".dir.";
+static string default_storage_pool = ".rgw.buckets";
+static string avail_pools = ".pools.avail";
+
+static rgw_bucket pi_buckets_rados = RGW_ROOT_BUCKET;
+
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
@@ -312,7 +320,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
  */
 int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, 
 			    map<std::string, bufferlist>& attrs, 
-			    bool create_pool, bool assign_marker,
+			    bool system_bucket,
 			    bool exclusive, uint64_t auid)
 {
   librados::ObjectWriteOperation op;
@@ -326,15 +334,19 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
   if (ret < 0 && ret != -EEXIST)
     return ret;
 
-  if (create_pool) {
+  if (system_bucket) {
     ret = rados->pool_create(bucket.pool.c_str(), auid);
     if (ret == -EEXIST)
       ret = 0;
-    if (ret < 0)
+    if (ret < 0) {
       root_pool_ctx.remove(bucket.name.c_str());
-  }
-
-  if (assign_marker) {
+    } else {
+      bucket.pool = bucket.name;
+    }
+  } else {
+    ret = select_bucket_placement(bucket.name, bucket);
+    if (ret < 0)
+      return ret;
     librados::IoCtx io_ctx; // context for new bucket
 
     int r = open_bucket_ctx(bucket, io_ctx);
@@ -372,9 +384,94 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
       r = cls_rgw_init_index(bucket, dir_oid);
       if (r < 0)
         return r;
+
+      RGWBucketInfo info;
+      info.bucket = bucket;
+      info.owner = id;
+      ret = store_bucket_info(info);
+      if (ret < 0) {
+        RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
+        delete_bucket(id, bucket, true);
+        return ret;
+      }
     }
   }
 
+  return ret;
+}
+
+int RGWRados::store_bucket_info(RGWBucketInfo& info)
+{
+  bufferlist bl;
+  ::encode(info, bl);
+
+  string unused;
+  int ret = rgw_put_obj(unused, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length());
+  if (ret < 0)
+    return ret;
+
+  char bucket_char[16];
+  snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
+  string bucket_id_string(bucket_char);
+  ret = rgw_put_obj(unused, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
+
+  RGW_LOG(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  return 0;
+}
+
+
+int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
+{
+  bufferlist header;
+  map<string, bufferlist> m;
+  string pool_name;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  int ret = tmap_get(obj, header, m);
+  if (ret < 0 || !m.size()) {
+    string id;
+    vector<string> names;
+    names.push_back(default_storage_pool);
+    vector<int> retcodes;
+    bufferlist bl;
+    ret = create_pools(id, names, retcodes);
+    if (ret < 0)
+      return ret;
+    ret = tmap_set(obj, default_storage_pool, bl);
+    if (ret < 0)
+      return ret;
+    m[default_storage_pool] = bl;
+  }
+
+  vector<string> v;
+  map<string, bufferlist>::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    v.push_back(miter->first);
+  }
+
+  uint32_t r;
+  ret = get_random_bytes((char *)&r, sizeof(r));
+  if (ret < 0)
+    return ret;
+
+  int i = r % v.size();
+  pool_name = v[i];
+  bucket.pool = pool_name;
+  bucket.name = bucket_name;
+
+  return 0;
+
+}
+
+int RGWRados::add_bucket_placement(std::string& new_pool)
+{
+  int ret = rados->pool_lookup(new_pool.c_str());
+  if (ret < 0) // DNE, or something
+    return ret;
+
+  rgw_obj obj(pi_buckets_rados, avail_pools);
+  bufferlist empty_bl;
+  ret = tmap_set(obj, new_pool, empty_bl);
   return ret;
 }
 
@@ -1618,6 +1715,34 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
 
   return 0;
 }
+
+int RGWRados::get_bucket_info(string& bucket_name, RGWBucketInfo& info)
+{
+  bufferlist bl;
+
+  int ret = rgw_get_obj(pi_buckets_rados, bucket_name, bl);
+  if (ret < 0) {
+    if (ret != -ENOENT)
+      return ret;
+
+    info.bucket.name = bucket_name;
+    info.bucket.pool = bucket_name; // for now
+    return 0;
+  }
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    RGW_LOG(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+
+  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+
+  return 0;
+}
+
 
 int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
 {

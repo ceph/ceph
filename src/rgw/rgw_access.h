@@ -60,7 +60,11 @@ public:
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0) = 0;
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket,
+                            map<std::string, bufferlist>& attrs,
+                            bool system_bucket, bool exclusive = true,
+                            uint64_t auid = 0) = 0;
+  virtual int add_bucket_placement(std::string& new_placement) { return 0; }
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
@@ -259,6 +263,10 @@ public:
   virtual void set_intent_cb(void *ctx, int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {}
 
   virtual int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats) { return -ENOTSUP; }
+
+  /* The bucket here can either be the bucket name identifier, or the ID
+   * in period format: ".123" */
+  virtual int get_bucket_info(string& bucket, RGWBucketInfo& info) = 0;
 };
 
 class RGWStoreManager {

@@ -14,7 +14,6 @@
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
 
@@ -237,7 +236,7 @@ int read_acls(struct req_state *s, bool only_bucket)
 
   if (s->bucket_name_str.size()) {
     RGWBucketInfo bucket_info;
-    ret = rgw_get_bucket_info(s->bucket_name_str, bucket_info);
+    ret = rgwstore->get_bucket_info(s->bucket_name_str, bucket_info);
     if (ret < 0) {
       dout(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
@@ -468,12 +467,9 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgw_bucket_allocate_pool(s->bucket_name_str, s->bucket);
-  if (ret < 0)
-    goto done;
-
-  ret = rgw_create_bucket(s->user.user_id, s->bucket_name_str, s->bucket, attrs, true,
-			  s->user.auid);
+  s->bucket.name = s->bucket_name_str;
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket, attrs, false,
+                                true, s->user.auid);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   dout(0) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -839,7 +835,7 @@ int RGWCopyObj::verify_permission()
 
   RGWBucketInfo bucket_info;
 
-  ret = rgw_get_bucket_info(src_bucket_name, bucket_info);
+  ret = rgwstore->get_bucket_info(src_bucket_name, bucket_info);
   if (ret < 0)
     return ret;
 

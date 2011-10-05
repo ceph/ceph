@@ -309,7 +309,6 @@ my_radosgw_src = \
 	rgw/rgw_fs.cc \
 	rgw/rgw_rados.cc \
 	rgw/rgw_tools.cc \
-	rgw/rgw_bucket.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_access.cc \
 	rgw/rgw_op.cc \
@@ -1367,7 +1366,6 @@ noinst_HEADERS = \
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
 	rgw/rgw_tools.h\
-	rgw/rgw_bucket.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\

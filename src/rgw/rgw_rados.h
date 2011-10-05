@@ -122,6 +122,10 @@ class RGWRados  : public RGWAccess
                  bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
   int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
+
+  int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
+  int store_bucket_info(RGWBucketInfo& info);
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL), watcher(NULL), watch_handle(0) {}
 
@@ -150,7 +154,11 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket, map<std::string,bufferlist>& attrs, bool create_pool, bool assign_marker, bool exclusive = true, uint64_t auid = 0);
+  virtual int create_bucket(std::string& id, rgw_bucket& bucket,
+                            map<std::string,bufferlist>& attrs,
+                            bool system_bucket, bool exclusive = true,
+                            uint64_t auid = 0);
+  virtual int add_bucket_placement(std::string& new_pool);
   virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
@@ -281,6 +289,7 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
+  virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
