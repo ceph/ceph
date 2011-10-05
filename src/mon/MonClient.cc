@@ -51,6 +51,7 @@ MonClient::MonClient(CephContext *cct_) :
   cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
+  initialized(false),
   log_client(NULL),
   hunting(true),
   want_monmap(true),
@@ -376,12 +377,16 @@ int MonClient::init()
       ldout(cct, 0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
+
+  initialized = true;
   return 0;
 }
 
 void MonClient::shutdown()
 {
-  finisher.stop();
+  if (initialized) {
+    finisher.stop();
+  }
   monc_lock.Lock();
   timer.shutdown();
   if (cur_con) {

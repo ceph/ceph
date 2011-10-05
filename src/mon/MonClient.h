@@ -64,6 +64,7 @@ private:
   Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
+  bool initialized;
 
   LogClient *log_client;
 
