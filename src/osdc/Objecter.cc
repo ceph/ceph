@@ -133,6 +133,8 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   LingerOp *info = new LingerOp;
   info->oid = oid;
   info->oloc = oloc;
+  if (info->oloc.key == oid)
+    info->oloc.key.clear();
   info->snap = snap;
   info->flags = flags;
   info->ops = op.ops;

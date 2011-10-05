@@ -391,6 +391,9 @@ public:
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL) {
       ops.swap(op);
+
+      if (oloc.key == o)
+	oloc.key.clear();
     }
 
     bool operator<(const Op& other) const {
