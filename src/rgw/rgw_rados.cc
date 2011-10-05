@@ -1671,6 +1671,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+  io_ctx.locator_set_key(key);
 
   if (rctx) {
     RGWObjState *astate;
@@ -1688,8 +1689,6 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
 
     return 0;
   }
-
-  io_ctx.locator_set_key(key);
 
   r = io_ctx.stat(oid, psize, pmtime);
   return r;
