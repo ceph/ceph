@@ -390,7 +390,7 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
       info.owner = id;
       ret = store_bucket_info(info);
       if (ret < 0) {
-        RGW_LOG(0) << "failed to store bucket info, removing bucket" << dendl;
+        dout(0) << "failed to store bucket info, removing bucket" << dendl;
         delete_bucket(id, bucket, true);
         return ret;
       }
@@ -415,7 +415,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info)
   string bucket_id_string(bucket_char);
   ret = rgw_put_obj(unused, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
 
-  RGW_LOG(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
 }
 
@@ -1734,11 +1734,11 @@ int RGWRados::get_bucket_info(string& bucket_name, RGWBucketInfo& info)
   try {
     ::decode(info, iter);
   } catch (buffer::error& err) {
-    RGW_LOG(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    dout(0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
 
-  RGW_LOG(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
+  dout(0) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
 
   return 0;
 }
