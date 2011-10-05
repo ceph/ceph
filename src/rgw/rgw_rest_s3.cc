@@ -275,9 +275,8 @@ void RGWCompleteMultipart_REST_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
-    const char *gateway_dns_name = s->env->get("RGW_DNS_NAME");
-    if (gateway_dns_name)
-      s->formatter->dump_format("Location", "%s.%s", s->bucket_name, gateway_dns_name);
+    if (g_conf->rgw_dns_name.length())
+      s->formatter->dump_format("Location", "%s.%s", s->bucket_name, g_conf->rgw_dns_name.c_str());
     s->formatter->dump_format("Bucket", s->bucket_name);
     s->formatter->dump_format("Key", s->object);
     s->formatter->dump_format("ETag", etag.c_str());

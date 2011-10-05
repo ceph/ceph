@@ -367,13 +367,8 @@ static void next_tok(string& str, string& tok, char delim)
 
 void init_entities_from_header(struct req_state *s)
 {
-  const char *gateway_dns_name;
   string req;
   string first;
-
-  gateway_dns_name = s->env->get("RGW_DNS_NAME", "s3.");
-
-  dout(20) << "gateway_dns_name = " << gateway_dns_name << dendl;
 
   s->bucket_name = NULL;
   s->bucket.clear();
@@ -390,11 +385,11 @@ void init_entities_from_header(struct req_state *s)
   s->formatter = new XMLFormatter(false);
 
   int pos;
-  if (s->host) {
+  if (g_conf->rgw_dns_name.length() && s->host) {
     string h(s->host);
 
-    dout(10) << "host=" << s->host << dendl;
-    pos = h.find(gateway_dns_name);
+    dout(10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    pos = h.find(g_conf->rgw_dns_name);
 
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
