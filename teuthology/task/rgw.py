@@ -63,7 +63,7 @@ def ship_config(ctx, config):
             data="""#!/bin/sh
 ulimit -c unlimited
 export LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib
-exec /tmp/cephtest/binary/usr/local/bin/radosgw -c /tmp/cephtest/ceph.conf
+exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
 """
             )
         remote.run(
@@ -109,6 +109,7 @@ def start_rgw(ctx, config):
                 '-c', '/tmp/cephtest/ceph.conf',
                 '--log-file', '/tmp/cephtest/archive/log/rgw.log',
                 '/tmp/cephtest/apache/apache.conf',
+                '--foreground',
                 run.Raw('>'),
                 '/tmp/cephtest/archive/log/rgw.stdout',
                 run.Raw('2>&1'),
