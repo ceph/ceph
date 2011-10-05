@@ -93,6 +93,20 @@ extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
+extern int cls_cxx_map_read_full(cls_method_context_t hctx, bufferlist* outbl);
+extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
+extern int cls_cxx_map_read_key(cls_method_context_t hctx, string key, bufferlist *outbl);
+extern int cls_cxx_map_write_full(cls_method_context_t hctx, bufferlist* in);
+extern int cls_cxx_map_write_key(cls_method_context_t hctx, string key, bufferlist *inbl);
+extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
+extern int cls_cxx_map_remove_key(cls_method_context_t hctx, string key);
+extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist* inbl);
+
+/* These are also defined in rados.h and librados.h. Keep them in sync! */
+#define CEPH_OSD_TMAP_HDR 'h'
+#define CEPH_OSD_TMAP_SET 's'
+#define CEPH_OSD_TMAP_CREATE 'c'
+#define CEPH_OSD_TMAP_RM 'r'
 
 
 #endif
