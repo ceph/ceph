@@ -753,8 +753,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
   s->http_auth = s->env->get("HTTP_AUTHORIZATION");
 
-  const char *cgi_env_continue = s->env->get("RGW_PRINT_CONTINUE");
-  if (rgw_str_to_bool(cgi_env_continue, 0)) {
+  if (g_conf->rgw_print_continue) {
     const char *expect = s->env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }

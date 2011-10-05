@@ -141,8 +141,6 @@ protected:
   RGWOp *get_delete_op();
   RGWOp *get_post_op();
 
-  bool expect100cont;
-
 public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
