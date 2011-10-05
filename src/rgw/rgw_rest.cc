@@ -425,12 +425,9 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
-    const char *swift_url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
-    bool cut_url = (swift_url_prefix != NULL);
-    if (!swift_url_prefix)
-      swift_url_prefix = "v1";
+    bool cut_url = g_conf->rgw_swift_url_prefix.length();
     first = req.substr(0, pos);
-    if (first.compare(swift_url_prefix) == 0) {
+    if (first.compare(g_conf->rgw_swift_url_prefix) == 0) {
       s->prot_flags |= RGW_REST_SWIFT;
       if (cut_url) {
         next_tok(req, first, '/');

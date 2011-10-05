@@ -127,15 +127,14 @@ void RGW_SWIFT_Auth_Get::execute()
 
   const char *key = s->env->get("HTTP_X_AUTH_KEY");
   const char *user = s->env->get("HTTP_X_AUTH_USER");
-  const char *url_prefix = s->env->get("RGW_SWIFT_URL_PREFIX");
-  const char *os_url = s->env->get("RGW_SWIFT_URL");
 
   string user_str = user;
   RGWUserInfo info;
   bufferlist bl;
 
-  if (!os_url || !url_prefix) {
-    dout(0) << "server is misconfigured, missing RGW_SWIFT_URL_PREFIX or RGW_SWIFT_URL" << dendl;
+  if (g_conf->rgw_swift_url.length() == 0 ||
+      g_conf->rgw_swift_url_prefix.length() == 0) {
+    dout(0) << "server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url" << dendl;
     ret = -EINVAL;
     goto done;
   }
@@ -152,7 +151,8 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", os_url, url_prefix);
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", g_conf->rgw_swift_url.c_str(),
+	     g_conf->rgw_swift_url_prefix);
 
   if ((ret = encode_token(info.swift_name, info.swift_key, bl)) < 0)
     goto done;
