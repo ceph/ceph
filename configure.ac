@@ -242,6 +242,8 @@ AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 if test x"$freebsd" != x"yes"; then
 PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
                 [], AC_MSG_FAILURE([No usable version of libedit found.]))
+else
+	LIBEDIT_LIBS="-ledit"
 fi
 
 #libatomic-ops? You want it!
