@@ -53,8 +53,8 @@ case "$1" in
 	    fi
 
 	    user=`ceph-conf -n $name user`
-	    if [ -n "$user" ]; then
-		user=$DEFAULT_USER
+	    if [ -z "$user" ]; then
+		user="$DEFAULT_USER"
 	    fi
 
 	    log_file=`ceph-conf -n $name log_file`
