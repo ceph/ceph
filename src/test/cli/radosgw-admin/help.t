@@ -16,7 +16,7 @@
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
-    pool add		       add an existing pool to those which can store buckets
+    pool add                   add an existing pool to those which can store buckets
     pool info                  show pool information
     pool create                generate pool information (requires bucket)
     policy                     read bucket/object policy
