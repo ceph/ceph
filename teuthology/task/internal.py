@@ -53,7 +53,13 @@ def lock_machines(ctx, config):
     while True:
         # make sure there are enough machines up
         machines = lock.list_locks(ctx)
-        assert machines is not None, 'error listing machines'
+        if machines is None:
+            if ctx.block:
+                log.warn('error listing machines, trying again')
+                time.sleep(20)
+                continue
+            else:
+                assert 0, 'error listing machines'
         num_up = len(filter(lambda machine: machine['up'], machines))
         assert num_up >= config, 'not enough machines are up'
 
