@@ -17,7 +17,7 @@
 #include <sys/types.h>
 #include <sys/extattr.h>
 #elif defined(__linux__)
-#include <linux/types.h>
+#include <sys/types.h>
 #include <sys/xattr.h>
 #elif defined(DARWIN)
 #include <sys/xattr.h>
