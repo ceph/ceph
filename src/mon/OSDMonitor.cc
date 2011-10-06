@@ -943,6 +943,18 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << req->get_orig_source_inst() << dendl;
+  if (first < paxos->get_first_committed()) {
+    first = paxos->get_first_committed();
+    bufferlist bl;
+    mon->store->get_bl_sn(bl, "osdmap_full", first);
+    dout(20) << "send_incremental starting with base full " << first << " " << bl.length() << " bytes" << dendl;
+    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
+    m->oldest_map = paxos->get_first_committed();
+    m->newest_map = osdmap.get_epoch();
+    m->maps[first] = bl;
+    mon->send_reply(req, m);
+    return;
+  }
   MOSDMap *m = build_incremental(first, osdmap.get_epoch());
   m->oldest_map = paxos->get_first_committed();
   m->newest_map = osdmap.get_epoch();
