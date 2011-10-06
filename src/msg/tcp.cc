@@ -43,13 +43,21 @@ int tcp_read_wait(int sd, int timeout)
   if (sd < 0)
     return -1;
   struct pollfd pfd;
+  short evmask;
   pfd.fd = sd;
-  pfd.events = POLLIN | POLLRDHUP;
+  pfd.events = POLLIN;
+#if defined(__linux__)
+  pfd.events |= POLLRDHUP;
+#endif
 
   if (poll(&pfd, 1, timeout) <= 0)
     return -1;
 
-  if (pfd.revents & (POLLERR | POLLHUP | POLLRDHUP | POLLNVAL))
+  evmask = POLLERR | POLLHUP | POLLNVAL;
+#if defined(__linux__)
+  evmask |= POLLRDHUP;
+#endif
+  if (pfd.revents & evmask)
     return -1;
 
   if (!(pfd.revents & POLLIN))
@@ -90,7 +98,10 @@ int tcp_write(CephContext *cct, int sd, const char *buf, int len)
     return -1;
   struct pollfd pfd;
   pfd.fd = sd;
-  pfd.events = POLLOUT | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
+  pfd.events = POLLOUT | POLLHUP | POLLNVAL | POLLERR;
+#if defined(__linux__)
+  pfd.events |= POLLRDHUP;
+#endif
 
   if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
     if (rand() % cct->_conf->ms_inject_socket_failures == 0) {

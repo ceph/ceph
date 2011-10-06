@@ -7,7 +7,19 @@
 #ifndef CEPH_BYTEORDER_H
 #define CEPH_BYTEORDER_H
 
+#if defined(__linux__)
 #include <endian.h>
+#elif defined(__FreeBSD__)
+#include <sys/endian.h>
+#else
+#error "Your platform is not yet supported."
+#endif
+
+#if defined(__FreeBSD__)
+#define	__BYTE_ORDER _BYTE_ORDER
+#define	__BIG_ENDIAN _BIG_ENDIAN
+#define	__LITTLE_ENDIAN _LITTLE_ENDIAN
+#endif
 
 static __inline__ __u16 swab16(__u16 val) 
 {
@@ -31,6 +43,10 @@ static __inline__ uint64_t swab64(uint64_t val)
 	  ((val << 40) & 0xff000000000000ull) |
 	  ((val << 56)));
 }
+
+#if !defined(__BYTE_ORDER) || !defined(__BIG_ENDIAN) || !defined(__LITTLE_ENDIAN)
+#error "Endianess is unknown!"
+#endif
 
 // mswab == maybe swab (if not LE)
 #if __BYTE_ORDER == __BIG_ENDIAN

@@ -20,12 +20,18 @@
 #include "common/perf_counters.h"
 #include "os/ObjectStore.h"
 
+#include "include/compat.h"
+
 #include <fcntl.h>
 #include <sstream>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
+
+#if defined(__FreeBSD__)
+#include <sys/disk.h>
+#endif
 
 
 #define DOUT_SUBSYS journal
@@ -99,6 +105,9 @@ int FileJournal::_open_block_device()
 {
   int ret = 0;
   int64_t bdev_sz = 0;
+#if defined(__FreeBSD__)
+  ret = ::ioctl(fd, DIOCGMEDIASIZE, &bdev_sz);
+#elif defined(__linux__)
 #ifdef BLKGETSIZE64
   // ioctl block device
   ret = ::ioctl(fd, BLKGETSIZE64, &bdev_sz);
@@ -107,9 +116,10 @@ int FileJournal::_open_block_device()
   unsigned long sectors = 0;
   ret = ::ioctl(fd, BLKGETSIZE, &sectors);
   bdev_sz = sectors * 512ULL;
+#endif
 #else
 #error "Compile error: we don't know how to get the size of a raw block device."
-#endif
+#endif /* !__FreeBSD__ */
   if (ret) {
     dout(0) << __func__ << ": failed to read block device size." << dendl;
     return -EIO;
@@ -142,8 +152,8 @@ int FileJournal::_open_block_device()
     max_size = conf_journal_sz;
   }
 
-  /* block devices have to write in blocks of PAGE_SIZE */
-  block_size = PAGE_SIZE;
+  /* block devices have to write in blocks of CEPH_PAGE_SIZE */
+  block_size = CEPH_PAGE_SIZE;
 
   _check_disk_write_cache();
   return 0;
@@ -294,7 +304,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   else {
     max_size = oldsize;
   }
-  block_size = MAX(blksize, (blksize_t)PAGE_SIZE);
+  block_size = MAX(blksize, (blksize_t)CEPH_PAGE_SIZE);
 
   dout(10) << "_open journal is not a block device, NOT checking disk "
            << "write cache on '" << fn << "'" << dendl;
@@ -419,8 +429,8 @@ int FileJournal::open(uint64_t next_seq)
 	    << block_size << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
-  if ((header.alignment % PAGE_SIZE) && directio) {
-    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
+  if ((header.alignment % CEPH_PAGE_SIZE) && directio) {
+    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << CEPH_PAGE_SIZE
 	    << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
@@ -671,7 +681,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   int alignment = writeq.front().alignment; // we want to start ebl with this alignment
   unsigned pre_pad = 0;
   if (alignment >= 0)
-    pre_pad = (alignment - head_size) & ~PAGE_MASK;
+    pre_pad = ((unsigned int)alignment - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
   off64_t size = ROUND_UP_TO(base_size + pre_pad, header.alignment);
   unsigned post_pad = size - base_size - pre_pad;
 
@@ -728,11 +738,11 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   if (directio && (!bl.is_page_aligned() ||
 		   !bl.is_n_page_sized())) {
     bl.rebuild_page_aligned();
-    if ((bl.length() & ~PAGE_MASK) != 0 ||
-	(pos & ~PAGE_MASK) != 0)
+    if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
+	(pos & ~CEPH_PAGE_MASK) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
-    assert((bl.length() & ~PAGE_MASK) == 0);
-    assert((pos & ~PAGE_MASK) == 0);
+    assert((bl.length() & ~CEPH_PAGE_MASK) == 0);
+    assert((pos & ~CEPH_PAGE_MASK) == 0);
   }
 
   ::lseek64(fd, pos, SEEK_SET);
@@ -820,7 +830,7 @@ void FileJournal::do_write(bufferlist& bl)
 
   if (!directio) {
     dout(20) << "do_write fsync" << dendl;
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
     ::fsync(fd);
 #else
 # ifdef HAVE_SYNC_FILE_RANGE

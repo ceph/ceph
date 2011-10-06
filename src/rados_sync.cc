@@ -20,6 +20,9 @@
 #include "global/global_init.h"
 #include "include/rados/librados.hpp"
 #include "rados_sync.h"
+#include "include/compat.h"
+
+#include "common/ceph_extattr.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -32,7 +35,6 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -89,7 +91,7 @@ ExportDir* ExportDir::create_for_writing(const std::string path, int version,
   }
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", version);
-  ret = setxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, strlen(buf) + 1, 0);
+  ret = ceph_os_setxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, strlen(buf) + 1);
   if (ret < 0) {
     int err = errno;
     cerr << ERR_PREFIX << "ExportDir: setxattr error :"
@@ -109,7 +111,7 @@ ExportDir* ExportDir::from_file_system(const std::string path)
   int ret;
   char buf[32];
   memset(buf, 0, sizeof(buf));
-  ret = getxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, sizeof(buf) - 1);
+  ret = ceph_os_getxattr(path.c_str(), XATTR_RADOS_SYNC_VER, buf, sizeof(buf) - 1);
   if (ret < 0) {
     ret = errno;
     if (ret == ENODATA) {
@@ -395,7 +397,7 @@ int BackedUpObject::from_path(const char *path, std::auto_ptr<BackedUpObject> &o
   }
 
   // get fullname
-  ssize_t res = fgetxattr(fd, XATTR_FULLNAME, NULL, 0);
+  ssize_t res = ceph_os_fgetxattr(fd, XATTR_FULLNAME, NULL, 0);
   if (res <= 0) {
     fclose(fp);
     ret = errno;
@@ -415,7 +417,7 @@ int BackedUpObject::from_path(const char *path, std::auto_ptr<BackedUpObject> &o
   }
   char rados_name_[res + 1];
   memset(rados_name_, 0, sizeof(rados_name_));
-  res = fgetxattr(fd, XATTR_FULLNAME, rados_name_, res);
+  res = ceph_os_fgetxattr(fd, XATTR_FULLNAME, rados_name_, res);
   if (res < 0) {
     ret = errno;
     fclose(fp);
@@ -603,7 +605,7 @@ int BackedUpObject::download(IoCtx &io_ctx, const char *path)
       break;
   }
   size_t attr_sz = strlen(rados_name) + 1;
-  int res = fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz, 0);
+  int res = ceph_os_fsetxattr(fd, XATTR_FULLNAME, rados_name, attr_sz);
   if (res) {
     int err = errno;
     cerr << ERR_PREFIX << "download: fsetxattr(" << tmp_path << ") error: "
@@ -694,7 +696,7 @@ BackedUpObject::BackedUpObject(const char *rados_name_,
 
 int BackedUpObject::read_xattrs_from_file(int fd)
 {
-  ssize_t blen = flistxattr(fd, NULL, 0);
+  ssize_t blen = ceph_os_flistxattr(fd, NULL, 0);
   if (blen > 0x1000000) {
     cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: unwilling "
 	 << "to allocate a buffer of size " << blen << " on the stack for "
@@ -703,7 +705,7 @@ int BackedUpObject::read_xattrs_from_file(int fd)
   }
   char buf[blen + 1];
   memset(buf, 0, sizeof(buf));
-  ssize_t blen2 = flistxattr(fd, buf, blen);
+  ssize_t blen2 = ceph_os_flistxattr(fd, buf, blen);
   if (blen != blen2) {
     cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: xattrs changed while "
 	 << "we were trying to "
@@ -716,7 +718,7 @@ int BackedUpObject::read_xattrs_from_file(int fd)
     size_t bs = strlen(b);
     std::string xattr_name = get_user_xattr_name(b);
     if (!xattr_name.empty()) {
-      ssize_t attr_len = fgetxattr(fd, b, NULL, 0);
+      ssize_t attr_len = ceph_os_fgetxattr(fd, b, NULL, 0);
       if (attr_len < 0) {
 	int err = errno;
 	cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "
@@ -731,7 +733,7 @@ int BackedUpObject::read_xattrs_from_file(int fd)
 	     << xattr_name << "'" << std::endl;
 	return ENOBUFS;
       }
-      ssize_t attr_len2 = fgetxattr(fd, b, attr, attr_len);
+      ssize_t attr_len2 = ceph_os_fgetxattr(fd, b, attr, attr_len);
       if (attr_len2 < 0) {
 	int err = errno;
 	cerr << ERR_PREFIX << "BackedUpObject::read_xattrs_from_file: "

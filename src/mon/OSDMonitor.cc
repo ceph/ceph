@@ -39,6 +39,8 @@
 #include "common/config.h"
 #include "common/errno.h"
 
+#include "include/compat.h"
+
 #include <sstream>
 
 #define DOUT_SUBSYS mon

@@ -20,6 +20,18 @@
 
 #include <ext/hash_map>
 
+#if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
+namespace __gnu_cxx {
+  template<>
+    struct hash<pthread_t>
+    {
+      size_t
+      operator()(pthread_t __x) const
+      { return (uintptr_t)__x; }
+    };
+}
+#endif
+
 /******* Constants **********/
 #define DOUT_SUBSYS lockdep
 #undef DOUT_COND

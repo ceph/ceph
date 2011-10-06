@@ -27,9 +27,11 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "include/compat.h"
+#include "common/ceph_extattr.h"
 
 using namespace librados;
 
@@ -99,8 +101,8 @@ private:
       }
       std::string xattr_fs_name(USER_XATTR_PREFIX);
       xattr_fs_name += x->c_str();
-      ret = setxattr(obj_path.c_str(), xattr_fs_name.c_str(),
-		     xattr->data, xattr->len, 0);
+      ret = ceph_os_setxattr(obj_path.c_str(), xattr_fs_name.c_str(),
+		     xattr->data, xattr->len);
       if (ret) {
 	ret = errno;
 	cerr << ERR_PREFIX << "setxattr error: " << cpp_strerror(ret) << std::endl;
@@ -110,7 +112,7 @@ private:
     for (std::list < std::string >::const_iterator x = only_in_b.begin();
 	 x != only_in_b.end(); ++x) {
       flags |= CHANGED_XATTRS;
-      ret = removexattr(obj_path.c_str(), x->c_str());
+      ret = ceph_os_removexattr(obj_path.c_str(), x->c_str());
       if (ret) {
 	ret = errno;
 	cerr << ERR_PREFIX << "removexattr error: " << cpp_strerror(ret) << std::endl;

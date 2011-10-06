@@ -1,7 +1,12 @@
 #ifndef CEPH_ASSERT_H
 #define CEPH_ASSERT_H
 
+#if defined(__linux__)
 #include <features.h>
+#elif defined(__FreeBSD__)
+#include <sys/cdefs.h>
+#define	__GNUC_PREREQ(minor, major)	__GNUC_PREREQ__(minor, major)
+#endif
 
 #ifdef __CEPH__
 # include "acconfig.h"

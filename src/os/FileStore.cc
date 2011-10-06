@@ -22,18 +22,24 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+
+#if defined(__linux__)
 #include <linux/fs.h>
+#endif
 
 #include <iostream>
 #include <map>
 
-#include "include/fiemap.h"
-
-#ifndef __CYGWIN__
-# include <sys/xattr.h>
+#if defined(__FreeBSD__)
+#include "include/inttypes.h"
 #endif
 
-#ifdef DARWIN
+#include "include/compat.h"
+#include "include/fiemap.h"
+
+#include "common/ceph_extattr.h"
+
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
@@ -63,9 +69,7 @@
 using ceph::crypto::SHA1;
 
 #ifndef __CYGWIN__
-# ifndef DARWIN
 #  include "btrfs_ioctl.h"
-# endif
 #endif
 
 #include "common/config.h"
@@ -114,56 +118,29 @@ int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 int do_listxattr(const char *fn, char *names, size_t len);
 int do_removexattr(const char *fn, const char *name);
 
-#ifdef DARWIN
 static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
 {
-  int r = ::getxattr(fn, name, val, size, 0, 0);
+  int r = ::ceph_os_getxattr(fn, name, val, size);
   return (r < 0 ? -errno : r);
 }
 
 static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
 {
-  int r = ::setxattr(fn, name, val, size, 0, 0);
+  int r = ::ceph_os_setxattr(fn, name, val, size);
   return (r < 0 ? -errno : r);
 }
 
 static int sys_removexattr(const char *fn, const char *name)
 {
-  int r = ::removexattr(fn, name, 0);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_listxattr(const char *fn, char *names, size_t len)
-{
-  int r = ::listxattr(fn, names, len, 0);
-  return (r < 0 ? -errno : r);
-}
-#else
-
-static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
-{
-  int r = ::getxattr(fn, name, val, size);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
-{
-  int r = ::setxattr(fn, name, val, size, 0);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_removexattr(const char *fn, const char *name)
-{
-  int r = ::removexattr(fn, name);
+  int r = ::ceph_os_removexattr(fn, name);
   return (r < 0 ? -errno : r);
 }
 
 int sys_listxattr(const char *fn, char *names, size_t len)
 {
-  int r = ::listxattr(fn, names, len);
+  int r = ::ceph_os_listxattr(fn, names, len);
   return (r < 0 ? -errno : r);
 }
-#endif
 
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
@@ -523,7 +500,7 @@ int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    int r = ::fsetxattr(fd, raw_name, (char *)val + pos, chunk_size, 0);
+    int r = ::ceph_os_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -537,7 +514,7 @@ int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
      before) */
   if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    ::fremovexattr(fd, raw_name);
+    ::ceph_os_fremovexattr(fd, raw_name);
   }
   
   return ret;
@@ -748,6 +725,7 @@ int FileStore::open_journal()
 
 int FileStore::wipe_subvol(const char *s)
 {
+#if defined(__linux__)
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
   strncpy(volargs.name, s, sizeof(volargs.name)-1);
@@ -764,6 +742,7 @@ int FileStore::wipe_subvol(const char *s)
     dout(0) << "mkfs  removed old subvol " << s << dendl;
     return 0;
   }
+#endif
 
   dout(0) << "mkfs  removing old directory " << s << dendl;
   ostringstream old_dir;
@@ -803,8 +782,10 @@ int FileStore::mkfs()
   char buf[PATH_MAX];
   DIR *dir;
   struct dirent *de;
+#if defined(__linux__)
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
+#endif
 
   if (!m_filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
@@ -900,6 +881,7 @@ int FileStore::mkfs()
   }
 
   // current
+#if defined(__linux__)
   memset(&volargs, 0, sizeof(volargs));
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
@@ -913,6 +895,7 @@ int FileStore::mkfs()
     else if (ret == EOPNOTSUPP || ret == ENOTTY) {
       dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
 	      << current_fn << dendl;
+#endif
       if (::mkdir(current_fn.c_str(), 0755)) {
 	ret = errno;
 	if (ret != EEXIST) {
@@ -921,6 +904,7 @@ int FileStore::mkfs()
 	  goto close_basedir_fd;
 	}
       }
+#if defined(__linux__)
     }
     else {
       derr << "FileStore::mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
@@ -938,6 +922,7 @@ int FileStore::mkfs()
       goto close_basedir_fd;
     }
   }
+#endif
 
   // journal?
   ret = mkjournal();
@@ -954,7 +939,9 @@ int FileStore::mkfs()
   ret = 0;
 
 close_basedir_fd:
+#if defined(__linux__)
   TEMP_FAILURE_RETRY(::close(basedir_fd));
+#endif
 close_dir:
   ::closedir(dir);
 close_fsid_fd:
@@ -1042,8 +1029,6 @@ bool FileStore::test_mount_in_use()
 
 int FileStore::_detect_fs()
 {
-  char buf[80];
-  
   // fake collections?
   if (m_filestore_fake_collections) {
     dout(0) << "faking collections (in memory)" << dendl;
@@ -1098,6 +1083,8 @@ int FileStore::_detect_fs()
     return -errno;
   blk_size = st.f_bsize;
 
+#if defined(__linux__)
+  char buf[80];
   static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
   if (st.f_type == BTRFS_F_TYPE) {
     dout(0) << "mount detected btrfs" << dendl;      
@@ -1213,7 +1200,9 @@ int FileStore::_detect_fs()
 	   << TEXT_NORMAL;
     }
 
-  } else {
+  } else
+#endif /* __linux__ */
+  {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
   }
@@ -2149,9 +2138,6 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 
 int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
 {
-#ifdef DARWIN
-  return 0;
-#else
   if (!btrfs || !btrfs_trans_start_end ||
       !m_filestore_btrfs_trans)
     return 0;
@@ -2178,14 +2164,10 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   ::mknod(fn, 0644, 0);
 
   return fd;
-#endif /* DARWIN */
 }
 
 void FileStore::_transaction_finish(int fd)
 {
-#ifdef DARWIN
-  return;
-#else
   if (!btrfs || !btrfs_trans_start_end ||
       !m_filestore_btrfs_trans)
     return;
@@ -2197,7 +2179,6 @@ void FileStore::_transaction_finish(int fd)
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
   ::close(fd);
-#endif /* DARWIN */
 }
 
 unsigned FileStore::_do_transaction(Transaction& t)
@@ -2689,11 +2670,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     goto out;
   }
   if (btrfs)
-#ifndef DARWIN
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
-#else 
-  ;
-#endif /* DARWIN */
   else {
     struct stat st;
     ::fstat(o, &st);
@@ -3070,14 +3047,16 @@ void FileStore::sync_entry()
 	  
 	  commit_started();
 	}
-      } else {
+      } else
+      {
 	commit_started();
 
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
-	} else if (m_filestore_fsync_flushes_journal_data) {
+	} else
+        if (m_filestore_fsync_flushes_journal_data) {
 	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
 	  // make the file system's journal commit.
 	  //  this works with ext3, but NOT ext4
@@ -3231,7 +3210,7 @@ int FileStore::snapshot(const string& name)
 {
   dout(10) << "snapshot " << name << dendl;
   sync_and_flush();
-  
+
   if (!btrfs) {
     dout(0) << "snapshot " << name << " failed, no btrfs" << dendl;
     return -EOPNOTSUPP;
@@ -3261,7 +3240,7 @@ int FileStore::_getattr(coll_t cid, const hobject_t& oid, const char *name, buff
     memcpy(bp.c_str(), val, l);
   } else if (l == -ERANGE) {
     l = lfn_getxattr(cid, oid, name, 0, 0);
-    if (l) {
+    if (l > 0) {
       bp = buffer::create(l);
       l = lfn_getxattr(cid, oid, name, bp.c_str(), l);
     }
@@ -3278,7 +3257,7 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
     memcpy(bp.c_str(), val, l);
   } else if (l == -ERANGE) {
     l = do_getxattr(fn, name, 0, 0);
-    if (l) {
+    if (l > 0) {
       bp = buffer::create(l);
       l = do_getxattr(fn, name, bp.c_str(), l);
     }

@@ -15,6 +15,10 @@
 #include <tr1/memory>
 #include <map>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"

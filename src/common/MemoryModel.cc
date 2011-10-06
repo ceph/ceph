@@ -90,6 +90,7 @@ void MemoryModel::_sample(snap *psnap)
   psnap->heap = heap >> 10;
 
   // ...
+#if defined(__linux__)
   struct mallinfo mi = mallinfo();
   
   psnap->malloc = mi.uordblks >> 10;
@@ -106,4 +107,7 @@ void MemoryModel::_sample(snap *psnap)
       << "\t" << mi.hblks 
       << "\t" << mi.hblkhd / 1024
       << std::endl;
+#else
+#warning "Not implemented!"
+#endif
 }

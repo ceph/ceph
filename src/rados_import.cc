@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
 

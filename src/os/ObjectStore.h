@@ -25,7 +25,7 @@
 #include <sys/stat.h>
 #include <vector>
 
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
@@ -200,7 +200,7 @@ public:
     int get_data_alignment() {
       if (!largest_data_len)
 	return -1;
-      return (largest_data_off - get_data_offset()) & ~PAGE_MASK;
+      return (largest_data_off - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
 
     bool empty() {

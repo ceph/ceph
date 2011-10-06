@@ -22,6 +22,12 @@
 #include "common/config.h"
 #include "common/sync_filesystem.h"
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#include "include/compat.h"
+
 #define DOUT_SUBSYS mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, dir)
