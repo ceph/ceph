@@ -140,6 +140,7 @@ public:
 		   num_wr(0), wake(false) {}
 
     void check_mode() {
+      assert(state != DELAYED_FLUSHING && state != RMW_FLUSHING);
       if (num_wr == 0)
 	state = IDLE;
     }
