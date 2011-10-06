@@ -43,6 +43,7 @@
 /test_librgw_build
 /testsnaps
 /test_stress_watch
+/multi_stress_watch
 /test_store
 /test_libcommon_build
 /test_mutate
