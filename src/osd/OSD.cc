@@ -3500,7 +3500,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     pg->unlock();
   }  
 
-  do_notifies(notify_list);  // notify? (residual|replica)
+  do_notifies(notify_list, osdmap->get_epoch());  // notify? (residual|replica)
   do_queries(query_map);
   do_infos(info_map);
 
@@ -4117,7 +4117,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list) 
+void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list,
+		      epoch_t query_epoch)
 {
   for (map< int, vector<PG::Info> >::iterator it = notify_list.begin();
        it != notify_list.end();
@@ -4126,8 +4127,11 @@ void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list)
       dout(7) << "do_notify osd." << it->first << " is self, skipping" << dendl;
       continue;
     }
-    dout(7) << "do_notify osd." << it->first << " on " << it->second.size() << " PGs" << dendl;
-    MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(), it->second);
+    dout(7) << "do_notify osd." << it->first
+	    << " on " << it->second.size() << " PGs" << dendl;
+    MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(),
+				       it->second,
+				       query_epoch);
     _share_map_outgoing(osdmap->get_cluster_inst(it->first));
     cluster_messenger->send_message(m, osdmap->get_cluster_inst(it->first));
   }
@@ -4199,7 +4203,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (!pg)
       continue;
 
-    if (pg->old_peering_msg(m->get_epoch())) {
+    if (pg->old_peering_msg(m->get_epoch(), m->get_query_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
       delete t;
@@ -4246,7 +4250,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     return;
   }
 
-  if (pg->old_peering_msg(m->get_epoch())) {
+  if (pg->old_peering_msg(m->get_epoch(), m->get_query_epoch())) {
     dout(10) << "ignoring old peering message " << *m << dendl;
     pg->unlock();
     delete t;
@@ -4293,7 +4297,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
     if (!pg)
       continue;
 
-    if (pg->old_peering_msg(m->get_epoch())) {
+    if (pg->old_peering_msg(m->get_epoch(), m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
       delete t;
@@ -4434,7 +4438,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       if (it->second.type == PG::Query::LOG ||
 	  it->second.type == PG::Query::BACKLOG ||
 	  it->second.type == PG::Query::FULLLOG) {
-	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty);
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
+					m->get_epoch());
 	_share_map_outgoing(osdmap->get_cluster_inst(from));
 	cluster_messenger->send_message(mlog,
 					osdmap->get_cluster_inst(from));
@@ -4453,7 +4458,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       continue;
     }
 
-    if (pg->old_peering_msg(m->get_epoch())) {
+    if (pg->old_peering_msg(m->get_epoch(), m->get_epoch())) {
       dout(10) << "ignoring old peering message " << *m << dendl;
       pg->unlock();
       continue;
@@ -4479,11 +4484,11 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
     // ok, process query!
     PG::RecoveryCtx rctx(0, 0, &notify_list, 0, 0);
-    pg->handle_query(from, it->second, &rctx);
+    pg->handle_query(from, it->second, m->get_epoch(), &rctx);
     pg->unlock();
   }
   
-  do_notifies(notify_list);   
+  do_notifies(notify_list, m->get_epoch());
 
   m->put();
 }

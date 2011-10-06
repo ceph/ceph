@@ -3479,7 +3479,7 @@ void PG::fulfill_info(int from, const Query &query,
   notify_info = make_pair(from, info);
 }
 
-void PG::fulfill_log(int from, const Query &query)
+void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
 {
   assert(!acting.empty());
   assert(from == acting[0]);
@@ -3488,9 +3488,10 @@ void PG::fulfill_log(int from, const Query &query)
       !log.backlog) {
     assert(0); // generated in the state machine
   } else {
-    MOSDPGLog *mlog = new MOSDPGLog(osd->osdmap->get_epoch(), info);
+    MOSDPGLog *mlog = new MOSDPGLog(osd->osdmap->get_epoch(),
+				    info, query_epoch);
     mlog->missing = missing;
-	
+
     // primary -> other, when building master log
     if (query.type == PG::Query::LOG) {
       dout(10) << " sending info+missing+log since " << query.since
@@ -3512,9 +3513,9 @@ void PG::fulfill_log(int from, const Query &query)
       dout(10) << " sending info+missing+full log" << dendl;
       mlog->log.copy_non_backlog(log);
     }
-	
+
     dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
-	
+
     osd->_share_map_outgoing(osd->osdmap->get_cluster_inst(from));
     osd->cluster_messenger->send_message(mlog, 
 					 osd->osdmap->get_cluster_inst(from));
@@ -3530,9 +3531,11 @@ bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacti
   }
 }
 
-bool PG::old_peering_msg(const epoch_t &msg_epoch)
+bool PG::old_peering_msg(epoch_t reply_epoch,
+			 epoch_t query_epoch)
 {
-  return (last_peering_reset > msg_epoch);
+  return (last_peering_reset > reply_epoch ||
+	  last_peering_reset > query_epoch);
 }
 
 void PG::set_last_peering_reset() {
@@ -4297,7 +4300,7 @@ boost::statechart::result
 PG::RecoveryState::ReplicaActive::react(const MQuery& query) {
   PG *pg = context< RecoveryMachine >().pg;
   assert(query.query.type == Query::MISSING);
-  pg->fulfill_log(query.from, query.query);
+  pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
 }
 
@@ -4353,11 +4356,11 @@ PG::RecoveryState::Stray::react(const BacklogComplete&) {
   PG *pg = context< RecoveryMachine >().pg;
   assert(backlog_requested);
   dout(10) << "BacklogComplete" << dendl;
-  for (map<int, Query>::iterator i = pending_queries.begin();
+  for (map<int, pair<Query, epoch_t> >::iterator i = pending_queries.begin();
        i != pending_queries.end();
        pending_queries.erase(i++)) {
     dout(10) << "sending log to " << i->first << dendl;
-    pg->fulfill_log(i->first, i->second);
+    pg->fulfill_log(i->first, i->second.first, i->second.second);
   }
   backlog_requested = false;
   return discard_event();
@@ -4370,7 +4373,8 @@ PG::RecoveryState::Stray::react(const MQuery& query) {
     if (!pg->log.backlog) {
       dout(10) << "Stray, need a backlog!" 
 	       << dendl;
-      pending_queries[query.from] = query.query;
+      pending_queries[query.from] = pair<Query, epoch_t>(query.query,
+							 query.query_epoch);
       if (!backlog_requested) {
 	dout(10) << "Stray, generating a backlog!" 
 		 << dendl;
@@ -4386,7 +4390,7 @@ PG::RecoveryState::Stray::react(const MQuery& query) {
     pg->fulfill_info(query.from, query.query, notify_info);
     context< RecoveryMachine >().send_notify(notify_info.first, notify_info.second);
   } else {
-    pg->fulfill_log(query.from, query.query);
+    pg->fulfill_log(query.from, query.query, query.query_epoch);
   }
   return discard_event();
 }
@@ -4775,11 +4779,12 @@ void PG::RecoveryState::handle_log(int from,
 }
 
 void PG::RecoveryState::handle_query(int from, const PG::Query& q,
+				     epoch_t query_epoch,
 				     RecoveryCtx *rctx)
 {
   dout(10) << "handle_query " << q << " from osd." << from << dendl;
   start_handle(rctx);
-  machine.process_event(MQuery(from, q));
+  machine.process_event(MQuery(from, q, query_epoch));
   end_handle();
 }
 

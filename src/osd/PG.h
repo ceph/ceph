@@ -928,8 +928,9 @@ public:
     struct MQuery : boost::statechart::event< MQuery > {
       int from;
       const Query &query;
-      MQuery(int from, const Query &query):
-	from(from), query(query) {}
+      epoch_t query_epoch;
+      MQuery(int from, const Query &query, epoch_t query_epoch):
+	from(from), query(query), query_epoch(query_epoch) {}
     };
 
     struct AdvMap : boost::statechart::event< AdvMap > {
@@ -1178,7 +1179,7 @@ public:
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
       bool backlog_requested;
-      map<int, Query> pending_queries;
+      map<int, pair<Query, epoch_t> > pending_queries;
 
       Stray(my_context ctx);
       void exit();
@@ -1281,7 +1282,9 @@ public:
     void handle_log(int from,
 		    MOSDPGLog *msg,
 		    RecoveryCtx *ctx);
-    void handle_query(int from, const PG::Query& q, RecoveryCtx *ctx);
+    void handle_query(int from, const PG::Query& q,
+		      epoch_t query_epoch,
+		      RecoveryCtx *ctx);
     void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
@@ -1601,9 +1604,9 @@ public:
 
   void fulfill_info(int from, const Query &query, 
 		    pair<int, Info> &notify_info);
-  void fulfill_log(int from, const Query &query);
+  void fulfill_log(int from, const Query &query, epoch_t query_epoch);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
-  bool old_peering_msg(const epoch_t &msg_epoch);
+  bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
 
   // recovery bits
   void handle_notify(int from, PG::Info& i, RecoveryCtx *rctx) {
@@ -1617,8 +1620,10 @@ public:
 		  RecoveryCtx *rctx) {
     recovery_state.handle_log(from, msg, rctx);
   }
-  void handle_query(int from, const PG::Query& q, RecoveryCtx *rctx) {
-    recovery_state.handle_query(from, q, rctx);
+  void handle_query(int from, const PG::Query& q,
+		    epoch_t query_epoch,
+		    RecoveryCtx *rctx) {
+    recovery_state.handle_query(from, q, query_epoch, rctx);
   }
   void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
 			  vector<int>& newup, vector<int>& newacting,
