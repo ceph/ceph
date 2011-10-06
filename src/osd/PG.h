@@ -185,7 +185,7 @@ public:
       epoch_t last_epoch_split;    // as parent
 
       epoch_t same_up_since;       // same acting set since
-      epoch_t same_acting_since;   // same acting AND up set since
+      epoch_t same_interval_since;   // same acting AND up set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
 
       eversion_t last_scrub;
@@ -194,7 +194,7 @@ public:
       History() : 	      
 	epoch_created(0),
 	last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
-	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
+	same_up_since(0), same_interval_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
 	// Here, we only update the fields which cannot be calculated from the OSDmap.
@@ -219,7 +219,7 @@ public:
 	::encode(last_epoch_started, bl);
 	::encode(last_epoch_clean, bl);
 	::encode(last_epoch_split, bl);
-	::encode(same_acting_since, bl);
+	::encode(same_interval_since, bl);
 	::encode(same_up_since, bl);
 	::encode(same_primary_since, bl);
 	::encode(last_scrub, bl);
@@ -235,7 +235,7 @@ public:
 	else
 	  last_epoch_clean = last_epoch_started;  // careful, it's a lie!
 	::decode(last_epoch_split, bl);
-	::decode(same_acting_since, bl);
+	::decode(same_interval_since, bl);
 	::decode(same_up_since, bl);
 	::decode(same_primary_since, bl);
 	if (struct_v >= 2) {
@@ -1675,7 +1675,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 {
   return out << "ec=" << h.epoch_created
 	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
-	     << " " << h.same_up_since << "/" << h.same_acting_since << "/" << h.same_primary_since;
+	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 

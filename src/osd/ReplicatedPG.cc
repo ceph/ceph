@@ -3304,7 +3304,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 	   << dendl;  
 
   // sanity checks
-  assert(op->map_epoch >= info.history.same_acting_since);
+  assert(op->map_epoch >= info.history.same_interval_since);
   assert(is_active());
   assert(is_replica());
   
@@ -4010,7 +4010,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t last_complete)
 {
   lock();
-  if (same_since == info.history.same_acting_since) {
+  if (same_since == info.history.same_interval_since) {
     dout(10) << "_committed_pushed_object last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
@@ -4314,7 +4314,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   // apply to disk!
   int r = osd->store->queue_transaction(&osr, t,
 					onreadable,
-					new C_OSD_CommittedPushedObject(this, op, info.history.same_acting_since,
+					new C_OSD_CommittedPushedObject(this, op,
+									info.history.same_interval_since,
 									info.last_complete),
 					onreadable_sync);
   assert(r == 0);

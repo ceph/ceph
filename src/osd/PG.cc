@@ -921,7 +921,7 @@ void PG::generate_past_intervals()
 
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
-  epoch_t last_epoch = info.history.same_acting_since - 1;
+  epoch_t last_epoch = info.history.same_interval_since - 1;
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
   OSDMap *nextmap = osd->get_map(last_epoch);
@@ -1047,7 +1047,7 @@ bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 {
   epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
   if (need_up_thru &&
-      up_thru >= info.history.same_acting_since) {
+      up_thru >= info.history.same_interval_since) {
     dout(10) << "adjust_need_up_thru now " << up_thru << ", need_up_thru now false" << dendl;
     need_up_thru = false;
     return true;
@@ -1208,15 +1208,15 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
   
   // NOTE: we can skip the up_thru check if this is a new PG and there
   // were no prior intervals.
-  if (info.history.epoch_created < info.history.same_acting_since &&
-      osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
+  if (info.history.epoch_created < info.history.same_interval_since &&
+      osd->osdmap->get_up_thru(osd->whoami) < info.history.same_interval_since) {
     dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
-	     << " < same_since " << info.history.same_acting_since
+	     << " < same_since " << info.history.same_interval_since
 	     << ", must notify monitor" << dendl;
     need_up_thru = true;
   } else {
     dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
-	     << " >= same_since " << info.history.same_acting_since
+	     << " >= same_since " << info.history.same_interval_since
 	     << ", all is well" << dendl;
     need_up_thru = false;
   }
@@ -1546,7 +1546,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // find out when we commit
   get();   // for callback
-  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_acting_since));
+  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_interval_since));
   
   // initialize snap_trimq
   if (is_primary()) {
@@ -1726,7 +1726,7 @@ void PG::_activate_committed(epoch_t e)
     peer_activated.insert(osd->whoami);
     dout(10) << "_activate_committed " << e << " peer_activated now " << peer_activated 
 	     << " last_epoch_started " << info.history.last_epoch_started
-	     << " same_acting_since " << info.history.same_acting_since << dendl;
+	     << " same_interval_since " << info.history.same_interval_since << dendl;
     if (peer_activated.size() == acting.size())
       all_activated_and_committed();
   } else {
@@ -2657,9 +2657,9 @@ void PG::sub_op_scrub_map(MOSDSubOp *op)
 {
   dout(7) << "sub_op_scrub_map" << dendl;
 
-  if (op->map_epoch < info.history.same_acting_since) {
+  if (op->map_epoch < info.history.same_interval_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
+	     << op->map_epoch << " < " << info.history.same_interval_since << dendl;
     op->put();
     return;
   }
@@ -2847,7 +2847,7 @@ void PG::build_scrub_map(ScrubMap &map)
   dout(10) << "build_scrub_map" << dendl;
 
   map.valid_through = info.last_update;
-  epoch_t epoch = info.history.same_acting_since;
+  epoch_t epoch = info.history.same_interval_since;
 
   unlock();
 
@@ -2862,7 +2862,7 @@ void PG::build_scrub_map(ScrubMap &map)
   _scan_list(map, ls);
   lock();
 
-  if (epoch != info.history.same_acting_since) {
+  if (epoch != info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     return;
   }
@@ -2955,13 +2955,13 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   assert(!active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
-  if (msg->map_epoch < info.history.same_acting_since) {
+  if (msg->map_epoch < info.history.same_interval_since) {
     if (finalizing_scrub) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       finalizing_scrub = 0;
     } else {
       dout(10) << "replica_scrub discarding old replica_scrub from "
-	       << msg->map_epoch << " < " << info.history.same_acting_since 
+	       << msg->map_epoch << " < " << info.history.same_interval_since 
 	       << dendl;
     }
     msg->put();
@@ -2985,7 +2985,7 @@ void PG::replica_scrub(MOSDRepScrub *msg)
     build_scrub_map(map);
   }
 
-  if (msg->map_epoch < info.history.same_acting_since) {
+  if (msg->map_epoch < info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     msg->put();
     return;
@@ -3049,7 +3049,7 @@ void PG::scrub()
     dout(10) << "scrub start" << dendl;
     update_stats();
     scrub_received_maps.clear();
-    scrub_epoch_start = info.history.same_acting_since;
+    scrub_epoch_start = info.history.same_interval_since;
 
     osd->sched_scrub_lock.Lock();
     if (scrub_reserved) {
@@ -3077,7 +3077,7 @@ void PG::scrub()
     primary_scrubmap = ScrubMap();
     build_scrub_map(primary_scrubmap);
 
-    if (scrub_epoch_start != info.history.same_acting_since) {
+    if (scrub_epoch_start != info.history.same_interval_since) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       scrub_clear_state();
       scrub_unreserve_replicas();
@@ -3099,7 +3099,7 @@ void PG::scrub()
   dout(10) << "clean up scrub" << dendl;
   assert(last_update_applied == info.last_update);
   
-  if (scrub_epoch_start != info.history.same_acting_since) {
+  if (scrub_epoch_start != info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     scrub_clear_state();
     scrub_unreserve_replicas();
@@ -3262,7 +3262,7 @@ void PG::scrub_finalize() {
   lock();
   assert(last_update_applied == info.last_update);
 
-  if (scrub_epoch_start != info.history.same_acting_since) {
+  if (scrub_epoch_start != info.history.same_interval_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     scrub_clear_state();
     scrub_unreserve_replicas();
@@ -3535,9 +3535,9 @@ bool PG::old_peering_msg(const epoch_t &msg_epoch)
   return (last_warm_restart > msg_epoch);
 }
 
-void PG::reset_last_warm_restart() {
-  const OSDMap &osdmap = *osd->osdmap;
-  last_warm_restart = osdmap.get_epoch();
+void PG::reset_last_warm_restart()
+{
+  last_warm_restart = osd->osdmap->get_epoch();
 }
 
 /* Called before initializing peering during advance_map */
@@ -3568,14 +3568,14 @@ void PG::warm_restart(const OSDMap *lastmap, const vector<int>& newup, const vec
     dirty_info = true;
   } else if (acting != oldacting || up != oldup) {
     // remember past interval
-    PG::Interval& i = past_intervals[info.history.same_acting_since];
-    i.first = info.history.same_acting_since;
+    PG::Interval& i = past_intervals[info.history.same_interval_since];
+    i.first = info.history.same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     i.acting = oldacting;
     i.up = oldup;
 
     if (oldacting != acting || oldup != up) {
-      info.history.same_acting_since = osdmap->get_epoch();
+      info.history.same_interval_since = osdmap->get_epoch();
     }
     if (oldup != up) {
       info.history.same_up_since = osdmap->get_epoch();
@@ -4228,9 +4228,9 @@ PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
   // share that until _everyone_ does the same.
   if (pg->is_acting(infoevt.from)) {
     assert(pg->info.history.last_epoch_started < 
-	   pg->info.history.same_acting_since);
+	   pg->info.history.same_interval_since);
     assert(infoevt.info.history.last_epoch_started >= 
-	   pg->info.history.same_acting_since);
+	   pg->info.history.same_interval_since);
     dout(10) << " peer osd." << infoevt.from << " activated and committed" 
 	     << dendl;
     pg->peer_activated.insert(infoevt.from);
@@ -4417,7 +4417,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx)
     pg->build_prior(prior_set);
 
   if (pg->need_up_thru)
-    pg->osd->queue_want_up_thru(pg->info.history.same_acting_since);
+    pg->osd->queue_want_up_thru(pg->info.history.same_interval_since);
 
   get_infos();
 }

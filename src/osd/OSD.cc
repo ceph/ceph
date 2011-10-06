@@ -1103,7 +1103,7 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->up = pg->acting;
   pg->info.history = history;
   /* This is weird, but all the peering code needs last_epoch_start
-   * to be less than same_acting_since. Make it so!
+   * to be less than same_interval_since. Make it so!
    * This is easier to deal with if you remember that the PG, while
    * now created in memory, still hasn't peered and started -- and
    * the map epoch could change before that happens! */
@@ -1223,9 +1223,9 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
     PG::Info::History history = info.history;
     project_pg_history(info.pgid, history, epoch, up, acting);
 
-    if (epoch < history.same_acting_since) {
+    if (epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << info.pgid << " acting changed in "
-	       << history.same_acting_since << " (msg from " << epoch << ")" << dendl;
+	       << history.same_interval_since << " (msg from " << epoch << ")" << dendl;
       return NULL;
     }
 
@@ -1280,9 +1280,9 @@ PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& cr
   } else {
     // already had it.  did the mapping change?
     pg = _lookup_lock_pg(info.pgid);
-    if (epoch < pg->info.history.same_acting_since) {
+    if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
-	       << pg->info.history.same_acting_since
+	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
       pg->unlock();
       return NULL;
@@ -1328,7 +1328,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
 
 
 /**
- * Fill in the passed history so you know same_acting_since, same_up_since,
+ * Fill in the passed history so you know same_interval_since, same_up_since,
  * and same_primary_since.
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
@@ -1350,12 +1350,12 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     oldmap->pg_to_up_acting_osds(pgid, up, acting);
 
     // acting set change?
-    if ((acting != currentacting || up != currentup) && e > h.same_acting_since) {
+    if ((acting != currentacting || up != currentup) && e > h.same_interval_since) {
       dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e 
 	       << " from " << acting << "/" << up
 	       << " -> " << currentacting << "/" << currentup
 	       << dendl;
-      h.same_acting_since = e;
+      h.same_interval_since = e;
     }
     // up set change?
     if (up != currentup && e > h.same_up_since) {
@@ -1371,15 +1371,15 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
       h.same_primary_since = e;
     }
 
-    if (h.same_acting_since >= e && h.same_up_since >= e && h.same_primary_since >= e)
+    if (h.same_interval_since >= e && h.same_up_since >= e && h.same_primary_since >= e)
       break;
   }
 
   // base case: these floors should be the creation epoch if we didn't
   // find any changes.
   if (e == h.epoch_created) {
-    if (!h.same_acting_since)
-      h.same_acting_since = e;
+    if (!h.same_interval_since)
+      h.same_interval_since = e;
     if (!h.same_up_since)
       h.same_up_since = e;
     if (!h.same_primary_since)
@@ -3843,7 +3843,7 @@ void OSD::kick_pg_split_queue()
 	 q++) {
       PG::Info::History history;
       history.epoch_created = history.same_up_since =
-          history.same_acting_since = history.same_primary_since =
+          history.same_interval_since = history.same_primary_since =
           osdmap->get_epoch();
       PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t, history);
       children[*q] = pg;
@@ -4066,7 +4066,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     creating_pgs[pgid].parent = parent;
     creating_pgs[pgid].split_bits = split_bits;
     creating_pgs[pgid].acting.swap(acting);
-    calc_priors_during(pgid, created, history.same_acting_since, 
+    calc_priors_during(pgid, created, history.same_interval_since, 
 		       creating_pgs[pgid].prior);
 
     // poll priors
@@ -4331,7 +4331,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
     dout(10) << " don't have pg " << m->pgid << dendl;
   } else {
     PG *pg = _lookup_lock_pg(m->pgid);
-    if (m->epoch < pg->info.history.same_acting_since) {
+    if (m->epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
       goto out;
@@ -4421,9 +4421,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       PG::Info::History history = it->second.history;
       project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
-      if (m->get_epoch() < history.same_acting_since) {
+      if (m->get_epoch() < history.same_interval_since) {
         dout(10) << " pg " << pgid << " dne, and pg has changed in "
-                 << history.same_acting_since << " (msg from " << m->get_epoch() << ")" << dendl;
+                 << history.same_interval_since << " (msg from " << m->get_epoch() << ")" << dendl;
         continue;
       }
 
@@ -4444,9 +4444,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
     }
 
     pg = _lookup_lock_pg(pgid);
-    if (m->get_epoch() < pg->info.history.same_acting_since) {
+    if (m->get_epoch() < pg->info.history.same_interval_since) {
       dout(10) << *pg << " handle_pg_query changed in "
-	       << pg->info.history.same_acting_since
+	       << pg->info.history.same_interval_since
 	       << " (msg from " << m->get_epoch() << ")" << dendl;
       pg->unlock();
       continue;
@@ -4511,7 +4511,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
-    if (pg->info.history.same_acting_since <= m->get_epoch()) {
+    if (pg->info.history.same_interval_since <= m->get_epoch()) {
       if (pg->deleting) {
 	dout(10) << *pg << " already removing." << dendl;
       } else {
@@ -4520,7 +4520,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
       }
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
-	       << pg->info.history.same_acting_since
+	       << pg->info.history.same_interval_since
 	       << " > " << m->get_epoch() << dendl;
     }
     pg->unlock();
@@ -5219,7 +5219,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
-  if (op->map_epoch < pg->info.history.same_acting_since) {
+  if (op->map_epoch < pg->info.history.same_interval_since) {
     dout(10) << "handle_sub_op pg changed " << pg->info.history
 	     << " after " << op->map_epoch 
 	     << ", dropping" << dendl;
