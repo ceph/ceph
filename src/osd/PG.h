@@ -1308,7 +1308,7 @@ protected:
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
 
-  epoch_t last_warm_restart;
+  epoch_t last_peering_reset;
 
   friend class OSD;
 
@@ -1514,7 +1514,7 @@ public:
     have_master_log(true),
     recovery_state(this),
     need_up_thru(false),
-    last_warm_restart(0),
+    last_peering_reset(0),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),
@@ -1594,9 +1594,11 @@ public:
   void share_pg_info();
   void share_pg_log(const eversion_t &oldver);
 
-  void warm_restart(const OSDMap *lastmap, const vector<int>& newup, const vector<int>& newacting);
-  void reset_last_warm_restart();
-		    
+  void start_peering_interval(const OSDMap *lastmap,
+			      const vector<int>& newup,
+			      const vector<int>& newacting);
+  void set_last_peering_reset();
+
   void fulfill_info(int from, const Query &query, 
 		    pair<int, Info> &notify_info);
   void fulfill_log(int from, const Query &query);

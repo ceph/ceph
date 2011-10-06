@@ -1720,7 +1720,7 @@ void PG::_activate_committed(epoch_t e)
 {
   osd->map_lock.get_read();
   lock();
-  if (e < last_warm_restart) {
+  if (e < last_peering_reset) {
     dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
   } else if (is_primary()) {
     peer_activated.insert(osd->whoami);
@@ -3532,23 +3532,24 @@ bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacti
 
 bool PG::old_peering_msg(const epoch_t &msg_epoch)
 {
-  return (last_warm_restart > msg_epoch);
+  return (last_peering_reset > msg_epoch);
 }
 
-void PG::reset_last_warm_restart()
-{
-  last_warm_restart = osd->osdmap->get_epoch();
+void PG::set_last_peering_reset() {
+  last_peering_reset = osd->osdmap->get_epoch();
 }
 
 /* Called before initializing peering during advance_map */
-void PG::warm_restart(const OSDMap *lastmap, const vector<int>& newup, const vector<int>& newacting)
+void PG::start_peering_interval(const OSDMap *lastmap,
+				const vector<int>& newup,
+				const vector<int>& newacting)
 {
   const OSDMap *osdmap = osd->osdmap;
 
   // -- there was a change! --
   kick();
 
-  reset_last_warm_restart();
+  set_last_peering_reset();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
@@ -3960,7 +3961,7 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
 
 void PG::RecoveryState::Initial::exit() {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->reset_last_warm_restart();
+  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -3997,8 +3998,9 @@ PG::RecoveryState::Reset::react(const AdvMap& advmap) {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
-    dout(10) << "up or acting affected, calling warm_restart again" << dendl;
-    pg->warm_restart(advmap.lastmap, advmap.newup, advmap.newacting);
+    dout(10) << "up or acting affected, calling start_peering_interval again"
+	     << dendl;
+    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting);
   }
   return discard_event();
 }
