@@ -45,6 +45,12 @@ class MOSDMap : public Message {
         (e == 0 || i->first > e)) e = i->first;
     return e;
   }
+  epoch_t get_oldest() {
+    return oldest_map;
+  }
+  epoch_t get_newest() {
+    return newest_map;
+  }
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }

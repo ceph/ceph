@@ -197,6 +197,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   list<LingerOp*> need_resend_linger;
   map<tid_t, Op*> need_resend;
 
+  bool skipped_map = false;
+
   if (m->get_last() <= osdmap->get_epoch()) {
     ldout(cct, 3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -214,7 +216,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	   e <= m->get_last();
 	   e++) {
  
-	if (m->incremental_maps.count(e)) {
+	if (osdmap->get_epoch() == e-1 &&
+	    m->incremental_maps.count(e)) {
 	  ldout(cct, 3) << "handle_osd_map decoding incremental epoch " << e << dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
 	  osdmap->apply_incremental(inc);
@@ -224,9 +227,15 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  osdmap->decode(m->maps[e]);
 	}
 	else {
-	  ldout(cct, 3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  maybe_request_map();
-	  break;
+	  if (m->get_first() > m->get_oldest() || e == m->get_first()) {
+	    ldout(cct, 3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
+	    maybe_request_map();
+	    break;
+	  }
+	  ldout(cct, 3) << "handle_osd_map missing epoch " << osdmap->get_epoch()+1
+			<< ", jumping to " << m->get_oldest() << dendl;
+	  e = m->get_oldest() - 1;
+	  continue;
 	}
 	
 	// check for changed linger mappings (_before_ regular ops)
@@ -235,6 +244,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p++) {
 	  LingerOp *op = p->second;
 	  int r = recalc_linger_op_target(op);
+	  if (skipped_map)
+	    r = RECALC_OP_TARGET_NEED_RESEND;
 	  switch (r) {
 	  case RECALC_OP_TARGET_NO_ACTION:
 	    // do nothing
@@ -255,6 +266,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     ++p) {
 	  Op *op = p->second;
 	  int r = recalc_op_target(op);
+	  if (skipped_map)
+	    r = RECALC_OP_TARGET_NEED_RESEND;
 	  switch (r) {
 	  case RECALC_OP_TARGET_NO_ACTION:
 	    // do nothing
