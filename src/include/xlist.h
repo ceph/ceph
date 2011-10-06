@@ -69,14 +69,19 @@ public:
     assert(_back == 0);
   }
 
-  int size() const { return _size; }
+  int size() const {
+    assert((bool)_front == (bool)_size);
+    return _size;
+  }
   bool empty() const { 
     assert((bool)_front == (bool)_size);
     return _front == 0; 
   }
 
   void clear() {
-    while (_front) remove(_front);
+    while (_front)
+      remove(_front);
+    assert((bool)_front == (bool)_size);
   }
 
   void push_front(item *i) {
@@ -122,6 +127,7 @@ public:
 
     i->_list = 0;
     i->_next = i->_prev = 0;
+    assert((bool)_front == (bool)_size);
   }
 
   T front() { return (T)_front->_item; }
