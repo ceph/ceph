@@ -1978,6 +1978,7 @@ bool OSD::ms_handle_reset(Connection *con)
   watch_lock.Unlock();
 #endif
 
+  session->put();
   return true;
 }
 
@@ -3009,14 +3010,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   Session *session = (Session *)m->get_connection()->get_priv();
-  if (session && !(session->caps.is_mon() || session->caps.is_osd())) {
+  bool is_mon_or_osd = false;
+  if (session) {
+    is_mon_or_osd = session->caps.is_mon() || session->caps.is_osd();
+    session->put();
+  }
+  if (!is_mon_or_osd) {
     //not enough perms!
     m->put();
-    session->put();
     return;
   }
-  if (session)
-    session->put();
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();

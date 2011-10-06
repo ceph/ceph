@@ -607,6 +607,7 @@ private:
       bool default_layout_exists;
       ::decode(default_layout_exists, bl);
       if (default_layout_exists) {
+        delete default_layout;
         default_layout = new default_file_layout;
         ::decode(*default_layout, bl);
       }
@@ -642,6 +643,7 @@ private:
       bool default_layout_exists;
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
+        delete default_layout;
         default_layout = new default_file_layout;
         ::decode(*default_layout, p);
       }

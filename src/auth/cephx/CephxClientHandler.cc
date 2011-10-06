@@ -81,6 +81,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     if (!authorizer)
       return -EINVAL;
     bl.claim_append(authorizer->bl);
+    delete authorizer;
 
     CephXServiceTicketRequest req;
     req.keys = need;
