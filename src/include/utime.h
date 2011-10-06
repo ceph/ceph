@@ -109,6 +109,59 @@ public:
     ts.tv_nsec = nsec();
     return ts;
   }
+
+  // output
+  ostream& gmtime(ostream& out) const {
+    out.setf(std::ios::right);
+    out.fill('0');
+    if (sec() < ((time_t)(60*60*24*365*10))) {
+      // raw seconds.  this looks like a relative time.
+      out << (long)sec() << "." << std::setw(6) << usec();
+    } else {
+      // localtime.  this looks like an absolute time.
+      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = sec();
+      gmtime_r(&tt, &bdt);
+      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+	  << '-' << std::setw(2) << (bdt.tm_mon+1)
+	  << '-' << std::setw(2) << bdt.tm_mday
+	  << ' '
+	  << std::setw(2) << bdt.tm_hour
+	  << ':' << std::setw(2) << bdt.tm_min
+	  << ':' << std::setw(2) << bdt.tm_sec;
+      out << "." << std::setw(6) << usec();
+      out << "Z";
+    }
+    out.unsetf(std::ios::right);
+    return out;
+  }
+
+  ostream& localtime(ostream& out) const {
+    out.setf(std::ios::right);
+    out.fill('0');
+    if (sec() < ((time_t)(60*60*24*365*10))) {
+      // raw seconds.  this looks like a relative time.
+      out << (long)sec() << "." << std::setw(6) << usec();
+    } else {
+      // localtime.  this looks like an absolute time.
+      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = sec();
+      localtime_r(&tt, &bdt);
+      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+	  << '-' << std::setw(2) << (bdt.tm_mon+1)
+	  << '-' << std::setw(2) << bdt.tm_mday
+	  << ' '
+	  << std::setw(2) << bdt.tm_hour
+	  << ':' << std::setw(2) << bdt.tm_min
+	  << ':' << std::setw(2) << bdt.tm_sec;
+      out << "." << std::setw(6) << usec();
+      //out << '_' << bdt.tm_zone;
+    }
+    out.unsetf(std::ios::right);
+    return out;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 
@@ -188,33 +241,13 @@ inline bool operator!=(const utime_t& a, const utime_t& b)
   return a.sec() != b.sec() || a.nsec() != b.nsec();
 }
 
+
+// output
+
 // ostream
 inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 {
-  out.setf(std::ios::right);
-  out.fill('0');
-  if (t.sec() < ((time_t)(60*60*24*365*10))) {
-    // raw seconds.  this looks like a relative time.
-    out << (long)t.sec();
-  } else {
-    // localtime.  this looks like an absolute time.
-    //  aim for http://en.wikipedia.org/wiki/ISO_8601
-    struct tm bdt;
-    time_t tt = t.sec();
-    localtime_r(&tt, &bdt);
-    out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-	<< '-' << std::setw(2) << (bdt.tm_mon+1)
-	<< '-' << std::setw(2) << bdt.tm_mday
-	<< ' '
-	<< std::setw(2) << bdt.tm_hour
-	<< ':' << std::setw(2) << bdt.tm_min
-	<< ':' << std::setw(2) << bdt.tm_sec;
-    //	<< '_' << bdt.tm_zone;
-  }
-  out << ".";
-  out << std::setw(6) << t.usec();
-  out.unsetf(std::ios::right);
-  return out;
+  return t.localtime(out);
 }
 
 #endif
