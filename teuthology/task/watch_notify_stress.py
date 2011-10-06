@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import proc_thrasher
 
 from ..orchestra import run
 
@@ -26,7 +27,7 @@ def task(ctx, config):
     log.info('Beginning test_stress_watch...')
     assert isinstance(config, dict), \
         "please list clients to run on"
-    testsnaps = {}
+    testwatch = {}
 
     (mon,) = ctx.cluster.only('mon.0').remotes.iterkeys()
     remotes = []
@@ -38,48 +39,28 @@ def task(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         remotes.append(remote)
 
-        remote.run(
-            args=[
-                'cp',
-                '/tmp/cephtest/ceph.conf',
-                '/tmp/cephtest/data/ceph.conf',
-                ],
-            logger=log.getChild('test_stress_watch.{id}'.format(id=id_)),
-            wait=True,
-            )
-
-        args =[ '/bin/sh', '-c',
-                " ".join([
-                    'cd', '/tmp/cephtest/data;',
-                    'export CEPH_CLIENT_ID={id_}; export CEPH_CONF=ceph.conf; export CEPH_ARGS="{flags}"; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/test_stress_watch {flags}'.format(
-                        id_=id_,
-                        flags=config.get('flags', ''),
-                        )
-                    ])
-                ]
+        args =['CEPH_CLIENT_ID={id_}'.format(id_=id_),
+               'CEPH_CONF=/tmp/cephtest/ceph.conf',
+               'CEPH_ARGS="{flags}"'.format(flags=config.get('flags', '')),
+               'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
+               '/tmp/cephtest/daemon-helper', 'kill',
+               '/tmp/cephtest/binary/usr/local/bin/multi_stress_watch foo foo'
+               ]
 
         log.info("args are %s" % (args,))
 
-        proc = remote.run(
-            args=args,
-            logger=log.getChild('testsnaps.{id}'.format(id=id_)),
+        proc = proc_thrasher.ProcThrasher({}, remote,
+            args=[run.Raw(i) for i in args],
+            logger=log.getChild('testwatch.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False
             )
-        testsnaps[id_] = proc
+        proc.start()
+        testwatch[id_] = proc
 
     try:
         yield
     finally:
-        for i in remotes:
-            i.run(
-                args=[
-                    'rm',
-                    '/tmp/cephtest/data/ceph.conf'
-                    ],
-                logger=log.getChild('testsnaps.{id}'.format(id=id_)),
-                wait=True,
-                )
-
         log.info('joining watch_notify_stress')
-        run.wait(testsnaps.itervalues())
+        for i in testwatch.itervalues():
+            i.join()
