@@ -1190,7 +1190,8 @@ int main(int argc, char **argv)
 	
 	formatter->open_object_section("log_entry");
 	formatter->dump_string("bucket", entry.bucket.c_str());
-	formatter->dump_stream("time") << entry.time;
+	entry.time.gmtime(formatter->dump_stream("time"));      // UTC
+	entry.time.localtime(formatter->dump_stream("time_local"));
 	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
 	if (entry.object_owner.length())
 	  formatter->dump_string("object_owner", entry.object_owner.c_str());
