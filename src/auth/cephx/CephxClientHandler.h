@@ -26,7 +26,6 @@ class CephxClientHandler : public AuthClientHandler {
   /* envelope protocol parameters */
   uint64_t server_challenge;
   
-  CephXAuthorizer *authorizer;
   CephXTicketManager tickets;
   
   RotatingKeyRing *rotating_secrets;
@@ -37,7 +36,6 @@ public:
     : AuthClientHandler(cct_),
       starting(false),
       server_challenge(0),
-      authorizer(0),
       tickets(cct_),
       rotating_secrets(rsecrets),
       keyring(rsecrets->get_keyring())
@@ -46,8 +44,6 @@ public:
   }
 
   void reset() {
-    delete authorizer;
-    authorizer = 0;
     starting = true;
     server_challenge = 0;
   }
