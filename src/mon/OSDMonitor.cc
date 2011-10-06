@@ -1113,7 +1113,8 @@ void OSDMonitor::tick()
       mon->pgmon()->pg_map.creating_pgs.empty()) {
     epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
-    if (floor < paxos->get_version() - 10) {
+    unsigned min = 100;
+    if (floor + min < paxos->get_version()) {
       epoch_t of = paxos->get_first_committed();
       paxos->trim_to(floor);
       while (of < floor) {
