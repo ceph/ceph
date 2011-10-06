@@ -262,7 +262,10 @@ int main(int argc, const char **argv)
     close(0);
     close(1);
     close(2);
-    chdir("/");
+    int r = chdir("/");
+    if (r < 0) {
+      dout(0) << "weird, i couldn't chdir to /" << dendl;
+    }
   }
   
   common_init_finish(g_ceph_context);
