@@ -1079,97 +1079,6 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
   return true;
 }
 
-/* Mark an object as lost
- */
-void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
-			  const hobject_t &lost_soid)
-{
-  // Wake anyone waiting for this object. Now that it's been marked as lost,
-  // we will just return an error code.
-  map<hobject_t, list<class Message*> >::iterator wmo =
-    waiting_for_missing_object.find(lost_soid);
-  if (wmo != waiting_for_missing_object.end()) {
-    osd->requeue_ops(this, wmo->second);
-  }
-
-  // Tell the object store that this object is lost.
-  bufferlist b1;
-  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
-
-  object_locator_t oloc;
-  oloc.clear();
-  oloc.pool = info.pgid.pool();
-  object_info_t oi(lost_soid, oloc);
-
-  if (r >= 0) {
-    // Some version of this lost object exists in our filestore.
-    // So, we can fetch its attributes and preserve most of them.
-    oi = object_info_t(b1);
-  }
-  else {
-    // The object doesn't exist in the filestore yet. Make sure that
-    // we create it there.
-    t.touch(coll, lost_soid);
-  }
-
-  oi.lost = true;
-  oi.version = info.last_update;
-  bufferlist b2;
-  oi.encode(b2);
-  t.setattr(coll, lost_soid, OI_ATTR, b2);
-}
-
-/* Mark all unfound objects as lost.
- */
-void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
-{
-  dout(3) << __func__ << dendl;
-
-  dout(30) << __func__  << ": log before:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  utime_t mtime = ceph_clock_now(g_ceph_context);
-  eversion_t old_last_update = info.last_update;
-  info.last_update.epoch = osd->osdmap->get_epoch();
-  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
-  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
-  while (m != mend) {
-    const hobject_t &soid(m->first);
-    if (missing_loc.find(soid) != missing_loc.end()) {
-      // We only care about unfound objects
-      ++m;
-      continue;
-    }
-
-    // Add log entry
-    info.last_update.version++;
-    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
-		 m->second.need, osd_reqid_t(), mtime);
-    log.add(e);
-
-    // Object store stuff
-    mark_obj_as_lost(t, soid);
-
-    // Remove from missing set
-    missing.got(m++);
-  }
-
-  dout(30) << __func__ << ": log after:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  if (missing.num_missing() == 0) {
-    // advance last_complete since nothing else is missing!
-    info.last_complete = info.last_update;
-    write_info(t);
-  }
-
-  // Send out the PG log to all replicas
-  // So that they know what is lost
-  share_pg_log(old_last_update);
-}
-
 void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
 {
   if (1) {
@@ -3447,6 +3356,8 @@ void PG::share_pg_log(const eversion_t &oldver)
 	case Log::Entry::LOST: {
 	  PG::Missing& pmissing(peer_missing[peer]);
 	  pmissing.add(entry.soid, entry.version, eversion_t());
+	  dout(20) << " peer osd." << peer << " now missing " << entry.soid
+		   << " v" << entry.version << " (lost)" << dendl;
 	  break;
         }
 	default: {
@@ -3462,12 +3373,10 @@ void PG::share_pg_log(const eversion_t &oldver)
     PG::Info& pinfo(peer_info[peer]);
     pinfo.last_update = log.head;
     // shouldn't move pinfo.log.tail
-    pinfo.last_update = log.head;
     // no change in pinfo.last_complete
 
     m->missing = missing;
-    osd->cluster_messenger->send_message(m, osd->osdmap->
-					 get_cluster_inst(peer));
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
   }
 }
 
@@ -4194,8 +4103,8 @@ PG::RecoveryState::Active::react(const ActMap&) {
       pg->all_unfound_are_lost(pg->osd->osdmap)) {
     if (g_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, automatically marking lost\n";
-      pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());
+			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
+      //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }

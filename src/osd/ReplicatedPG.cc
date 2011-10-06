@@ -4441,6 +4441,124 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
 }
 
 
+
+
+/* Mark an object as lost
+ */
+ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
+					      const hobject_t &oid, eversion_t version,
+					      utime_t mtime)
+{
+  // Wake anyone waiting for this object. Now that it's been marked as lost,
+  // we will just return an error code.
+  map<hobject_t, list<class Message*> >::iterator wmo =
+    waiting_for_missing_object.find(oid);
+  if (wmo != waiting_for_missing_object.end()) {
+    osd->requeue_ops(this, wmo->second);
+  }
+
+  // Add log entry
+  info.last_update.version++;
+  Log::Entry e(Log::Entry::LOST, oid, info.last_update,
+	       version, osd_reqid_t(), mtime);
+  log.add(e);
+  
+  object_locator_t oloc;
+  oloc.pool = info.pgid.pool();
+  oloc.key = oid.get_key();
+  ObjectContext *obc = get_object_context(oid, oloc, true);
+
+  obc->ondisk_write_lock();
+
+  obc->obs.oi.lost = true;
+  obc->obs.oi.version = info.last_update;
+  obc->obs.oi.prior_version = version;
+
+  bufferlist b2;
+  obc->obs.oi.encode(b2);
+  t->setattr(coll, oid, OI_ATTR, b2);
+
+  return obc;
+}
+
+struct C_PG_MarkUnfoundLost : public Context {
+  ReplicatedPG *pg;
+  list<ReplicatedPG::ObjectContext*> obcs;
+  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {
+    pg->get();
+  }
+  void finish(int r) {
+    pg->_finish_mark_all_unfound_lost(obcs);
+  }
+};
+
+/* Mark all unfound objects as lost.
+ */
+void ReplicatedPG::mark_all_unfound_lost()
+{
+  dout(3) << __func__ << dendl;
+
+  dout(30) << __func__ << ": log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
+
+  utime_t mtime = ceph_clock_now(g_ceph_context);
+  eversion_t old_last_update = info.last_update;
+  info.last_update.epoch = osd->osdmap->get_epoch();
+  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
+  while (m != mend) {
+    const hobject_t &soid(m->first);
+    if (missing_loc.find(soid) != missing_loc.end()) {
+      // We only care about unfound objects
+      ++m;
+      continue;
+    }
+
+    ObjectContext *obc = mark_object_lost(t, soid, m->second.need, mtime);
+    c->obcs.push_back(obc);
+
+    // Remove from (my) missing set
+    missing.got(m++);
+  }
+
+  dout(30) << __func__ << ": log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  if (missing.num_missing() == 0) {
+    // advance last_complete since nothing else is missing!
+    info.last_complete = info.last_update;
+    write_info(*t);
+  }
+
+  osd->store->queue_transaction(&osr, t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
+	      
+  // Send out the PG log to all replicas
+  // So that they know what is lost
+  share_pg_log(old_last_update);
+
+  // queue ourselves so that we push the (now-lost) object_infos to replicas.
+  osd->queue_for_recovery(this);
+}
+
+void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
+{
+  dout(10) << "_finish_mark_all_unfound_lost" << dendl;
+  lock();
+  while (!obcs.empty()) {
+    ObjectContext *obc = obcs.front();
+    put_object_context(obc);
+    obcs.pop_front();
+  }
+  unlock();
+  put();
+}
+
+
 /*
  * pg status change notification
  */

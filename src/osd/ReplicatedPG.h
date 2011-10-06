@@ -659,6 +659,14 @@ protected:
 	obc2->ondisk_write_unlock();
     }
   };
+  struct C_OSD_OndiskWriteUnlockList : public Context {
+    list<ObjectContext*> *pls;
+    C_OSD_OndiskWriteUnlockList(list<ObjectContext*> *l) : pls(l) {}
+    void finish(int r) {
+      for (list<ObjectContext*>::iterator p = pls->begin(); p != pls->end(); ++p)
+	(*p)->ondisk_write_unlock();
+    }
+  };
   struct C_OSD_AppliedPushedObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
@@ -804,6 +812,12 @@ public:
 
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, Message *op);
+
+  void mark_all_unfound_lost();
+  ObjectContext *mark_object_lost(ObjectStore::Transaction *t,
+				  const hobject_t& oid, eversion_t version,
+				  utime_t mtime);
+  void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
 
   void on_osd_failure(int o);
   void on_acker_change();

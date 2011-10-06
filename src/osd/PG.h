@@ -375,11 +375,11 @@ public:
       uint64_t offset;   // [soft state] my offset on disk
       
       Entry() : op(0), invalid_hash(false) {}
-      Entry(int _op, const hobject_t& _soid,
+      Entry(int _op, const hobject_t& _soid, 
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
         op(_op), soid(_soid), version(v),
-	prior_version(pv), 
+	prior_version(pv),
 	reqid(rid), mtime(mt), invalid_hash(false) {}
       
       bool is_delete() const { return op == DELETE; }
@@ -1372,9 +1372,7 @@ public:
   bool adjust_need_up_thru(const OSDMap *osdmap);
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
-  void mark_obj_as_lost(ObjectStore::Transaction& t,
-			const hobject_t &lost_soid);
-  void mark_all_unfound_as_lost(ObjectStore::Transaction& t);
+  virtual void mark_all_unfound_lost() = 0;
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
