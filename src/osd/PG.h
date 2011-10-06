@@ -185,7 +185,7 @@ public:
       epoch_t last_epoch_split;    // as parent
 
       epoch_t same_up_since;       // same acting set since
-      epoch_t same_acting_since;   // same acting set since
+      epoch_t same_acting_since;   // same acting AND up set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
 
       eversion_t last_scrub;

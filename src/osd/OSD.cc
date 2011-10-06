@@ -1350,14 +1350,16 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     oldmap->pg_to_up_acting_osds(pgid, up, acting);
 
     // acting set change?
-    if (acting != currentacting && e > h.same_acting_since) {
-      dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << acting << " -> " << currentacting << dendl;
+    if ((acting != currentacting || up != currentup) && e > h.same_acting_since) {
+      dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e 
+	       << " from " << acting << "/" << up
+	       << " -> " << currentacting << "/" << currentup
+	       << dendl;
       h.same_acting_since = e;
     }
     // up set change?
     if (up != currentup && e > h.same_up_since) {
-      dout(15) << "project_pg_history " << pgid << " changed in " << e 
+      dout(15) << "project_pg_history " << pgid << " up changed in " << e 
                 << " from " << up << " -> " << currentup << dendl;
       h.same_up_since = e;
     }
