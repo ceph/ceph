@@ -128,6 +128,7 @@ MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
 # default differs from what's needed for rpm
 %{configure} --prefix=/usr --sbindir=/sbin \
 --localstatedir=/var --sysconfdir=/etc \
+--docdir=%{_docdir}/ceph \
 --without-hadoop $MY_CONF_OPT \
 %{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
 
@@ -139,8 +140,6 @@ make install DESTDIR=$RPM_BUILD_ROOT
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/radosgw
-chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
@@ -168,7 +167,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%doc README COPYING
+%doc README COPYING src/sample.ceph.conf src/sample.fetch_config
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
@@ -198,8 +197,6 @@ fi
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
-%{_docdir}/ceph/sample.ceph.conf
-%{_docdir}/ceph/sample.fetch_config
 %{_sysconfdir}/bash_completion.d/ceph
 %{_sysconfdir}/bash_completion.d/rados
 %{_sysconfdir}/bash_completion.d/radosgw-admin
