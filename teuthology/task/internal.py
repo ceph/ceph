@@ -89,7 +89,7 @@ def lock_machines(ctx, config):
     try:
         yield
     finally:
-        if not ctx.keep_locked_on_error or ctx.summary.get('success', False):
+        if ctx.summary.get('success', False):
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
                 lock.unlock(ctx, machine, ctx.owner)

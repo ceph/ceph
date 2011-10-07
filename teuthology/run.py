@@ -79,12 +79,6 @@ def parse_args():
         default=False,
         help='block until locking machines succeeds (use with --lock)',
         )
-    parser.add_argument(
-        '--keep-locked-on-error',
-        action='store_true',
-        default=False,
-        help='unlock machines only if the test succeeds (use with --lock)',
-        )
 
     args = parser.parse_args()
     return args
@@ -109,9 +103,6 @@ def main():
     if ctx.block:
         assert ctx.lock, \
             'the --block option is only supported with the --lock option'
-    if ctx.keep_locked_on_error:
-        assert ctx.lock, \
-            'the --keep_locked_on_error option is only supported with the --lock option'
 
     from teuthology.misc import read_config
     read_config(ctx)
