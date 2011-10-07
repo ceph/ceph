@@ -949,6 +949,7 @@ int main(int argc, const char **argv)
       if (i == args.end())
 	usage();
       float f = atof(*i);
+      i = args.erase(i);
       int w = (int)(f * 0x10000);
       if (w < 0)
 	w = 0;
