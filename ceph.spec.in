@@ -21,10 +21,16 @@ Group:         System Environment/Base
 URL:           http://ceph.newdream.net/
 
 Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
-BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel, 
+BuildRequires: gcc-c++,
+BuildRequires: fuse-devel, libtool, boost-devel, 
+%if %{defined suse_version}
+BuildRequires: mozilla-nss-devel, libatomic-ops-devel, keyutils-devel, libtool,
+%else
+BuildRequires: nss-devel, libatomic_ops-devel, keyutils-libs-devel,
+BuildRequires: libtool-ltdl-devel, 
+%endif
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
-BuildRequires: nss-devel, libatomic_ops-devel
-BuildRequires: pkgconfig, python, keyutils-libs-devel
+BuildRequires: pkgconfig, python
 %if %{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
@@ -32,8 +38,14 @@ BuildRequires: pkgconfig, python, keyutils-libs-devel
 BuildRequires: google-perftools-devel%{?_isa}
 %endif
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Requires(post): chkconfig, binutils, libedit
+%if %{defined suse_version}
+Requires(post): aaa_base
+Requires(preun): aaa_base
+%else
+Requires(post): chkconfig
 Requires(preun): chkconfig
+%endif
+Requires(post): binutils, libedit
 Requires(preun): initscripts
 
 %description
