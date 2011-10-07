@@ -5005,6 +5005,13 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 
 void OSD::handle_op(MOSDOp *op)
 {
+  if (!op->get_connection()->is_connected()) {
+    dout(10) << "handle_op sender " << op->get_connection()->get_peer_addr()
+	     << " not connected, dropping " << *op << dendl;
+    op->put();
+    return;
+  }
+
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch()))
     return;
@@ -5322,15 +5329,21 @@ void OSD::dequeue_op(PG *pg)
   }
   osd_lock.Unlock();
 
-  // do it
-  if (op->get_type() == CEPH_MSG_OSD_OP)
-    pg->do_op((MOSDOp*)op); // do it now
-  else if (op->get_type() == MSG_OSD_SUBOP)
-    pg->do_sub_op((MOSDSubOp*)op);
-  else if (op->get_type() == MSG_OSD_SUBOPREPLY)
-    pg->do_sub_op_reply((MOSDSubOpReply*)op);
-  else 
-    assert(0);
+  if (!op->get_connection()->is_connected()) {
+    dout(10) << "dequeue_op sender " << op->get_connection()->get_peer_addr()
+	     << " not connected, dropping " << *op << dendl;
+    op->put();
+  } else {
+    // do it
+    if (op->get_type() == CEPH_MSG_OSD_OP)
+      pg->do_op((MOSDOp*)op); // do it now
+    else if (op->get_type() == MSG_OSD_SUBOP)
+      pg->do_sub_op((MOSDSubOp*)op);
+    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
+      pg->do_sub_op_reply((MOSDSubOpReply*)op);
+    else 
+      assert(0);
+  }
 
   // unlock and put pg
   pg->unlock();

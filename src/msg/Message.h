@@ -222,6 +222,10 @@ public:
       pipe->put();
     pipe = p->get();
   }
+  bool is_connected() {
+    Mutex::Locker l(lock);
+    return pipe != NULL;
+  }
 
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
