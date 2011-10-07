@@ -56,7 +56,7 @@ string render_log_object_name(const string& format,
 	break;
 
       case 'i':
-	sprintf(buf, "%lld", bucket_id);
+	sprintf(buf, "%lld", (long long)bucket_id);
 	break;
       case 'n':
 	o += bucket_name;
