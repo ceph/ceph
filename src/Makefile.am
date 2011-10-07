@@ -724,7 +724,9 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
-docdir = ${datadir}/doc/ceph
+# NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
+docdir ?= ${datadir}/doc/ceph
+
 doc_DATA = $(srcdir)/sample.ceph.conf
 doc_SCRIPTS = sample.fetch_config
 
