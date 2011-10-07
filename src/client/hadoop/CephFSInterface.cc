@@ -94,13 +94,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   CephContext *cct = ceph_get_mount_context(cmount);
   ldout(cct, 3) << "CephFSInterface: mounting filesystem...:" << dendl;
 
+  ret = ceph_mount(cmount, mount_root.c_str());
+  if (ret)
+    return false;
+
   ceph_localize_reads(cmount, true);
   ceph_set_default_file_stripe_unit(cmount, block_size);
   ceph_set_default_object_size(cmount, block_size);
 
-  ret = ceph_mount(cmount, mount_root.c_str());
-  if (ret)
-    return false;
   if (set_local_writes) {
     ceph_set_default_preferred_pg(cmount, ceph_get_local_osd(cmount));
   }
