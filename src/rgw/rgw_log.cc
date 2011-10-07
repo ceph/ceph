@@ -15,6 +15,65 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
     str = p;
 }
 
+string render_log_object_name(const string& format,
+			      struct tm *dt, int64_t bucket_id, const string& bucket_name)
+{
+  string o;
+  for (unsigned i=0; i<format.size(); i++) {
+    if (format[i] == '%' && i+1 < format.size()) {
+      i++;
+      char buf[32];
+      switch (format[i]) {
+      case '%':
+	strcpy(buf, "%");
+	break;
+      case 'Y':
+	sprintf(buf, "%.4d", dt->tm_year + 1900);
+	break;
+      case 'y':
+	sprintf(buf, "%.2d", dt->tm_year % 100);
+	break;
+      case 'm':
+	sprintf(buf, "%.2d", dt->tm_mon + 1);
+	break;
+      case 'd':
+	sprintf(buf, "%.2d", dt->tm_mday);
+	break;
+      case 'H':
+	sprintf(buf, "%.2d", dt->tm_hour);
+	break;
+      case 'I':
+	sprintf(buf, "%.2d", (dt->tm_hour % 12) + 1);
+	break;
+      case 'k':
+	sprintf(buf, "%d", dt->tm_hour);
+	break;
+      case 'l':
+	sprintf(buf, "%d", (dt->tm_hour % 12) + 1);
+	break;
+      case 'M':
+	sprintf(buf, "%.2d", dt->tm_min);
+	break;
+
+      case 'i':
+	sprintf(buf, "%lld", bucket_id);
+	break;
+      case 'n':
+	o += bucket_name;
+	continue;
+      default:
+	// unknown code
+	sprintf(buf, "%%%c", format[i]);
+	break;
+      }
+      o += buf;
+      continue;
+    }
+    o += format[i];
+  }
+  return o;
+}
+
 int rgw_log_op(struct req_state *s)
 {
   struct rgw_log_entry entry;
@@ -78,12 +137,14 @@ int rgw_log_op(struct req_state *s)
 
   struct tm bdt;
   time_t t = entry.time.sec();
-  gmtime_r(&t, &bdt);
+  if (g_conf->rgw_log_object_name_utc)
+    gmtime_r(&t, &bdt);
+  else
+    localtime_r(&t, &bdt);
   
-  char buf[entry.bucket.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
-	  (long long)s->bucket.bucket_id, entry.bucket.c_str());
-  string oid(buf);
+  string oid = render_log_object_name(g_conf->rgw_log_object_name, &bdt,
+				      s->bucket.bucket_id, entry.bucket.c_str());
+
   rgw_obj obj(log_bucket, oid);
 
   int ret = rgwstore->append_async(obj, bl.length(), bl);
@@ -114,7 +175,10 @@ int rgw_log_intent(struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
 
   struct tm bdt;
   time_t t = entry.op_time.sec();
-  gmtime_r(&t, &bdt);
+  if (g_conf->rgw_intent_log_object_name_utc)
+    gmtime_r(&t, &bdt);
+  else
+    localtime_r(&t, &bdt);
 
   char buf[obj.bucket.name.size() + 16];
   sprintf(buf, "%.4d-%.2d-%.2d-%lld-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,

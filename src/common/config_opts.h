@@ -337,6 +337,10 @@ OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0)
 OPTION(rgw_pools_preallocate_max, OPT_INT, 100)
 OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70)
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
+OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
+OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
+OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
+OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
 OPTION(rbd_writeback_window, OPT_INT, 0 /*8 << 20*/) // rbd writeback window size, bytes
 
 // This will be set to true when it is safe to start threads.
