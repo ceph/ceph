@@ -4,6 +4,7 @@ import os
 import logging
 import configobj
 import getpass
+import paramiko
 import socket
 import time
 import urllib2
@@ -325,6 +326,7 @@ def reconnect(ctx, timeout):
     while True:
         for remote in list(need_reconnect):
             try:
+                log.info('trying to connect to %s', remote.name)
                 from .orchestra import connection
                 remote.ssh = connection.connect(
                     user_at_host=remote.name,
@@ -340,10 +342,12 @@ def reconnect(ctx, timeout):
                         raise
                     else:
                         if time.time() - starttime > timeout:
-                            log.exception('timed out waiting for %s', remote.name)
                             raise
                 else:
                     log.exception('weird socket error without error code')
+                    raise
+            except paramiko.SSHException:
+                if time.time() - starttime > timeout:
                     raise
             else:
                 need_reconnect.remove(remote)
