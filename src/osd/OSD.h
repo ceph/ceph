@@ -114,6 +114,8 @@ class Watch;
 class Notification;
 class ReplicatedPG;
 
+class AuthAuthorizeHandlerRegistry;
+
 extern const coll_t meta_coll;
 
 class OSD : public Dispatcher {
@@ -121,6 +123,8 @@ class OSD : public Dispatcher {
 protected:
   Mutex osd_lock;			// global lock
   SafeTimer timer;    // safe timer (osd_lock)
+
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;

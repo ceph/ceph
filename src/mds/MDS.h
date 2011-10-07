@@ -137,10 +137,14 @@ class AnchorClient;
 class MDSTableServer;
 class MDSTableClient;
 
+class AuthAuthorizeHandlerRegistry;
+
 class MDS : public Dispatcher {
  public:
   Mutex        mds_lock;
   SafeTimer    timer;
+
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   string name;
   int whoami;

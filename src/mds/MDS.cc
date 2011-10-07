@@ -94,6 +94,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(m->cct, mds_lock),
+  authorize_handler_registry(new AuthAuthorizeHandlerRegistry(m->cct)),
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
@@ -154,6 +155,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
 MDS::~MDS() {
   Mutex::Locker lock(mds_lock);
+
+  delete authorize_handler_registry;
 
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
@@ -2027,7 +2030,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   Mutex::Locker l(mds_lock);
 
   AuthAuthorizeHandler *authorize_handler =
-      get_authorize_handler(protocol, g_ceph_context);
+    authorize_handler_registry->get_handler(protocol);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;

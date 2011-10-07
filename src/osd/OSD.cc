@@ -514,6 +514,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
   timer(external_messenger->cct, osd_lock),
+  authorize_handler_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
@@ -575,6 +576,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 
 OSD::~OSD()
 {
+  delete authorize_handler_registry;
   delete map_in_progress_cond;
   delete class_handler;
   g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
@@ -2596,8 +2598,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  AuthAuthorizeHandler *authorize_handler =
-      get_authorize_handler(protocol, g_ceph_context);
+  AuthAuthorizeHandler *authorize_handler = authorize_handler_registry->get_handler(protocol);
   if (!authorize_handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     isvalid = false;
