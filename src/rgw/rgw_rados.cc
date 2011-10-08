@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include "common/errno.h"
+
 #include "rgw_access.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -21,6 +23,8 @@ using namespace librados;
 #include <list>
 #include <map>
 #include "auth/Crypto.h" // get_random_bytes()
+
+#include "rgw_log.h"
 
 #define DOUT_SUBSYS rgw
 
@@ -2118,3 +2122,164 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
   return 0;
 }
 
+
+class IntentLogNameFilter : public RGWAccessListFilter
+{
+  string prefix;
+  bool filter_exact_date;
+public:
+  IntentLogNameFilter(const char *date, struct tm *tm) {
+    prefix = date;
+    filter_exact_date = !(tm->tm_hour || tm->tm_min || tm->tm_sec); /* if time was specified and is not 00:00:00
+                                                                       we should look at objects from that date */
+  }
+  bool filter(string& name, string& key) {
+    if (filter_exact_date)
+      return name.compare(prefix) < 0;
+    else
+      return name.compare(0, prefix.size(), prefix) <= 0;
+  }
+};
+
+enum IntentFlags { // bitmask
+  I_DEL_OBJ = 1,
+  I_DEL_POOL = 2,
+};
+
+
+int RGWRados::remove_temp_objects(string date, string time)
+{
+  struct tm tm;
+  
+  string format = "%Y-%m-%d";
+  string datetime = date;
+  if (datetime.size() != 10) {
+    cerr << "bad date format" << std::endl;
+    return -EINVAL;
+  }
+
+  if (!time.empty()) {
+    if (time.size() != 5 && time.size() != 8) {
+      cerr << "bad time format" << std::endl;
+      return -EINVAL;
+    }
+    format.append(" %H:%M:%S");
+    datetime.append(time.c_str());
+  }
+  const char *s = strptime(datetime.c_str(), format.c_str(), &tm);
+  if (s && *s) {
+    cerr << "failed to parse date/time" << std::endl;
+    return -EINVAL;
+  }
+  time_t epoch = mktime(&tm);
+
+  rgw_bucket bucket(RGW_INTENT_LOG_POOL_NAME);
+  string prefix, delim, marker;
+  vector<RGWObjEnt> objs;
+  map<string, bool> common_prefixes;
+  string ns;
+  string id;
+  
+  int max = 1000;
+  bool is_truncated;
+  IntentLogNameFilter filter(date.c_str(), &tm);
+  do {
+    int r = store->list_objects(id, bucket, max, prefix, delim, marker,
+				objs, common_prefixes, false, ns,
+				&is_truncated, &filter);
+    if (r == -ENOENT)
+      break;
+    if (r < 0) {
+      cerr << "failed to list objects" << std::endl;
+    }
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
+    }
+  } while (is_truncated);
+
+  return 0;
+}
+
+int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
+				 time_t epoch, int flags, bool purge)
+{
+  cout << "processing intent log " << oid << std::endl;
+  uint64_t size;
+  rgw_obj obj(bucket, oid);
+  int r = obj_stat(NULL, obj, &size, NULL);
+  if (r < 0) {
+    cerr << "error while doing stat on " << bucket << ":" << oid
+	 << " " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  bufferlist bl;
+  r = read(NULL, obj, 0, size, bl);
+  if (r < 0) {
+    cerr << "error while reading from " <<  bucket << ":" << oid
+	 << " " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  bufferlist::iterator iter = bl.begin();
+  string id;
+  bool complete = true;
+  try {
+    while (!iter.end()) {
+      struct rgw_intent_log_entry entry;
+      try {
+        ::decode(entry, iter);
+      } catch (buffer::error& err) {
+        dout(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
+        return -EIO;
+      }
+      if (entry.op_time.sec() > epoch) {
+        cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
+        cerr << "skipping intent log" << std::endl; // no use to continue
+        complete = false;
+        break;
+      }
+      switch (entry.intent) {
+      case DEL_OBJ:
+        if (!flags & I_DEL_OBJ) {
+          complete = false;
+          break;
+        }
+        r = rgwstore->delete_obj(NULL, id, entry.obj);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove obj: " << entry.obj << std::endl;
+          complete = false;
+        }
+        break;
+      case DEL_POOL:
+        if (!flags & I_DEL_POOL) {
+          complete = false;
+          break;
+        }
+        r = delete_bucket(id, entry.obj.bucket, true);
+        if (r < 0 && r != -ENOENT) {
+          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
+          complete = false;
+        }
+        break;
+      default:
+        complete = false;
+      }
+    }
+  } catch (buffer::error& err) {
+    cerr << "failed to decode intent log entry in " << bucket << ":" << oid << std::endl;
+    complete = false;
+  }
+
+  if (complete) {
+    rgw_obj obj(bucket, oid);
+    cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
+    if (purge) {
+      r = delete_obj(NULL, id, obj, true);
+      if (r < 0)
+        cerr << "failed to remove obj: " << obj << std::endl;
+    }
+  }
+
+  return 0;
+}

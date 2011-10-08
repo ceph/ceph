@@ -305,6 +305,14 @@ public:
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
     return cls_obj_complete_del(bucket, tag, epoch, oid);
   }
+
+  /// clean up/process any temporary objects older than given date[/time]
+  int remove_temp_objects(string date, string time);
+
+ private:
+  int process_intent_log(rgw_bucket& bucket, string& oid,
+			 time_t epoch, int flags, bool purge);
+
 };
 
 #endif

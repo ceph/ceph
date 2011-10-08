@@ -267,6 +267,12 @@ public:
   /* The bucket here can either be the bucket name identifier, or the ID
    * in period format: ".123" */
   virtual int get_bucket_info(string& bucket, RGWBucketInfo& info) = 0;
+
+
+  virtual int remove_temp_objects(string date, string time) {
+    return 0;
+  }
+
 };
 
 class RGWStoreManager {
