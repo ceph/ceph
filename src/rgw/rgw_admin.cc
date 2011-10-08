@@ -943,8 +943,6 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_LOG_LIST) {
-    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
-
     // filter by date?
     if (date.size() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
@@ -954,7 +952,7 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = store->list_objects_raw_init(log_bucket, &h);
+    int r = store->list_logs_init(date, &h);
     if (r == -ENOENT) {
       // no logs.
     } else {
@@ -963,17 +961,15 @@ int main(int argc, char **argv)
 	return r;
       }
       while (true) {
-	RGWObjEnt obj;
-	int r = store->list_objects_raw_next(obj, &h);
+	string name;
+	int r = store->list_logs_next(h, &name);
 	if (r == -ENOENT)
 	  break;
 	if (r < 0) {
 	  cerr << "log list: error " << r << std::endl;
 	  return r;
 	}
-	if (date.size() && obj.name.find(date) != 0)
-	  continue;
-	formatter->dump_string("object", obj.name);
+	formatter->dump_string("object", name);
       }
     }
     formatter->close_section();
