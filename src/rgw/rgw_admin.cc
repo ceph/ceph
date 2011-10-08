@@ -952,7 +952,7 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = store->list_logs_init(date, &h);
+    int r = store->log_list_init(date, &h);
     if (r == -ENOENT) {
       // no logs.
     } else {
@@ -962,7 +962,7 @@ int main(int argc, char **argv)
       }
       while (true) {
 	string name;
-	int r = store->list_logs_next(h, &name);
+	int r = store->log_list_next(h, &name);
 	if (r == -ENOENT)
 	  break;
 	if (r < 0) {
@@ -982,7 +982,6 @@ int main(int argc, char **argv)
       return usage();
     }
 
-    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
     string oid;
     if (!object.empty()) {
       oid = object;
@@ -995,45 +994,33 @@ int main(int argc, char **argv)
       oid += "-";
       oid += string(bucket.name);
     }
-    rgw_obj obj(log_bucket, oid);
 
     if (opt_cmd == OPT_LOG_SHOW) {
-      uint64_t size;
-      int r = store->obj_stat(NULL, obj, &size, NULL);
+      RGWAccessHandle h;
+
+      int r = store->log_show_init(oid, &h);
       if (r < 0) {
-	cerr << "error while doing stat on " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
+	cerr << "error opening log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
 
-      bufferlist bl;
-      r = store->read(NULL, obj, 0, size, bl);
-      if (r < 0) {
-	cerr << "error while reading from " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
-      
-      bufferlist::iterator iter = bl.begin();
-      
-      struct rgw_log_entry entry;
-      
       formatter->reset();
       formatter->open_object_section("log");
 
-      // peek at first entry to get bucket metadata
-      bufferlist::iterator first_iter = iter;
-      if (!first_iter.end()) {
-	::decode(entry, first_iter);
-	formatter->dump_int("bucket_id", entry.bucket_id);
-	formatter->dump_string("bucket_owner", entry.bucket_owner);
-	formatter->dump_string("bucket", entry.bucket);
-      }
-      formatter->open_array_section("log_entries");
+      struct rgw_log_entry entry;
       
-      while (!iter.end()) {
-	::decode(entry, iter);
-	
+      // peek at first entry to get bucket metadata
+      r = store->log_show_next(h, &entry);
+      if (r < 0) {
+	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+      formatter->dump_int("bucket_id", entry.bucket_id);
+      formatter->dump_string("bucket_owner", entry.bucket_owner);
+      formatter->dump_string("bucket", entry.bucket);
+
+      formatter->open_array_section("log_entries");
+      do {
 	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
 	
 	formatter->open_object_section("log_entry");
@@ -1056,17 +1043,23 @@ int main(int argc, char **argv)
 	formatter->dump_string("referrer",  entry.referrer.c_str());
 	formatter->close_section();
 	formatter->flush(cout);
+
+	r = store->log_show_next(h, &entry);
+      } while (r > 0);
+
+      if (r < 0) {
+      	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+	return -r;
       }
+
       formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
     }
     if (opt_cmd == OPT_LOG_RM) {
-      std::string id;
-      int r = store->delete_obj(NULL, id, obj);
+      int r = store->log_remove(oid);
       if (r < 0) {
-	cerr << "error removing " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
+	cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
     }

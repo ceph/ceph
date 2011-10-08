@@ -145,6 +145,14 @@ public:
   int log_list_init(const string& prefix, RGWAccessHandle *handle);
   int log_list_next(RGWAccessHandle handle, string *name);
 
+  /// remove log
+  int log_remove(const string& name);
+
+  /// show log
+  int log_show_init(const string& name, RGWAccessHandle *handle);
+  int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
+
+
   /** get listing of the objects in a bucket */
   virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,

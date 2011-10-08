@@ -209,6 +209,9 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
   return 0;
 }
 
+
+/**** logs ****/
+
 struct log_list_state {
   string prefix;
   librados::IoCtx io_ctx;
@@ -218,13 +221,12 @@ struct log_list_state {
 int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
 {
   log_list_state *state = new log_list_state;
-  rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
-  int r = open_bucket_ctx(log_bucket, state->io_ctx);
+  int r = rados->ioctx_create(RGW_LOG_POOL_NAME, state->io_ctx);
   if (r < 0)
     return r;
   state->prefix = prefix;
   state->obit = state->io_ctx.objects_begin();
-  *handle = (RGWAccessHandle*)state;
+  *handle = (RGWAccessHandle)state;
   return 0;
 }
 
@@ -248,6 +250,72 @@ int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
   return 0;
 }
 
+int RGWRados::log_remove(const string& name)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(RGW_LOG_POOL_NAME, io_ctx);
+  if (r < 0)
+    return r;
+  return io_ctx.remove(name);
+}
+
+struct log_show_state {
+  librados::IoCtx io_ctx;
+  bufferlist bl;
+  bufferlist::iterator p;
+  string name;
+  uint64_t pos;
+  bool eof;
+  log_show_state() : pos(0), eof(false) {}
+};
+
+int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
+{
+  log_show_state *state = new log_show_state;
+  int r = rados->ioctx_create(RGW_LOG_POOL_NAME, state->io_ctx);
+  if (r < 0)
+    return r;
+  state->name = name;
+  *handle = (RGWAccessHandle)state;
+  return 0;
+}
+
+int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
+{
+  log_show_state *state = (log_show_state *)handle;
+
+  dout(10) << "log_show_next pos " << state->pos << " bl " << state->bl.length()
+	   << " off " << state->p.get_off()
+	   << " eof " << (int)state->eof
+	   << dendl;
+  // read some?
+  unsigned chunk = 1024*1024;
+  if (state->bl.length() < chunk/2 && !state->eof) {
+    bufferlist more;
+    int r = state->io_ctx.read(state->name, more, chunk, state->pos);
+    if (r < 0)
+      return r;
+    bufferlist old;
+    old.substr_of(state->bl, state->p.get_off(), state->bl.length() - state->p.get_off());
+    state->bl.clear();
+    state->bl.claim(old);
+    state->bl.claim_append(more);
+    state->p = state->bl.begin();
+    if ((unsigned)r < chunk)
+      state->eof = true;
+    dout(10) << " read " << r << dendl;
+  }
+
+  if (state->p.end())
+    return 0;  // end of file
+  try {
+    ::decode(*entry, state->p);
+  }
+  catch (const buffer::error &e) {
+    return -EINVAL;
+  }
+  return 1;
+}
 
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
 {

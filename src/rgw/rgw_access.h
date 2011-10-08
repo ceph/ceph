@@ -40,6 +40,9 @@ public:
   
   virtual int log_list_init(const string& prefix, RGWAccessHandle *handle) { return -ENOENT; }
   virtual int log_list_next(RGWAccessHandle handle, string *name) { return -ENOENT; }
+  virtual int log_remove(const string& name) { return -ENOENT; }
+  virtual int log_show_init(const string& name, RGWAccessHandle *handle) { return -ENOENT; }
+  virtual int log_show_next(RGWAccessHandle handle, class rgw_log_entry *entry) { return -ENOENT; }
 
   /** 
    * get listing of the objects in a bucket.
