@@ -262,9 +262,9 @@ int main(int argc, const char **argv)
     close(0);
     close(1);
     close(2);
-    int r = chdir("/");
+    int r = chdir(g_conf->chdir.c_str());
     if (r < 0) {
-      dout(0) << "weird, i couldn't chdir to /" << dendl;
+      dout(0) << "weird, i couldn't chdir to '" << g_conf->chdir << "'" << dendl;
     }
   }
   
