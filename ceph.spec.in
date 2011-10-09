@@ -208,6 +208,8 @@ fi
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so.*
 %{_libdir}/rados-classes/libcls_rbd.so
+%{_libdir}/rados-classes/libcls_rgw.so.*
+%{_libdir}/rados-classes/libcls_rgw.so
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -282,6 +284,7 @@ fi
 
 %files radosgw
 %defattr(-,root,root,-)
+%{_initrddir}/radosgw
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
