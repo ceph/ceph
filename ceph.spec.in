@@ -1,4 +1,3 @@
-%define with_radosgw %{?_with_radosgw: 1} %{!?_with_radosgw: 0}
 %define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
 
 # it seems there is no usable tcmalloc rpm for x86_64; parts of
@@ -29,8 +28,8 @@ BuildRequires: mozilla-nss-devel, libatomic-ops-devel, keyutils-devel, libtool,
 BuildRequires: nss-devel, libatomic_ops-devel, keyutils-libs-devel,
 BuildRequires: libtool-ltdl-devel, 
 %endif
-BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
-BuildRequires: pkgconfig, python
+BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm, libcurl-devel,
+BuildRequires: pkgconfig, python,
 %if %{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
@@ -41,6 +40,7 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 %if %{defined suse_version}
 Requires(post): aaa_base
 Requires(preun): aaa_base
+BuildRequires: %insserv_prereq
 %else
 Requires(post): chkconfig
 Requires(preun): chkconfig
@@ -68,19 +68,20 @@ Requires:    %{name} = %{version}-%{release}
 %description devel
 This package contains the headers needed to develop programs that use Ceph.
 
-%if %{with_radosgw}
 %package radosgw
 Summary:        rados REST gateway
 Group:          Development/Libraries
 Requires:       mod_fcgid
-BuildRequires:  fcgi-devel
-BuildRequires:  expat-devel
+%if %{defined suse_version}
+BuildRequires:  libexpat-devel, FastCGI-devel,
+%else
+BuildRequires:  expat-devel, fcgi-devel,
+%endif
 
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
 implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
-%endif
 
 %package obsync
 Summary:        synchronize data between cloud object storage providers or a local directory
@@ -112,11 +113,7 @@ file system.
 ./autogen.sh
 MY_CONF_OPT=""
 
-%if %{with_radosgw}
 MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
-%else
-MY_CONF_OPT="$MY_CONF_OPT --without-radosgw"
-%endif
 
 %if %{with_gtk2}
 MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
@@ -142,6 +139,8 @@ find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
+chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
+chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
@@ -153,8 +152,14 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add ceph
+%if %{defined suse_version}
+%fillup_and_insserv -f -y ceph
+%endif
 
 %preun
+%if %{defined suse_version}
+%stop_on_removal ceph
+%endif
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
     /sbin/chkconfig --del ceph
@@ -165,10 +170,16 @@ fi
 if [ "$1" -ge "1" ] ; then
     /sbin/service ceph condrestart >/dev/null 2>&1 || :
 fi
+%if %{defined suse_version}
+%insserv_cleanup
+%endif
 
 %files
 %defattr(-,root,root,-)
-%doc README COPYING src/sample.ceph.conf src/sample.fetch_config
+%docdir %{_docdir}
+%dir %{_docdir}/ceph
+%{_docdir}/ceph/sample.ceph.conf
+%{_docdir}/ceph/sample.fetch_config
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
@@ -194,7 +205,9 @@ fi
 %{_libdir}/libcephfs.so.*
 %{_libdir}/librados.so.*
 %{_libdir}/librbd.so.*
+%dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so.*
+%{_libdir}/rados-classes/libcls_rbd.so
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -216,8 +229,6 @@ fi
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
-%{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/ceph-authtool.8*
@@ -241,37 +252,41 @@ fi
 
 %files fuse
 %defattr(-,root,root,-)
-%doc COPYING
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 
 %files devel
 %defattr(-,root,root,-)
-%doc COPYING
+%dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
+%dir %{_includedir}/crush
 %{_includedir}/crush/crush.h
 %{_includedir}/crush/hash.h
 %{_includedir}/crush/mapper.h
 %{_includedir}/crush/types.h
+%dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/librados.hpp
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
+%{_includedir}/rados/librgw.h
+%dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
+
 %{_libdir}/libcephfs.so
 %{_libdir}/librados.so
 %{_libdir}/librbd.so
-%{_libdir}/rados-classes/libcls_rbd.so
+%{_libdir}/librgw.so
 
-%if %{with_radosgw}
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
-%{_initrddir}/radosgw
-%endif
+%{_mandir}/man8/radosgw.8*
+%{_mandir}/man8/radosgw-admin.8*
+%{_libdir}/librgw.so.*
 
 %if %{with_gtk2}
 %files gcephtool
