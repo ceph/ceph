@@ -16,11 +16,13 @@ union ceph_mount_union_t {
 static void set_ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info *cmount)
 {
   jclass cls = env->GetObjectClass(obj);
-  jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
+  if (cls == NULL)
+    return;
+  jfieldID fid = env->GetFieldID(cls, "cluster", "J");
   if (fid == NULL)
     return;
   ceph_mount_union_t ceph_mount_union;
-  ceph_mount_union.cjlong= 0;
+  ceph_mount_union.cjlong = 0;
   ceph_mount_union.cmount = cmount;
   env->SetLongField(obj, fid, ceph_mount_union.cjlong);
 }
@@ -28,7 +30,7 @@ static void set_ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info
 static struct ceph_mount_info *get_ceph_mount_t(JNIEnv *env, jobject obj)
 {
   jclass cls = env->GetObjectClass(obj);
-  jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
+  jfieldID fid = env->GetFieldID(cls, "cluster", "J");
   if (fid == NULL)
     return NULL;
   ceph_mount_union_t ceph_mount_union;
