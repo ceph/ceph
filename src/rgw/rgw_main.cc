@@ -10,7 +10,12 @@
 
 #include <curl/curl.h>
 
-#include "fcgiapp.h"
+#include "acconfig.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"

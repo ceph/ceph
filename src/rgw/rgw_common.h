@@ -17,7 +17,13 @@
 
 #include "common/ceph_crypto.h"
 #include "common/debug.h"
-#include "fcgiapp.h"
+
+#include "acconfig.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
 #include <errno.h>
 #include <string.h>
