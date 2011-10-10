@@ -1152,11 +1152,11 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
 {
   CephContext *cct = dest_md_ctx.cct();
   CopyProgressCtx cp(prog_ctx);
-
   uint64_t src_size = ictx.get_image_size();
+  int64_t r;
 
   int order = ictx.header.options.order;
-  int r = create(dest_md_ctx, destname, src_size, &order);
+  r = create(dest_md_ctx, destname, src_size, &order);
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
