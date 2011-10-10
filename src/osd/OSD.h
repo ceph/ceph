@@ -112,8 +112,9 @@ class MOSDPGMissing;
 
 class Watch;
 class Notification;
-class ObjectContext;
 class ReplicatedPG;
+
+class AuthAuthorizeHandlerRegistry;
 
 extern const coll_t meta_coll;
 
@@ -122,6 +123,8 @@ class OSD : public Dispatcher {
 protected:
   Mutex osd_lock;			// global lock
   SafeTimer timer;    // safe timer (osd_lock)
+
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
@@ -1034,6 +1037,11 @@ public:
   Mutex watch_lock;
   SafeTimer watch_timer;
   void handle_notify_timeout(void *notif);
+  void disconnect_session_watches(Session *session);
+  void handle_watch_timeout(void *obc,
+			    ReplicatedPG *pg,
+			    entity_name_t entity,
+			    utime_t expire);
 };
 
 //compatibility of the executable

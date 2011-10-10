@@ -21,10 +21,16 @@ Group:         System Environment/Base
 URL:           http://ceph.newdream.net/
 
 Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
-BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel, 
+BuildRequires: gcc-c++,
+BuildRequires: fuse-devel, libtool, boost-devel, 
+%if %{defined suse_version}
+BuildRequires: mozilla-nss-devel, libatomic-ops-devel, keyutils-devel, libtool,
+%else
+BuildRequires: nss-devel, libatomic_ops-devel, keyutils-libs-devel,
+BuildRequires: libtool-ltdl-devel, 
+%endif
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
-BuildRequires: nss-devel, libatomic_ops-devel
-BuildRequires: pkgconfig, python, keyutils-libs-devel
+BuildRequires: pkgconfig, python
 %if %{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
@@ -32,8 +38,14 @@ BuildRequires: pkgconfig, python, keyutils-libs-devel
 BuildRequires: google-perftools-devel%{?_isa}
 %endif
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Requires(post): chkconfig, binutils, libedit
+%if %{defined suse_version}
+Requires(post): aaa_base
+Requires(preun): aaa_base
+%else
+Requires(post): chkconfig
 Requires(preun): chkconfig
+%endif
+Requires(post): binutils, libedit
 Requires(preun): initscripts
 
 %description
@@ -116,6 +128,7 @@ MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
 # default differs from what's needed for rpm
 %{configure} --prefix=/usr --sbindir=/sbin \
 --localstatedir=/var --sysconfdir=/etc \
+--docdir=%{_docdir}/ceph \
 --without-hadoop $MY_CONF_OPT \
 %{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc}
 
@@ -127,8 +140,6 @@ make install DESTDIR=$RPM_BUILD_ROOT
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/radosgw
-chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
@@ -156,7 +167,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%doc README COPYING
+%doc README COPYING src/sample.ceph.conf src/sample.fetch_config
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
@@ -186,8 +197,6 @@ fi
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
-%{_docdir}/ceph/sample.ceph.conf
-%{_docdir}/ceph/sample.fetch_config
 %{_sysconfdir}/bash_completion.d/ceph
 %{_sysconfdir}/bash_completion.d/rados
 %{_sysconfdir}/bash_completion.d/radosgw-admin
