@@ -1111,8 +1111,6 @@ int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
   int ret = 0;
   if (buf) {
     ret = write(cp->destictx, offset, len, buf);
-    if (ret < 0)
-      return ret;
   }
   return ret;
 }
