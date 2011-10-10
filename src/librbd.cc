@@ -1176,7 +1176,7 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
     prog_ctx.update_progress(cp.src_size, cp.src_size);
   }
   close_image(cp.destictx);
-  return r;
+  return 0;
 }
 
 int snap_set(ImageCtx *ictx, const char *snap_name)
