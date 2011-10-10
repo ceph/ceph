@@ -1107,13 +1107,14 @@ struct CopyProgressCtx {
 int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
 {
   CopyProgressCtx *cp = reinterpret_cast<CopyProgressCtx*>(data);
+  cp->prog_ctx.update_progress(offset, cp->src_size);
+  int ret = 0;
   if (buf) {
-    int ret = write(cp->destictx, offset, len, buf);
-    if (ret) {
+    ret = write(cp->destictx, offset, len, buf);
+    if (ret < 0)
       return ret;
-    }
   }
-  return cp->prog_ctx.update_progress(offset, cp->src_size);
+  return ret;
 }
 
 ProgressContext::~ProgressContext()
