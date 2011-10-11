@@ -292,20 +292,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->dump_string("email", info.user_email.c_str());
   formatter->dump_int("suspended", (int)info.suspended);
 
-  // keys
-  formatter->open_array_section("keys");
-  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-    formatter->open_object_section("key");
-    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-    formatter->dump_string("access_key", k.id);
-    formatter->dump_string("secret_key", k.key);
-    formatter->close_section();
-  }
-  formatter->close_section();
-
   // subusers
   formatter->open_array_section("subusers");
   for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
@@ -317,6 +303,20 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
     formatter->dump_string("permissions", buf);
     formatter->close_section();
     formatter->flush(cout);
+  }
+  formatter->close_section();
+
+  // keys
+  formatter->open_array_section("keys");
+  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
+    RGWAccessKey& k = kiter->second;
+    const char *sep = (k.subuser.empty() ? "" : ":");
+    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
+    formatter->open_object_section("key");
+    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
+    formatter->dump_string("access_key", k.id);
+    formatter->dump_string("secret_key", k.key);
+    formatter->close_section();
   }
   formatter->close_section();
 
@@ -779,8 +779,11 @@ int main(int argc, char **argv)
   case OPT_KEY_CREATE:
     if (!user_id.empty())
       info.user_id = user_id;
-    if (key_type == KEY_TYPE_SWIFT)
-      access_key = subuser;
+    if (key_type == KEY_TYPE_SWIFT) {
+      access_key = info.user_id;
+      access_key.append(":");
+      access_key.append(subuser);
+    }
     if ((!access_key.empty()) && (!secret_key.empty())) {
       RGWAccessKey k;
       k.id = access_key;
