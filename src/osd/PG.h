@@ -733,8 +733,10 @@ public:
     _lock.Unlock();
   }
   void assert_locked() {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(_lock.is_locked());
+  }
+  bool is_locked() {
+    return _lock.is_locked();
   }
   void wait() {
     assert(_lock.is_locked());

@@ -2782,7 +2782,7 @@ void ReplicatedPG::op_commit(RepGather *repop)
 
     last_update_ondisk = repop->v;
     if (waiting_for_ondisk.count(repop->v)) {
-      osd->take_waiters(waiting_for_ondisk[repop->v]);
+      osd->requeue_ops(this, waiting_for_ondisk[repop->v]);
       waiting_for_ondisk.erase(repop->v);
     }
 
@@ -3298,7 +3298,7 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
 
   if (mode.wake) {
-    osd->take_waiters(mode.waiting);
+    osd->requeue_ops(this, mode.waiting);
     for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); p++)
       (*p)->Signal();
     mode.wake = false;
@@ -4045,7 +4045,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 	dout(10) << "pushed " << soid << " to all replicas" << dendl;
 	finish_recovery_op(soid);
 	if (waiting_for_degraded_object.count(soid)) {
-	  osd->take_waiters(waiting_for_degraded_object[soid]);
+	  osd->requeue_ops(this, waiting_for_degraded_object[soid]);
 	  waiting_for_degraded_object.erase(soid);
 	}
 	map<hobject_t, ObjectContext *>::iterator i =
@@ -4461,7 +4461,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     // kick waiters
     if (waiting_for_missing_object.count(soid)) {
       dout(20) << " kicking waiters on " << soid << dendl;
-      osd->take_waiters(waiting_for_missing_object[soid]);
+      osd->requeue_ops(this, waiting_for_missing_object[soid]);
       waiting_for_missing_object.erase(soid);
     } else {
       dout(20) << " no waiters on " << soid << dendl;

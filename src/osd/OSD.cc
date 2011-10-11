@@ -5033,17 +5033,6 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session) {
-    dout(0) << "WARNING: no session for op" << dendl;
-    reply_op_error(op, -EPERM);
-    return;
-  }
-
-  OSDCaps& caps = session->caps;
-  session->put();
-
-
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
 		      (Session *)op->get_connection()->get_priv());
@@ -5062,7 +5051,7 @@ void OSD::handle_op(MOSDOp *op)
     pgid = osdmap->raw_pg_to_pg(pgid);
 
   // get and lock *pg.
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
+  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
   if (!pg) {
     dout(7) << "hit non-existent pg " << pgid 
 	    << ", waiting" << dendl;
@@ -5070,8 +5059,29 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
+  pg->get();
+  _handle_op(pg, op);
+  pg->unlock();
+  pg->put();
+}
+
+void OSD::_handle_op(PG *pg, MOSDOp *op)
+{
+  dout(10) << *pg << " _handle_op " << op << " " << *op << dendl;
+  assert(pg->is_locked());
+
+  Session *session = (Session *)op->get_connection()->get_priv();
+  if (!session) {
+    dout(0) << "WARNING: no session for op" << dendl;
+    reply_op_error(op, -EPERM);
+    return;
+  }
+
+  OSDCaps& caps = session->caps;
+  session->put();
+
   int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
-  dout(10) << "request for pool=" << pool << " (" << pg->pool->name
+  dout(10) << " request for pool=" << pg->pool->id << " (" << pg->pool->name
 	   << ") owner=" << pg->pool->auid
 	   << " perm=" << perm
 	   << " may_read=" << op->may_read()
@@ -5081,18 +5091,17 @@ void OSD::handle_op(MOSDOp *op)
 
   int err = -EPERM;
   if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
-    dout(10) << "no READ permission to access pool " << pg->pool->name << dendl;
+    dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
   } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
-    dout(10) << "no WRITE permission to access pool " << pg->pool->name << dendl;
+    dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
   } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
-    dout(10) << "no EXEC permission to access pool " << pg->pool->name << dendl;
+    dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
   } else {
     err = 0;
   }
 
   if (err < 0) {
     reply_op_error(op, err);
-    pg->unlock();
     return;
   }
 
@@ -5104,7 +5113,6 @@ void OSD::handle_op(MOSDOp *op)
     if (!pg->is_primary() ||
 	!pg->same_for_modify_since(op->get_map_epoch())) {
       handle_misdirected_op(pg, op);
-      pg->unlock();
       return;
     }
 
@@ -5112,14 +5120,12 @@ void OSD::handle_op(MOSDOp *op)
     if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
 	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
       reply_op_error(op, -ENOSPC);
-      pg->unlock();
       return;
     }
 
     // invalid?
     if (op->get_snapid() != CEPH_NOSNAP) {
       reply_op_error(op, -EINVAL);
-      pg->unlock();
       return;
     }
 
@@ -5128,14 +5134,12 @@ void OSD::handle_op(MOSDOp *op)
         op->get_data_len() > g_conf->osd_max_write_size << 20) {
       // journal can't hold commit!
       reply_op_error(op, -OSD_WRITETOOBIG);
-      pg->unlock();
       return;
     }
   } else {
     // misdirected?
     if (!pg->same_for_read_since(op->get_map_epoch())) {
       handle_misdirected_op(pg, op);
-      pg->unlock();
       return;
     }
   }
@@ -5144,7 +5148,6 @@ void OSD::handle_op(MOSDOp *op)
   if (!pg->is_active()) {
     dout(7) << *pg << " not active (yet)" << dendl;
     pg->waiting_for_active.push_back(op);
-    pg->unlock();
     return;
   }
   if (pg->is_replay()) {
@@ -5152,7 +5155,6 @@ void OSD::handle_op(MOSDOp *op)
       dout(7) << *pg << " queueing replay at " << op->get_version()
 	      << " for " << *op << dendl;
       pg->replay_queue[op->get_version()] = op;
-      pg->unlock();
       return;
     }
   }
@@ -5163,38 +5165,22 @@ void OSD::handle_op(MOSDOp *op)
 		   CEPH_NOSNAP, op->get_pg().ps());
     if (pg->is_missing_object(head)) {
       pg->wait_for_missing_object(head, op);
-      pg->unlock();
       return;
     }
 
     // degraded object?
     if (op->may_write() && pg->is_degraded_object(head)) {
       pg->wait_for_degraded_object(head, op);
-      pg->unlock();
       return;
     }
   }
 
-  
-  dout(10) << "handle_op " << *op << " in " << *pg << dendl;
-
-  pg->get();
   if (g_conf->osd_op_threads < 1) {
-    // do it now.
-    if (op->get_type() == CEPH_MSG_OSD_OP)
-      pg->do_op((MOSDOp*)op);
-    else if (op->get_type() == MSG_OSD_SUBOP)
-      pg->do_sub_op((MOSDSubOp*)op);
-    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
-      pg->do_sub_op_reply((MOSDSubOpReply*)op);
-    else 
-      assert(0);
+    pg->do_op(op);
   } else {
     // queue for worker threads
     enqueue_op(pg, op);         
   }
-  pg->unlock();
-  pg->put();
 }
 
 
@@ -5217,20 +5203,28 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   const pg_t pgid = op->pgid;
 
   // require same or newer map
-  if (!require_same_or_newer_map(op, op->map_epoch)) return;
+  if (!require_same_or_newer_map(op, op->map_epoch))
+    return;
 
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->map_epoch,
 		      (Session*)op->get_connection()->get_priv());
 
-  if (!_have_pg(pgid)) {
-    // hmm.
+  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
+  if (!pg) {
     op->put();
     return;
-  } 
+  }
+  pg->get();
+  _handle_sub_op(pg, op);
+  pg->unlock();
+  pg->put();
+}
 
-
-  PG *pg = _lookup_lock_pg(pgid);
+void OSD::_handle_sub_op(PG *pg, MOSDSubOp *op)
+{
+  dout(10) << *pg << " _handle_sub_op " << op << " " << *op << dendl;
+  assert(pg->is_locked());
 
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
@@ -5238,7 +5232,6 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     dout(10) << "handle_sub_op pg changed " << pg->info.history
 	     << " after " << op->map_epoch 
 	     << ", dropping" << dendl;
-    pg->unlock();
     op->put();
     return;
   }
@@ -5248,8 +5241,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   } else {
     enqueue_op(pg, op);     // queue for worker threads
   }
-  pg->unlock();
 }
+
 void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
   if (op->get_map_epoch() < up_epoch) {
@@ -5273,19 +5266,27 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
 		      (Session*)op->get_connection()->get_priv());
-  if (!_have_pg(pgid)) {
-    // hmm.
+
+  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
+  if (!pg) {
     op->put();
     return;
-  } 
+  }
+  pg->get();
+  _handle_sub_op_reply(pg, op);
+  pg->unlock();
+  pg->put();
+}
 
-  PG *pg = _lookup_lock_pg(pgid);
+void OSD::_handle_sub_op_reply(PG *pg, MOSDSubOpReply *op)
+{
+  dout(10) << *pg << " _handle_sub_op_reply " << op << " " << *op << dendl;
+  assert(pg->is_locked());
   if (g_conf->osd_op_threads < 1) {
     pg->do_sub_op_reply(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
   }
-  pg->unlock();
 }
 
 
@@ -5295,12 +5296,52 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 void OSD::enqueue_op(PG *pg, Message *op)
 {
   dout(15) << *pg << " enqueue_op " << op << " " << *op << dendl;
+  assert(pg->is_locked());
   // add to pg's op_queue
   pg->op_queue.push_back(op);
   pending_ops++;
   logger->set(l_osd_opq, pending_ops);
   
   op_wq.queue(pg);
+}
+
+/*
+ * requeue ops at _front_ of queue.  these are previously queued
+ * operations that need to get requeued ahead of anything the dispatch
+ * thread is currently chewing on so as not to violate ordering from
+ * the clients' perspective.
+ */
+void OSD::requeue_ops(PG *pg, list<Message*>& ls)
+{
+  dout(15) << *pg << " requeue_ops " << ls << dendl;
+  assert(pg->is_locked());
+
+  // set current queue contents aside..
+  list<Message*> orig_queue;
+  orig_queue.swap(pg->op_queue);
+
+  // requeue old items, now at front.
+  while (!ls.empty()) {
+    Message *op = ls.front();
+    ls.pop_front();
+
+    switch (op->get_type()) {
+    case CEPH_MSG_OSD_OP:
+      _handle_op(pg, (MOSDOp*)op);
+      break;
+    case MSG_OSD_SUBOP:
+      _handle_sub_op(pg, (MOSDSubOp*)op);
+      break;
+    case MSG_OSD_SUBOPREPLY:
+      _handle_sub_op_reply(pg, (MOSDSubOpReply*)op);
+      break;
+    default:
+      assert(0 == "requeued an illegal type");
+    }
+  }
+
+  // put orig queue contents back in line, after the stuff we requeued.
+  pg->op_queue.splice(pg->op_queue.end(), orig_queue);
 }
 
 /*

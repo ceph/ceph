@@ -625,7 +625,7 @@ bool PG::search_for_missing(const Info &oinfo, const Missing *omissing,
       map<hobject_t, list<class Message*> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
-	osd->take_waiters(wmo->second);
+	osd->requeue_ops(this, wmo->second);
       }
       stats_updated = true;
       missing_loc[soid].insert(fromosd);
@@ -1087,7 +1087,7 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
   map<hobject_t, list<class Message*> >::iterator wmo =
     waiting_for_missing_object.find(lost_soid);
   if (wmo != waiting_for_missing_object.end()) {
-    osd->take_waiters(wmo->second);
+    osd->requeue_ops(this, wmo->second);
   }
 
   // Tell the object store that this object is lost.
@@ -1683,7 +1683,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // waiters
   if (!is_replay()) {
-    osd->take_waiters(waiting_for_active);
+    osd->requeue_ops(this, waiting_for_active);
   }
 
   on_activate();
@@ -1712,8 +1712,8 @@ void PG::replay_queued_ops()
     replay.push_back(p->second);
   }
   replay_queue.clear();
-  osd->take_waiters(replay);
-  osd->take_waiters(waiting_for_active);
+  osd->requeue_ops(this, replay);
+  osd->requeue_ops(this, waiting_for_active);
   state_clear(PG_STATE_REPLAY);
   update_stats();
 }
@@ -2580,7 +2580,7 @@ void PG::take_object_waiters(map<hobject_t, list<Message*> >& m)
   for (map<hobject_t, list<Message*> >::iterator it = m.begin();
        it != m.end();
        it++)
-    osd->take_waiters(it->second);
+    osd->requeue_ops(this, it->second);
   m.clear();
 }
 
@@ -3134,7 +3134,7 @@ void PG::scrub_clear_state()
   // active -> nothing.
   osd->dec_scrubs_active();
 
-  osd->take_waiters(waiting_for_active);
+  osd->requeue_ops(this, waiting_for_active);
 
   finalizing_scrub = false;
   scrub_received_maps.clear();
@@ -3659,13 +3659,13 @@ void PG::start_peering_interval(const OSDMap *lastmap,
 	   it++)
 	ls.push_back(it->second);
       replay_queue.clear();
-      osd->take_waiters(ls);
+      osd->requeue_ops(this, ls);
     }
 
     on_role_change();
 
     // take active waiters
-    osd->take_waiters(waiting_for_active);
+    osd->requeue_ops(this, waiting_for_active);
 
     // new primary?
     if (role == 0) {
