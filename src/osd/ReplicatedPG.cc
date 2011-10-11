@@ -990,6 +990,7 @@ bool ReplicatedPG::snap_trimmer()
       dout(10) << " can't write, requeueing" << dendl;
       queue_snap_trim();
       unlock();
+      put();
       return true;
     }
     if (!finalizing_scrub) {
@@ -1016,6 +1017,7 @@ bool ReplicatedPG::snap_trimmer()
     queue_snap_trim();
   }
   unlock();
+  put();
   return true;
 }
 

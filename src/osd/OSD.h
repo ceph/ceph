@@ -741,11 +741,13 @@ protected:
     bool _enqueue(PG *pg) {
       if (pg->snap_trim_item.is_on_list())
 	return false;
+      pg->get();
       osd->snap_trim_queue.push_back(&pg->snap_trim_item);
       return true;
     }
     void _dequeue(PG *pg) {
-      pg->snap_trim_item.remove_myself();
+      if (pg->snap_trim_item.remove_myself())
+	pg->put();
     }
     PG *_dequeue() {
       if (osd->snap_trim_queue.empty())

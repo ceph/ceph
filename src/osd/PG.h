@@ -1645,7 +1645,7 @@ public:
     recovery_state.handle_loaded(rctx);
   }
 
-
+  void on_removal();
   // abstract bits
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;

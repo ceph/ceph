@@ -4664,11 +4664,11 @@ void OSD::_remove_pg(PG *pg)
   }
 
 
-  // remove_watchers_and_notifies and the erasure from the pg_map
-  // must be done together without unlocking the pg lock,
+  // on_removal, which calls remove_watchers_and_notifies, and the erasure from 
+  // the pg_map must be done together without unlocking the pg lock,
   // to avoid racing with watcher cleanup in ms_handle_reset
   // and handle_notify_timeout
-  pg->remove_watchers_and_notifies();
+  pg->on_removal();
 
   // remove from map
   pg_map.erase(pgid);

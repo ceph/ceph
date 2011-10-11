@@ -3540,6 +3540,20 @@ bool PG::old_peering_msg(epoch_t reply_epoch,
 	  last_peering_reset > query_epoch);
 }
 
+
+void PG::on_removal()
+{
+  osd->recovery_wq.dequeue(this);
+  osd->backlog_wq.dequeue(this);
+  osd->scrub_wq.dequeue(this);
+  osd->scrub_finalize_wq.dequeue(this);
+  osd->snap_trim_wq.dequeue(this);
+  osd->remove_wq.dequeue(this);
+  osd->pg_stat_queue_dequeue(this);
+
+  remove_watchers_and_notifies();
+}
+
 void PG::set_last_peering_reset() {
   last_peering_reset = osd->osdmap->get_epoch();
 }
