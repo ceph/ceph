@@ -29,19 +29,16 @@
 #include <sys/user.h> // for PAGE_MASK
 
 
-Thread::
-Thread()
+Thread::Thread()
   : thread_id(0)
 {
 }
 
-Thread::
-~Thread()
+Thread::~Thread()
 {
 }
 
-void *Thread::
-_entry_func(void *arg) {
+void *Thread::_entry_func(void *arg) {
   void *r = ((Thread*)arg)->entry();
   return r;
 }
@@ -51,8 +48,7 @@ _entry_func(void *arg) {
  * So a single-threaded program would have one thread; a program with a main
  * thread and one child thread would have two threads, etc.
  */
-int Thread::
-get_num_threads(void)
+int Thread::get_num_threads(void)
 {
   std::ostringstream oss;
   oss << "/proc/" << getpid() << "/task";
@@ -79,26 +75,22 @@ get_num_threads(void)
   return num_entries;
 }
 
-const pthread_t &Thread::
-get_thread_id()
+const pthread_t &Thread::get_thread_id()
 {
   return thread_id;
 }
 
-bool Thread::
-is_started()
+bool Thread::is_started()
 {
   return thread_id != 0;
 }
 
-bool Thread::
-am_self()
+bool Thread::am_self()
 {
   return (pthread_self() == thread_id);
 }
 
-int Thread::
-kill(int signal)
+int Thread::kill(int signal)
 {
   if (thread_id)
     return pthread_kill(thread_id, signal);
@@ -106,8 +98,7 @@ kill(int signal)
     return -EINVAL;
 }
 
-int Thread::
-try_create(size_t stacksize)
+int Thread::try_create(size_t stacksize)
 {
   pthread_attr_t *thread_attr = NULL;
   stacksize &= PAGE_MASK;  // must be multiple of page
@@ -139,8 +130,7 @@ try_create(size_t stacksize)
   return r;
 }
 
-void Thread::
-create(size_t stacksize)
+void Thread::create(size_t stacksize)
 {
   int ret = try_create(stacksize);
   if (ret != 0) {
@@ -152,8 +142,7 @@ create(size_t stacksize)
   }
 }
 
-int Thread::
-join(void **prval)
+int Thread::join(void **prval)
 {
   if (thread_id == 0) {
     assert("join on thread that was never started" == 0);
