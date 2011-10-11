@@ -188,16 +188,8 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist bl;
-  struct rgw_bucket_dir dir;
-  int rc = read_bucket_dir(hctx, dir);
-  if (rc < 0)
-    return rc;
-
-  CLS_LOG("rgw_bucket_complete_op(): dir.m.size()=%lld", dir.m.size());
-
+  // decode request
   rgw_cls_obj_complete_op op;
-
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(op, iter);
@@ -206,48 +198,60 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
   CLS_LOG("rgw_bucket_complete_op(): request: op=%d name=%s epoch=%lld tag=%s\n", op.op, op.name.c_str(), op.epoch, op.tag.c_str());
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
-  struct rgw_bucket_dir_entry *entry = NULL;
 
-  CLS_LOG("rgw_bucket_modify(): dir.m.size()=%lld", dir.m.size());
+  bufferlist header_bl;
+  struct rgw_bucket_dir_header header;
+  int rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0)
+    return rc;
+  bufferlist::iterator header_iter = header_bl.begin();
+  ::decode(header, header_iter);
 
-  if (miter != dir.m.end()) {
-    entry = &miter->second;
-    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld\n", entry->epoch);
-    if (op.epoch <= entry->epoch) {
+  bufferlist current_entry;
+  struct rgw_bucket_dir_entry entry;
+  bool ondisk = true;
+  rc = cls_cxx_map_read_key(hctx, op.name, &current_entry);
+  if (rc < 0) {
+    if (rc != -ENOENT) {
+      return rc;
+    } else {
+      entry.name = op.name;
+      entry.epoch = op.epoch;
+      entry.meta = op.meta;
+      ondisk = false;
+    }
+  } else {
+    bufferlist::iterator cur_iter = current_entry.begin();
+    ::decode(entry, cur_iter);
+    CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld\n", entry.epoch);
+    if (op.epoch <= entry.epoch) {
       CLS_LOG("rgw_bucket_complete_op(): skipping request, old epoch\n");
       return 0;
     }
-
-    if (entry->exists) {
-      struct rgw_bucket_category_stats& stats = dir.header.stats[entry->meta.category];
+    if (entry.exists) {
+      struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
       stats.num_entries--;
-      stats.total_size -= entry->meta.size;
-      stats.total_size_rounded -= get_rounded_size(entry->meta.size);
+      stats.total_size -= entry.meta.size;
+      stats.total_size_rounded -= get_rounded_size(entry.meta.size);
     }
-  } else {
-    entry = &dir.m[op.name];
-    entry->name = op.name;
-    entry->epoch = op.epoch;
-    entry->meta = op.meta;
   }
 
   if (op.tag.size()) {
-    map<string, struct rgw_bucket_pending_info>::iterator pinter = entry->pending_map.find(op.tag);
-    if (pinter == entry->pending_map.end()) {
+    map<string, struct rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
+    if (pinter == entry.pending_map.end()) {
       CLS_LOG("ERROR: couldn't find tag for pending operation\n");
       return -EINVAL;
     }
-    entry->pending_map.erase(pinter);
+    entry.pending_map.erase(pinter);
   }
 
   switch (op.op) {
   case CLS_RGW_OP_DEL:
-    if (miter != dir.m.end()) {
-      if (!entry->pending_map.size())
-        dir.m.erase(miter);
+    if (ondisk) {
+      if (!entry.pending_map.size())
+        cls_cxx_map_remove_key(hctx, op.name);
       else
-        entry->exists = false;
+        entry.exists = false;
     } else {
       return -ENOENT;
     }
@@ -255,21 +259,27 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   case CLS_RGW_OP_ADD:
     {
       struct rgw_bucket_dir_entry_meta& meta = op.meta;
-      struct rgw_bucket_category_stats& stats = dir.header.stats[meta.category];
-      entry->meta = meta;
-      entry->name = op.name;
-      entry->epoch = op.epoch;
-      entry->exists = true;
+      struct rgw_bucket_category_stats& stats = header.stats[meta.category];
+      entry.meta = meta;
+      entry.name = op.name;
+      entry.epoch = op.epoch;
+      entry.exists = true;
       stats.num_entries++;
       stats.total_size += meta.size;
       stats.total_size_rounded += get_rounded_size(meta.size);
+      bufferlist new_key_bl;
+      ::encode(entry, new_key_bl);
+      rc = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
+      if (rc < 0) {
+        return rc;
+      }
     }
     break;
   }
 
-  rc = write_bucket_dir(hctx, dir);
-
-  return rc;
+  bufferlist new_header_bl;
+  ::encode(header, new_header_bl);
+  return cls_cxx_map_write_header(hctx, &new_header_bl);
 }
 
 void __cls_init()
