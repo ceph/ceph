@@ -128,8 +128,13 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   rgw_bucket_dir dir;
-  rc = write_bucket_dir(hctx, dir);
-
+  bufferlist map_bl;
+  bufferlist header_bl;
+  ::encode(dir.header, header_bl);
+  ::encode(header_bl, map_bl);
+  __u32 num_keys = 0;
+  ::encode(num_keys, map_bl);
+  rc = cls_cxx_map_write_full(hctx, &map_bl);
   return rc;
 }
 
