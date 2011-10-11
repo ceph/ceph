@@ -1513,20 +1513,18 @@ int FileStore::mount()
 	
 	if (cp != curr_seq) {
 	  if (!m_osd_use_stale_snap) { 
-	    derr << TEXT_RED
-		 << " ** ERROR: current/ volume data version is not equal to snapshotted version\n"
-		 << "           which can lead to data inconsistency. \n"
-		 << "           Current version " << curr_seq << ", last snap " << cp << "\n"
-		 << "           Startup with snapshotted version can be forced using the\n"
-		 <<"            'osd use stale snap = true' config option.\n"
-		 << TEXT_NORMAL << dendl;
+	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
+	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
+	    derr << "Force rollback to snapshotted version with 'osd use stale snap = true'" << dendl;
+	    derr << "config option for --osd-use-stale-snap startup argument." << dendl;
 	    ret = -ENOTSUP;
 	    goto close_basedir_fd;
 	  }
 	  derr << "WARNING: user forced start with data sequence mismatch: current was " << curr_seq
 	       << ", newest snap is " << cp << dendl;
 	  cerr << TEXT_YELLOW
-	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
+	       << " ** WARNING: forcing the use of stale snapshot data **"
+	       << TEXT_NORMAL << std::endl;
 	}
 
         dout(10) << "mount rolling back to consistent snap " << cp << dendl;
