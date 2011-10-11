@@ -57,7 +57,7 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 7
+#define USER_INFO_VER 8
 
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
@@ -279,9 +279,8 @@ struct RGWUserInfo
   string user_id;
   string display_name;
   string user_email;
-  string swift_name;
-  string swift_key;
   map<string, RGWAccessKey> access_keys;
+  map<string, RGWAccessKey> swift_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
 
@@ -303,12 +302,21 @@ struct RGWUserInfo
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
      ::encode(user_email, bl);
+     string swift_name;
+     string swift_key;
+     if (!swift_keys.empty()) {
+       map<string, RGWAccessKey>::const_iterator iter = swift_keys.begin();
+       const RGWAccessKey& k = iter->second;
+       swift_name = k.id;
+       swift_key = k.key;
+     }
      ::encode(swift_name, bl);
      ::encode(swift_key, bl);
      ::encode(user_id, bl);
      ::encode(access_keys, bl);
      ::encode(subusers, bl);
      ::encode(suspended, bl);
+     ::encode(swift_keys, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -327,6 +335,8 @@ struct RGWUserInfo
     }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
+    string swift_name;
+    string swift_key;
     if (ver >= 3) ::decode(swift_name, bl);
     if (ver >= 4) ::decode(swift_key, bl);
     if (ver >= 5)
@@ -340,6 +350,9 @@ struct RGWUserInfo
     suspended = 0;
     if (ver >= 7) {
       ::decode(suspended, bl);
+    }
+    if (ver >= 8) {
+      ::decode(swift_keys, bl);
     }
   }
 

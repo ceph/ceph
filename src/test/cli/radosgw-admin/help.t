@@ -28,15 +28,14 @@
                                specified date (and optional time)
   options:
      --uid=<id>                user id
+     --auth-uid=<auid>         librados uid
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
-     --swift-user=<group:name> Swift user
      --email=<email>
-     --auth_uid=<auid>         librados uid
-     --secret=<key>            S3 key
-     --swift-secret=<key>      Swift key
-     --gen-access-key          generate random access key
+     --secret=<key>            specify secret key
+     --gen-access-key          generate random access key (for S3)
      --gen-secret              generate random secret key
+     --key-type=<type>         key type, options are: swift, s3
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
      --display-name=<name>
