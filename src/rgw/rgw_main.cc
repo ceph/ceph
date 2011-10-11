@@ -287,8 +287,14 @@ int main(int argc, const char **argv)
     return EIO;
   }
   
+  int r = rgw_perf_start(g_ceph_context);
+  if (r < 0)
+    return 1;
+
   RGWProcess process(g_ceph_context, g_conf->rgw_thread_pool_size);
   process.run();
+
+  rgw_perf_stop(g_ceph_context);
 
   return 0;
 }

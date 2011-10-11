@@ -17,6 +17,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/debug.h"
+#include "common/perf_counters.h"
 
 #include "acconfig.h"
 #ifdef FASTCGI_INCLUDE_DIR
@@ -124,6 +125,33 @@ using ceph::crypto::MD5;
 #define ERR_INTERNAL_ERROR       2200
 
 typedef void *RGWAccessHandle;
+
+
+/* perf counter */
+
+extern PerfCounters *perfcounter;
+
+extern int rgw_perf_start(CephContext *cct);
+extern void rgw_perf_stop(CephContext *cct);
+
+enum {
+  l_rgw_first = 15000,
+  l_rgw_req,
+
+  l_rgw_get,
+  l_rgw_get_b,
+  l_rgw_get_lat,
+
+  l_rgw_put,
+  l_rgw_put_b,
+  l_rgw_put_lat,
+
+  l_rgw_qlen,
+  l_rgw_qactive,
+
+  l_rgw_last,
+};
+
 
  /* size should be the required string size + 1 */
 extern int gen_rand_base64(char *dest, int size);

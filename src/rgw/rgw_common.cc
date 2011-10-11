@@ -8,11 +8,41 @@
 #include "common/errno.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
+#include "common/perf_counters.h"
 #include "auth/Crypto.h"
 
 #include <sstream>
 
 #define DOUT_SUBSYS rgw
+
+PerfCounters *perfcounter = NULL;
+
+int rgw_perf_start(CephContext *cct)
+{
+  PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
+
+  plb.add_u64_counter(l_rgw_get, "get");
+  plb.add_u64_counter(l_rgw_get_b, "get_b");
+  plb.add_fl_avg(l_rgw_get_lat, "get_lat");
+  plb.add_u64_counter(l_rgw_put, "put");
+  plb.add_u64_counter(l_rgw_put_b, "put_b");
+  plb.add_fl_avg(l_rgw_put_lat, "put_lat");
+
+  plb.add_u64(l_rgw_qlen, "qlen");
+  plb.add_u64(l_rgw_qactive, "qactive");
+
+  perfcounter = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(perfcounter);
+  return 0;
+}
+
+void rgw_perf_stop(CephContext *cct)
+{
+  assert(perfcounter);
+  cct->get_perfcounters_collection()->remove(perfcounter);
+  delete perfcounter;
+}
+
 
 using namespace ceph::crypto;
 
