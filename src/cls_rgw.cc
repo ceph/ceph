@@ -38,13 +38,27 @@ static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir
   if (rc < 0)
     return rc;
 
-  rc = cls_cxx_read(hctx, 0, size, &bl);
+  rc = cls_cxx_map_read_full(hctx, &bl);
   if (rc < 0)
     return rc;
 
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(dir, iter);
+    bufferlist header_bl;
+    ::decode(header_bl, iter);
+    bufferlist::iterator header_iter = header_bl.begin();
+    ::decode(dir.header, header_iter);
+    __u32 nkeys = 0;
+    ::decode(nkeys, iter);
+    while (nkeys) {
+      string key;
+      bufferlist value;
+      ::decode(key, iter);
+      ::decode(value, iter);
+      bufferlist::iterator val_iter = value.begin();
+      ::decode(dir.m[key], val_iter);
+      --nkeys;
+    }
   } catch (buffer::error& err) {
     CLS_LOG("ERROR: read_bucket_dir(): failed to decode buffer\n");
     return -EIO;
