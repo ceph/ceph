@@ -140,14 +140,8 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist bl;
-  struct rgw_bucket_dir dir;
-  int rc = read_bucket_dir(hctx, dir);
-  if (rc < 0)
-    return rc;
-
+  // decode request
   rgw_cls_obj_prepare_op op;
-
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(op, iter);
@@ -155,34 +149,40 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     CLS_LOG("ERROR: rgw_bucket_prepare_op(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s tag=%s\n", op.op, op.name.c_str(), op.tag.c_str());
-
-  std::map<string, struct rgw_bucket_dir_entry>::iterator miter = dir.m.find(op.name);
-  struct rgw_bucket_dir_entry *entry = NULL;
-
-  if (miter != dir.m.end()) {
-    entry = &miter->second;
-  } else {
-    entry = &dir.m[op.name];
-    entry->name = op.name;
-    entry->epoch = 0;
-    entry->exists = false;
-  }
 
   if (op.tag.empty()) {
     CLS_LOG("ERROR: tag is empty\n");
     return -EINVAL;
   }
 
-  struct rgw_bucket_pending_info& info = entry->pending_map[op.tag];
+  CLS_LOG("rgw_bucket_prepare_op(): request: op=%d name=%s tag=%s\n", op.op, op.name.c_str(), op.tag.c_str());
+
+  // get on-disk state
+  bufferlist cur_value;
+  int rc = cls_cxx_map_read_key(hctx, op.name, &cur_value);
+  if (rc < 0 && rc != -ENOENT)
+    return rc;
+
+  struct rgw_bucket_dir_entry entry;
+  if (rc != -ENOENT) {
+    bufferlist::iterator biter = cur_value.begin();
+    ::decode(entry, biter);
+  } else { // no entry, initialize fields
+    entry.name = op.name;
+    entry.epoch = 0;
+    entry.exists = false;
+  }
+
+  // fill in proper state
+  struct rgw_bucket_pending_info& info = entry.pending_map[op.tag];
   info.timestamp = ceph_clock_now(g_ceph_context);
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
 
-  entry->pending_map[op.tag] = info;
-
-  rc = write_bucket_dir(hctx, dir);
-
+  // write out new key to disk
+  bufferlist info_bl;
+  ::encode(entry, info_bl);
+  cls_cxx_map_write_key(hctx, op.name, &info_bl);
   return rc;
 }
 
