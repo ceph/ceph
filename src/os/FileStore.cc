@@ -1486,6 +1486,7 @@ int FileStore::mount()
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
       char s[PATH_MAX];
+      uint64_t curr_seq = 0;
 
       if (m_osd_rollback_to_cluster_snap.length()) {
 	derr << TEXT_RED
@@ -1496,13 +1497,16 @@ int FileStore::mount()
 	snprintf(s, sizeof(s), "%s/" CLUSTER_SNAP_ITEM, basedir.c_str(),
 		 m_osd_rollback_to_cluster_snap.c_str());
       } else {
-	uint64_t curr_seq;
 	{
 	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-	  assert(fd >= 0);
-	  TEMP_FAILURE_RETRY(::close(fd));
+	  if (fd >= 0) {
+	    TEMP_FAILURE_RETRY(::close(fd));
+	  }
 	}
-	dout(10) << " current/ seq was " << curr_seq << dendl;
+	if (curr_seq)
+	  dout(10) << " current/ seq was " << curr_seq << dendl;
+	else
+	  dout(10) << " current/ missing entirely (unusual, but okay)" << dendl;
 
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
@@ -1510,7 +1514,7 @@ int FileStore::mount()
 	if (cp != curr_seq) {
 	  if (!m_osd_use_stale_snap) { 
 	    derr << TEXT_RED
-		 << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+		 << " ** ERROR: current/ volume data version is not equal to snapshotted version\n"
 		 << "           which can lead to data inconsistency. \n"
 		 << "           Current version " << curr_seq << ", last snap " << cp << "\n"
 		 << "           Startup with snapshotted version can be forced using the\n"
@@ -1529,24 +1533,27 @@ int FileStore::mount()
 	snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
       }
 
-      // drop current
       btrfs_ioctl_vol_args vol_args;
       vol_args.fd = 0;
       strcpy(vol_args.name, "current");
-      ret = ::ioctl(basedir_fd,
+
+      // drop current?
+      if (curr_seq > 0) {
+	ret = ::ioctl(basedir_fd,
 		      BTRFS_IOC_SNAP_DESTROY,
 		      &vol_args);
-      if (ret) {
-	ret = errno;
-	derr << "FileStore::mount: error removing old current subvol: "
-	     << cpp_strerror(ret) << dendl;
-	char s[PATH_MAX];
-	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	if (::rename(current_fn.c_str(), s)) {
-	  ret = -errno;
-	  derr << "FileStore::mount: error renaming old current subvol: "
+	if (ret) {
+	  ret = errno;
+	  derr << "FileStore::mount: error removing old current subvol: "
 	       << cpp_strerror(ret) << dendl;
-	  goto close_basedir_fd;
+	  char s[PATH_MAX];
+	  snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
+	  if (::rename(current_fn.c_str(), s)) {
+	    ret = -errno;
+	    derr << "FileStore::mount: error renaming old current subvol: "
+		 << cpp_strerror(ret) << dendl;
+	    goto close_basedir_fd;
+	  }
 	}
       }
 
