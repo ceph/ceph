@@ -124,6 +124,29 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWStatAccount : public RGWOp {
+protected:
+  int ret;
+  uint32_t buckets_count;
+  uint64_t buckets_objcount;
+  uint64_t buckets_size;
+
+public:
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    buckets_count = 0;
+    buckets_objcount = 0;
+    buckets_size = 0;
+  }
+  RGWStatAccount() {}
+
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
 class RGWListBucket : public RGWOp {
 protected:
   string prefix;

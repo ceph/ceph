@@ -165,7 +165,7 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", g_conf->rgw_swift_url.c_str(),
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", g_conf->rgw_swift_url.c_str(),
 	     g_conf->rgw_swift_url_prefix.c_str());
 
   if ((ret = encode_token(swift_key->id, swift_key->key, bl)) < 0)

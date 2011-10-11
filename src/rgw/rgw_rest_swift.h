@@ -32,6 +32,15 @@ public:
   void send_response();
 };
 
+class RGWStatAccount_REST_SWIFT : public RGWStatAccount_REST {
+public:
+  RGWStatAccount_REST_SWIFT() {
+  }
+  ~RGWStatAccount_REST_SWIFT() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_REST_SWIFT : public RGWStatBucket_REST {
 public:
   RGWStatBucket_REST_SWIFT() {}
