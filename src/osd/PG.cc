@@ -356,7 +356,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       } else {
 	// old delete, new update.
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : missing" << dendl;
-	assert(missing.is_missing(oe.soid));
+	missing.revise_need(ne.soid, ne.version);
       }
     } else {
       if (ne.is_delete()) {
