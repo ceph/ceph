@@ -9,15 +9,7 @@
 
 void RGWListBuckets_REST_SWIFT::send_response()
 {
-  set_req_state_err(s, ret);
-  dump_errno(s);
-
   dump_start(s);
-
-  if (ret < 0) {
-    end_header(s);
-    return;
-  }
 
   s->formatter->open_array_section("account");
 
@@ -47,30 +39,23 @@ void RGWListBuckets_REST_SWIFT::send_response()
   }
   s->formatter->close_section();
 
-  ostringstream oss;
-  s->formatter->flush(oss);
-  std::string outs(oss.str());
-  string::size_type outs_size = outs.size();
-  dump_content_length(s, outs_size);
+  if (!ret && s->formatter->get_len() == 0)
+    ret = 204;
+
+  set_req_state_err(s, ret);
+  dump_errno(s);
   end_header(s);
-  if (!outs.empty()) {
-    CGI_PutStr(s, outs.c_str(), outs_size);
+
+  if (ret < 0) {
+    return;
   }
-  s->formatter->reset();
+
+  flush_formatter_to_req_state(s, s->formatter);
 }
 
 void RGWListBucket_REST_SWIFT::send_response()
 {
-  set_req_state_err(s, (ret < 0 ? ret : 0));
-  dump_errno(s);
-
-  dump_start(s);
-  if (ret < 0) {
-    end_header(s);
-    return;
-  }
-
-  vector<RGWObjEnt>::iterator iter = objs.begin();
+   vector<RGWObjEnt>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   s->formatter->open_array_section("container");
@@ -114,7 +99,18 @@ void RGWListBucket_REST_SWIFT::send_response()
 
   s->formatter->close_section();
 
+  if (!ret && s->formatter->get_len() == 0)
+    ret = 204;
+
+  set_req_state_err(s, (ret < 0 ? ret : 0));
+  dump_errno(s);
+
+  dump_start(s);
   end_header(s);
+  if (ret < 0) {
+    return;
+  }
+
   flush_formatter_to_req_state(s, s->formatter);
 }
 

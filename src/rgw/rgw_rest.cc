@@ -154,18 +154,23 @@ void dump_start(struct req_state *s)
 
 void end_header(struct req_state *s, const char *content_type)
 {
+  string ctype;
+
   if (!content_type || s->err.is_err()) {
     switch (s->format) {
     case RGW_FORMAT_XML:
-      content_type = "application/xml";
+      ctype = "application/xml";
       break;
     case RGW_FORMAT_JSON:
-      content_type = "application/json";
+      ctype = "application/json";
       break;
     default:
-      content_type = "text/plain";
+      ctype = "text/plain";
       break;
     }
+    if (s->prot_flags & RGW_REST_SWIFT)
+      ctype.append("; charset=utf-8");
+    content_type = ctype.c_str();
   }
   if (s->err.is_err()) {
     dump_start(s);
@@ -634,6 +639,9 @@ static int validate_bucket_name(const char *bucket)
     // Name too long
     return ERR_INVALID_BUCKET_NAME;
   }
+
+#warning FIXME
+  return 0;
 
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
