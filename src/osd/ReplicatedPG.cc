@@ -4459,7 +4459,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transac
 
   // Add log entry
   info.last_update.version++;
-  Log::Entry e(Log::Entry::LOST, oid, info.last_update,
+  Log::Entry e(Log::Entry::LOST_MARK, oid, info.last_update,
 	       version, osd_reqid_t(), mtime);
   log.add(e);
   

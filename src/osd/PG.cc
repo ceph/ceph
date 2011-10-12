@@ -3353,7 +3353,7 @@ void PG::share_pg_log(const eversion_t &oldver)
       }
       const Log::Entry &entry(*i);
       switch (entry.op) {
-	case Log::Entry::LOST: {
+	case Log::Entry::LOST_MARK: {
 	  PG::Missing& pmissing(peer_missing[peer]);
 	  pmissing.add(entry.soid, entry.version, eversion_t());
 	  dout(20) << " peer osd." << peer << " now missing " << entry.soid

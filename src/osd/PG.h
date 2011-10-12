@@ -356,13 +356,37 @@ public:
      */
     struct Entry {
       enum {
-	LOST = 0,        // lost new version, now deleted
 	MODIFY = 1,
 	CLONE = 2,
 	DELETE = 3,
 	BACKLOG = 4,  // event invented by generate_backlog
-	LOST_REVERT = 5, // lost new version, reverted to old
+	LOST_REVERT = 5, // lost new version, revert to an older version.
+	LOST_DELETE = 6, // lost new version, revert to no object (deleted).
+	LOST_MARK = 7,   // lost new version, now EIO
       };
+      static const char *get_op_name(int op) {
+	switch (op) {
+	case MODIFY:
+	  return "modify  ";
+	case CLONE:
+	  return "clone   ";
+	case DELETE:
+	  return "delete  ";
+	case BACKLOG:
+	  return "backlog ";
+	case LOST_REVERT:
+	  return "l_revert";
+	case LOST_DELETE:
+	  return "l_delete";
+	case LOST_MARK:
+	  return "l_mark  ";
+	default:
+	  return "unknown ";
+	}
+      }
+      const char *get_op_name() const {
+	return get_op_name(op);
+      }
 
       __s32      op;
       hobject_t  soid;
@@ -382,16 +406,22 @@ public:
 	prior_version(pv),
 	reqid(rid), mtime(mt), invalid_hash(false) {}
       
-      bool is_delete() const { return op == DELETE; }
       bool is_clone() const { return op == CLONE; }
       bool is_modify() const { return op == MODIFY; }
       bool is_backlog() const { return op == BACKLOG; }
-      bool is_lost() const { return op == LOST; }
       bool is_lost_revert() const { return op == LOST_REVERT; }
-      bool is_update() const { return is_clone() || is_modify() || is_backlog() || is_lost_revert(); }
+      bool is_lost_delete() const { return op == LOST_DELETE; }
+      bool is_lost_mark() const { return op == LOST_MARK; }
 
+      bool is_update() const {
+	return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+      }
+      bool is_delete() const {
+	return op == DELETE || op == LOST_DELETE;
+      }
+      
       bool reqid_is_indexed() const {
-	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE && op != LOST && op != LOST_REVERT;
+	return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
       }
 
       void encode(bufferlist &bl) const {
@@ -1732,15 +1762,8 @@ inline ostream& operator<<(ostream& out, const PG::Query& q)
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {
-  return out << e.version << " (" << e.prior_version << ")"
-             << (e.is_delete() ? " - ":
-		 (e.is_clone() ? " c ":
-		  (e.is_modify() ? " m ":
-		   (e.is_backlog() ? " b ":
-		    (e.is_lost() ? " L ":
-		     (e.is_lost_revert() ? " R " :
-		      " ? "))))))
-             << e.soid << " by " << e.reqid << " " << e.mtime;
+  return out << e.version << " (" << e.prior_version << ") "
+             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
