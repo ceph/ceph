@@ -590,6 +590,11 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
+unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
+unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_interval_tree
+
 test_librbd_SOURCES = test/test_librbd.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
