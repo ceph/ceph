@@ -1173,10 +1173,12 @@ int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
   r = read_iterate(&ictx, 0, src_size, do_copy_extent, &cp);
 
   if (r >= 0) {
+    // don't return total bytes read, which may not fit in an int
+    r = 0;
     prog_ctx.update_progress(cp.src_size, cp.src_size);
   }
   close_image(cp.destictx);
-  return 0;
+  return r;
 }
 
 int snap_set(ImageCtx *ictx, const char *snap_name)
