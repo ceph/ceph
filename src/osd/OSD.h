@@ -536,6 +536,8 @@ protected:
   void handle_pg_stats_ack(class MPGStatsAck *ack);
 
   void handle_command(class MMonCommand *m);
+  void handle_command(class MCommand *m);
+  void do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data);
 
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
