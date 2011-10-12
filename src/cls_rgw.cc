@@ -245,12 +245,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.pending_map.erase(pinter);
   }
 
+  bufferlist op_bl;
+
   switch (op.op) {
   case CLS_RGW_OP_DEL:
     if (ondisk) {
-      if (!entry.pending_map.size())
-        cls_cxx_map_remove_key(hctx, op.name);
-      else
+      if (!entry.pending_map.size()) {
+        op_bl.append(CEPH_OSD_TMAP_RM);
+        ::encode(op.name, op_bl);
+      } else
         entry.exists = false;
     } else {
       return -ENOENT;
@@ -269,17 +272,20 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.total_size_rounded += get_rounded_size(meta.size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
-      rc = cls_cxx_map_write_key(hctx, op.name, &new_key_bl);
-      if (rc < 0) {
-        return rc;
-      }
+      op_bl.append(CEPH_OSD_TMAP_SET);
+      ::encode(op.name, op_bl);
+      ::encode(new_key_bl, op_bl);
     }
     break;
   }
 
+  bufferlist update_bl;
   bufferlist new_header_bl;
   ::encode(header, new_header_bl);
-  return cls_cxx_map_write_header(hctx, &new_header_bl);
+  update_bl.append(CEPH_OSD_TMAP_HDR);
+  ::encode(new_header_bl, update_bl);
+  update_bl.claim_append(op_bl);
+  return cls_cxx_map_update(hctx, &update_bl);
 }
 
 void __cls_init()
