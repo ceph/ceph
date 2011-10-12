@@ -664,7 +664,7 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-init-ceph mkcephfs ceph-debugpack ceph-coverage: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in
+init-ceph mkcephfs ceph-debugpack ceph-coverage aclocations.h: init-ceph.in mkcephfs.in Makefile ceph-debugpack.in ceph-coverage.in aclocations.h.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp

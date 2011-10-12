@@ -1,0 +1,9 @@
+
+#undef LIBDIR
+#define LIBDIR "@libdir@"
+
+#undef BINDIR
+#define BINDIR "@bindir@"
+
+#undef SYSCONFDIR
+#define SYSCONFDIR "@sysconfdir@"

@@ -12,6 +12,8 @@
  *
  */
 
+#include "../aclocations.h"
+
 /* note: no header guard */
 OPTION(host, OPT_STR, "localhost")
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
@@ -64,7 +66,7 @@ OPTION(debug_finisher, OPT_INT, 1)
 OPTION(debug_heartbeatmap, OPT_INT, 1)
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
-OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin")
+OPTION(keyring, OPT_STR, SYSCONFDIR "/ceph/keyring,/etc/ceph/keyring.bin")
 OPTION(heartbeat_interval, OPT_INT, 5)
 OPTION(heartbeat_file, OPT_STR, "")
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
@@ -270,7 +272,7 @@ OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
 OPTION(osd_auto_weight, OPT_BOOL, false)
 OPTION(osd_class_error_timeout, OPT_DOUBLE, 60.0)  // seconds
 OPTION(osd_class_timeout, OPT_DOUBLE, 60*60.0) // seconds
-OPTION(osd_class_dir, OPT_STR, "/usr/lib/rados-classes")
+OPTION(osd_class_dir, OPT_STR, LIBDIR "/rados-classes")
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
