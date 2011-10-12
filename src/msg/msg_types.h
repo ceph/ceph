@@ -63,6 +63,36 @@ public:
     return n;
   }
 
+  bool parse(const string& s) {
+    const char *start = s.c_str();
+    char *end;
+    bool got = parse(start, &end);
+    return got && end == start + s.length();
+  }
+  bool parse(const char *start, char **end) {
+    if (strstr(start, "mon.") == start) {
+      _type = TYPE_MON;
+      start += 4;
+    } else if (strstr(start, "osd.") == start) {
+      _type = TYPE_OSD;
+      start += 4;
+    } else if (strstr(start, "mds.") == start) {
+      _type = TYPE_MDS;
+      start += 4;
+    } else if (strstr(start, "client.") == start) {
+      _type = TYPE_CLIENT;
+      start += 7;
+    } else {
+      return false;
+    }
+    if (isspace(*start))
+      return false;
+    _num = strtoll(start, end, 10);
+    if (*end == NULL || *end == start)
+      return false;
+    return true;
+  }
+
 };
 
 inline void encode(const entity_name_t &a, bufferlist& bl) {
