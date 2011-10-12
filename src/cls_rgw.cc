@@ -67,16 +67,6 @@ static int read_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir
   return 0;
 }
 
-static int write_bucket_dir(cls_method_context_t hctx, struct rgw_bucket_dir& dir)
-{
-  bufferlist bl;
-
-  ::encode(dir, bl);
-
-  int rc = cls_cxx_write_full(hctx, &bl);
-  return rc;
-}
-
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist bl;
