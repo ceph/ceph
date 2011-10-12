@@ -65,6 +65,8 @@ def task(ctx, config):
 
     ##
     user='foo'
+    subuser1='foo:foo1'
+    subuser2='foo:foo2'
     display_name='Foo'
     email='foo@foo.com'
     auid='1234'
@@ -72,6 +74,8 @@ def task(ctx, config):
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'
     secret_key2='Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
+    swift_secret1='gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
+    swift_secret2='ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
     
     bucket_name='myfoo'
 
@@ -133,7 +137,49 @@ def task(ctx, config):
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
     
-    # no buckets yet
+    # add swift key
+    (err, out) = rgwadmin(ctx, client, [
+            'key', 'create', '--subuser', subuser1,
+            '--secret', swift_secret1,
+            '--key-type', 'swift',
+            ])
+    assert not err
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
+    assert not err
+    assert len(out['swift_keys']) == 1
+    assert out['swift_keys'][0]['user'] == subuser1
+    assert out['swift_keys'][0]['secret_key'] == swift_secret1
+
+    # add another swift key
+    (err, out) = rgwadmin(ctx, client, [
+            'key', 'create', '--subuser', subuser2,
+            '--secret', swift_secret2,
+            '--key-type', 'swift',
+            ])
+    assert not err
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
+    assert not err
+    assert len(out['swift_keys']) == 2
+    assert out['swift_keys'][0]['user'] == subuser2 or out['swift_keys'][1]['user'] == subuser2
+    assert out['swift_keys'][0]['secret_key'] == swift_secret2 or out['swift_keys'][1]['secret_key'] == swift_secret2
+
+    # remove first swift key
+    (err, out) = rgwadmin(ctx, client, [
+            'key', 'rm', '--subuser', subuser1,
+            '--key-type', 'swift',
+            ])
+    assert not err
+    assert len(out['swift_keys']) == 1
+
+     # remove second swift key
+    (err, out) = rgwadmin(ctx, client, [
+            'key', 'rm', '--subuser', subuser2,
+            '--key-type', 'swift',
+            ])
+    assert not err
+    assert len(out['swift_keys']) == 0
+
+   # no buckets yet
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user])
     assert not err
     assert len(out) == 0
