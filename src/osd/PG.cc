@@ -3343,7 +3343,7 @@ void PG::share_pg_log(const eversion_t &oldver)
   vector<int>::const_iterator end = acting.end();
   while (++a != end) {
     int peer(*a);
-    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
     m->log.head = log.head;
     m->log.tail = log.tail;
     for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
@@ -4210,6 +4210,20 @@ PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
 			infoevt.info);
+  return discard_event();
+}
+
+boost::statechart::result 
+PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
+  PG *pg = context< RecoveryMachine >().pg;
+  MOSDPGLog *msg = logevt.msg;
+  dout(10) << "received log from " << logevt.from << dendl;
+  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
+		msg->info, msg->log, logevt.from);
+
+  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.head == pg->info.last_update);
+
   return discard_event();
 }
 

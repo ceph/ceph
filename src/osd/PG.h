@@ -1207,9 +1207,11 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MQuery >,
-	boost::statechart::custom_reaction< MInfoRec >
+	boost::statechart::custom_reaction< MInfoRec >,
+	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
       boost::statechart::result react(const MInfoRec& infoevt);
+      boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
     };
