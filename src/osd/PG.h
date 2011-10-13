@@ -1632,8 +1632,10 @@ public:
   void queue_snap_trim();
   bool queue_scrub();
 
+  /// share pg info after a pg is active
   void share_pg_info();
-  void share_pg_log(const eversion_t &oldver);
+  /// share new pg log entries after a pg is active
+  void share_pg_log();
 
   void start_peering_interval(const OSDMap *lastmap,
 			      const vector<int>& newup,

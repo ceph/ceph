@@ -4542,7 +4542,7 @@ void ReplicatedPG::mark_all_unfound_lost()
 	      
   // Send out the PG log to all replicas
   // So that they know what is lost
-  share_pg_log(old_last_update);
+  share_pg_log();
 
   // queue ourselves so that we push the (now-lost) object_infos to replicas.
   osd->queue_for_recovery(this);

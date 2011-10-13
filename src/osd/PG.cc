@@ -3325,17 +3325,13 @@ void PG::share_pg_info()
 }
 
 /*
- * Share some of this PG's log with some replicas.
- *
- * The log will be shared from the current version (last_update) back to
- * 'oldver.'
+ * Share a new segment of this PG's log with some replicas, after PG is active.
  *
  * Updates peer_missing and peer_info.
  */
-void PG::share_pg_log(const eversion_t &oldver)
+void PG::share_pg_log()
 {
   dout(10) << __func__ << dendl;
-
   assert(is_primary());
 
   vector<int>::const_iterator a = acting.begin();
@@ -3343,41 +3339,19 @@ void PG::share_pg_log(const eversion_t &oldver)
   vector<int>::const_iterator end = acting.end();
   while (++a != end) {
     int peer(*a);
-    MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
-    m->log.head = log.head;
-    m->log.tail = log.tail;
-    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
-	 i != log.log.rend();
-	 ++i) {
-      if (i->version <= oldver) {
-	m->log.tail = i->version;
-	break;
-      }
-      const Log::Entry &entry(*i);
-      switch (entry.op) {
-	case Log::Entry::LOST_MARK: {
-	  PG::Missing& pmissing(peer_missing[peer]);
-	  pmissing.add(entry.soid, entry.version, eversion_t());
-	  dout(20) << " peer osd." << peer << " now missing " << entry.soid
-		   << " v" << entry.version << " (lost)" << dendl;
-	  break;
-        }
-	default: {
-	  // To do this right, you need to figure out what impact this log
-	  // entry has on the peer missing and the peer info
-	  assert(0);
-	  break;
-        }
-      }
-
-      m->log.log.push_front(*i);
-    }
+    PG::Missing& pmissing(peer_missing[peer]);
     PG::Info& pinfo(peer_info[peer]);
-    pinfo.last_update = log.head;
-    // shouldn't move pinfo.log.tail
-    // no change in pinfo.last_complete
 
-    m->missing = missing;
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
+    m->log.copy_after(log, pinfo.last_update);
+
+    for (list<Log::Entry>::const_iterator i = m->log.log.begin();
+	 i != m->log.log.end();
+	 ++i) {
+      pmissing.add_next_event(*i, pinfo);
+    }
+    pinfo.last_update = m->log.head;
+
     osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
   }
 }
