@@ -1401,7 +1401,7 @@ public:
 
   bool adjust_need_up_thru(const OSDMap *osdmap);
 
-  bool all_unfound_are_lost(const OSDMap* osdmap) const;
+  bool all_unfound_are_queried_or_lost(const OSDMap* osdmap) const;
   virtual void mark_all_unfound_lost() = 0;
 
   bool calc_min_last_complete_ondisk() {

@@ -1060,13 +1060,15 @@ bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
-bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+bool PG::all_unfound_are_queried_or_lost(const OSDMap* osdmap) const
 {
   assert(is_primary());
 
   set<int>::const_iterator peer = might_have_unfound.begin();
   set<int>::const_iterator mend = might_have_unfound.end();
   for (; peer != mend; ++peer) {
+    if (peer_missing.count(*peer))
+      continue;
     const osd_info_t &osd_info(osdmap->get_info(*peer));
     if (osd_info.lost_at <= osd_info.up_from) {
       // If there is even one OSD in might_have_unfound that isn't lost, we
@@ -1074,8 +1076,8 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
       return false;
     }
   }
-  dout(10) << "all_unfound_are_lost all of might_have_unfound " << might_have_unfound 
-	   << " are marked lost!" << dendl;
+  dout(10) << "all_unfound_are_queried_or_lost all of might_have_unfound " << might_have_unfound 
+	   << " have been queried or are marked lost" << dendl;
   return true;
 }
 
@@ -4100,7 +4102,7 @@ PG::RecoveryState::Active::react(const ActMap&) {
 
   int unfound = pg->missing.num_missing() - pg->missing_loc.size();
   if (unfound > 0 &&
-      pg->all_unfound_are_lost(pg->osd->osdmap)) {
+      pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
     if (g_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
