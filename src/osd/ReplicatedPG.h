@@ -816,10 +816,11 @@ public:
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, Message *op);
 
-  void mark_all_unfound_lost();
+  void mark_all_unfound_lost(int what);
+  eversion_t pick_newest_available(const hobject_t& oid);
   ObjectContext *mark_object_lost(ObjectStore::Transaction *t,
 				  const hobject_t& oid, eversion_t version,
-				  utime_t mtime);
+				  utime_t mtime, int what);
   void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
 
   void on_osd_failure(int o);

@@ -2357,14 +2357,29 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     flush_pg_stats();
   }
   
-  else if (cmd.size() == 2 && cmd[0] == "mark_unfound_lost") {
+  else if (cmd.size() == 3 && cmd[0] == "mark_unfound_lost") {
     pg_t pgid;
     if (!pgid.parse(cmd[1].c_str())) {
       ss << "can't parse pgid '" << cmd[1] << "'";
       r = -EINVAL;
       goto out;
     }
-    PG *pg = _lookup_lock_pg(pgid);
+    int mode;
+    if (cmd[2] == "revert")
+      mode = PG::Log::Entry::LOST_REVERT;
+    /*
+    else if (cmd[2] == "mark")
+      mode = PG::Log::Entry::LOST_MARK;
+    else if (cmd[2] == "delete" || cmd[2] == "remove")
+      mode = PG::Log::Entry::LOST_DELETE;
+    */
+    else {
+      //ss << "mode must be mark|revert|delete";
+      ss << "mode must be revert (mark|delete not yet implemented)";
+      r = -EINVAL;
+      goto out;
+    }
+    PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
     if (!pg) {
       ss << "pg " << pgid << " not found";
       r = -ENOENT;
@@ -2372,16 +2387,19 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     if (!pg->is_primary()) {
       ss << "pg " << pgid << " not primary";
+      pg->unlock();
       r = -EINVAL;
       goto out;
     }
     int unfound = pg->missing.num_missing() - pg->missing_loc.size();
     if (!unfound) {
       ss << "pg " << pgid << " has no unfound objects";
+      pg->unlock();
       r = -ENOENT;
       goto out;
     }
     if (!pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
+      pg->unlock();
       ss << "pg " << pgid << " has " << unfound
 	 << " objects but we haven't probed all sources, not marking lost despite command "
 	 << cmd;
@@ -2390,7 +2408,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     ss << pgid << " has " << unfound
        << " objects unfound and apparently lost, marking";
-    pg->mark_all_unfound_lost();
+    pg->mark_all_unfound_lost(mode);
     pg->unlock();
   }
 
