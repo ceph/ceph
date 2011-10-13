@@ -391,9 +391,9 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   // If our log is empty, the incoming log either needs to have a backlog
   // or have not been trimmed
-  assert(!log.empty() || olog.backlog || olog.tail == eversion_t());
+  assert(!log.null() || olog.backlog || olog.tail == eversion_t());
   // If the logs don't overlap, we need both backlogs
-  assert(log.head >= olog.tail || ((log.backlog || log.empty()) && olog.backlog));
+  assert(log.head >= olog.tail || ((log.backlog || log.null()) && olog.backlog));
 
   for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
@@ -529,7 +529,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       
       // move aside divergent items
       list<Log::Entry> divergent;
-      while (!log.log.empty()) {
+      while (!log.empty()) {
 	Log::Entry &oe = *log.log.rbegin();
 	/*
 	 * look at eversion.version here.  we want to avoid a situation like:
@@ -825,7 +825,7 @@ void PG::drop_backlog()
   log.backlog = false;
   info.log_backlog = false;
   
-  while (!log.log.empty()) {
+  while (!log.empty()) {
     Log::Entry &e = *log.log.begin();
     if (e.version > log.tail) break;
 
@@ -2200,7 +2200,7 @@ void PG::read_log(ObjectStore *store)
     
     PG::Log::Entry e;
     bufferlist::iterator p = bl.begin();
-    assert(log.log.empty());
+    assert(log.empty());
     eversion_t last;
     bool reorder = false;
     while (!p.end()) {
@@ -2508,7 +2508,7 @@ void PG::log_weirdness()
 		      << " != info.last_update " << info.last_update
 		      << "\n";
 
-  if (log.log.empty()) {
+  if (log.empty()) {
     // shoudl it be?
     if (log.head != log.tail)
       osd->clog.error() << info.pgid
@@ -3882,7 +3882,7 @@ ostream& operator<<(ostream& out, const PG& pg)
       pg.log.head != pg.info.last_update)
     out << " (info mismatch, " << pg.log << ")";
 
-  if (pg.log.log.empty()) {
+  if (pg.log.empty()) {
     // shoudl it be?
     if (pg.log.head.version - pg.log.tail.version != 0) {
       out << " (log bound mismatch, empty)";
