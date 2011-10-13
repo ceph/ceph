@@ -112,7 +112,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
   }
   else {
     dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
-    pull(soid);
+    pull(soid, v);
   }
   waiting_for_missing_object[soid].push_back(m);
 }
@@ -3630,10 +3630,8 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
  */
 enum { PULL_NONE, PULL_OTHER, PULL_YES };
 
-int ReplicatedPG::pull(const hobject_t& soid)
+int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
 {
-  eversion_t v = missing.missing[soid].need;
-
   int fromosd = -1;
   map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
   if (q != missing_loc.end()) {
@@ -3673,7 +3671,7 @@ int ReplicatedPG::pull(const hobject_t& soid)
 	dout(10) << " missing but already pulling head " << head << dendl;
 	return PULL_NONE;
       } else {
-	int r = pull(head);
+	int r = pull(head, missing.missing[head].need);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
 	return PULL_NONE;
@@ -3685,7 +3683,7 @@ int ReplicatedPG::pull(const hobject_t& soid)
 	dout(10) << " missing but already pulling snapdir " << head << dendl;
 	return false;
       } else {
-  	int r = pull(head);
+	int r = pull(head, missing.missing[head].need);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
 	return PULL_NONE;
@@ -4823,7 +4821,7 @@ int ReplicatedPG::recover_primary(int max)
 	  }
 	}
 	
-	int r = pull(soid);
+	int r = pull(soid, need);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
