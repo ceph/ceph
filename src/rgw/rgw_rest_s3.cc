@@ -165,6 +165,8 @@ void RGWListBucket_REST_S3::send_response()
 
 void RGWCreateBucket_REST_S3::send_response()
 {
+  if (ret == -ERR_BUCKET_EXISTS)
+    ret = 0;
   if (ret)
     set_req_state_err(s, ret);
   dump_errno(s);

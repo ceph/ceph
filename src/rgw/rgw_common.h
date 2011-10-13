@@ -109,6 +109,7 @@ using ceph::crypto::MD5;
 #define ERR_REQUEST_TIMEOUT     2010
 #define ERR_LENGTH_REQUIRED     2011
 #define ERR_REQUEST_TIME_SKEWED 2012
+#define ERR_BUCKET_EXISTS       2013
 #define ERR_USER_SUSPENDED      2100
 #define ERR_INTERNAL_ERROR      2200
 

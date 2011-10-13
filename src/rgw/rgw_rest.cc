@@ -29,6 +29,7 @@ struct rgw_html_errors {
 const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { 0, 200, "" },
     { 201, 201, "Created" },
+    { 202, 202, "Accepted" },
     { 204, 204, "NoContent" },
     { 206, 206, "" },
     { EINVAL, 400, "InvalidArgument" },
@@ -56,18 +57,43 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
+const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
+    { EACCES, 401, "AccessDenied" },
+    { EPERM, 401, "AccessDenied" },
+    { ERR_USER_SUSPENDED, 401, "UserSuspended" },
+};
+
+#define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
+static const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
+{
+  for (int i = 0; i < len; ++i, ++errs) {
+    if (err_no == errs->err_no)
+      return errs;
+  }
+  return NULL;
+}
+
 void set_req_state_err(struct req_state *s, int err_no)
 {
+  const struct rgw_html_errors *r;
+
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = err_no;
-  for (size_t i = 0; i < sizeof(RGW_HTML_ERRORS)/sizeof(RGW_HTML_ERRORS[0]); ++i) {
-    const struct rgw_html_errors *r = RGW_HTML_ERRORS + i;
-    if (err_no == r->err_no) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    r = search_err(err_no, RGW_HTML_SWIFT_ERRORS, ARRAY_LEN(RGW_HTML_SWIFT_ERRORS));
+    if (r) {
       s->err.http_ret = r->http_ret;
       s->err.s3_code = r->s3_code;
       return;
     }
+  }
+  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  if (r) {
+    s->err.http_ret = r->http_ret;
+    s->err.s3_code = r->s3_code;
+    return;
   }
   dout(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
@@ -624,7 +650,7 @@ static bool looks_like_ip_address(const char *bucket)
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-static int validate_bucket_name(const char *bucket)
+static int validate_bucket_name(const char *bucket, int flags)
 {
   int len = strlen(bucket);
   if (len < 3) {
@@ -640,8 +666,12 @@ static int validate_bucket_name(const char *bucket)
     return ERR_INVALID_BUCKET_NAME;
   }
 
-#warning FIXME
-  return 0;
+  if (flags & RGW_REST_SWIFT) {
+    if (*bucket == '.')
+      return ERR_INVALID_BUCKET_NAME;
+
+    return 0;
+  }
 
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
@@ -735,10 +765,18 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     break;
   }
 
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    char buf[g_conf->rgw_swift_url_prefix.length() + 16];
+    int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+    if (s->path_name_url[0] != '/' ||
+        s->path_name_url.compare(0, blen, buf) !=  0)
+      ret = -ENOENT;
+  }
+
   if (ret)
     return ret;
 
-  ret = validate_bucket_name(s->bucket_name_str.c_str());
+  ret = validate_bucket_name(s->bucket_name_str.c_str(), s->prot_flags);
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());

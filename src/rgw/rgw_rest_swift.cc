@@ -101,8 +101,10 @@ void RGWListBucket_REST_SWIFT::send_response()
 
   if (!ret && s->formatter->get_len() == 0)
     ret = 204;
+  else if (ret > 0)
+    ret = 0;
 
-  set_req_state_err(s, (ret < 0 ? ret : 0));
+  set_req_state_err(s, ret);
   dump_errno(s);
 
   dump_start(s);
@@ -167,6 +169,8 @@ void RGWCreateBucket_REST_SWIFT::send_response()
 {
   if (!ret)
     ret = 201; // "created"
+  else if (ret == -ERR_BUCKET_EXISTS)
+    ret = 202;
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);

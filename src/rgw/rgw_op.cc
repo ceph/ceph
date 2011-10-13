@@ -521,7 +521,7 @@ void RGWCreateBucket::execute()
     rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
 
   if (ret == -EEXIST)
-    ret = 0;
+    ret = -ERR_BUCKET_EXISTS;
 
 done:
   send_response();
