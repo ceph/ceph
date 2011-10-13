@@ -4319,6 +4319,17 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       }
     }
 
+    bool revert = false;
+    if (missing.is_missing(soid) && missing.missing[soid].need > v) {
+      Log::Entry *latest = log.objects[soid];
+      if (latest->op == Log::Entry::LOST_REVERT &&
+	  latest->prior_version == v) {
+	dout(10) << " got old revert version " << v << " for " << *latest << dendl;
+	revert = true;
+	v = latest->version;
+      }
+    }
+
     recover_primary_got(soid, v);
 
     // update pg
@@ -4333,6 +4344,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       
       obc->obs.exists = true;
       obc->obs.oi.decode(oibl);
+
+      if (revert) {
+	// update the attr to the revert event version
+	obc->obs.oi.prior_version = obc->obs.oi.version;
+	obc->obs.oi.version = v;
+	bufferlist bl;
+	::encode(obc->obs.oi, bl);
+	t->setattr(coll, soid, OI_ATTR, bl);
+      }
       
       // suck in snapset context?
       SnapSetContext *ssc = obc->ssc;
@@ -4451,17 +4471,17 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
 
   assert(missing.is_missing(oid));
   v = missing.missing[oid].have;
-  dout(10) << "pick_newest_available " << oid << " i have " << v << dendl;
+  dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
   for (unsigned i=1; i<acting.size(); ++i) {
     assert(peer_missing[acting[i]].is_missing(oid));
     eversion_t h = peer_missing[acting[i]].missing[oid].have;
-    dout(10) << "pick_newest_available " << oid << " osd." << acting[i] << " has " << v << dendl;
+    dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << acting[i] << dendl;
     if (h > v)
       v = h;
   }
 
-  dout(10) << "pick_newest_available " << oid << " " << v << dendl;
+  dout(10) << "pick_newest_available " << oid << " " << v << " (newest)" << dendl;
   return v;
 }
 
@@ -4928,12 +4948,26 @@ int ReplicatedPG::recover_primary(int max)
 	      continue;
 	    }
 	  } else {
+	    /*
+	     * Pull the old version of the object.  Update missing_loc here to have the location
+	     * of the version we want.
+	     *
+	     * This doesn't use the usual missing_loc paths, but that's okay:
+	     *  - if we have it locally, we hit the case above, and go from there.
+	     *  - if we don't, we always pass through this case during recovery and set up the location
+	     *    properly.
+	     *  - this way we don't need to mangle the missing code to be general about needing an old
+	     *    version...
+	     */
 	    need = latest->prior_version;
-	    dout(10) << " pulling prior_version " << need << " for revert " << item << dendl;
-	    
-	    // ...
-	    assert(0 == "pulling prior version for revert not implement yet");
-	    
+	    dout(10) << " need to pull prior_version " << need << " for revert " << item << dendl;
+
+	    set<int>& loc = missing_loc[soid];
+	    for (map<int,Missing>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
+	      if (p->second.missing[soid].have == need)
+		loc.insert(p->first);
+	    dout(10) << " will pull " << need << " from one of " << loc << dendl;
+	    unfound = false;
 	  }
 	}
 	break;
