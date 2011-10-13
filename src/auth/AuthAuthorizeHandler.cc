@@ -21,7 +21,7 @@
 
 AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
 {
-  if (!is_supported_auth(protocol, cct)) {
+  if (!supported.is_supported_auth(protocol)) {
     return NULL;
   }
   

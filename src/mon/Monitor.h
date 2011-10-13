@@ -38,6 +38,7 @@
 #include "common/LogClient.h"
 
 #include "auth/cephx/CephxKeyServer.h"
+#include "auth/AuthSupported.h"
 
 #include "perfglue/heap_profiler.h"
 
@@ -71,6 +72,8 @@ public:
 
   LogClient clog;
   KeyServer key_server;
+
+  AuthSupported auth_supported;
 
 private:
   void new_tick();

@@ -39,7 +39,6 @@ public:
   EntityName& get_entity_name() { return entity_name; }
 };
 
-extern AuthServiceHandler *get_auth_service_handler(CephContext *cct,
-				KeyServer *ks, set<__u32>& supported);
+extern AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServer *ks);
 
 #endif

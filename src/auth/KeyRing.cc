@@ -38,7 +38,9 @@ KeyRing *KeyRing::from_ceph_context(CephContext *cct)
   bool found_key = false;
   auto_ptr < KeyRing > keyring(new KeyRing());
 
-  if (!is_supported_auth(CEPH_AUTH_CEPHX, cct)) {
+  AuthSupported supported(cct);
+
+  if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
     ldout(cct, 2) << "KeyRing::from_ceph_context: CephX auth is not supported." << dendl;
     return keyring.release();
   }
