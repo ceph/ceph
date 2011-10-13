@@ -4088,6 +4088,28 @@ void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectCon
   delete t;
 }
 
+void ReplicatedPG::recover_primary_got(hobject_t oid, eversion_t v)
+{
+  if (missing.is_missing(oid, v)) {
+    dout(10) << "got missing " << oid << " v " << v << dendl;
+    missing.got(oid, v);
+    if (is_primary())
+      missing_loc.erase(oid);
+      
+    // raise last_complete?
+    while (log.complete_to != log.log.end()) {
+      if (missing.missing.count(log.complete_to->soid))
+	break;
+      if (info.last_complete < log.complete_to->version)
+	info.last_complete = log.complete_to->version;
+      log.complete_to++;
+    }
+    dout(10) << "last_complete now " << info.last_complete << dendl;
+    if (log.complete_to != log.log.end())
+      dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
+  }
+}
+
 /** op_push
  * NOTE: called from opqueue.
  */
@@ -4297,28 +4319,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       }
     }
 
-    if (missing.is_missing(soid, v)) {
-      dout(10) << "got missing " << soid << " v " << v << dendl;
-      missing.got(soid, v);
-      if (is_primary())
-	missing_loc.erase(soid);
-      
-      // raise last_complete?
-      while (log.complete_to != log.log.end()) {
-	if (missing.missing.count(log.complete_to->soid))
-	  break;
-	if (info.last_complete < log.complete_to->version)
-	  info.last_complete = log.complete_to->version;
-	log.complete_to++;
-      }
-      dout(10) << "last_complete now " << info.last_complete << dendl;
-      if (log.complete_to != log.log.end())
-	dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
-    }
+    recover_primary_got(soid, v);
 
     // update pg
     write_info(*t);
-
 
     // track ObjectContext
     if (is_primary()) {
