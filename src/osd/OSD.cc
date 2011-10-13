@@ -3973,7 +3973,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     PG *child = p->second;
 
     // fix log bounds
-    if (!child->log.log.empty()) {
+    if (!child->log.empty()) {
       child->log.head = child->log.log.rbegin()->version;
       child->log.tail =  parent->log.tail;
       child->log.backlog = parent->log.backlog;
