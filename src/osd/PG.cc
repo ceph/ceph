@@ -921,6 +921,8 @@ void PG::generate_past_intervals()
 
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
+  if (stop < osd->superblock.oldest_map)
+    stop = osd->superblock.oldest_map;   // this is a lower bound on last_epoch_clean cluster-wide.     
   epoch_t last_epoch = info.history.same_interval_since - 1;
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
