@@ -3705,7 +3705,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
+void PG::Missing::add_next_event(const Log::Entry& e, const Info &info)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t()) {
@@ -3752,18 +3752,23 @@ void PG::Missing::add(const hobject_t& oid, eversion_t need, eversion_t have)
 
 void PG::Missing::rm(const hobject_t& oid, eversion_t v)
 {
-  if (missing.count(oid) && missing[oid].need <= v) {
-    rmissing.erase(missing[oid].need.version);
-    missing.erase(oid);
-  }
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  if (p != missing.end() && p->second.need <= v)
+    rm(p);
+}
+
+void PG::Missing::rm(const std::map<hobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need.version);
+  missing.erase(m);
 }
 
 void PG::Missing::got(const hobject_t& oid, eversion_t v)
 {
-  assert(missing.count(oid));
-  assert(missing[oid].need <= v);
-  rmissing.erase(missing[oid].need.version);
-  missing.erase(oid);
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  assert(p != missing.end());
+  assert(p->second.need <= v);
+  got(p);
 }
 
 void PG::Missing::got(const std::map<hobject_t, Missing::item>::iterator &m)

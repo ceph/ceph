@@ -713,10 +713,11 @@ public:
     bool is_missing(const hobject_t& oid) const;
     bool is_missing(const hobject_t& oid, eversion_t v) const;
     eversion_t have_old(const hobject_t& oid) const;
-    void add_next_event(Log::Entry& e, const Info &info);
+    void add_next_event(const Log::Entry& e, const Info &info);
     void revise_need(hobject_t oid, eversion_t need);
     void add(const hobject_t& oid, eversion_t need, eversion_t have);
     void rm(const hobject_t& oid, eversion_t v);
+    void rm(const std::map<hobject_t, Missing::item>::iterator &m);
     void got(const hobject_t& oid, eversion_t v);
     void got(const std::map<hobject_t, Missing::item>::iterator &m);
 
