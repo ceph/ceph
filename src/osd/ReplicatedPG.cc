@@ -4072,7 +4072,8 @@ void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, e
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
 
-  log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+  if (op)
+    log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
 
   unlock();
   put();

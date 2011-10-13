@@ -683,12 +683,14 @@ protected:
     epoch_t same_since;
     eversion_t last_complete;
     C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
-      op->get();
+      if (op)
+	op->get();
       pg->get();
     }
     void finish(int r) {
       pg->_committed_pushed_object(op, same_since, last_complete);
-      op->put();
+      if (op)
+	op->put();
     }
   };
 
