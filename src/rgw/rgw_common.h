@@ -96,6 +96,11 @@ using ceph::crypto::MD5;
   state->bytes_received += olen; \
 } while (0)
 
+#define STATUS_CREATED          1900
+#define STATUS_ACCEPTED         1901
+#define STATUS_NO_CONTENT       1902
+#define STATUS_PARTIAL_CONTENT  1903
+
 #define ERR_INVALID_BUCKET_NAME 2000
 #define ERR_INVALID_OBJECT_NAME 2001
 #define ERR_NO_SUCH_BUCKET      2002
@@ -110,6 +115,9 @@ using ceph::crypto::MD5;
 #define ERR_LENGTH_REQUIRED     2011
 #define ERR_REQUEST_TIME_SKEWED 2012
 #define ERR_BUCKET_EXISTS       2013
+#define ERR_BAD_URL             2014
+#define ERR_PRECONDITION_FAILED 2015
+#define ERR_NOT_MODIFIED        2016
 #define ERR_USER_SUSPENDED      2100
 #define ERR_INTERNAL_ERROR      2200
 
@@ -828,8 +836,10 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   return "unknown";
 }
 
-/** */
+/** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
+extern bool parse_rfc2616(const char *s, struct tm *t);
+
 /** Check if a user has a permission on that ACL */
 extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm);
 /** Check if the req_state's user has the necessary permissions

@@ -118,6 +118,7 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
+  const char *format;
 
   struct plain_stack_entry& entry = stack.back();
 
@@ -133,7 +134,12 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
   va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  write_data("%s\n", buf);
+  if (len)
+    format = "\n%s";
+  else
+    format = "%s";
+
+  write_data(format, buf);
 }
 
 int RGWFormatter_Plain::get_len() const

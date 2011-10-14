@@ -1399,6 +1399,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
       goto done_err;
   }
 
+  dout(0) << __FILE__ << ":" << __LINE__ << " mod_ptr=" << (void *)mod_ptr << " unmod_ptr=" << (void *)unmod_ptr << dendl;
+
   /* Convert all times go GMT to make them compatible */
   if (mod_ptr || unmod_ptr) {
     struct tm mtm;
@@ -1410,13 +1412,10 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
     ctime = mktime(gmtm);
 
-    r = -ECANCELED;
     if (mod_ptr) {
       dout(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
       if (ctime < *mod_ptr) {
-        err->http_ret = 304;
-        err->s3_code = "NotModified";
-
+        r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
     }
@@ -1424,8 +1423,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     if (unmod_ptr) {
       dout(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << dendl;
       if (ctime > *unmod_ptr) {
-        err->http_ret = 412;
-        err->s3_code = "PreconditionFailed";
+        r = -ERR_PRECONDITION_FAILED;
         goto done_err;
       }
     }
@@ -1435,12 +1433,10 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     if (r < 0)
       goto done_err;
 
-    r = -ECANCELED;
     if (if_match) {
       dout(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
       if (strcmp(if_match, etag.c_str())) {
-        err->http_ret = 412;
-        err->s3_code = "PreconditionFailed";
+        r = -ERR_PRECONDITION_FAILED;
         goto done_err;
       }
     }
@@ -1448,8 +1444,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     if (if_nomatch) {
       dout(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
-        err->http_ret = 304;
-        err->s3_code = "NotModified";
+        r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
     }

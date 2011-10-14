@@ -40,7 +40,7 @@ void RGWListBuckets_REST_SWIFT::send_response()
   s->formatter->close_section();
 
   if (!ret && s->formatter->get_len() == 0)
-    ret = 204;
+    ret = STATUS_NO_CONTENT;
 
   set_req_state_err(s, ret);
   dump_errno(s);
@@ -100,7 +100,7 @@ void RGWListBucket_REST_SWIFT::send_response()
   s->formatter->close_section();
 
   if (!ret && s->formatter->get_len() == 0)
-    ret = 204;
+    ret = STATUS_NO_CONTENT;
   else if (ret > 0)
     ret = 0;
 
@@ -140,7 +140,7 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
 void RGWStatAccount_REST_SWIFT::send_response()
 {
   if (ret >= 0) {
-    ret = 204;
+    ret = STATUS_NO_CONTENT;
     dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size);
   }
 
@@ -154,7 +154,7 @@ void RGWStatAccount_REST_SWIFT::send_response()
 void RGWStatBucket_REST_SWIFT::send_response()
 {
   if (ret >= 0) {
-    ret = 204;
+    ret = STATUS_NO_CONTENT;
     dump_container_metadata(s, bucket);
   }
 
@@ -168,9 +168,9 @@ void RGWStatBucket_REST_SWIFT::send_response()
 void RGWCreateBucket_REST_SWIFT::send_response()
 {
   if (!ret)
-    ret = 201; // "created"
+    ret = STATUS_CREATED;
   else if (ret == -ERR_BUCKET_EXISTS)
-    ret = 202;
+    ret = STATUS_ACCEPTED;
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
@@ -181,7 +181,7 @@ void RGWDeleteBucket_REST_SWIFT::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -192,7 +192,7 @@ void RGWDeleteBucket_REST_SWIFT::send_response()
 void RGWPutObj_REST_SWIFT::send_response()
 {
   if (!ret)
-    ret = 201; // "created"
+    ret = STATUS_CREATED;
   dump_etag(s, etag.c_str());
   set_req_state_err(s, ret);
   dump_errno(s);
@@ -204,7 +204,7 @@ void RGWDeleteObj_REST_SWIFT::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -248,7 +248,7 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
   }
 
   if (range_str && !ret)
-    ret = 206; /* partial content */
+    ret = -STATUS_PARTIAL_CONTENT;
 
   if (ret)
     set_req_state_err(s, ret);

@@ -72,7 +72,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
   }
 
   if (range_str && !ret)
-    ret = 206; /* partial content */
+    ret = STATUS_PARTIAL_CONTENT;
 done:
   set_req_state_err(s, ret);
 
@@ -177,7 +177,7 @@ void RGWDeleteBucket_REST_S3::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -200,7 +200,7 @@ void RGWDeleteObj_REST_S3::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -291,7 +291,7 @@ void RGWAbortMultipart_REST_S3::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -526,39 +526,6 @@ static void get_canon_resource(struct req_state *s, string& dest)
     }
   }
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-}
-
-static bool check_str_end(const char *s)
-{
-  if (!s)
-    return false;
-
-  while (*s) {
-    if (!isspace(*s))
-      return false;
-    s++;
-  }
-  return true;
-}
-
-static bool parse_rfc850(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
-}
-
-static bool parse_asctime(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
-}
-
-static bool parse_rfc1123(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
-}
-
-static bool parse_rfc2616(const char *s, struct tm *t)
-{
-  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
 }
 
 static inline bool is_base64_for_content_md5(unsigned char c) {

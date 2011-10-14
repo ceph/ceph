@@ -92,14 +92,47 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
   return oss;
 }
 
+static bool check_str_end(const char *s)
+{
+  if (!s)
+    return false;
+
+  while (*s) {
+    if (!isspace(*s))
+      return false;
+    s++;
+  }
+  return true;
+}
+
+static bool parse_rfc850(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
+}
+
+static bool parse_asctime(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
+}
+
+static bool parse_rfc1123(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
+}
+
+bool parse_rfc2616(const char *s, struct tm *t)
+{
+  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
+}
+
 int parse_time(const char *time_str, time_t *time)
 {
   struct tm tm;
-  memset(&tm, 0, sizeof(struct tm));
-  if (!strptime(time_str, "%a, %d %b %Y %H:%M:%S %Z", &tm))
+
+  if (!parse_rfc2616(time_str, &tm))
     return -EINVAL;
 
-  *time = mktime(&tm);
+  *time = timegm(&tm);
 
   return 0;
 }

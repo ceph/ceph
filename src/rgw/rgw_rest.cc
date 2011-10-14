@@ -28,10 +28,11 @@ struct rgw_html_errors {
 
 const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { 0, 200, "" },
-    { 201, 201, "Created" },
-    { 202, 202, "Accepted" },
-    { 204, 204, "NoContent" },
-    { 206, 206, "" },
+    { STATUS_CREATED, 201, "Created" },
+    { STATUS_ACCEPTED, 202, "Accepted" },
+    { STATUS_NO_CONTENT, 204, "NoContent" },
+    { STATUS_PARTIAL_CONTENT, 206, "" },
+    { ERR_NOT_MODIFIED, 304, "NotModified" },
     { EINVAL, 400, "InvalidArgument" },
     { ERR_INVALID_DIGEST, 400, "InvalidDigest" },
     { ERR_BAD_DIGEST, 400, "BadDigest" },
@@ -53,6 +54,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
     { ENOTEMPTY, 409, "BucketNotEmpty" },
+    { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
@@ -61,6 +63,7 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
     { EACCES, 401, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
+    { ERR_BAD_URL, 412, "Bad URL" },
 };
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
@@ -202,7 +205,7 @@ void end_header(struct req_state *s, const char *content_type)
     dump_start(s);
     s->formatter->open_object_section("Error");
     if (!s->err.s3_code.empty())
-      s->formatter->dump_format("Code", "%s", s->err.s3_code.c_str());
+      s->formatter->dump_string("Code", s->err.s3_code.c_str());
     if (!s->err.message.empty())
       s->formatter->dump_format("Message", s->err.message.c_str());
     s->formatter->close_section();
@@ -237,6 +240,7 @@ int RGWGetObj_REST::get_params()
   range_str = s->env->get("HTTP_RANGE");
   if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
   if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
+dout(0) << __FILE__ << ":" << __LINE__ << " if_unmod=" << (void *)if_unmod << dendl;
   if_match = s->env->get("HTTP_IF_MATCH");
   if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
 
@@ -396,7 +400,7 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-void init_entities_from_header(struct req_state *s)
+static int init_entities_from_header(struct req_state *s)
 {
   string req;
   string first;
@@ -430,7 +434,8 @@ void init_entities_from_header(struct req_state *s)
     } else {
       s->host_bucket = NULL;
     }
-  } else s->host_bucket = NULL;
+  } else
+    s->host_bucket = NULL;
 
   const char *req_name = s->path_name;
   const char *p;
@@ -465,10 +470,25 @@ void init_entities_from_header(struct req_state *s)
       }
     }
   } else {
+    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
+      s->prot_flags |= RGW_REST_SWIFT;
+      delete s->formatter;
+      s->format = 0;
+      s->formatter = new RGWFormatter_Plain;
+      return -ERR_BAD_URL;
+    }
     first = req;
   }
 
   if (s->prot_flags & RGW_REST_SWIFT) {
+    /* verify that the request_uri conforms with what's expected */
+    char buf[g_conf->rgw_swift_url_prefix.length() + 16];
+    int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+    if (s->path_name_url[0] != '/' ||
+        s->path_name_url.compare(0, blen, buf) !=  0) {
+      return -ENOENT;
+    }
+
     s->format = 0;
     delete s->formatter;
     s->formatter = new RGWFormatter_Plain;
@@ -529,6 +549,7 @@ void init_entities_from_header(struct req_state *s)
   }
 done:
   s->formatter->reset();
+  return 0;
 }
 
 static void line_unfold(const char *line, string& sdest)
@@ -747,7 +768,10 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   else
     s->op = OP_UNKNOWN;
 
-  init_entities_from_header(s);
+  ret = init_entities_from_header(s);
+  if (ret)
+    return ret;
+
   switch (s->op) {
   case OP_PUT:
     if (s->object && !s->args.sub_resource_exists("acl")) {
@@ -763,14 +787,6 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     break;
   default:
     break;
-  }
-
-  if (s->prot_flags & RGW_REST_SWIFT) {
-    char buf[g_conf->rgw_swift_url_prefix.length() + 16];
-    int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
-    if (s->path_name_url[0] != '/' ||
-        s->path_name_url.compare(0, blen, buf) !=  0)
-      ret = -ENOENT;
   }
 
   if (ret)

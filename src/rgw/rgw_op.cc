@@ -267,7 +267,10 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
-  init_common();
+  ret = init_common();
+  if (ret < 0)
+    goto done;
+dout(0) << __FILE__ << ":" << __LINE__ << " unmod_ptr=" << (void *)unmod_ptr << dendl;
 
   obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, obj);
@@ -315,10 +318,12 @@ int RGWGetObj::init_common()
     mod_ptr = &mod_time;
   }
 
+dout(0) << __FILE__ << ":" << __LINE__ << " if_unmod=" << (void *)if_unmod << dendl;
   if (if_unmod) {
     if (parse_time(if_unmod, &unmod_time) < 0)
       return -EINVAL;
     unmod_ptr = &unmod_time;
+dout(0) << __FILE__ << ":" << __LINE__ << " unmod_ptr=" << (void *)unmod_ptr << dendl;
   }
 
   return 0;
