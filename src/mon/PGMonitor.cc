@@ -446,6 +446,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
   // pg stats
   MPGStatsAck *ack = new MPGStatsAck;
+  ack->set_tid(stats->get_tid());
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++) {
