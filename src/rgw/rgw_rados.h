@@ -320,6 +320,25 @@ public:
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
+  /**
+   * Check the actual on-disk state of the object specified
+   * by list_state, and fill in the time and size of object.
+   * Then append any changes to suggested_updates for
+   * the rgw class' dir_suggest_changes function.
+   *
+   * Note that this can maul list_state; don't use it afterwards. Also
+   * it expects object to already be filled in from list_state; it only
+   * sets the size and mtime.
+   *
+   * Returns 0 on success, -ENOENT if the object doesn't exist on disk,
+   * and -errno on other failures. (-ENOENT is not a failure, and it
+   * will encode that info as a suggested update.)
+   */
+  int check_disk_state(librados::IoCtx& io_ctx,
+                       rgw_bucket& bucket,
+                       rgw_bucket_dir_entry& list_state,
+                       RGWObjEnt& object,
+                       bufferlist& suggested_updates);
 
 };
 

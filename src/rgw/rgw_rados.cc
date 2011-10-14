@@ -2145,23 +2145,79 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
 
   struct rgw_bucket_dir& dir = ret.dir;
   map<string, struct rgw_bucket_dir_entry>::iterator miter;
+  bufferlist updates;
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
     RGWObjEnt e;
     rgw_bucket_dir_entry& dirent = miter->second;
-    if (!dirent.exists)
-      continue;
 
+    // fill it in with initial values; we may correct later
     e.name = dirent.name;
     e.size = dirent.meta.size;
     e.mtime = dirent.meta.mtime;
     e.etag = dirent.meta.etag;
     e.owner = dirent.meta.owner;
     e.owner_display_name = dirent.meta.owner_display_name;
+
+    if (!dirent.exists || !dirent.pending_map.empty()) {
+      /* there are uncommitted ops. We need to check the current state,
+       * and if the tags are old we need to do cleanup as well. */
+      r = check_disk_state(io_ctx, bucket, dirent, e, updates);
+      if (r < 0) {
+        if (r == -ENOENT)
+          continue;
+        else
+          return r;
+      }
+    }
     m[e.name] = e;
     dout(0) << " got " << e.name << dendl;
   }
 
+  if (updates.length()) {
+    // we don't care if we lose suggested updates, send them off blindly
+    AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    r = io_ctx.aio_exec(oid, c, "rgw", "dir_suggest_changes", in, NULL);
+    c->release();
+  }
   return m.size();
+}
+
+int RGWRados::check_disk_state(librados::IoCtx& io_ctx,
+                               rgw_bucket& bucket,
+                               rgw_bucket_dir_entry& list_state,
+                               RGWObjEnt& object,
+                               bufferlist& suggested_updates)
+{
+  rgw_obj obj;
+  std::string oid, key;
+  obj.init(bucket, list_state.name);
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  int r = io_ctx.stat(oid, &object.size, &object.mtime);
+
+  list_state.pending_map.clear(); // we don't need this and it inflates size
+  if (r == -ENOENT) {
+      /* object doesn't exist right now -- hopefully because it's
+       * marked as !exists and got deleted */
+    if (list_state.exists) {
+      /* FIXME: what should happen now? Work out if there are any
+       * non-bad ways this could happen (there probably are, but annoying
+       * to handle!) */
+    }
+    // encode a suggested removal of that key
+    list_state.epoch = io_ctx.get_last_version();
+    suggested_updates.append(CEPH_RGW_REMOVE);
+    ::encode(list_state, suggested_updates);
+  }
+  if (r < 0)
+    return r;
+
+  // encode suggested updates
+  list_state.epoch = io_ctx.get_last_version();
+  list_state.meta.size = object.size;
+  list_state.meta.mtime.set_from_double(double(object.mtime));
+  suggested_updates.append(CEPH_RGW_UPDATE);
+  ::encode(list_state, suggested_updates);
+  return 0;
 }
 
 int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header)

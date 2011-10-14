@@ -6,6 +6,10 @@
 #include "include/types.h"
 #include "include/utime.h"
 
+
+#define CEPH_RGW_REMOVE 'r'
+#define CEPH_RGW_UPDATE 'u'
+
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY,
   CLS_RGW_STATE_COMPLETE,
