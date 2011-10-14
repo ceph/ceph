@@ -180,7 +180,7 @@ bool PGMonitor::update_from_paxos()
     mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
   }
 
-  unsigned max = 500;
+  unsigned max = g_conf->mon_max_pgmap_epochs;
   if (mon->is_leader() &&
       paxosv > max)
     paxos->trim_to(paxosv - max);
