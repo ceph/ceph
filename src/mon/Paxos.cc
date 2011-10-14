@@ -728,6 +728,10 @@ void Paxos::trim_to(version_t first)
 	 first_committed < last_consumed) {
     dout(10) << "trim " << first_committed << dendl;
     mon->store->erase_sn(machine_name, first_committed);
+    for (list<string>::iterator p = extra_state_dirs.begin();
+	 p != extra_state_dirs.end();
+	 ++p)
+      mon->store->erase_sn(p->c_str(), first_committed);
     first_committed++;
   }
   mon->store->put_int(first_committed, machine_name, "first_committed");
