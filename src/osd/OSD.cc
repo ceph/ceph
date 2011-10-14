@@ -2175,14 +2175,6 @@ void OSD::send_pg_stats(const utime_t &now)
       if (pg->pg_stats_valid) {
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
 	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
-  JSONFormatter jf(false);
-  jf.open_object_section("stats");
-  pg->pg_stats_stable.dump(&jf);
-  jf.close_section();
-  stringstream ss;
-  jf.flush(ss);
-  dout(20) << " sending " << pg->info.pgid << " " << ss.str() << dendl;
-
       } else {
 	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << ", not valid" << dendl;
       }
