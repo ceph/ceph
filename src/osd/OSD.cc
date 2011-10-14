@@ -3178,6 +3178,14 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   assert(osd_lock.is_locked());
 
+  if (superblock.oldest_map) {
+    for (epoch_t e = superblock.oldest_map; e < m->oldest_map; ++e) {
+      dout(20) << " removing old osdmap epoch " << e << dendl;
+      t.remove(coll_t::META_COLL, get_osdmap_pobject_name(e));
+      t.remove(coll_t::META_COLL, get_inc_osdmap_pobject_name(e));
+      superblock.oldest_map = e+1;
+    }
+  }
 
   if (!superblock.oldest_map || skip_maps)
     superblock.oldest_map = first;
