@@ -3548,23 +3548,37 @@ MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
   return m;
 }
 
+void OSD::send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy)
+{
+  Messenger *msgr = client_messenger;
+  if (entity_name_t::TYPE_OSD == inst.name._type)
+    msgr = cluster_messenger;
+  if (lazy)
+    msgr->lazy_send_message(m, inst);  // only if we already have an open connection
+  else
+    msgr->send_message(m, inst);
+}
+
 void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
 {
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
+  if (since < superblock.oldest_map) {
+    // just send latest full map
+    MOSDMap *m = new MOSDMap(monc->get_fsid());
+    epoch_t e = osdmap->get_epoch();
+    get_map_bl(e, m->maps[e]);
+    send_map(m, inst, lazy);
+    return;
+  }
+
   while (since < osdmap->get_epoch()) {
     epoch_t to = osdmap->get_epoch();
     if (to - since > (epoch_t)g_conf->osd_map_message_max)
       to = since + g_conf->osd_map_message_max;
     MOSDMap *m = build_incremental_map_msg(since, to);
-    Messenger *msgr = client_messenger;
-    if (entity_name_t::TYPE_OSD == inst.name._type)
-      msgr = cluster_messenger;
-    if (lazy)
-      msgr->lazy_send_message(m, inst);  // only if we already have an open connection
-    else
-      msgr->send_message(m, inst);
+    send_map(m, inst, lazy);
     since = to;
   }
 }
