@@ -3530,6 +3530,8 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid());
+  m->oldest_map = superblock.oldest_map;
+  m->newest_map = superblock.newest_map;
   
   for (epoch_t e = to;
        e > since;
@@ -3567,6 +3569,8 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
   if (since < superblock.oldest_map) {
     // just send latest full map
     MOSDMap *m = new MOSDMap(monc->get_fsid());
+    m->oldest_map = superblock.oldest_map;
+    m->newest_map = superblock.newest_map;
     epoch_t e = osdmap->get_epoch();
     get_map_bl(e, m->maps[e]);
     send_map(m, inst, lazy);
