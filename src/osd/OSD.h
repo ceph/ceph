@@ -530,11 +530,14 @@ protected:
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
+  Cond pg_stat_queue_cond;
   xlist<PG*> pg_stat_queue;
   bool osd_stat_updated;
+  uint64_t pg_stat_tid, pg_stat_tid_flushed;
 
   void send_pg_stats(const utime_t &now);
   void handle_pg_stats_ack(class MPGStatsAck *ack);
+  void flush_pg_stats();
 
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();

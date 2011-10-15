@@ -549,6 +549,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
+  pg_stat_tid(0), pg_stat_tid_flushed(0),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
   backlog_wq(this, g_conf->osd_backlog_thread_timeout, &disk_tp),
@@ -2165,6 +2166,7 @@ void OSD::send_pg_stats(const utime_t &now)
     had_for -= had_map_since;
 
     MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
+    m->set_tid(++pg_stat_tid);
     m->osd_stat = cur_stat;
 
     xlist<PG*>::iterator p = pg_stat_queue.begin();
@@ -2203,6 +2205,11 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   pg_stat_queue_lock.Lock();
 
+  if (ack->get_tid() > pg_stat_tid_flushed) {
+    pg_stat_tid_flushed = ack->get_tid();
+    pg_stat_queue_cond.Signal();
+  }
+
   xlist<PG*>::iterator p = pg_stat_queue.begin();
   while (!p.end()) {
     PG *pg = *p;
@@ -2228,6 +2235,26 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   ack->put();
 }
+
+void OSD::flush_pg_stats()
+{
+  dout(10) << "flush_pg_stats" << dendl;
+  utime_t now = ceph_clock_now(cct);
+  send_pg_stats(now);
+
+  osd_lock.Unlock();
+
+  pg_stat_queue_lock.Lock();
+  uint64_t tid = pg_stat_tid;
+  dout(10) << "flush_pg_stats waiting for stats tid " << tid << " to flush" << dendl;
+  while (tid > pg_stat_tid_flushed)
+    pg_stat_queue_cond.Wait(pg_stat_queue_lock);
+  dout(10) << "flush_pg_stats finished waiting for stats tid " << tid << " to flush" << dendl;
+  pg_stat_queue_lock.Unlock();
+
+  osd_lock.Lock();
+}
+
 
 void OSD::handle_command(MMonCommand *m)
 {
@@ -2270,6 +2297,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   bufferlist odata;
 
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
+
   if (cmd[0] == "injectargs") {
     if (cmd.size() < 2) {
       r = -EINVAL;
@@ -2280,10 +2308,13 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     g_conf->injectargs(cmd[1], &ss);
     osd_lock.Lock();
   }
+
   else if (cmd[0] == "stop") {
     ss << "got shutdown";
     shutdown();
-  } else if (cmd[0] == "bench") {
+  }
+
+  else if (cmd[0] == "bench") {
     uint64_t count = 1 << 30;  // 1gb
     uint64_t bsize = 4 << 20;
     if (cmd.size() > 1)
@@ -2320,7 +2351,13 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     ss << "bench: wrote " << prettybyte_t(count)
        << " in blocks of " << prettybyte_t(bsize) << " in "
        << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
-  } else if (cmd.size() == 2 && cmd[0] == "mark_unfound_lost") {
+  }
+
+  else if (cmd.size() >= 1 && cmd[0] == "flush_pg_stats") {
+    flush_pg_stats();
+  }
+  
+  else if (cmd.size() == 2 && cmd[0] == "mark_unfound_lost") {
     pg_t pgid;
     if (!pgid.parse(cmd[1].c_str())) {
       ss << "can't parse pgid '" << cmd[1] << "'";
@@ -2356,14 +2393,18 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     pg->mark_all_unfound_as_lost(*t);
     store->queue_transaction(&pg->osr, t);
-  } else if (cmd[0] == "heap") {
+  }
+
+  else if (cmd[0] == "heap") {
     if (ceph_using_tcmalloc()) {
       ceph_heap_profiler_handle_command(cmd, clog);
     } else {
       r = -EOPNOTSUPP;
       ss << "could not issue heap profiler command -- not using tcmalloc!";
     }
-  } else if (cmd.size() > 1 && cmd[0] == "debug") {
+  }
+
+  else if (cmd.size() > 1 && cmd[0] == "debug") {
     if (cmd.size() == 3 && cmd[1] == "dump_missing") {
       const string &file_name(cmd[2]);
       std::ofstream fout(file_name.c_str());
@@ -2423,18 +2464,22 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       recovery_wq.kick();
     }
   }
+
   else if (cmd[0] == "cpu_profiler") {
     cpu_profiler_handle_command(cmd, clog);
   }
+
   else if (cmd[0] == "dump_pg_recovery_stats") {
     stringstream s;
     pg_recovery_stats.dump(s);
     ss << "dump pg recovery stats: " << s.str();
   }
+
   else if (cmd[0] == "reset_pg_recovery_stats") {
     ss << "reset pg recovery stats";
     pg_recovery_stats.reset();
   }
+
   else {
     ss << "unrecognized command! " << cmd;
     r = -EINVAL;
