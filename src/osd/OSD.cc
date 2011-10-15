@@ -532,6 +532,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads),
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads),
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads),
+  command_tp(external_messenger->cct, "OSD::command_tp", 1),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   hbin_messenger(hbinm),
@@ -551,6 +552,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   last_tid(0),
   tid_lock("OSD::tid_lock"),
   backlog_wq(this, g_conf->osd_backlog_thread_timeout, &disk_tp),
+  command_wq(this, g_conf->osd_command_thread_timeout, &command_tp),
   recovery_ops_active(0),
   recovery_wq(this, g_conf->osd_recovery_thread_timeout, &recovery_tp),
   remove_list_lock("OSD::remove_list_lock"),
@@ -716,6 +718,7 @@ int OSD::init()
   op_tp.start();
   recovery_tp.start();
   disk_tp.start();
+  command_tp.start();
 
   // start the heartbeat
   heartbeat_thread.create();
@@ -826,6 +829,8 @@ int OSD::shutdown()
   heartbeat_cond.Signal();
   heartbeat_lock.Unlock();
   heartbeat_thread.join();
+
+  command_tp.stop();
 
   // finish ops
   wait_for_no_ops();
@@ -2228,7 +2233,8 @@ void OSD::handle_command(MMonCommand *m)
 {
   if (!require_mon_peer(m))
     return;
-  do_command(NULL, m->get_tid(), m->cmd, m->get_data());
+  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), NULL);
+  command_wq.queue(c);
   m->put();
 }
 
@@ -2251,7 +2257,8 @@ void OSD::handle_command(MCommand *m)
     return;
   }
 
-  do_command(con, m->get_tid(), m->cmd, m->get_data());
+  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), con);
+  command_wq.queue(c);
 
   m->put();
 }
