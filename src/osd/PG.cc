@@ -790,14 +790,21 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
 	  le->prior_version > log.tail) {      // prior_version also already in log
-	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
-      } else {
-	be.version = le->prior_version;
-	be.reqid = osd_reqid_t();
-	dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
-	omap[be.version] = be;
-	// don't try to index: this is the prior_version backlog entry
+	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
+	omap.erase(i++);
+	continue;
       }
+
+      be.reqid = osd_reqid_t();
+      if (be.version == le->prior_version) {
+	dout(15) << "   keeping prior_version " << be << " (have " << *le << ")" << dendl;
+	i++;
+	continue;
+      }
+
+      be.version = le->prior_version;
+      dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
+      omap[be.version] = be;
       omap.erase(i++);
     } else {
       i++;
@@ -813,6 +820,10 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
       log.index( *log.log.begin() );
   }
+
+  dout(25) << "result:\n";
+  log.print(*_dout);
+  *_dout << dendl;
 }
 
 
