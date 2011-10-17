@@ -3,6 +3,7 @@ import random
 import time
 import re
 import gevent
+import json
 from ..orchestra import run
 
 class Thrasher(gevent.Greenlet):
@@ -141,6 +142,7 @@ class CephManager:
                 '/tmp/cephtest/binary/usr/local/bin/ceph',
                 '-k', '/tmp/cephtest/ceph.keyring',
                 '-c', '/tmp/cephtest/ceph.conf',
+                '--concise',
                 ]
         ceph_args.extend(args)
         proc = self.controller.run(
@@ -185,6 +187,27 @@ class CephManager:
                 "\d* pgs:",
                 status).group(0).split()[0])
 
+    def get_pg_stats(self):
+        out = self.raw_cluster_cmd('--', 'pg','dump','--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['pg_stats']
+
+    def get_osd_dump(self):
+        out = self.raw_cluster_cmd('--', 'osd','dump','--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['osds']
+
+    def get_num_unfound_objects(self):
+        status = self.raw_cluster_status()
+        self.log(status)
+        match = re.search(
+            "\d+/\d+ unfound",
+            status)
+        if match == None:
+            return 0
+        else:
+            return int(match.group(0).split('/')[0])
+
     def get_num_active_clean(self):
         status = self.raw_cluster_status()
         self.log(status)
@@ -195,6 +218,14 @@ class CephManager:
             return 0
         else:
             return int(match.group(0).split()[0])
+
+    def get_num_active(self):
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if pg['state'].startswith('active'):
+                num += 1
+        return num
 
     def is_clean(self):
         return self.get_num_active_clean() == self.get_num_pgs()
@@ -208,6 +239,33 @@ class CephManager:
                     'failed to become clean before timeout expired'
             time.sleep(3)
         self.log("clean!")
+
+    def osd_is_up(self, osd):
+        osds = self.get_osd_dump()
+        return osds[osd]['up'] > 0
+
+    def wait_till_osd_is_up(self, osd, timeout=None):
+        self.log('waiting for osd.%d to be up' % osd);
+        start = time.time()
+        while not self.osd_is_up(osd):
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'osd.%d failed to come up before timeout expired' % osd
+            time.sleep(3)
+        self.log('osd.%d is up' % osd)
+
+    def is_active(self):
+        return self.get_num_active() == self.get_num_pgs()
+
+    def wait_till_active(self, timeout=None):
+        self.log("waiting till active")
+        start = time.time()
+        while not self.is_active():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to become active before timeout expired'
+            time.sleep(3)
+        self.log("active!")
 
     def mark_out_osd(self, osd):
         self.raw_cluster_cmd('osd', 'out', str(osd))
