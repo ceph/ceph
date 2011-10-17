@@ -1030,18 +1030,6 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
     }
   }
 
-  // did a significant osd's up_thru change?
-  for (map<int,epoch_t>::const_iterator p = prior.up_thru.begin();
-       p != prior.up_thru.end();
-       ++p)
-    if (p->second != osdmap->get_up_thru(p->first)) {
-      dout(10) << "prior_set_affected: primary osd." << p->first
-	       << " up_thru " << p->second
-	       << " -> " << osdmap->get_up_thru(p->first) 
-	       << dendl;
-      return true;
-    }
-
   return false;
 }
 
@@ -1199,15 +1187,6 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
     state_set(PG_STATE_DOWN);
   }
 
-  if (prior.some_down) {
-    for (vector<Interval>::iterator i = prior.inter_up_thru.begin();
-	 i != prior.inter_up_thru.end();
-	 ++i) {
-      OSDMap *lastmap = osd->get_map(i->last);
-      prior.up_thru[i->acting[0]] = lastmap->get_up_thru(i->acting[0]);
-    }
-  }
-  
   // NOTE: we can skip the up_thru check if this is a new PG and there
   // were no prior intervals.
   if (info.history.epoch_created < info.history.same_interval_since &&
@@ -4471,7 +4450,7 @@ void PG::RecoveryState::GetInfo::get_infos()
     }
   }
   
-  if (peer_info_requested.empty() && !prior_set->some_down) {
+  if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
   }
 }
@@ -4493,7 +4472,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       get_infos();
     } else {
       // are we done getting everything?
-      if (peer_info_requested.empty() && !prior_set->some_down)
+      if (peer_info_requested.empty() && !prior_set->pg_down)
 	post_event(GotInfo());
     }
   }
@@ -4856,8 +4835,8 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 			   const vector<int> &up,
 			   const vector<int> &acting,
 			   const PG::Info &info,
-			   const PG* pg)
-  : crashed(false), pg_down(false), some_down(false), pg(pg)
+			   const PG *pg)
+  : crashed(false), pg_down(false), pg(pg)
 {
   /*
    * We have to be careful to gracefully deal with situations like
@@ -5023,8 +5002,6 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	  cur.insert(interval.acting[i]);
 	  pg_down = true;
 	}
-      some_down = true;
-      inter_up_thru.push_back(interval);
     }
 
     if (crashed) {
@@ -5044,11 +5021,8 @@ PG::PgPriorSet::PgPriorSet(int whoami,
   }
 
   dout(10) << "build_prior final: cur " << cur << " down " << down << " lost " << lost
-	   << " up_thru " << up_thru
-	   << " inter_up_thru " << inter_up_thru
 	   << (crashed ? " crashed":"")
 	   << (pg_down ? " pg_down":"")
-	   << (some_down ? " some_down":"")
 	   << dendl;
 }
 
