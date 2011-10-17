@@ -54,6 +54,9 @@ struct rgw_bucket_dir_entry_meta {
   string owner_display_name;
   string tag;
 
+  rgw_bucket_dir_entry_meta() :
+  category(0), size(0) { mtime.set_from_double(0); }
+
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -83,6 +86,9 @@ struct rgw_bucket_dir_entry {
   bool exists;
   struct rgw_bucket_dir_entry_meta meta;
   map<string, struct rgw_bucket_pending_info> pending_map;
+
+  rgw_bucket_dir_entry() :
+    epoch(0), exists(false) {}
 
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;
