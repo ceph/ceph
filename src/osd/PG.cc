@@ -4943,7 +4943,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
       continue;
 
     int need_down = 0;
-    bool any_survived = false;
+    bool any_is_alive_now = false;
 
     // consider UP osds
     for (unsigned i=0; i<interval.up.size(); i++) {
@@ -4977,7 +4977,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	cur.insert(o);
 
 	// did any osds survive _this_ interval?
-	any_survived = true;
+	any_is_alive_now = true;
       } else if (!pinfo || pinfo->lost_at > interval.first) {
 	down.insert(o);
 	if (started_since_joining.size()) {
@@ -5014,7 +5014,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_survived && need_down && interval.maybe_went_rw) {
+    if (!any_is_alive_now && need_down && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
       dout(10) << "build_prior  " << need_down
 	  << " osds possibly went active+rw, no survivors, including" << dendl;
