@@ -66,16 +66,8 @@ def shutdown_daemons(ctx, log):
                 '/tmp/cephtest/binary/usr/local/bin/ceph-fuse',
                 '/tmp/cephtest/binary/usr/local/bin/radosgw',
                 'apache2',
-                run.Raw(';'),
-                'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
-                run.Raw(';'),
-                'then',
-                'sudo', 'rm', '-f', '--', '/etc/rsyslog.d/80-cephtest.conf',
-                run.Raw('&&'),
-                'sudo', 'initctl', 'restart', 'rsyslog',
-                run.Raw(';'),
-                'fi',
-                run.Raw(';'),
+                run.Raw('||'),
+                'true', # ignore errors from ceph binaries not being found
                 ],
             wait=False,
             )
@@ -153,6 +145,30 @@ def reboot(ctx, remotes, log):
         log.info('waiting for nodes to reboot')
         time.sleep(5) #if we try and reconnect too quickly, it succeeds!
         reconnect(ctx, 300)     #allow 5 minutes for the reboots
+
+def reset_syslog_dir(ctx, log):
+    from .orchestra import run
+    nodes = {}
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
+                'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
+                run.Raw(';'),
+                'then',
+                'sudo', 'rm', '-f', '--', '/etc/rsyslog.d/80-cephtest.conf',
+                run.Raw('&&'),
+                'sudo', 'initctl', 'restart', 'rsyslog',
+                run.Raw(';'),
+                'fi',
+                run.Raw(';'),
+                ],
+            wait=False,
+            )
+        nodes[remote.name] = proc
+
+    for name, proc in nodes.iteritems():
+        log.info('Waiting for %s to restart syslog...', name)
+        proc.exitstatus.get()
 
 def remove_testing_tree(ctx, log):
     nodes = {}
@@ -239,6 +255,8 @@ def main():
         need_reboot = ctx.cluster.remotes.keys()
     synch_clocks(need_reboot, log)
 
+    log.info('Reseting syslog output locations...')
+    reset_syslog_dir(ctx, log)
     log.info('Clearing filesystem of test data...')
     remove_testing_tree(ctx, log)
     log.info('Filesystem Cleared.')
