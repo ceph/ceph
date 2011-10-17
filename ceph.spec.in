@@ -69,7 +69,7 @@ Requires:    %{name} = %{version}-%{release}
 This package contains the headers needed to develop programs that use Ceph.
 
 %package radosgw
-Summary:        rados REST gateway
+Summary:        Rados REST gateway
 Group:          Development/Libraries
 Requires:       mod_fcgid
 %if %{defined suse_version}
