@@ -1,4 +1,4 @@
-.TH "MKCEPHFS" "8" "September 22, 2011" "dev" "Ceph"
+.TH "MKCEPHFS" "8" "October 17, 2011" "dev" "Ceph"
 .SH NAME
 mkcephfs \- create a ceph file system
 .
@@ -116,6 +116,13 @@ Create and mount the any btrfs file systems specified in the
 ceph.conf for OSD data storage using mkfs.btrfs. The "btrfs devs"
 and (if it differs from "osd data") "btrfs path" options must be
 defined.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-no\-copy\-conf
+By default, mkcephfs with \-a will copy the new configuration to
+/etc/ceph/ceph.conf on each node in the cluster.  This option
+disables that behavior.
 .UNINDENT
 .SH SUBCOMMANDS
 .sp
