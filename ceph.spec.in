@@ -153,10 +153,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
-/sbin/chkconfig --add ceph
-%if %{defined suse_version}
-%fillup_and_insserv -f -y ceph
-%endif
+#/sbin/chkconfig --add ceph
 
 %preun
 %if %{defined suse_version}
@@ -164,7 +161,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
-    /sbin/chkconfig --del ceph
+#    /sbin/chkconfig --del ceph
 fi
 
 %postun
@@ -292,6 +289,21 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_libdir}/librgw.so.*
+
+%post radosgw
+%if %{defined suse_version}
+%fillup_and_insserv -f -y radosgw
+%endif
+
+%preun radosgw
+%if %{defined suse_version}
+%stop_on_removal radosgw
+%endif
+
+%postun radosgw
+%if %{defined suse_version}
+%insserv_cleanup
+%endif
 
 %if %{with_gtk2}
 %files gcephtool
