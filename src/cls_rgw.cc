@@ -214,13 +214,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     bufferlist::iterator cur_iter = current_entry.begin();
     ::decode(entry, cur_iter);
     CLS_LOG("rgw_bucket_complete_op(): existing entry: epoch=%lld\n", entry.epoch);
-
-    if (entry.exists) {
-      struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-      stats.num_entries--;
-      stats.total_size -= entry.meta.size;
-      stats.total_size_rounded -= get_rounded_size(entry.meta.size);
-    }
   }
 
   if (op.tag.size()) {
@@ -235,6 +228,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (op.epoch <= entry.epoch) {
     CLS_LOG("rgw_bucket_complete_op(): skipping request, old epoch\n");
     return 0;
+  }
+
+  if (entry.exists) {
+    struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
+    stats.num_entries--;
+    stats.total_size -= entry.meta.size;
+    stats.total_size_rounded -= get_rounded_size(entry.meta.size);
   }
 
   bufferlist op_bl;
