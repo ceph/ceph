@@ -1,5 +1,7 @@
 tasks:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down or wrong addr
 - thrashosds:
     op_delay: 1
     chance_down: 10

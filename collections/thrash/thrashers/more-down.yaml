@@ -1,4 +1,6 @@
 tasks:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down or wrong addr
 - thrashosds:
     chance_down: 50
