@@ -431,7 +431,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
       dout(20) << "merge_log merging " << ne << dendl;
-      missing.add_next_event(ne, oinfo);
+      missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(coll, ne.soid);
     }
@@ -522,7 +522,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	Log::Entry &ne = *p;
         dout(20) << "merge_log " << ne << dendl;
 	log.index(ne);
-	missing.add_next_event(ne, info);
+	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  t.remove(coll, ne.soid);
       }
@@ -1561,7 +1561,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
              p != m->log.log.end();
              p++) 
           if (p->version > plu)
-            pm.add_next_event(*p, pi);
+            pm.add_next_event(*p);
       }
       
       if (m) {
@@ -3348,7 +3348,7 @@ void PG::share_pg_log()
     for (list<Log::Entry>::const_iterator i = m->log.log.begin();
 	 i != m->log.log.end();
 	 ++i) {
-      pmissing.add_next_event(*i, pinfo);
+      pmissing.add_next_event(*i);
     }
     pinfo.last_update = m->log.head;
 
@@ -3679,7 +3679,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(const Log::Entry& e, const Info &info)
+void PG::Missing::add_next_event(const Log::Entry& e)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t()) {
@@ -3693,9 +3693,7 @@ void PG::Missing::add_next_event(const Log::Entry& e, const Info &info)
       //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog() ||
-	       e.prior_version <= info.log_tail ||
-	       e.prior_version > info.last_update) {
+    } else if (e.is_backlog()) {
       // May not have prior version
       missing[e.soid].need = e.version;
     } else {
