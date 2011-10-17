@@ -118,6 +118,7 @@ using ceph::crypto::MD5;
 #define ERR_BAD_URL             2014
 #define ERR_PRECONDITION_FAILED 2015
 #define ERR_NOT_MODIFIED        2016
+#define ERR_INVALID_UTF8        2017
 #define ERR_USER_SUSPENDED      2100
 #define ERR_INTERNAL_ERROR      2200
 

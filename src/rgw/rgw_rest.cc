@@ -63,6 +63,7 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
     { EACCES, 401, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
+    { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
     { ERR_BAD_URL, 412, "Bad URL" },
 };
 
@@ -240,7 +241,6 @@ int RGWGetObj_REST::get_params()
   range_str = s->env->get("HTTP_RANGE");
   if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
   if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
-dout(0) << __FILE__ << ":" << __LINE__ << " if_unmod=" << (void *)if_unmod << dendl;
   if_match = s->env->get("HTTP_IF_MATCH");
   if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
 
@@ -680,23 +680,31 @@ static int validate_bucket_name(const char *bucket, int flags)
       return 0;
     }
     // Name too short
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
   else if (len > 255) {
     // Name too long
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
 
   if (flags & RGW_REST_SWIFT) {
     if (*bucket == '.')
-      return ERR_INVALID_BUCKET_NAME;
+      return -ERR_INVALID_BUCKET_NAME;
+
+    if (check_utf8(bucket, len))
+      return -ERR_INVALID_UTF8;
+
+    for (int i = 0; i < len; ++i) {
+      if ((unsigned char)bucket[i] == 0xff)
+        return -ERR_INVALID_BUCKET_NAME;
+    }
 
     return 0;
   }
 
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
 
   for (const char *s = bucket; *s; ++s) {
@@ -708,11 +716,11 @@ static int validate_bucket_name(const char *bucket, int flags)
     if ((c == '-') || (c == '_'))
       continue;
     // Invalid character
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
 
   if (looks_like_ip_address(bucket))
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   return 0;
 }
 
@@ -725,12 +733,12 @@ static int validate_object_name(const char *object)
   int len = strlen(object);
   if (len > 1024) {
     // Name too long
-    return ERR_INVALID_OBJECT_NAME;
+    return -ERR_INVALID_OBJECT_NAME;
   }
 
   if (check_utf8(object, len)) {
     // Object names must be valid UTF-8.
-    return ERR_INVALID_OBJECT_NAME;
+    return -ERR_INVALID_OBJECT_NAME;
   }
   return 0;
 }

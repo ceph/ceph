@@ -1008,6 +1008,9 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   if (r < 0)
     return r;
 
+  if (state && !state->exists)
+    return -ENOENT;
+
   string tag;
   op.remove();
   if (sync) {
@@ -1398,8 +1401,6 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     if (r < 0)
       goto done_err;
   }
-
-  dout(0) << __FILE__ << ":" << __LINE__ << " mod_ptr=" << (void *)mod_ptr << " unmod_ptr=" << (void *)unmod_ptr << dendl;
 
   /* Convert all times go GMT to make them compatible */
   if (mod_ptr || unmod_ptr) {

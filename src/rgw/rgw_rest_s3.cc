@@ -199,6 +199,8 @@ void RGWPutObj_REST_S3::send_response()
 void RGWDeleteObj_REST_S3::send_response()
 {
   int r = ret;
+  if (r == -ENOENT)
+    r = 0;
   if (!r)
     r = STATUS_NO_CONTENT;
 
