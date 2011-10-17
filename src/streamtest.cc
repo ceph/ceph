@@ -43,9 +43,9 @@ void throttle()
 void pr(off_t off)
 {
   io &i = writes[off];
-  generic_dout(0) << off << "\t" 
-	  << (i.ack - i.start) << "\t"
-	  << (i.commit - i.start) << dendl;
+  cout << off << "\t" 
+       << (i.ack - i.start) << "\t"
+       << (i.commit - i.start) << std::endl;
   writes.erase(off);
   cond.Signal();
 }
