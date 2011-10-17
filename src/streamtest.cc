@@ -124,7 +124,12 @@ int main(int argc, const char **argv)
        << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
   ObjectStore *fs = new FileStore(filename, journal);
-
+  
+  if (fs->mkfs() < 0) {
+    cout << "mkfs failed" << std::endl;
+    return -1;
+  }
+  
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;
