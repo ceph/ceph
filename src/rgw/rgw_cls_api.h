@@ -9,6 +9,7 @@
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
+#define CEPH_RGW_TAG_TIMEOUT 60*60*24
 
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY,
