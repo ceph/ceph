@@ -652,34 +652,33 @@ def cluster(ctx, config):
                 )
 
         log.info('Checking cluster ceph.log for badness...')
-        def first_in_ceph_log(pattern):
+        def first_in_ceph_log(pattern, excludes):
+            args = [
+                'egrep', pattern,
+                '/tmp/cephtest/data/%s/log' % firstmon,
+                ]
+            for exclude in excludes:
+                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            args.extend([
+                    run.Raw('|'), 'head', '-n', '1',
+                    ])
             r = mon0_remote.run(
-                args=[
-                    'if', run.Raw('!'),
-                    'egrep', '-q', pattern,
-                    '/tmp/cephtest/data/%s/log' % firstmon,
-                    run.Raw(';'), 'then', 'echo', 'OK', run.Raw(';'),
-                    'else',
-                    'egrep', pattern,
-                    '/tmp/cephtest/data/%s/log' % firstmon,
-                    run.Raw('|'),
-                    'head', '-n', '1', run.Raw(';'),
-                    'fi',
-                    ],
                 stdout=StringIO(),
+                args=args,
                 )
             stdout = r.stdout.getvalue()
-            if stdout != "OK\n":
+            if stdout != '':
                 return stdout
             return None
 
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]') is not None:
+        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
+                             config['log_whitelist']) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern)
+                    match = first_in_ceph_log(pattern, config['log_whitelist'])
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
@@ -982,6 +981,14 @@ def task(ctx, config):
                 debug client: 10
                 debug ms: 1
 
+    By default, the cluster log is checked for errors and warnings,
+    and the run marked failed if any appear. You can ignore log
+    entries by giving a list of egrep compatible regexes, i.e.:
+
+        tasks:
+        - ceph:
+            log-whitelist: ['foo.*bar', 'bad message']
+
     """
     if config is None:
         config = {}
@@ -1044,7 +1051,8 @@ def task(ctx, config):
         lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {}),
-                btrfs=config.get('btrfs', False)
+                btrfs=config.get('btrfs', False),
+                log_whitelist=config.get('log-whitelist', []),
                 )),
         lambda: mon(ctx=ctx, config=config),
         lambda: osd(ctx=ctx, config=config),
