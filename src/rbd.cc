@@ -1007,8 +1007,12 @@ int main(int argc, const char **argv)
       opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
       opt_cmd == OPT_SNAP_REMOVE ||
       opt_cmd == OPT_MAP || opt_cmd == OPT_UNMAP) {
-    set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
-  } else if (snapname) {
+    set_pool_image_name(poolname, imgname, (char **)&poolname,
+			(char **)&imgname, (char **)&snapname);
+  }
+  if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
+      opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage_exit();
   }
@@ -1053,7 +1057,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (imgname &&
+  if (imgname && talk_to_cluster &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH ||
@@ -1065,7 +1069,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (snapname) {
+  if (snapname && talk_to_cluster &&
+      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY)) {
     r = image.snap_set(snapname);
     if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
