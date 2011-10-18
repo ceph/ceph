@@ -280,15 +280,15 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
   
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int64_t pool = ++pool_max;
-    pools[pool].v.type = CEPH_PG_TYPE_REP;
-    pools[pool].v.size = cct->_conf->osd_pool_default_size;
-    pools[pool].v.crush_ruleset = p->first;
-    pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].v.pg_num = nosd << pg_bits;
-    pools[pool].v.pgp_num = nosd << pgp_bits;
-    pools[pool].v.lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
-    pools[pool].v.lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
-    pools[pool].v.last_change = epoch;
+    pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].size = cct->_conf->osd_pool_default_size;
+    pools[pool].crush_ruleset = p->first;
+    pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
+    pools[pool].pg_num = nosd << pg_bits;
+    pools[pool].pgp_num = nosd << pgp_bits;
+    pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].last_change = epoch;
     pool_name[pool] = p->second;
   }
 
@@ -357,7 +357,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     // rules
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, minrep, maxrep);
+      crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
@@ -382,7 +382,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     // replication
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, conf->osd_min_rep, maxrep);
+      crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, conf->osd_min_rep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);

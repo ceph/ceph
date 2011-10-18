@@ -397,7 +397,7 @@ private:
     for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
 	 p != pools.end();
 	 p++)
-      p->second.v.last_change = e;
+      p->second.last_change = e;
   }
 
   /* stamps etc */
@@ -655,7 +655,7 @@ private:
 	 p != inc.new_pools.end();
 	 p++) {
       pools[p->first] = p->second;
-      pools[p->first].v.last_change = epoch;
+      pools[p->first].last_change = epoch;
     }
     for (map<int64_t,string>::iterator p = inc.new_pool_names.begin();
 	 p != inc.new_pool_names.end();
@@ -952,9 +952,9 @@ private:
       return -ENOENT;
     ps_t ps;
     if (loc.key.length())
-      ps = ceph_str_hash(pool->v.object_hash, loc.key.c_str(), loc.key.length());
+      ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
     else
-      ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
+      ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
     if (loc.get_preferred() >= 0)
