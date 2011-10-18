@@ -38,6 +38,8 @@ protected:
   list<uint64_t> ops_submitting;
   list<Cond*> ops_apply_blocked;
 
+  bool replaying;
+
 protected:
   void journal_start();
   void journal_stop();
@@ -71,7 +73,8 @@ public:
 			    open_ops(0), blocked(false),
 			    journal(NULL), finisher(g_ceph_context),
 			    journal_lock("JournalingObjectStore::journal_lock"),
-			    com_lock("JournalingObjectStore::com_lock") { }
+			    com_lock("JournalingObjectStore::com_lock"),
+			    replaying(false) { }
   
 };
 

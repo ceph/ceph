@@ -2440,6 +2440,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
     else if (r == -ENOTEMPTY) {
       assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
     }
+    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !btrfs) {
+      dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
+    }
     else if (r < 0) {
       dout(0) << " error " << cpp_strerror(r) << " not handled" << dendl;
       assert(0 == "unexpected error");
