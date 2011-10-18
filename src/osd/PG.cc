@@ -4904,8 +4904,12 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     if (interval.acting.empty())
       continue;
 
-    int need_down = 0;
-    bool any_is_alive_now = false;
+    // look at candidate osds during this interval.  each falls into
+    // one of three categories: up, down (but potentially
+    // interesting), or lost (down, but we won't wait for it).
+    bool any_up_now = false;    // any candidates up now
+    bool any_down_now = false;  // any candidates down now (that might have useful data)
+    bool any_lost_now = false;  // any candidates lost now (that we will ignore)
 
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
@@ -4921,41 +4925,38 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 		    !(pinfo->last_clean_first <= interval.first &&
 		      pinfo->last_clean_last >= interval.last))) {
 	dout(10) << "build_prior  prior osd." << o
-	    << " up_from " << pinfo->up_from
-	    << " and last clean interval " << pinfo->last_clean_first << "-" << pinfo->last_clean_last
-	    << " does not include us" << dendl;
+		 << " up_from " << pinfo->up_from
+		 << " and last clean interval "
+		 << pinfo->last_clean_first << "-" << pinfo->last_clean_last
+		 << " does not include us" << dendl;
 	crashed = true;
       }
 
-      if (osdmap.is_up(o)) {  // is up now
-	// include past acting osds if they are up
+      if (osdmap.is_up(o)) {
+	// include past acting osds if they are up.
 	cur.insert(o);
-
-	// did any osds survive _this_ interval?
-	any_is_alive_now = true;
-      } else if (!pinfo || pinfo->lost_at > interval.first) {
+	any_up_now = true;
+      } else if (!pinfo) {
+	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
-	if (pinfo)
-	  dout(10) << "build_prior  prior osd." << o
-		   << " is down, but marked lost at " << pinfo->lost_at << dendl;
-	else
-	  dout(10) << "build_prior  prior osd." << o
-		   << " no longer exists" << dendl;
+	any_lost_now = true;
+      } else if (pinfo->lost_at > interval.first) {
+	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
+	down.insert(o);
+	any_lost_now = true;
       } else {
-	dout(10) << "build_prior  prior osd." << o
-	    << " is down" << dendl;
-	need_down++;
+	dout(10) << "build_prior  prior osd." << o << " is down" << dendl;
 	down.insert(o);
+	any_down_now = true;
       }
     }
 
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_is_alive_now && need_down && interval.maybe_went_rw) {
+    if (!any_up_now && any_down_now && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  " << need_down
-	  << " osds possibly went active+rw, no survivors, including" << dendl;
+      dout(10) << "build_prior  possibly went active+rw, none up; including down osds" << dendl;
       for (unsigned i=0; i<interval.acting.size(); i++)
 	if (osdmap.is_down(interval.acting[i])) {
 	  cur.insert(interval.acting[i]);
@@ -4965,7 +4966,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 
     if (crashed) {
       dout(10) << "build_prior  one of " << interval.acting
-	  << " possibly crashed, marking pg crashed" << dendl;
+	       << " possibly crashed, marking pg crashed" << dendl;
     }
   }
 
