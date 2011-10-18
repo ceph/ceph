@@ -623,6 +623,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
   op.create(exclusive);
 
   string etag;
+  string content_type;
   bufferlist acl_bl;
 
   map<string, bufferlist>::iterator iter;
@@ -637,6 +638,8 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
       etag = bl.c_str();
+    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
+      content_type = bl.c_str();
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
       acl_bl = bl;
     }
@@ -658,7 +661,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
 
   utime_t ut = ceph_clock_now(g_ceph_context);
   r = complete_update_index(bucket, obj.object, tag, epoch, size,
-                            ut, etag, &acl_bl, category);
+                            ut, etag, content_type, &acl_bl, category);
 
   if (mtime) {
     r = io_ctx.stat(oid, NULL, mtime);
@@ -1487,7 +1490,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket, strin
 }
 
 int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
-                                    utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category)
+                                    utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category)
 {
   if (bucket.marker.empty())
     return 0;
@@ -1506,6 +1509,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
   }
   ent.owner = owner.get_id();
   ent.owner_display_name = owner.get_display_name();
+  ent.content_type = content_type;
 
   int ret = cls_obj_complete_add(bucket, tag, epoch, ent, category);
 
@@ -1529,6 +1533,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   uint64_t size = 0;
   string etag;
+  string content_type;
   bufferlist acl_bl;
 
   int r = open_bucket_ctx(bucket, io_ctx);
@@ -1552,6 +1557,8 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
       etag = bl.c_str();
+    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
+      content_type = bl.c_str();
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
       acl_bl = bl;
     }
@@ -1616,7 +1623,7 @@ done:
 
   if (ret >= 0) {
     ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
-                                ut, etag, &acl_bl, category);
+                                ut, etag, content_type, &acl_bl, category);
   }
 
   return ret;
@@ -2080,6 +2087,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   call.meta.etag = ent.etag;
   call.meta.owner = ent.owner;
   call.meta.owner_display_name = ent.owner_display_name;
+  call.meta.content_type = ent.content_type;
   call.meta.category = category;
   ::encode(call, in);
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
@@ -2153,6 +2161,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     e.etag = dirent.meta.etag;
     e.owner = dirent.meta.owner;
     e.owner_display_name = dirent.meta.owner_display_name;
+    e.content_type = dirent.meta.content_type;
     m[e.name] = e;
     dout(0) << " got " << e.name << dendl;
   }

@@ -309,7 +309,7 @@ public:
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
-                            utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category);
+                            utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
     return cls_obj_complete_del(bucket, tag, epoch, oid);
   }

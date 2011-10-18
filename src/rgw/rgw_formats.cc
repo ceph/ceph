@@ -126,6 +126,7 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
     min_stack_level = stack.size();
 
   bool should_print = (stack.size() == min_stack_level && !entry.size);
+
   entry.size++;
 
   if (!should_print)
@@ -223,6 +224,7 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
 
   struct plain_stack_entry& entry = stack.back();
   bool should_print = (stack.size() == min_stack_level && !entry.size);
+
   entry.size++;
 
   if (!should_print)
@@ -231,5 +233,12 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  write_data("%s\n", buf);
+
+  const char *eol;
+  if (len)
+    eol = "\n";
+  else
+    eol = "";
+
+  write_data("%s%s", eol, buf);
 }

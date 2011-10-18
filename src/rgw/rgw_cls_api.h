@@ -49,9 +49,10 @@ struct rgw_bucket_dir_entry_meta {
   string owner;
   string owner_display_name;
   string tag;
+  string content_type;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(category, bl);
     ::encode(size, bl);
@@ -59,6 +60,7 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(etag, bl);
     ::encode(owner, bl);
     ::encode(owner_display_name, bl);
+    ::encode(content_type, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -69,6 +71,8 @@ struct rgw_bucket_dir_entry_meta {
     ::decode(etag, bl);
     ::decode(owner, bl);
     ::decode(owner_display_name, bl);
+    if (struct_v >= 2)
+      ::decode(content_type, bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
