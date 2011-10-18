@@ -843,12 +843,12 @@ public:
   bool prior_set_built;
 
   struct PgPriorSet {
-    set<int>    cur;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-    set<int>    down;  // down osds that would normally be in cur
-    set<int>    lost;  // osds in the prior set which are lost
+    set<int> cur;   /// current+prior OSDs we need to probe.
+    set<int> down;  /// down osds that would normally be in @cur and might be interesting.
+    set<int> lost;  /// down osds that would normally be in @cur but we won't wait for.
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
-    bool pg_down;   /// the DOWN state big for this pg will get set
     const PG *pg;
+    bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
     PgPriorSet(int whoami,
 	       const OSDMap &osdmap,
 	       const map<epoch_t, Interval> &past_intervals,
