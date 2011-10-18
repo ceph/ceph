@@ -845,7 +845,8 @@ public:
   struct PgPriorSet {
     set<int> cur;   /// current+prior OSDs we need to probe.
     set<int> down;  /// down osds that would normally be in @cur and might be interesting.
-    set<int> lost;  /// down osds that would normally be in @cur but we won't wait for.
+    map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
+
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
     PgPriorSet(int whoami,

@@ -997,8 +997,18 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
       return true;
     }
 
-    // If someone in the prior set is marked as lost, it would also have to be
-    // marked as down. So don't check for newly lost osds here.
+    // did a down osd in cur get (re)marked as lost?
+    map<int,epoch_t>::iterator p = prior.blocked_by.find(o);
+    if (p != prior.blocked_by.end()) {
+      if (!osdmap->exists(o)) {
+	dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
+	return true;
+      }
+      if (osdmap->get_info(o).lost_at != p->second) {
+	dout(10) << "prior_set_affected: osd." << o << " (re)marked as lost" << dendl;
+	return true;
+      }
+    }
   }
 
   // did someone in the prior down set go up?
@@ -1017,15 +1027,6 @@ bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
     if (!osdmap->exists(o)) {
       dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
       return true;
-    }
-      
-    const osd_info_t& pinfo(osdmap->get_info(o));
-    if (pinfo.lost_at > pinfo.up_from) {
-      set<int>::const_iterator pl = prior.lost.find(o);
-      if (pl == prior.lost.end()) {
-	dout(10) << "prior_set_affected: osd." << o << " now lost" << dendl;
-	return true;
-      }
     }
   }
 
@@ -3904,9 +3905,9 @@ ostream& operator<<(ostream& out, const PG& pg)
 std::ostream& operator<<(std::ostream& oss,
 			 const struct PG::PgPriorSet &prior)
 {
-  oss << "[[ cur=" << prior.cur << ", "
-      << "down=" << prior.down << ", "
-      << "lost=" << prior.lost << " ]]";
+  oss << "PgPriorSet[cur=" << prior.cur << " "
+      << "down=" << prior.down << " "
+      << "blocked_by=" << prior.blocked_by << "]";
   return oss;
 }
 
@@ -4959,11 +4960,19 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     if (!any_up_now && any_down_now && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
       dout(10) << "build_prior  possibly went active+rw, none up; including down osds" << dendl;
-      for (unsigned i=0; i<interval.acting.size(); i++)
-	if (osdmap.is_down(interval.acting[i])) {
-	  cur.insert(interval.acting[i]);
+      for (vector<int>::const_iterator i = interval.acting.begin();
+	   i != interval.acting.end();
+	   ++i) {
+	if (osdmap.exists(*i) &&   // if it doesn't exist, we already consider it lost.
+	    osdmap.is_down(*i)) {
+	  cur.insert(*i);
 	  pg_down = true;
+
+	  // make note of when any down osd in the cur set was lost, so that
+	  // we can notice changes in prior_set_affected.
+	  blocked_by[*i] = osdmap.get_info(*i).lost_at;
 	}
+      }
     }
 
     // if we may have gone rw during this interval, but nobody is
@@ -4976,17 +4985,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     }
   }
 
-  // Build prior_set.lost
-  for (set<int>::const_iterator i = cur.begin();
-       i != cur.end(); ++i) {
-    int o = *i;
-    const osd_info_t& pinfo(osdmap.get_info(o));
-    if (pinfo.lost_at > pinfo.up_from) {
-      lost.insert(o);
-    }
-  }
-
-  dout(10) << "build_prior final: cur " << cur << " down " << down << " lost " << lost
+  dout(10) << "build_prior final: cur " << cur << " down " << down << " blocked_by " << blocked_by
 	   << (crashed ? " crashed":"")
 	   << (pg_down ? " pg_down":"")
 	   << dendl;
