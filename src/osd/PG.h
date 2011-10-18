@@ -847,7 +847,6 @@ public:
     set<int> down;  /// down osds that would normally be in @cur and might be interesting.
     set<int> lost;  /// down osds that would normally be in @cur but we won't wait for.
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
-    const PG *pg;
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
     PgPriorSet(int whoami,
 	       const OSDMap &osdmap,

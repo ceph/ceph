@@ -4836,7 +4836,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 			   const vector<int> &acting,
 			   const PG::Info &info,
 			   const PG *pg)
-  : crashed(false), pg_down(false), pg(pg)
+  : crashed(false), pg_down(false)
 {
   /*
    * We have to be careful to gracefully deal with situations like
