@@ -4853,7 +4853,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    * Then, we have something like
    *
    *  1: A B
-   *  2:   B   alive_thru[B]=0
+   *  2:   B   up_thru[B]=0
    *  3:
    *  4: A
    *
@@ -4863,13 +4863,13 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    * or,
    *
    *  1: A B
-   *  2:   B   alive_thru[B]=0
-   *  3:   B   alive_thru[B]=2
+   *  2:   B   up_thru[B]=0
+   *  3:   B   up_thru[B]=2
    *  4:
    *  5: A    
    *
    * -> we must wait for B, bc it was alive through 2, and could have
-        written to the pg.
+   *    written to the pg.
    *
    * If B is really dead, then an administrator will need to manually
    * intervene by marking the OSD as "lost."
