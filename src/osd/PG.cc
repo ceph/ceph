@@ -4906,6 +4906,11 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     bool any_down_now = false;  // any candidates down now (that might have useful data)
     bool any_lost_now = false;  // any candidates lost now (that we will ignore)
 
+    // look at whether any of the osds during this interval survived
+    // past the end of the interval (i.e., didn't crash and
+    // potentially fail to COMMIT a write that it ACKed).
+    bool any_survived_interval = false;
+
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
       int o = interval.acting[i];
@@ -4914,17 +4919,19 @@ PG::PgPriorSet::PgPriorSet(int whoami,
       if (osdmap.exists(o))
 	pinfo = &osdmap.get_info(o);
 
-      // if the osd restarted after this interval but is not known to have
-      // cleanly survived through this interval, we mark the pg crashed.
-      if (pinfo && (pinfo->up_from > interval.last &&
-		    !(pinfo->last_clean_first <= interval.first &&
-		      pinfo->last_clean_last >= interval.last))) {
+      // does this osd appear to have survived through the end of the
+      // interval?
+      if (pinfo && ((pinfo->up_from <= interval.first &&
+		     pinfo->up_thru > interval.last) ||            // most recently
+		    (pinfo->up_from > interval.last &&
+		     pinfo->last_clean_first <= interval.first &&
+		     pinfo->last_clean_last >= interval.last))) {  // previous osd interval
 	dout(10) << "build_prior  prior osd." << o
 		 << " up_from " << pinfo->up_from
 		 << " and last clean interval "
 		 << pinfo->last_clean_first << "-" << pinfo->last_clean_last
-		 << " does not include us" << dendl;
-	crashed = true;
+		 << " survived the interval" << dendl;
+	any_survived_interval = true;
       }
 
       if (osdmap.is_up(o)) {
@@ -4959,9 +4966,13 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	}
     }
 
-    if (crashed) {
-      dout(10) << "build_prior  one of " << interval.acting
-	       << " possibly crashed, marking pg crashed" << dendl;
+    // if we may have gone rw during this interval, but nobody is
+    // known to have survived through the completion of that interval,
+    // mark the PG crashed so that writers who got ACK but not COMMIT
+    // have a chance to replay their requests and preserve ordering.
+    if (interval.maybe_went_rw && !any_survived_interval) {
+      dout(10) << "build_prior  no acting survived past the interval, marking crashed" << dendl;
+      crashed = true;
     }
   }
 
