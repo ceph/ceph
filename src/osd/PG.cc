@@ -4892,30 +4892,6 @@ PG::PgPriorSet::PgPriorSet(int whoami,
   for (unsigned i=0; i<up.size(); i++)
     cur.insert(up[i]);
 
-  // see if i have ever started since joining the pg.  this is important only
-  // if we want to exclude lost osds.
-  // FIXME: this check is broken.  it is probably better than nothing (which would allow
-  // us to go active with an empty PG), but it needs a closer look!
-  set<int> started_since_joining;
-  for (vector<int>::const_iterator q = acting.begin(); q != acting.end(); q++) {
-    int o = *q;
-    
-    for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
-	 p != past_intervals.rend();
-	 p++) {
-      const Interval &interval = p->second;
-      if (interval.last < info.history.last_epoch_started)
-	break;  // we don't care
-      if (!interval.maybe_went_rw)
-	continue;
-      if (std::find(interval.acting.begin(), interval.acting.end(), o) != interval.acting.end())
-	started_since_joining.insert(o);
-      break;
-    }
-  }
-  dout(10) << "build_prior osds <" << started_since_joining
-	   << "> have started since joining this pg" << dendl;
-
   for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
@@ -4959,29 +4935,12 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	any_is_alive_now = true;
       } else if (!pinfo || pinfo->lost_at > interval.first) {
 	down.insert(o);
-	if (started_since_joining.size()) {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd." << o
-		<< " is down, but marked lost at " << pinfo->lost_at
-		<< ", and " << started_since_joining << " have started since joining pg"
-		<< dendl;
-	  else
-	    dout(10) << "build_prior  prior osd." << o
-		<< " no longer exists, and " << started_since_joining << " have started since joining pg"
-		<< dendl;
-
-	} else {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd." << o
-		<< " is down, but marked lost at " << pinfo->lost_at
-		<< ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		<< dendl;
-	  else
-	    dout(10) << "build_prior  prior osd." << o
-		     << " no longer exists, and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		     << dendl;
-	  need_down++;
-	}
+	if (pinfo)
+	  dout(10) << "build_prior  prior osd." << o
+		   << " is down, but marked lost at " << pinfo->lost_at << dendl;
+	else
+	  dout(10) << "build_prior  prior osd." << o
+		   << " no longer exists" << dendl;
       } else {
 	dout(10) << "build_prior  prior osd." << o
 	    << " is down" << dendl;
