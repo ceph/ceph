@@ -115,6 +115,19 @@ void RGWListBuckets_REST_S3::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+int RGWListBucket_REST_S3::get_params()
+{
+  url_decode(s->args.get("prefix"), prefix);
+  url_decode(s->args.get("marker"), marker);
+  url_decode(s->args.get("max-keys"), max_keys);
+  ret = parse_max_keys();
+  if (ret < 0) {
+    return ret;
+  }
+  url_decode(s->args.get("delimiter"), delimiter);
+  return 0;
+}
+
 void RGWListBucket_REST_S3::send_response()
 {
   if (ret < 0)

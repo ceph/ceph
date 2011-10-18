@@ -121,6 +121,7 @@ public:
   int verify_permission();
   void execute();
 
+  virtual int get_params()= 0;
   virtual void send_response() = 0;
 };
 
@@ -158,9 +159,10 @@ protected:
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
 
-  string limit_opt_name;
   int default_max;
   bool is_truncated;
+
+  int parse_max_keys();
 
 public:
   RGWListBucket() {}
@@ -180,6 +182,7 @@ public:
   int verify_permission();
   void execute();
 
+  virtual int get_params() = 0;
   virtual void send_response() = 0;
 };
 

@@ -7,27 +7,37 @@
 
 #define DOUT_SUBSYS rgw
 
+int RGWListBuckets_REST_SWIFT::get_params()
+{
+  url_decode(s->args.get("marker"), marker);
+  string limit_str;
+  url_decode(s->args.get("limit"), limit_str);
+  limit = strtol(limit_str.c_str(), NULL, 10);
+  if (limit > limit_max || limit < 0)
+    return -ERR_PRECONDITION_FAILED;
+
+  if (limit == 0)
+    limit = limit_max;
+
+  return 0;
+}
+
 void RGWListBuckets_REST_SWIFT::send_response()
 {
+  map<string, RGWBucketEnt>& m = buckets.get_buckets();
+  map<string, RGWBucketEnt>::iterator iter;
+
+  if (ret < 0)
+    goto done;
+
   dump_start(s);
 
   s->formatter->open_array_section("account");
 
-  // dump_owner(s, s->user.user_id, s->user.display_name);
-
-  map<string, RGWBucketEnt>& m = buckets.get_buckets();
-  map<string, RGWBucketEnt>::iterator iter;
-
-  string marker = s->args.get("marker");
   if (marker.empty())
     iter = m.begin();
   else
     iter = m.upper_bound(marker);
-
-  int limit = 10000;
-  string limit_str = s->args.get("limit");
-  if (!limit_str.empty())
-    limit = atoi(limit_str.c_str());
 
   for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
     RGWBucketEnt obj = iter->second;
@@ -41,7 +51,7 @@ void RGWListBuckets_REST_SWIFT::send_response()
 
   if (!ret && s->formatter->get_len() == 0)
     ret = STATUS_NO_CONTENT;
-
+done:
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
@@ -53,9 +63,36 @@ void RGWListBuckets_REST_SWIFT::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+int RGWListBucket_REST_SWIFT::get_params()
+{
+  url_decode(s->args.get("prefix"), prefix);
+  url_decode(s->args.get("marker"), marker);
+  url_decode(s->args.get("limit"), max_keys);
+  ret = parse_max_keys();
+  if (ret < 0) {
+    return ret;
+  }
+  if (max > default_max)
+    return -ERR_PRECONDITION_FAILED;
+
+  url_decode(s->args.get("delimiter"), delimiter);
+
+  string path_args;
+  url_decode(s->args.get("path"), path_args);
+  if (!path_args.empty()) {
+    if (!delimiter.empty() || !prefix.empty()) {
+      return -EINVAL;
+    }
+    url_decode(path_args, prefix);
+    delimiter="/";
+  }
+
+  return 0;
+}
+
 void RGWListBucket_REST_SWIFT::send_response()
 {
-   vector<RGWObjEnt>::iterator iter = objs.begin();
+  vector<RGWObjEnt>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   s->formatter->open_array_section("container");

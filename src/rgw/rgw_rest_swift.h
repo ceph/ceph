@@ -14,21 +14,28 @@ public:
 };
 
 class RGWListBuckets_REST_SWIFT : public RGWListBuckets_REST {
+  int limit_max;
+  int limit;
+  string marker;
 public:
-  RGWListBuckets_REST_SWIFT() {}
+  RGWListBuckets_REST_SWIFT() {
+    limit_max = 10000;
+    limit = limit_max;
+  }
   ~RGWListBuckets_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 
 class RGWListBucket_REST_SWIFT : public RGWListBucket_REST {
 public:
   RGWListBucket_REST_SWIFT() {
-    limit_opt_name = "limit";
     default_max = 10000;
   }
   ~RGWListBucket_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 

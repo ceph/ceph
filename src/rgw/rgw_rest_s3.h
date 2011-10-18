@@ -20,17 +20,18 @@ public:
   RGWListBuckets_REST_S3() {}
   ~RGWListBuckets_REST_S3() {}
 
+  int get_params() { return 0; }
   void send_response();
 };
 
 class RGWListBucket_REST_S3 : public RGWListBucket_REST {
 public:
   RGWListBucket_REST_S3() {
-    limit_opt_name ="max-keys";
     default_max = 1000;
   }
   ~RGWListBucket_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 

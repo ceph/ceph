@@ -333,6 +333,10 @@ int RGWListBuckets::verify_permission()
 
 void RGWListBuckets::execute()
 {
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
   ret = rgw_read_user_buckets(s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_SWIFT));
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
@@ -349,6 +353,7 @@ void RGWListBuckets::execute()
     */
   }
 
+done:
   send_response();
 }
 
@@ -427,13 +432,8 @@ int RGWListBucket::verify_permission()
   return 0;
 }
 
-void RGWListBucket::execute()
+int RGWListBucket::parse_max_keys()
 {
-  string no_ns;
-
-  url_decode(s->args.get("prefix"), prefix);
-  url_decode(s->args.get("marker"), marker);
-  url_decode(s->args.get(limit_opt_name), max_keys);
   if (!max_keys.empty()) {
     char *endptr;
     max = strtol(max_keys.c_str(), &endptr, 10);
@@ -441,27 +441,23 @@ void RGWListBucket::execute()
       while (*endptr && isspace(*endptr)) // ignore white space
         endptr++;
       if (*endptr) {
-        ret = -EINVAL;
-        goto done;
+        return -EINVAL;
       }
     }
   } else {
     max = default_max;
   }
-  url_decode(s->args.get("delimiter"), delimiter);
 
-  if (s->prot_flags & RGW_REST_SWIFT) {
-    string path_args;
-    url_decode(s->args.get("path"), path_args);
-    if (!path_args.empty()) {
-      if (!delimiter.empty() || !prefix.empty()) {
-        ret = -EINVAL;
-        goto done;
-      }
-      url_decode(path_args, prefix);
-      delimiter="/";
-    }
-  }
+  return 0;
+}
+
+void RGWListBucket::execute()
+{
+  string no_ns;
+
+  ret = get_params();
+  if (ret < 0)
+    goto done;
 
   ret = rgwstore->list_objects(s->user.user_id, s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, &is_truncated, NULL);
