@@ -844,7 +844,7 @@ public:
 
   struct PgPriorSet {
     set<int>    cur;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-    set<int>    down;  // down osds normally exluded from cur
+    set<int>    down;  // down osds that would normally be in cur
     set<int>    lost;  // osds in the prior set which are lost
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// the DOWN state big for this pg will get set

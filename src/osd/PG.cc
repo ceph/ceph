@@ -4879,11 +4879,18 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    * If B is really dead, then an administrator will need to manually
    * intervene by marking the OSD as "lost."
    */
-  // current up and/or acting nodes, of course.
-  for (unsigned i=0; i<up.size(); i++)
-    cur.insert(up[i]);
+
+  // Include current acting and up nodes... not because they may
+  // contain old data (this interval hasn't gone active, obviously),
+  // but because we want their pg_info to inform choose_acting(), and
+  // so that we know what they do/do not have explicitly before
+  // sending them any new info/logs/whatever.
   for (unsigned i=0; i<acting.size(); i++)
     cur.insert(acting[i]);
+  // It may be possible to exlude the up nodes, but let's keep them in
+  // there for now.
+  for (unsigned i=0; i<up.size(); i++)
+    cur.insert(up[i]);
 
   // see if i have ever started since joining the pg.  this is important only
   // if we want to exclude lost osds.
@@ -4923,13 +4930,6 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 
     int need_down = 0;
     bool any_is_alive_now = false;
-
-    // consider UP osds
-    for (unsigned i=0; i<interval.up.size(); i++) {
-      int o = interval.up[i];
-      if (osdmap.is_up(o)) // is up now
-	cur.insert(o);
-    }
 
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
