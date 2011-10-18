@@ -1751,6 +1751,19 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
 
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
 
+  MClientRequest *req = mdr->client_request;
+  if (req->get_data().length()) {
+    bufferlist::iterator p = req->get_data().begin();
+
+    // xattrs on new inode?
+    map<string,bufferptr> xattrs;
+    ::decode(xattrs, p);
+    for (map<string,bufferptr>::iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
+      dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
+      in->xattrs[p->first] = p->second;
+    }
+  }
+
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
   return in;
