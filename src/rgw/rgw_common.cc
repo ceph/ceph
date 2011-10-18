@@ -333,7 +333,7 @@ bool url_decode(string& src_str, string& dest_str)
   int pos = 0;
   char c;
 
-  dout(10) << "src=" << (void *)src << dendl;
+  dout(10) << "src=" << src << dendl;
 
   while (*src) {
     if (*src != '%') {
@@ -362,6 +362,8 @@ bool url_decode(string& src_str, string& dest_str)
   }
   dest[pos] = 0;
   dest_str = dest;
+
+  dout(10) << "dest=" << dest << dendl;
 
   return true;
 }

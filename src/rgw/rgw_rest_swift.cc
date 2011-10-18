@@ -95,6 +95,8 @@ void RGWListBucket_REST_SWIFT::send_response()
   vector<RGWObjEnt>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
+  dump_start(s);
+
   s->formatter->open_array_section("container");
 
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
@@ -117,8 +119,18 @@ void RGWListBucket_REST_SWIFT::send_response()
       s->formatter->dump_format("name", iter->name.c_str());
       s->formatter->dump_format("hash", "\"%s\"", iter->etag.c_str());
       s->formatter->dump_int("bytes", iter->size);
-      if (iter->content_type.size())
-        s->formatter->dump_format("content_type", iter->content_type.c_str());
+      string single_content_type = iter->content_type;
+      if (iter->content_type.size()) {
+        // content type might hold multiple values, just dump the last one
+        size_t pos = iter->content_type.rfind(',');
+        if (pos > 0) {
+          ++pos;
+          while (single_content_type[pos] == ' ')
+            ++pos;
+          single_content_type = single_content_type.substr(pos);
+        }
+        s->formatter->dump_format("content_type", single_content_type.c_str());
+      }
       dump_time(s, "last_modified", &iter->mtime);
       s->formatter->close_section();
     }
@@ -143,8 +155,6 @@ void RGWListBucket_REST_SWIFT::send_response()
 
   set_req_state_err(s, ret);
   dump_errno(s);
-
-  dump_start(s);
   end_header(s);
   if (ret < 0) {
     return;
@@ -276,8 +286,8 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s,"%s: %s\r\n", name, iter->second.c_str());
+         name += sizeof(RGW_ATTR_META_PREFIX) - 1;
+         CGI_PRINTF(s,"X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }

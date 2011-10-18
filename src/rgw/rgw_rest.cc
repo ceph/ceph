@@ -516,11 +516,11 @@ static int init_entities_from_header(struct req_state *s)
     if (first.size() == 0)
       goto done;
 
-    url_decode(first, s->bucket_name_str);
+    s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      url_decode(req, s->object_str);
+      s->object_str = req;
       s->object = strdup(s->object_str.c_str());
     }
 
@@ -528,10 +528,10 @@ static int init_entities_from_header(struct req_state *s)
   }
 
   if (!s->bucket_name) {
-    url_decode(first, s->bucket_name_str);
+    s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
   } else {
-    url_decode(req, s->object_str);
+    s->object_str = first;
     s->object = strdup(s->object_str.c_str());
     goto done;
   }
@@ -541,7 +541,7 @@ static int init_entities_from_header(struct req_state *s)
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
-    url_decode(encoded_obj_str, s->object_str);
+    s->object_str = encoded_obj_str;
 
     if (s->object_str.size() > 0) {
       s->object = strdup(s->object_str.c_str());
@@ -594,6 +594,7 @@ struct str_len {
 struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_GOOG"),
                                    STR_LEN_ENTRY("HTTP_X_DHO"),
+                                   STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    {NULL, 0} };
 
 static void init_auth_info(struct req_state *s)
@@ -608,16 +609,18 @@ static void init_auth_info(struct req_state *s)
       int len = meta_prefixes[prefix_num].len;
       if (strncmp(p, prefix, len) == 0) {
         dout(10) << "meta>> " << p << dendl;
-        const char *name = p+5; /* skip the HTTP_ part */
+        const char *name = p+len; /* skip the prefix */
         const char *eq = strchr(name, '=');
         if (!eq) /* shouldn't happen! */
           continue;
-        int len = eq - name;
-        char name_low[len + 1];
+        int len = eq - name + 1;
+        char name_low[meta_prefixes[0].len + len + 1];
+        len = snprintf(name_low, meta_prefixes[0].len - 5 + len, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
         for (j=0; j<len; j++) {
-          name_low[j] = tolower(name[j]);
-          if (name_low[j] == '_')
+          if (name_low[j] != '_')
+            name_low[j] = tolower(name_low[j]);
+          else
             name_low[j] = '-';
         }
         name_low[j] = 0;
@@ -750,6 +753,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   s->fcgx = fcgx;
   s->path_name = s->env->get("SCRIPT_NAME");
   s->path_name_url = s->env->get("REQUEST_URI");
+  url_decode(s->path_name_url, s->path_name_url);
   int pos = s->path_name_url.find('?');
   if (pos >= 0) {
     s->path_name_url = s->path_name_url.substr(0, pos);
