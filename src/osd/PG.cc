@@ -985,8 +985,8 @@ void PG::trim_past_intervals()
 // true if the given map affects the prior set
 bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
 {
-  for (set<int>::iterator p = prior.cur.begin();
-       p != prior.cur.end();
+  for (set<int>::iterator p = prior.probe.begin();
+       p != prior.probe.end();
        ++p)
   {
     int o = *p;
@@ -1307,7 +1307,7 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
   for (map<int, Info>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (prior_set.cur.find(i->first) == prior_set.cur.end()) {
+    if (prior_set.probe.find(i->first) == prior_set.probe.end()) {
       dout(10) << "osd." << i->first << " not in current prior set, skipping" << dendl;
       continue;
     }
@@ -3905,7 +3905,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 std::ostream& operator<<(std::ostream& oss,
 			 const struct PG::PgPriorSet &prior)
 {
-  oss << "PgPriorSet[cur=" << prior.cur << " "
+  oss << "PgPriorSet[probe=" << prior.probe << " "
       << "down=" << prior.down << " "
       << "blocked_by=" << prior.blocked_by << "]";
   return oss;
@@ -4424,8 +4424,8 @@ void PG::RecoveryState::GetInfo::get_infos()
   PG *pg = context< RecoveryMachine >().pg;
   auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
 
-  for (set<int>::const_iterator it = prior_set->cur.begin();
-       it != prior_set->cur.end();
+  for (set<int>::const_iterator it = prior_set->probe.begin();
+       it != prior_set->probe.end();
        ++it) {
     int peer = *it;
     if (peer == pg->osd->whoami) {
@@ -4882,11 +4882,11 @@ PG::PgPriorSet::PgPriorSet(int whoami,
   // so that we know what they do/do not have explicitly before
   // sending them any new info/logs/whatever.
   for (unsigned i=0; i<acting.size(); i++)
-    cur.insert(acting[i]);
+    probe.insert(acting[i]);
   // It may be possible to exlude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i=0; i<up.size(); i++)
-    cur.insert(up[i]);
+    probe.insert(up[i]);
 
   for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
@@ -4937,7 +4937,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 
       if (osdmap.is_up(o)) {
 	// include past acting osds if they are up.
-	cur.insert(o);
+	probe.insert(o);
 	any_up_now = true;
       } else if (!pinfo) {
 	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
@@ -4965,7 +4965,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
 	   ++i) {
 	if (osdmap.exists(*i) &&   // if it doesn't exist, we already consider it lost.
 	    osdmap.is_down(*i)) {
-	  cur.insert(*i);
+	  probe.insert(*i);
 	  pg_down = true;
 
 	  // make note of when any down osd in the cur set was lost, so that
@@ -4985,7 +4985,9 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     }
   }
 
-  dout(10) << "build_prior final: cur " << cur << " down " << down << " blocked_by " << blocked_by
+  dout(10) << "build_prior final: probe " << probe
+	   << " down " << down
+	   << " blocked_by " << blocked_by
 	   << (crashed ? " crashed":"")
 	   << (pg_down ? " pg_down":"")
 	   << dendl;

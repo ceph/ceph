@@ -843,8 +843,8 @@ public:
   bool prior_set_built;
 
   struct PgPriorSet {
-    set<int> cur;   /// current+prior OSDs we need to probe.
-    set<int> down;  /// down osds that would normally be in @cur and might be interesting.
+    set<int> probe; /// current+prior OSDs we need to probe.
+    set<int> down;  /// down osds that would normally be in @probe and might be interesting.
     map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
