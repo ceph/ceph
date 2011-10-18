@@ -950,9 +950,8 @@ void PG::generate_past_intervals()
     i.acting.swap(tacting);
     if (i.acting.size()) {
       i.maybe_went_rw = 
-	(lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
-	 lastmap->get_up_from(i.acting[0]) <= first_epoch) ||
-	(first_epoch == info.history.epoch_created);
+	lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
+	lastmap->get_up_from(i.acting[0]) <= first_epoch;
       dout(10) << "generate_past_intervals " << i
 	       << " : primary up " << lastmap->get_up_from(i.acting[0])
 	       << "-" << lastmap->get_up_thru(i.acting[0])
@@ -1187,10 +1186,7 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
     state_set(PG_STATE_DOWN);
   }
 
-  // NOTE: we can skip the up_thru check if this is a new PG and there
-  // were no prior intervals.
-  if (info.history.epoch_created < info.history.same_interval_since &&
-      osd->osdmap->get_up_thru(osd->whoami) < info.history.same_interval_since) {
+  if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_interval_since) {
     dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	     << " < same_since " << info.history.same_interval_since
 	     << ", must notify monitor" << dendl;
@@ -3581,10 +3577,9 @@ void PG::start_peering_interval(const OSDMap *lastmap,
     }
 
     if (i.acting.size()) {
-      i.maybe_went_rw = 
-	(lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	 lastmap->get_up_from(i.acting[0]) <= i.first) ||
-	i.first == info.history.epoch_created;
+      i.maybe_went_rw =
+	lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	lastmap->get_up_from(i.acting[0]) <= i.first;
     } else {
       i.maybe_went_rw = 0;
     }
