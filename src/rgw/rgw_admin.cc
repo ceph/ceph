@@ -456,7 +456,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   return 0;
 }
 
-enum KeyType {
+enum ObjectKeyType {
   KEY_TYPE_SWIFT,
   KEY_TYPE_S3,
 };
@@ -474,7 +474,7 @@ int main(int argc, char **argv)
   std::string bucket_name, pool_name, object;
   std::string date, time, subuser, access, format;
   std::string key_type_str;
-  KeyType key_type = KEY_TYPE_S3;
+  ObjectKeyType key_type = KEY_TYPE_S3;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   uint64_t auid = -1;
