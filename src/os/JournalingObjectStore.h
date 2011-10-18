@@ -62,6 +62,7 @@ protected:
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
   void commit_finish();
   
+public:
   bool is_committing() {
     Mutex::Locker l(com_lock);
     return committing_seq != committed_seq;

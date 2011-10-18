@@ -173,7 +173,9 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.la $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += dupstore streamtest
+test_filestore_idempotent_SOURCES = test/test_filestore_idempotent.cc
+test_filestore_idempotent_LDADD = libos.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
