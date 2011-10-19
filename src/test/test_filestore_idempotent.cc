@@ -85,7 +85,7 @@ int main(int argc, const char **argv)
     uint64_t size = 4096;
     uint64_t x = 1;
 
-    bool committing;
+    bool committing = false;
     uint64_t committed_at = 0;
     while (true) {
       // build buffer
