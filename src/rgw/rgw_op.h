@@ -266,6 +266,23 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWPutObjMetadata : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWPutObjMetadata() {}
+
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+  }
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
 class RGWDeleteObj : public RGWOp {
 protected:
   int ret;

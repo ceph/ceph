@@ -247,6 +247,16 @@ void RGWPutObj_REST_SWIFT::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+void RGWPutObjMetadata_REST_SWIFT::send_response()
+{
+  if (!ret)
+    ret = STATUS_ACCEPTED;
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+  flush_formatter_to_req_state(s, s->formatter);
+}
+
 void RGWDeleteObj_REST_SWIFT::send_response()
 {
   int r = ret;
@@ -372,6 +382,14 @@ RGWOp *RGWHandler_REST_SWIFT::get_delete_op()
     return new RGWDeleteObj_REST_SWIFT;
   else if (s->bucket_name)
     return new RGWDeleteBucket_REST_SWIFT;
+
+  return NULL;
+}
+
+RGWOp *RGWHandler_REST_SWIFT::get_post_op()
+{
+  if (s->object)
+    return new RGWPutObjMetadata_REST_SWIFT;
 
   return NULL;
 }

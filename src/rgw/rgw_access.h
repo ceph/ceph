@@ -72,7 +72,8 @@ public:
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
-                      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive) = 0;
+                      map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                      map<std::string, bufferlist>* rmattrs) = 0;
   virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
   virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
@@ -83,7 +84,7 @@ public:
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     int ret = put_obj_data(ctx, id, obj, data, -1, len);
     if (ret >= 0) {
-      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false);
+      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false, NULL);
     }
     return ret;
   }

@@ -80,6 +80,14 @@ public:
   void send_response();
 };
 
+class RGWPutObjMetadata_REST_SWIFT : public RGWPutObjMetadata_REST {
+public:
+  RGWPutObjMetadata_REST_SWIFT() {}
+  ~RGWPutObjMetadata_REST_SWIFT() {}
+
+  void send_response();
+};
+
 class RGWDeleteObj_REST_SWIFT : public RGWDeleteObj_REST {
 public:
   RGWDeleteObj_REST_SWIFT() {}
@@ -120,7 +128,7 @@ protected:
   RGWOp *get_retrieve_op(bool get_data);
   RGWOp *get_create_op();
   RGWOp *get_delete_op();
-  RGWOp *get_post_op() { return NULL; }
+  RGWOp *get_post_op();
 
 public:
   RGWHandler_REST_SWIFT() : RGWHandler_REST() {}

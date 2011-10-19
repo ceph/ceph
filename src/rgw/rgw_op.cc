@@ -163,6 +163,15 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
   return ret;
 }
 
+static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+{
+  void *handle;
+  int ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, 0, NULL, &attrs, NULL,
+                                      NULL, NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
+  rgwstore->finish_get_obj(&handle);
+  return ret;
+}
+
 int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
@@ -771,7 +780,7 @@ void RGWPutObj::execute()
           goto done;
       }
     } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
+      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
       if (ret < 0)
         goto done_err;
 
@@ -799,6 +808,47 @@ done_err:
   if (created_obj)
     rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
   drain_pending(pending);
+  send_response();
+}
+
+int RGWPutObjMetadata::verify_permission()
+{
+  if (!::verify_permission(s, RGW_PERM_WRITE))
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWPutObjMetadata::execute()
+{
+  ret = -EINVAL;
+
+  const char *meta_prefix = RGW_ATTR_META_PREFIX;
+  int meta_prefix_len = sizeof(RGW_ATTR_META_PREFIX) - 1;
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  map<string, bufferlist>::iterator iter;
+  get_request_metadata(s, attrs);
+
+  rgw_obj obj(s->bucket, s->object_str);
+
+  rgwstore->set_atomic(s->obj_ctx, obj);
+
+  /* check if obj exists, read orig attrs */
+  ret = get_obj_attrs(s, obj, orig_attrs);
+  if (ret < 0)
+    goto done;
+
+  /* only remove meta attrs */
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+    const string& name = iter->first;
+    if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
+      rmattrs[name] = iter->second;
+    }
+  }
+
+  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
+
+done:
   send_response();
 }
 
@@ -1208,7 +1258,7 @@ void RGWInitMultipart::execute()
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1217,17 +1267,13 @@ done:
 static int get_multiparts_info(struct req_state *s, string& meta_oid, map<uint32_t, RGWUploadPartInfo>& parts,
                                RGWAccessControlPolicy& policy, map<string, bufferlist>& attrs)
 {
-  void *handle;
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
   rgw_obj obj(s->bucket, meta_oid, s->object_str, mp_ns);
 
-  int ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, 0, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
-  rgwstore->finish_get_obj(&handle);
-
+  int ret = get_obj_attrs(s, obj, attrs);
   if (ret < 0)
     return ret;
 
@@ -1361,7 +1407,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
   if (ret < 0)
     goto done;
   

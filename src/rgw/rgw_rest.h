@@ -66,6 +66,13 @@ public:
   int get_data();
 };
 
+class RGWPutObjMetadata_REST : public RGWPutObjMetadata
+{
+public:
+  RGWPutObjMetadata_REST() {}
+  ~RGWPutObjMetadata_REST() {}
+};
+
 class RGWDeleteObj_REST : public RGWDeleteObj {
 public:
   RGWDeleteObj_REST() {}
