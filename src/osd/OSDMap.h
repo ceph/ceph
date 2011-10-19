@@ -162,7 +162,7 @@ public:
 
     string cluster_snapshot;
 
-    void encode_client_old(bufferlist& bl) {
+    void encode_client_old(bufferlist& bl) const {
       __u16 v = 5;
       ::encode(v, bl);
       ::encode(fsid, bl);
@@ -178,7 +178,7 @@ public:
       // for ::encode(new_pools, bl);
       __u32 n = new_pools.size();
       ::encode(n, bl);
-      for (map<int64_t,pg_pool_t>::iterator p = new_pools.begin();
+      for (map<int64_t,pg_pool_t>::const_iterator p = new_pools.begin();
 	   p != new_pools.end();
 	   ++p) {
 	n = p->first;
@@ -188,7 +188,7 @@ public:
       // for ::encode(new_pool_names, bl);
       n = new_pool_names.size();
       ::encode(n, bl);
-      for (map<int64_t, string>::iterator p = new_pool_names.begin(); p != new_pool_names.end(); ++p) {
+      for (map<int64_t, string>::const_iterator p = new_pool_names.begin(); p != new_pool_names.end(); ++p) {
 	n = p->first;
 	::encode(n, bl);
 	::encode(p->second, bl);
@@ -206,7 +206,7 @@ public:
       // for ::encode(new_pg_temp, bl);
       n = new_pg_temp.size();
       ::encode(n, bl);
-      for (map<pg_t,vector<int32_t> >::iterator p = new_pg_temp.begin();
+      for (map<pg_t,vector<int32_t> >::const_iterator p = new_pg_temp.begin();
 	   p != new_pg_temp.end();
 	   ++p) {
 	old_pg_t opg = p->first.get_old_pg();
@@ -215,7 +215,12 @@ public:
       }
     }
 
-    void encode(bufferlist& bl) {
+    void encode(bufferlist& bl, uint64_t features=-1) const {
+      if ((features & CEPH_FEATURE_PGID64) == 0) {
+	encode_client_old(bl);
+	return;
+      }
+
       // base
       __u16 v = 6;
       ::encode(v, bl);
@@ -747,7 +752,7 @@ private:
   }
 
   // serialize, unserialize
-  void encode_client_old(bufferlist& bl) {
+  void encode_client_old(bufferlist& bl) const {
     __u16 v = 5;
     ::encode(v, bl);
 
@@ -760,7 +765,7 @@ private:
     // for ::encode(pools, bl);
     __u32 n = pools.size();
     ::encode(n, bl);
-    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
+    for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end();
 	 ++p) {
       n = p->first;
@@ -770,7 +775,7 @@ private:
     // for ::encode(pool_name, bl);
     n = pool_name.size();
     ::encode(n, bl);
-    for (map<int64_t, string>::iterator p = pool_name.begin();
+    for (map<int64_t, string>::const_iterator p = pool_name.begin();
 	 p != pool_name.end();
 	 ++p) {
       n = p->first;
@@ -791,7 +796,7 @@ private:
     // for ::encode(pg_temp, bl);
     n = pg_temp.size();
     ::encode(n, bl);
-    for (map<pg_t,vector<int32_t> >::iterator p = pg_temp.begin();
+    for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp.begin();
 	 p != pg_temp.end();
 	 ++p) {
       old_pg_t opg = p->first.get_old_pg();
@@ -805,7 +810,12 @@ private:
     ::encode(cbl, bl);
   }
 
-  void encode(bufferlist& bl) {
+  void encode(bufferlist& bl, uint64_t features=-1) const {
+    if ((features & CEPH_FEATURE_PGID64) == 0) {
+      encode_client_old(bl);
+      return;
+    }
+    
     __u16 v = 6;
     ::encode(v, bl);
 

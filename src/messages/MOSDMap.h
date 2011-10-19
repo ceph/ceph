@@ -92,7 +92,7 @@ public:
 	bufferlist::iterator q = p->second.begin();
 	inc.decode(q);
 	p->second.clear();
-	inc.encode_client_old(p->second);
+	inc.encode(p->second, connection->get_features());
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -100,7 +100,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode_client_old(p->second);
+	m.encode(p->second, connection->get_features());
       }
       header.version = 1;
     }
