@@ -305,7 +305,9 @@ public:
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
-  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num,
+                      map<string, RGWObjEnt>& m, bool *is_truncated,
+                      string *last_entry = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,

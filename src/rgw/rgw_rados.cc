@@ -357,7 +357,8 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, max - count, ent_map, &truncated);
+    int r = cls_bucket_list(bucket, cur_marker, max - count, ent_map,
+                            &truncated, &cur_marker);
     if (r < 0)
       return r;
 
@@ -365,7 +366,6 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       string obj = eiter->first;
       string key = obj;
-      cur_marker = obj;
 
       if (!rgw_obj::translate_raw_obj(obj, ns))
         continue;
@@ -850,7 +850,8 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
 
   do {
 #define NUM_ENTRIES 1000
-    r = cls_bucket_list(bucket, marker, NUM_ENTRIES, ent_map, &is_truncated);
+    r = cls_bucket_list(bucket, marker, NUM_ENTRIES, ent_map,
+                        &is_truncated, &marker);
     if (r < 0)
       return r;
 
@@ -863,7 +864,6 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
       if (rgw_obj::translate_raw_obj(obj, ns))
         return -ENOTEMPTY;
     }
-    marker = obj;
   } while (is_truncated);
 
   if (remove_pool) {
@@ -2105,7 +2105,7 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epo
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
-			      bool *is_truncated)
+			      bool *is_truncated, string *last_entry)
 {
   dout(0) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
 
@@ -2171,6 +2171,10 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     }
     m[e.name] = e;
     dout(0) << " got " << e.name << dendl;
+  }
+
+  if (dir.m.size()) {
+    *last_entry = dir.m.rbegin()->first;
   }
 
   if (updates.length()) {
