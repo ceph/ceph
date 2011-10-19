@@ -71,14 +71,18 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : crush(0), have_rmaps(false) {}
+  CrushWrapper() : crush(0), have_rmaps(false) {
+    create();
+  }
   ~CrushWrapper() {
-    if (crush) crush_destroy(crush);
+    if (crush)
+      crush_destroy(crush);
   }
 
   /* building */
   void create() {
-    if (crush) crush_destroy(crush);
+    if (crush)
+      crush_destroy(crush);
     crush = crush_create();
   }
 
@@ -409,8 +413,8 @@ public:
     return bl.write_file(fn);
   }
 
-  void encode(bufferlist &bl, bool lean=false) {
-    if (!crush) create();  // duh.
+  void encode(bufferlist &bl, bool lean=false) const {
+    assert(crush);
 
     __u32 magic = CRUSH_MAGIC;
     ::encode(magic, bl);
@@ -629,5 +633,6 @@ public:
     }
   }
 };
+WRITE_CLASS_ENCODER(CrushWrapper)
 
 #endif
