@@ -613,11 +613,11 @@ static void init_auth_info(struct req_state *s)
         const char *eq = strchr(name, '=');
         if (!eq) /* shouldn't happen! */
           continue;
-        int len = eq - name + 1;
-        char name_low[meta_prefixes[0].len + len + 1];
-        len = snprintf(name_low, meta_prefixes[0].len - 5 + len, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        int name_len = eq - name + 1;
+        char name_low[meta_prefixes[0].len + name_len + 1];
+        snprintf(name_low, meta_prefixes[0].len - 5 + name_len, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
-        for (j=0; j<len; j++) {
+        for (j = 0; name_low[j]; j++) {
           if (name_low[j] != '_')
             name_low[j] = tolower(name_low[j]);
           else
