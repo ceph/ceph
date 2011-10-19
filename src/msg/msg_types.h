@@ -93,17 +93,16 @@ public:
     return true;
   }
 
+  void encode(bufferlist& bl) const {
+    ::encode(_type, bl);
+    ::encode(_num, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(_type, bl);
+    ::decode(_num, bl);
+  }
 };
-
-inline void encode(const entity_name_t &a, bufferlist& bl) {
-  encode(a._type, bl);
-  encode(a._num, bl);
-}
-
-inline void decode(entity_name_t &a, bufferlist::iterator& p) {
-  decode(a._type, p);
-  decode(a._num, p);
-}
+WRITE_CLASS_ENCODER(entity_name_t)
 
 inline bool operator== (const entity_name_t& l, const entity_name_t& r) { 
   return (l.type() == r.type()) && (l.num() == r.num()); }
@@ -320,16 +319,18 @@ struct entity_inst_t {
     ceph_entity_inst i = {name, addr};
     return i;
   }
-};
 
-inline void encode(const entity_inst_t &i, bufferlist& bl) {
-  encode(i.name, bl);
-  encode(i.addr, bl);
-}
-inline void decode(entity_inst_t &i, bufferlist::iterator& p) {
-  decode(i.name, p);
-  decode(i.addr, p);
-}
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(addr, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(addr, bl);
+  }
+};
+WRITE_CLASS_ENCODER(entity_inst_t)
+
 
 inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { 
   return a.name == b.name && a.addr == b.addr;

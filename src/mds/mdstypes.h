@@ -755,18 +755,16 @@ struct metareqid_t {
   uint64_t tid;
   metareqid_t() : tid(0) {}
   metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(tid, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    ::decode(name, p);
+    ::decode(tid, p);
+  }
 };
-
-static inline void encode(const metareqid_t &r, bufferlist &bl)
-{
-  ::encode(r.name, bl);
-  ::encode(r.tid, bl);
-}
-static inline void decode( metareqid_t &r, bufferlist::iterator &p)
-{
-  ::decode(r.name, p);
-  ::decode(r.tid, p);
-}
+WRITE_CLASS_ENCODER(metareqid_t)
 
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
   return out << r.name << ":" << r.tid;
@@ -887,16 +885,17 @@ struct dirfrag_t {
 
   dirfrag_t() : ino(0) { }
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
-};
 
-inline void encode(const dirfrag_t &f, bufferlist& bl) { 
-  encode(f.ino, bl);
-  encode(f.frag, bl);
-}
-inline void decode(dirfrag_t &f, bufferlist::iterator& p) { 
-  decode(f.ino, p);
-  decode(f.frag, p);
-}
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(frag, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(ino, bl);
+    ::decode(frag, bl);
+  }
+};
+WRITE_CLASS_ENCODER(dirfrag_t)
 
 
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {
