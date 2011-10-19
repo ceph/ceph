@@ -209,15 +209,12 @@ class CephManager:
             return int(match.group(0).split('/')[0])
 
     def get_num_active_clean(self):
-        status = self.raw_cluster_status()
-        self.log(status)
-        match = re.search(
-            "\d* active.clean",
-            status)
-        if match == None:
-            return 0
-        else:
-            return int(match.group(0).split()[0])
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if pg['state'].startswith('active+clean'):
+                num += 1
+        return num
 
     def get_num_active(self):
         pgs = self.get_pg_stats()
