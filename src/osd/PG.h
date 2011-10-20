@@ -856,7 +856,7 @@ public:
 	       const Info &info,
 	       PG *debug_pg=0);
 
-    bool prior_set_affected(const OSDMap *osdmap, PG *debug_pg=0) const;
+    bool affected_by_map(const OSDMap *osdmap, PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,

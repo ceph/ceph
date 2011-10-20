@@ -4050,8 +4050,8 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Peering advmap" << dendl;
-  if (prior_set.get()->prior_set_affected(advmap.osdmap, pg)) {
-    dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
+  if (prior_set.get()->affected_by_map(advmap.osdmap, pg)) {
+    dout(1) << "Peering, affected_by_map, going to Reset" << dendl;
     pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
@@ -4935,17 +4935,16 @@ PG::PgPriorSet::PgPriorSet(const OSDMap &osdmap,
 }
 
 // true if the given map affects the prior set
-bool PG::PgPriorSet::prior_set_affected(const OSDMap *osdmap, PG *debug_pg) const
+bool PG::PgPriorSet::affected_by_map(const OSDMap *osdmap, PG *debug_pg) const
 {
   for (set<int>::iterator p = probe.begin();
        p != probe.end();
-       ++p)
-  {
+       ++p) {
     int o = *p;
 
     // did someone in the prior set go down?
     if (osdmap->is_down(o) && down.count(o) == 0) {
-      dout(10) << "prior_set_affected: osd." << o << " now down" << dendl;
+      dout(10) << "affected_by_map osd." << o << " now down" << dendl;
       return true;
     }
 
@@ -4953,11 +4952,11 @@ bool PG::PgPriorSet::prior_set_affected(const OSDMap *osdmap, PG *debug_pg) cons
     map<int,epoch_t>::const_iterator p = blocked_by.find(o);
     if (p != blocked_by.end()) {
       if (!osdmap->exists(o)) {
-	dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
+	dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
 	return true;
       }
       if (osdmap->get_info(o).lost_at != p->second) {
-	dout(10) << "prior_set_affected: osd." << o << " (re)marked as lost" << dendl;
+	dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
 	return true;
       }
     }
@@ -4966,18 +4965,17 @@ bool PG::PgPriorSet::prior_set_affected(const OSDMap *osdmap, PG *debug_pg) cons
   // did someone in the prior down set go up?
   for (set<int>::const_iterator p = down.begin();
        p != down.end();
-       ++p)
-  {
+       ++p) {
     int o = *p;
 
     if (osdmap->is_up(o)) {
-      dout(10) << "prior_set_affected: osd." << *p << " now up" << dendl;
+      dout(10) << "affected_by_map osd." << *p << " now up" << dendl;
       return true;
     }
 
     // did someone in the prior set get lost or destroyed?
     if (!osdmap->exists(o)) {
-      dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
+      dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
       return true;
     }
   }
