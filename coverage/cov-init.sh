@@ -25,7 +25,7 @@ cp $OUTPUT_DIR/usr/local/lib/ceph/coverage/*.gcno $OUTPUT_DIR/ceph/src
 mkdir $OUTPUT_DIR/ceph/src/.libs
 cp $OUTPUT_DIR/usr/local/lib/ceph/coverage/.libs/*.gcno $OUTPUT_DIR/ceph/src/.libs
 rm -rf $OUTPUT_DIR/usr
-rm $OUTPUT_DIR/ceph.x86_64.tgz
+# leave ceph tarball around in case we need to inspect core files
 
 echo "Initializing lcov files..."
 lcov -d $OUTPUT_DIR/ceph/src -z
