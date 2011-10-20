@@ -724,6 +724,35 @@ public:
     return true;
   }
 
+  /**
+   * Given a mangled object name and an empty namespace string, this
+   * function extracts the namespace into the string and sets the object
+   * name to be the unmangled version.
+   *
+   * It returns true after successfully doing so, or
+   * false if it fails.
+   */
+  static bool strip_namespace_from_object(string& obj, string& ns) {
+    ns.clear();
+    if (obj[0] != '_') {
+      return true;
+    }
+
+    size_t pos = obj.find('_', 1);
+    if (pos == string::npos) {
+      return false;
+    }
+
+    size_t period_pos = obj.find('.');
+    if (period_pos < pos) {
+      return false;
+    }
+
+    ns = obj.substr(1, pos-1);
+    obj = obj.substr(pos+1, string::npos);
+    return true;
+  }
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
     ::encode(struct_v, bl);

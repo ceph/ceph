@@ -2165,7 +2165,9 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
     if (!dirent.exists || !dirent.pending_map.empty()) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
-      r = check_disk_state(io_ctx, bucket, dirent, e, updates);
+      librados::IoCtx sub_ctx;
+      sub_ctx.dup(io_ctx);
+      r = check_disk_state(sub_ctx, bucket, dirent, e, updates);
       if (r < 0) {
         if (r == -ENOENT)
           continue;
@@ -2190,16 +2192,22 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, ma
   return m.size();
 }
 
-int RGWRados::check_disk_state(librados::IoCtx& io_ctx,
+int RGWRados::check_disk_state(librados::IoCtx io_ctx,
                                rgw_bucket& bucket,
                                rgw_bucket_dir_entry& list_state,
                                RGWObjEnt& object,
                                bufferlist& suggested_updates)
 {
   rgw_obj obj;
-  std::string oid, key;
-  obj.init(bucket, list_state.name);
+  std::string oid, key, ns;
+  oid = list_state.name;
+  if (!rgw_obj::strip_namespace_from_object(oid, ns)) {
+    // well crap
+    assert(0 == "got bad object name off disk");
+  }
+  obj.init(bucket, oid, list_state.locator, ns);
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  io_ctx.locator_set_key(key);
   int r = io_ctx.stat(oid, &object.size, &object.mtime);
 
   list_state.pending_map.clear(); // we don't need this and it inflates size

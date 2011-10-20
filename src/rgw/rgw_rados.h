@@ -338,7 +338,7 @@ public:
    * and -errno on other failures. (-ENOENT is not a failure, and it
    * will encode that info as a suggested update.)
    */
-  int check_disk_state(librados::IoCtx& io_ctx,
+  int check_disk_state(librados::IoCtx io_ctx,
                        rgw_bucket& bucket,
                        rgw_bucket_dir_entry& list_state,
                        RGWObjEnt& object,
