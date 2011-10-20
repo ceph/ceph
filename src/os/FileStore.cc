@@ -685,6 +685,11 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   plb.add_fl_avg(l_os_apply_lat, "apply_latency");
   plb.add_u64(l_os_committing, "committing");
 
+  plb.add_u64_counter(l_os_commit, "commitcycle");
+  plb.add_fl_avg(l_os_commit_len, "commitcycle_interval");
+  plb.add_fl_avg(l_os_commit_lat, "commitcycle_latency");
+  plb.add_u64_counter(l_os_j_full, "journal_full");
+
   logger = plb.create_perf_counters();
 }
 
@@ -3072,8 +3077,14 @@ void FileStore::sync_entry()
       }
       
       utime_t done = ceph_clock_now(g_ceph_context);
-      done -= start;
-      dout(10) << "sync_entry commit took " << done << dendl;
+      utime_t lat = done - start;
+      utime_t dur = done - startwait;
+      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+
+      logger->inc(l_os_commit);
+      logger->finc(l_os_commit_lat, lat);
+      logger->finc(l_os_commit_len, dur);
+
       commit_finish();
 
       logger->set(l_os_committing, 0);

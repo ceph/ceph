@@ -594,6 +594,9 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
       if (orig_ops)
 	break;         // commit what we have
 
+      if (logger)
+	logger->inc(l_os_j_full);
+
       if (wait_on_full) {
 	dout(20) << "prepare_multi_write full on first entry, need to wait" << dendl;
       } else {
