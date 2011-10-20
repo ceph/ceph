@@ -1122,9 +1122,6 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
 				 this));
   PgPriorSet &prior(*prior_set.get());
 				 
-  // take note that we care about the primary's up_thru.  if it
-  // changes later, it will affect our prior_set, and we'll want
-  // to rebuild it!
   if (prior.crashed) {
     state_set(PG_STATE_CRASHED);
   }
