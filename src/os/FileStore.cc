@@ -1793,7 +1793,7 @@ void FileStore::start_logger(int whoami, utime_t tare)
   logger = plb.create_perf_counters();
   if (journal)
     journal->logger = logger;
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 }
 
 void FileStore::stop_logger()
@@ -1802,7 +1802,7 @@ void FileStore::stop_logger()
   if (logger) {
     if (journal)
       journal->logger = NULL;
-    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->remove(logger);
     delete logger;
     logger = NULL;
   }

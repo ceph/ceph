@@ -26,15 +26,13 @@
 
 using std::ostringstream;
 
-PerfCountersCollection::
-PerfCountersCollection(CephContext *cct)
+PerfCountersCollection::PerfCountersCollection(CephContext *cct)
   : m_cct(cct),
     m_lock("PerfCountersCollection")
 {
 }
 
-PerfCountersCollection::
-~PerfCountersCollection()
+PerfCountersCollection::~PerfCountersCollection()
 {
   Mutex::Locker lck(m_lock);
   for (perf_counters_set_t::iterator l = m_loggers.begin();
@@ -44,8 +42,7 @@ PerfCountersCollection::
   m_loggers.clear();
 }
 
-void PerfCountersCollection::
-logger_add(class PerfCounters *l)
+void PerfCountersCollection::add(class PerfCounters *l)
 {
   Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.find(l);
@@ -53,8 +50,7 @@ logger_add(class PerfCounters *l)
   m_loggers.insert(l);
 }
 
-void PerfCountersCollection::
-logger_remove(class PerfCounters *l)
+void PerfCountersCollection::remove(class PerfCounters *l)
 {
   Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.find(l);
@@ -63,8 +59,7 @@ logger_remove(class PerfCounters *l)
   m_loggers.erase(i);
 }
 
-void PerfCountersCollection::
-logger_clear()
+void PerfCountersCollection::clear()
 {
   Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
@@ -75,8 +70,7 @@ logger_clear()
   }
 }
 
-void PerfCountersCollection::
-write_json_to_buf(std::vector <char> &buffer, bool schema)
+void PerfCountersCollection::write_json_to_buf(std::vector <char> &buffer, bool schema)
 {
   Mutex::Locker lck(m_lock);
   buffer.push_back('{');
@@ -94,13 +88,11 @@ write_json_to_buf(std::vector <char> &buffer, bool schema)
   buffer.push_back('\0');
 }
 
-PerfCounters::
-~PerfCounters()
+PerfCounters::~PerfCounters()
 {
 }
 
-void PerfCounters::
-inc(int idx, uint64_t amt)
+void PerfCounters::inc(int idx, uint64_t amt)
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -113,8 +105,7 @@ inc(int idx, uint64_t amt)
     data.avgcount++;
 }
 
-void PerfCounters::
-set(int idx, uint64_t amt)
+void PerfCounters::set(int idx, uint64_t amt)
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -127,8 +118,7 @@ set(int idx, uint64_t amt)
     data.avgcount++;
 }
 
-uint64_t PerfCounters::
-get(int idx) const
+uint64_t PerfCounters::get(int idx) const
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -139,8 +129,7 @@ get(int idx) const
   return data.u.u64;
 }
 
-void PerfCounters::
-finc(int idx, double amt)
+void PerfCounters::finc(int idx, double amt)
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -153,8 +142,7 @@ finc(int idx, double amt)
     data.avgcount++;
 }
 
-void PerfCounters::
-fset(int idx, double amt)
+void PerfCounters::fset(int idx, double amt)
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -167,8 +155,7 @@ fset(int idx, double amt)
     data.avgcount++;
 }
 
-double PerfCounters::
-fget(int idx) const
+double PerfCounters::fget(int idx) const
 {
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
@@ -187,8 +174,7 @@ static inline void append_to_vector(std::vector <char> &buffer, char *buf)
   memcpy(&buffer[sz], buf, strlen_buf);
 }
 
-void PerfCounters::
-write_json_to_buf(std::vector <char> &buffer, bool schema)
+void PerfCounters::write_json_to_buf(std::vector <char> &buffer, bool schema)
 {
   char buf[512];
   Mutex::Locker lck(m_lock);
@@ -218,14 +204,12 @@ write_json_to_buf(std::vector <char> &buffer, bool schema)
   buffer.push_back('}');
 }
 
-const std::string &PerfCounters::
-get_name() const
+const std::string &PerfCounters::get_name() const
 {
   return m_name;
 }
 
-PerfCounters::
-PerfCounters(CephContext *cct, const std::string &name,
+PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
 	   int lower_bound, int upper_bound)
   : m_cct(cct),
     m_lower_bound(lower_bound),
@@ -237,8 +221,7 @@ PerfCounters(CephContext *cct, const std::string &name,
   m_data.resize(upper_bound - lower_bound - 1);
 }
 
-PerfCounters::perf_counter_data_any_d::
-perf_counter_data_any_d()
+PerfCounters::perf_counter_data_any_d::perf_counter_data_any_d()
   : name(NULL),
     type(PERFCOUNTER_NONE),
     avgcount(0)
@@ -246,14 +229,12 @@ perf_counter_data_any_d()
   memset(&u, 0, sizeof(u));
 }
 
-void  PerfCounters::perf_counter_data_any_d::
-write_schema_json(char *buf, size_t buf_sz) const
+void  PerfCounters::perf_counter_data_any_d::write_schema_json(char *buf, size_t buf_sz) const
 {
   snprintf(buf, buf_sz, "\"%s\":{\"type\":%d}", name, type);
 }
 
-void  PerfCounters::perf_counter_data_any_d::
-write_json(char *buf, size_t buf_sz) const
+void  PerfCounters::perf_counter_data_any_d::write_json(char *buf, size_t buf_sz) const
 {
   if (type & PERFCOUNTER_LONGRUNAVG) {
     if (type & PERFCOUNTER_U64) {
@@ -284,47 +265,40 @@ write_json(char *buf, size_t buf_sz) const
   }
 }
 
-PerfCountersBuilder::
-PerfCountersBuilder(CephContext *cct, const std::string &name,
+PerfCountersBuilder::PerfCountersBuilder(CephContext *cct, const std::string &name,
                   int first, int last)
   : m_perf_counters(new PerfCounters(cct, name, first, last))
 {
 }
 
-PerfCountersBuilder::
-~PerfCountersBuilder()
+PerfCountersBuilder::~PerfCountersBuilder()
 {
   if (m_perf_counters)
     delete m_perf_counters;
   m_perf_counters = NULL;
 }
 
-void PerfCountersBuilder::
-add_u64_counter(int idx, const char *name)
+void PerfCountersBuilder::add_u64_counter(int idx, const char *name)
 {
   add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 }
 
-void PerfCountersBuilder::
-add_u64(int idx, const char *name)
+void PerfCountersBuilder::add_u64(int idx, const char *name)
 {
   add_impl(idx, name, PERFCOUNTER_U64);
 }
 
-void PerfCountersBuilder::
-add_fl(int idx, const char *name)
+void PerfCountersBuilder::add_fl(int idx, const char *name)
 {
   add_impl(idx, name, PERFCOUNTER_FLOAT);
 }
 
-void PerfCountersBuilder::
-add_fl_avg(int idx, const char *name)
+void PerfCountersBuilder::add_fl_avg(int idx, const char *name)
 {
   add_impl(idx, name, PERFCOUNTER_FLOAT | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::
-add_impl(int idx, const char *name, int ty)
+void PerfCountersBuilder::add_impl(int idx, const char *name, int ty)
 {
   assert(idx > m_perf_counters->m_lower_bound);
   assert(idx < m_perf_counters->m_upper_bound);
@@ -336,8 +310,7 @@ add_impl(int idx, const char *name, int ty)
   data.avgcount = 0;
 }
 
-PerfCounters *PerfCountersBuilder::
-create_perf_counters()
+PerfCounters *PerfCountersBuilder::create_perf_counters()
 {
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
