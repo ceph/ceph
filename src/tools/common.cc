@@ -344,11 +344,11 @@ static void send_command(CephToolCtx *ctx)
     }
     
     if (!osdmap->is_up(n)) {
-      reply_rc = -ENOENT;
+      reply_rc = -ESRCH;
       reply = true;
+    } else {
+      messenger->send_message(m, osdmap->get_inst(n));
     }
-
-    messenger->send_message(m, osdmap->get_inst(n));
     return;
   }
 

@@ -431,7 +431,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
       dout(20) << "merge_log merging " << ne << dendl;
-      missing.add_next_event(ne, oinfo);
+      missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(coll, ne.soid);
     }
@@ -522,7 +522,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	Log::Entry &ne = *p;
         dout(20) << "merge_log " << ne << dendl;
 	log.index(ne);
-	missing.add_next_event(ne, info);
+	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  t.remove(coll, ne.soid);
       }
@@ -790,14 +790,21 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
 	  le->prior_version > log.tail) {      // prior_version also already in log
-	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
-      } else {
-	be.version = le->prior_version;
-	be.reqid = osd_reqid_t();
-	dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
-	omap[be.version] = be;
-	// don't try to index: this is the prior_version backlog entry
+	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
+	omap.erase(i++);
+	continue;
       }
+
+      be.reqid = osd_reqid_t();
+      if (be.version == le->prior_version) {
+	dout(15) << "   keeping prior_version " << be << " (have " << *le << ")" << dendl;
+	i++;
+	continue;
+      }
+
+      be.version = le->prior_version;
+      dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
+      omap[be.version] = be;
       omap.erase(i++);
     } else {
       i++;
@@ -813,6 +820,10 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
       log.index( *log.log.begin() );
   }
+
+  dout(25) << "result:\n";
+  log.print(*_dout);
+  *_dout << dendl;
 }
 
 
@@ -1060,13 +1071,15 @@ bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
-bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+bool PG::all_unfound_are_queried_or_lost(const OSDMap* osdmap) const
 {
   assert(is_primary());
 
   set<int>::const_iterator peer = might_have_unfound.begin();
   set<int>::const_iterator mend = might_have_unfound.end();
   for (; peer != mend; ++peer) {
+    if (peer_missing.count(*peer))
+      continue;
     const osd_info_t &osd_info(osdmap->get_info(*peer));
     if (osd_info.lost_at <= osd_info.up_from) {
       // If there is even one OSD in might_have_unfound that isn't lost, we
@@ -1074,100 +1087,9 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
       return false;
     }
   }
-  dout(10) << "all_unfound_are_lost all of might_have_unfound " << might_have_unfound 
-	   << " are marked lost!" << dendl;
+  dout(10) << "all_unfound_are_queried_or_lost all of might_have_unfound " << might_have_unfound 
+	   << " have been queried or are marked lost" << dendl;
   return true;
-}
-
-/* Mark an object as lost
- */
-void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
-			  const hobject_t &lost_soid)
-{
-  // Wake anyone waiting for this object. Now that it's been marked as lost,
-  // we will just return an error code.
-  map<hobject_t, list<class Message*> >::iterator wmo =
-    waiting_for_missing_object.find(lost_soid);
-  if (wmo != waiting_for_missing_object.end()) {
-    osd->requeue_ops(this, wmo->second);
-  }
-
-  // Tell the object store that this object is lost.
-  bufferlist b1;
-  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
-
-  object_locator_t oloc;
-  oloc.clear();
-  oloc.pool = info.pgid.pool();
-  object_info_t oi(lost_soid, oloc);
-
-  if (r >= 0) {
-    // Some version of this lost object exists in our filestore.
-    // So, we can fetch its attributes and preserve most of them.
-    oi = object_info_t(b1);
-  }
-  else {
-    // The object doesn't exist in the filestore yet. Make sure that
-    // we create it there.
-    t.touch(coll, lost_soid);
-  }
-
-  oi.lost = true;
-  oi.version = info.last_update;
-  bufferlist b2;
-  oi.encode(b2);
-  t.setattr(coll, lost_soid, OI_ATTR, b2);
-}
-
-/* Mark all unfound objects as lost.
- */
-void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
-{
-  dout(3) << __func__ << dendl;
-
-  dout(30) << __func__  << ": log before:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  utime_t mtime = ceph_clock_now(g_ceph_context);
-  eversion_t old_last_update = info.last_update;
-  info.last_update.epoch = osd->osdmap->get_epoch();
-  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
-  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
-  while (m != mend) {
-    const hobject_t &soid(m->first);
-    if (missing_loc.find(soid) != missing_loc.end()) {
-      // We only care about unfound objects
-      ++m;
-      continue;
-    }
-
-    // Add log entry
-    info.last_update.version++;
-    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
-		 m->second.need, osd_reqid_t(), mtime);
-    log.add(e);
-
-    // Object store stuff
-    mark_obj_as_lost(t, soid);
-
-    // Remove from missing set
-    missing.got(m++);
-  }
-
-  dout(30) << __func__ << ": log after:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  if (missing.num_missing() == 0) {
-    // advance last_complete since nothing else is missing!
-    info.last_complete = info.last_update;
-    write_info(t);
-  }
-
-  // Send out the PG log to all replicas
-  // So that they know what is lost
-  share_pg_log(old_last_update);
 }
 
 void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
@@ -1650,7 +1572,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
              p != m->log.log.end();
              p++) 
           if (p->version > plu)
-            pm.add_next_event(*p, pi);
+            pm.add_next_event(*p);
       }
       
       if (m) {
@@ -3414,17 +3336,13 @@ void PG::share_pg_info()
 }
 
 /*
- * Share some of this PG's log with some replicas.
- *
- * The log will be shared from the current version (last_update) back to
- * 'oldver.'
+ * Share a new segment of this PG's log with some replicas, after PG is active.
  *
  * Updates peer_missing and peer_info.
  */
-void PG::share_pg_log(const eversion_t &oldver)
+void PG::share_pg_log()
 {
   dout(10) << __func__ << dendl;
-
   assert(is_primary());
 
   vector<int>::const_iterator a = acting.begin();
@@ -3432,42 +3350,20 @@ void PG::share_pg_log(const eversion_t &oldver)
   vector<int>::const_iterator end = acting.end();
   while (++a != end) {
     int peer(*a);
-    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
-    m->log.head = log.head;
-    m->log.tail = log.tail;
-    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
-	 i != log.log.rend();
-	 ++i) {
-      if (i->version <= oldver) {
-	m->log.tail = i->version;
-	break;
-      }
-      const Log::Entry &entry(*i);
-      switch (entry.op) {
-	case Log::Entry::LOST: {
-	  PG::Missing& pmissing(peer_missing[peer]);
-	  pmissing.add(entry.soid, entry.version, eversion_t());
-	  break;
-        }
-	default: {
-	  // To do this right, you need to figure out what impact this log
-	  // entry has on the peer missing and the peer info
-	  assert(0);
-	  break;
-        }
-      }
-
-      m->log.log.push_front(*i);
-    }
+    PG::Missing& pmissing(peer_missing[peer]);
     PG::Info& pinfo(peer_info[peer]);
-    pinfo.last_update = log.head;
-    // shouldn't move pinfo.log.tail
-    pinfo.last_update = log.head;
-    // no change in pinfo.last_complete
 
-    m->missing = missing;
-    osd->cluster_messenger->send_message(m, osd->osdmap->
-					 get_cluster_inst(peer));
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
+    m->log.copy_after(log, pinfo.last_update);
+
+    for (list<Log::Entry>::const_iterator i = m->log.log.begin();
+	 i != m->log.log.end();
+	 ++i) {
+      pmissing.add_next_event(*i);
+    }
+    pinfo.last_update = m->log.head;
+
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
   }
 }
 
@@ -3794,7 +3690,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
+void PG::Missing::add_next_event(const Log::Entry& e)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t()) {
@@ -3808,9 +3704,7 @@ void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
       //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog() ||
-	       e.prior_version <= info.log_tail ||
-	       e.prior_version > info.last_update) {
+    } else if (e.is_backlog()) {
       // May not have prior version
       missing[e.soid].need = e.version;
     } else {
@@ -3841,18 +3735,23 @@ void PG::Missing::add(const hobject_t& oid, eversion_t need, eversion_t have)
 
 void PG::Missing::rm(const hobject_t& oid, eversion_t v)
 {
-  if (missing.count(oid) && missing[oid].need <= v) {
-    rmissing.erase(missing[oid].need.version);
-    missing.erase(oid);
-  }
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  if (p != missing.end() && p->second.need <= v)
+    rm(p);
+}
+
+void PG::Missing::rm(const std::map<hobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need.version);
+  missing.erase(m);
 }
 
 void PG::Missing::got(const hobject_t& oid, eversion_t v)
 {
-  assert(missing.count(oid));
-  assert(missing[oid].need <= v);
-  rmissing.erase(missing[oid].need.version);
-  missing.erase(oid);
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  assert(p != missing.end());
+  assert(p->second.need <= v);
+  got(p);
 }
 
 void PG::Missing::got(const std::map<hobject_t, Missing::item>::iterator &m)
@@ -4191,11 +4090,11 @@ PG::RecoveryState::Active::react(const ActMap&) {
 
   int unfound = pg->missing.num_missing() - pg->missing_loc.size();
   if (unfound > 0 &&
-      pg->all_unfound_are_lost(pg->osd->osdmap)) {
+      pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
     if (g_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, automatically marking lost\n";
-      pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());
+			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
+      //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
@@ -4302,6 +4201,20 @@ PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
+boost::statechart::result 
+PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
+  PG *pg = context< RecoveryMachine >().pg;
+  MOSDPGLog *msg = logevt.msg;
+  dout(10) << "received log from " << logevt.from << dendl;
+  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
+		msg->info, msg->log, logevt.from);
+
+  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.head == pg->info.last_update);
+
+  return discard_event();
+}
+
 boost::statechart::result
 PG::RecoveryState::ReplicaActive::react(const ActMap&) {
   PG *pg = context< RecoveryMachine >().pg;
@@ -4347,7 +4260,6 @@ PG::RecoveryState::Stray::react(const MLogRec& logevt) {
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
-  pg->write_info(*context<RecoveryMachine>().get_cur_transaction());
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
@@ -4357,11 +4269,9 @@ boost::statechart::result
 PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "received info from " << infoevt.from << dendl;
-
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
-  pg->write_info(*context<RecoveryMachine>().get_cur_transaction());
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
