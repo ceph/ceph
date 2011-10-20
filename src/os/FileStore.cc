@@ -665,6 +665,39 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   ostringstream sss;
   sss << basedir << "/current/commit_op_seq";
   current_op_seq_fn = sss.str();
+
+  // initialize logger
+  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
+
+  plb.add_u64_counter(l_os_in_ops, "in_ops");
+  plb.add_u64_counter(l_os_in_bytes, "in_bytes");
+  plb.add_u64_counter(l_os_readable_ops, "readable_ops");
+  plb.add_u64_counter(l_os_readable_bytes, "readable_bytes");
+  plb.add_u64_counter(l_os_commit_ops, "commit_ops");
+  plb.add_u64_counter(l_os_commit_bytes, "commit_bytes");
+
+  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
+  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
+  plb.add_u64_counter(l_os_j_ops, "journal_ops");
+  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
+  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
+  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops");
+  plb.add_u64_counter(l_os_ops, "ops");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
+  plb.add_u64_counter(l_os_bytes, "bytes");
+  plb.add_u64(l_os_committing, "committing");
+
+  logger = plb.create_perf_counters();
+}
+
+FileStore::~FileStore()
+{
+  if (journal)
+    journal->logger = NULL;
+  delete logger;
 }
 
 static void get_attrname(const char *name, char *buf, int len)
@@ -742,6 +775,8 @@ int FileStore::open_journal()
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
     journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    if (journal)
+      journal->logger = logger;
   }
   return 0;
 }
@@ -1675,7 +1710,7 @@ int FileStore::mount()
 
   timer.init();
 
-  start_logger();
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 
   // all okay.
   return 0;
@@ -1710,7 +1745,8 @@ int FileStore::umount()
   flusher_thread.join();
 
   journal_stop();
-  stop_logger();
+
+  g_ceph_context->GetPerfCountersCollection()->remove(logger);
 
   op_finisher.stop();
   ondisk_finisher.stop();
@@ -1762,53 +1798,6 @@ int FileStore::get_max_object_name_length()
   return ret;
 }
 
-void FileStore::start_logger()
-{
-  dout(10) << "start_logger" << dendl;
-  assert(!logger);
-
-  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
-
-  plb.add_u64_counter(l_os_in_ops, "in_ops");
-  plb.add_u64_counter(l_os_in_bytes, "in_bytes");
-  plb.add_u64_counter(l_os_readable_ops, "readable_ops");
-  plb.add_u64_counter(l_os_readable_bytes, "readable_bytes");
-  plb.add_u64_counter(l_os_commit_ops, "commit_ops");
-  plb.add_u64_counter(l_os_commit_bytes, "commit_bytes");
-
-  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops");
-  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops");
-  plb.add_u64_counter(l_os_ops, "ops");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
-  plb.add_u64_counter(l_os_bytes, "bytes");
-  plb.add_u64(l_os_committing, "committing");
-
-  logger = plb.create_perf_counters();
-  if (journal)
-    journal->logger = logger;
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
-}
-
-void FileStore::stop_logger()
-{
-  dout(10) << "stop_logger" << dendl;
-  if (logger) {
-    if (journal)
-      journal->logger = NULL;
-    g_ceph_context->GetPerfCountersCollection()->remove(logger);
-    delete logger;
-    logger = NULL;
-  }
-}
-
-
 
 
 /// -----------------------------
@@ -1850,12 +1839,10 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   osr->queue(o);
 
-  if (logger) {
-    logger->inc(l_os_ops);
-    logger->inc(l_os_bytes, o->bytes);
-    logger->set(l_os_oq_ops, op_queue_len);
-    logger->set(l_os_oq_bytes, op_queue_bytes);
-  }
+  logger->inc(l_os_ops);
+  logger->inc(l_os_bytes, o->bytes);
+  logger->set(l_os_oq_ops, op_queue_len);
+  logger->set(l_os_oq_bytes, op_queue_bytes);
 
   op_tp.unlock();
 
@@ -1883,10 +1870,8 @@ void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
     max_bytes += m_filestore_queue_committing_max_bytes;
   }
 
-  if (logger) {
-    logger->set(l_os_oq_max_ops, max_ops);
-    logger->set(l_os_oq_max_bytes, max_bytes);
-  }
+  logger->set(l_os_oq_max_ops, max_ops);
+  logger->set(l_os_oq_max_bytes, max_bytes);
 
   while ((max_ops && (op_queue_len + 1) > max_ops) ||
 	 (max_bytes && op_queue_bytes      // let single large ops through!
@@ -1935,10 +1920,8 @@ void FileStore::_finish_op(OpSequencer *osr)
   // called with tp lock held
   _op_queue_release_throttle(o);
 
-  if (logger) {
-    logger->inc(l_os_readable_ops);
-    logger->inc(l_os_readable_bytes, o->bytes);
-  }
+  logger->inc(l_os_readable_ops);
+  logger->inc(l_os_readable_bytes, o->bytes);
 
   if (next_finish == o->op) {
     dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
@@ -2011,10 +1994,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     dout(5) << "queue_transactions new osr " << osr << "/" << osr->parent << dendl;
   }
 
-  if (logger) {
-    logger->inc(l_os_in_ops);
-    //logger->inc(l_os_in_bytes, 1); 
-  }
+  logger->inc(l_os_in_ops);
+  //logger->inc(l_os_in_bytes, 1); 
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync);
@@ -2064,10 +2045,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   op_submit_finish(op);
   op_apply_finish(op);
 
-  if (logger) {
-    logger->inc(l_os_readable_ops);
-    //fixme logger->inc(l_os_readable_bytes, 1);
-  }
+  logger->inc(l_os_readable_ops);
+  //fixme logger->inc(l_os_readable_bytes, 1);
 
   return r;
 }
@@ -3023,8 +3002,7 @@ void FileStore::sync_entry()
       timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
-      if (logger)
-	logger->set(l_os_committing, 1);
+      logger->set(l_os_committing, 1);
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;
@@ -3107,8 +3085,7 @@ void FileStore::sync_entry()
       dout(10) << "sync_entry commit took " << done << dendl;
       commit_finish();
 
-      if (logger)
-	logger->set(l_os_committing, 0);
+      logger->set(l_os_committing, 0);
 
       // remove old snaps?
       if (do_snap) {

@@ -243,9 +243,6 @@ class FileStore : public JournalingObjectStore,
   PerfCounters *logger;
 
 public:
-  void start_logger();
-  void stop_logger();
-
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
   int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
   int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
@@ -260,6 +257,7 @@ public:
 
  public:
   FileStore(const std::string &base, const std::string &jdev);
+  ~FileStore();
 
   int _detect_fs();
   int _sanity_check_fs();
