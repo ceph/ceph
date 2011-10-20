@@ -243,7 +243,7 @@ class FileStore : public JournalingObjectStore,
   PerfCounters *logger;
 
 public:
-  void start_logger(int whoami, utime_t tare);
+  void start_logger();
   void stop_logger();
 
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);

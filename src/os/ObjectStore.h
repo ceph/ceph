@@ -643,8 +643,6 @@ public:
     
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};
-  
-  virtual void start_logger(int whoami, utime_t tare) {};
 
 };
 

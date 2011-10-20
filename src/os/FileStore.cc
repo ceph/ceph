@@ -1675,6 +1675,8 @@ int FileStore::mount()
 
   timer.init();
 
+  start_logger();
+
   // all okay.
   return 0;
 
@@ -1760,7 +1762,7 @@ int FileStore::get_max_object_name_length()
   return ret;
 }
 
-void FileStore::start_logger(int whoami, utime_t tare)
+void FileStore::start_logger()
 {
   dout(10) << "start_logger" << dendl;
   assert(!logger);
