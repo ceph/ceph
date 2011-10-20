@@ -95,6 +95,9 @@ OPTION(mon_osd_nearfull_ratio, OPT_INT, 85) // what % full makes an OSD near ful
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
+OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
+OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
+OPTION(mon_max_log_epochs, OPT_INT, 500)
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_observer_timeout, OPT_DOUBLE, 5*60) // gather updates for this long before proposing a map update
@@ -247,6 +250,7 @@ OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
 OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
 OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
+OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_age, OPT_FLOAT, .8)
 OPTION(osd_age_time, OPT_INT, 0)
 OPTION(osd_heartbeat_interval, OPT_INT, 1)
@@ -331,7 +335,7 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  //
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
-OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60)
+OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0)
 OPTION(rgw_pools_preallocate_max, OPT_INT, 100)

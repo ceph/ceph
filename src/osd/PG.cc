@@ -356,7 +356,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       } else {
 	// old delete, new update.
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : missing" << dendl;
-	assert(missing.is_missing(oe.soid));
+	missing.revise_need(ne.soid, ne.version);
       }
     } else {
       if (ne.is_delete()) {
@@ -391,9 +391,9 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   // If our log is empty, the incoming log either needs to have a backlog
   // or have not been trimmed
-  assert(!log.empty() || olog.backlog || olog.tail == eversion_t());
+  assert(!log.null() || olog.backlog || olog.tail == eversion_t());
   // If the logs don't overlap, we need both backlogs
-  assert(log.head >= olog.tail || ((log.backlog || log.empty()) && olog.backlog));
+  assert(log.head >= olog.tail || ((log.backlog || log.null()) && olog.backlog));
 
   for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
@@ -529,7 +529,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       
       // move aside divergent items
       list<Log::Entry> divergent;
-      while (!log.log.empty()) {
+      while (!log.empty()) {
 	Log::Entry &oe = *log.log.rbegin();
 	/*
 	 * look at eversion.version here.  we want to avoid a situation like:
@@ -825,7 +825,7 @@ void PG::drop_backlog()
   log.backlog = false;
   info.log_backlog = false;
   
-  while (!log.log.empty()) {
+  while (!log.empty()) {
     Log::Entry &e = *log.log.begin();
     if (e.version > log.tail) break;
 
@@ -921,6 +921,8 @@ void PG::generate_past_intervals()
 
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
+  if (stop < osd->superblock.oldest_map)
+    stop = osd->superblock.oldest_map;   // this is a lower bound on last_epoch_clean cluster-wide.     
   epoch_t last_epoch = info.history.same_interval_since - 1;
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
@@ -2198,7 +2200,7 @@ void PG::read_log(ObjectStore *store)
     
     PG::Log::Entry e;
     bufferlist::iterator p = bl.begin();
-    assert(log.log.empty());
+    assert(log.empty());
     eversion_t last;
     bool reorder = false;
     while (!p.end()) {
@@ -2506,7 +2508,7 @@ void PG::log_weirdness()
 		      << " != info.last_update " << info.last_update
 		      << "\n";
 
-  if (log.log.empty()) {
+  if (log.empty()) {
     // shoudl it be?
     if (log.head != log.tail)
       osd->clog.error() << info.pgid
@@ -3568,8 +3570,6 @@ void PG::start_peering_interval(const OSDMap *lastmap,
   // -- there was a change! --
   kick();
 
-  set_last_peering_reset();
-
   vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
@@ -3880,7 +3880,7 @@ ostream& operator<<(ostream& out, const PG& pg)
       pg.log.head != pg.info.last_update)
     out << " (info mismatch, " << pg.log << ")";
 
-  if (pg.log.log.empty()) {
+  if (pg.log.empty()) {
     // shoudl it be?
     if (pg.log.head.version - pg.log.tail.version != 0) {
       out << " (log bound mismatch, empty)";
@@ -3979,14 +3979,14 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
 }
 
 void PG::RecoveryState::Initial::exit() {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Started-------*/
 PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
   state_name = "Started";
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_enter(state_name);
 }
 

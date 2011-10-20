@@ -457,7 +457,12 @@ public:
       backlog = false;
       log.clear();
     }
+
     bool empty() const {
+      return log.empty();
+    }
+
+    bool null() const {
       return head.version == 0 && head.epoch == 0;
     }
 

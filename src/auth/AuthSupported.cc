@@ -19,11 +19,9 @@
 
 #define DOUT_SUBSYS auth
 
-static bool _supported_initialized = false;
-static Mutex _supported_lock("auth_supported_init");
-static set<int> auth_supported;
+#include "AuthSupported.h"
 
-static void _init_supported(CephContext *cct)
+AuthSupported::AuthSupported(CephContext *cct)
 {
   string str = cct->_conf->auth_supported;
   list<string> sup_list;
@@ -37,19 +35,17 @@ static void _init_supported(CephContext *cct)
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
-  _supported_initialized = true;
 }
 
-
-bool is_supported_auth(int auth_type, CephContext *cct)
+bool AuthSupported::is_supported_auth(int auth_type)
 {
-  {
-    Mutex::Locker lock(_supported_lock);
-    if (!_supported_initialized) {
-      _init_supported(cct);
-    }
-  }
   return auth_supported.count(auth_type);
 }
 
-
+int AuthSupported::pick(const set<__u32>& supp)
+{
+  for (set<__u32>::const_reverse_iterator p = supp.rbegin(); p != supp.rend(); ++p)
+    if (is_supported_auth(*p))
+      return *p;
+  return CEPH_AUTH_NONE;
+}

@@ -221,6 +221,7 @@ private:
   ThreadPool op_tp;
   ThreadPool recovery_tp;
   ThreadPool disk_tp;
+  ThreadPool command_tp;
 
   // -- sessions --
 public:
@@ -419,6 +420,8 @@ private:
   
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
+  void send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy);
+
 
 protected:
   Watch *watch; /* notify-watch handler */
@@ -527,13 +530,14 @@ protected:
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
+  Cond pg_stat_queue_cond;
   xlist<PG*> pg_stat_queue;
   bool osd_stat_updated;
+  uint64_t pg_stat_tid, pg_stat_tid_flushed;
 
   void send_pg_stats(const utime_t &now);
   void handle_pg_stats_ack(class MPGStatsAck *ack);
-
-  void handle_command(class MMonCommand *m);
+  void flush_pg_stats();
 
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
@@ -646,6 +650,65 @@ protected:
   void cancel_generate_backlog(PG *pg);
   void generate_backlog(PG *pg);
 
+
+  // -- commands --
+  struct Command {
+    vector<string> cmd;
+    tid_t tid;
+    bufferlist indata;
+    Connection *con;
+
+    Command(vector<string>& c, tid_t t, bufferlist& bl, Connection *co)
+      : cmd(c), tid(t), indata(bl), con(co) {
+      if (con)
+	con->get();
+    }
+    ~Command() {
+      if (con)
+	con->put();
+    }
+  };
+  list<Command*> command_queue;
+  struct CommandWQ : public ThreadPool::WorkQueue<Command> {
+    OSD *osd;
+    CommandWQ(OSD *o, time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, 0, tp), osd(o) {}
+
+    bool _empty() {
+      return osd->command_queue.empty();
+    }
+    bool _enqueue(Command *c) {
+      osd->command_queue.push_back(c);
+      return true;
+    }
+    void _dequeue(Command *pg) {
+      assert(0);
+    }
+    Command *_dequeue() {
+      if (osd->command_queue.empty())
+	return NULL;
+      Command *c = osd->command_queue.front();
+      osd->command_queue.pop_front();
+      return c;
+    }
+    void _process(Command *c) {
+      osd->osd_lock.Lock();
+      osd->do_command(c->con, c->tid, c->cmd, c->indata);
+      osd->osd_lock.Unlock();
+      delete c;
+    }
+    void _clear() {
+      while (!osd->command_queue.empty()) {
+	Command *c = osd->command_queue.front();
+	osd->command_queue.pop_front();
+	delete c;
+      }
+    }
+  } command_wq;
+
+  void handle_command(class MMonCommand *m);
+  void handle_command(class MCommand *m);
+  void do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data);
 
   // -- pg recovery --
   xlist<PG*> recovery_queue;

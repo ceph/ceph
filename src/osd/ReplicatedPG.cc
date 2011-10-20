@@ -1893,176 +1893,114 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	osd_op.data.hexdump(*_dout);
 	*_dout << dendl;
 
-	if (0) {
-	  // parse
-	  bufferlist header;
-	  map<string, bufferlist> m;
-	  //ibl.hexdump(*_dout);
-	  if (ibl.length()) {
-	    ::decode(header, ip);
-	    ::decode(m, ip);
-	    //dout(0) << "m is " << m.size() << " " << m << dendl;
-	    assert(ip.end());
-	  }
-	  
-	  // do the update(s)
-	  while (!bp.end()) {
-	    __u8 op;
-	    string key;
-	    ::decode(op, bp);
-	    
-	    switch (op) {
-	    case CEPH_OSD_TMAP_SET: // insert key
-	      {
-		::decode(key, bp);
-		bufferlist data;
-		::decode(data, bp);
-		m[key] = data;
-	      }
-	      break;
-	      
-	    case CEPH_OSD_TMAP_CREATE: // create (new) key
-	      {
-		::decode(key, bp);
-		bufferlist data;
-		::decode(data, bp);
-		if (m.count(key))
-		  return -EEXIST;
-		m[key] = data;
-	      }
-	      break;
-
-	    case CEPH_OSD_TMAP_RM: // remove key
-	      ::decode(key, bp);
-	      if (m.count(key)) {
-		m.erase(key);
-	      }
-	      break;
-	      
-	    case CEPH_OSD_TMAP_HDR: // update header
-	      {
-		::decode(header, bp);
-	      }
-	      break;
-	      
-	    default:
-	      return -EINVAL;
-	    }
-	  }
-
-	  // reencode
-	  ::encode(header, obl);
-	  ::encode(m, obl);
-	} else {
-	  // header
-	  bufferlist header;
-	  __u32 nkeys = 0;
-	  if (ibl.length()) {
-	    ::decode(header, ip);
-	    ::decode(nkeys, ip);
-	  }
-	  dout(10) << "tmapup header " << header.length() << dendl;
-
-	  if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
-	    ++bp;
-	    ::decode(header, bp);
-	    dout(10) << "tmapup new header " << header.length() << dendl;
-	  }
-	  
-	  ::encode(header, obl);
-
-	  dout(20) << "tmapup initial nkeys " << nkeys << dendl;
-
-	  // update keys
-	  bufferlist newkeydata;
-	  string nextkey;
-	  bufferlist nextval;
-	  bool have_next = false;
-	  if (!ip.end()) {
-	    have_next = true;
-	    ::decode(nextkey, ip);
-	    ::decode(nextval, ip);
-	  }
-	  result = 0;
-	  while (!bp.end() && !result) {
-	    __u8 op;
-	    string key;
-	    ::decode(op, bp);
-	    ::decode(key, bp);
-	    
-	    dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
-
-	    // skip existing intervening keys
-	    bool key_exists = false;
-	    while (have_next && !key_exists) {
-	      dout(20) << "  (have_next=" << have_next << " nextkey=" << nextkey << ")" << dendl;
-	      if (nextkey > key)
-		break;
-	      if (nextkey < key) {
-		// copy untouched.
-		::encode(nextkey, newkeydata);
-		::encode(nextval, newkeydata);
-		dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
-	      } else {
-		// don't copy; discard old value.  and stop.
-		dout(20) << "  drop " << nextkey << " " << nextval.length() << dendl;
-		key_exists = true;
-		nkeys--;
-	      }	      
-	      if (!ip.end()) {
-		::decode(nextkey, ip);
-		::decode(nextval, ip);
-	      } else {
-		have_next = false;
-	      }
-	    }
-	    
-	    if (op == CEPH_OSD_TMAP_SET) {
-	      bufferlist val;
-	      ::decode(val, bp);
-	      ::encode(key, newkeydata);
-	      ::encode(val, newkeydata);
-	      dout(20) << "   set " << key << " " << val.length() << dendl;
-	      nkeys++;
-	    } else if (op == CEPH_OSD_TMAP_CREATE) {
-	      if (key_exists) {
-		result = -EEXIST;
-		break;
-	      }
-	      bufferlist val;
-	      ::decode(val, bp);
-	      ::encode(key, newkeydata);
-	      ::encode(val, newkeydata);
-	      dout(20) << "   create " << key << " " << val.length() << dendl;
-	      nkeys++;
-	    } else if (op == CEPH_OSD_TMAP_RM) {
-	      if (!key_exists) {
-		result = -ENOENT;
-		break;
-	      }
-	      // do nothing.
-	    }
-	  }
-
-	  // copy remaining
-	  if (have_next) {
-	    ::encode(nextkey, newkeydata);
-	    ::encode(nextval, newkeydata);
-	    dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
-	  }
-	  if (!ip.end()) {
-	    bufferlist rest;
-	    rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
-	    dout(20) << "  keep trailing " << rest.length()
-		     << " at " << newkeydata.length() << dendl;
-	    newkeydata.claim_append(rest);
-	  }
-
-	  // encode final key count + key data
-	  dout(20) << "tmapup final nkeys " << nkeys << dendl;
-	  ::encode(nkeys, obl);
-	  obl.claim_append(newkeydata);
+	// header
+	bufferlist header;
+	__u32 nkeys = 0;
+	if (ibl.length()) {
+	  ::decode(header, ip);
+	  ::decode(nkeys, ip);
 	}
+	dout(10) << "tmapup header " << header.length() << dendl;
+
+	if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
+	  ++bp;
+	  ::decode(header, bp);
+	  dout(10) << "tmapup new header " << header.length() << dendl;
+	}
+
+	::encode(header, obl);
+
+	dout(20) << "tmapup initial nkeys " << nkeys << dendl;
+
+	// update keys
+	bufferlist newkeydata;
+	string nextkey;
+	bufferlist nextval;
+	bool have_next = false;
+	if (!ip.end()) {
+	  have_next = true;
+	  ::decode(nextkey, ip);
+	  ::decode(nextval, ip);
+	}
+	result = 0;
+	while (!bp.end() && !result) {
+	  __u8 op;
+	  string key;
+	  ::decode(op, bp);
+	  ::decode(key, bp);
+
+	  dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
+	  
+	  // skip existing intervening keys
+	  bool key_exists = false;
+	  while (have_next && !key_exists) {
+	    dout(20) << "  (have_next=" << have_next << " nextkey=" << nextkey << ")" << dendl;
+	    if (nextkey > key)
+	      break;
+	    if (nextkey < key) {
+	      // copy untouched.
+	      ::encode(nextkey, newkeydata);
+	      ::encode(nextval, newkeydata);
+	      dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
+	    } else {
+	      // don't copy; discard old value.  and stop.
+	      dout(20) << "  drop " << nextkey << " " << nextval.length() << dendl;
+	      key_exists = true;
+	      nkeys--;
+	    }
+	    if (!ip.end()) {
+	      ::decode(nextkey, ip);
+	      ::decode(nextval, ip);
+	    } else {
+	      have_next = false;
+	    }
+	  }
+
+	  if (op == CEPH_OSD_TMAP_SET) {
+	    bufferlist val;
+	    ::decode(val, bp);
+	    ::encode(key, newkeydata);
+	    ::encode(val, newkeydata);
+	    dout(20) << "   set " << key << " " << val.length() << dendl;
+	    nkeys++;
+	  } else if (op == CEPH_OSD_TMAP_CREATE) {
+	    if (key_exists) {
+	      result = -EEXIST;
+	      break;
+	    }
+	    bufferlist val;
+	    ::decode(val, bp);
+	    ::encode(key, newkeydata);
+	    ::encode(val, newkeydata);
+	    dout(20) << "   create " << key << " " << val.length() << dendl;
+	    nkeys++;
+	  } else if (op == CEPH_OSD_TMAP_RM) {
+	    if (!key_exists) {
+	      result = -ENOENT;
+	      break;
+	    }
+	    // do nothing.
+	  }
+	}
+
+	// copy remaining
+	if (have_next) {
+	  ::encode(nextkey, newkeydata);
+	  ::encode(nextval, newkeydata);
+	  dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
+	}
+	if (!ip.end()) {
+	  bufferlist rest;
+	  rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
+	  dout(20) << "  keep trailing " << rest.length()
+		             << " at " << newkeydata.length() << dendl;
+	  newkeydata.claim_append(rest);
+	}
+
+	// encode final key count + key data
+	dout(20) << "tmapup final nkeys " << nkeys << dendl;
+	::encode(nkeys, obl);
+	obl.claim_append(newkeydata);
 
 	if (0) {
 	  dout(30) << " final is \n";

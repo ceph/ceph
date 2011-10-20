@@ -311,9 +311,9 @@ TEST(LibRBD, TestCopy)
   ASSERT_EQ(0, rbd_create(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
   ASSERT_EQ(1, test_ls(ioctx, 1, name));
-  ASSERT_LT(0, rbd_copy(image, ioctx, name2));
+  ASSERT_EQ(0, rbd_copy(image, ioctx, name2));
   ASSERT_EQ(2, test_ls(ioctx, 2, name, name2));
-  ASSERT_LT(0, rbd_copy_with_progress(image, ioctx, name3, print_progress_percent, NULL));
+  ASSERT_EQ(0, rbd_copy_with_progress(image, ioctx, name3, print_progress_percent, NULL));
   ASSERT_EQ(3, test_ls(ioctx, 3, name, name2, name3));
 
   ASSERT_EQ(0, rbd_close(image));
@@ -355,9 +355,9 @@ TEST(LibRBD, TestCopyPP)
     ASSERT_EQ(0, rbd.create(ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
     ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name));
-    ASSERT_LT(0, image.copy(ioctx, name2));
+    ASSERT_EQ(0, image.copy(ioctx, name2));
     ASSERT_EQ(2, test_ls_pp(rbd, ioctx, 2, name, name2));
-    ASSERT_LT(0, image.copy_with_progress(ioctx, name3, pp));
+    ASSERT_EQ(0, image.copy_with_progress(ioctx, name3, pp));
     ASSERT_EQ(3, test_ls_pp(rbd, ioctx, 3, name, name2, name3));
   }
 

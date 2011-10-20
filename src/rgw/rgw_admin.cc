@@ -456,7 +456,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   return 0;
 }
 
-enum KeyType {
+enum ObjectKeyType {
   KEY_TYPE_SWIFT,
   KEY_TYPE_S3,
 };
@@ -474,7 +474,7 @@ int main(int argc, char **argv)
   std::string bucket_name, pool_name, object;
   std::string date, time, subuser, access, format;
   std::string key_type_str;
-  KeyType key_type = KEY_TYPE_S3;
+  ObjectKeyType key_type = KEY_TYPE_S3;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   uint64_t auid = -1;
@@ -620,7 +620,7 @@ int main(int argc, char **argv)
     free(suser);
   }
 
-  if (opt_cmd == OPT_KEY_RM && access_key.empty()) {
+  if (opt_cmd == OPT_KEY_RM && key_type == KEY_TYPE_S3 && access_key.empty()) {
     cerr << "error: access key was not specified" << std::endl;
     return usage();
   }
@@ -836,15 +836,26 @@ int main(int argc, char **argv)
     break;
 
   case OPT_KEY_RM:
-    kiter = info.access_keys.find(access_key);
-    if (kiter == info.access_keys.end()) {
-      cerr << "key not found" << std::endl;
-    } else {
-      rgw_remove_key_index(kiter->second);
-      info.access_keys.erase(kiter);
-      if ((err = rgw_store_user_info(info)) < 0) {
-        cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
-        break;
+    {
+      map<string, RGWAccessKey> *keys_map;
+      if (key_type == KEY_TYPE_SWIFT) {
+        access_key = info.user_id;
+        access_key.append(":");
+        access_key.append(subuser);
+        keys_map = &info.swift_keys;
+      } else {
+        keys_map = &info.access_keys;
+      }
+      kiter = keys_map->find(access_key);
+      if (kiter == keys_map->end()) {
+        cerr << "key not found" << std::endl;
+      } else {
+        rgw_remove_key_index(kiter->second);
+        keys_map->erase(kiter);
+        if ((err = rgw_store_user_info(info)) < 0) {
+          cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
+          break;
+        }
       }
     }
     show_user_info(info, formatter);

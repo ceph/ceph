@@ -2413,18 +2413,20 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0);
     }
 
-    if (r == -ENOENT && 
-	(op == Transaction::OP_CLONERANGE ||
-	 op == Transaction::OP_CLONE ||
-	 op == Transaction::OP_CLONERANGE2)) {
-      // Halt before we incorrectly mark the pg clean
-      assert(0 == "ENOENT on clone suggests osd bug");
+    if (r == -ENOENT) {
+      if (op == Transaction::OP_CLONERANGE ||
+	  op == Transaction::OP_CLONE ||
+	  op == Transaction::OP_CLONERANGE2) {
+	// Halt before we incorrectly mark the pg clean
+	assert(0 == "ENOENT on clone suggests osd bug");
+      } else {
+	// -ENOENT is normally okay
+      }
     }
-      
-    if (r == -ENOTEMPTY) {
-      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
+    else if (r == -ENODATA) {
+      // -ENODATA is okay
     }
-    if (r == -ENOSPC) {
+    else if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.
 
@@ -2435,8 +2437,15 @@ unsigned FileStore::_do_transaction(Transaction& t)
       else
 	assert(0 == "ENOSPC handling not implemented");
     }
-    if (r == -EIO) {
-      assert(0 == "EIO handling not implemented");
+    else if (r == -ENOTEMPTY) {
+      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
+    }
+    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !btrfs) {
+      dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
+    }
+    else if (r < 0) {
+      dout(0) << " error " << cpp_strerror(r) << " not handled" << dendl;
+      assert(0 == "unexpected error");
     }
   }
   return 0;  // FIXME count errors

@@ -53,6 +53,12 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 
 
 /************ MAPS ****************/
+OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p)
+  : PaxosService(mn, p)
+{
+  // we need to trim this too
+  p->add_extra_state_dir("osdmap_full");
+}
 
 
 void OSDMonitor::create_initial(bufferlist& bl)
@@ -1125,15 +1131,9 @@ void OSDMonitor::tick()
       mon->pgmon()->pg_map.creating_pgs.empty()) {
     epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
-    unsigned min = 100;
-    if (floor + min < paxos->get_version()) {
-      epoch_t of = paxos->get_first_committed();
+    unsigned min = g_conf->mon_min_osdmap_epochs;
+    if (floor + min < paxos->get_version())
       paxos->trim_to(floor);
-      while (of < floor) {
-	mon->store->erase_sn("osdmap_full", of);
-	of++;
-      }
-    }
   }    
 }
 

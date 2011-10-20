@@ -171,7 +171,7 @@ bool LogMonitor::update_from_paxos()
 
 
   // trim
-  unsigned max = 500;
+  unsigned max = g_conf->mon_max_log_epochs;
   if (mon->is_leader() && paxosv > max)
     paxos->trim_to(paxosv - max);
 
