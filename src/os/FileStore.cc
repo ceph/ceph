@@ -1765,9 +1765,7 @@ void FileStore::start_logger(int whoami, utime_t tare)
   dout(10) << "start_logger" << dendl;
   assert(!logger);
 
-  char name[80];
-  snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  PerfCountersBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
 
   plb.add_u64_counter(l_os_in_ops, "in_o");
   //plb.add_u64_counter(l_os_in_bytes, "in_b");

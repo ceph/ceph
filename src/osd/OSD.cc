@@ -746,9 +746,7 @@ void OSD::create_logger()
 {
   dout(10) << "create_logger" << dendl;
 
-  char name[80];
-  snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  PerfCountersBuilder osd_plb(g_ceph_context, name, l_osd_first, l_osd_last);
+  PerfCountersBuilder osd_plb(g_ceph_context, "osd", l_osd_first, l_osd_last);
 
   osd_plb.add_u64(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
   osd_plb.add_u64(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
