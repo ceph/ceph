@@ -549,7 +549,8 @@ struct pg_pool_t {
     return get_type_name(type);
   }
 
-  __u8 type;                /// CEPH_PG_TYPE_*
+  uint64_t flags;           /// FLAG_* 
+  __u8 type;                /// TYPE_*
   __u8 size;                /// number of osds in each pg
   __u8 crush_ruleset;       /// crush placement rule set
   __u8 object_hash;         /// hash mapping object name to ps
@@ -559,6 +560,7 @@ struct pg_pool_t {
   snapid_t snap_seq;        /// seq for per-pool snapshot
   epoch_t snap_epoch;       /// osdmap epoch of last snap
   uint64_t auid;            /// who owns the pg
+  __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -577,15 +579,17 @@ struct pg_pool_t {
   int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
 
   pg_pool_t()
-    : type(0), size(0), crush_ruleset(0), object_hash(0),
+    : flags(0), type(0), size(0), crush_ruleset(0), object_hash(0),
       pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
       last_change(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
+      crash_replay_interval(0),
       pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
 
+  uint64_t get_flags() const { return flags; }
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   int get_crush_ruleset() const { return crush_ruleset; }
@@ -597,6 +601,7 @@ struct pg_pool_t {
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
+  unsigned get_crash_replay_interval() const { return crash_replay_interval; }
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }

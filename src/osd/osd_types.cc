@@ -235,6 +235,7 @@ void pool_snap_info_t::decode(bufferlist::iterator& bl)
 
 void pg_pool_t::dump(Formatter *f) const
 {
+  f->dump_unsigned("flags", get_flags());
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
@@ -243,6 +244,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("pg_placement_num", get_pgp_num());
   f->dump_int("localized_pg_num", get_lpg_num());
   f->dump_int("localized_pg_placement_num", get_lpgp_num());
+  f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
@@ -426,7 +428,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  __u8 struct_v = 3;
+  __u8 struct_v = 4;
   ::encode(struct_v, bl);
   ::encode(type, bl);
   ::encode(size, bl);
@@ -442,13 +444,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(snaps, bl);
   ::encode(removed_snaps, bl);
   ::encode(auid, bl);
+  ::encode(flags, bl);
+  ::encode(crash_replay_interval, bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
   __u8 struct_v;
   ::decode(struct_v, bl);
-  if (struct_v > 3)
+  if (struct_v > 4)
     throw buffer::error();
 
   ::decode(type, bl);
@@ -476,6 +480,14 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     removed_snaps.decode_nohead(m, bl);
   }
 
+  if (struct_v >= 4) {
+    ::decode(flags, bl);
+    ::decode(crash_replay_interval, bl);
+  } else {
+    flags = 0;
+    crash_replay_interval = 0;
+  }
+
   calc_pg_masks();
 }
 
@@ -491,6 +503,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " lpgp_num " << p.get_lpgp_num()
       << " last_change " << p.get_last_change()
       << " owner " << p.get_auid();
+  if (p.flags)
+    out << " flags " << p.flags;
+  if (p.crash_replay_interval)
+    out << " crash_replay_interval " << p.crash_replay_interval;
   return out;
 }
 
