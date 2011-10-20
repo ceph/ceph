@@ -854,9 +854,9 @@ public:
 	       const vector<int> &up,
 	       const vector<int> &acting,
 	       const Info &info,
-	       PG *debug_pg);
+	       PG *debug_pg=0);
 
-    
+    bool prior_set_affected(const OSDMap *osdmap, PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
@@ -1365,7 +1365,6 @@ public:
   void trim_past_intervals();
   void build_prior(std::auto_ptr<PgPriorSet> &prior_set);
   void clear_prior();
-  bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
 
   bool adjust_need_up_thru(const OSDMap *osdmap);
 

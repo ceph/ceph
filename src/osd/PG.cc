@@ -979,58 +979,6 @@ void PG::trim_past_intervals()
 }
 
 
-
-// true if the given map affects the prior set
-bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
-{
-  for (set<int>::iterator p = prior.probe.begin();
-       p != prior.probe.end();
-       ++p)
-  {
-    int o = *p;
-
-    // did someone in the prior set go down?
-    if (osdmap->is_down(o) && prior.down.count(o) == 0) {
-      dout(10) << "prior_set_affected: osd." << o << " now down" << dendl;
-      return true;
-    }
-
-    // did a down osd in cur get (re)marked as lost?
-    map<int,epoch_t>::iterator p = prior.blocked_by.find(o);
-    if (p != prior.blocked_by.end()) {
-      if (!osdmap->exists(o)) {
-	dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
-	return true;
-      }
-      if (osdmap->get_info(o).lost_at != p->second) {
-	dout(10) << "prior_set_affected: osd." << o << " (re)marked as lost" << dendl;
-	return true;
-      }
-    }
-  }
-
-  // did someone in the prior down set go up?
-  for (set<int>::iterator p = prior.down.begin();
-       p != prior.down.end();
-       ++p)
-  {
-    int o = *p;
-
-    if (osdmap->is_up(o)) {
-      dout(10) << "prior_set_affected: osd." << *p << " now up" << dendl;
-      return true;
-    }
-
-    // did someone in the prior set get lost or destroyed?
-    if (!osdmap->exists(o)) {
-      dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
-      return true;
-    }
-  }
-
-  return false;
-}
-
 bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 {
   epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
@@ -4105,7 +4053,7 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Peering advmap" << dendl;
-  if (pg->prior_set_affected(*prior_set.get(), advmap.osdmap)) {
+  if (prior_set.get()->prior_set_affected(advmap.osdmap, pg)) {
     dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
     pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
@@ -4989,3 +4937,53 @@ PG::PgPriorSet::PgPriorSet(const OSDMap &osdmap,
 	   << dendl;
 }
 
+// true if the given map affects the prior set
+bool PG::PgPriorSet::prior_set_affected(const OSDMap *osdmap, PG *debug_pg) const
+{
+  for (set<int>::iterator p = probe.begin();
+       p != probe.end();
+       ++p)
+  {
+    int o = *p;
+
+    // did someone in the prior set go down?
+    if (osdmap->is_down(o) && down.count(o) == 0) {
+      dout(10) << "prior_set_affected: osd." << o << " now down" << dendl;
+      return true;
+    }
+
+    // did a down osd in cur get (re)marked as lost?
+    map<int,epoch_t>::const_iterator p = blocked_by.find(o);
+    if (p != blocked_by.end()) {
+      if (!osdmap->exists(o)) {
+	dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
+	return true;
+      }
+      if (osdmap->get_info(o).lost_at != p->second) {
+	dout(10) << "prior_set_affected: osd." << o << " (re)marked as lost" << dendl;
+	return true;
+      }
+    }
+  }
+
+  // did someone in the prior down set go up?
+  for (set<int>::const_iterator p = down.begin();
+       p != down.end();
+       ++p)
+  {
+    int o = *p;
+
+    if (osdmap->is_up(o)) {
+      dout(10) << "prior_set_affected: osd." << *p << " now up" << dendl;
+      return true;
+    }
+
+    // did someone in the prior set get lost or destroyed?
+    if (!osdmap->exists(o)) {
+      dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
+      return true;
+    }
+  }
+
+  return false;
+}
