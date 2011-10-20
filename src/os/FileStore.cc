@@ -1769,26 +1769,26 @@ void FileStore::start_logger()
 
   PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
 
-  plb.add_u64_counter(l_os_in_ops, "in_o");
-  //plb.add_u64_counter(l_os_in_bytes, "in_b");
-  plb.add_u64_counter(l_os_readable_ops, "or_o");
-  plb.add_u64_counter(l_os_readable_bytes, "or_b");
-  //plb.add_u64_counter(l_os_commit_bytes, "com_o");
-  //plb.add_u64_counter(l_os_commit_bytes, "com_b");
+  plb.add_u64_counter(l_os_in_ops, "in_ops");
+  plb.add_u64_counter(l_os_in_bytes, "in_bytes");
+  plb.add_u64_counter(l_os_readable_ops, "readable_ops");
+  plb.add_u64_counter(l_os_readable_bytes, "readable_bytes");
+  plb.add_u64_counter(l_os_commit_ops, "commit_ops");
+  plb.add_u64_counter(l_os_commit_bytes, "commit_bytes");
 
-  plb.add_u64(l_os_jq_max_ops, "jq_mo");
-  plb.add_u64(l_os_jq_ops, "jq_o");
-  plb.add_u64_counter(l_os_j_ops, "j_o");
-  plb.add_u64(l_os_jq_max_bytes, "jq_mb");
-  plb.add_u64(l_os_jq_bytes, "jq_b");
-  plb.add_u64_counter(l_os_j_bytes, "j_b");
-  plb.add_u64(l_os_oq_max_ops, "oq_mo");
-  plb.add_u64(l_os_oq_ops, "oq_o");
-  plb.add_u64_counter(l_os_ops, "o");
-  plb.add_u64(l_os_oq_max_bytes, "oq_mb");
-  plb.add_u64(l_os_oq_bytes, "oq_b");
-  plb.add_u64_counter(l_os_bytes, "b");
-  plb.add_u64(l_os_committing, "comitng");
+  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
+  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
+  plb.add_u64_counter(l_os_j_ops, "journal_ops");
+  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
+  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
+  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops");
+  plb.add_u64_counter(l_os_ops, "ops");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
+  plb.add_u64_counter(l_os_bytes, "bytes");
+  plb.add_u64(l_os_committing, "committing");
 
   logger = plb.create_perf_counters();
   if (journal)
