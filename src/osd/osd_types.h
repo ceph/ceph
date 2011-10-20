@@ -654,10 +654,10 @@ struct pg_pool_t {
    */
   ps_t raw_pg_to_pps(pg_t pg) const;
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
 };
-WRITE_CLASS_ENCODER(pg_pool_t)
+WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p);
 

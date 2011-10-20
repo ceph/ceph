@@ -92,7 +92,7 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
        ++p) {
     n = p->first;
     ::encode(n, bl);
-    ::encode(p->second, bl);
+    ::encode(p->second, bl, 0);
   }
   // for ::encode(new_pool_names, bl);
   n = new_pool_names.size();
@@ -143,7 +143,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(crush, bl);
 
   ::encode(new_max_osd, bl);
-  ::encode(new_pools, bl);
+  ::encode(new_pools, bl, features);
   ::encode(new_pool_names, bl);
   ::encode(old_pools, bl);
   ::encode(new_up_client, bl);
@@ -460,7 +460,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
        ++p) {
     n = p->first;
     ::encode(n, bl);
-    ::encode(p->second, bl);
+    ::encode(p->second, bl, 0);
   }
   // for ::encode(pool_name, bl);
   n = pool_name.size();
@@ -516,7 +516,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(created, bl);
   ::encode(modified, bl);
 
-  ::encode(pools, bl);
+  ::encode(pools, bl, features);
   ::encode(pool_name, bl);
   ::encode(pool_max, bl);
 

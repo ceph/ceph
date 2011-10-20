@@ -396,9 +396,37 @@ ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
     return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) + pg.pool();
 }
 
-void pg_pool_t::encode(bufferlist& bl) const
+void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 {
-  __u8 struct_v = 2;
+  if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
+    // this encoding matches the old struct ceph_pg_pool
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+
+    __u32 n = snaps.size();
+    ::encode(n, bl);
+    n = removed_snaps.num_intervals();
+    ::encode(n, bl);
+
+    ::encode(auid, bl);
+
+    ::encode_nohead(snaps, bl);
+    removed_snaps.encode_nohead(bl);
+    return;
+  }
+
+  __u8 struct_v = 3;
   ::encode(struct_v, bl);
   ::encode(type, bl);
   ::encode(size, bl);
@@ -411,23 +439,16 @@ void pg_pool_t::encode(bufferlist& bl) const
   ::encode(last_change, bl);
   ::encode(snap_seq, bl);
   ::encode(snap_epoch, bl);
-
-  __u32 n = snaps.size();
-  ::encode(n, bl);
-  n = removed_snaps.num_intervals();
-  ::encode(n, bl);
-
+  ::encode(snaps, bl);
+  ::encode(removed_snaps, bl);
   ::encode(auid, bl);
-
-  ::encode_nohead(snaps, bl);
-  removed_snaps.encode_nohead(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
   __u8 struct_v;
   ::decode(struct_v, bl);
-  if (struct_v > 2)
+  if (struct_v > 3)
     throw buffer::error();
 
   ::decode(type, bl);
@@ -441,15 +462,19 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   ::decode(last_change, bl);
   ::decode(snap_seq, bl);
   ::decode(snap_epoch, bl);
-  
-  __u32 n, m;
-  ::decode(n, bl);
-  ::decode(m, bl);
-  
-  ::decode(auid, bl);
 
-  ::decode_nohead(n, snaps, bl);
-  removed_snaps.decode_nohead(m, bl);
+  if (struct_v >= 3) {
+    ::decode(snaps, bl);
+    ::decode(removed_snaps, bl);
+    ::decode(auid, bl);
+  } else {
+    __u32 n, m;
+    ::decode(n, bl);
+    ::decode(m, bl);
+    ::decode(auid, bl);
+    ::decode_nohead(n, snaps, bl);
+    removed_snaps.decode_nohead(m, bl);
+  }
 
   calc_pg_masks();
 }

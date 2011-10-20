@@ -79,7 +79,8 @@ public:
   void encode_payload(CephContext *cct) {
     ::encode(fsid, payload);
     header.version = 2;
-    if (connection && !connection->has_feature(CEPH_FEATURE_PGID64)) {
+    if (connection && (!connection->has_feature(CEPH_FEATURE_PGID64) ||
+		       !connection->has_feature(CEPH_FEATURE_PGPOOL3))) {
       // reencode maps using old format
       //
       // FIXME: this can probably be done more efficiently higher up
