@@ -1104,7 +1104,7 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   share_pg_log(old_last_update);
 }
 
-void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
+void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
 {
   if (1) {
     // sanity check
@@ -1114,13 +1114,13 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
     }
   }
-  prior_set.reset(new PgPriorSet(*osd->osdmap,
+  prior_set.reset(new PriorSet(*osd->osdmap,
 				 past_intervals,
 				 up,
 				 acting,
 				 info,
 				 this));
-  PgPriorSet &prior(*prior_set.get());
+  PriorSet &prior(*prior_set.get());
 				 
   if (prior.crashed) {
     state_set(PG_STATE_CRASHED);
@@ -1232,7 +1232,7 @@ bool PG::choose_acting(int newest_update_osd) const
   return true;
 }
 
-bool PG::choose_log_location(const PgPriorSet &prior_set,
+bool PG::choose_log_location(const PriorSet &prior_set,
 			     bool &need_backlog,
 			     bool &wait_on_backlog,
 			     int &pull_from,
@@ -3845,9 +3845,9 @@ ostream& operator<<(ostream& out, const PG& pg)
 }
 
 std::ostream& operator<<(std::ostream& oss,
-			 const struct PG::PgPriorSet &prior)
+			 const struct PG::PriorSet &prior)
 {
-  oss << "PgPriorSet[probe=" << prior.probe << " "
+  oss << "PriorSet[probe=" << prior.probe << " "
       << "down=" << prior.down << " "
       << "blocked_by=" << prior.blocked_by << "]";
   return oss;
@@ -4350,7 +4350,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   pg->generate_past_intervals();
-  auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
   if (!prior_set.get())
     pg->build_prior(prior_set);
@@ -4364,7 +4364,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx)
 void PG::RecoveryState::GetInfo::get_infos()
 {
   PG *pg = context< RecoveryMachine >().pg;
-  auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
   for (set<int>::const_iterator it = prior_set->probe.begin();
        it != prior_set->probe.end();
@@ -4403,7 +4403,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   epoch_t old_start = pg->info.history.last_epoch_started;
   if (pg->proc_replica_info(infoevt.from, infoevt.info)) {
     // we got something new ...
-    auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+    auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
     if (old_start < pg->info.history.last_epoch_started) {
       dout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
       pg->build_prior(prior_set);
@@ -4765,9 +4765,9 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 
 /*---------------------------------------------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PgPriorSet: ")
+#define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
-PG::PgPriorSet::PgPriorSet(const OSDMap &osdmap,
+PG::PriorSet::PriorSet(const OSDMap &osdmap,
 			   const map<epoch_t, Interval> &past_intervals,
 			   const vector<int> &up,
 			   const vector<int> &acting,
@@ -4935,7 +4935,7 @@ PG::PgPriorSet::PgPriorSet(const OSDMap &osdmap,
 }
 
 // true if the given map affects the prior set
-bool PG::PgPriorSet::affected_by_map(const OSDMap *osdmap, PG *debug_pg) const
+bool PG::PriorSet::affected_by_map(const OSDMap *osdmap, PG *debug_pg) const
 {
   for (set<int>::iterator p = probe.begin();
        p != probe.end();

@@ -842,14 +842,14 @@ public:
  protected:
   bool prior_set_built;
 
-  struct PgPriorSet {
+  struct PriorSet {
     set<int> probe; /// current+prior OSDs we need to probe.
     set<int> down;  /// down osds that would normally be in @probe and might be interesting.
     map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
-    PgPriorSet(const OSDMap &osdmap,
+    PriorSet(const OSDMap &osdmap,
 	       const map<epoch_t, Interval> &past_intervals,
 	       const vector<int> &up,
 	       const vector<int> &acting,
@@ -860,7 +860,7 @@ public:
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
-				  const struct PgPriorSet &prior);
+				  const struct PriorSet &prior);
 
 public:    
   struct RecoveryCtx {
@@ -1138,7 +1138,7 @@ public:
     struct Active;
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      std::auto_ptr< PgPriorSet > prior_set;
+      std::auto_ptr< PriorSet > prior_set;
 
       Peering(my_context ctx);
       void exit();
@@ -1363,7 +1363,7 @@ public:
 
   void generate_past_intervals();
   void trim_past_intervals();
-  void build_prior(std::auto_ptr<PgPriorSet> &prior_set);
+  void build_prior(std::auto_ptr<PriorSet> &prior_set);
   void clear_prior();
 
   bool adjust_need_up_thru(const OSDMap *osdmap);
@@ -1418,7 +1418,7 @@ public:
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  bool choose_log_location(const PgPriorSet &prior_set,
+  bool choose_log_location(const PriorSet &prior_set,
 			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,
