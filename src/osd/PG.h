@@ -850,13 +850,13 @@ public:
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
     PriorSet(const OSDMap &osdmap,
-	       const map<epoch_t, Interval> &past_intervals,
-	       const vector<int> &up,
-	       const vector<int> &acting,
-	       const Info &info,
-	       PG *debug_pg=0);
+	     const map<epoch_t, Interval> &past_intervals,
+	     const vector<int> &up,
+	     const vector<int> &acting,
+	     const Info &info,
+	     const PG *debug_pg=NULL);
 
-    bool affected_by_map(const OSDMap *osdmap, PG *debug_pg=0) const;
+    bool affected_by_map(const OSDMap *osdmap, const PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,

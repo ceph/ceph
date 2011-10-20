@@ -4768,11 +4768,11 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(const OSDMap &osdmap,
-			   const map<epoch_t, Interval> &past_intervals,
-			   const vector<int> &up,
-			   const vector<int> &acting,
-			   const PG::Info &info,
-			   PG *debug_pg)
+		       const map<epoch_t, Interval> &past_intervals,
+		       const vector<int> &up,
+		       const vector<int> &acting,
+		       const PG::Info &info,
+		       const PG *debug_pg)
   : crashed(false), pg_down(false)
 {
   /*
@@ -4935,7 +4935,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 }
 
 // true if the given map affects the prior set
-bool PG::PriorSet::affected_by_map(const OSDMap *osdmap, PG *debug_pg) const
+bool PG::PriorSet::affected_by_map(const OSDMap *osdmap, const PG *debug_pg) const
 {
   for (set<int>::iterator p = probe.begin();
        p != probe.end();
