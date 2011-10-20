@@ -849,13 +849,14 @@ public:
 
     bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
-    PgPriorSet(int whoami,
-	       const OSDMap &osdmap,
+    PgPriorSet(const OSDMap &osdmap,
 	       const map<epoch_t, Interval> &past_intervals,
 	       const vector<int> &up,
 	       const vector<int> &acting,
 	       const Info &info,
-	       const PG *pg);
+	       PG *debug_pg);
+
+    
   };
 
   friend std::ostream& operator<<(std::ostream& oss,

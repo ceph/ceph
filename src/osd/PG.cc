@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #include "PG.h"
 #include "common/config.h"
 #include "OSD.h"
@@ -1168,8 +1166,7 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
     }
   }
-  prior_set.reset(new PgPriorSet(osd->whoami,
-				 *osd->osdmap,
+  prior_set.reset(new PgPriorSet(*osd->osdmap,
 				 past_intervals,
 				 up,
 				 acting,
@@ -4823,15 +4820,14 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 
 /*---------------------------------------------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << pg->gen_prefix() << "PgPriorSet: ")
+#define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PgPriorSet: ")
 
-PG::PgPriorSet::PgPriorSet(int whoami,
-			   const OSDMap &osdmap,
+PG::PgPriorSet::PgPriorSet(const OSDMap &osdmap,
 			   const map<epoch_t, Interval> &past_intervals,
 			   const vector<int> &up,
 			   const vector<int> &acting,
 			   const PG::Info &info,
-			   const PG *pg)
+			   PG *debug_pg)
   : crashed(false), pg_down(false)
 {
   /*
