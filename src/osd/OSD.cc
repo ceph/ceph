@@ -5334,10 +5334,15 @@ void OSD::requeue_ops(PG *pg, list<Message*>& ls)
   list<Message*> orig_queue;
   orig_queue.swap(pg->op_queue);
 
+  // grab whole list at once, in case methods we call below start adding things
+  // back on the list reference we were passed!
+  list<Message*> q;
+  q.swap(ls);
+
   // requeue old items, now at front.
-  while (!ls.empty()) {
-    Message *op = ls.front();
-    ls.pop_front();
+  while (!q.empty()) {
+    Message *op = q.front();
+    q.pop_front();
 
     switch (op->get_type()) {
     case CEPH_MSG_OSD_OP:
