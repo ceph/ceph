@@ -106,6 +106,7 @@ class FileStore : public JournalingObjectStore,
 
   // -- op workqueue --
   struct Op {
+    utime_t start;
     uint64_t op;
     list<Transaction*> tls;
     Context *onreadable, *onreadable_sync;
