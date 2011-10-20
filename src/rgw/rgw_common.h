@@ -688,7 +688,15 @@ public:
       return orig_key;
   }
 
-  static bool translate_raw_obj(string& obj, string& ns) {
+  /**
+   * Translate a namespace-mangled object name to the user-facing name
+   * existing in the given namespace.
+   *
+   * If the object is part of the given namespace, it returns true
+   * and cuts down the name to the unmangled version. If it is not
+   * part of the given namespace, it returns false.
+   */
+  static bool translate_raw_obj_to_obj_in_ns(string& obj, string& ns) {
     if (ns.empty()) {
       if (obj[0] != '_')
         return true;

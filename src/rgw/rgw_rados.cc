@@ -367,7 +367,7 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
       string obj = eiter->first;
       string key = obj;
 
-      if (!rgw_obj::translate_raw_obj(obj, ns))
+      if (!rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns))
         continue;
 
       if (filter && !filter->filter(obj, key))
@@ -861,7 +861,7 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       obj = eiter->first;
 
-      if (rgw_obj::translate_raw_obj(obj, ns))
+      if (rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns))
         return -ENOTEMPTY;
     }
   } while (is_truncated);
