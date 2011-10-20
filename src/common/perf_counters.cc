@@ -15,7 +15,6 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/debug.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -26,12 +25,6 @@
 #include <string>
 
 using std::ostringstream;
-
-
-#define DOUT_SUBSYS perfcounter
-#undef dout_prefix
-#define dout_prefix *_dout << "perfcounters "
-
 
 PerfCountersCollection::PerfCountersCollection(CephContext *cct)
   : m_cct(cct),
@@ -50,7 +43,6 @@ void PerfCountersCollection::add(class PerfCounters *l)
   perf_counters_set_t::iterator i = m_loggers.find(l);
   assert(i == m_loggers.end());
   m_loggers.insert(l);
-  dout(2) << "add " << l << " " << l->get_name() << dendl;
 }
 
 void PerfCountersCollection::remove(class PerfCounters *l)
@@ -58,7 +50,6 @@ void PerfCountersCollection::remove(class PerfCounters *l)
   Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.find(l);
   assert(i != m_loggers.end());
-  dout(2) << "remove " << l << " " << l->get_name() << dendl;
   m_loggers.erase(i);
 }
 
@@ -67,9 +58,7 @@ void PerfCountersCollection::clear()
   Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
   perf_counters_set_t::iterator i_end = m_loggers.end();
-  dout(2) << "clear" << dendl;
   for (; i != i_end; ) {
-    dout(10) << "clear " << *i << " " << (*i)->get_name() << dendl;
     m_loggers.erase(i++);
   }
 }
@@ -77,13 +66,11 @@ void PerfCountersCollection::clear()
 void PerfCountersCollection::write_json_to_buf(std::vector <char> &buffer, bool schema)
 {
   Mutex::Locker lck(m_lock);
-  dout(10) << "write_json_to_buf " << m_loggers.size() << dendl;
   buffer.push_back('{');
   perf_counters_set_t::iterator l = m_loggers.begin();
   perf_counters_set_t::iterator l_end = m_loggers.end();
   if (l != l_end) {
     while (true) {
-      dout(10) << "write_json_to_buf " << (*l)->get_name() << dendl;
       (*l)->write_json_to_buf(buffer, schema);
       if (++l == l_end)
 	break;
@@ -288,25 +275,21 @@ PerfCountersBuilder::~PerfCountersBuilder()
 
 void PerfCountersBuilder::add_u64_counter(int idx, const char *name)
 {
-  dout(10) << "add_u64_counter " << idx << " " << name << dendl;
   add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 }
 
 void PerfCountersBuilder::add_u64(int idx, const char *name)
 {
-  dout(10) << "add_u64 " << idx << " " << name << dendl;
   add_impl(idx, name, PERFCOUNTER_U64);
 }
 
 void PerfCountersBuilder::add_fl(int idx, const char *name)
 {
-  dout(10) << "add_fl " << idx << " " << name << dendl;
   add_impl(idx, name, PERFCOUNTER_FLOAT);
 }
 
 void PerfCountersBuilder::add_fl_avg(int idx, const char *name)
 {
-  dout(10) << "add_fl_avg " << idx << " " << name << dendl;
   add_impl(idx, name, PERFCOUNTER_FLOAT | PERFCOUNTER_LONGRUNAVG);
 }
 
@@ -328,7 +311,6 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
   for (; d != d_end; ++d) {
     if (d->type == PERFCOUNTER_NONE) {
-      dout(0) << "perfcounter " << d->name << " has type NONE" << dendl;
       assert(d->type != PERFCOUNTER_NONE);
     }
   }
