@@ -1003,13 +1003,10 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
-      opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-      opt_cmd == OPT_SNAP_REMOVE ||
-      opt_cmd == OPT_MAP || opt_cmd == OPT_UNMAP) {
-    set_pool_image_name(poolname, imgname, (char **)&poolname,
-			(char **)&imgname, (char **)&snapname);
-  }
+  // do this unconditionally so we can parse pool/image@snapshot into
+  // the relevant parts
+  set_pool_image_name(poolname, imgname, (char **)&poolname,
+		      (char **)&imgname, (char **)&snapname);
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY) {
