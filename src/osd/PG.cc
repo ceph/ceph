@@ -1044,9 +1044,6 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
 				 this));
   PriorSet &prior(*prior_set.get());
 				 
-  if (prior.crashed) {
-    state_set(PG_STATE_REPLAY);
-  }
   if (prior.pg_down) {
     state_set(PG_STATE_DOWN);
   }
@@ -1329,12 +1326,13 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   assert(!is_active());
 
   // -- crash recovery?
-  if (is_replay()) {
+  if (may_need_replay(osd->osdmap)) {
     if (g_conf->osd_replay_window > 0) {
       replay_until = ceph_clock_now(g_ceph_context);
       replay_until += g_conf->osd_replay_window;
       dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
 	       << " until " << replay_until << dendl;
+      state_set(PG_STATE_REPLAY);
       osd->replay_queue_lock.Lock();
       osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
       osd->replay_queue_lock.Unlock();
@@ -3329,6 +3327,85 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
   }
 }
 
+
+// true if all OSDs in prior intervals may have crashed, and we need to replay
+// false positives are okay, false negatives are not.
+bool PG::may_need_replay(const OSDMap *osdmap) const
+{
+  bool crashed = false;
+
+  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+       p != past_intervals.rend();
+       p++) {
+    const Interval &interval = p->second;
+    dout(10) << "may_need_replay " << interval << dendl;
+
+    if (interval.last < info.history.last_epoch_started)
+      break;  // we don't care
+
+    if (interval.acting.empty())
+      continue;
+
+    if (!interval.maybe_went_rw)
+      continue;
+
+    // look at whether any of the osds during this interval survived
+    // past the end of the interval (i.e., didn't crash and
+    // potentially fail to COMMIT a write that it ACKed).
+    bool any_survived_interval = false;
+
+    // consider ACTING osds
+    for (unsigned i=0; i<interval.acting.size(); i++) {
+      int o = interval.acting[i];
+
+      const osd_info_t *pinfo = 0;
+      if (osdmap->exists(o))
+	pinfo = &osdmap->get_info(o);
+
+      // does this osd appear to have survived through the end of the
+      // interval?
+      if (pinfo) {
+	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
+	  dout(10) << "may_need_replay  osd." << o
+		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
+		   << " survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from <= interval.first &&
+		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
+		  std::find(up.begin(), up.end(), o) != up.end())) {
+	  dout(10) << "may_need_replay  osd." << o
+		   << " up_from " << pinfo->up_from << " and is in acting|up,"
+		   << " assumed to have survived the interval" << dendl;
+	  // (if it hasn't, we will rebuild PriorSet)
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from > interval.last &&
+		 pinfo->last_clean_begin <= interval.first &&
+		 pinfo->last_clean_end > interval.last) {
+	  dout(10) << "may_need_replay  prior osd." << o
+		   << " up_from " << pinfo->up_from
+		   << " and last clean interval ["
+		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
+		   << ") survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
+      }
+    }
+
+    if (!any_survived_interval) {
+      dout(3) << "may_need_replay  no known survivors of interval "
+	      << interval.first << "-" << interval.last
+	      << ", may need replay" << dendl;
+      crashed = true;
+      break;
+    }
+  }
+
+  return crashed;
+}
+
+
 bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
 {
   if (acting != newacting || up != newup) {
@@ -4671,7 +4748,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 		       const vector<int> &acting,
 		       const PG::Info &info,
 		       const PG *debug_pg)
-  : crashed(false), pg_down(false)
+  : pg_down(false)
 {
   /*
    * We have to be careful to gracefully deal with situations like
@@ -4739,17 +4816,15 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
     if (interval.acting.empty())
       continue;
 
+    if (!interval.maybe_went_rw)
+      continue;
+
     // look at candidate osds during this interval.  each falls into
     // one of three categories: up, down (but potentially
     // interesting), or lost (down, but we won't wait for it).
     bool any_up_now = false;    // any candidates up now
     bool any_down_now = false;  // any candidates down now (that might have useful data)
     bool any_lost_now = false;  // any candidates lost now (that we will ignore)
-
-    // look at whether any of the osds during this interval survived
-    // past the end of the interval (i.e., didn't crash and
-    // potentially fail to COMMIT a write that it ACKed).
-    bool any_survived_interval = false;
 
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
@@ -4758,36 +4833,6 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
       const osd_info_t *pinfo = 0;
       if (osdmap.exists(o))
 	pinfo = &osdmap.get_info(o);
-
-      // does this osd appear to have survived through the end of the
-      // interval?
-      if (pinfo) {
-	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
-	  dout(10) << "build_prior  osd." << o
-		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
-		   << " survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from <= interval.first &&
-		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
-		  std::find(up.begin(), up.end(), o) != up.end())) {
-	  dout(10) << "build_prior  osd." << o
-		   << " up_from " << pinfo->up_from << " and is in acting|up,"
-		   << " assumed to have survived the interval" << dendl;
-	  // (if it hasn't, we will rebuild PriorSet)
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from > interval.last &&
-		 pinfo->last_clean_begin <= interval.first &&
-		 pinfo->last_clean_end > interval.last) {
-	  dout(10) << "build_prior  prior osd." << o
-		   << " up_from " << pinfo->up_from
-		   << " and last clean interval ["
-		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
-		   << ") survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-      }
 
       if (osdmap.is_up(o)) {
 	// include past acting osds if they are up.
@@ -4811,7 +4856,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_up_now && any_down_now && interval.maybe_went_rw) {
+    if (!any_up_now && any_down_now) {
       // fixme: how do we identify a "clean" shutdown anyway?
       dout(10) << "build_prior  possibly went active+rw, none up; including down osds" << dendl;
       for (vector<int>::const_iterator i = interval.acting.begin();
@@ -4828,21 +4873,11 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 	}
       }
     }
-
-    // if we may have gone rw during this interval, but nobody is
-    // known to have survived through the completion of that interval,
-    // mark the PG crashed so that writers who got ACK but not COMMIT
-    // have a chance to replay their requests and preserve ordering.
-    if (interval.maybe_went_rw && !any_survived_interval) {
-      dout(10) << "build_prior  no acting survived past the interval, marking crashed" << dendl;
-      crashed = true;
-    }
   }
 
   dout(10) << "build_prior final: probe " << probe
 	   << " down " << down
 	   << " blocked_by " << blocked_by
-	   << (crashed ? " crashed":"")
 	   << (pg_down ? " pg_down":"")
 	   << dendl;
 }

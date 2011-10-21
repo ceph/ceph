@@ -878,7 +878,6 @@ public:
     set<int> down;  /// down osds that would normally be in @probe and might be interesting.
     map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
-    bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
     bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
     PriorSet(const OSDMap &osdmap,
 	     const map<epoch_t, Interval> &past_intervals,
@@ -892,6 +891,9 @@ public:
 
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PriorSet &prior);
+
+  bool may_need_replay(const OSDMap *osdmap) const;
+
 
 public:    
   struct RecoveryCtx {
