@@ -1045,7 +1045,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
   PriorSet &prior(*prior_set.get());
 				 
   if (prior.crashed) {
-    state_set(PG_STATE_CRASHED);
+    state_set(PG_STATE_REPLAY);
   }
   if (prior.pg_down) {
     state_set(PG_STATE_DOWN);
@@ -1327,19 +1327,20 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
+
   // -- crash recovery?
-  if (is_crashed()) {
+  if (is_replay()) {
     if (g_conf->osd_replay_window > 0) {
       replay_until = ceph_clock_now(g_ceph_context);
       replay_until += g_conf->osd_replay_window;
       dout(10) << "crashed, allowing op replay for " << g_conf->osd_replay_window
 	       << " until " << replay_until << dendl;
-      state_set(PG_STATE_REPLAY);
       osd->replay_queue_lock.Lock();
       osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
       osd->replay_queue_lock.Unlock();
     } else {
       dout(10) << "crashed, but osd_replay_window=0.  skipping replay." << dendl;
+      state_clear(PG_STATE_REPLAY);
     }
   }
 
@@ -1348,7 +1349,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_PEERING);
-  state_clear(PG_STATE_CRASHED);
   if (is_primary() && 
       osd->osdmap->get_pg_size(info.pgid) != acting.size())
     state_set(PG_STATE_DEGRADED);
@@ -1534,7 +1534,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
 void PG::replay_queued_ops()
 {
-  assert(is_replay() && is_active() && !is_crashed());
+  assert(is_replay() && is_active());
   eversion_t c = info.last_update;
   list<Message*> replay;
   dout(10) << "replay_queued_ops" << dendl;
@@ -1556,7 +1556,7 @@ void PG::replay_queued_ops()
   replay_queue.clear();
   osd->requeue_ops(this, replay);
   osd->requeue_ops(this, waiting_for_active);
-  state_clear(PG_STATE_REPLAY);
+
   update_stats();
 }
 
@@ -3430,7 +3430,6 @@ void PG::start_peering_interval(const OSDMap *lastmap,
   state_clear(PG_STATE_PEERING);  // we'll need to restart peering
   state_clear(PG_STATE_DEGRADED);
   state_clear(PG_STATE_REPLAY);
-  state_clear(PG_STATE_CRASHED);
 
   osd->cancel_generate_backlog(this);
 

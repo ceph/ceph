@@ -492,7 +492,6 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_CREATING     (1<<0)  // creating
 #define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
 #define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
-#define PG_STATE_CRASHED      (1<<3)  // all replicas went down, clients needs to replay
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
 #define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 #define PG_STATE_STRAY        (1<<6)  // i must notify the primary i exist.

@@ -1592,7 +1592,6 @@ public:
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
