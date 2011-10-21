@@ -300,7 +300,8 @@ public:
   virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
-  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
+  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
+                         string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
@@ -309,7 +310,8 @@ public:
                       map<string, RGWObjEnt>& m, bool *is_truncated,
                       string *last_entry = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
-  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
+  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
+                           rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {

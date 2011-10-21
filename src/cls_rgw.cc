@@ -162,6 +162,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     entry.name = op.name;
     entry.epoch = 0;
     entry.exists = false;
+    entry.locator = op.locator;
   }
 
   // fill in proper state
@@ -209,6 +210,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.name = op.name;
       entry.epoch = op.epoch;
       entry.meta = op.meta;
+      entry.locator = op.locator;
       ondisk = false;
     }
   } else {

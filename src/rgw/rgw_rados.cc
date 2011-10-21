@@ -646,7 +646,7 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
     return 0;
 
   string tag;
-  r = prepare_update_index(NULL, bucket, obj.object, tag);
+  r = prepare_update_index(NULL, bucket, obj, tag);
   if (r < 0)
     return r;
 
@@ -1011,7 +1011,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   string tag;
   op.remove();
   if (sync) {
-    r = prepare_update_index(state, bucket, obj.object, tag);
+    r = prepare_update_index(state, bucket, obj, tag);
     if (r < 0)
       return r;
     r = io_ctx.operate(oid, &op);
@@ -1474,7 +1474,8 @@ done_err:
   return r;
 }
 
-int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag)
+int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
+                                   rgw_obj& obj, string& tag)
 {
   if (state && state->obj_tag.length()) {
     int len = state->obj_tag.length();
@@ -1485,7 +1486,8 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket, strin
   } else {
     append_rand_alpha(tag, tag, 32);
   }
-  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag, oid);
+  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
+                               obj.object, obj.key);
 
   return ret;
 }
@@ -1607,7 +1609,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   string tag;
   uint64_t epoch = 0;
-  int ret = prepare_update_index(state, bucket, dst_obj.object, tag);
+  int ret = prepare_update_index(state, bucket, dst_obj, tag);
   if (ret < 0)
     goto done;
 
@@ -2027,7 +2029,8 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
   return r;
 }
 
-int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name)
+int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
+                                 string& name, string& locator)
 {
   if (bucket.marker.empty()) {
     if (bucket.name[0] == '.')
@@ -2050,6 +2053,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, st
   call.op = op;
   call.tag = tag;
   call.name = name;
+  call.locator = locator;
   ::encode(call, in);
   r = io_ctx.exec(oid, "rgw", "bucket_prepare_op", in, out);
   return r;
