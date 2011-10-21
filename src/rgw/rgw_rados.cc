@@ -827,7 +827,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
 
   ret = clone_obj(ctx, dest_obj, 0, tmp_obj, 0, end + 1, NULL, attrs, category);
   if (mtime)
-    obj_stat(ctx, tmp_obj, NULL, mtime);
+    obj_stat(ctx, tmp_obj, NULL, mtime, NULL);
 
   r = rgwstore->delete_obj(ctx, id, tmp_obj, false);
   if (r < 0)
@@ -1029,7 +1029,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
       return r;
     r = io_ctx.operate(oid, &op);
 
-    if (r >= 0 && bucket.marker.size()) {
+    if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
       uint64_t epoch = io_ctx.get_last_version();
       r = complete_update_index_del(bucket, obj.object, tag, epoch);
     }
@@ -1071,7 +1071,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
   op.getxattrs();
   op.stat();
   bufferlist outbl;
-  int r = io_ctx.operate(actual_obj, &op, &outbl);
+  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->attrset);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -1082,29 +1082,6 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     return r;
 
   s->exists = true;
-
-  bufferlist::iterator oiter = outbl.begin();
-  try {
-    ::decode(s->attrset, oiter);
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
-    return -EIO;
-  }
-
-  map<string, bufferlist>::iterator aiter;
-  for (aiter = s->attrset.begin(); aiter != s->attrset.end(); ++aiter) {
-    dout(0) << "iter->first=" << aiter->first << dendl;
-  }
-
-  try {
-    ::decode(s->size, oiter);
-    utime_t ut;
-    ::decode(ut, oiter);
-    s->mtime = ut.sec();
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
-  }
-
   s->has_attrs = true;
   map<string, bufferlist>::iterator iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
   if (iter != s->attrset.end()) {
@@ -1758,37 +1735,58 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   return r;
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime)
+int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
 {
   rgw_bucket bucket;
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
+
   io_ctx.locator_set_key(key);
 
-  if (rctx) {
-    RGWObjState *astate;
-    r = get_obj_state(rctx, obj, io_ctx, oid, &astate);
-    if (r < 0)
-      return r;
+  ObjectReadOperation op;
+  op.getxattrs();
+  op.stat();
+  bufferlist outbl;
+  r = io_ctx.operate(oid, &op, &outbl);
+  if (r < 0)
+    return r;
 
-    if (!astate->exists)
-      return -ENOENT;
-
-    if (psize)
-      *psize = astate->size;
-    if (pmtime)
-      *pmtime = astate->mtime;
-
-    return 0;
+  map<string, bufferlist> attrset;
+  bufferlist::iterator oiter = outbl.begin();
+  try {
+    ::decode(attrset, oiter);
+  } catch (buffer::error& err) {
+    dout(0) << "ERROR: failed decoding s->attrset (obj=" << obj << "), aborting" << dendl;
+    return -EIO;
   }
 
-  r = io_ctx.stat(oid, psize, pmtime);
-  return r;
+  map<string, bufferlist>::iterator aiter;
+  for (aiter = attrset.begin(); aiter != attrset.end(); ++aiter) {
+    dout(0) << "iter->first=" << aiter->first << dendl;
+  }
+
+  uint64_t size;
+  time_t mtime;
+  try {
+    ::decode(size, oiter);
+    utime_t ut;
+    ::decode(ut, oiter);
+    mtime = ut.sec();
+  } catch (buffer::error& err) {
+    dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
+  }
+  if (psize)
+    *psize = size;
+  if (pmtime)
+    *pmtime = mtime;
+  if (attrs)
+    *attrs = attrset;
+
+  return 0;
 }
 
 int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats)
@@ -2302,7 +2300,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   cout << "processing intent log " << oid << std::endl;
   uint64_t size;
   rgw_obj obj(bucket, oid);
-  int r = obj_stat(NULL, obj, &size, NULL);
+  int r = obj_stat(NULL, obj, &size, NULL, NULL);
   if (r < 0) {
     cerr << "error while doing stat on " << bucket << ":" << oid
 	 << " " << cpp_strerror(-r) << std::endl;

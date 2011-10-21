@@ -273,7 +273,7 @@ public:
 
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime);
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
   virtual bool supports_tmap() { return true; }
   virtual int tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);

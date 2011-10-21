@@ -235,7 +235,7 @@ public:
  /**
   * stat an object
   */
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime) = 0;
+  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs) = 0;
 
   virtual bool supports_tmap() { return false; }
 

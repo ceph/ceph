@@ -163,7 +163,7 @@ public:
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
   int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
 };
@@ -261,20 +261,20 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
 {
-  if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, bucket, obj, psize, pmtime);
+  string& bucket_name = obj.bucket.name;
+  string& oid = obj.object;
+  if (bucket_name[0] != '.')
+    return T::obj_stat(ctx, obj, psize, pmtime, attrs);
 
-  string name = normal_name(bucket, obj);
+  string name = normal_name(obj.bucket, oid);
 
   uint64_t size;
   time_t mtime;
-  int64_t t;
 
   ObjectCacheInfo info;
-  bufferlist& bl = info.data;
-  int r = cache.get(name, info, CACHE_FLAG_META);
+  int r = cache.get(name, info, CACHE_FLAG_META | CACHE_FLAG_XATTRS);
   if (r == 0) {
     if (info.status < 0)
       return info.status;
@@ -283,7 +283,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint6
     mtime = info.meta.mtime;
     goto done;
   }
-  r = T::obj_stat(ctx, bucket, obj, &size, &mtime);
+  r = T::obj_stat(ctx, obj, &size, &mtime, &info.xattrs);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
@@ -294,13 +294,15 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint6
   info.status = 0;
   info.meta.mtime = mtime;
   info.meta.size = size;
-  info.flags = CACHE_FLAG_META;
+  info.flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
   cache.put(name, info);
 done:
   if (psize)
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
+  if (attrs)
+    *attrs = info.xattrs;
   return 0;
 }
 
