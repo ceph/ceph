@@ -116,7 +116,7 @@ int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& i
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_obj(bucket, key, bl);
+  int ret = rgw_get_obj(NULL, bucket, key, bl);
   if (ret < 0)
     return ret;
 

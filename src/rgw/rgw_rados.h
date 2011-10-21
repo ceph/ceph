@@ -48,10 +48,20 @@ struct RGWRadosCtx {
   int (*intent_cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
   void *user_ctx;
   RGWObjState *get_state(rgw_obj& obj) {
-    return &objs_state[obj];
+    if (obj.object.size()) {
+      return &objs_state[obj];
+    } else {
+      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
+      return &objs_state[new_obj];
+    }
   }
   void set_atomic(rgw_obj& obj) {
-    objs_state[obj].is_atomic = true;
+    if (obj.object.size()) {
+      objs_state[obj].is_atomic = true;
+    } else {
+      rgw_obj new_obj(rgw_root_bucket, obj.bucket.name);
+      objs_state[new_obj].is_atomic = true;
+    }
   }
   void set_intent_cb(int (*cb)(void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
     intent_cb = cb;
@@ -298,7 +308,7 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
-  virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
+  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);

@@ -29,7 +29,7 @@ int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, 
   return ret;
 }
 
-int rgw_get_obj(rgw_bucket& bucket, string& key, bufferlist& bl)
+int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl)
 {
   int ret;
   char *data = NULL;
@@ -38,13 +38,13 @@ int rgw_get_obj(rgw_bucket& bucket, string& key, bufferlist& bl)
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(NULL, obj, 0, NULL, NULL, NULL,
+  ret = rgwstore->prepare_get_obj(ctx, obj, 0, NULL, NULL, NULL,
                                   NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 
   do {
-    ret = rgwstore->get_obj(NULL, &handle, obj, &data, 0, request_len - 1);
+    ret = rgwstore->get_obj(ctx, &handle, obj, &data, 0, request_len - 1);
     if (ret < 0)
       goto done;
     if (ret < request_len)

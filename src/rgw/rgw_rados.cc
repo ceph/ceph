@@ -1061,6 +1061,7 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 
 int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
 {
+  dout(20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << dendl;
   RGWObjState *s = rctx->get_state(obj);
   *state = s;
   if (s->has_attrs)
@@ -1811,11 +1812,11 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
   return 0;
 }
 
-int RGWRados::get_bucket_info(string& bucket_name, RGWBucketInfo& info)
+int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info)
 {
   bufferlist bl;
 
-  int ret = rgw_get_obj(pi_buckets_rados, bucket_name, bl);
+  int ret = rgw_get_obj(ctx, pi_buckets_rados, bucket_name, bl);
   if (ret < 0) {
     if (ret != -ENOENT)
       return ret;

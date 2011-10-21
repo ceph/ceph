@@ -228,7 +228,6 @@ int read_acls(struct req_state *s, bool only_bucket)
 {
   int ret = 0;
   string obj_str;
-
   if (!s->acl) {
      s->acl = new RGWAccessControlPolicy;
      if (!s->acl)
@@ -245,7 +244,7 @@ int read_acls(struct req_state *s, bool only_bucket)
 
   if (s->bucket_name_str.size()) {
     RGWBucketInfo bucket_info;
-    ret = rgwstore->get_bucket_info(s->bucket_name_str, bucket_info);
+    ret = rgwstore->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);
     if (ret < 0) {
       dout(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
@@ -920,7 +919,7 @@ int RGWCopyObj::verify_permission()
 
   RGWBucketInfo bucket_info;
 
-  ret = rgwstore->get_bucket_info(src_bucket_name, bucket_info);
+  ret = rgwstore->get_bucket_info(s->obj_ctx, src_bucket_name, bucket_info);
   if (ret < 0)
     return ret;
 
