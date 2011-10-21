@@ -1,12 +1,12 @@
 #!/bin/sh -ex
 
+TMP_FILES="/tmp/img1 /tmp/img1.new /tmp/img2 /tmp/img2.new /tmp/img3 /tmp/img3.new /tmp/img1.snap1"
+
 rbd rm testimg1 || true
 rbd rm testimg2 || true
 rbd rm testimg3 || true
 
-rm -f /tmp/img1 /tmp/img1.new
-rm -f /tmp/img2 /tmp/img2.new
-rm -f /tmp/img3 /tmp/img3.new
+rm -f $TMP_FILES
 
 # create an image
 dd if=/bin/sh of=/tmp/img1 bs=1k count=1 seek=10
@@ -42,6 +42,16 @@ rbd export testimg3 /tmp/img3.new
 cmp /tmp/img2 /tmp/img2.new
 cmp /tmp/img3 /tmp/img3.new
 
-rm /tmp/img1 /tmp/img2 /tmp/img3 /tmp/img1.new /tmp/img2.new /tmp/img3.new
+# rollback
+rbd snap rollback --snap=snap1 testimg1
+rbd info testimg1 | grep 'size 256 MB'
+rbd export testimg1 /tmp/img1.snap1
+cmp /tmp/img2 /tmp/img1.snap1
+
+# remove snapshots
+rbd snap rm --snap=snap1 testimg1
+rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: error 2: No such file or directory'
+
+rm -f $TMP_FILES
 
 echo OK
