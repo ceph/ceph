@@ -2788,15 +2788,11 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
  * If msg->scrub_from is not set, replica_scrub calls build_scrubmap to
  * build a complete map (with the pg lock dropped).
  *
- * If msg->scrub_from is set, replica_scrub sets finalizing_scrub.
- * Similarly to scrub, if last_update_applied is behind info.last_update
- * replica_scrub returns to be requeued by sub_op_modify_applied.
- * replica_scrub then builds an incremental scrub map with the 
- * pg lock held.
+ * If msg->scrub_from is set, we build an incremental scrub map with
+ * the pg lock held.
  */
 void PG::replica_scrub(MOSDRepScrub *msg)
 {
-  assert(!active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
   if (msg->map_epoch < info.history.same_interval_since) {
@@ -2814,17 +2810,10 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 
   ScrubMap map;
   if (msg->scrub_from > eversion_t()) {
-    if (finalizing_scrub) {
-      assert(last_update_applied == info.last_update);
-    } else {
-      finalizing_scrub = 1;
-      if (last_update_applied != info.last_update) {
-	active_rep_scrub = msg;
-	return;
-      }
-    }
+    // flush out in-flight writes to disk, so we can scrub the
+    // resulting on-disk state.
+    osr.flush();
     build_inc_scrub_map(map, msg->scrub_from);
-    finalizing_scrub = 0;
   } else {
     build_scrub_map(map);
   }
