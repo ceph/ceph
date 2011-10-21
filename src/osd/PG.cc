@@ -1648,6 +1648,8 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   clear_recovery_state();
 
+  trim_past_intervals();
+  
   write_info(t);
 
   /*
