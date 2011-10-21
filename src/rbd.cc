@@ -1069,7 +1069,7 @@ int main(int argc, const char **argv)
   if (snapname && talk_to_cluster &&
       (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY)) {
     r = image.snap_set(snapname);
-    if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
+    if (r < 0) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }
