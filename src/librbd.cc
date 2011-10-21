@@ -150,11 +150,12 @@ namespace librbd {
       return name + RBD_SUFFIX;
     }
 
-    uint64_t get_image_size() {
+    uint64_t get_image_size() const
+    {
       if (snapname.length() == 0) {
 	return header.image_size;
       } else {
-	map<std::string,SnapInfo>::iterator p = snaps_by_name.find(snapname);
+	map<std::string,SnapInfo>::const_iterator p = snaps_by_name.find(snapname);
 	assert(p != snaps_by_name.end());
 	return p->second.size;
       }
@@ -357,7 +358,7 @@ namespace librbd {
   int tmap_set(IoCtx& io_ctx, const string& imgname);
   int tmap_rm(IoCtx& io_ctx, const string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid, ProgressContext& prog_ctx);
-  void image_info(const rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
+  void image_info(const ImageCtx& ictx, image_info_t& info, size_t info_size);
   string get_block_oid(const rbd_obj_header_ondisk &header, uint64_t num);
   uint64_t get_max_block(uint64_t size, int obj_order);
   uint64_t get_max_block(const rbd_obj_header_ondisk &header);
@@ -441,14 +442,14 @@ void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   ondisk.snap_names_len = 0;
 }
 
-void image_info(const rbd_obj_header_ondisk& header, image_info_t& info, size_t infosize)
+void image_info(const ImageCtx& ictx, image_info_t& info, size_t infosize)
 {
-  int obj_order = header.options.order;
-  info.size = header.image_size;
+  int obj_order = ictx.header.options.order;
+  info.size = ictx.get_image_size();
   info.obj_size = 1 << obj_order;
-  info.num_objs = header.image_size >> obj_order;
+  info.num_objs = ictx.get_image_size() >> obj_order;
   info.order = obj_order;
-  memcpy(&info.block_name_prefix, &header.block_name, RBD_MAX_BLOCK_NAME_SIZE);
+  memcpy(&info.block_name_prefix, &ictx.header.block_name, RBD_MAX_BLOCK_NAME_SIZE);
   info.parent_pool = -1;
   bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
@@ -828,7 +829,7 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  image_info(ictx->header, info, infosize);
+  image_info(*ictx, info, infosize);
   return 0;
 }
 
