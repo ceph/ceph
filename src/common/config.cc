@@ -272,7 +272,8 @@ parse_argv(std::vector<const char*>& args)
       set_val_or_die("pid_file", "");
       set_val_or_die("log_sym_dir", "");
       set_val_or_die("log_sym_history", "0");
-      set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_ALL));
+      set_val_or_die("log_to_stderr", "true");
+      set_val_or_die("err_to_stderr", "true");
       set_val_or_die("log_to_syslog", "false");
       set_val_or_die("log_per_instance", "false");
     }
