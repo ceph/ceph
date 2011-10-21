@@ -1019,8 +1019,7 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   if (r < 0)
     return r;
 
-  if (state && !state->exists)
-    return -ENOENT;
+  bool ret_not_existed = (state && !state->exists);
 
   string tag;
   op.remove();
@@ -1044,6 +1043,9 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
 
   if (r < 0)
     return r;
+
+  if (ret_not_existed)
+    return -ENOENT;
 
   return 0;
 }
