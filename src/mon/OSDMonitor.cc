@@ -635,17 +635,17 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
     dout(10) << " old osd_info: " << info << dendl;
-    if (m->sb.mounted > info.last_clean_first ||
-	(m->sb.mounted == info.last_clean_first &&
-	 m->sb.clean_thru > info.last_clean_last)) {
-      epoch_t first = m->sb.mounted;
-      epoch_t last = m->sb.clean_thru;
+    if (m->sb.mounted > info.last_clean_begin ||
+	(m->sb.mounted == info.last_clean_begin &&
+	 m->sb.clean_thru > info.last_clean_end)) {
+      epoch_t begin = m->sb.mounted;
+      epoch_t end = m->sb.clean_thru;
 
       dout(10) << "prepare_boot osd." << from << " last_clean_interval "
-	       << info.last_clean_first << "-" << info.last_clean_last
-	       << " -> " << first << "-" << last
+	       << "[" << info.last_clean_begin << "," << info.last_clean_end << ")"
+	       << " -> [" << begin << "-" << end << ")"
 	       << dendl;
-      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(first, last);
+      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(begin, end);
     }
 
     // wait

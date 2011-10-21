@@ -79,14 +79,14 @@ using __gnu_cxx::hash_set;
  * thrown out).
  */
 struct osd_info_t {
-  epoch_t last_clean_first;  // last interval that ended with a clean osd shutdown
-  epoch_t last_clean_last;
+  epoch_t last_clean_begin;  // last interval that ended with a clean osd shutdown
+  epoch_t last_clean_end;
   epoch_t up_from;   // epoch osd marked up
   epoch_t up_thru;   // lower bound on actual osd death (if > up_from)
   epoch_t down_at;   // upper bound on actual osd death (if > up_from)
   epoch_t lost_at;   // last epoch we decided data was "lost"
   
-  osd_info_t() : last_clean_first(0), last_clean_last(0),
+  osd_info_t() : last_clean_begin(0), last_clean_end(0),
 		 up_from(0), up_thru(0), down_at(0), lost_at(0) {}
 
   void dump(Formatter *f) const;
@@ -94,8 +94,8 @@ struct osd_info_t {
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
-    ::encode(last_clean_first, bl);
-    ::encode(last_clean_last, bl);
+    ::encode(last_clean_begin, bl);
+    ::encode(last_clean_end, bl);
     ::encode(up_from, bl);
     ::encode(up_thru, bl);
     ::encode(down_at, bl);
@@ -104,8 +104,8 @@ struct osd_info_t {
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
-    ::decode(last_clean_first, bl);
-    ::decode(last_clean_last, bl);
+    ::decode(last_clean_begin, bl);
+    ::decode(last_clean_end, bl);
     ::decode(up_from, bl);
     ::decode(up_thru, bl);
     ::decode(down_at, bl);
@@ -118,7 +118,7 @@ inline ostream& operator<<(ostream& out, const osd_info_t& info) {
   out << "up_from " << info.up_from
       << " up_thru " << info.up_thru
       << " down_at " << info.down_at
-      << " last_clean_interval " << info.last_clean_first << "-" << info.last_clean_last;
+      << " last_clean_interval [" << info.last_clean_begin << "," << info.last_clean_end << ")";
   if (info.lost_at)
     out << " lost_at " << info.lost_at;
   return out;
@@ -703,8 +703,8 @@ private:
     for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
          i != inc.new_last_clean_interval.end();
          i++) {
-      osd_info[i->first].last_clean_first = i->second.first;
-      osd_info[i->first].last_clean_last = i->second.second;
+      osd_info[i->first].last_clean_begin = i->second.first;
+      osd_info[i->first].last_clean_end = i->second.second;
     }
     for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
       osd_info[p->first].lost_at = p->second;

@@ -4761,19 +4761,32 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 
       // does this osd appear to have survived through the end of the
       // interval?
-      if (pinfo && ((pinfo->up_from <= interval.first &&
-		     (pinfo->up_thru > interval.last ||                             // most recently
-		      std::find(acting.begin(), acting.end(), o) != acting.end() ||
-		      std::find(up.begin(), up.end(), o) != up.end())) ||           // or still
-		    (pinfo->up_from > interval.last &&
-		     pinfo->last_clean_first <= interval.first &&
-		     pinfo->last_clean_last >= interval.last))) {                   // previous osd interval
-	dout(10) << "build_prior  prior osd." << o
-		 << " up_from " << pinfo->up_from
-		 << " and last clean interval "
-		 << pinfo->last_clean_first << "-" << pinfo->last_clean_last
-		 << " survived the interval" << dendl;
-	any_survived_interval = true;
+      if (pinfo) {
+	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
+	  dout(10) << "build_prior  osd." << o
+		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
+		   << " survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from <= interval.first &&
+		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
+		  std::find(up.begin(), up.end(), o) != up.end())) {
+	  dout(10) << "build_prior  osd." << o
+		   << " up_from " << pinfo->up_from << " and is in acting|up,"
+		   << " assumed to have survived the interval" << dendl;
+	  // (if it hasn't, we will rebuild PriorSet)
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from > interval.last &&
+		 pinfo->last_clean_begin <= interval.first &&
+		 pinfo->last_clean_end > interval.last) {
+	  dout(10) << "build_prior  prior osd." << o
+		   << " up_from " << pinfo->up_from
+		   << " and last clean interval ["
+		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
+		   << ") survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
       }
 
       if (osdmap.is_up(o)) {

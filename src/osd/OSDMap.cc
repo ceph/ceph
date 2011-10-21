@@ -20,8 +20,8 @@
 
 void osd_info_t::dump(Formatter *f) const
 {
-  f->dump_int("last_clean_first", last_clean_first);
-  f->dump_int("last_clean_last", last_clean_last);
+  f->dump_int("last_clean_begin", last_clean_begin);
+  f->dump_int("last_clean_end", last_clean_end);
   f->dump_int("up_from", up_from);
   f->dump_int("up_thru", up_thru);
   f->dump_int("down_at", down_at);
