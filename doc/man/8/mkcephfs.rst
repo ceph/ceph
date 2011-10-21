@@ -77,6 +77,11 @@ Options
    and (if it differs from "osd data") "btrfs path" options must be
    defined.
 
+.. option:: --no-copy-conf
+
+   By default, mkcephfs with -a will copy the new configuration to
+   /etc/ceph/ceph.conf on each node in the cluster.  This option
+   disables that behavior.
 
 Subcommands
 ===========

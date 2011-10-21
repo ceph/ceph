@@ -114,9 +114,9 @@ class PerfCountersCollection
 public:
   PerfCountersCollection(CephContext *cct);
   ~PerfCountersCollection();
-  void logger_add(class PerfCounters *l);
-  void logger_remove(class PerfCounters *l);
-  void logger_clear();
+  void add(class PerfCounters *l);
+  void remove(class PerfCounters *l);
+  void clear();
   void write_json_to_buf(std::vector <char> &buffer, bool schema);
 private:
   bool init(const std::string &uri);

@@ -291,11 +291,7 @@ void Client::init()
   
   // logger?
   client_logger_lock.Lock();
-  char s[80];
-  char hostname[80];
-  gethostname(hostname, 79);
-  snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-  PerfCountersBuilder plb(cct, s, l_c_first, l_c_last);
+  PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
   if (client_counters == 0) {
     plb.add_fl_avg(l_c_reply, "reply");
     plb.add_fl_avg(l_c_lat, "lat");

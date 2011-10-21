@@ -66,16 +66,14 @@ using namespace std;
 
 void Server::create_logger()
 {
-  char name[80];
-  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf->name.get_id().c_str());
-  PerfCountersBuilder plb(g_ceph_context, name, l_mdss_first, l_mdss_last);
+  PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
   plb.add_u64_counter(l_mdss_hcreq,"hcreq"); // handle client req
   plb.add_u64_counter(l_mdss_hsreq, "hsreq"); // slave
   plb.add_u64_counter(l_mdss_hcsess, "hcsess");    // client session
   plb.add_u64_counter(l_mdss_dcreq, "dcreq"); // dispatch client req
   plb.add_u64_counter(l_mdss_dsreq, "dsreq"); // slave
   logger = plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 }
 
 
@@ -1750,6 +1748,19 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
   in->inode.uid = mdr->client_request->get_caller_uid();
 
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
+
+  MClientRequest *req = mdr->client_request;
+  if (req->get_data().length()) {
+    bufferlist::iterator p = req->get_data().begin();
+
+    // xattrs on new inode?
+    map<string,bufferptr> xattrs;
+    ::decode(xattrs, p);
+    for (map<string,bufferptr>::iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
+      dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
+      in->xattrs[p->first] = p->second;
+    }
+  }
 
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;

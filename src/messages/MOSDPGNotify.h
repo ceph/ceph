@@ -65,7 +65,7 @@ public:
   }
   void print(ostream& out) {
     out << "osd pg notify(" << "epoch " << epoch
-	<< "query epoch " << query_epoch << "; ";
+	<< "query_epoch " << query_epoch << "; ";
     for (vector<PG::Info>::iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {

@@ -88,6 +88,7 @@ dir=""
 moreargs=""
 auto_action=0
 manual_action=0
+nocopyconf=0
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -131,6 +132,9 @@ case $1 in
 	    ;;
     --mkbtrfs)
 	    mkbtrfs=1
+	    ;;
+    --no-copy-conf)
+	    nocopyconf=1
 	    ;;
     --conf | -c)
 	    [ -z "$2" ] && usage_exit
@@ -441,8 +445,18 @@ if [ $allhosts -eq 1 ]; then
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
 	    scp -q $dir/monmap $host:$rdir
+
+	    if [ $nocopyconf -eq 0 ]; then
+		# also put conf at /etc/ceph/ceph.conf
+		scp -q $dir/conf $host:/etc/ceph/ceph.conf
+	    fi
 	else
 	    rdir=$dir
+
+	    if [ $nocopyconf -eq 0 ]; then
+		# also put conf at /etc/ceph/ceph.conf
+		cp $dir/conf /etc/ceph/ceph.conf
+	    fi
 	fi
 	
 	if [ $mkbtrfs -eq 1 ] && [ "$type" = "osd" ]; then
@@ -476,8 +490,18 @@ if [ $allhosts -eq 1 ]; then
 	    echo pushing everything to $host
 	    ssh $host mkdir -p $rdir
 	    scp -q $dir/* $host:$rdir
+
+	    if [ $nocopyconf -eq 0 ]; then
+		# also put conf at /etc/ceph/ceph.conf
+		scp -q $dir/conf $host:/etc/ceph/ceph.conf
+	    fi
 	else
 	    rdir=$dir
+
+	    if [ $nocopyconf -eq 0 ]; then
+	        # also put conf at /etc/ceph/ceph.conf
+		cp $dir/conf /etc/ceph/ceph.conf
+	    fi
 	fi
 	
 	do_root_cmd "$0 -d $rdir --init-daemon $name"

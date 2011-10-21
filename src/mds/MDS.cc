@@ -176,12 +176,12 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) {
-    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->remove(logger);
     delete logger;
     logger = 0;
   }
   if (mlogger) {
-    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->remove(logger);
     delete mlogger;
     mlogger = 0;
   }
@@ -194,12 +194,7 @@ void MDS::create_logger()
 {
   dout(10) << "create_logger" << dendl;
   {
-    char name[80];
-    snprintf(name, sizeof(name), "mds.%s.%llu.log",
-	     g_conf->name.get_id().c_str(),
-	     (unsigned long long) monc->get_global_id());
-    PerfCountersBuilder mds_plb(g_ceph_context, name,
-			      l_mds_first, l_mds_last);
+    PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
     mds_plb.add_u64_counter(l_mds_req, "req"); // FIXME: nobody is actually setting this
     mds_plb.add_u64_counter(l_mds_reply, "reply");
@@ -257,16 +252,11 @@ void MDS::create_logger()
     mds_plb.add_u64_counter(l_mds_im, "im");
     mds_plb.add_u64_counter(l_mds_iim, "iim");
     logger = mds_plb.create_perf_counters();
-    g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+    g_ceph_context->GetPerfCountersCollection()->add(logger);
   }
 
   {
-    char name[80];
-    snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
-	     g_conf->name.get_id().c_str(),
-	     (unsigned long long) monc->get_global_id());
-    PerfCountersBuilder mdm_plb(g_ceph_context, name,
-			      l_mdm_first, l_mdm_last);
+    PerfCountersBuilder mdm_plb(g_ceph_context, "mds_mem", l_mdm_first, l_mdm_last);
     mdm_plb.add_u64(l_mdm_ino, "ino");
     mdm_plb.add_u64_counter(l_mdm_inoa, "ino+");
     mdm_plb.add_u64_counter(l_mdm_inos, "ino-");
@@ -284,7 +274,7 @@ void MDS::create_logger()
     mdm_plb.add_u64(l_mdm_malloc, "malloc");
     mdm_plb.add_u64(l_mdm_buf, "buf");
     mlogger = mdm_plb.create_perf_counters();
-    g_ceph_context->GetPerfCountersCollection()->logger_add(mlogger);
+    g_ceph_context->GetPerfCountersCollection()->add(mlogger);
   }
 
   mdlog->create_logger();

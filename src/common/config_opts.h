@@ -62,6 +62,7 @@ OPTION(debug_tp, OPT_INT, 0)
 OPTION(debug_auth, OPT_INT, 1)
 OPTION(debug_finisher, OPT_INT, 1)
 OPTION(debug_heartbeatmap, OPT_INT, 1)
+OPTION(debug_perfcounter, OPT_INT, 1)
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
 OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin")
@@ -335,7 +336,7 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  //
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
-OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60)
+OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0)
 OPTION(rgw_pools_preallocate_max, OPT_INT, 100)
