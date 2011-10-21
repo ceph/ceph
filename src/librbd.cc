@@ -1191,10 +1191,14 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
     return r;
 
   Mutex::Locker l(ictx->lock);
-  if (snap_name)
-    ictx->snap_set(snap_name);
-  else
+  if (snap_name) {
+    r = ictx->snap_set(snap_name);
+    if (r < 0) {
+      return r;
+    }
+  } else {
     ictx->snap_unset();
+  }
 
   ictx->data_ctx.snap_set_read(ictx->snapid);
 
