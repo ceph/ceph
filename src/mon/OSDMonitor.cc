@@ -641,11 +641,6 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
       epoch_t first = m->sb.mounted;
       epoch_t last = m->sb.clean_thru;
 
-      // adjust clean interval forward to the epoch the osd was actually marked down.
-      if (info.up_from == first &&
-	  (info.down_at-1) > last)
-	last = info.down_at-1;
-
       dout(10) << "prepare_boot osd." << from << " last_clean_interval "
 	       << info.last_clean_first << "-" << info.last_clean_last
 	       << " -> " << first << "-" << last
