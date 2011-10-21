@@ -172,7 +172,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   }
 
   // Avoid putting a small number (or 0) in the denominator when calculating
-  // average_full
+  // average_util
   const PGMap &pgm = mon->pgmon()->pg_map;
   if (pgm.osd_sum.kb < 1024) {
     ostringstream oss;
@@ -192,32 +192,34 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
     return -EDOM;
   }
 
-  // Assign a lower weight to overloaded OSDs
-  float average_full = pgm.osd_sum.kb_used;
-  average_full /= pgm.osd_sum.kb;
-  float overload_full = average_full;
-  overload_full *= oload;
-  overload_full /= 100.0;
+  float average_util = pgm.osd_sum.kb_used;
+  average_util /= pgm.osd_sum.kb;
+  float overload_util = average_util * oload / 100.0;
 
   ostringstream oss;
   char buf[128];
-  snprintf(buf, sizeof(buf), "average_full: %04f, overload_full: %04f. ",
-	   average_full, overload_full);
+  snprintf(buf, sizeof(buf), "average_util: %04f, overload_util: %04f. ",
+	   average_util, overload_util);
   oss << buf;
   std::string sep;
   oss << "overloaded osds: ";
   for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
-    float full = p->second.kb_used;
-    full /= p->second.kb;
-    if (full >= overload_full) {
+    float util = p->second.kb_used;
+    util /= p->second.kb;
+    if (util >= overload_util) {
       sep = ", ";
-      float new_weight = (1.0f - full) / (1.0f - overload_full);
+      // Assign a lower weight to overloaded OSDs. The current weight
+      // is a factor to take into account the original weights,
+      // to represent e.g. differing storage capacities
+      float weight = osdmap.get_weightf(p->first);
+      float new_weight = (average_util / util) * weight;
       osdmap.set_weightf(p->first, new_weight);
       char buf[128];
-      snprintf(buf, sizeof(buf), "%d [%04f]", p->first, new_weight);
-      oss << sep << buf;
+      snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+	       weight, new_weight);
+      oss << buf << sep;
     }
   }
   if (sep.empty()) {
