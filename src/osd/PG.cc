@@ -222,8 +222,9 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(10) << "Missing sobject: " << i->first << dendl;
+    dout(20) << " before missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
   }
+
   list<Log::Entry>::const_reverse_iterator pp = olog.log.rbegin();
   eversion_t lu(oinfo.last_update);
   while (true) {
@@ -293,7 +294,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   for (map<hobject_t, Missing::item>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
-    dout(10) << "Final Missing sobject: " << i->first << dendl;
+    dout(20) << " after missing " << i->first << " need " << i->second.need << " have " << i->second.have << dendl;
   }
   peer_missing[from].swap(omissing);
 }
@@ -1497,7 +1498,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       }
       
       if (m) {
-	dout(10) << "activate peer osd." << peer << " sending " << m->log << " " << m->missing << dendl;
+	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
 	//m->log.print(cout);
 	osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
       }
@@ -1508,7 +1509,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       // update our missing
       if (pm.num_missing() == 0) {
 	pi.last_complete = pi.last_update;
-        dout(10) << "activate peer osd." << peer << " already uptodate, " << pi << dendl;
+        dout(10) << "activate peer osd." << peer << " " << pi << " uptodate" << dendl;
       } else {
         dout(10) << "activate peer osd." << peer << " " << pi
                  << " missing " << pm << dendl;
