@@ -23,6 +23,10 @@ rbd snap create testimg1 --snap=snap1
 rbd resize testimg1 --size=128
 rbd export testimg1 /tmp/img3
 
+# info
+rbd info testimg1 | grep 'size 128 MB'
+rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
+
 # make copies
 rbd copy testimg1 --snap=snap1 testimg2
 rbd copy testimg1 testimg3
