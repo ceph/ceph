@@ -262,7 +262,7 @@ OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
 OPTION(osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
-OPTION(osd_replay_window, OPT_INT, 45)
+OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, true)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 15)

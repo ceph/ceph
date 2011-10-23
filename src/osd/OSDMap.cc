@@ -906,6 +906,8 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
     pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
+    if (p->first == CEPH_DATA_RULE)
+      pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = p->second;
   }
 
