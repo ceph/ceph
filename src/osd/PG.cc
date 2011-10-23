@@ -54,7 +54,12 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    if (i->version <= v || i->version <= other.tail) {
+    // stop if we reach the tail; do not copy backlog entries and keep
+    // tail == other.tail.
+    if (i->version <= other.tail)
+      break;
+    if (i->version <= v) {
+      // make tail accurate.
       tail = i->version;
       break;
     }
