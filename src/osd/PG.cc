@@ -964,13 +964,35 @@ void PG::generate_past_intervals()
     i.up.swap(tup);
     i.acting.swap(tacting);
     if (i.acting.size()) {
-      i.maybe_went_rw = 
-	lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
-	lastmap->get_up_from(i.acting[0]) <= first_epoch;
-      dout(10) << "generate_past_intervals " << i
-	       << " : primary up " << lastmap->get_up_from(i.acting[0])
-	       << "-" << lastmap->get_up_thru(i.acting[0])
-	       << dendl;
+      if (lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
+	  lastmap->get_up_from(i.acting[0]) <= first_epoch) {
+	i.maybe_went_rw = true;
+	dout(10) << "generate_past_intervals " << i
+		 << " : primary up " << lastmap->get_up_from(i.acting[0])
+		 << "-" << lastmap->get_up_thru(i.acting[0])
+		 << dendl;
+      } else if (info.history.last_epoch_clean >= first_epoch &&
+		 info.history.last_epoch_clean <= last_epoch) {
+	// If the last_epoch_clean is included in this interval, then
+	// the pg must have been rw (for recovery to have completed).
+	// This is important because we won't know the _real_
+	// first_epoch because we stop at last_epoch_clean, and we
+	// don't want the oldest interval to randomly have
+	// maybe_went_rw false depending on the relative up_thru vs
+	// last_epoch_clean timing.
+	i.maybe_went_rw = true;
+	dout(10) << "generate_past_intervals " << i
+		 << " : includes last_epoch_clean " << info.history.last_epoch_clean
+		 << " and presumed to have been rw"
+		 << dendl;
+      } else {
+	i.maybe_went_rw = false;
+	dout(10) << "generate_past_intervals " << i
+		 << " : primary up " << lastmap->get_up_from(i.acting[0])
+		 << "-" << lastmap->get_up_thru(i.acting[0])
+		 << " does not include interval"
+		 << dendl;
+      }
     } else {
       i.maybe_went_rw = false;
       dout(10) << "generate_past_intervals " << i << " : empty" << dendl;
