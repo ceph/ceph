@@ -131,7 +131,7 @@ static int testrados(void)
 	}
 
 	// Can we change it?
-	if (rados_conf_set(cl, "log to stderr", "2")) {
+	if (rados_conf_set(cl, "log to stderr", "true")) {
 		printf("error: error setting log_to_stderr\n");
 		return 1;
 	}
@@ -139,7 +139,7 @@ static int testrados(void)
 		printf("error: failed to read log_to_stderr from config\n");
 		return 1;
 	}
-	if (tmp[0] != '2') {
+	if (strcmp(tmp, "true")) {
 		printf("error: new setting for log_to_stderr failed to take effect.\n");
 		return 1;
 	}

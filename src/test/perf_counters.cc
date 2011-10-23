@@ -77,7 +77,7 @@ static PerfCounters* setup_test_perfcounters1(CephContext *cct)
 TEST(PerfCounters, SinglePerfCounters) {
   PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
   PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
-  coll->logger_add(fake_pf);
+  coll->add(fake_pf);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
   g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
@@ -116,11 +116,11 @@ static PerfCounters* setup_test_perfcounter2(CephContext *cct)
 
 TEST(PerfCounters, MultiplePerfCounters) {
   PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
-  coll->logger_clear();
+  coll->clear();
   PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
   PerfCounters* fake_pf2 = setup_test_perfcounter2(g_ceph_context);
-  coll->logger_add(fake_pf1);
-  coll->logger_add(fake_pf2);
+  coll->add(fake_pf1);
+  coll->add(fake_pf2);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
   g_ceph_context->_conf->apply_changes(NULL);
   AdminSocketClient client(get_rand_socket_path());
@@ -136,14 +136,14 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,'element3':"
 	    "{'avgcount':0,'sum':0}},'test_perfcounter_2':{'foo':0,'bar':0}}"), msg);
 
-  coll->logger_remove(fake_pf2);
+  coll->remove(fake_pf2);
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,"
 	    "'element3':{'avgcount':0,'sum':0}}}"), msg);
   ASSERT_EQ("", client.get_schema(&msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':{'type':2},"
 	       "'element2':{'type':1},'element3':{'type':5}}}"), msg);
-  coll->logger_clear();
+  coll->clear();
   ASSERT_EQ("", client.get_message(&msg));
   ASSERT_EQ("{}", msg);
 }

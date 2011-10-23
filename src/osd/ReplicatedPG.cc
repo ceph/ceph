@@ -112,7 +112,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
   }
   else {
     dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
-    pull(soid);
+    pull(soid, v);
   }
   waiting_for_missing_object[soid].push_back(m);
 }
@@ -644,6 +644,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     log_op_stats(ctx);
     
     MOSDOpReply *reply = ctx->reply;
+    reply->set_version(info.last_update);
     ctx->reply = NULL;
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->client_messenger->send_message(reply, op->get_connection());
@@ -3438,12 +3439,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   bool done = rm->applied && rm->committed;
 
   last_update_applied = rm->op->version;
-  if (last_update_applied == info.last_update && finalizing_scrub) {
-    assert(active_rep_scrub);
-    osd->rep_scrub_wq.queue(active_rep_scrub);
-    active_rep_scrub->put();
-    active_rep_scrub = 0;
-  }
 
   unlock();
   if (done) {
@@ -3630,10 +3625,8 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
  */
 enum { PULL_NONE, PULL_OTHER, PULL_YES };
 
-int ReplicatedPG::pull(const hobject_t& soid)
+int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
 {
-  eversion_t v = missing.missing[soid].need;
-
   int fromosd = -1;
   map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
   if (q != missing_loc.end()) {
@@ -3673,7 +3666,7 @@ int ReplicatedPG::pull(const hobject_t& soid)
 	dout(10) << " missing but already pulling head " << head << dendl;
 	return PULL_NONE;
       } else {
-	int r = pull(head);
+	int r = pull(head, missing.missing[head].need);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
 	return PULL_NONE;
@@ -3685,7 +3678,7 @@ int ReplicatedPG::pull(const hobject_t& soid)
 	dout(10) << " missing but already pulling snapdir " << head << dendl;
 	return false;
       } else {
-  	int r = pull(head);
+	int r = pull(head, missing.missing[head].need);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
 	return PULL_NONE;
@@ -4074,7 +4067,8 @@ void ReplicatedPG::_committed_pushed_object(MOSDSubOp *op, epoch_t same_since, e
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
 
-  log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+  if (op)
+    log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
 
   unlock();
   put();
@@ -4087,6 +4081,28 @@ void ReplicatedPG::_applied_pushed_object(ObjectStore::Transaction *t, ObjectCon
   put_object_context(obc);
   unlock();
   delete t;
+}
+
+void ReplicatedPG::recover_primary_got(hobject_t oid, eversion_t v)
+{
+  if (missing.is_missing(oid, v)) {
+    dout(10) << "got missing " << oid << " v " << v << dendl;
+    missing.got(oid, v);
+    if (is_primary())
+      missing_loc.erase(oid);
+      
+    // raise last_complete?
+    while (log.complete_to != log.log.end()) {
+      if (missing.missing.count(log.complete_to->soid))
+	break;
+      if (info.last_complete < log.complete_to->version)
+	info.last_complete = log.complete_to->version;
+      log.complete_to++;
+    }
+    dout(10) << "last_complete now " << info.last_complete << dendl;
+    if (log.complete_to != log.log.end())
+      dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
+  }
 }
 
 /** op_push
@@ -4298,28 +4314,21 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       }
     }
 
-    if (missing.is_missing(soid, v)) {
-      dout(10) << "got missing " << soid << " v " << v << dendl;
-      missing.got(soid, v);
-      if (is_primary())
-	missing_loc.erase(soid);
-      
-      // raise last_complete?
-      while (log.complete_to != log.log.end()) {
-	if (missing.missing.count(log.complete_to->soid))
-	  break;
-	if (info.last_complete < log.complete_to->version)
-	  info.last_complete = log.complete_to->version;
-	log.complete_to++;
+    bool revert = false;
+    if (missing.is_missing(soid) && missing.missing[soid].need > v) {
+      Log::Entry *latest = log.objects[soid];
+      if (latest->op == Log::Entry::LOST_REVERT &&
+	  latest->prior_version == v) {
+	dout(10) << " got old revert version " << v << " for " << *latest << dendl;
+	revert = true;
+	v = latest->version;
       }
-      dout(10) << "last_complete now " << info.last_complete << dendl;
-      if (log.complete_to != log.log.end())
-	dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
     }
+
+    recover_primary_got(soid, v);
 
     // update pg
     write_info(*t);
-
 
     // track ObjectContext
     if (is_primary()) {
@@ -4330,6 +4339,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       
       obc->obs.exists = true;
       obc->obs.oi.decode(oibl);
+
+      if (revert) {
+	// update the attr to the revert event version
+	obc->obs.oi.prior_version = obc->obs.oi.version;
+	obc->obs.oi.version = v;
+	bufferlist bl;
+	::encode(obc->obs.oi, bl);
+	t->setattr(coll, soid, OI_ATTR, bl);
+      }
       
       // suck in snapset context?
       SnapSetContext *ssc = obc->ssc;
@@ -4438,6 +4456,188 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
   pulling.erase(soid);
 
   op->put();
+}
+
+
+
+eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
+{
+  eversion_t v;
+
+  assert(missing.is_missing(oid));
+  v = missing.missing[oid].have;
+  dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
+
+  for (unsigned i=1; i<acting.size(); ++i) {
+    assert(peer_missing[acting[i]].is_missing(oid));
+    eversion_t h = peer_missing[acting[i]].missing[oid].have;
+    dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << acting[i] << dendl;
+    if (h > v)
+      v = h;
+  }
+
+  dout(10) << "pick_newest_available " << oid << " " << v << " (newest)" << dendl;
+  return v;
+}
+
+
+/* Mark an object as lost
+ */
+ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
+							    const hobject_t &oid, eversion_t version,
+							    utime_t mtime, int what)
+{
+  // Wake anyone waiting for this object. Now that it's been marked as lost,
+  // we will just return an error code.
+  map<hobject_t, list<class Message*> >::iterator wmo =
+    waiting_for_missing_object.find(oid);
+  if (wmo != waiting_for_missing_object.end()) {
+    osd->requeue_ops(this, wmo->second);
+  }
+
+  // Add log entry
+  ++info.last_update.version;
+  Log::Entry e(what, oid, info.last_update, version, osd_reqid_t(), mtime);
+  log.add(e);
+  
+  object_locator_t oloc;
+  oloc.pool = info.pgid.pool();
+  oloc.key = oid.get_key();
+  ObjectContext *obc = get_object_context(oid, oloc, true);
+
+  obc->ondisk_write_lock();
+
+  obc->obs.oi.lost = true;
+  obc->obs.oi.version = info.last_update;
+  obc->obs.oi.prior_version = version;
+
+  bufferlist b2;
+  obc->obs.oi.encode(b2);
+  t->setattr(coll, oid, OI_ATTR, b2);
+
+  return obc;
+}
+
+struct C_PG_MarkUnfoundLost : public Context {
+  ReplicatedPG *pg;
+  list<ReplicatedPG::ObjectContext*> obcs;
+  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {
+    pg->get();
+  }
+  void finish(int r) {
+    pg->_finish_mark_all_unfound_lost(obcs);
+  }
+};
+
+/* Mark all unfound objects as lost.
+ */
+void ReplicatedPG::mark_all_unfound_lost(int what)
+{
+  dout(3) << __func__ << " " << Log::Entry::get_op_name(what) << dendl;
+
+  dout(30) << __func__ << ": log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
+
+  utime_t mtime = ceph_clock_now(g_ceph_context);
+  eversion_t old_last_update = info.last_update;
+  info.last_update.epoch = osd->osdmap->get_epoch();
+  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
+  while (m != mend) {
+    const hobject_t &oid(m->first);
+    if (missing_loc.find(oid) != missing_loc.end()) {
+      // We only care about unfound objects
+      ++m;
+      continue;
+    }
+
+    ObjectContext *obc = NULL;
+    eversion_t prev;
+
+    switch (what) {
+    case Log::Entry::LOST_MARK:
+      obc = mark_object_lost(t, oid, m->second.need, mtime, Log::Entry::LOST_MARK);
+      missing.got(m++);
+      assert(0 == "actually, not implemented yet!");
+      // we need to be careful about how this is handled on the replica!
+      break;
+
+    case Log::Entry::LOST_REVERT:
+      prev = pick_newest_available(oid);
+      if (prev > eversion_t()) {
+	// log it
+	++info.last_update.version;
+	Log::Entry e(Log::Entry::LOST_REVERT, oid, info.last_update, prev, osd_reqid_t(), mtime);
+	log.add(e);
+	dout(10) << e << dendl;
+
+	// we are now missing the new version; recovery code will sort it out.
+	m++;
+	missing.revise_need(oid, info.last_update);
+	break;
+      }
+      /** fall-thru **/
+
+    case Log::Entry::LOST_DELETE:
+      {
+	// log it
+      	++info.last_update.version;
+	Log::Entry e(Log::Entry::LOST_DELETE, oid, info.last_update, m->second.need,
+		     osd_reqid_t(), mtime);
+	log.add(e);
+	dout(10) << e << dendl;
+
+	// delete local copy?  NOT YET!  FIXME
+	if (m->second.have != eversion_t()) {
+	  assert(0 == "not implemented.. tho i'm not sure how useful it really would be.");
+	}
+	missing.rm(m++);
+      }
+      break;
+
+    default:
+      assert(0);
+    }
+
+    if (obc)
+      c->obcs.push_back(obc);
+  }
+
+  dout(30) << __func__ << ": log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  if (missing.num_missing() == 0) {
+    // advance last_complete since nothing else is missing!
+    info.last_complete = info.last_update;
+    write_info(*t);
+  }
+
+  osd->store->queue_transaction(&osr, t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
+	      
+  // Send out the PG log to all replicas
+  // So that they know what is lost
+  share_pg_log();
+
+  // queue ourselves so that we push the (now-lost) object_infos to replicas.
+  osd->queue_for_recovery(this);
+}
+
+void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
+{
+  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
+  lock();
+  while (!obcs.empty()) {
+    ObjectContext *obc = obcs.front();
+    put_object_context(obc);
+    obcs.pop_front();
+  }
+  unlock();
+  put();
 }
 
 
@@ -4595,6 +4795,11 @@ int ReplicatedPG::start_recovery_ops(int max)
     // We still have missing objects that we should grab from replicas.
     started += recover_primary(max);
   }
+  if (!started && num_unfound != get_num_unfound()) {
+    // second chance to recovery replicas
+    started = recover_replicas(max);
+  }
+
   dout(10) << " started " << started << dendl;
 
   osd->logger->inc(l_osd_rop, started);
@@ -4655,6 +4860,8 @@ int ReplicatedPG::recover_primary(int max)
     hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
+    eversion_t need = item.need;
+
     bool unfound = (missing_loc.find(soid) == missing_loc.end());
 
     dout(10) << "recover_primary "
@@ -4665,15 +4872,12 @@ int ReplicatedPG::recover_primary(int max)
              << (pulling.count(soid) ? " (pulling)":"")
 	     << (pulling.count(head) ? " (pulling head)":"")
              << dendl;
-    
-    if (!pulling.count(soid)) {
-      if (pulling.count(head)) {
-	++skipped;
-      } else if (unfound) {
-	++skipped;
-      } else {
-	// is this a clone operation that we can do locally?
-	if (latest && latest->op == Log::Entry::CLONE) {
+
+    if (latest) {
+      switch (latest->op) {
+      case Log::Entry::CLONE:
+	{
+	  // is this a clone operation that we can do locally?
 	  if (missing.is_missing(head) &&
 	      missing.have_old(head) == latest->prior_version) {
 	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
@@ -4704,8 +4908,74 @@ int ReplicatedPG::recover_primary(int max)
 	    continue;
 	  }
 	}
-	
-	int r = pull(soid);
+	break;
+
+      case Log::Entry::LOST_REVERT:
+	{
+	  if (item.have == latest->prior_version) {
+	    // I have it locally.  Revert.
+	    object_locator_t oloc;
+	    oloc.pool = info.pgid.pool();
+	    oloc.key = soid.get_key();
+	    ObjectContext *obc = get_object_context(soid, oloc, true);
+	    
+	    if (obc->obs.oi.version == latest->version) {
+	      // I'm already reverting
+	      dout(10) << " already reverting " << soid << dendl;
+	    } else {
+	      dout(10) << " reverting " << soid << " to " << latest->prior_version << dendl;
+	      obc->ondisk_write_lock();
+	      obc->obs.oi.version = latest->version;
+
+	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	      bufferlist b2;
+	      obc->obs.oi.encode(b2);
+	      t->setattr(coll, soid, OI_ATTR, b2);
+
+	      recover_primary_got(soid, latest->version);
+
+	      osd->store->queue_transaction(&osr, t,
+					    new C_OSD_AppliedPushedObject(this, t, obc),
+					    new C_OSD_CommittedPushedObject(this, NULL,
+									    info.history.same_interval_since,
+									    info.last_complete),
+					    new C_OSD_OndiskWriteUnlock(obc));
+	      continue;
+	    }
+	  } else {
+	    /*
+	     * Pull the old version of the object.  Update missing_loc here to have the location
+	     * of the version we want.
+	     *
+	     * This doesn't use the usual missing_loc paths, but that's okay:
+	     *  - if we have it locally, we hit the case above, and go from there.
+	     *  - if we don't, we always pass through this case during recovery and set up the location
+	     *    properly.
+	     *  - this way we don't need to mangle the missing code to be general about needing an old
+	     *    version...
+	     */
+	    need = latest->prior_version;
+	    dout(10) << " need to pull prior_version " << need << " for revert " << item << dendl;
+
+	    set<int>& loc = missing_loc[soid];
+	    for (map<int,Missing>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
+	      if (p->second.missing[soid].have == need)
+		loc.insert(p->first);
+	    dout(10) << " will pull " << need << " from one of " << loc << dendl;
+	    unfound = false;
+	  }
+	}
+	break;
+      }
+    }
+   
+    if (!pulling.count(soid)) {
+      if (pulling.count(head)) {
+	++skipped;
+      } else if (unfound) {
+	++skipped;
+      } else {
+	int r = pull(soid, need);
 	switch (r) {
 	case PULL_YES:
 	  ++started;

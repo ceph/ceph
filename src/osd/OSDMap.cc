@@ -23,8 +23,8 @@
 
 void osd_info_t::dump(Formatter *f) const
 {
-  f->dump_int("last_clean_first", last_clean_first);
-  f->dump_int("last_clean_last", last_clean_last);
+  f->dump_int("last_clean_begin", last_clean_begin);
+  f->dump_int("last_clean_end", last_clean_end);
   f->dump_int("up_from", up_from);
   f->dump_int("up_thru", up_thru);
   f->dump_int("down_at", down_at);
@@ -35,8 +35,8 @@ void osd_info_t::encode(bufferlist& bl) const
 {
   __u8 struct_v = 1;
   ::encode(struct_v, bl);
-  ::encode(last_clean_first, bl);
-  ::encode(last_clean_last, bl);
+  ::encode(last_clean_begin, bl);
+  ::encode(last_clean_end, bl);
   ::encode(up_from, bl);
   ::encode(up_thru, bl);
   ::encode(down_at, bl);
@@ -47,8 +47,8 @@ void osd_info_t::decode(bufferlist::iterator& bl)
 {
   __u8 struct_v;
   ::decode(struct_v, bl);
-  ::decode(last_clean_first, bl);
-  ::decode(last_clean_last, bl);
+  ::decode(last_clean_begin, bl);
+  ::decode(last_clean_end, bl);
   ::decode(up_from, bl);
   ::decode(up_thru, bl);
   ::decode(down_at, bl);
@@ -60,7 +60,7 @@ ostream& operator<<(ostream& out, const osd_info_t& info)
   out << "up_from " << info.up_from
       << " up_thru " << info.up_thru
       << " down_at " << info.down_at
-      << " last_clean_interval " << info.last_clean_first << "-" << info.last_clean_last;
+      << " last_clean_interval [" << info.last_clean_begin << "," << info.last_clean_end << ")";
   if (info.lost_at)
     out << " lost_at " << info.lost_at;
   return out;
@@ -397,8 +397,8 @@ int OSDMap::apply_incremental(Incremental &inc)
   for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
        i != inc.new_last_clean_interval.end();
        i++) {
-    osd_info[i->first].last_clean_first = i->second.first;
-    osd_info[i->first].last_clean_last = i->second.second;
+    osd_info[i->first].last_clean_begin = i->second.first;
+    osd_info[i->first].last_clean_end = i->second.second;
   }
   for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
     osd_info[p->first].lost_at = p->second;

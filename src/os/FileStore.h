@@ -106,6 +106,7 @@ class FileStore : public JournalingObjectStore,
 
   // -- op workqueue --
   struct Op {
+    utime_t start;
     uint64_t op;
     list<Transaction*> tls;
     Context *onreadable, *onreadable_sync;
@@ -243,9 +244,6 @@ class FileStore : public JournalingObjectStore,
   PerfCounters *logger;
 
 public:
-  void start_logger(int whoami, utime_t tare);
-  void stop_logger();
-
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
   int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
   int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
@@ -260,6 +258,7 @@ public:
 
  public:
   FileStore(const std::string &base, const std::string &jdev);
+  ~FileStore();
 
   int _detect_fs();
   int _sanity_check_fs();

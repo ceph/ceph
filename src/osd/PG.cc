@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #include "PG.h"
 #include "common/config.h"
 #include "OSD.h"
@@ -56,7 +54,12 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    if (i->version <= v || i->version <= other.tail) {
+    // stop if we reach the tail; do not copy backlog entries and keep
+    // tail == other.tail.
+    if (i->version <= other.tail)
+      break;
+    if (i->version <= v) {
+      // make tail accurate.
       tail = i->version;
       break;
     }
@@ -431,7 +434,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
       dout(20) << "merge_log merging " << ne << dendl;
-      missing.add_next_event(ne, oinfo);
+      missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(coll, ne.soid);
     }
@@ -522,7 +525,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	Log::Entry &ne = *p;
         dout(20) << "merge_log " << ne << dendl;
 	log.index(ne);
-	missing.add_next_event(ne, info);
+	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  t.remove(coll, ne.soid);
       }
@@ -790,14 +793,21 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
 	  le->prior_version > log.tail) {      // prior_version also already in log
-	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
-      } else {
-	be.version = le->prior_version;
-	be.reqid = osd_reqid_t();
-	dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
-	omap[be.version] = be;
-	// don't try to index: this is the prior_version backlog entry
+	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
+	omap.erase(i++);
+	continue;
       }
+
+      be.reqid = osd_reqid_t();
+      if (be.version == le->prior_version) {
+	dout(15) << "   keeping prior_version " << be << " (have " << *le << ")" << dendl;
+	i++;
+	continue;
+      }
+
+      be.version = le->prior_version;
+      dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
+      omap[be.version] = be;
       omap.erase(i++);
     } else {
       i++;
@@ -813,6 +823,10 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
       log.index( *log.log.begin() );
   }
+
+  dout(25) << "result:\n";
+  log.print(*_dout);
+  *_dout << dendl;
 }
 
 
@@ -950,9 +964,8 @@ void PG::generate_past_intervals()
     i.acting.swap(tacting);
     if (i.acting.size()) {
       i.maybe_went_rw = 
-	(lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
-	 lastmap->get_up_from(i.acting[0]) <= first_epoch) ||
-	(first_epoch == info.history.epoch_created);
+	lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
+	lastmap->get_up_from(i.acting[0]) <= first_epoch;
       dout(10) << "generate_past_intervals " << i
 	       << " : primary up " << lastmap->get_up_from(i.acting[0])
 	       << "-" << lastmap->get_up_thru(i.acting[0])
@@ -982,69 +995,6 @@ void PG::trim_past_intervals()
 }
 
 
-
-// true if the given map affects the prior set
-bool PG::prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const
-{
-  for (set<int>::iterator p = prior.cur.begin();
-       p != prior.cur.end();
-       ++p)
-  {
-    int o = *p;
-
-    // did someone in the prior set go down?
-    if (osdmap->is_down(o) && prior.down.count(o) == 0) {
-      dout(10) << "prior_set_affected: osd." << o << " now down" << dendl;
-      return true;
-    }
-
-    // If someone in the prior set is marked as lost, it would also have to be
-    // marked as down. So don't check for newly lost osds here.
-  }
-
-  // did someone in the prior down set go up?
-  for (set<int>::iterator p = prior.down.begin();
-       p != prior.down.end();
-       ++p)
-  {
-    int o = *p;
-
-    if (osdmap->is_up(o)) {
-      dout(10) << "prior_set_affected: osd." << *p << " now up" << dendl;
-      return true;
-    }
-
-    // did someone in the prior set get lost or destroyed?
-    if (!osdmap->exists(o)) {
-      dout(10) << "prior_set_affected: osd." << o << " no longer exists" << dendl;
-      return true;
-    }
-      
-    const osd_info_t& pinfo(osdmap->get_info(o));
-    if (pinfo.lost_at > pinfo.up_from) {
-      set<int>::const_iterator pl = prior.lost.find(o);
-      if (pl == prior.lost.end()) {
-	dout(10) << "prior_set_affected: osd." << o << " now lost" << dendl;
-	return true;
-      }
-    }
-  }
-
-  // did a significant osd's up_thru change?
-  for (map<int,epoch_t>::const_iterator p = prior.up_thru.begin();
-       p != prior.up_thru.end();
-       ++p)
-    if (p->second != osdmap->get_up_thru(p->first)) {
-      dout(10) << "prior_set_affected: primary osd." << p->first
-	       << " up_thru " << p->second
-	       << " -> " << osdmap->get_up_thru(p->first) 
-	       << dendl;
-      return true;
-    }
-
-  return false;
-}
-
 bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 {
   epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
@@ -1060,13 +1010,15 @@ bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
-bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+bool PG::all_unfound_are_queried_or_lost(const OSDMap* osdmap) const
 {
   assert(is_primary());
 
   set<int>::const_iterator peer = might_have_unfound.begin();
   set<int>::const_iterator mend = might_have_unfound.end();
   for (; peer != mend; ++peer) {
+    if (peer_missing.count(*peer))
+      continue;
     const osd_info_t &osd_info(osdmap->get_info(*peer));
     if (osd_info.lost_at <= osd_info.up_from) {
       // If there is even one OSD in might_have_unfound that isn't lost, we
@@ -1074,103 +1026,12 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
       return false;
     }
   }
-  dout(10) << "all_unfound_are_lost all of might_have_unfound " << might_have_unfound 
-	   << " are marked lost!" << dendl;
+  dout(10) << "all_unfound_are_queried_or_lost all of might_have_unfound " << might_have_unfound 
+	   << " have been queried or are marked lost" << dendl;
   return true;
 }
 
-/* Mark an object as lost
- */
-void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
-			  const hobject_t &lost_soid)
-{
-  // Wake anyone waiting for this object. Now that it's been marked as lost,
-  // we will just return an error code.
-  map<hobject_t, list<class Message*> >::iterator wmo =
-    waiting_for_missing_object.find(lost_soid);
-  if (wmo != waiting_for_missing_object.end()) {
-    osd->requeue_ops(this, wmo->second);
-  }
-
-  // Tell the object store that this object is lost.
-  bufferlist b1;
-  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
-
-  object_locator_t oloc;
-  oloc.clear();
-  oloc.pool = info.pgid.pool();
-  object_info_t oi(lost_soid, oloc);
-
-  if (r >= 0) {
-    // Some version of this lost object exists in our filestore.
-    // So, we can fetch its attributes and preserve most of them.
-    oi = object_info_t(b1);
-  }
-  else {
-    // The object doesn't exist in the filestore yet. Make sure that
-    // we create it there.
-    t.touch(coll, lost_soid);
-  }
-
-  oi.lost = true;
-  oi.version = info.last_update;
-  bufferlist b2;
-  oi.encode(b2);
-  t.setattr(coll, lost_soid, OI_ATTR, b2);
-}
-
-/* Mark all unfound objects as lost.
- */
-void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
-{
-  dout(3) << __func__ << dendl;
-
-  dout(30) << __func__  << ": log before:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  utime_t mtime = ceph_clock_now(g_ceph_context);
-  eversion_t old_last_update = info.last_update;
-  info.last_update.epoch = osd->osdmap->get_epoch();
-  map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
-  map<hobject_t, Missing::item>::iterator mend = missing.missing.end();
-  while (m != mend) {
-    const hobject_t &soid(m->first);
-    if (missing_loc.find(soid) != missing_loc.end()) {
-      // We only care about unfound objects
-      ++m;
-      continue;
-    }
-
-    // Add log entry
-    info.last_update.version++;
-    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
-		 m->second.need, osd_reqid_t(), mtime);
-    log.add(e);
-
-    // Object store stuff
-    mark_obj_as_lost(t, soid);
-
-    // Remove from missing set
-    missing.got(m++);
-  }
-
-  dout(30) << __func__ << ": log after:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  if (missing.num_missing() == 0) {
-    // advance last_complete since nothing else is missing!
-    info.last_complete = info.last_update;
-    write_info(t);
-  }
-
-  // Send out the PG log to all replicas
-  // So that they know what is lost
-  share_pg_log(old_last_update);
-}
-
-void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
+void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
 {
   if (1) {
     // sanity check
@@ -1180,38 +1041,19 @@ void PG::build_prior(std::auto_ptr<PgPriorSet> &prior_set)
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
     }
   }
-  prior_set.reset(new PgPriorSet(osd->whoami,
-				 *osd->osdmap,
+  prior_set.reset(new PriorSet(*osd->osdmap,
 				 past_intervals,
 				 up,
 				 acting,
 				 info,
 				 this));
-  PgPriorSet &prior(*prior_set.get());
+  PriorSet &prior(*prior_set.get());
 				 
-  // take note that we care about the primary's up_thru.  if it
-  // changes later, it will affect our prior_set, and we'll want
-  // to rebuild it!
-  if (prior.crashed) {
-    state_set(PG_STATE_CRASHED);
-  }
   if (prior.pg_down) {
     state_set(PG_STATE_DOWN);
   }
 
-  if (prior.some_down) {
-    for (vector<Interval>::iterator i = prior.inter_up_thru.begin();
-	 i != prior.inter_up_thru.end();
-	 ++i) {
-      OSDMap *lastmap = osd->get_map(i->last);
-      prior.up_thru[i->acting[0]] = lastmap->get_up_thru(i->acting[0]);
-    }
-  }
-  
-  // NOTE: we can skip the up_thru check if this is a new PG and there
-  // were no prior intervals.
-  if (info.history.epoch_created < info.history.same_interval_since &&
-      osd->osdmap->get_up_thru(osd->whoami) < info.history.same_interval_since) {
+  if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_interval_since) {
     dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	     << " < same_since " << info.history.same_interval_since
 	     << ", must notify monitor" << dendl;
@@ -1314,7 +1156,7 @@ bool PG::choose_acting(int newest_update_osd) const
   return true;
 }
 
-bool PG::choose_log_location(const PgPriorSet &prior_set,
+bool PG::choose_log_location(const PriorSet &prior_set,
 			     bool &need_backlog,
 			     bool &wait_on_backlog,
 			     int &pull_from,
@@ -1331,7 +1173,7 @@ bool PG::choose_log_location(const PgPriorSet &prior_set,
   for (map<int, Info>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
-    if (prior_set.cur.find(i->first) == prior_set.cur.end()) {
+    if (prior_set.probe.find(i->first) == prior_set.probe.end()) {
       dout(10) << "osd." << i->first << " not in current prior set, skipping" << dendl;
       continue;
     }
@@ -1487,8 +1329,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
+
   // -- crash recovery?
-  if (is_crashed()) {
+  if (may_need_replay(osd->osdmap)) {
     if (g_conf->osd_replay_window > 0) {
       replay_until = ceph_clock_now(g_ceph_context);
       replay_until += g_conf->osd_replay_window;
@@ -1500,6 +1343,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       osd->replay_queue_lock.Unlock();
     } else {
       dout(10) << "crashed, but osd_replay_window=0.  skipping replay." << dendl;
+      state_clear(PG_STATE_REPLAY);
     }
   }
 
@@ -1508,7 +1352,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_PEERING);
-  state_clear(PG_STATE_CRASHED);
   if (is_primary() && 
       osd->osdmap->get_pg_size(info.pgid) != acting.size())
     state_set(PG_STATE_DEGRADED);
@@ -1650,7 +1493,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
              p != m->log.log.end();
              p++) 
           if (p->version > plu)
-            pm.add_next_event(*p, pi);
+            pm.add_next_event(*p);
       }
       
       if (m) {
@@ -1694,7 +1537,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
 void PG::replay_queued_ops()
 {
-  assert(is_replay() && is_active() && !is_crashed());
+  assert(is_replay() && is_active());
   eversion_t c = info.last_update;
   list<Message*> replay;
   dout(10) << "replay_queued_ops" << dendl;
@@ -1716,7 +1559,7 @@ void PG::replay_queued_ops()
   replay_queue.clear();
   osd->requeue_ops(this, replay);
   osd->requeue_ops(this, waiting_for_active);
-  state_clear(PG_STATE_REPLAY);
+
   update_stats();
 }
 
@@ -1810,6 +1653,8 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 
   clear_recovery_state();
 
+  trim_past_intervals();
+  
   write_info(t);
 
   /*
@@ -2948,15 +2793,11 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
  * If msg->scrub_from is not set, replica_scrub calls build_scrubmap to
  * build a complete map (with the pg lock dropped).
  *
- * If msg->scrub_from is set, replica_scrub sets finalizing_scrub.
- * Similarly to scrub, if last_update_applied is behind info.last_update
- * replica_scrub returns to be requeued by sub_op_modify_applied.
- * replica_scrub then builds an incremental scrub map with the 
- * pg lock held.
+ * If msg->scrub_from is set, we build an incremental scrub map with
+ * the pg lock held.
  */
 void PG::replica_scrub(MOSDRepScrub *msg)
 {
-  assert(!active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
   if (msg->map_epoch < info.history.same_interval_since) {
@@ -2974,17 +2815,10 @@ void PG::replica_scrub(MOSDRepScrub *msg)
 
   ScrubMap map;
   if (msg->scrub_from > eversion_t()) {
-    if (finalizing_scrub) {
-      assert(last_update_applied == info.last_update);
-    } else {
-      finalizing_scrub = 1;
-      if (last_update_applied != info.last_update) {
-	active_rep_scrub = msg;
-	return;
-      }
-    }
+    // flush out in-flight writes to disk, so we can scrub the
+    // resulting on-disk state.
+    osr.flush();
     build_inc_scrub_map(map, msg->scrub_from);
-    finalizing_scrub = 0;
   } else {
     build_scrub_map(map);
   }
@@ -3414,17 +3248,13 @@ void PG::share_pg_info()
 }
 
 /*
- * Share some of this PG's log with some replicas.
- *
- * The log will be shared from the current version (last_update) back to
- * 'oldver.'
+ * Share a new segment of this PG's log with some replicas, after PG is active.
  *
  * Updates peer_missing and peer_info.
  */
-void PG::share_pg_log(const eversion_t &oldver)
+void PG::share_pg_log()
 {
   dout(10) << __func__ << dendl;
-
   assert(is_primary());
 
   vector<int>::const_iterator a = acting.begin();
@@ -3432,42 +3262,20 @@ void PG::share_pg_log(const eversion_t &oldver)
   vector<int>::const_iterator end = acting.end();
   while (++a != end) {
     int peer(*a);
-    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
-    m->log.head = log.head;
-    m->log.tail = log.tail;
-    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
-	 i != log.log.rend();
-	 ++i) {
-      if (i->version <= oldver) {
-	m->log.tail = i->version;
-	break;
-      }
-      const Log::Entry &entry(*i);
-      switch (entry.op) {
-	case Log::Entry::LOST: {
-	  PG::Missing& pmissing(peer_missing[peer]);
-	  pmissing.add(entry.soid, entry.version, eversion_t());
-	  break;
-        }
-	default: {
-	  // To do this right, you need to figure out what impact this log
-	  // entry has on the peer missing and the peer info
-	  assert(0);
-	  break;
-        }
-      }
-
-      m->log.log.push_front(*i);
-    }
+    PG::Missing& pmissing(peer_missing[peer]);
     PG::Info& pinfo(peer_info[peer]);
-    pinfo.last_update = log.head;
-    // shouldn't move pinfo.log.tail
-    pinfo.last_update = log.head;
-    // no change in pinfo.last_complete
 
-    m->missing = missing;
-    osd->cluster_messenger->send_message(m, osd->osdmap->
-					 get_cluster_inst(peer));
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.epoch, info);
+    m->log.copy_after(log, pinfo.last_update);
+
+    for (list<Log::Entry>::const_iterator i = m->log.log.begin();
+	 i != m->log.log.end();
+	 ++i) {
+      pmissing.add_next_event(*i);
+    }
+    pinfo.last_update = m->log.head;
+
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
   }
 }
 
@@ -3525,6 +3333,85 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
 					 osd->osdmap->get_cluster_inst(from));
   }
 }
+
+
+// true if all OSDs in prior intervals may have crashed, and we need to replay
+// false positives are okay, false negatives are not.
+bool PG::may_need_replay(const OSDMap *osdmap) const
+{
+  bool crashed = false;
+
+  for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+       p != past_intervals.rend();
+       p++) {
+    const Interval &interval = p->second;
+    dout(10) << "may_need_replay " << interval << dendl;
+
+    if (interval.last < info.history.last_epoch_started)
+      break;  // we don't care
+
+    if (interval.acting.empty())
+      continue;
+
+    if (!interval.maybe_went_rw)
+      continue;
+
+    // look at whether any of the osds during this interval survived
+    // past the end of the interval (i.e., didn't crash and
+    // potentially fail to COMMIT a write that it ACKed).
+    bool any_survived_interval = false;
+
+    // consider ACTING osds
+    for (unsigned i=0; i<interval.acting.size(); i++) {
+      int o = interval.acting[i];
+
+      const osd_info_t *pinfo = 0;
+      if (osdmap->exists(o))
+	pinfo = &osdmap->get_info(o);
+
+      // does this osd appear to have survived through the end of the
+      // interval?
+      if (pinfo) {
+	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
+	  dout(10) << "may_need_replay  osd." << o
+		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
+		   << " survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from <= interval.first &&
+		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
+		  std::find(up.begin(), up.end(), o) != up.end())) {
+	  dout(10) << "may_need_replay  osd." << o
+		   << " up_from " << pinfo->up_from << " and is in acting|up,"
+		   << " assumed to have survived the interval" << dendl;
+	  // (if it hasn't, we will rebuild PriorSet)
+	  any_survived_interval = true;
+	}
+	else if (pinfo->up_from > interval.last &&
+		 pinfo->last_clean_begin <= interval.first &&
+		 pinfo->last_clean_end > interval.last) {
+	  dout(10) << "may_need_replay  prior osd." << o
+		   << " up_from " << pinfo->up_from
+		   << " and last clean interval ["
+		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
+		   << ") survived the interval" << dendl;
+	  any_survived_interval = true;
+	}
+      }
+    }
+
+    if (!any_survived_interval) {
+      dout(3) << "may_need_replay  no known survivors of interval "
+	      << interval.first << "-" << interval.last
+	      << ", may need replay" << dendl;
+      crashed = true;
+      break;
+    }
+  }
+
+  return crashed;
+}
+
 
 bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
 {
@@ -3602,10 +3489,9 @@ void PG::start_peering_interval(const OSDMap *lastmap,
     }
 
     if (i.acting.size()) {
-      i.maybe_went_rw = 
-	(lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	 lastmap->get_up_from(i.acting[0]) <= i.first) ||
-	i.first == info.history.epoch_created;
+      i.maybe_went_rw =
+	lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	lastmap->get_up_from(i.acting[0]) <= i.first;
     } else {
       i.maybe_went_rw = 0;
     }
@@ -3628,7 +3514,6 @@ void PG::start_peering_interval(const OSDMap *lastmap,
   state_clear(PG_STATE_PEERING);  // we'll need to restart peering
   state_clear(PG_STATE_DEGRADED);
   state_clear(PG_STATE_REPLAY);
-  state_clear(PG_STATE_CRASHED);
 
   osd->cancel_generate_backlog(this);
 
@@ -3794,7 +3679,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
  * this needs to be called in log order as we extend the log.  it
  * assumes missing is accurate up through the previous log entry.
  */
-void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
+void PG::Missing::add_next_event(const Log::Entry& e)
 {
   if (e.is_update()) {
     if (e.prior_version == eversion_t()) {
@@ -3808,9 +3693,7 @@ void PG::Missing::add_next_event(Log::Entry& e, const Info &info)
       //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase(missing[e.soid].need.version);
       missing[e.soid].need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog() ||
-	       e.prior_version <= info.log_tail ||
-	       e.prior_version > info.last_update) {
+    } else if (e.is_backlog()) {
       // May not have prior version
       missing[e.soid].need = e.version;
     } else {
@@ -3841,18 +3724,23 @@ void PG::Missing::add(const hobject_t& oid, eversion_t need, eversion_t have)
 
 void PG::Missing::rm(const hobject_t& oid, eversion_t v)
 {
-  if (missing.count(oid) && missing[oid].need <= v) {
-    rmissing.erase(missing[oid].need.version);
-    missing.erase(oid);
-  }
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  if (p != missing.end() && p->second.need <= v)
+    rm(p);
+}
+
+void PG::Missing::rm(const std::map<hobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need.version);
+  missing.erase(m);
 }
 
 void PG::Missing::got(const hobject_t& oid, eversion_t v)
 {
-  assert(missing.count(oid));
-  assert(missing[oid].need <= v);
-  rmissing.erase(missing[oid].need.version);
-  missing.erase(oid);
+  std::map<hobject_t, Missing::item>::iterator p = missing.find(oid);
+  assert(p != missing.end());
+  assert(p->second.need <= v);
+  got(p);
 }
 
 void PG::Missing::got(const std::map<hobject_t, Missing::item>::iterator &m)
@@ -3928,11 +3816,11 @@ ostream& operator<<(ostream& out, const PG& pg)
 }
 
 std::ostream& operator<<(std::ostream& oss,
-			 const struct PG::PgPriorSet &prior)
+			 const struct PG::PriorSet &prior)
 {
-  oss << "[[ cur=" << prior.cur << ", "
-      << "down=" << prior.down << ", "
-      << "lost=" << prior.lost << " ]]";
+  oss << "PriorSet[probe=" << prior.probe << " "
+      << "down=" << prior.down << " "
+      << "blocked_by=" << prior.blocked_by << "]";
   return oss;
 }
 
@@ -4133,8 +4021,8 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Peering advmap" << dendl;
-  if (pg->prior_set_affected(*prior_set.get(), advmap.osdmap)) {
-    dout(1) << "Peering, priors_set_affected, going to Reset" << dendl;
+  if (prior_set.get()->affected_by_map(advmap.osdmap, pg)) {
+    dout(1) << "Peering, affected_by_map, going to Reset" << dendl;
     pg->state_clear(PG_STATE_PEERING);
     post_event(advmap);
     return transit< Reset >();
@@ -4191,11 +4079,11 @@ PG::RecoveryState::Active::react(const ActMap&) {
 
   int unfound = pg->missing.num_missing() - pg->missing_loc.size();
   if (unfound > 0 &&
-      pg->all_unfound_are_lost(pg->osd->osdmap)) {
+      pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
     if (g_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, automatically marking lost\n";
-      pg->mark_all_unfound_as_lost(*context< RecoveryMachine >().get_cur_transaction());
+			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
+      //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
       pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
@@ -4302,6 +4190,20 @@ PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
+boost::statechart::result 
+PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
+  PG *pg = context< RecoveryMachine >().pg;
+  MOSDPGLog *msg = logevt.msg;
+  dout(10) << "received log from " << logevt.from << dendl;
+  pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
+		msg->info, msg->log, logevt.from);
+
+  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+  assert(pg->log.head == pg->info.last_update);
+
+  return discard_event();
+}
+
 boost::statechart::result
 PG::RecoveryState::ReplicaActive::react(const ActMap&) {
   PG *pg = context< RecoveryMachine >().pg;
@@ -4347,7 +4249,6 @@ PG::RecoveryState::Stray::react(const MLogRec& logevt) {
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
-  pg->write_info(*context<RecoveryMachine>().get_cur_transaction());
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
@@ -4357,11 +4258,9 @@ boost::statechart::result
 PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "received info from " << infoevt.from << dendl;
-
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
-  pg->write_info(*context<RecoveryMachine>().get_cur_transaction());
   dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
@@ -4433,7 +4332,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   pg->generate_past_intervals();
-  auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
   if (!prior_set.get())
     pg->build_prior(prior_set);
@@ -4447,10 +4346,10 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx)
 void PG::RecoveryState::GetInfo::get_infos()
 {
   PG *pg = context< RecoveryMachine >().pg;
-  auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
-  for (set<int>::const_iterator it = prior_set->cur.begin();
-       it != prior_set->cur.end();
+  for (set<int>::const_iterator it = prior_set->probe.begin();
+       it != prior_set->probe.end();
        ++it) {
     int peer = *it;
     if (peer == pg->osd->whoami) {
@@ -4471,7 +4370,7 @@ void PG::RecoveryState::GetInfo::get_infos()
     }
   }
   
-  if (peer_info_requested.empty() && !prior_set->some_down) {
+  if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
   }
 }
@@ -4486,14 +4385,14 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   epoch_t old_start = pg->info.history.last_epoch_started;
   if (pg->proc_replica_info(infoevt.from, infoevt.info)) {
     // we got something new ...
-    auto_ptr<PgPriorSet> &prior_set = context< Peering >().prior_set;
+    auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
     if (old_start < pg->info.history.last_epoch_started) {
       dout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
       pg->build_prior(prior_set);
       get_infos();
     } else {
       // are we done getting everything?
-      if (peer_info_requested.empty() && !prior_set->some_down)
+      if (peer_info_requested.empty() && !prior_set->pg_down)
 	post_event(GotInfo());
     }
   }
@@ -4848,16 +4747,15 @@ void PG::RecoveryState::handle_create(RecoveryCtx *rctx)
 
 /*---------------------------------------------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << pg->gen_prefix() << "PgPriorSet: ")
+#define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
-PG::PgPriorSet::PgPriorSet(int whoami,
-			   const OSDMap &osdmap,
-			   const map<epoch_t, Interval> &past_intervals,
-			   const vector<int> &up,
-			   const vector<int> &acting,
-			   const PG::Info &info,
-			   const PG* pg)
-  : crashed(false), pg_down(false), some_down(false), pg(pg)
+PG::PriorSet::PriorSet(const OSDMap &osdmap,
+		       const map<epoch_t, Interval> &past_intervals,
+		       const vector<int> &up,
+		       const vector<int> &acting,
+		       const PG::Info &info,
+		       const PG *debug_pg)
+  : pg_down(false)
 {
   /*
    * We have to be careful to gracefully deal with situations like
@@ -4879,7 +4777,7 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    * Then, we have something like
    *
    *  1: A B
-   *  2:   B   alive_thru[B]=0
+   *  2:   B   up_thru[B]=0
    *  3:
    *  4: A
    *
@@ -4889,46 +4787,29 @@ PG::PgPriorSet::PgPriorSet(int whoami,
    * or,
    *
    *  1: A B
-   *  2:   B   alive_thru[B]=0
-   *  3:   B   alive_thru[B]=2
+   *  2:   B   up_thru[B]=0
+   *  3:   B   up_thru[B]=2
    *  4:
    *  5: A    
    *
    * -> we must wait for B, bc it was alive through 2, and could have
-        written to the pg.
+   *    written to the pg.
    *
    * If B is really dead, then an administrator will need to manually
    * intervene by marking the OSD as "lost."
    */
-  // current up and/or acting nodes, of course.
-  for (unsigned i=0; i<up.size(); i++)
-    cur.insert(up[i]);
-  for (unsigned i=0; i<acting.size(); i++)
-    cur.insert(acting[i]);
 
-  // see if i have ever started since joining the pg.  this is important only
-  // if we want to exclude lost osds.
-  // FIXME: this check is broken.  it is probably better than nothing (which would allow
-  // us to go active with an empty PG), but it needs a closer look!
-  set<int> started_since_joining;
-  for (vector<int>::const_iterator q = acting.begin(); q != acting.end(); q++) {
-    int o = *q;
-    
-    for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
-	 p != past_intervals.rend();
-	 p++) {
-      const Interval &interval = p->second;
-      if (interval.last < info.history.last_epoch_started)
-	break;  // we don't care
-      if (!interval.maybe_went_rw)
-	continue;
-      if (std::find(interval.acting.begin(), interval.acting.end(), o) != interval.acting.end())
-	started_since_joining.insert(o);
-      break;
-    }
-  }
-  dout(10) << "build_prior osds <" << started_since_joining
-	   << "> have started since joining this pg" << dendl;
+  // Include current acting and up nodes... not because they may
+  // contain old data (this interval hasn't gone active, obviously),
+  // but because we want their pg_info to inform choose_acting(), and
+  // so that we know what they do/do not have explicitly before
+  // sending them any new info/logs/whatever.
+  for (unsigned i=0; i<acting.size(); i++)
+    probe.insert(acting[i]);
+  // It may be possible to exlude the up nodes, but let's keep them in
+  // there for now.
+  for (unsigned i=0; i<up.size(); i++)
+    probe.insert(up[i]);
 
   for (map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
@@ -4942,15 +4823,15 @@ PG::PgPriorSet::PgPriorSet(int whoami,
     if (interval.acting.empty())
       continue;
 
-    int need_down = 0;
-    bool any_survived = false;
+    if (!interval.maybe_went_rw)
+      continue;
 
-    // consider UP osds
-    for (unsigned i=0; i<interval.up.size(); i++) {
-      int o = interval.up[i];
-      if (osdmap.is_up(o)) // is up now
-	cur.insert(o);
-    }
+    // look at candidate osds during this interval.  each falls into
+    // one of three categories: up, down (but potentially
+    // interesting), or lost (down, but we won't wait for it).
+    bool any_up_now = false;    // any candidates up now
+    bool any_down_now = false;  // any candidates down now (that might have useful data)
+    bool any_lost_now = false;  // any candidates lost now (that we will ignore)
 
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
@@ -4960,95 +4841,99 @@ PG::PgPriorSet::PgPriorSet(int whoami,
       if (osdmap.exists(o))
 	pinfo = &osdmap.get_info(o);
 
-      // if the osd restarted after this interval but is not known to have
-      // cleanly survived through this interval, we mark the pg crashed.
-      if (pinfo && (pinfo->up_from > interval.last &&
-		    !(pinfo->last_clean_first <= interval.first &&
-		      pinfo->last_clean_last >= interval.last))) {
-	dout(10) << "build_prior  prior osd." << o
-	    << " up_from " << pinfo->up_from
-	    << " and last clean interval " << pinfo->last_clean_first << "-" << pinfo->last_clean_last
-	    << " does not include us" << dendl;
-	crashed = true;
-      }
-
-      if (osdmap.is_up(o)) {  // is up now
-	// include past acting osds if they are up
-	cur.insert(o);
-
-	// did any osds survive _this_ interval?
-	any_survived = true;
-      } else if (!pinfo || pinfo->lost_at > interval.first) {
+      if (osdmap.is_up(o)) {
+	// include past acting osds if they are up.
+	probe.insert(o);
+	any_up_now = true;
+      } else if (!pinfo) {
+	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
-	if (started_since_joining.size()) {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd." << o
-		<< " is down, but marked lost at " << pinfo->lost_at
-		<< ", and " << started_since_joining << " have started since joining pg"
-		<< dendl;
-	  else
-	    dout(10) << "build_prior  prior osd." << o
-		<< " no longer exists, and " << started_since_joining << " have started since joining pg"
-		<< dendl;
-
-	} else {
-	  if (pinfo)
-	    dout(10) << "build_prior  prior osd." << o
-		<< " is down, but marked lost at " << pinfo->lost_at
-		<< ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		<< dendl;
-	  else
-	    dout(10) << "build_prior  prior osd." << o
-		     << " no longer exists, and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		     << dendl;
-	  need_down++;
-	}
+	any_lost_now = true;
+      } else if (pinfo->lost_at > interval.first) {
+	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
+	down.insert(o);
+	any_lost_now = true;
       } else {
-	dout(10) << "build_prior  prior osd." << o
-	    << " is down" << dendl;
-	need_down++;
+	dout(10) << "build_prior  prior osd." << o << " is down" << dendl;
 	down.insert(o);
+	any_down_now = true;
       }
     }
 
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_survived && need_down && interval.maybe_went_rw) {
+    if (!any_up_now && any_down_now) {
       // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  " << need_down
-	  << " osds possibly went active+rw, no survivors, including" << dendl;
-      for (unsigned i=0; i<interval.acting.size(); i++)
-	if (osdmap.is_down(interval.acting[i])) {
-	  cur.insert(interval.acting[i]);
+      dout(10) << "build_prior  possibly went active+rw, none up; including down osds" << dendl;
+      for (vector<int>::const_iterator i = interval.acting.begin();
+	   i != interval.acting.end();
+	   ++i) {
+	if (osdmap.exists(*i) &&   // if it doesn't exist, we already consider it lost.
+	    osdmap.is_down(*i)) {
+	  probe.insert(*i);
 	  pg_down = true;
+
+	  // make note of when any down osd in the cur set was lost, so that
+	  // we can notice changes in prior_set_affected.
+	  blocked_by[*i] = osdmap.get_info(*i).lost_at;
 	}
-      some_down = true;
-      inter_up_thru.push_back(interval);
-    }
-
-    if (crashed) {
-      dout(10) << "build_prior  one of " << interval.acting
-	  << " possibly crashed, marking pg crashed" << dendl;
+      }
     }
   }
 
-  // Build prior_set.lost
-  for (set<int>::const_iterator i = cur.begin();
-       i != cur.end(); ++i) {
-    int o = *i;
-    const osd_info_t& pinfo(osdmap.get_info(o));
-    if (pinfo.lost_at > pinfo.up_from) {
-      lost.insert(o);
-    }
-  }
-
-  dout(10) << "build_prior final: cur " << cur << " down " << down << " lost " << lost
-	   << " up_thru " << up_thru
-	   << " inter_up_thru " << inter_up_thru
-	   << (crashed ? " crashed":"")
+  dout(10) << "build_prior final: probe " << probe
+	   << " down " << down
+	   << " blocked_by " << blocked_by
 	   << (pg_down ? " pg_down":"")
-	   << (some_down ? " some_down":"")
 	   << dendl;
 }
 
+// true if the given map affects the prior set
+bool PG::PriorSet::affected_by_map(const OSDMap *osdmap, const PG *debug_pg) const
+{
+  for (set<int>::iterator p = probe.begin();
+       p != probe.end();
+       ++p) {
+    int o = *p;
+
+    // did someone in the prior set go down?
+    if (osdmap->is_down(o) && down.count(o) == 0) {
+      dout(10) << "affected_by_map osd." << o << " now down" << dendl;
+      return true;
+    }
+
+    // did a down osd in cur get (re)marked as lost?
+    map<int,epoch_t>::const_iterator p = blocked_by.find(o);
+    if (p != blocked_by.end()) {
+      if (!osdmap->exists(o)) {
+	dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
+	return true;
+      }
+      if (osdmap->get_info(o).lost_at != p->second) {
+	dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
+	return true;
+      }
+    }
+  }
+
+  // did someone in the prior down set go up?
+  for (set<int>::const_iterator p = down.begin();
+       p != down.end();
+       ++p) {
+    int o = *p;
+
+    if (osdmap->is_up(o)) {
+      dout(10) << "affected_by_map osd." << *p << " now up" << dendl;
+      return true;
+    }
+
+    // did someone in the prior set get lost or destroyed?
+    if (!osdmap->exists(o)) {
+      dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
+      return true;
+    }
+  }
+
+  return false;
+}

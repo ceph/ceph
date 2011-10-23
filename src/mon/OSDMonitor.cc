@@ -172,7 +172,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   }
 
   // Avoid putting a small number (or 0) in the denominator when calculating
-  // average_full
+  // average_util
   const PGMap &pgm = mon->pgmon()->pg_map;
   if (pgm.osd_sum.kb < 1024) {
     ostringstream oss;
@@ -192,32 +192,34 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
     return -EDOM;
   }
 
-  // Assign a lower weight to overloaded OSDs
-  float average_full = pgm.osd_sum.kb_used;
-  average_full /= pgm.osd_sum.kb;
-  float overload_full = average_full;
-  overload_full *= oload;
-  overload_full /= 100.0;
+  float average_util = pgm.osd_sum.kb_used;
+  average_util /= pgm.osd_sum.kb;
+  float overload_util = average_util * oload / 100.0;
 
   ostringstream oss;
   char buf[128];
-  snprintf(buf, sizeof(buf), "average_full: %04f, overload_full: %04f. ",
-	   average_full, overload_full);
+  snprintf(buf, sizeof(buf), "average_util: %04f, overload_util: %04f. ",
+	   average_util, overload_util);
   oss << buf;
   std::string sep;
   oss << "overloaded osds: ";
   for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
-    float full = p->second.kb_used;
-    full /= p->second.kb;
-    if (full >= overload_full) {
+    float util = p->second.kb_used;
+    util /= p->second.kb;
+    if (util >= overload_util) {
       sep = ", ";
-      float new_weight = (1.0f - full) / (1.0f - overload_full);
+      // Assign a lower weight to overloaded OSDs. The current weight
+      // is a factor to take into account the original weights,
+      // to represent e.g. differing storage capacities
+      float weight = osdmap.get_weightf(p->first);
+      float new_weight = (average_util / util) * weight;
       osdmap.set_weightf(p->first, new_weight);
       char buf[128];
-      snprintf(buf, sizeof(buf), "%d [%04f]", p->first, new_weight);
-      oss << sep << buf;
+      snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+	       weight, new_weight);
+      oss << buf << sep;
     }
   }
   if (sep.empty()) {
@@ -633,22 +635,17 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
     dout(10) << " old osd_info: " << info << dendl;
-    if (m->sb.mounted > info.last_clean_first ||
-	(m->sb.mounted == info.last_clean_first &&
-	 m->sb.clean_thru > info.last_clean_last)) {
-      epoch_t first = m->sb.mounted;
-      epoch_t last = m->sb.clean_thru;
-
-      // adjust clean interval forward to the epoch the osd was actually marked down.
-      if (info.up_from == first &&
-	  (info.down_at-1) > last)
-	last = info.down_at-1;
+    if (m->sb.mounted > info.last_clean_begin ||
+	(m->sb.mounted == info.last_clean_begin &&
+	 m->sb.clean_thru > info.last_clean_end)) {
+      epoch_t begin = m->sb.mounted;
+      epoch_t end = m->sb.clean_thru;
 
       dout(10) << "prepare_boot osd." << from << " last_clean_interval "
-	       << info.last_clean_first << "-" << info.last_clean_last
-	       << " -> " << first << "-" << last
+	       << "[" << info.last_clean_begin << "," << info.last_clean_end << ")"
+	       << " -> [" << begin << "-" << end << ")"
 	       << dendl;
-      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(first, last);
+      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(begin, end);
     }
 
     // wait

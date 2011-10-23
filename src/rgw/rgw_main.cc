@@ -248,7 +248,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS | CINIT_FLAG_NO_BANNER);
-  g_conf->set_val("daemonize", false);
 
   pid_t childpid = 0;
   if (g_conf->daemonize) {

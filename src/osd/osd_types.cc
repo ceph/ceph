@@ -170,8 +170,6 @@ std::string pg_state_string(int state)
     oss << "active+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
-  if (state & PG_STATE_CRASHED)
-    oss << "crashed+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_REPLAY)

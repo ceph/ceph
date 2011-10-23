@@ -584,7 +584,7 @@ OSD::~OSD()
   delete authorize_handler_registry;
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+  g_ceph_context->GetPerfCountersCollection()->remove(logger);
   delete logger;
   delete store;
 }
@@ -746,65 +746,63 @@ void OSD::create_logger()
 {
   dout(10) << "create_logger" << dendl;
 
-  char name[80];
-  snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  PerfCountersBuilder osd_plb(g_ceph_context, name, l_osd_first, l_osd_last);
+  PerfCountersBuilder osd_plb(g_ceph_context, "osd", l_osd_first, l_osd_last);
 
   osd_plb.add_u64(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
   osd_plb.add_u64(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
 
   osd_plb.add_u64_counter(l_osd_op,       "op");           // client ops
-  osd_plb.add_u64_counter(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
-  osd_plb.add_u64_counter(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
-  osd_plb.add_fl_avg(l_osd_op_lat,   "op_lat");       // client op latency
+  osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes");       // client op in bytes (writes)
+  osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes");      // client op out bytes (reads)
+  osd_plb.add_fl_avg(l_osd_op_lat,   "op_latency");       // client op latency
 
   osd_plb.add_u64_counter(l_osd_op_r,      "op_r");        // client reads
-  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
-  osd_plb.add_fl_avg(l_osd_op_r_lat,  "op_r_lat");    // client read latency
+  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes");   // client read out bytes
+  osd_plb.add_fl_avg(l_osd_op_r_lat,  "op_r_latency");    // client read latency
   osd_plb.add_u64_counter(l_osd_op_w,      "op_w");        // client writes
-  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_inb");    // client write in bytes
+  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes");    // client write in bytes
   osd_plb.add_fl_avg(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_w_lat,  "op_w_lat");    // client write latency
+  osd_plb.add_fl_avg(l_osd_op_w_lat,  "op_w_latency");    // client write latency
   osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw");       // client rmw
-  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_inb");   // client rmw in bytes
-  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_outb");  // client rmw out bytes
+  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes");   // client rmw in bytes
+  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes");  // client rmw out bytes
   osd_plb.add_fl_avg(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
+  osd_plb.add_fl_avg(l_osd_op_rw_lat, "op_rw_latency");   // client rmw latency
 
-  osd_plb.add_u64_counter(l_osd_sop,       "sop");         // subops
-  osd_plb.add_u64_counter(l_osd_sop_inb,   "sop_inb");     // subop in bytes
-  osd_plb.add_fl_avg(l_osd_sop_lat,   "sop_lat");     // subop latency
+  osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
+  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
+  osd_plb.add_fl_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
 
-  osd_plb.add_u64_counter(l_osd_sop_w,     "sop_w");          // replicated (client) writes
-  osd_plb.add_u64_counter(l_osd_sop_w_inb, "sop_w_inb");      // replicated write in bytes
-  osd_plb.add_fl_avg(l_osd_sop_w_lat, "sop_w_lat");      // replicated write latency
-  osd_plb.add_u64_counter(l_osd_sop_pull,     "sop_pull");       // pull request
-  osd_plb.add_fl_avg(l_osd_sop_pull_lat, "sop_pull_lat");
-  osd_plb.add_u64_counter(l_osd_sop_push,     "sop_push");       // push (write)
-  osd_plb.add_u64_counter(l_osd_sop_push_inb, "sop_push_inb");
-  osd_plb.add_fl_avg(l_osd_sop_push_lat, "sop_push_lat");
+  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w");          // replicated (client) writes
+  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes");      // replicated write in bytes
+  osd_plb.add_fl_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
+  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull");       // pull request
+  osd_plb.add_fl_avg(l_osd_sop_pull_lat, "subop_pull_latency");
+  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push");       // push (write)
+  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes");
+  osd_plb.add_fl_avg(l_osd_sop_push_lat, "subop_push_latency");
 
   osd_plb.add_u64_counter(l_osd_pull,      "pull");       // pull requests sent
   osd_plb.add_u64_counter(l_osd_push,      "push");       // push messages
-  osd_plb.add_u64_counter(l_osd_push_outb, "push_outb");  // pushed bytes
+  osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes");  // pushed bytes
 
-  osd_plb.add_u64_counter(l_osd_rop, "rop");       // recovery ops (started)
+  osd_plb.add_u64_counter(l_osd_rop, "recovery_ops");       // recovery ops (started)
 
   osd_plb.add_fl(l_osd_loadavg, "loadavg");
-  osd_plb.add_u64(l_osd_buf, "buf");       // total ceph::buffer bytes
+  osd_plb.add_u64(l_osd_buf, "buffer_bytes");       // total ceph::buffer bytes
 
   osd_plb.add_u64(l_osd_pg, "numpg");   // num pgs
   osd_plb.add_u64(l_osd_pg_primary, "numpg_primary"); // num primary pgs
   osd_plb.add_u64(l_osd_pg_replica, "numpg_replica"); // num replica pgs
   osd_plb.add_u64(l_osd_pg_stray, "numpg_stray");   // num stray pgs
-  osd_plb.add_u64(l_osd_hb_to, "hbto");     // heartbeat peers we send to
-  osd_plb.add_u64(l_osd_hb_from, "hbfrom"); // heartbeat peers we recv from
-  osd_plb.add_u64_counter(l_osd_map, "map");           // osdmap messages
-  osd_plb.add_u64_counter(l_osd_mape, "mape");         // osdmap epochs
-  osd_plb.add_u64_counter(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
+  osd_plb.add_u64(l_osd_hb_to, "heartbeat_to_peers");     // heartbeat peers we send to
+  osd_plb.add_u64(l_osd_hb_from, "heartbeat_from_peers"); // heartbeat peers we recv from
+  osd_plb.add_u64_counter(l_osd_map, "map_messagse");           // osdmap messages
+  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
+  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
 
   logger = osd_plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 }
 
 int OSD::shutdown()
@@ -2357,14 +2355,29 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     flush_pg_stats();
   }
   
-  else if (cmd.size() == 2 && cmd[0] == "mark_unfound_lost") {
+  else if (cmd.size() == 3 && cmd[0] == "mark_unfound_lost") {
     pg_t pgid;
     if (!pgid.parse(cmd[1].c_str())) {
       ss << "can't parse pgid '" << cmd[1] << "'";
       r = -EINVAL;
       goto out;
     }
-    PG *pg = _lookup_lock_pg(pgid);
+    int mode;
+    if (cmd[2] == "revert")
+      mode = PG::Log::Entry::LOST_REVERT;
+    /*
+    else if (cmd[2] == "mark")
+      mode = PG::Log::Entry::LOST_MARK;
+    else if (cmd[2] == "delete" || cmd[2] == "remove")
+      mode = PG::Log::Entry::LOST_DELETE;
+    */
+    else {
+      //ss << "mode must be mark|revert|delete";
+      ss << "mode must be revert (mark|delete not yet implemented)";
+      r = -EINVAL;
+      goto out;
+    }
+    PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
     if (!pg) {
       ss << "pg " << pgid << " not found";
       r = -ENOENT;
@@ -2372,16 +2385,19 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     if (!pg->is_primary()) {
       ss << "pg " << pgid << " not primary";
+      pg->unlock();
       r = -EINVAL;
       goto out;
     }
     int unfound = pg->missing.num_missing() - pg->missing_loc.size();
     if (!unfound) {
       ss << "pg " << pgid << " has no unfound objects";
+      pg->unlock();
       r = -ENOENT;
       goto out;
     }
-    if (!pg->all_unfound_are_lost(pg->osd->osdmap)) {
+    if (!pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
+      pg->unlock();
       ss << "pg " << pgid << " has " << unfound
 	 << " objects but we haven't probed all sources, not marking lost despite command "
 	 << cmd;
@@ -2390,9 +2406,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     ss << pgid << " has " << unfound
        << " objects unfound and apparently lost, marking";
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    pg->mark_all_unfound_as_lost(*t);
-    store->queue_transaction(&pg->osr, t);
+    pg->mark_all_unfound_lost(mode);
+    pg->unlock();
   }
 
   else if (cmd[0] == "heap") {
@@ -5443,10 +5458,15 @@ void OSD::requeue_ops(PG *pg, list<Message*>& ls)
   list<Message*> orig_queue;
   orig_queue.swap(pg->op_queue);
 
+  // grab whole list at once, in case methods we call below start adding things
+  // back on the list reference we were passed!
+  list<Message*> q;
+  q.swap(ls);
+
   // requeue old items, now at front.
-  while (!ls.empty()) {
-    Message *op = ls.front();
-    ls.pop_front();
+  while (!q.empty()) {
+    Message *op = q.front();
+    q.pop_front();
 
     switch (op->get_type()) {
     case CEPH_MSG_OSD_OP:
