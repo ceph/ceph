@@ -139,7 +139,7 @@ static int testrados(void)
 		printf("error: failed to read log_to_stderr from config\n");
 		return 1;
 	}
-	if (tmp == "true") {
+	if (strcmp(tmp, "true")) {
 		printf("error: new setting for log_to_stderr failed to take effect.\n");
 		return 1;
 	}

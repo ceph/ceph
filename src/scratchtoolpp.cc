@@ -73,7 +73,7 @@ int main(int argc, const char **argv)
     printf("error: failed to read log_to_stderr from config\n");
     exit(1);
   }
-  if (tmp == "true") {
+  if (tmp != "true") {
     printf("error: new setting for log_to_stderr failed to take effect.\n");
     exit(1);
   }
