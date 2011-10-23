@@ -1118,9 +1118,9 @@ bool PG::choose_acting(int newest_update_osd) const
     if (best_info.log_tail <= cur_info.last_update || best_info.log_backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(*i);
-      dout(10) << " osd." << *i << " (up) accepted" << dendl;
+      dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
     } else {
-      dout(10) << " osd." << *i << " (up) REJECTED" << dendl;
+      dout(10) << " osd." << *i << " (up) REJECTED " << cur_info << dendl;
     }
   }
 
@@ -1137,9 +1137,9 @@ bool PG::choose_acting(int newest_update_osd) const
     if (best_info.log_tail <= i->second.last_update || best_info.log_backlog) {
       // Can be brought up to date without stopping to generate a backlog
       want.push_back(i->first);
-      dout(10) << " osd." << i->first << " (stray) accepted" << dendl;
+      dout(10) << " osd." << i->first << " (stray) accepted " << i->second << dendl;
     } else {
-      dout(10) << " osd." << i->first << " (stray) REJECTED" << dendl;
+      dout(10) << " osd." << i->first << " (stray) REJECTED " << i->second << dendl;
     }
   }
 
