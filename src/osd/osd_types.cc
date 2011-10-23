@@ -483,7 +483,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(crash_replay_interval, bl);
   } else {
     flags = 0;
-    crash_replay_interval = 0;
+
+    // if this looks like the 'data' pool, set the
+    // crash_replay_interval appropriately.  unfortunately, we can't
+    // be precise here.  this should be good enough to preserve replay
+    // on the data pool for the majority of cluster upgrades, though.
+    if (crush_ruleset == 0 && auid == 0)
+      crash_replay_interval = 60;
+    else
+      crash_replay_interval = 0;
   }
 
   calc_pg_masks();
