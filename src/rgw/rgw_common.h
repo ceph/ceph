@@ -747,9 +747,15 @@ public:
   }
 
   bool operator<(const rgw_obj& o) const {
-    return  (bucket.name.compare(o.bucket.name) < 0) ||
-            (object.compare(o.object) < 0) ||
-            (ns.compare(o.ns) < 0);
+    int r = bucket.name.compare(o.bucket.name);
+    if (r == 0) {
+     r = object.compare(o.object);
+     if (r == 0) {
+       r = ns.compare(o.ns);
+     }
+    }
+
+    return (r < 0);
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)

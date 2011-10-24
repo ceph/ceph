@@ -1061,8 +1061,8 @@ int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
 
 int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io_ctx, string& actual_obj, RGWObjState **state)
 {
-  dout(20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << dendl;
   RGWObjState *s = rctx->get_state(obj);
+  dout(20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << dendl;
   *state = s;
   if (s->has_attrs)
     return 0;
@@ -1091,6 +1091,10 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCtx& io
     s->shadow_obj[bl.length()] = '\0';
   }
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
+  if (s->obj_tag.length())
+    dout(20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
+  else
+    dout(20) << "get_obj_state: s->obj_tag was set empty" << dendl;
   return 0;
 }
 
@@ -1154,11 +1158,15 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj, librados::IoCt
 
   RGWObjState *state = *pstate;
 
-  if (!state->is_atomic)
+  if (!state->is_atomic) {
+    dout(20) << "state for obj=" << obj << " is not atomic, not appending atomic test" << dendl;
     return 0;
+  }
 
   if (state->obj_tag.length() > 0) {// check for backward compatibility
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
+  } else {
+    dout(20) << "state->obj_tag is empty, not appending atomic test" << dendl;
   }
   return 0;
 }
@@ -1172,8 +1180,10 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
 
   RGWObjState *state = *pstate;
 
-  if (!state->is_atomic)
+  if (!state->is_atomic) {
+    dout(20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
     return 0;
+  }
 
   if (state->obj_tag.length() == 0 ||
       state->shadow_obj.size() == 0) {
@@ -1219,7 +1229,6 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj, lib
   append_rand_alpha(tag, tag, 32);
   bufferlist bl;
   bl.append(tag);
-
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
