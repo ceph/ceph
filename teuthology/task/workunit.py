@@ -156,6 +156,7 @@ def _run_tests(ctx, role, tests):
                         run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                         run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
                         run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
+                        run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
                         '/tmp/cephtest/enable-coredump',
                         '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                         '/tmp/cephtest/archive/coverage',
