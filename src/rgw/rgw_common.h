@@ -522,7 +522,7 @@ struct RGWObjEnt {
   std::string name;
   std::string owner;
   std::string owner_display_name;
-  size_t size;
+  uint64_t size;
   time_t mtime;
   string etag;
   string content_type;
