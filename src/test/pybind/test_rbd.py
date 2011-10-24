@@ -191,6 +191,29 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, '\0' * 256)
 
+    def test_rollback_with_resize(self):
+        read = self.image.read(0, 256)
+        eq(read, '\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, data)
+        new_size = IMG_SIZE * 2
+        self.image.resize(new_size)
+        check_stat(self.image.stat(), new_size, IMG_ORDER)
+        self.image.write(data, new_size - 256)
+        self.image.create_snap('snap2')
+        read = self.image.read(new_size - 256, 256)
+        eq(read, data)
+        self.image.rollback_to_snap('snap1')
+        check_stat(self.image.stat(), IMG_SIZE, IMG_ORDER)
+        assert_raises(InvalidArgument, self.image.read, new_size - 256, 256)
+        self.image.rollback_to_snap('snap2')
+        check_stat(self.image.stat(), new_size, IMG_ORDER)
+        read = self.image.read(new_size - 256, 256)
+        eq(read, data)
+
     def test_set_snap(self):
         self.image.write('\0' * 256, 0)
         self.image.create_snap('snap1')
