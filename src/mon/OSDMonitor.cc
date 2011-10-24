@@ -1939,6 +1939,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      getline(ss, rs);
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
+	    } else if (m->cmd[4] == "crash_replay_interval") {
+	      if (pending_inc.new_pools.count(pool) == 0)
+		pending_inc.new_pools[pool] = *p;
+	      pending_inc.new_pools[pool].crash_replay_interval = n;
+	      ss << "set pool " << pool << " to crash_replay_interval to " << n;
+	      getline(ss, rs);
+	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
 	      if (n <= p->get_pg_num()) {
 		ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
