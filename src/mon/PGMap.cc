@@ -333,8 +333,8 @@ void PGMap::dump(ostream& ss) const
   ss << " sum\t" << pg_sum.stats.sum.num_objects
     //<< "\t" << pg_sum.num_object_copies
      << "\t" << pg_sum.stats.sum.num_objects_missing_on_primary
-     << "\t" << pg_sum.stats.sum.num_objects_unfound
      << "\t" << pg_sum.stats.sum.num_objects_degraded
+     << "\t" << pg_sum.stats.sum.num_objects_unfound
      << "\t" << pg_sum.stats.sum.num_kb
      << "\t" << pg_sum.stats.sum.num_bytes
      << "\t" << pg_sum.log_size
