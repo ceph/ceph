@@ -1934,7 +1934,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  unsigned n = strtol(start, &end, 10);
 	  if (*end == '\0') {
 	    if (m->cmd[4] == "size") {
-	      pending_inc.new_pools[pool] = *p;
+	      if (pending_inc.new_pools.count(pool) == 0)
+		pending_inc.new_pools[pool] = *p;
 	      pending_inc.new_pools[pool].size = n;
 	      pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 	      ss << "set pool " << pool << " size to " << n;
@@ -1956,7 +1957,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "currently creating pgs, wait";
 		err = -EAGAIN;
 	      } else {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
 		pending_inc.new_pools[pool].pg_num = n;
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pg_num to " << n;
@@ -1973,7 +1975,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "still creating pgs, wait";
 		err = -EAGAIN;
 	      } else {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
 		pending_inc.new_pools[pool].pgp_num = n;
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pgp_num to " << n;
@@ -1983,7 +1986,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      }
 	    } else if (m->cmd[4] == "crush_ruleset") {
 	      if (osdmap.crush.rule_exists(n)) {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
 		pending_inc.new_pools[pool].crush_ruleset = n;
 		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " crush_ruleset to " << n;
