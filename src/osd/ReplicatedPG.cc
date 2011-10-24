@@ -933,7 +933,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 
     if (oldsnaps[0] != snaps[0]) {
       t->collection_remove(coll_t(info.pgid, oldsnaps[0]), coid);
-      if (oldsnaps.size() > 1 && oldsnaps[snaps.size() - 1] != snaps[0])
+      if (oldsnaps.size() > 1 && oldsnaps[snaps.size() - 1] != snaps[0] && snaps.size() > 1)
 	t->collection_add(coll_t(info.pgid, snaps[0]), coll, coid);
     }
     if (oldsnaps.size() > 1 && oldsnaps[oldsnaps.size()-1] != snaps[snaps.size()-1]) {
