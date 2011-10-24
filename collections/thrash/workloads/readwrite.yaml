@@ -1,0 +1,5 @@
+tasks:
+- testrados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
