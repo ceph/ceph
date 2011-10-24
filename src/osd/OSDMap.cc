@@ -753,7 +753,7 @@ void OSDMap::print(ostream& out) const
     map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
     if (pni != pool_name.end())
       name = pni->second;
-    out << "pg_pool " << p->first
+    out << "pool " << p->first
 	<< " '" << name
 	<< "' " << p->second << "\n";
     for (map<snapid_t,pool_snap_info_t>::const_iterator q = p->second.snaps.begin();

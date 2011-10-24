@@ -499,7 +499,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
-  out << "pool " << p.get_type_name()
+  out << p.get_type_name()
       << " size " << p.get_size()
       << " crush_ruleset " << p.get_crush_ruleset()
       << " object_hash " << p.get_object_hash_name()
