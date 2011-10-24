@@ -185,6 +185,10 @@ testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object
 testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
 
+testreadwrite_SOURCES = test/osd/TestReadWrite.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
+testreadwrite_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += testreadwrite
+
 multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += multi_stress_watch 

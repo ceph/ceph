@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
@@ -23,15 +23,15 @@ TestOpGenerator::~TestOpGenerator()
 {
 }
 
-struct SnapTestGenerator : public TestOpGenerator
+struct ReadWriteGenerator : public TestOpGenerator
 {
   TestOp *nextop;
   int op;
   int ops;
   int objects;
-  TestOpStat *stats;
-  SnapTestGenerator(int ops, int objects, TestOpStat *stats) : 
-    nextop(0), op(0), ops(ops), objects(objects), stats(stats)
+  int read_percent;
+  ReadWriteGenerator(int ops, int objects, int read_percent) :
+    nextop(0), op(0), ops(ops), objects(objects), read_percent(read_percent)
   {}
 
 
@@ -52,40 +52,27 @@ struct SnapTestGenerator : public TestOpGenerator
       nextop = 0;
       return retval;
     }
-		
-    int switchval = rand() % 50;
-    if (switchval < 20) {
+    int switchval = rand() % 100;
+    if (switchval < read_percent) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Reading " << oid << std::endl;
-      return new ReadOp(&context, oid, stats);
-    } else if (switchval < 40) {
-      string oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Writing " << oid << " current snap is " 
-	   << context.current_snap << std::endl;
-      return new WriteOp(&context, oid, stats);
-    } else if ((switchval < 45) && !context.snaps.empty()) {
-      int snap = rand_choose(context.snaps)->first;
-      string oid = *(rand_choose(context.oid_not_in_use));
-      cout << "RollingBack " << oid << " to " << snap << std::endl;
-      nextop = new ReadOp(&context, oid, stats);
-      return new RollbackOp(&context, oid, snap);
-    } else if ((switchval < 47) && !context.snaps.empty()) {
-      int snap = rand_choose(context.snaps)->first;
-      cout << "RemovingSnap " << snap << std::endl;
-      return new SnapRemoveOp(&context, snap, stats);
+      return new ReadOp(&context, oid, 0);
     } else {
-      cout << "Snapping" << std::endl;
-      return new SnapCreateOp(&context, stats);
+      string oid = *(rand_choose(context.oid_not_in_use));
+      cout << "Writing " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(&context, oid, 0);
     }
   }
 };
-		
+
 int main(int argc, char **argv)
 {
-  int ops = 1000;
-  int objects = 50;
+  int ops = 10000;
+  int objects = 500;
+  int read_percent = 50;
   int max_in_flight = 16;
-  int size = 400000;
+  int size = 4000000; // 4 MB
   if (argc > 1) {
     ops = atoi(argv[1]);
   }
@@ -95,11 +82,15 @@ int main(int argc, char **argv)
   }
 
   if (argc > 3) {
-    max_in_flight = atoi(argv[3]);
+    read_percent = atoi(argv[3]);
   }
 
   if (argc > 4) {
-    size = atoi(argv[4]);
+    max_in_flight = atoi(argv[4]);
+  }
+
+  if (argc > 5) {
+    size = atoi(argv[5]);
   }
 
   if (max_in_flight > objects) {
@@ -110,17 +101,14 @@ int main(int argc, char **argv)
 
   char *id = getenv("CEPH_CLIENT_ID");
   if (id) cerr << "Client id is: " << id << std::endl;
-		
   string pool_name = "data";
   VarLenGenerator cont_gen(size);
   RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
 
-  TestOpStat stats;
-  SnapTestGenerator gen = SnapTestGenerator(ops, objects, &stats);
+  ReadWriteGenerator gen = ReadWriteGenerator(ops, objects, read_percent);
   context.loop(&gen);
 
   context.shutdown();
   cerr << context.errors << " errors." << std::endl;
-  cerr << stats << std::endl;
   return 0;
 }
