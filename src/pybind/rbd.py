@@ -304,7 +304,6 @@ class Image(object):
         :type dest_ioctx: :class:`rados.Ioctx`
         :param dest_name: the name of the copy
         :type dest_name: str
-        :returns: int - the number of bytes copied
         :raises: :class:`ImageExists`
         """
         if not isinstance(dest_name, str):
@@ -312,7 +311,6 @@ class Image(object):
         ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
         if ret < 0:
             raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
-        return ret
 
     def list_snaps(self):
         """

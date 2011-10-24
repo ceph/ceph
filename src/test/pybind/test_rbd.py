@@ -4,7 +4,7 @@ import struct
 from nose import with_setup
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
-from rbd import RBD, Image, ImageNotFound, InvalidArgument
+from rbd import RBD, Image, ImageNotFound, InvalidArgument, ImageExists
 
 
 rados = None
@@ -130,12 +130,12 @@ class TestImage(object):
         global ioctx
         data = rand_data(256)
         self.image.write(data, 256)
-        bytes_copied = self.image.copy(ioctx, IMG_NAME + '2')
+        self.image.copy(ioctx, IMG_NAME + '2')
+        assert_raises(ImageExists, self.image.copy, ioctx, IMG_NAME + '2')
         copy = Image(ioctx, IMG_NAME + '2')
         copy_data = copy.read(256, 256)
         copy.close()
         self.rbd.remove(ioctx, IMG_NAME + '2')
-        eq(bytes_copied, IMG_SIZE)
         eq(data, copy_data)
 
     def test_create_snap(self):
