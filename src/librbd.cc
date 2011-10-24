@@ -137,6 +137,16 @@ namespace librbd {
       return CEPH_NOSNAP;
     }
 
+    int get_snap_size(std::string snap_name, uint64_t *size) const
+    {
+      std::map<std::string, struct SnapInfo>::const_iterator it = snaps_by_name.find(snap_name);
+      if (it != snaps_by_name.end()) {
+	*size = it->second.size;
+	return 0;
+      }
+      return -ENOENT;
+    }
+
     void add_snap(std::string snap_name, snap_t id, uint64_t size)
     {
       snapc.snaps.push_back(id);
@@ -332,6 +342,7 @@ namespace librbd {
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx);
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
+  int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx);
@@ -863,17 +874,9 @@ int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   return 0;
 }
 
-int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
+int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
 {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
-
-  int r = ictx_check(ictx);
-  if (r < 0)
-    return r;
-
-  Mutex::Locker l(ictx->lock);
-  // trim
   if (size == ictx->header.image_size) {
     ldout(cct, 2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
     return 0;
@@ -891,7 +894,7 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
+  int r = ictx->md_ctx.write(ictx->md_oid(), bl, bl.length(), 0);
 
   if (r == -ERANGE)
     lderr(cct) << "operation might have conflicted with another client!" << dendl;
@@ -901,6 +904,21 @@ int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   } else {
     notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
   }
+
+  return 0;
+}
+
+int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
+{
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
+
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  Mutex::Locker l(ictx->lock);
+  resize_helper(ictx, size, prog_ctx);
 
   ldout(cct, 2) << "done." << dendl;
 
@@ -1063,59 +1081,6 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx)
-{
-  CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
-
-  int r = ictx_check(ictx);
-  if (r < 0)
-    return r;
-
-  Mutex::Locker l(ictx->lock);
-  snap_t snapid = ictx->get_snapid(snap_name);
-  if (snapid == CEPH_NOSNAP) {
-    lderr(cct) << "No such snapshot found." << dendl;
-    return -ENOENT;
-  }
-
-  r = rollback_image(ictx, snapid, prog_ctx);
-  if (r < 0) {
-    lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  // refresh without setting the snapid we read from
-  ictx_refresh(ictx, NULL);
-  snap_t new_snapid = ictx->get_snapid(snap_name);
-  ldout(ictx->cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
-
-  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
-
-  return 0;
-}
-
-struct CopyProgressCtx {
-  CopyProgressCtx(ProgressContext &p)
-	: prog_ctx(p)
-  {
-  }
-  ImageCtx *destictx;
-  uint64_t src_size;
-  ProgressContext &prog_ctx;
-};
-
-int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
-{
-  CopyProgressCtx *cp = reinterpret_cast<CopyProgressCtx*>(data);
-  cp->prog_ctx.update_progress(offset, cp->src_size);
-  int ret = 0;
-  if (buf) {
-    ret = write(cp->destictx, offset, len, buf);
-  }
-  return ret;
-}
-
 ProgressContext::~ProgressContext()
 {
 }
@@ -1147,6 +1112,70 @@ private:
   librbd_progress_fn_t m_fn;
   void *m_data;
 };
+
+int snap_rollback(ImageCtx *ictx, const char *snap_name, ProgressContext& prog_ctx)
+{
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
+
+  int r = ictx_check(ictx);
+  if (r < 0)
+    return r;
+
+  Mutex::Locker l(ictx->lock);
+  snap_t snapid = ictx->get_snapid(snap_name);
+  if (snapid == CEPH_NOSNAP) {
+    lderr(cct) << "No such snapshot found." << dendl;
+    return -ENOENT;
+  }
+
+  uint64_t new_size = ictx->get_image_size();
+  ictx->get_snap_size(snap_name, &new_size);
+  ldout(cct, 2) << "resizing to snapshot size..." << dendl;
+  NoOpProgressContext no_op;
+  r = resize_helper(ictx, new_size, no_op);
+  if (r < 0) {
+    lderr(cct) << "Error resizing to snapshot size: "
+	       << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = rollback_image(ictx, snapid, prog_ctx);
+  if (r < 0) {
+    lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  // refresh without setting the snapid we read from
+  ictx_refresh(ictx, NULL);
+  snap_t new_snapid = ictx->get_snapid(snap_name);
+  ldout(cct, 20) << "snapid is " << ictx->snapid << " new snapid is " << new_snapid << dendl;
+
+  notify_change(ictx->md_ctx, ictx->md_oid(), NULL, ictx);
+
+  return r;
+}
+
+struct CopyProgressCtx {
+  CopyProgressCtx(ProgressContext &p)
+	: prog_ctx(p)
+  {
+  }
+  ImageCtx *destictx;
+  uint64_t src_size;
+  ProgressContext &prog_ctx;
+};
+
+int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
+{
+  CopyProgressCtx *cp = reinterpret_cast<CopyProgressCtx*>(data);
+  cp->prog_ctx.update_progress(offset, cp->src_size);
+  int ret = 0;
+  if (buf) {
+    ret = write(cp->destictx, offset, len, buf);
+  }
+  return ret;
+}
 
 int copy(ImageCtx& ictx, IoCtx& dest_md_ctx, const char *destname,
 	 ProgressContext &prog_ctx)
