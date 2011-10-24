@@ -1929,8 +1929,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  err = -ENOENT;
 	} else {
 	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
-	  unsigned n = atoi(m->cmd[5].c_str());
-	  if (n) {
+	  const char *start = m->cmd[5].c_str();
+	  char *end = (char *)start;
+	  unsigned n = strtol(start, &end, 10);
+	  if (*end == '\0') {
 	    if (m->cmd[4] == "size") {
 	      pending_inc.new_pools[pool] = *p;
 	      pending_inc.new_pools[pool].size = n;
