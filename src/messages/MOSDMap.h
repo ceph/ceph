@@ -93,6 +93,13 @@ public:
 	bufferlist::iterator q = p->second.begin();
 	inc.decode(q);
 	p->second.clear();
+	if (inc.fullmap.length()) {
+	  // embedded full map?
+	  OSDMap m;
+	  m.decode(inc.fullmap);
+	  inc.fullmap.clear();
+	  m.encode(inc.fullmap, connection->get_features());
+	}
 	inc.encode(p->second, connection->get_features());
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
