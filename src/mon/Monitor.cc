@@ -604,6 +604,10 @@ void Monitor::handle_route(MRoute *m)
   if (m->session_mon_tid) {
     if (routed_requests.count(m->session_mon_tid)) {
       RoutedRequest *rr = routed_requests[m->session_mon_tid];
+
+      // reset payload, in case encoding is dependent on target features
+      m->msg->clear_payload();
+
       messenger->send_message(m->msg, rr->session->inst);
       m->msg = NULL;
       routed_requests.erase(m->session_mon_tid);
