@@ -5145,9 +5145,7 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 
 void OSD::handle_op(MOSDOp *op)
 {
-  if (!op->get_connection()->is_connected()) {
-    dout(10) << "handle_op sender " << op->get_connection()->get_peer_addr()
-	     << " not connected, dropping " << *op << dendl;
+  if (op_is_discardable(op)) {
     op->put();
     return;
   }
@@ -5330,6 +5328,20 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   pg->put();
 }
 
+bool OSD::op_is_discardable(MOSDOp *op)
+{
+  // drop client request if they are not connected and can't get the
+  // reply anyway.  unless this is a replayed op, in which case we
+  // want to do what we can to apply it.
+  if (!op->get_connection()->is_connected() &&
+      op->get_version().version == 0) {
+    dout(10) << " sender " << op->get_connection()->get_peer_addr()
+	     << " not connected, dropping " << *op << dendl;
+    return true;
+  }
+  return false;
+}
+
 /*
  * discard operation, or return true.  no side-effects.
  */
@@ -5339,6 +5351,11 @@ bool OSD::op_is_queueable(PG *pg, MOSDOp *op)
 
   if (!op_has_sufficient_caps(pg, op)) {
     reply_op_error(op, -EPERM);
+    return false;
+  }
+
+  if (op_is_discardable(op)) {
+    op->put();
     return false;
   }
 
@@ -5488,20 +5505,17 @@ void OSD::dequeue_op(PG *pg)
   }
   osd_lock.Unlock();
 
-  if (!op->get_connection()->is_connected()) {
-    dout(10) << "dequeue_op sender " << op->get_connection()->get_peer_addr()
-	     << " not connected, dropping " << *op << dendl;
-    op->put();
-  } else {
-    // do it
-    if (op->get_type() == CEPH_MSG_OSD_OP)
+  if (op->get_type() == CEPH_MSG_OSD_OP) {
+    if (op_is_discardable((MOSDOp*)op))
+      op->put();
+    else
       pg->do_op((MOSDOp*)op); // do it now
-    else if (op->get_type() == MSG_OSD_SUBOP)
-      pg->do_sub_op((MOSDSubOp*)op);
-    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
-      pg->do_sub_op_reply((MOSDSubOpReply*)op);
-    else 
-      assert(0);
+  } else if (op->get_type() == MSG_OSD_SUBOP) {
+    pg->do_sub_op((MOSDSubOp*)op);
+  } else if (op->get_type() == MSG_OSD_SUBOPREPLY) {
+    pg->do_sub_op_reply((MOSDSubOpReply*)op);
+  } else {
+    assert(0 == "bad message type in dequeue_op");
   }
 
   // unlock and put pg
