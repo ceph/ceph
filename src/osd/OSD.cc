@@ -5300,12 +5300,7 @@ void OSD::_handle_op(PG *pg, MOSDOp *op)
     }
   }
 
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_op(op);
-  } else {
-    // queue for worker threads
-    enqueue_op(pg, op);         
-  }
+  enqueue_op(pg, op);         
 }
 
 
@@ -5346,6 +5341,9 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   pg->put();
 }
 
+/*
+ * queue an operation, or discard it.  avoid side-effects or any "real" work.
+ */
 void OSD::_handle_sub_op(PG *pg, MOSDSubOp *op)
 {
   dout(10) << *pg << " _handle_sub_op " << op << " " << *op << dendl;
@@ -5361,11 +5359,7 @@ void OSD::_handle_sub_op(PG *pg, MOSDSubOp *op)
     return;
   }
 
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_sub_op(op);    // do it now
-  } else {
-    enqueue_op(pg, op);     // queue for worker threads
-  }
+  enqueue_op(pg, op);     // queue for worker threads
 }
 
 void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
@@ -5403,15 +5397,14 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   pg->put();
 }
 
+/*
+ * queue an operation, or discard it.  avoid side-effects or any "real" work.
+ */
 void OSD::_handle_sub_op_reply(PG *pg, MOSDSubOpReply *op)
 {
   dout(10) << *pg << " _handle_sub_op_reply " << op << " " << *op << dendl;
   assert(pg->is_locked());
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_sub_op_reply(op);    // do it now
-  } else {
-    enqueue_op(pg, op);     // queue for worker threads
-  }
+  enqueue_op(pg, op);     // queue for worker threads
 }
 
 
