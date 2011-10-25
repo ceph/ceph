@@ -5203,6 +5203,9 @@ void OSD::handle_op(MOSDOp *op)
   pg->put();
 }
 
+/*
+ * queue an operation, or discard it.  avoid side-effects or any "real" work.
+ */
 void OSD::_handle_op(PG *pg, MOSDOp *op)
 {
   dout(10) << *pg << " _handle_op " << op << " " << *op << dendl;
@@ -5219,7 +5222,7 @@ void OSD::_handle_op(PG *pg, MOSDOp *op)
   session->put();
 
   int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
-  dout(10) << " request for pool=" << pg->pool->id << " (" << pg->pool->name
+  dout(20) << " request for pool=" << pg->pool->id << " (" << pg->pool->name
 	   << ") owner=" << pg->pool->auid
 	   << " perm=" << perm
 	   << " may_read=" << op->may_read()
@@ -5293,22 +5296,6 @@ void OSD::_handle_op(PG *pg, MOSDOp *op)
       dout(7) << *pg << " queueing replay at " << op->get_version()
 	      << " for " << *op << dendl;
       pg->replay_queue[op->get_version()] = op;
-      return;
-    }
-  }
-
-  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
-    // missing object?
-    hobject_t head(op->get_oid(), op->get_object_locator().key,
-		   CEPH_NOSNAP, op->get_pg().ps());
-    if (pg->is_missing_object(head)) {
-      pg->wait_for_missing_object(head, op);
-      return;
-    }
-
-    // degraded object?
-    if (op->may_write() && pg->is_degraded_object(head)) {
-      pg->wait_for_degraded_object(head, op);
       return;
     }
   }

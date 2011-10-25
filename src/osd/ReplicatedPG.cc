@@ -400,12 +400,27 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return do_pg_op(op);
 
   dout(10) << "do_op " << *op << (op->may_write() ? " may_write" : "") << dendl;
+
   if (finalizing_scrub && op->may_write()) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     return;
   }
 
+  // missing object?
+  hobject_t head(op->get_oid(), op->get_object_locator().key,
+		 CEPH_NOSNAP, op->get_pg().ps());
+  if (is_missing_object(head)) {
+    wait_for_missing_object(head, op);
+    return;
+  }
+
+  // degraded object?
+  if (op->may_write() && is_degraded_object(head)) {
+    wait_for_degraded_object(head, op);
+    return;
+  }
+ 
   entity_inst_t client = op->get_source_inst();
 
   ObjectContext *obc;
