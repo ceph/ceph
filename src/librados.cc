@@ -1678,11 +1678,10 @@ int librados::RadosClient::clone_range(IoCtxImpl& io,
   bufferlist outbl;
 
   lock.Lock();
-  ::SnapContext snapc;
   ::ObjectOperation wr;
   prepare_assert_ops(&io, &wr);
   wr.clone_range(src_oid, src_offset, len, dst_offset);
-  objecter->mutate(dst_oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  objecter->mutate(dst_oid, io.oloc, wr, io.snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1906,7 +1905,6 @@ int librados::RadosClient::aio_write_full(IoCtxImpl& io, const object_t &oid,
 
 int librados::RadosClient::remove(IoCtxImpl& io, const object_t& oid)
 {
-  ::SnapContext snapc;
   utime_t ut = ceph_clock_now(cct);
 
   /* can't write to a snapshot */
@@ -1925,7 +1923,7 @@ int librados::RadosClient::remove(IoCtxImpl& io, const object_t& oid)
 
   lock.Lock();
   objecter->remove(oid, io.oloc,
-		  snapc, ut, 0,
+		  io.snapc, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
 
@@ -1993,11 +1991,10 @@ int librados::RadosClient::tmap_update(IoCtxImpl& io, const object_t& oid, buffe
   bufferlist outbl;
 
   lock.Lock();
-  ::SnapContext snapc;
   ::ObjectOperation wr;
   prepare_assert_ops(&io, &wr);
   wr.tmap_update(cmdbl);
-  objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  objecter->mutate(oid, io.oloc, wr, io.snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -2028,11 +2025,10 @@ int librados::RadosClient::tmap_put(IoCtxImpl& io, const object_t& oid, bufferli
   bufferlist outbl;
 
   lock.Lock();
-  ::SnapContext snapc;
   ::ObjectOperation wr;
   prepare_assert_ops(&io, &wr);
   wr.tmap_put(bl);
-  objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  objecter->mutate(oid, io.oloc, wr, io.snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
