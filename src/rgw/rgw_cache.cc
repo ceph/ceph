@@ -64,8 +64,19 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
   else
     target.flags &= ~CACHE_FLAG_META; // any non-meta change should reset meta
 
-  if (info.flags & CACHE_FLAG_XATTRS)
+  if (info.flags & CACHE_FLAG_XATTRS) {
     target.xattrs = info.xattrs;
+    map<string, bufferlist>::iterator iter;
+    for (iter = target.xattrs.begin(); iter != target.xattrs.end(); ++iter) {
+      dout(0) << "updating xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
+    }
+  } else if (info.flags & CACHE_FLAG_APPEND_XATTRS) {
+    map<string, bufferlist>::iterator iter;
+    for (iter = info.xattrs.begin(); iter != info.xattrs.end(); ++iter) {
+      dout(0) << "appending xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
+      target.xattrs[iter->first] = iter->second;
+    }
+  }
 
   if (info.flags & CACHE_FLAG_DATA)
     target.data = info.data;
