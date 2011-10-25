@@ -25,7 +25,7 @@
 #error "Your system is not supported!"
 #endif
 
-#include "common/ceph_extattr.h"
+#include "common/xattr.h"
 
 /*
  * Sets extended attribute on a file.

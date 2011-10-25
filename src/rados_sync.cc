@@ -22,7 +22,7 @@
 #include "rados_sync.h"
 #include "include/compat.h"
 
-#include "common/ceph_extattr.h"
+#include "common/xattr.h"
 
 #include <dirent.h>
 #include <errno.h>

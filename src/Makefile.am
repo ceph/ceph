@@ -864,7 +864,7 @@ libcommon_files = \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
 	common/armor.c \
-	common/ceph_extattr.c \
+	common/xattr.c \
 	common/safe_io.c \
 	common/str_list.cc \
 	common/errno.cc \
@@ -1060,7 +1060,7 @@ noinst_HEADERS = \
 	common/WorkQueue.h\
 	common/ceph_argparse.h\
 	common/ceph_context.h\
-	common/ceph_extattr.h\
+	common/xattr.h\
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\

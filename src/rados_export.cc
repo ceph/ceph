@@ -31,7 +31,7 @@
 #include <unistd.h>
 
 #include "include/compat.h"
-#include "common/ceph_extattr.h"
+#include "common/xattr.h"
 
 using namespace librados;
 

@@ -37,7 +37,7 @@
 #include "include/compat.h"
 #include "include/fiemap.h"
 
-#include "common/ceph_extattr.h"
+#include "common/xattr.h"
 
 #if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
