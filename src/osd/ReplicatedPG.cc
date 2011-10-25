@@ -400,12 +400,27 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return do_pg_op(op);
 
   dout(10) << "do_op " << *op << (op->may_write() ? " may_write" : "") << dendl;
+
   if (finalizing_scrub && op->may_write()) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     return;
   }
 
+  // missing object?
+  hobject_t head(op->get_oid(), op->get_object_locator().key,
+		 CEPH_NOSNAP, op->get_pg().ps());
+  if (is_missing_object(head)) {
+    wait_for_missing_object(head, op);
+    return;
+  }
+
+  // degraded object?
+  if (op->may_write() && is_degraded_object(head)) {
+    wait_for_degraded_object(head, op);
+    return;
+  }
+ 
   entity_inst_t client = op->get_source_inst();
 
   ObjectContext *obc;
@@ -3725,8 +3740,8 @@ void ReplicatedPG::send_pull_op(const hobject_t& soid, eversion_t v, bool first,
 				const interval_set<uint64_t>& data_subset, int fromosd)
 {
   // send op
-  osd_reqid_t rid;
   tid_t tid = osd->get_tid();
+  osd_reqid_t rid(osd->cluster_messenger->get_myname(), 0, tid);
 
   dout(10) << "send_pull_op " << soid << " " << v
 	   << " first=" << first
@@ -3901,9 +3916,10 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
   osd->logger->inc(l_osd_push_outb, bl.length());
   
   // send
-  osd_reqid_t rid;  // useless?
+  tid_t tid = osd->get_tid();
+  osd_reqid_t rid(osd->cluster_messenger->get_myname(), 0, tid);
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), oi.version);
+				   osd->osdmap->get_epoch(), tid, oi.version);
   subop->oloc = oi.oloc;
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
@@ -3924,9 +3940,10 @@ int ReplicatedPG::send_push_op(const hobject_t& soid, eversion_t version, int pe
 void ReplicatedPG::send_push_op_blank(const hobject_t& soid, int peer)
 {
   // send a blank push back to the primary
-  osd_reqid_t rid;
+  tid_t tid = osd->get_tid();
+  osd_reqid_t rid(osd->cluster_messenger->get_myname(), 0, tid);
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), eversion_t());
+				   osd->osdmap->get_epoch(), tid, eversion_t());
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
   subop->first = false;

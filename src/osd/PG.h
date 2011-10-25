@@ -1690,13 +1690,6 @@ public:
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
-  virtual bool is_write_in_progress() = 0;
-  virtual bool is_missing_object(const hobject_t& oid) = 0;
-  virtual void wait_for_missing_object(const hobject_t& oid, Message *op) = 0;
-
-  virtual bool is_degraded_object(const hobject_t& oid) = 0;
-  virtual void wait_for_degraded_object(const hobject_t& oid, Message *op) = 0;
-
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
