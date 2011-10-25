@@ -34,7 +34,8 @@ int librgw_create(librgw_t *rgw, const char * const id)
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf->set_val("log_to_stderr", "1"); // quiet by default
+  cct->_conf->set_val("log_to_stderr", "false"); // quiet by default
+  cct->_conf->set_val("err_to_stderr", "true"); // quiet by default
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes(NULL);
 

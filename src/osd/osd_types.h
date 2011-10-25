@@ -492,7 +492,6 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_CREATING     (1<<0)  // creating
 #define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
 #define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
-#define PG_STATE_CRASHED      (1<<3)  // all replicas went down, clients needs to replay
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
 #define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 #define PG_STATE_STRAY        (1<<6)  // i must notify the primary i exist.
@@ -533,9 +532,34 @@ inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
  * pg_pool
  */
 struct pg_pool_t {
-  mutable ceph_pg_pool v;
+  enum {
+    TYPE_REP = 1,     // replication
+    TYPE_RAID4 = 2,   // raid4 (never implemented)
+  };
 
-  int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+  static const char *get_type_name(int t) {
+    switch (t) {
+    case TYPE_REP: return "rep";
+    case TYPE_RAID4: return "raid4";
+    default: return "???";
+    }
+  }
+  const char *get_type_name() const {
+    return get_type_name(type);
+  }
+
+  uint64_t flags;           /// FLAG_* 
+  __u8 type;                /// TYPE_*
+  __u8 size;                /// number of osds in each pg
+  __u8 crush_ruleset;       /// crush placement rule set
+  __u8 object_hash;         /// hash mapping object name to ps
+  __u32 pg_num, pgp_num;    /// number of pgs
+  __u32 lpg_num, lpgp_num;  /// number of localized pgs
+  epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
+  snapid_t snap_seq;        /// seq for per-pool snapshot
+  epoch_t snap_epoch;       /// osdmap epoch of last snap
+  uint64_t auid;            /// who owns the pg
+  __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -551,35 +575,43 @@ struct pg_pool_t {
    */
   interval_set<snapid_t> removed_snaps;
 
-  pg_pool_t() :
-    pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) {
-    memset(&v, 0, sizeof(v));
-  }
+  int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+
+  pg_pool_t()
+    : flags(0), type(0), size(0), crush_ruleset(0), object_hash(0),
+      pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
+      last_change(0),
+      snap_seq(0), snap_epoch(0),
+      auid(0),
+      crash_replay_interval(0),
+      pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
 
-  unsigned get_type() const { return v.type; }
-  unsigned get_size() const { return v.size; }
-  int get_crush_ruleset() const { return v.crush_ruleset; }
-  int get_object_hash() const { return v.object_hash; }
+  uint64_t get_flags() const { return flags; }
+  unsigned get_type() const { return type; }
+  unsigned get_size() const { return size; }
+  int get_crush_ruleset() const { return crush_ruleset; }
+  int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
     return ceph_str_hash_name(get_object_hash());
   }
-  epoch_t get_last_change() const { return v.last_change; }
-  epoch_t get_snap_epoch() const { return v.snap_epoch; }
-  snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
-  uint64_t get_auid() const { return v.auid; }
+  epoch_t get_last_change() const { return last_change; }
+  epoch_t get_snap_epoch() const { return snap_epoch; }
+  snapid_t get_snap_seq() const { return snap_seq; }
+  uint64_t get_auid() const { return auid; }
+  unsigned get_crash_replay_interval() const { return crash_replay_interval; }
 
-  void set_snap_seq(snapid_t s) { v.snap_seq = s; }
-  void set_snap_epoch(epoch_t e) { v.snap_epoch = e; }
+  void set_snap_seq(snapid_t s) { snap_seq = s; }
+  void set_snap_epoch(epoch_t e) { snap_epoch = e; }
 
-  bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
-  bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
+  bool is_rep()   const { return get_type() == TYPE_REP; }
+  bool is_raid4() const { return get_type() == TYPE_RAID4; }
 
-  unsigned get_pg_num() const { return v.pg_num; }
-  unsigned get_pgp_num() const { return v.pgp_num; }
-  unsigned get_lpg_num() const { return v.lpg_num; }
-  unsigned get_lpgp_num() const { return v.lpgp_num; }
+  unsigned get_pg_num() const { return pg_num; }
+  unsigned get_pgp_num() const { return pgp_num; }
+  unsigned get_lpg_num() const { return lpg_num; }
+  unsigned get_lpgp_num() const { return lpgp_num; }
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
@@ -626,10 +658,10 @@ struct pg_pool_t {
    */
   ps_t raw_pg_to_pps(pg_t pg) const;
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
 };
-WRITE_CLASS_ENCODER(pg_pool_t)
+WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p);
 

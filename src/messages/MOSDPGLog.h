@@ -48,8 +48,8 @@ private:
 public:
   const char *get_type_name() { return "PGlog"; }
   void print(ostream& out) {
-    out << "pg_log(" << info.pgid << " e" << epoch
-	<< " query epoch" << query_epoch << ")";
+    out << "pg_log(" << info.pgid << " epoch " << epoch
+	<< " query_epoch " << query_epoch << ")";
   }
 
   void encode_payload(CephContext *cct) {

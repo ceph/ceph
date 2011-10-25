@@ -630,11 +630,11 @@ bool PGMonitor::register_new_pgs()
 
     if (pool.get_last_change() <= pg_map.last_pg_scan ||
 	pool.get_last_change() <= pending_inc.pg_scan) {
-      dout(10) << " no change in " << pool << dendl;
+      dout(10) << " no change in pool " << p->first << " " << pool << dendl;
       continue;
     }
 
-    dout(10) << "register_new_pgs scanning " << pool << dendl;
+    dout(10) << "register_new_pgs scanning pool " << p->first << " " << pool << dendl;
 
     bool new_pool = pg_map.pg_pool_sum.count(poolid) == 0;  // first pgs in this pool
 

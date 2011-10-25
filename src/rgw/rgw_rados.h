@@ -311,14 +311,18 @@ public:
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
-  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
+  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
+                         string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
-  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num,
+                      map<string, RGWObjEnt>& m, bool *is_truncated,
+                      string *last_entry = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
-  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
+  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
+                           rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
@@ -331,6 +335,25 @@ public:
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
+  /**
+   * Check the actual on-disk state of the object specified
+   * by list_state, and fill in the time and size of object.
+   * Then append any changes to suggested_updates for
+   * the rgw class' dir_suggest_changes function.
+   *
+   * Note that this can maul list_state; don't use it afterwards. Also
+   * it expects object to already be filled in from list_state; it only
+   * sets the size and mtime.
+   *
+   * Returns 0 on success, -ENOENT if the object doesn't exist on disk,
+   * and -errno on other failures. (-ENOENT is not a failure, and it
+   * will encode that info as a suggested update.)
+   */
+  int check_disk_state(librados::IoCtx io_ctx,
+                       rgw_bucket& bucket,
+                       rgw_bucket_dir_entry& list_state,
+                       RGWObjEnt& object,
+                       bufferlist& suggested_updates);
 
 };
 

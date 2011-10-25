@@ -64,14 +64,17 @@ public:
     }
   }
   void print(ostream& out) {
-    out << "osd pg notify(" << "epoch " << epoch
-	<< "query epoch " << query_epoch << "; ";
+    out << "pg_notify(";
     for (vector<PG::Info>::iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
-      out << "pg" << i->pgid << "; ";
+      if (i != pg_list.begin())
+	out << ",";
+      out << i->pgid;
     }
-    out << ")";
+    out << " epoch " << epoch
+	<< " query_epoch " << query_epoch
+	<< ")";
   }
 };
 

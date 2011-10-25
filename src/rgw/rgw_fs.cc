@@ -122,7 +122,7 @@ int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix,
 
     string obj = dirent->d_name;
 
-    if (!rgw_obj::translate_raw_obj(obj, ns))
+    if (!rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns))
         continue;
 
     string key = obj;

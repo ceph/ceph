@@ -584,7 +584,7 @@ OSD::~OSD()
   delete authorize_handler_registry;
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+  g_ceph_context->GetPerfCountersCollection()->remove(logger);
   delete logger;
   delete store;
 }
@@ -746,65 +746,63 @@ void OSD::create_logger()
 {
   dout(10) << "create_logger" << dendl;
 
-  char name[80];
-  snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  PerfCountersBuilder osd_plb(g_ceph_context, name, l_osd_first, l_osd_last);
+  PerfCountersBuilder osd_plb(g_ceph_context, "osd", l_osd_first, l_osd_last);
 
   osd_plb.add_u64(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
   osd_plb.add_u64(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
 
   osd_plb.add_u64_counter(l_osd_op,       "op");           // client ops
-  osd_plb.add_u64_counter(l_osd_op_inb,   "op_inb");       // client op in bytes (writes)
-  osd_plb.add_u64_counter(l_osd_op_outb,  "op_outb");      // client op out bytes (reads)
-  osd_plb.add_fl_avg(l_osd_op_lat,   "op_lat");       // client op latency
+  osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes");       // client op in bytes (writes)
+  osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes");      // client op out bytes (reads)
+  osd_plb.add_fl_avg(l_osd_op_lat,   "op_latency");       // client op latency
 
   osd_plb.add_u64_counter(l_osd_op_r,      "op_r");        // client reads
-  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_outb");   // client read out bytes
-  osd_plb.add_fl_avg(l_osd_op_r_lat,  "op_r_lat");    // client read latency
+  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes");   // client read out bytes
+  osd_plb.add_fl_avg(l_osd_op_r_lat,  "op_r_latency");    // client read latency
   osd_plb.add_u64_counter(l_osd_op_w,      "op_w");        // client writes
-  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_inb");    // client write in bytes
+  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes");    // client write in bytes
   osd_plb.add_fl_avg(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_w_lat,  "op_w_lat");    // client write latency
+  osd_plb.add_fl_avg(l_osd_op_w_lat,  "op_w_latency");    // client write latency
   osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw");       // client rmw
-  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_inb");   // client rmw in bytes
-  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_outb");  // client rmw out bytes
+  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes");   // client rmw in bytes
+  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes");  // client rmw out bytes
   osd_plb.add_fl_avg(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_rw_lat, "op_rw_lat");   // client rmw latency
+  osd_plb.add_fl_avg(l_osd_op_rw_lat, "op_rw_latency");   // client rmw latency
 
-  osd_plb.add_u64_counter(l_osd_sop,       "sop");         // subops
-  osd_plb.add_u64_counter(l_osd_sop_inb,   "sop_inb");     // subop in bytes
-  osd_plb.add_fl_avg(l_osd_sop_lat,   "sop_lat");     // subop latency
+  osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
+  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
+  osd_plb.add_fl_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
 
-  osd_plb.add_u64_counter(l_osd_sop_w,     "sop_w");          // replicated (client) writes
-  osd_plb.add_u64_counter(l_osd_sop_w_inb, "sop_w_inb");      // replicated write in bytes
-  osd_plb.add_fl_avg(l_osd_sop_w_lat, "sop_w_lat");      // replicated write latency
-  osd_plb.add_u64_counter(l_osd_sop_pull,     "sop_pull");       // pull request
-  osd_plb.add_fl_avg(l_osd_sop_pull_lat, "sop_pull_lat");
-  osd_plb.add_u64_counter(l_osd_sop_push,     "sop_push");       // push (write)
-  osd_plb.add_u64_counter(l_osd_sop_push_inb, "sop_push_inb");
-  osd_plb.add_fl_avg(l_osd_sop_push_lat, "sop_push_lat");
+  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w");          // replicated (client) writes
+  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes");      // replicated write in bytes
+  osd_plb.add_fl_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
+  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull");       // pull request
+  osd_plb.add_fl_avg(l_osd_sop_pull_lat, "subop_pull_latency");
+  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push");       // push (write)
+  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes");
+  osd_plb.add_fl_avg(l_osd_sop_push_lat, "subop_push_latency");
 
   osd_plb.add_u64_counter(l_osd_pull,      "pull");       // pull requests sent
   osd_plb.add_u64_counter(l_osd_push,      "push");       // push messages
-  osd_plb.add_u64_counter(l_osd_push_outb, "push_outb");  // pushed bytes
+  osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes");  // pushed bytes
 
-  osd_plb.add_u64_counter(l_osd_rop, "rop");       // recovery ops (started)
+  osd_plb.add_u64_counter(l_osd_rop, "recovery_ops");       // recovery ops (started)
 
   osd_plb.add_fl(l_osd_loadavg, "loadavg");
-  osd_plb.add_u64(l_osd_buf, "buf");       // total ceph::buffer bytes
+  osd_plb.add_u64(l_osd_buf, "buffer_bytes");       // total ceph::buffer bytes
 
   osd_plb.add_u64(l_osd_pg, "numpg");   // num pgs
   osd_plb.add_u64(l_osd_pg_primary, "numpg_primary"); // num primary pgs
   osd_plb.add_u64(l_osd_pg_replica, "numpg_replica"); // num replica pgs
   osd_plb.add_u64(l_osd_pg_stray, "numpg_stray");   // num stray pgs
-  osd_plb.add_u64(l_osd_hb_to, "hbto");     // heartbeat peers we send to
-  osd_plb.add_u64(l_osd_hb_from, "hbfrom"); // heartbeat peers we recv from
-  osd_plb.add_u64_counter(l_osd_map, "map");           // osdmap messages
-  osd_plb.add_u64_counter(l_osd_mape, "mape");         // osdmap epochs
-  osd_plb.add_u64_counter(l_osd_mape_dup, "mape_dup"); // dup osdmap epochs
+  osd_plb.add_u64(l_osd_hb_to, "heartbeat_to_peers");     // heartbeat peers we send to
+  osd_plb.add_u64(l_osd_hb_from, "heartbeat_from_peers"); // heartbeat peers we recv from
+  osd_plb.add_u64_counter(l_osd_map, "map_messagse");           // osdmap messages
+  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
+  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
 
   logger = osd_plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 }
 
 int OSD::shutdown()
@@ -1021,7 +1019,7 @@ PGPool* OSD::_get_pool(int id)
     }
 
     p = new PGPool(id, osdmap->get_pool_name(id),
-		   osdmap->get_pg_pool(id)->v.auid );
+		   osdmap->get_pg_pool(id)->auid);
     pool_map[id] = p;
     p->get();
     
@@ -1060,7 +1058,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   PG *pg;
   hobject_t logoid = make_pg_log_oid(pgid);
   hobject_t infooid = make_pg_biginfo_oid(pgid);
-  if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
+  if (osdmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
     pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
   else 
     assert(0);
@@ -2357,14 +2355,29 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     flush_pg_stats();
   }
   
-  else if (cmd.size() == 2 && cmd[0] == "mark_unfound_lost") {
+  else if (cmd.size() == 3 && cmd[0] == "mark_unfound_lost") {
     pg_t pgid;
     if (!pgid.parse(cmd[1].c_str())) {
       ss << "can't parse pgid '" << cmd[1] << "'";
       r = -EINVAL;
       goto out;
     }
-    PG *pg = _lookup_lock_pg(pgid);
+    int mode;
+    if (cmd[2] == "revert")
+      mode = PG::Log::Entry::LOST_REVERT;
+    /*
+    else if (cmd[2] == "mark")
+      mode = PG::Log::Entry::LOST_MARK;
+    else if (cmd[2] == "delete" || cmd[2] == "remove")
+      mode = PG::Log::Entry::LOST_DELETE;
+    */
+    else {
+      //ss << "mode must be mark|revert|delete";
+      ss << "mode must be revert (mark|delete not yet implemented)";
+      r = -EINVAL;
+      goto out;
+    }
+    PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid) : NULL;
     if (!pg) {
       ss << "pg " << pgid << " not found";
       r = -ENOENT;
@@ -2372,16 +2385,19 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     if (!pg->is_primary()) {
       ss << "pg " << pgid << " not primary";
+      pg->unlock();
       r = -EINVAL;
       goto out;
     }
     int unfound = pg->missing.num_missing() - pg->missing_loc.size();
     if (!unfound) {
       ss << "pg " << pgid << " has no unfound objects";
+      pg->unlock();
       r = -ENOENT;
       goto out;
     }
-    if (!pg->all_unfound_are_lost(pg->osd->osdmap)) {
+    if (!pg->all_unfound_are_queried_or_lost(pg->osd->osdmap)) {
+      pg->unlock();
       ss << "pg " << pgid << " has " << unfound
 	 << " objects but we haven't probed all sources, not marking lost despite command "
 	 << cmd;
@@ -2390,9 +2406,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
     ss << pgid << " has " << unfound
        << " objects unfound and apparently lost, marking";
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    pg->mark_all_unfound_as_lost(*t);
-    store->queue_transaction(&pg->osr, t);
+    pg->mark_all_unfound_lost(mode);
+    pg->unlock();
   }
 
   else if (cmd[0] == "heap") {
@@ -3501,7 +3516,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     PGPool *pool = p->second;
     
     // make sure auid stays up to date
-    pool->auid = pi->v.auid;
+    pool->auid = pi->auid;
     
     if (pi->get_snap_epoch() == osdmap->get_epoch()) {
       pi->build_removed_snaps(pool->newly_removed_snaps);
@@ -5130,12 +5145,13 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 
 void OSD::handle_op(MOSDOp *op)
 {
-  if (!op->get_connection()->is_connected()) {
-    dout(10) << "handle_op sender " << op->get_connection()->get_peer_addr()
-	     << " not connected, dropping " << *op << dendl;
+  if (op_is_discardable(op)) {
     op->put();
     return;
   }
+
+  // we don't need encoded payload anymore
+  op->clear_payload();
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch()))
@@ -5153,6 +5169,27 @@ void OSD::handle_op(MOSDOp *op)
   if (osdmap->is_blacklisted(op->get_source_addr())) {
     dout(4) << "handle_op " << op->get_source_addr() << " is blacklisted" << dendl;
     reply_op_error(op, -EBLACKLISTED);
+    return;
+  }
+
+  // full?
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+      !op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+    reply_op_error(op, -ENOSPC);
+    return;
+  }
+
+  // invalid?
+  if (op->get_snapid() != CEPH_NOSNAP) {
+    reply_op_error(op, -EINVAL);
+    return;
+  }
+
+  // too big?
+  if (g_conf->osd_max_write_size &&
+      op->get_data_len() > g_conf->osd_max_write_size << 20) {
+    // journal can't hold commit!
+    reply_op_error(op, -OSD_WRITETOOBIG);
     return;
   }
 
@@ -5183,129 +5220,41 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   pg->get();
-  _handle_op(pg, op);
+  enqueue_op(pg, op);
   pg->unlock();
   pg->put();
 }
 
-void OSD::_handle_op(PG *pg, MOSDOp *op)
+bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
 {
-  dout(10) << *pg << " _handle_op " << op << " " << *op << dendl;
-  assert(pg->is_locked());
-
   Session *session = (Session *)op->get_connection()->get_priv();
   if (!session) {
-    dout(0) << "WARNING: no session for op" << dendl;
-    reply_op_error(op, -EPERM);
-    return;
+    dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
+    return false;
   }
-
   OSDCaps& caps = session->caps;
   session->put();
 
   int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
-  dout(10) << " request for pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid
-	   << " perm=" << perm
+  dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
+	   << ") owner=" << pg->pool->auid << " perm=" << perm
 	   << " may_read=" << op->may_read()
-           << " may_write=" << op->may_write()
+	   << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec()
            << " require_exec_caps=" << op->require_exec_caps() << dendl;
 
-  int err = -EPERM;
   if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
     dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
+    return false;
   } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
     dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
+    return false;
   } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
     dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
-  } else {
-    err = 0;
+    return false;
   }
-
-  if (err < 0) {
-    reply_op_error(op, err);
-    return;
-  }
-
-  // we don't need encoded payload anymore
-  op->clear_payload();
- 
-  if (op->may_write()) {
-    // misdirected?
-    if (!pg->is_primary() ||
-	!pg->same_for_modify_since(op->get_map_epoch())) {
-      handle_misdirected_op(pg, op);
-      return;
-    }
-
-    // full?
-    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
-	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-      reply_op_error(op, -ENOSPC);
-      return;
-    }
-
-    // invalid?
-    if (op->get_snapid() != CEPH_NOSNAP) {
-      reply_op_error(op, -EINVAL);
-      return;
-    }
-
-    // too big?
-    if (g_conf->osd_max_write_size &&
-        op->get_data_len() > g_conf->osd_max_write_size << 20) {
-      // journal can't hold commit!
-      reply_op_error(op, -OSD_WRITETOOBIG);
-      return;
-    }
-  } else {
-    // misdirected?
-    if (!pg->same_for_read_since(op->get_map_epoch())) {
-      handle_misdirected_op(pg, op);
-      return;
-    }
-  }
-
-  // pg must be active.
-  if (!pg->is_active()) {
-    dout(7) << *pg << " not active (yet)" << dendl;
-    pg->waiting_for_active.push_back(op);
-    return;
-  }
-  if (pg->is_replay()) {
-    if (op->get_version().version > 0) {
-      dout(7) << *pg << " queueing replay at " << op->get_version()
-	      << " for " << *op << dendl;
-      pg->replay_queue[op->get_version()] = op;
-      return;
-    }
-  }
-
-  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
-    // missing object?
-    hobject_t head(op->get_oid(), op->get_object_locator().key,
-		   CEPH_NOSNAP, op->get_pg().ps());
-    if (pg->is_missing_object(head)) {
-      pg->wait_for_missing_object(head, op);
-      return;
-    }
-
-    // degraded object?
-    if (op->may_write() && pg->is_degraded_object(head)) {
-      pg->wait_for_degraded_object(head, op);
-      return;
-    }
-  }
-
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_op(op);
-  } else {
-    // queue for worker threads
-    enqueue_op(pg, op);         
-  }
+  return true;
 }
-
 
 void OSD::handle_sub_op(MOSDSubOp *op)
 {
@@ -5339,31 +5288,9 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   }
   pg->get();
-  _handle_sub_op(pg, op);
+  enqueue_op(pg, op);
   pg->unlock();
   pg->put();
-}
-
-void OSD::_handle_sub_op(PG *pg, MOSDSubOp *op)
-{
-  dout(10) << *pg << " _handle_sub_op " << op << " " << *op << dendl;
-  assert(pg->is_locked());
-
-  // same pg?
-  //  if pg changes _at all_, we reset and repeer!
-  if (op->map_epoch < pg->info.history.same_interval_since) {
-    dout(10) << "handle_sub_op pg changed " << pg->info.history
-	     << " after " << op->map_epoch 
-	     << ", dropping" << dendl;
-    op->put();
-    return;
-  }
-
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_sub_op(op);    // do it now
-  } else {
-    enqueue_op(pg, op);     // queue for worker threads
-  }
 }
 
 void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
@@ -5396,22 +5323,93 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
     return;
   }
   pg->get();
-  _handle_sub_op_reply(pg, op);
+  enqueue_op(pg, op);
   pg->unlock();
   pg->put();
 }
 
-void OSD::_handle_sub_op_reply(PG *pg, MOSDSubOpReply *op)
+bool OSD::op_is_discardable(MOSDOp *op)
 {
-  dout(10) << *pg << " _handle_sub_op_reply " << op << " " << *op << dendl;
-  assert(pg->is_locked());
-  if (g_conf->osd_op_threads < 1) {
-    pg->do_sub_op_reply(op);    // do it now
-  } else {
-    enqueue_op(pg, op);     // queue for worker threads
+  // drop client request if they are not connected and can't get the
+  // reply anyway.  unless this is a replayed op, in which case we
+  // want to do what we can to apply it.
+  if (!op->get_connection()->is_connected() &&
+      op->get_version().version == 0) {
+    dout(10) << " sender " << op->get_connection()->get_peer_addr()
+	     << " not connected, dropping " << *op << dendl;
+    return true;
   }
+  return false;
 }
 
+/*
+ * discard operation, or return true.  no side-effects.
+ */
+bool OSD::op_is_queueable(PG *pg, MOSDOp *op)
+{
+  assert(pg->is_locked());
+
+  if (!op_has_sufficient_caps(pg, op)) {
+    reply_op_error(op, -EPERM);
+    return false;
+  }
+
+  if (op_is_discardable(op)) {
+    op->put();
+    return false;
+  }
+
+  // misdirected?
+  if (op->may_write()) {
+    if (!pg->is_primary() ||
+	!pg->same_for_modify_since(op->get_map_epoch())) {
+      handle_misdirected_op(pg, op);
+      return false;
+    }
+  } else {
+    if (!pg->same_for_read_since(op->get_map_epoch())) {
+      handle_misdirected_op(pg, op);
+      return false;
+    }
+  }
+
+  if (!pg->is_active()) {
+    dout(7) << *pg << " not active (yet)" << dendl;
+    pg->waiting_for_active.push_back(op);
+    return false;
+  }
+
+  if (pg->is_replay()) {
+    if (op->get_version().version > 0) {
+      dout(7) << *pg << " queueing replay at " << op->get_version()
+	      << " for " << *op << dendl;
+      pg->replay_queue[op->get_version()] = op;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/*
+ * discard operation, or return true.  no side-effects.
+ */
+bool OSD::subop_is_queueable(PG *pg, MOSDSubOp *op)
+{
+  assert(pg->is_locked());
+
+  // same pg?
+  //  if pg changes _at all_, we reset and repeer!
+  if (op->map_epoch < pg->info.history.same_interval_since) {
+    dout(10) << "handle_sub_op pg changed " << pg->info.history
+	     << " after " << op->map_epoch 
+	     << ", dropping" << dendl;
+    op->put();
+    return false;
+  }
+
+  return true;
+}
 
 /*
  * enqueue called with osd_lock held
@@ -5420,6 +5418,26 @@ void OSD::enqueue_op(PG *pg, Message *op)
 {
   dout(15) << *pg << " enqueue_op " << op << " " << *op << dendl;
   assert(pg->is_locked());
+
+  switch (op->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    if (!op_is_queueable(pg, (MOSDOp*)op))
+      return;
+    break;
+
+  case MSG_OSD_SUBOP:
+    if (!subop_is_queueable(pg, (MOSDSubOp*)op))
+      return;
+    break;
+
+  case MSG_OSD_SUBOPREPLY:
+    // don't care.
+    break;
+
+  default:
+    assert(0 == "enqueued an illegal message type");
+  }
+
   // add to pg's op_queue
   pg->op_queue.push_back(op);
   pending_ops++;
@@ -5443,24 +5461,16 @@ void OSD::requeue_ops(PG *pg, list<Message*>& ls)
   list<Message*> orig_queue;
   orig_queue.swap(pg->op_queue);
 
-  // requeue old items, now at front.
-  while (!ls.empty()) {
-    Message *op = ls.front();
-    ls.pop_front();
+  // grab whole list at once, in case methods we call below start adding things
+  // back on the list reference we were passed!
+  list<Message*> q;
+  q.swap(ls);
 
-    switch (op->get_type()) {
-    case CEPH_MSG_OSD_OP:
-      _handle_op(pg, (MOSDOp*)op);
-      break;
-    case MSG_OSD_SUBOP:
-      _handle_sub_op(pg, (MOSDSubOp*)op);
-      break;
-    case MSG_OSD_SUBOPREPLY:
-      _handle_sub_op_reply(pg, (MOSDSubOpReply*)op);
-      break;
-    default:
-      assert(0 == "requeued an illegal type");
-    }
+  // requeue old items, now at front.
+  while (!q.empty()) {
+    Message *op = q.front();
+    q.pop_front();
+    enqueue_op(pg, op);
   }
 
   // put orig queue contents back in line, after the stuff we requeued.
@@ -5495,20 +5505,17 @@ void OSD::dequeue_op(PG *pg)
   }
   osd_lock.Unlock();
 
-  if (!op->get_connection()->is_connected()) {
-    dout(10) << "dequeue_op sender " << op->get_connection()->get_peer_addr()
-	     << " not connected, dropping " << *op << dendl;
-    op->put();
-  } else {
-    // do it
-    if (op->get_type() == CEPH_MSG_OSD_OP)
+  if (op->get_type() == CEPH_MSG_OSD_OP) {
+    if (op_is_discardable((MOSDOp*)op))
+      op->put();
+    else
       pg->do_op((MOSDOp*)op); // do it now
-    else if (op->get_type() == MSG_OSD_SUBOP)
-      pg->do_sub_op((MOSDSubOp*)op);
-    else if (op->get_type() == MSG_OSD_SUBOPREPLY)
-      pg->do_sub_op_reply((MOSDSubOpReply*)op);
-    else 
-      assert(0);
+  } else if (op->get_type() == MSG_OSD_SUBOP) {
+    pg->do_sub_op((MOSDSubOp*)op);
+  } else if (op->get_type() == MSG_OSD_SUBOPREPLY) {
+    pg->do_sub_op_reply((MOSDSubOpReply*)op);
+  } else {
+    assert(0 == "bad message type in dequeue_op");
   }
 
   // unlock and put pg

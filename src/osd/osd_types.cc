@@ -170,8 +170,6 @@ std::string pg_state_string(int state)
     oss << "active+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
-  if (state & PG_STATE_CRASHED)
-    oss << "crashed+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
@@ -235,6 +233,7 @@ void pool_snap_info_t::decode(bufferlist::iterator& bl)
 
 void pg_pool_t::dump(Formatter *f) const
 {
+  f->dump_unsigned("flags", get_flags());
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
@@ -243,6 +242,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("pg_placement_num", get_pgp_num());
   f->dump_int("localized_pg_num", get_lpg_num());
   f->dump_int("localized_pg_placement_num", get_lpgp_num());
+  f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
@@ -271,10 +271,10 @@ int pg_pool_t::calc_bits_of(int t)
 
 void pg_pool_t::calc_pg_masks()
 {
-  pg_num_mask = (1 << calc_bits_of(v.pg_num-1)) - 1;
-  pgp_num_mask = (1 << calc_bits_of(v.pgp_num-1)) - 1;
-  lpg_num_mask = (1 << calc_bits_of(v.lpg_num-1)) - 1;
-  lpgp_num_mask = (1 << calc_bits_of(v.lpgp_num-1)) - 1;
+  pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
+  pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+  lpg_num_mask = (1 << calc_bits_of(lpg_num-1)) - 1;
+  lpgp_num_mask = (1 << calc_bits_of(lpgp_num-1)) - 1;
 }
 
 /*
@@ -329,7 +329,7 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
 {
   assert(removed_snaps.empty());
   snapid_t s = get_snap_seq() + 1;
-  v.snap_seq = s;
+  snap_seq = s;
   snaps[s].snapid = s;
   snaps[s].name = n;
   snaps[s].stamp = stamp;
@@ -340,23 +340,23 @@ void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
   if (removed_snaps.empty()) {
     assert(snaps.empty());
     removed_snaps.insert(snapid_t(1));
-    v.snap_seq = 1;
+    snap_seq = 1;
   }
-  snapid = v.snap_seq = v.snap_seq + 1;
+  snapid = snap_seq = snap_seq + 1;
 }
 
 void pg_pool_t::remove_snap(snapid_t s)
 {
   assert(snaps.count(s));
   snaps.erase(s);
-  v.snap_seq = v.snap_seq + 1;
+  snap_seq = snap_seq + 1;
 }
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
   assert(snaps.empty());
   removed_snaps.insert(s);
-  v.snap_seq = v.snap_seq + 1;
+  snap_seq = snap_seq + 1;
   removed_snaps.insert(get_snap_seq());
 }
 
@@ -376,10 +376,10 @@ SnapContext pg_pool_t::get_snap_context() const
  */
 pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
 {
-  if (pg.preferred() >= 0 && v.lpg_num)
-    pg.set_ps(ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask));
+  if (pg.preferred() >= 0 && lpg_num)
+    pg.set_ps(ceph_stable_mod(pg.ps(), lpg_num, lpg_num_mask));
   else
-    pg.set_ps(ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask));
+    pg.set_ps(ceph_stable_mod(pg.ps(), pg_num, pg_num_mask));
   return pg;
 }
   
@@ -390,43 +390,117 @@ pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
  */
 ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
 {
-  if (pg.preferred() >= 0 && v.lpgp_num)
-    return ceph_stable_mod(pg.ps(), v.lpgp_num, lpgp_num_mask) + pg.pool();
+  if (pg.preferred() >= 0 && lpgp_num)
+    return ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask) + pg.pool();
   else
-    return ceph_stable_mod(pg.ps(), v.pgp_num, pgp_num_mask) + pg.pool();
+    return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) + pg.pool();
 }
 
-void pg_pool_t::encode(bufferlist& bl) const
+void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 {
-  __u8 struct_v = CEPH_PG_POOL_VERSION;
+  if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
+    // this encoding matches the old struct ceph_pg_pool
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+
+    __u32 n = snaps.size();
+    ::encode(n, bl);
+    n = removed_snaps.num_intervals();
+    ::encode(n, bl);
+
+    ::encode(auid, bl);
+
+    ::encode_nohead(snaps, bl);
+    removed_snaps.encode_nohead(bl);
+    return;
+  }
+
+  __u8 struct_v = 4;
   ::encode(struct_v, bl);
-  v.num_snaps = snaps.size();
-  v.num_removed_snap_intervals = removed_snaps.num_intervals();
-  ::encode(v, bl);
-  ::encode_nohead(snaps, bl);
-  removed_snaps.encode_nohead(bl);
+  ::encode(type, bl);
+  ::encode(size, bl);
+  ::encode(crush_ruleset, bl);
+  ::encode(object_hash, bl);
+  ::encode(pg_num, bl);
+  ::encode(pgp_num, bl);
+  ::encode(lpg_num, bl);
+  ::encode(lpgp_num, bl);
+  ::encode(last_change, bl);
+  ::encode(snap_seq, bl);
+  ::encode(snap_epoch, bl);
+  ::encode(snaps, bl);
+  ::encode(removed_snaps, bl);
+  ::encode(auid, bl);
+  ::encode(flags, bl);
+  ::encode(crash_replay_interval, bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
   __u8 struct_v;
   ::decode(struct_v, bl);
-  if (struct_v > CEPH_PG_POOL_VERSION)
+  if (struct_v > 4)
     throw buffer::error();
-  ::decode(v, bl);
-  ::decode_nohead(v.num_snaps, snaps, bl);
-  removed_snaps.decode_nohead(v.num_removed_snap_intervals, bl);
+
+  ::decode(type, bl);
+  ::decode(size, bl);
+  ::decode(crush_ruleset, bl);
+  ::decode(object_hash, bl);
+  ::decode(pg_num, bl);
+  ::decode(pgp_num, bl);
+  ::decode(lpg_num, bl);
+  ::decode(lpgp_num, bl);
+  ::decode(last_change, bl);
+  ::decode(snap_seq, bl);
+  ::decode(snap_epoch, bl);
+
+  if (struct_v >= 3) {
+    ::decode(snaps, bl);
+    ::decode(removed_snaps, bl);
+    ::decode(auid, bl);
+  } else {
+    __u32 n, m;
+    ::decode(n, bl);
+    ::decode(m, bl);
+    ::decode(auid, bl);
+    ::decode_nohead(n, snaps, bl);
+    removed_snaps.decode_nohead(m, bl);
+  }
+
+  if (struct_v >= 4) {
+    ::decode(flags, bl);
+    ::decode(crash_replay_interval, bl);
+  } else {
+    flags = 0;
+
+    // if this looks like the 'data' pool, set the
+    // crash_replay_interval appropriately.  unfortunately, we can't
+    // be precise here.  this should be good enough to preserve replay
+    // on the data pool for the majority of cluster upgrades, though.
+    if (crush_ruleset == 0 && auid == 0)
+      crash_replay_interval = 60;
+    else
+      crash_replay_interval = 0;
+  }
+
   calc_pg_masks();
 }
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
-  out << "pg_pool(";
-  switch (p.get_type()) {
-  case CEPH_PG_TYPE_REP: out << "rep"; break;
-  default: out << "type " << p.get_type();
-  }
-  out << " pg_size " << p.get_size()
+  out << p.get_type_name()
+      << " size " << p.get_size()
       << " crush_ruleset " << p.get_crush_ruleset()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
@@ -434,8 +508,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " lpg_num " << p.get_lpg_num()
       << " lpgp_num " << p.get_lpgp_num()
       << " last_change " << p.get_last_change()
-      << " owner " << p.v.auid
-      << ")";
+      << " owner " << p.get_auid();
+  if (p.flags)
+    out << " flags " << p.flags;
+  if (p.crash_replay_interval)
+    out << " crash_replay_interval " << p.crash_replay_interval;
   return out;
 }
 

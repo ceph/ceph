@@ -98,7 +98,15 @@ private:
 
   // in journal
   deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
-  deque<pair<uint64_t,Context*> > completions;  // queued, writing, waiting for commit.
+
+  struct completion_item {
+    uint64_t seq;
+    Context *finish;
+    utime_t start;
+    completion_item(uint64_t o, Context *c, utime_t s)
+      : seq(o), finish(c), start(s) {}
+  };
+  deque<completion_item> completions;  // queued, writing, waiting for commit.
 
   uint64_t writing_seq, journaled_seq;
   bool plug_journal_completions;

@@ -532,7 +532,7 @@ struct RGWObjEnt {
   std::string name;
   std::string owner;
   std::string owner_display_name;
-  size_t size;
+  uint64_t size;
   time_t mtime;
   string etag;
   string content_type;
@@ -698,7 +698,15 @@ public:
       return orig_key;
   }
 
-  static bool translate_raw_obj(string& obj, string& ns) {
+  /**
+   * Translate a namespace-mangled object name to the user-facing name
+   * existing in the given namespace.
+   *
+   * If the object is part of the given namespace, it returns true
+   * and cuts down the name to the unmangled version. If it is not
+   * part of the given namespace, it returns false.
+   */
+  static bool translate_raw_obj_to_obj_in_ns(string& obj, string& ns) {
     if (ns.empty()) {
       if (obj[0] != '_')
         return true;
@@ -723,6 +731,35 @@ public:
         return false;
 
     obj = obj.substr(pos + 1);
+    return true;
+  }
+
+  /**
+   * Given a mangled object name and an empty namespace string, this
+   * function extracts the namespace into the string and sets the object
+   * name to be the unmangled version.
+   *
+   * It returns true after successfully doing so, or
+   * false if it fails.
+   */
+  static bool strip_namespace_from_object(string& obj, string& ns) {
+    ns.clear();
+    if (obj[0] != '_') {
+      return true;
+    }
+
+    size_t pos = obj.find('_', 1);
+    if (pos == string::npos) {
+      return false;
+    }
+
+    size_t period_pos = obj.find('.');
+    if (period_pos < pos) {
+      return false;
+    }
+
+    ns = obj.substr(1, pos-1);
+    obj = obj.substr(pos+1, string::npos);
     return true;
   }
 

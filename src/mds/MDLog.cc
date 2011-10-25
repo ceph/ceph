@@ -38,7 +38,7 @@ MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
   if (logger) {
-    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
+    g_ceph_context->GetPerfCountersCollection()->remove(logger);
     delete logger;
     logger = 0;
   }
@@ -47,9 +47,7 @@ MDLog::~MDLog()
 
 void MDLog::create_logger()
 {
-  char name[80];
-  snprintf(name, sizeof(name), "mds.%s.log", g_conf->name.get_id().c_str());
-  PerfCountersBuilder plb(g_ceph_context, name, l_mdl_first, l_mdl_last);
+  PerfCountersBuilder plb(g_ceph_context, "mds_log", l_mdl_first, l_mdl_last);
 
   plb.add_u64_counter(l_mdl_evadd, "evadd");
   plb.add_u64_counter(l_mdl_evex, "evex");
@@ -72,7 +70,7 @@ void MDLog::create_logger()
 
   // logger
   logger = plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
 }
 
 void MDLog::init_journaler()

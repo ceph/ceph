@@ -1619,8 +1619,8 @@ void GuiMonitor::StatsWindowInfo::gen_osd_node_columns()
   insert_stats("Up From", str(boost::format("%lu") % osdInfo.up_from));
   insert_stats("Up Through", str(boost::format("%lu") % osdInfo.up_thru));
   insert_stats("Down At", str(boost::format("%lu") % osdInfo.down_at));
-  insert_stats("Last Clean", str(boost::format("First: %lu, Last: %lu") %
-    osdInfo.last_clean_first % osdInfo.last_clean_last));
+  insert_stats("Last Clean", str(boost::format("Begin: %lu, End: %lu") %
+    osdInfo.last_clean_begin % osdInfo.last_clean_end));
 }
 
 void GuiMonitor::StatsWindowInfo::gen_mds_node_columns()

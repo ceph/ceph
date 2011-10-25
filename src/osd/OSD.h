@@ -1092,13 +1092,14 @@ public:
   void handle_sub_op_reply(class MOSDSubOpReply *m);
 
 private:
-  /*
-   * these locked helpers assume pg is locked, and will do fina
-   * checks before enqueuing the given operation.
-   */
-  void _handle_op(PG *pg, class MOSDOp *m);
-  void _handle_sub_op(PG *pg, class MOSDSubOp *m);
-  void _handle_sub_op_reply(PG *pg, class MOSDSubOpReply *m);
+  /// check if we can throw out op from a disconnected client
+  bool op_is_discardable(class MOSDOp *m);
+  /// check if op has sufficient caps
+  bool op_has_sufficient_caps(PG *pg, class MOSDOp *m);
+  /// check if op should be (re)queued for processing
+  bool op_is_queueable(PG *pg, class MOSDOp *m);
+  /// check if subop should be (re)queued for processing
+  bool subop_is_queueable(PG *pg, class MOSDSubOp *m);
 
 public:
   void force_remount();

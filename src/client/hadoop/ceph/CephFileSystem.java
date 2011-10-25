@@ -30,7 +30,6 @@ import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
-import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -40,8 +39,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FsStatus;
-import org.apache.hadoop.fs.CreateFlag;
 
 
 /**
@@ -330,7 +327,7 @@ public class CephFileSystem extends FileSystem {
           "mkdirs: make directory " + abs_path + "Failing with result " + result,
           ceph.WARN);
       if (ceph.ENOTDIR == result) {
-        throw new FileAlreadyExistsException("Parent path is not a directory");
+        throw new IOException("Parent path is not a directory");
       }
       return false;
     } else {
@@ -518,8 +515,8 @@ public class CephFileSystem extends FileSystem {
    * Create a new file and open an FSDataOutputStream that's connected to it.
    * @param path The file to create.
    * @param permission The permissions to apply to the file.
-   * @param flag If CreateFlag.OVERWRITE, overwrite any existing
-   * file with this name; otherwise don't.
+   * @param overwrite If true, overwrite any existing file with
+	 * this name; otherwise don't.
    * @param bufferSize Ceph does internal buffering, but you can buffer
    *   in the Java code too if you like.
    * @param replication Ignored by Ceph. This can be
@@ -536,7 +533,6 @@ public class CephFileSystem extends FileSystem {
   public FSDataOutputStream create(Path path,
       FsPermission permission,
       boolean overwrite,
-      // boolean overwrite,
       int bufferSize,
       short replication,
       long blockSize,
@@ -787,39 +783,9 @@ public class CephFileSystem extends FileSystem {
     return locations;
   }
 
-  /**
-   * Get usage statistics on the Ceph filesystem.
-   * @param path A path to the partition you're interested in.
-   * Ceph doesn't partition, so this is ignored.
-   * @return FsStatus reporting capacity, usage, and remaining space.
-   * @throws IOException if initialize() hasn't been called, or the
-   * stat somehow fails.
-   */
-  @Override
-  public FsStatus getStatus(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
-    ceph.debug("getStatus:enter with path " + path, ceph.DEBUG);
-    Path abs_path = makeAbsolute(path);
-
-    // currently(Ceph .16) Ceph actually ignores the path
-    // but we still pass it in; if Ceph stops ignoring we may need more
-    // error-checking code.
-    CephStat ceph_stat = new CephStat();
-
-    ceph.debug("getStatus:calling ceph_statfs from Java", ceph.TRACE);
-    int result = ceph.ceph_statfs(abs_path.toString(), ceph_stat);
-
-    if (result != 0) {
-      throw new IOException(
-          "Somehow failed to statfs the Ceph filesystem. Error code: " + result);
-    }
-    ceph.debug("getStatus:exit successfully", ceph.DEBUG);
-    return new FsStatus(ceph_stat.capacity, ceph_stat.used, ceph_stat.remaining);
-  }
+	public boolean delete(Path path) throws IOException {
+		return delete(path, false);
+	}
 
   /**
    * Delete the given path, and optionally its children.
@@ -995,14 +961,5 @@ public class CephFileSystem extends FileSystem {
     public int mode;
 
     public Stat() {}
-  }
-
-
-  static class CephStat {
-    public long capacity;
-    public long used;
-    public long remaining;
-
-    public CephStat() {}
   }
 }

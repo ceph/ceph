@@ -6,6 +6,11 @@
 #include "include/types.h"
 #include "include/utime.h"
 
+
+#define CEPH_RGW_REMOVE 'r'
+#define CEPH_RGW_UPDATE 'u'
+#define CEPH_RGW_TAG_TIMEOUT 60*60*24
+
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY,
   CLS_RGW_STATE_COMPLETE,
@@ -51,6 +56,9 @@ struct rgw_bucket_dir_entry_meta {
   string tag;
   string content_type;
 
+  rgw_bucket_dir_entry_meta() :
+  category(0), size(0) { mtime.set_from_double(0); }
+
   void encode(bufferlist &bl) const {
     __u8 struct_v = 2;
     ::encode(struct_v, bl);
@@ -80,18 +88,28 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
 struct rgw_bucket_dir_entry {
   std::string name;
   uint64_t epoch;
+  std::string locator;
   bool exists;
   struct rgw_bucket_dir_entry_meta meta;
   map<string, struct rgw_bucket_pending_info> pending_map;
 
+  rgw_bucket_dir_entry() :
+    epoch(0), exists(false) {}
+
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
+    if (!locator.size()) {
+      struct_v = 1; // don't waste space encoding it
+    }
     ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
     ::encode(pending_map, bl);
+    if (locator.size()) {
+      ::encode(locator, bl);
+    }
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -101,6 +119,9 @@ struct rgw_bucket_dir_entry {
     ::decode(exists, bl);
     ::decode(meta, bl);
     ::decode(pending_map, bl);
+    if (struct_v >= 2) {
+      ::decode(locator, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
@@ -167,13 +188,20 @@ struct rgw_cls_obj_prepare_op
   uint8_t op;
   string name;
   string tag;
+  string locator;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
+    if (!locator.size()) {
+      struct_v = 1; // don't waste the encoding space
+    }
     ::encode(struct_v, bl);
     ::encode(op, bl);
     ::encode(name, bl);
     ::encode(tag, bl);
+    if (locator.size()) {
+      ::encode(locator, bl);
+    }
   }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
@@ -181,6 +209,9 @@ struct rgw_cls_obj_prepare_op
     ::decode(op, bl);
     ::decode(name, bl);
     ::decode(tag, bl);
+    if (struct_v >= 2) {
+      ::decode(locator, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
@@ -189,19 +220,26 @@ struct rgw_cls_obj_complete_op
 {
   uint8_t op;
   string name;
+  string locator;
   uint64_t epoch;
   struct rgw_bucket_dir_entry_meta meta;
   string tag;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
+    if (!locator.size()) {
+      struct_v = 1; // don't waste the encoding space
+    }
     ::encode(struct_v, bl);
     ::encode(op, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
-  }
+    if (locator.size()) {
+      ::encode(locator, bl);
+    }
+ }
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
@@ -210,6 +248,9 @@ struct rgw_cls_obj_complete_op
     ::decode(epoch, bl);
     ::decode(meta, bl);
     ::decode(tag, bl);
+    if (struct_v >= 2) {
+      ::decode(locator, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)

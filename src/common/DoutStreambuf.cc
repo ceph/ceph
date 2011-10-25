@@ -241,15 +241,14 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
     syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s",
 	   obuf + TIME_FMT_SZ + 1);
   }
-  if (flags & DOUTSB_FLAG_STDERR) {
-    if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
-      // Just write directly out to the stderr fileno. There's no point in
-      // using something like fputs to write to a temporary buffer,
-      // because we would just have to flush that temporary buffer
-      // immediately.
-      if (safe_write(STDERR_FILENO, obuf, len))
-	flags &= ~DOUTSB_FLAG_STDERR;
-    }
+  if ((prio == -1 && (flags & DOUTSB_FLAG_STDERR_ERR)) ||
+      (prio != -1 && (flags & DOUTSB_FLAG_STDERR_LOG))) {
+    // Just write directly out to the stderr fileno. There's no point in
+    // using something like fputs to write to a temporary buffer,
+    // because we would just have to flush that temporary buffer
+    // immediately.
+    if (safe_write(STDERR_FILENO, obuf, len))
+      flags &= ~DOUTSB_FLAG_STDERR;
   }
   if (flags & DOUTSB_FLAG_OFILE) {
     if (safe_write(ofd, obuf, len))
@@ -277,7 +276,7 @@ get_tracked_conf_keys() const
 {
   static const char *KEYS[] =
 	{ "log_file", "log_sym_dir",
-	 "log_sym_history", "log_to_stderr",
+	  "log_sym_history", "log_to_stderr", "err_to_stderr",
 	 "log_to_syslog", "log_per_instance", NULL };
   return KEYS;
 }
@@ -305,22 +304,16 @@ handle_conf_change(const md_config_t *conf, const std::set <std::string> &change
     flags |= DOUTSB_FLAG_SYSLOG;
   }
 
-  if ((conf->log_to_stderr != LOG_TO_STDERR_NONE) &&
-       fd_is_open(STDERR_FILENO)) {
-    switch (conf->log_to_stderr) {
-      case LOG_TO_STDERR_SOME:
-	flags |= DOUTSB_FLAG_STDERR_SOME;
-	break;
-      case LOG_TO_STDERR_ALL:
-	flags |= DOUTSB_FLAG_STDERR_ALL;
-	break;
-      default:
-	ostringstream oss;
-	oss << "DoutStreambuf::handle_conf_change: can't understand "
-	    << "conf->log_to_stderr = " << conf->log_to_stderr << "\n";
-	dout_emergency(oss.str());
-	break;
-    }
+  if (fd_is_open(STDERR_FILENO)) {
+    if (conf->log_to_stderr)
+      flags |= DOUTSB_FLAG_STDERR_LOG;
+    else
+      flags &= ~DOUTSB_FLAG_STDERR_LOG;
+
+    if (conf->err_to_stderr)
+      flags |= DOUTSB_FLAG_STDERR_ERR;
+    else
+      flags &= ~DOUTSB_FLAG_STDERR_ERR;
   }
 
   if (_read_ofile_config(conf) == 0) {

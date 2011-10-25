@@ -64,7 +64,7 @@ int main(int argc, const char **argv)
     printf("error: succeeded in setting nonexistent config option\n");
     exit(1);
   }
-  if (rados.conf_set("log to stderr", "2")) {
+  if (rados.conf_set("log to stderr", "true")) {
     printf("error: error setting log_to_stderr\n");
     exit(1);
   }
@@ -73,7 +73,7 @@ int main(int argc, const char **argv)
     printf("error: failed to read log_to_stderr from config\n");
     exit(1);
   }
-  if (tmp[0] != '2') {
+  if (tmp != "true") {
     printf("error: new setting for log_to_stderr failed to take effect.\n");
     exit(1);
   }

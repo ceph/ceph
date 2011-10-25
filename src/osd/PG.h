@@ -356,13 +356,37 @@ public:
      */
     struct Entry {
       enum {
-	LOST = 0,        // lost new version, now deleted
 	MODIFY = 1,
 	CLONE = 2,
 	DELETE = 3,
 	BACKLOG = 4,  // event invented by generate_backlog
-	LOST_REVERT = 5, // lost new version, reverted to old
+	LOST_REVERT = 5, // lost new version, revert to an older version.
+	LOST_DELETE = 6, // lost new version, revert to no object (deleted).
+	LOST_MARK = 7,   // lost new version, now EIO
       };
+      static const char *get_op_name(int op) {
+	switch (op) {
+	case MODIFY:
+	  return "modify  ";
+	case CLONE:
+	  return "clone   ";
+	case DELETE:
+	  return "delete  ";
+	case BACKLOG:
+	  return "backlog ";
+	case LOST_REVERT:
+	  return "l_revert";
+	case LOST_DELETE:
+	  return "l_delete";
+	case LOST_MARK:
+	  return "l_mark  ";
+	default:
+	  return "unknown ";
+	}
+      }
+      const char *get_op_name() const {
+	return get_op_name(op);
+      }
 
       __s32      op;
       hobject_t  soid;
@@ -375,23 +399,29 @@ public:
       uint64_t offset;   // [soft state] my offset on disk
       
       Entry() : op(0), invalid_hash(false) {}
-      Entry(int _op, const hobject_t& _soid,
+      Entry(int _op, const hobject_t& _soid, 
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
         op(_op), soid(_soid), version(v),
-	prior_version(pv), 
+	prior_version(pv),
 	reqid(rid), mtime(mt), invalid_hash(false) {}
       
-      bool is_delete() const { return op == DELETE; }
       bool is_clone() const { return op == CLONE; }
       bool is_modify() const { return op == MODIFY; }
       bool is_backlog() const { return op == BACKLOG; }
-      bool is_lost() const { return op == LOST; }
       bool is_lost_revert() const { return op == LOST_REVERT; }
-      bool is_update() const { return is_clone() || is_modify() || is_backlog() || is_lost_revert(); }
+      bool is_lost_delete() const { return op == LOST_DELETE; }
+      bool is_lost_mark() const { return op == LOST_MARK; }
 
+      bool is_update() const {
+	return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+      }
+      bool is_delete() const {
+	return op == DELETE || op == LOST_DELETE;
+      }
+      
       bool reqid_is_indexed() const {
-	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE && op != LOST && op != LOST_REVERT;
+	return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
       }
 
       void encode(bufferlist &bl) const {
@@ -683,10 +713,11 @@ public:
     bool is_missing(const hobject_t& oid) const;
     bool is_missing(const hobject_t& oid, eversion_t v) const;
     eversion_t have_old(const hobject_t& oid) const;
-    void add_next_event(Log::Entry& e, const Info &info);
+    void add_next_event(const Log::Entry& e);
     void revise_need(hobject_t oid, eversion_t need);
     void add(const hobject_t& oid, eversion_t need, eversion_t have);
     void rm(const hobject_t& oid, eversion_t v);
+    void rm(const std::map<hobject_t, Missing::item>::iterator &m);
     void got(const hobject_t& oid, eversion_t v);
     void got(const std::map<hobject_t, Missing::item>::iterator &m);
 
@@ -842,27 +873,27 @@ public:
  protected:
   bool prior_set_built;
 
-  struct PgPriorSet {
-    set<int>    cur;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-    set<int>    down;  // down osds normally exluded from cur
-    set<int>    lost;  // osds in the prior set which are lost
-    map<int,epoch_t> up_thru;  // osds whose up_thru we care about
-    vector<Interval> inter_up_thru;  // intervals whose up_thru we care about
-    bool crashed;   /// true if past osd failures were such that clients may need to replay requests.
-    bool pg_down;
-    bool some_down;
-    const PG *pg;
-    PgPriorSet(int whoami,
-	       const OSDMap &osdmap,
-	       const map<epoch_t, Interval> &past_intervals,
-	       const vector<int> &up,
-	       const vector<int> &acting,
-	       const Info &info,
-	       const PG *pg);
+  struct PriorSet {
+    set<int> probe; /// current+prior OSDs we need to probe.
+    set<int> down;  /// down osds that would normally be in @probe and might be interesting.
+    map<int,epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
+
+    bool pg_down;   /// some down osds are included in @cur; the DOWN pg state bit should be set.
+    PriorSet(const OSDMap &osdmap,
+	     const map<epoch_t, Interval> &past_intervals,
+	     const vector<int> &up,
+	     const vector<int> &acting,
+	     const Info &info,
+	     const PG *debug_pg=NULL);
+
+    bool affected_by_map(const OSDMap *osdmap, const PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
-				  const struct PgPriorSet &prior);
+				  const struct PriorSet &prior);
+
+  bool may_need_replay(const OSDMap *osdmap) const;
+
 
 public:    
   struct RecoveryCtx {
@@ -1140,7 +1171,7 @@ public:
     struct Active;
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      std::auto_ptr< PgPriorSet > prior_set;
+      std::auto_ptr< PriorSet > prior_set;
 
       Peering(my_context ctx);
       void exit();
@@ -1177,9 +1208,11 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< MQuery >,
-	boost::statechart::custom_reaction< MInfoRec >
+	boost::statechart::custom_reaction< MInfoRec >,
+	boost::statechart::custom_reaction< MLogRec >
 	> reactions;
       boost::statechart::result react(const MInfoRec& infoevt);
+      boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
     };
@@ -1365,16 +1398,13 @@ public:
 
   void generate_past_intervals();
   void trim_past_intervals();
-  void build_prior(std::auto_ptr<PgPriorSet> &prior_set);
+  void build_prior(std::auto_ptr<PriorSet> &prior_set);
   void clear_prior();
-  bool prior_set_affected(PgPriorSet &prior, const OSDMap *osdmap) const;
 
   bool adjust_need_up_thru(const OSDMap *osdmap);
 
-  bool all_unfound_are_lost(const OSDMap* osdmap) const;
-  void mark_obj_as_lost(ObjectStore::Transaction& t,
-			const hobject_t &lost_soid);
-  void mark_all_unfound_as_lost(ObjectStore::Transaction& t);
+  bool all_unfound_are_queried_or_lost(const OSDMap* osdmap) const;
+  virtual void mark_all_unfound_lost(int how) = 0;
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
@@ -1421,7 +1451,7 @@ public:
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       map< int, map<pg_t,Query> >& query_map,
 	       map<int, MOSDPGInfo*> *activator_map=0);
-  bool choose_log_location(const PgPriorSet &prior_set,
+  bool choose_log_location(const PriorSet &prior_set,
 			   bool &need_backlog,
 			   bool &wait_on_backlog,
 			   int &pull_from,
@@ -1477,7 +1507,6 @@ public:
   int scrub_waiting_on;
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
-  MOSDRepScrub *active_rep_scrub;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -1530,8 +1559,7 @@ public:
     finish_sync_event(NULL),
     finalizing_scrub(false),
     scrub_reserved(false), scrub_reserve_failed(false),
-    scrub_waiting_on(0),
-    active_rep_scrub(0)
+    scrub_waiting_on(0)
   {
     pool->get();
   }
@@ -1566,7 +1594,6 @@ public:
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
@@ -1601,8 +1628,10 @@ public:
   void queue_snap_trim();
   bool queue_scrub();
 
+  /// share pg info after a pg is active
   void share_pg_info();
-  void share_pg_log(const eversion_t &oldver);
+  /// share new pg log entries after a pg is active
+  void share_pg_log();
 
   void start_peering_interval(const OSDMap *lastmap,
 			      const vector<int>& newup,
@@ -1660,13 +1689,6 @@ public:
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
-
-  virtual bool is_write_in_progress() = 0;
-  virtual bool is_missing_object(const hobject_t& oid) = 0;
-  virtual void wait_for_missing_object(const hobject_t& oid, Message *op) = 0;
-
-  virtual bool is_degraded_object(const hobject_t& oid) = 0;
-  virtual void wait_for_degraded_object(const hobject_t& oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
@@ -1734,15 +1756,8 @@ inline ostream& operator<<(ostream& out, const PG::Query& q)
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {
-  return out << e.version << " (" << e.prior_version << ")"
-             << (e.is_delete() ? " - ":
-		 (e.is_clone() ? " c ":
-		  (e.is_modify() ? " m ":
-		   (e.is_backlog() ? " b ":
-		    (e.is_lost() ? " L ":
-		     (e.is_lost_revert() ? " R " :
-		      " ? "))))))
-             << e.soid << " by " << e.reqid << " " << e.mtime;
+  return out << e.version << " (" << e.prior_version << ") "
+             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
