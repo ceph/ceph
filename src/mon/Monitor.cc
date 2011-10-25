@@ -109,6 +109,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   monmap(map),
   clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
   key_server(cct),
+  auth_supported(cct),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -603,6 +604,10 @@ void Monitor::handle_route(MRoute *m)
   if (m->session_mon_tid) {
     if (routed_requests.count(m->session_mon_tid)) {
       RoutedRequest *rr = routed_requests[m->session_mon_tid];
+
+      // reset payload, in case encoding is dependent on target features
+      m->msg->clear_payload();
+
       messenger->send_message(m->msg, rr->session->inst);
       m->msg = NULL;
       routed_requests.erase(m->session_mon_tid);
@@ -1151,7 +1156,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
 
-  if (!is_supported_auth(CEPH_AUTH_CEPHX, g_ceph_context))
+  if (!auth_supported.is_supported_auth(CEPH_AUTH_CEPHX))
     return false;
 
   CephXServiceTicketInfo auth_ticket_info;
@@ -1208,7 +1213,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 	   << " protocol " << protocol << dendl;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
-      is_supported_auth(CEPH_AUTH_CEPHX, g_ceph_context)) {
+      auth_supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
     // monitor, and cephx is enabled
     isvalid = false;
     if (protocol == CEPH_AUTH_CEPHX) {

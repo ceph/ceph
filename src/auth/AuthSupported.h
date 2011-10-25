@@ -15,10 +15,19 @@
 #ifndef CEPH_AUTHSUPPORTED_H
 #define CEPH_AUTHSUPPORTED_H
 
-#include <map>
+#include "include/inttypes.h"
+#include <set>
 
 class CephContext;
 
-extern bool is_supported_auth(int auth_type, CephContext *cct);
+class AuthSupported {
+  std::set<int> auth_supported;
+public:
+  AuthSupported(CephContext *cct);
+
+  bool is_supported_auth(int auth_type);
+  int pick(const std::set<__u32>& supported);
+};
+
 
 #endif

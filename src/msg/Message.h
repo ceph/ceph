@@ -77,6 +77,8 @@
 #define MSG_OSD_REP_SCRUB      93
 
 
+#define MSG_COMMAND            97
+#define MSG_COMMAND_REPLY      98
 
 // *** MDS ***
 
@@ -221,6 +223,10 @@ public:
     if (pipe)
       pipe->put();
     pipe = p->get();
+  }
+  bool is_connected() {
+    Mutex::Locker l(lock);
+    return pipe != NULL;
   }
 
   int get_peer_type() { return peer_type; }

@@ -120,31 +120,58 @@ void RGWListBucket_REST_SWIFT::send_response()
 
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
-  char buf[16];
+  char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
   CGI_PRINTF(s,"X-Container-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
   CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
 }
 
-void RGWStatBucket_REST_SWIFT::send_response()
+static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
+                                  uint64_t buckets_object_count, uint64_t buckets_size)
 {
-  if (ret >= 0)
-    dump_container_metadata(s, bucket);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
+  CGI_PRINTF(s,"X-Account-Container-Count: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
+  CGI_PRINTF(s,"X-Account-Object-Count: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
+  CGI_PRINTF(s,"X-Account-Bytes-Used: %s\n", buf);
+}
 
-  if (ret < 0)
-    set_req_state_err(s, ret);
+void RGWStatAccount_REST_SWIFT::send_response()
+{
+  if (ret >= 0) {
+    ret = 204;
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size);
+  }
+
+  set_req_state_err(s, ret);
   dump_errno(s);
 
   end_header(s);
   dump_start(s);
-  flush_formatter_to_req_state(s, s->formatter);
+}
+
+void RGWStatBucket_REST_SWIFT::send_response()
+{
+  if (ret >= 0) {
+    ret = 204;
+    dump_container_metadata(s, bucket);
+  }
+
+  set_req_state_err(s, ret);
+  dump_errno(s);
+
+  end_header(s);
+  dump_start(s);
 }
 
 void RGWCreateBucket_REST_SWIFT::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (!ret)
+    ret = 201; // "created"
+  set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
@@ -270,7 +297,10 @@ RGWOp *RGWHandler_REST_SWIFT::get_retrieve_op(bool get_data)
     return get_retrieve_obj_op(get_data);
   }
 
-  return new RGWListBuckets_REST_SWIFT;
+  if (get_data)
+    return new RGWListBuckets_REST_SWIFT;
+  else
+    return new RGWStatAccount_REST_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_SWIFT::get_create_op()

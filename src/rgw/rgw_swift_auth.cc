@@ -12,9 +12,9 @@ using namespace ceph::crypto;
 
 static RGW_SWIFT_Auth_Get rgw_swift_auth_get;
 
-static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
+static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
 {
-  ::encode(os_user, bl);
+  ::encode(swift_user, bl);
   ::encode(nonce, bl);
   ::encode(expiration, bl);
 
@@ -38,7 +38,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
 
 }
 
-static int encode_token(string& os_user, string& key, bufferlist& bl)
+static int encode_token(string& swift_user, string& key, bufferlist& bl)
 {
   uint64_t nonce;
 
@@ -49,7 +49,7 @@ static int encode_token(string& os_user, string& key, bufferlist& bl)
   utime_t expiration = ceph_clock_now(g_ceph_context);
   expiration += RGW_SWIFT_TOKEN_EXPIRATION; // 15 minutes
 
-  ret = build_token(os_user, key, nonce, expiration, bl);
+  ret = build_token(swift_user, key, nonce, expiration, bl);
 
   return ret;
 }
@@ -79,10 +79,10 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
 
   uint64_t nonce;
   utime_t expiration;
-  string os_user;
+  string swift_user;
 
   try {
-    ::decode(os_user, iter);
+    ::decode(swift_user, iter);
     ::decode(nonce, iter);
     ::decode(expiration, iter);
   } catch (buffer::error& err) {
@@ -94,13 +94,18 @@ int rgw_swift_verify_signed_token(const char *token, RGWUserInfo& info)
     return -EPERM;
   }
 
-  if ((ret = rgw_get_user_info_by_swift(os_user, info)) < 0)
+  if ((ret = rgw_get_user_info_by_swift(swift_user, info)) < 0)
     return ret;
 
-  dout(10) << "os_user=" << os_user << dendl;
+  dout(10) << "swift_user=" << swift_user << dendl;
+
+  map<string, RGWAccessKey>::iterator siter = info.swift_keys.find(swift_user);
+  if (siter == info.swift_keys.end())
+    return -EPERM;
+  RGWAccessKey& swift_key = siter->second;
 
   bufferlist tok;
-  ret = build_token(os_user, info.swift_key, nonce, expiration, tok);
+  ret = build_token(swift_user, swift_key.key, nonce, expiration, tok);
   if (ret < 0)
     return ret;
 
@@ -131,6 +136,8 @@ void RGW_SWIFT_Auth_Get::execute()
   string user_str = user;
   RGWUserInfo info;
   bufferlist bl;
+  RGWAccessKey *swift_key;
+  map<string, RGWAccessKey>::iterator siter;
 
   if (g_conf->rgw_swift_url.length() == 0 ||
       g_conf->rgw_swift_url_prefix.length() == 0) {
@@ -145,16 +152,23 @@ void RGW_SWIFT_Auth_Get::execute()
   if ((ret = rgw_get_user_info_by_swift(user_str, info)) < 0)
     goto done;
 
-  if (info.swift_key.compare(key) != 0) {
+  siter = info.swift_keys.find(user_str);
+  if (siter == info.swift_keys.end()) {
+    ret = -EPERM;
+    goto done;
+  }
+  swift_key = &siter->second;
+
+  if (swift_key->key.compare(key) != 0) {
     dout(0) << "RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", g_conf->rgw_swift_url.c_str(),
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", g_conf->rgw_swift_url.c_str(),
 	     g_conf->rgw_swift_url_prefix.c_str());
 
-  if ((ret = encode_token(info.swift_name, info.swift_key, bl)) < 0)
+  if ((ret = encode_token(swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
   {

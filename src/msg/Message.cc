@@ -35,6 +35,9 @@ using namespace std;
 
 #include "messages/MPing.h"
 
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
 
@@ -244,6 +247,13 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case CEPH_MSG_PING:
     m = new MPing();
     break;
+  case MSG_COMMAND:
+    m = new MCommand;
+    break;
+  case MSG_COMMAND_REPLY:
+    m = new MCommandReply;
+    break;
+
   case MSG_ROUTE:
     m = new MRoute;
     break;

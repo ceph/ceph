@@ -12,11 +12,14 @@ using namespace librados;
 
 std::string get_temp_pool_name()
 {
-  char out[17];
+  char hostname[80];
+  char out[80];
+  memset(hostname, 0, sizeof(hostname));
   memset(out, 0, sizeof(out));
-  for (size_t i = 0; i < sizeof(out) - 1; ++i) {
-    out[i] = 'A' + (rand() % 26);
-  }
+  gethostname(hostname, sizeof(hostname)-1);
+  static int num = 1;
+  sprintf(out, "%s-%d-%d", hostname, getpid(), num);
+  num++;
   std::string prefix("test-rados-api-");
   prefix += out;
   return prefix;

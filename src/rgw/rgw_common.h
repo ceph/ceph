@@ -17,7 +17,13 @@
 
 #include "common/ceph_crypto.h"
 #include "common/debug.h"
-#include "fcgiapp.h"
+
+#include "acconfig.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
 #include <errno.h>
 #include <string.h>
@@ -51,7 +57,7 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 7
+#define USER_INFO_VER 8
 
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
@@ -273,9 +279,8 @@ struct RGWUserInfo
   string user_id;
   string display_name;
   string user_email;
-  string swift_name;
-  string swift_key;
   map<string, RGWAccessKey> access_keys;
+  map<string, RGWAccessKey> swift_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
 
@@ -297,12 +302,21 @@ struct RGWUserInfo
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
      ::encode(user_email, bl);
+     string swift_name;
+     string swift_key;
+     if (!swift_keys.empty()) {
+       map<string, RGWAccessKey>::const_iterator iter = swift_keys.begin();
+       const RGWAccessKey& k = iter->second;
+       swift_name = k.id;
+       swift_key = k.key;
+     }
      ::encode(swift_name, bl);
      ::encode(swift_key, bl);
      ::encode(user_id, bl);
      ::encode(access_keys, bl);
      ::encode(subusers, bl);
      ::encode(suspended, bl);
+     ::encode(swift_keys, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -321,6 +335,8 @@ struct RGWUserInfo
     }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
+    string swift_name;
+    string swift_key;
     if (ver >= 3) ::decode(swift_name, bl);
     if (ver >= 4) ::decode(swift_key, bl);
     if (ver >= 5)
@@ -334,6 +350,9 @@ struct RGWUserInfo
     suspended = 0;
     if (ver >= 7) {
       ::decode(suspended, bl);
+    }
+    if (ver >= 8) {
+      ::decode(swift_keys, bl);
     }
   }
 
@@ -503,7 +522,7 @@ struct RGWObjEnt {
   std::string name;
   std::string owner;
   std::string owner_display_name;
-  size_t size;
+  uint64_t size;
   time_t mtime;
   string etag;
   string content_type;
@@ -669,7 +688,15 @@ public:
       return orig_key;
   }
 
-  static bool translate_raw_obj(string& obj, string& ns) {
+  /**
+   * Translate a namespace-mangled object name to the user-facing name
+   * existing in the given namespace.
+   *
+   * If the object is part of the given namespace, it returns true
+   * and cuts down the name to the unmangled version. If it is not
+   * part of the given namespace, it returns false.
+   */
+  static bool translate_raw_obj_to_obj_in_ns(string& obj, string& ns) {
     if (ns.empty()) {
       if (obj[0] != '_')
         return true;
@@ -694,6 +721,35 @@ public:
         return false;
 
     obj = obj.substr(pos + 1);
+    return true;
+  }
+
+  /**
+   * Given a mangled object name and an empty namespace string, this
+   * function extracts the namespace into the string and sets the object
+   * name to be the unmangled version.
+   *
+   * It returns true after successfully doing so, or
+   * false if it fails.
+   */
+  static bool strip_namespace_from_object(string& obj, string& ns) {
+    ns.clear();
+    if (obj[0] != '_') {
+      return true;
+    }
+
+    size_t pos = obj.find('_', 1);
+    if (pos == string::npos) {
+      return false;
+    }
+
+    size_t period_pos = obj.find('.');
+    if (period_pos < pos) {
+      return false;
+    }
+
+    ns = obj.substr(1, pos-1);
+    obj = obj.substr(pos+1, string::npos);
     return true;
   }
 

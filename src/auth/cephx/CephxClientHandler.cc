@@ -77,7 +77,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
     ::encode(header, bl);
 
-    authorizer = ticket_handler.build_authorizer(global_id);
+    CephXAuthorizer *authorizer = ticket_handler.build_authorizer(global_id);
     if (!authorizer)
       return -EINVAL;
     bl.claim_append(authorizer->bl);

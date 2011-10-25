@@ -837,6 +837,7 @@ int main(int argc, const char **argv)
   int num_rep = 2;
   int min_x = 0, max_x = 10000-1;
   int min_rule = 0, max_rule = 1000;
+  int force = -1;
   map<int, int> device_weight;
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
@@ -922,6 +923,11 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       max_x = min_x;
+    } else if (ceph_argparse_withint(args, i, &force, &err, "--force", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_withint(args, i, &max_rule, &err, "--max_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -947,6 +953,7 @@ int main(int argc, const char **argv)
       if (i == args.end())
 	usage();
       float f = atof(*i);
+      i = args.erase(i);
       int w = (int)(f * 0x10000);
       if (w < 0)
 	w = 0;
@@ -1226,7 +1233,7 @@ int main(int argc, const char **argv)
       map<int,int> sizes;
       for (int x = min_x; x <= max_x; x++) {
 	vector<int> out;
-	crush.do_rule(r, x, out, num_rep, -1, weight);
+	crush.do_rule(r, x, out, num_rep, force, weight);
 	if (verbose)
 	  cout << "rule " << r << " x " << x << " " << out << std::endl;
 	for (unsigned i = 0; i < out.size(); i++)

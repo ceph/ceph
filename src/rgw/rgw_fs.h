@@ -14,10 +14,6 @@ public:
   int list_buckets_init(std::string& id, RGWAccessHandle *handle);
   int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
-  // not implemented here
-  int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) { assert(0); }
-  int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) { assert(0); }
-
   int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                    bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);

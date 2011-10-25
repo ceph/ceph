@@ -71,40 +71,10 @@ struct ceph_pg {
 } __attribute__ ((packed));
 
 /*
- * pg_pool is a set of pgs storing a pool of objects
- *
- *  pg_num -- base number of pseudorandomly placed pgs
- *
- *  pgp_num -- effective number when calculating pg placement.  this
- * is used for pg_num increases.  new pgs result in data being "split"
- * into new pgs.  for this to proceed smoothly, new pgs are intiially
- * colocated with their parents; that is, pgp_num doesn't increase
- * until the new pgs have successfully split.  only _then_ are the new
- * pgs placed independently.
- *
- *  lpg_num -- localized pg count (per device).  replicas are randomly
- * selected.
- *
- *  lpgp_num -- as above.
+ * pg pool types
  */
 #define CEPH_PG_TYPE_REP     1
 #define CEPH_PG_TYPE_RAID4   2
-#define CEPH_PG_POOL_VERSION 2
-struct ceph_pg_pool {
-	__u8 type;                /* CEPH_PG_TYPE_* */
-	__u8 size;                /* number of osds in each pg */
-	__u8 crush_ruleset;       /* crush placement rule */
-	__u8 object_hash;         /* hash mapping object name to ps */
-	__le32 pg_num, pgp_num;   /* number of pg's */
-	__le32 lpg_num, lpgp_num; /* number of localized pg's */
-	__le32 last_change;       /* most recent epoch changed -- excludes
-	                             snapshot changes; use snap_epoch for that*/
-	__le64 snap_seq;          /* seq for per-pool snapshot */
-	__le32 snap_epoch;        /* epoch of last snap */
-	__le32 num_snaps;
-	__le32 num_removed_snap_intervals; /* if non-empty, NO per-pool snaps */
-	__le64 auid;               /* who owns the pg */
-} __attribute__ ((packed));
 
 /*
  * stable_mod func is used to control number of placement groups.
@@ -307,7 +277,7 @@ static inline int ceph_osd_op_mode_modify(int op)
 
 /*
  * note that the following tmap stuff is also defined in the ceph librados.h
- * any modification here needs to be updated there
+ * and objclass.h. Any modification here needs to be updated there
  */
 #define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'

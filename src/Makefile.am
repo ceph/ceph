@@ -184,7 +184,9 @@ dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.la $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.la $(LIBGLOBAL_LDA)
-bin_DEBUGPROGRAMS += dupstore streamtest
+test_filestore_idempotent_SOURCES = test/test_filestore_idempotent.cc
+test_filestore_idempotent_LDADD = libos.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += dupstore streamtest test_filestore_idempotent
 
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.la $(LIBGLOBAL_LDA)
@@ -193,6 +195,14 @@ bin_DEBUGPROGRAMS += test_trans
 testsnaps_SOURCES = test/osd/TestSnaps.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
 testsnaps_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testsnaps
+
+testreadwrite_SOURCES = test/osd/TestReadWrite.cc test/osd/TestOpStat.cc test/osd/Object.cc  test/osd/RadosModel.cc
+testreadwrite_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += testreadwrite
+
+multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
+multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += multi_stress_watch 
 
 if WITH_BUILD_TESTS
 test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
@@ -599,6 +609,11 @@ unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librgw
 endif
 
+unittest_interval_tree_SOURCES = test/TestIntervalTree.cc
+unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_interval_tree
+
 test_librbd_SOURCES = test/test_librbd.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -733,7 +748,9 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
-docdir = ${datadir}/doc/ceph
+# NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
+docdir ?= ${datadir}/doc/ceph
+
 doc_DATA = $(srcdir)/sample.ceph.conf
 doc_SCRIPTS = sample.fetch_config
 
@@ -1222,6 +1239,8 @@ noinst_HEADERS = \
         messages/MClientRequestForward.h\
         messages/MClientSession.h\
         messages/MClientSnap.h\
+        messages/MCommand.h\
+        messages/MCommandReply.h\
         messages/MDentryLink.h\
         messages/MDentryUnlink.h\
         messages/MDirUpdate.h\

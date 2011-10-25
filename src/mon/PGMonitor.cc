@@ -180,7 +180,7 @@ bool PGMonitor::update_from_paxos()
     mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
   }
 
-  unsigned max = 500;
+  unsigned max = g_conf->mon_max_pgmap_epochs;
   if (mon->is_leader() &&
       paxosv > max)
     paxos->trim_to(paxosv - max);
@@ -446,6 +446,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
   // pg stats
   MPGStatsAck *ack = new MPGStatsAck;
+  ack->set_tid(stats->get_tid());
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++) {
@@ -629,11 +630,11 @@ bool PGMonitor::register_new_pgs()
 
     if (pool.get_last_change() <= pg_map.last_pg_scan ||
 	pool.get_last_change() <= pending_inc.pg_scan) {
-      dout(10) << " no change in " << pool << dendl;
+      dout(10) << " no change in pool " << p->first << " " << pool << dendl;
       continue;
     }
 
-    dout(10) << "register_new_pgs scanning " << pool << dendl;
+    dout(10) << "register_new_pgs scanning pool " << p->first << " " << pool << dendl;
 
     bool new_pool = pg_map.pg_pool_sum.count(poolid) == 0;  // first pgs in this pool
 

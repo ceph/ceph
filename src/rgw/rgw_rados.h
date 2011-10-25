@@ -141,9 +141,17 @@ public:
    */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
-  /* raw object list interface */
-  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle);
-  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle);
+  /// list logs
+  int log_list_init(const string& prefix, RGWAccessHandle *handle);
+  int log_list_next(RGWAccessHandle handle, string *name);
+
+  /// remove log
+  int log_remove(const string& name);
+
+  /// show log
+  int log_show_init(const string& name, RGWAccessHandle *handle);
+  int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
+
 
   /** get listing of the objects in a bucket */
   virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
@@ -292,19 +300,50 @@ public:
   virtual int get_bucket_info(string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
-  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag, string& name);
+  int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
+                         string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
                           RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
-  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m, bool *is_truncated);
+  int cls_bucket_list(rgw_bucket& bucket, string start, uint32_t num,
+                      map<string, RGWObjEnt>& m, bool *is_truncated,
+                      string *last_entry = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
-  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket, string& oid, string& tag);
+  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
+                           rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, bufferlist *acl_bl, RGWObjCategory category);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
     return cls_obj_complete_del(bucket, tag, epoch, oid);
   }
+
+  /// clean up/process any temporary objects older than given date[/time]
+  int remove_temp_objects(string date, string time);
+
+ private:
+  int process_intent_log(rgw_bucket& bucket, string& oid,
+			 time_t epoch, int flags, bool purge);
+  /**
+   * Check the actual on-disk state of the object specified
+   * by list_state, and fill in the time and size of object.
+   * Then append any changes to suggested_updates for
+   * the rgw class' dir_suggest_changes function.
+   *
+   * Note that this can maul list_state; don't use it afterwards. Also
+   * it expects object to already be filled in from list_state; it only
+   * sets the size and mtime.
+   *
+   * Returns 0 on success, -ENOENT if the object doesn't exist on disk,
+   * and -errno on other failures. (-ENOENT is not a failure, and it
+   * will encode that info as a suggested update.)
+   */
+  int check_disk_state(librados::IoCtx io_ctx,
+                       rgw_bucket& bucket,
+                       rgw_bucket_dir_entry& list_state,
+                       RGWObjEnt& object,
+                       bufferlist& suggested_updates);
+
 };
 
 #endif

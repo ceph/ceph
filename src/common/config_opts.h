@@ -24,7 +24,8 @@ OPTION(admin_socket, OPT_STR, "")
 OPTION(log_file, OPT_STR, "")
 OPTION(log_sym_dir, OPT_STR, "")
 OPTION(log_sym_history, OPT_INT, 10)
-OPTION(log_to_stderr, OPT_INT, LOG_TO_STDERR_ALL)
+OPTION(log_to_stderr, OPT_BOOL, true)
+OPTION(err_to_stderr, OPT_BOOL, true)
 OPTION(log_to_syslog, OPT_BOOL, false)
 OPTION(log_per_instance, OPT_BOOL, false)
 OPTION(clog_to_monitors, OPT_BOOL, true)
@@ -62,6 +63,7 @@ OPTION(debug_tp, OPT_INT, 0)
 OPTION(debug_auth, OPT_INT, 1)
 OPTION(debug_finisher, OPT_INT, 1)
 OPTION(debug_heartbeatmap, OPT_INT, 1)
+OPTION(debug_perfcounter, OPT_INT, 1)
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
 OPTION(keyring, OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin")
@@ -86,7 +88,7 @@ OPTION(mon_osd_down_out_interval, OPT_INT, 300) // seconds
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval, OPT_FLOAT, 3) // on leader, to renew the lease
 OPTION(mon_lease_ack_timeout, OPT_FLOAT, 10.0) // on leader, if lease isn't acked by all peons
-OPTION(mon_clock_drift_allowed, OPT_FLOAT, .010) // allowed clock drift between monitors
+OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between monitors
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
@@ -95,6 +97,9 @@ OPTION(mon_osd_nearfull_ratio, OPT_INT, 85) // what % full makes an OSD near ful
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
+OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
+OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
+OPTION(mon_max_log_epochs, OPT_INT, 500)
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_observer_timeout, OPT_DOUBLE, 5*60) // gather updates for this long before proposing a map update
@@ -247,6 +252,7 @@ OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
 OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
 OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
+OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_age, OPT_FLOAT, .8)
 OPTION(osd_age_time, OPT_INT, 0)
 OPTION(osd_heartbeat_interval, OPT_INT, 1)
@@ -256,7 +262,7 @@ OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
 OPTION(osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
-OPTION(osd_replay_window, OPT_INT, 45)
+OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, true)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 15)
@@ -331,12 +337,16 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  //
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
-OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 60*60)
+OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0)
 OPTION(rgw_pools_preallocate_max, OPT_INT, 100)
 OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70)
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
+OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
+OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
+OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
+OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
 OPTION(rbd_writeback_window, OPT_INT, 0 /*8 << 20*/) // rbd writeback window size, bytes
 
 // This will be set to true when it is safe to start threads.

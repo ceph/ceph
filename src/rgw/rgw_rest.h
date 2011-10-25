@@ -32,6 +32,12 @@ public:
   ~RGWListBucket_REST() {}
 };
 
+class RGWStatAccount_REST : public RGWStatAccount {
+public:
+  RGWStatAccount_REST() {}
+  ~RGWStatAccount_REST() {}
+};
+
 class RGWStatBucket_REST : public RGWStatBucket {
 public:
   RGWStatBucket_REST() {}

@@ -155,8 +155,7 @@ private:
   bool prepare_remove_snaps(class MRemoveSnaps *m);
 
  public:
-  OSDMonitor(Monitor *mn, Paxos *p) : 
-    PaxosService(mn, p) { }
+  OSDMonitor(Monitor *mn, Paxos *p);
 
   void tick();  // check state, take actions
 

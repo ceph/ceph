@@ -38,6 +38,8 @@ protected:
   list<uint64_t> ops_submitting;
   list<Cond*> ops_apply_blocked;
 
+  bool replaying;
+
 protected:
   void journal_start();
   void journal_stop();
@@ -60,6 +62,7 @@ protected:
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
   void commit_finish();
   
+public:
   bool is_committing() {
     Mutex::Locker l(com_lock);
     return committing_seq != committed_seq;
@@ -71,7 +74,8 @@ public:
 			    open_ops(0), blocked(false),
 			    journal(NULL), finisher(g_ceph_context),
 			    journal_lock("JournalingObjectStore::journal_lock"),
-			    com_lock("JournalingObjectStore::com_lock") { }
+			    com_lock("JournalingObjectStore::com_lock"),
+			    replaying(false) { }
   
 };
 

@@ -140,6 +140,7 @@ public:
 		   num_wr(0), wake(false) {}
 
     void check_mode() {
+      assert(state != DELAYED_FLUSHING && state != RMW_FLUSHING);
       if (num_wr == 0)
 	state = IDLE;
     }
@@ -272,7 +273,7 @@ public:
 
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
-    map<entity_name_t, utime_t> unconnected_watchers;
+    map<entity_name_t, Context *> unconnected_watchers;
     map<Watch::Notification *, bool> notifs;
 
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
@@ -486,6 +487,14 @@ protected:
   map<object_t, SnapSetContext*> snapset_contexts;
 
   void populate_obc_watchers(ObjectContext *obc);
+  void register_unconnected_watcher(void *obc,
+				    entity_name_t entity,
+				    utime_t expire);
+  void unregister_unconnected_watcher(void *obc,
+				      entity_name_t entity);
+  void handle_watch_timeout(void *obc,
+			    entity_name_t entity,
+			    utime_t expire);
 
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
@@ -526,9 +535,6 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  bool is_write_in_progress() {
-    return !object_contexts.empty();
-  }
 
 
   
@@ -575,7 +581,7 @@ protected:
 
   // Cancels/resets pulls from peer
   void check_recovery_op_pulls(const OSDMap *map);
-  int pull(const hobject_t& oid);
+  int pull(const hobject_t& oid, eversion_t v);
   void send_pull_op(const hobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
@@ -650,6 +656,14 @@ protected:
 	obc2->ondisk_write_unlock();
     }
   };
+  struct C_OSD_OndiskWriteUnlockList : public Context {
+    list<ObjectContext*> *pls;
+    C_OSD_OndiskWriteUnlockList(list<ObjectContext*> *l) : pls(l) {}
+    void finish(int r) {
+      for (list<ObjectContext*>::iterator p = pls->begin(); p != pls->end(); ++p)
+	(*p)->ondisk_write_unlock();
+    }
+  };
   struct C_OSD_AppliedPushedObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
@@ -666,12 +680,14 @@ protected:
     epoch_t same_since;
     eversion_t last_complete;
     C_OSD_CommittedPushedObject(ReplicatedPG *p, MOSDSubOp *o, epoch_t ss, eversion_t lc) : pg(p), op(o), same_since(ss), last_complete(lc) {
-      op->get();
+      if (op)
+	op->get();
       pg->get();
     }
     void finish(int r) {
       pg->_committed_pushed_object(op, same_since, last_complete);
-      op->put();
+      if (op)
+	op->put();
     }
   };
 
@@ -682,6 +698,7 @@ protected:
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void _applied_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void _committed_pushed_object(MOSDSubOp *op, epoch_t same_since, eversion_t lc);
+  void recover_primary_got(hobject_t oid, eversion_t v);
   void sub_op_push(MOSDSubOp *op);
   void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
@@ -796,10 +813,18 @@ public:
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, Message *op);
 
+  void mark_all_unfound_lost(int what);
+  eversion_t pick_newest_available(const hobject_t& oid);
+  ObjectContext *mark_object_lost(ObjectStore::Transaction *t,
+				  const hobject_t& oid, eversion_t version,
+				  utime_t mtime, int what);
+  void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
+
   void on_osd_failure(int o);
   void on_acker_change();
   void on_role_change();
   void on_change();
+  void on_activate();
   void on_shutdown();
 };
 

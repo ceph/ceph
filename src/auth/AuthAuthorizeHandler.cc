@@ -19,30 +19,33 @@
 #include "AuthSupported.h"
 #include "common/Mutex.h"
 
-static bool _initialized = false;
-static Mutex _lock("auth_service_handler_init");
-static map<int, AuthAuthorizeHandler *> authorizers;
-
-static void _init_authorizers(CephContext *cct)
+AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
 {
-  if (is_supported_auth(CEPH_AUTH_NONE, cct)) {
-    authorizers[CEPH_AUTH_NONE] = new AuthNoneAuthorizeHandler(); 
+  if (!supported.is_supported_auth(protocol)) {
+    return NULL;
   }
-  if (is_supported_auth(CEPH_AUTH_CEPHX, cct)) {
-    authorizers[CEPH_AUTH_CEPHX] = new CephxAuthorizeHandler(); 
+  
+  Mutex::Locker l(m_lock);
+  map<int,AuthAuthorizeHandler*>::iterator iter = m_authorizers.find(protocol);
+  if (iter != m_authorizers.end())
+    return iter->second;
+
+  switch (protocol) {
+  case CEPH_AUTH_NONE:
+    m_authorizers[protocol] = new AuthNoneAuthorizeHandler();
+    return m_authorizers[protocol];
+    
+  case CEPH_AUTH_CEPHX:
+    m_authorizers[protocol] = new CephxAuthorizeHandler();
+    return m_authorizers[protocol];
   }
-  _initialized = true;
+  return NULL;
 }
 
-AuthAuthorizeHandler *get_authorize_handler(int protocol, CephContext *cct)
+AuthAuthorizeHandlerRegistry::~AuthAuthorizeHandlerRegistry()
 {
-  Mutex::Locker l(_lock);
-  if (!_initialized) {
-   _init_authorizers(cct);
-  }
-
-  map<int, AuthAuthorizeHandler *>::iterator iter = authorizers.find(protocol);
-  if (iter != authorizers.end())
-    return iter->second;
-  return NULL;
+  for (map<int,AuthAuthorizeHandler*>::iterator iter = m_authorizers.begin();
+       iter != m_authorizers.end();
+       ++iter)
+    delete iter->second;
 }

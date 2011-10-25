@@ -77,7 +77,7 @@ class Paxos {
   friend class PaxosService;
   friend class PaxosObserver;
 
-
+  list<std::string> extra_state_dirs;
 
   // LEADER+PEON
 
@@ -258,6 +258,9 @@ public:
   void share_state(MMonPaxos *m, version_t first_committed, version_t last_committed);
   void store_state(MMonPaxos *m);
 
+  void add_extra_state_dir(string s) {
+    extra_state_dirs.push_back(s);
+  }
 
   // -- service interface --
   void wait_for_active(Context *c) {

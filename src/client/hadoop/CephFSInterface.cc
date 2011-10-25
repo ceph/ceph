@@ -16,11 +16,13 @@ union ceph_mount_union_t {
 static void set_ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info *cmount)
 {
   jclass cls = env->GetObjectClass(obj);
-  jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
+  if (cls == NULL)
+    return;
+  jfieldID fid = env->GetFieldID(cls, "cluster", "J");
   if (fid == NULL)
     return;
   ceph_mount_union_t ceph_mount_union;
-  ceph_mount_union.cjlong= 0;
+  ceph_mount_union.cjlong = 0;
   ceph_mount_union.cmount = cmount;
   env->SetLongField(obj, fid, ceph_mount_union.cjlong);
 }
@@ -28,7 +30,7 @@ static void set_ceph_mount_info(JNIEnv *env, jobject obj, struct ceph_mount_info
 static struct ceph_mount_info *get_ceph_mount_t(JNIEnv *env, jobject obj)
 {
   jclass cls = env->GetObjectClass(obj);
-  jfieldID fid = env->GetFieldID(cls, "cmount", "Ljava/lang/Long;");
+  jfieldID fid = env->GetFieldID(cls, "cluster", "J");
   if (fid == NULL)
     return NULL;
   ceph_mount_union_t ceph_mount_union;
@@ -94,13 +96,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   CephContext *cct = ceph_get_mount_context(cmount);
   ldout(cct, 3) << "CephFSInterface: mounting filesystem...:" << dendl;
 
+  ret = ceph_mount(cmount, mount_root.c_str());
+  if (ret)
+    return false;
+
   ceph_localize_reads(cmount, true);
   ceph_set_default_file_stripe_unit(cmount, block_size);
   ceph_set_default_object_size(cmount, block_size);
 
-  ret = ceph_mount(cmount, mount_root.c_str());
-  if (ret)
-    return false;
   if (set_local_writes) {
     ceph_set_default_preferred_pg(cmount, ceph_get_local_osd(cmount));
   }

@@ -604,6 +604,9 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
       if (orig_ops)
 	break;         // commit what we have
 
+      if (logger)
+	logger->inc(l_os_j_full);
+
       if (wait_on_full) {
 	dout(20) << "prepare_multi_write full on first entry, need to wait" << dendl;
       } else {
@@ -661,11 +664,20 @@ void FileJournal::queue_write_fin(uint64_t seq, Context *fin)
 
 void FileJournal::queue_completions_thru(uint64_t seq)
 {
+  utime_t now = ceph_clock_now(g_ceph_context);
   while (!completions.empty() &&
-	 completions.front().first <= seq) {
-    dout(10) << "queue_completions_thru seq " << seq << " queueing seq " << completions.front().first
-	     << " " << completions.front().second << dendl;
-    finisher->queue(completions.front().second);
+	 completions.front().seq <= seq) {
+    utime_t lat = now;
+    lat -= completions.front().start;
+    dout(10) << "queue_completions_thru seq " << seq
+	     << " queueing seq " << completions.front().seq
+	     << " " << completions.front().finish
+	     << " lat " << lat << dendl;
+    if (logger) {
+      logger->finc(l_os_j_lat, lat);
+    }
+    if (completions.front().finish)
+      finisher->queue(completions.front().finish);
     completions.pop_front();
   }
 }
@@ -942,8 +954,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
 
-  if (oncommit)
-    completions.push_back(pair<uint64_t,Context*>(seq, oncommit));
+  completions.push_back(completion_item(seq, oncommit, ceph_clock_now(g_ceph_context)));
 
   if (full_state == FULL_NOTFULL) {
     // queue and kick writer thread

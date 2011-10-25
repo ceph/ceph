@@ -56,15 +56,14 @@ void _usage()
   cerr << "                             specified date (and optional time)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
+  cerr << "   --auth-uid=<auid>         librados uid\n";
   cerr << "   --subuser=<name>          subuser name\n";
   cerr << "   --access-key=<key>        S3 access key\n";
-  cerr << "   --swift-user=<group:name> Swift user\n";
   cerr << "   --email=<email>\n";
-  cerr << "   --auth_uid=<auid>         librados uid\n";
-  cerr << "   --secret=<key>            S3 key\n";
-  cerr << "   --swift-secret=<key>      Swift key\n";
-  cerr << "   --gen-access-key          generate random access key\n";
+  cerr << "   --secret=<key>            specify secret key\n";
+  cerr << "   --gen-access-key          generate random access key (for S3)\n";
   cerr << "   --gen-secret              generate random secret key\n";
+  cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
@@ -291,9 +290,21 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->dump_int("rados_uid", info.auid);
   formatter->dump_string("display_name", info.display_name.c_str());
   formatter->dump_string("email", info.user_email.c_str());
-  formatter->dump_string("swift_user", info.swift_name.c_str());
-  formatter->dump_string("swift_key", info.swift_key.c_str());
   formatter->dump_int("suspended", (int)info.suspended);
+
+  // subusers
+  formatter->open_array_section("subusers");
+  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
+    RGWSubUser& u = uiter->second;
+    formatter->open_object_section("user");
+    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
+    char buf[256];
+    perm_to_str(u.perm_mask, buf, sizeof(buf));
+    formatter->dump_string("permissions", buf);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  formatter->close_section();
 
   // keys
   formatter->open_array_section("keys");
@@ -309,17 +320,15 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   }
   formatter->close_section();
 
-  // subusers
-  formatter->open_array_section("subusers");
-  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-    RGWSubUser& u = uiter->second;
-    formatter->open_object_section("user");
-    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
-    char buf[256];
-    perm_to_str(u.perm_mask, buf, sizeof(buf));
-    formatter->dump_string("permissions", buf);
+  formatter->open_array_section("swift_keys");
+  for (kiter = info.swift_keys.begin(); kiter != info.swift_keys.end(); ++kiter) {
+    RGWAccessKey& k = kiter->second;
+    const char *sep = (k.subuser.empty() ? "" : ":");
+    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
+    formatter->open_object_section("key");
+    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
+    formatter->dump_string("secret_key", k.key);
     formatter->close_section();
-    formatter->flush(cout);
   }
   formatter->close_section();
 
@@ -391,12 +400,16 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
     }
   }
 
-  if (!old_info.swift_name.empty() &&
-      old_info.swift_name.compare(new_info.swift_name) != 0) {
-    ret = rgw_remove_swift_name_index(new_info.user_id, old_info.swift_name);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove index for swift_name " << old_info.swift_name << " return code: " << ret << std::endl;
-      success = false;
+  map<string, RGWAccessKey>::iterator old_iter;
+  for (old_iter = old_info.swift_keys.begin(); old_iter != old_info.swift_keys.end(); ++old_iter) {
+    RGWAccessKey& swift_key = old_iter->second;
+    map<string, RGWAccessKey>::iterator new_iter = new_info.swift_keys.find(swift_key.id);
+    if (new_iter == new_info.swift_keys.end()) {
+      ret = rgw_remove_swift_name_index(new_info.user_id, swift_key.id);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not remove index for swift_name " << swift_key.id << " return code: " << ret << std::endl;
+        success = false;
+      }
     }
   }
 
@@ -405,111 +418,6 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 
   if (!success)
     cerr << "ERROR: this should be fixed manually!" << std::endl;
-}
-
-class IntentLogNameFilter : public RGWAccessListFilter
-{
-  string prefix;
-  bool filter_exact_date;
-public:
-  IntentLogNameFilter(const char *date, struct tm *tm) {
-    prefix = date;
-    filter_exact_date = !(tm->tm_hour || tm->tm_min || tm->tm_sec); /* if time was specified and is not 00:00:00
-                                                                       we should look at objects from that date */
-  }
-  bool filter(string& name, string& key) {
-    if (filter_exact_date)
-      return name.compare(prefix) < 0;
-    else
-      return name.compare(0, prefix.size(), prefix) <= 0;
-  }
-};
-
-enum IntentFlags { // bitmask
-  I_DEL_OBJ = 1,
-  I_DEL_POOL = 2,
-};
-
-int process_intent_log(rgw_bucket& bucket, string& oid, time_t epoch, int flags, bool purge)
-{
-  cout << "processing intent log " << oid << std::endl;
-  uint64_t size;
-  rgw_obj obj(bucket, oid);
-  int r = rgwstore->obj_stat(NULL, obj, &size, NULL);
-  if (r < 0) {
-    cerr << "error while doing stat on " << bucket << ":" << oid
-	 << " " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  bufferlist bl;
-  r = rgwstore->read(NULL, obj, 0, size, bl);
-  if (r < 0) {
-    cerr << "error while reading from " <<  bucket << ":" << oid
-	 << " " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  bufferlist::iterator iter = bl.begin();
-  string id;
-  bool complete = true;
-  try {
-    while (!iter.end()) {
-      struct rgw_intent_log_entry entry;
-      try {
-        ::decode(entry, iter);
-      } catch (buffer::error& err) {
-        dout(0) << "ERROR: " << __func__ << "(): caught buffer::error" << dendl;
-        return -EIO;
-      }
-      if (entry.op_time.sec() > epoch) {
-        cerr << "skipping entry for obj=" << obj << " entry.op_time=" << entry.op_time.sec() << " requested epoch=" << epoch << std::endl;
-        cerr << "skipping intent log" << std::endl; // no use to continue
-        complete = false;
-        break;
-      }
-      switch (entry.intent) {
-      case DEL_OBJ:
-        if (!flags & I_DEL_OBJ) {
-          complete = false;
-          break;
-        }
-        r = rgwstore->delete_obj(NULL, id, entry.obj);
-        if (r < 0 && r != -ENOENT) {
-          cerr << "failed to remove obj: " << entry.obj << std::endl;
-          complete = false;
-        }
-        break;
-      case DEL_POOL:
-        if (!flags & I_DEL_POOL) {
-          complete = false;
-          break;
-        }
-        r = rgwstore->delete_bucket(id, entry.obj.bucket, true);
-        if (r < 0 && r != -ENOENT) {
-          cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
-          complete = false;
-        }
-        break;
-      default:
-        complete = false;
-      }
-    }
-  } catch (buffer::error& err) {
-    cerr << "failed to decode intent log entry in " << bucket << ":" << oid << std::endl;
-    complete = false;
-  }
-
-  if (complete) {
-    rgw_obj obj(bucket, oid);
-    cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
-    if (purge) {
-      r = rgwstore->delete_obj(NULL, id, obj);
-      if (r < 0)
-        cerr << "failed to remove obj: " << obj << std::endl;
-    }
-  }
-
-  return 0;
 }
 
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
@@ -548,6 +456,11 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   return 0;
 }
 
+enum ObjectKeyType {
+  KEY_TYPE_SWIFT,
+  KEY_TYPE_S3,
+};
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -558,8 +471,10 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   std::string user_id, access_key, secret_key, user_email, display_name;
-  std::string bucket_name, pool_name, object, swift_user, swift_key;
+  std::string bucket_name, pool_name, object;
   std::string date, time, subuser, access, format;
+  std::string key_type_str;
+  ObjectKeyType key_type = KEY_TYPE_S3;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   uint64_t auid = -1;
@@ -605,6 +520,16 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
+      key_type_str = val;
+      if (key_type_str.compare("swift") == 0) {
+        key_type = KEY_TYPE_SWIFT;
+      } else if (key_type_str.compare("s3") == 0) {
+        key_type = KEY_TYPE_S3;
+      } else {
+        cerr << "bad key type: " << key_type_str << std::endl;
+        return usage();
+      }
     } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
       gen_key = true;
     } else if (ceph_argparse_flag(args, i, "--gen-secret", (char*)NULL)) {
@@ -615,10 +540,6 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
       auid = tmp;
-    } else if (ceph_argparse_witharg(args, i, &val, "--swift-user", (char*)NULL)) {
-      swift_user = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--swift-secret", (char*)NULL)) {
-      swift_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", (char*)NULL)) {
       date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--time", (char*)NULL)) {
@@ -699,7 +620,7 @@ int main(int argc, char **argv)
     free(suser);
   }
 
-  if (opt_cmd == OPT_KEY_RM && access_key.empty()) {
+  if (opt_cmd == OPT_KEY_RM && key_type == KEY_TYPE_S3 && access_key.empty()) {
     cerr << "error: access key was not specified" << std::endl;
     return usage();
   }
@@ -735,13 +656,6 @@ int main(int argc, char **argv)
       } else {
 	cerr << "could not find user by specified access key" << std::endl;
       }
-    }
-    if (!found && (!swift_user.empty())) {
-      s = swift_user;
-      if (rgw_get_user_info_by_swift(s, info) >= 0) {
-	found = true;
-      } else
-        cerr << "could not find user by specified swift username" << std::endl;
     }
     if (found)
       user_id = info.user_id.c_str();
@@ -865,15 +779,26 @@ int main(int argc, char **argv)
   case OPT_KEY_CREATE:
     if (!user_id.empty())
       info.user_id = user_id;
+    if (key_type == KEY_TYPE_SWIFT) {
+      access_key = info.user_id;
+      access_key.append(":");
+      access_key.append(subuser);
+    }
     if ((!access_key.empty()) && (!secret_key.empty())) {
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
       if (!subuser.empty())
         k.subuser = subuser;
-      info.access_keys[access_key] = k;
+      if (key_type == KEY_TYPE_SWIFT)
+        info.swift_keys[access_key] = k;
+      else
+        info.access_keys[access_key] = k;
    } else if ((!access_key.empty()) || (!secret_key.empty())) {
-      cerr << "access key modification requires both access key and secret key" << std::endl;
+      if (key_type == KEY_TYPE_SWIFT)
+        cerr << "swift key modification requires both subuser and secret key" << std::endl;
+      else
+        cerr << "access key modification requires both access key and secret key" << std::endl;
       return 1;
     }
     if (!display_name.empty())
@@ -882,10 +807,6 @@ int main(int argc, char **argv)
       info.user_email = user_email;
     if (auid != (uint64_t)-1)
       info.auid = auid;
-    if (!swift_user.empty())
-      info.swift_name = swift_user;
-    if (!swift_key.empty())
-      info.swift_key = swift_key;
     if (!subuser.empty()) {
       RGWSubUser u;
       u.name = subuser;
@@ -915,15 +836,26 @@ int main(int argc, char **argv)
     break;
 
   case OPT_KEY_RM:
-    kiter = info.access_keys.find(access_key);
-    if (kiter == info.access_keys.end()) {
-      cerr << "key not found" << std::endl;
-    } else {
-      rgw_remove_key_index(kiter->second);
-      info.access_keys.erase(kiter);
-      if ((err = rgw_store_user_info(info)) < 0) {
-        cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
-        break;
+    {
+      map<string, RGWAccessKey> *keys_map;
+      if (key_type == KEY_TYPE_SWIFT) {
+        access_key = info.user_id;
+        access_key.append(":");
+        access_key.append(subuser);
+        keys_map = &info.swift_keys;
+      } else {
+        keys_map = &info.access_keys;
+      }
+      kiter = keys_map->find(access_key);
+      if (kiter == keys_map->end()) {
+        cerr << "key not found" << std::endl;
+      } else {
+        rgw_remove_key_index(kiter->second);
+        keys_map->erase(kiter);
+        if ((err = rgw_store_user_info(info)) < 0) {
+          cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
+          break;
+        }
       }
     }
     show_user_info(info, formatter);
@@ -1040,59 +972,14 @@ int main(int argc, char **argv)
       cerr << "date wasn't specified" << std::endl;
       return usage();
     }
-
-    struct tm tm;
-
-    string format = "%Y-%m-%d";
-    string datetime = date;
-    if (datetime.size() != 10) {
-      cerr << "bad date format" << std::endl;
-      return -EINVAL;
+    int r = store->remove_temp_objects(date, time);
+    if (r < 0) {
+      cerr << "failure removing temp objects: " << cpp_strerror(r) << std::endl;
+      return 1;
     }
-
-    if (!time.empty()) {
-      if (time.size() != 5 && time.size() != 8) {
-        cerr << "bad time format" << std::endl;
-        return -EINVAL;
-      }
-      format.append(" %H:%M:%S");
-      datetime.append(time.c_str());
-    }
-    const char *s = strptime(datetime.c_str(), format.c_str(), &tm);
-    if (s && *s) {
-      cerr << "failed to parse date/time" << std::endl;
-      return -EINVAL;
-    }
-    time_t epoch = mktime(&tm);
-    rgw_bucket bucket(RGW_INTENT_LOG_POOL_NAME);
-    string prefix, delim, marker;
-    vector<RGWObjEnt> objs;
-    map<string, bool> common_prefixes;
-    string ns;
-    string id;
-
-    int max = 1000;
-    bool is_truncated;
-    IntentLogNameFilter filter(date.c_str(), &tm);
-    do {
-      int r = store->list_objects(id, bucket, max, prefix, delim, marker,
-                          objs, common_prefixes, false, ns,
-                          &is_truncated, &filter);
-      if (r == -ENOENT)
-        break;
-      if (r < 0) {
-        cerr << "failed to list objects" << std::endl;
-      }
-      vector<RGWObjEnt>::iterator iter;
-      for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        process_intent_log(bucket, (*iter).name, epoch, I_DEL_OBJ | I_DEL_POOL, true);
-      }
-    } while (is_truncated);
   }
 
   if (opt_cmd == OPT_LOG_LIST) {
-    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
-
     // filter by date?
     if (date.size() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
@@ -1102,7 +989,7 @@ int main(int argc, char **argv)
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = store->list_objects_raw_init(log_bucket, &h);
+    int r = store->log_list_init(date, &h);
     if (r == -ENOENT) {
       // no logs.
     } else {
@@ -1111,17 +998,15 @@ int main(int argc, char **argv)
 	return r;
       }
       while (true) {
-	RGWObjEnt obj;
-	int r = store->list_objects_raw_next(obj, &h);
+	string name;
+	int r = store->log_list_next(h, &name);
 	if (r == -ENOENT)
 	  break;
 	if (r < 0) {
 	  cerr << "log list: error " << r << std::endl;
 	  return r;
 	}
-	if (date.size() && obj.name.find(date) != 0)
-	  continue;
-	formatter->dump_string("object", obj.name);
+	formatter->dump_string("object", name);
       }
     }
     formatter->close_section();
@@ -1134,7 +1019,6 @@ int main(int argc, char **argv)
       return usage();
     }
 
-    rgw_bucket log_bucket(RGW_LOG_POOL_NAME);
     string oid;
     if (!object.empty()) {
       oid = object;
@@ -1147,45 +1031,33 @@ int main(int argc, char **argv)
       oid += "-";
       oid += string(bucket.name);
     }
-    rgw_obj obj(log_bucket, oid);
 
     if (opt_cmd == OPT_LOG_SHOW) {
-      uint64_t size;
-      int r = store->obj_stat(NULL, obj, &size, NULL);
+      RGWAccessHandle h;
+
+      int r = store->log_show_init(oid, &h);
       if (r < 0) {
-	cerr << "error while doing stat on " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
+	cerr << "error opening log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
 
-      bufferlist bl;
-      r = store->read(NULL, obj, 0, size, bl);
-      if (r < 0) {
-	cerr << "error while reading from " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
-      
-      bufferlist::iterator iter = bl.begin();
-      
-      struct rgw_log_entry entry;
-      
       formatter->reset();
       formatter->open_object_section("log");
 
-      // peek at first entry to get bucket metadata
-      bufferlist::iterator first_iter = iter;
-      if (!first_iter.end()) {
-	::decode(entry, first_iter);
-	formatter->dump_int("bucket_id", entry.bucket_id);
-	formatter->dump_string("bucket_owner", entry.bucket_owner);
-	formatter->dump_string("bucket", entry.bucket);
-      }
-      formatter->open_array_section("log_entries");
+      struct rgw_log_entry entry;
       
-      while (!iter.end()) {
-	::decode(entry, iter);
-	
+      // peek at first entry to get bucket metadata
+      r = store->log_show_next(h, &entry);
+      if (r < 0) {
+	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+	return -r;
+      }
+      formatter->dump_int("bucket_id", entry.bucket_id);
+      formatter->dump_string("bucket_owner", entry.bucket_owner);
+      formatter->dump_string("bucket", entry.bucket);
+
+      formatter->open_array_section("log_entries");
+      do {
 	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
 	
 	formatter->open_object_section("log_entry");
@@ -1208,17 +1080,23 @@ int main(int argc, char **argv)
 	formatter->dump_string("referrer",  entry.referrer.c_str());
 	formatter->close_section();
 	formatter->flush(cout);
+
+	r = store->log_show_next(h, &entry);
+      } while (r > 0);
+
+      if (r < 0) {
+      	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+	return -r;
       }
+
       formatter->close_section();
       formatter->close_section();
       formatter->flush(cout);
     }
     if (opt_cmd == OPT_LOG_RM) {
-      std::string id;
-      int r = store->delete_obj(NULL, id, obj);
+      int r = store->log_remove(oid);
       if (r < 0) {
-	cerr << "error removing " <<  log_bucket << ":" << oid
-	     << " " << cpp_strerror(-r) << std::endl;
+	cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
     }

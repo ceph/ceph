@@ -43,9 +43,9 @@ void throttle()
 void pr(off_t off)
 {
   io &i = writes[off];
-  generic_dout(0) << off << "\t" 
-	  << (i.ack - i.start) << "\t"
-	  << (i.commit - i.start) << dendl;
+  cout << off << "\t" 
+       << (i.ack - i.start) << "\t"
+       << (i.commit - i.start) << std::endl;
   writes.erase(off);
   cond.Signal();
 }
@@ -124,7 +124,12 @@ int main(int argc, const char **argv)
        << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
   ObjectStore *fs = new FileStore(filename, journal);
-
+  
+  if (fs->mkfs() < 0) {
+    cout << "mkfs failed" << std::endl;
+    return -1;
+  }
+  
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;

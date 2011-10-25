@@ -455,16 +455,13 @@ void init_entities_from_header(struct req_state *s)
 
   if (s->prot_flags & RGW_REST_SWIFT) {
     string ver;
-    string auth_key;
 
     next_tok(req, ver, '/');
     dout(10) << "ver=" << ver << dendl;
-    next_tok(req, auth_key, '/');
-    dout(10) << "auth_key=" << auth_key << dendl;
     s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
     next_tok(req, first, '/');
 
-    dout(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << dendl;
+    dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
     if (first.size() == 0)
       goto done;
 

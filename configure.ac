@@ -7,7 +7,7 @@ AC_PREREQ(2.59)
 # NOTE: This version is _only_ used for naming the tarball.  The
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
-AC_INIT([ceph], [0.36], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.37], [ceph-devel@vger.kernel.org])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 
@@ -173,7 +173,10 @@ AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
              [AC_CHECK_LIB([expat], [XML_Parse],
               [AC_CHECK_LIB([curl], [curl_easy_init],
-               [RADOSGW=1],
+               [RADOSGW=1
+	        AC_CHECK_HEADER([fastcgi/fcgiapp.h],
+		 [AC_DEFINE([FASTCGI_INCLUDE_DIR], [1], [FastCGI headers are in /usr/include/fastcgi])])
+	       ],
 	       [if test "x$with_radosgw" != "xcheck"; then
 		    AC_MSG_FAILURE([--with-radosgw was given but libcurl (libcurl-dev on debian) not found])
 	       fi])

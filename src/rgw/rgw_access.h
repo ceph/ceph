@@ -37,9 +37,12 @@ public:
   virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle) = 0;
   /** get the next bucket in the provided listing context. */
   virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
-
-  virtual int list_objects_raw_init(rgw_bucket& bucket, RGWAccessHandle *handle) = 0;
-  virtual int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
+  
+  virtual int log_list_init(const string& prefix, RGWAccessHandle *handle) { return -ENOENT; }
+  virtual int log_list_next(RGWAccessHandle handle, string *name) { return -ENOENT; }
+  virtual int log_remove(const string& name) { return -ENOENT; }
+  virtual int log_show_init(const string& name, RGWAccessHandle *handle) { return -ENOENT; }
+  virtual int log_show_next(RGWAccessHandle handle, class rgw_log_entry *entry) { return -ENOENT; }
 
   /** 
    * get listing of the objects in a bucket.
@@ -267,6 +270,12 @@ public:
   /* The bucket here can either be the bucket name identifier, or the ID
    * in period format: ".123" */
   virtual int get_bucket_info(string& bucket, RGWBucketInfo& info) = 0;
+
+
+  virtual int remove_temp_objects(string date, string time) {
+    return 0;
+  }
+
 };
 
 class RGWStoreManager {

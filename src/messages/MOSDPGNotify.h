@@ -24,17 +24,23 @@
  */
 
 class MOSDPGNotify : public Message {
-  epoch_t      epoch;
+  epoch_t epoch;
+  /// query_epoch is the epoch of the query being responded to, or
+  /// the current epoch if this is not being sent in response to a
+  /// query. This allows the recipient to disregard responses to old
+  /// queries.
+  epoch_t query_epoch;
   vector<PG::Info> pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
   vector<PG::Info>& get_pg_list() { return pg_list; }
+  epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGNotify() {}
-  MOSDPGNotify(epoch_t e, vector<PG::Info>& l) :
-    Message(MSG_OSD_PG_NOTIFY) {
-    this->epoch = e;
+  MOSDPGNotify(epoch_t e, vector<PG::Info>& l, epoch_t query_epoch) :
+    Message(MSG_OSD_PG_NOTIFY), epoch(e),
+    query_epoch(query_epoch) {
     pg_list.swap(l);
   }
 private:
@@ -44,22 +50,31 @@ public:
   const char *get_type_name() { return "PGnot"; }
 
   void encode_payload(CephContext *cct) {
+    header.version = 2;
     ::encode(epoch, payload);
     ::encode(pg_list, payload);
+    ::encode(query_epoch, payload);
   }
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(pg_list, p);
+    if (header.version > 1) {
+      ::decode(query_epoch, p);
+    }
   }
   void print(ostream& out) {
-    out << "osd pg notify(" << "epoch " << epoch << "; ";
+    out << "pg_notify(";
     for (vector<PG::Info>::iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
-      out << "pg" << i->pgid << "; ";
+      if (i != pg_list.begin())
+	out << ",";
+      out << i->pgid;
     }
-    out << ")";
+    out << " epoch " << epoch
+	<< " query_epoch " << query_epoch
+	<< ")";
   }
 };
 

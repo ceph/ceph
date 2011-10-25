@@ -52,9 +52,9 @@ namespace ceph {
     char buf[8096];
     BackTrace *bt = new BackTrace(1);
     snprintf(buf, sizeof(buf),
-	     "%s: In function '%s', in thread '%p'\n"
+	     "%s: In function '%s', in thread '%llx'\n"
 	     "%s: %d: FAILED assert(%s)\n",
-	     file, func, (void*)pthread_self(), file, line, assertion);
+	     file, func, (unsigned long long)pthread_self(), file, line, assertion);
     dout_emergency(buf);
 
     // TODO: get rid of this memory allocation.

@@ -103,7 +103,7 @@ int main(int argc, char **argv)
   }
 
   if (max_in_flight > objects) {
-    cerr << "Error: max_in_flight must be greater than the number of objects" 
+    cerr << "Error: max_in_flight must be less than the number of objects"
 	 << std::endl;
     return 0;
   }

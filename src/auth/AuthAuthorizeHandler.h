@@ -16,6 +16,7 @@
 #define CEPH_AUTHAUTHORIZEHANDLER_H
 
 #include "Auth.h"
+#include "AuthSupported.h"
 #include "include/types.h"
 
 class CephContext;
@@ -30,6 +31,19 @@ struct AuthAuthorizeHandler {
 				 AuthCapsInfo& caps_info, uint64_t *auid = NULL) = 0;
 };
 
-extern AuthAuthorizeHandler *get_authorize_handler(int protocol, CephContext *cct);
+class AuthAuthorizeHandlerRegistry {
+  Mutex m_lock;
+  map<int,AuthAuthorizeHandler*> m_authorizers;
+  CephContext *cct;
+  AuthSupported supported;
+
+public:
+  AuthAuthorizeHandlerRegistry(CephContext *cct_)
+    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), cct(cct_), supported(cct_)
+  {}
+  ~AuthAuthorizeHandlerRegistry();
+  
+  AuthAuthorizeHandler *get_handler(int protocol);
+};
 
 #endif

@@ -55,7 +55,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 	conf->set_val_or_die("admin_socket", "/var/run/ceph/$name.asok");
 	conf->set_val_or_die("log_file", "/var/log/ceph/$name.log");
       }
-      conf->set_val_or_die("log_to_stderr", STRINGIFY(LOG_TO_STDERR_SOME));
+      conf->set_val_or_die("log_to_stderr", "false");
+      conf->set_val_or_die("err_to_stderr", "true");
       break;
     default:
       conf->set_val_or_die("daemonize", "false");

@@ -350,6 +350,43 @@ void RGWListBuckets::execute()
   send_response();
 }
 
+int RGWStatAccount::verify_permission()
+{
+  return 0;
+}
+
+void RGWStatAccount::execute()
+{
+  RGWUserBuckets buckets;
+
+  ret = rgw_read_user_buckets(s->user.user_id, buckets, true);
+  if (ret < 0) {
+    /* hmm.. something wrong here.. the user was authenticated, so it
+       should exist, just try to recreate */
+    dout(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+
+    /*
+
+    on a second thought, this is probably a bug and we should fail
+
+    rgw_put_user_buckets(s->user.user_id, buckets);
+    ret = 0;
+
+    */
+  } else {
+    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    map<string, RGWBucketEnt>::iterator iter;
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      RGWBucketEnt& bucket = iter->second;
+      buckets_size += bucket.size;
+      buckets_objcount += bucket.count;
+    }
+    buckets_count = m.size();
+  }
+
+  send_response();
+}
+
 int RGWStatBucket::verify_permission()
 {
   if (!::verify_permission(s, RGW_PERM_READ))

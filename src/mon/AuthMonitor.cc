@@ -365,8 +365,8 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       goto reply;
     }
 
-    s->auth_handler = get_auth_service_handler(g_ceph_context,
-					       &mon->key_server, supported);
+    int type = mon->auth_supported.pick(supported);
+    s->auth_handler = get_auth_service_handler(type, g_ceph_context, &mon->key_server);
     if (!s->auth_handler) {
       ret = -ENOTSUP;
       goto reply;

@@ -123,7 +123,7 @@ struct rename_rollback {
       ::decode(old_ctime, bl);
     }
   };
-  WRITE_CLASS_ENCODER_MEMBER(drec)
+  WRITE_CLASS_MEMBER_ENCODER(drec)
 
   metareqid_t reqid;
   drec orig_src, orig_dest;

@@ -64,18 +64,18 @@ void usage()
   cout << "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
        << "  <ls | list> [pool-name]                   list rbd images\n"
-       << "  info [image-name]                         show information about image size,\n"
+       << "  info <--snap=name> [image-name]           show information about image size,\n"
        << "                                            striping, etc.\n"
        << "  create [image-name]                       create an empty image (requires size\n"
        << "                                            param)\n"
        << "  resize [image-name]                       resize (expand or contract) image\n"
        << "                                            (requires size param)\n"
        << "  rm [image-name]                           delete an image\n"
-       << "  export [image-name] [dest-path]           export image to file\n"
+       << "  export <--snap=name> [image-name] [path]  export image to file\n"
        << "  import [path] [dst-image]                 import image from file (dest defaults\n"
        << "                                            as the filename part of file)\n"
-       << "  <cp | copy> [src-image] [dest-image]      copy image to dest\n"
-       << "  <mv | rename> [src-image] [dest-image]    copy image to dest\n"
+       << "  <cp | copy> <--snap=name> [src] [dest]    copy src image to dest\n"
+       << "  <mv | rename> [src] [dest]                rename src image to dest\n"
        << "  snap ls [image-name]                      dump list of image snapshots\n"
        << "  snap create <--snap=name> [image-name]    create a snapshot\n"
        << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
@@ -1011,12 +1011,13 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
-      opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-      opt_cmd == OPT_SNAP_REMOVE ||
-      opt_cmd == OPT_MAP || opt_cmd == OPT_UNMAP) {
-    set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
-  } else if (snapname) {
+  // do this unconditionally so we can parse pool/image@snapshot into
+  // the relevant parts
+  set_pool_image_name(poolname, imgname, (char **)&poolname,
+		      (char **)&imgname, (char **)&snapname);
+  if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
+      opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage_exit();
   }
@@ -1061,7 +1062,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (imgname &&
+  if (imgname && talk_to_cluster &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH ||
@@ -1073,9 +1074,10 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (snapname) {
+  if (snapname && talk_to_cluster &&
+      (opt_cmd == OPT_INFO || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY)) {
     r = image.snap_set(snapname);
-    if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
+    if (r < 0) {
       cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
       exit(1);
     }

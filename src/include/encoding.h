@@ -23,6 +23,25 @@ using namespace ceph;
 
 #include <tr1/memory>
 
+/*
+ * Notes on feature encoding:
+ *
+ * - The default encode() methods have a features argument with a default parameter
+ *   (which goes to zero).
+ * - Normal classes will use WRITE_CLASS_ENCODER, with that features=0 default.
+ * - Classes that _require_ features will use WRITE_CLASS_ENCODER_FEATURES, which
+ *   does not define the default.  Any caller must explicitly pass it in.
+ * - STL container macros have two encode variants: one with a features arg, and one
+ *   without.
+ *
+ * The result:
+ * - A feature encode() method will fail to compile if a value is not
+ *   passed in.
+ * - The feature varianet of the STL templates will be used when the feature arg is
+ *   provided.  It will be passed through to any template arg types, but it will be
+ *   ignored when not needed.
+ */
+
 // --------------------------------------
 // base types
 
@@ -38,7 +57,7 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 }
 
 #define WRITE_RAW_ENCODER(type)						\
-  inline void encode(const type &v, bufferlist& bl) { encode_raw(v, bl); } \
+  inline void encode(const type &v, bufferlist& bl, uint64_t features=0) { encode_raw(v, bl); } \
   inline void decode(type &v, bufferlist::iterator& p) { decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
@@ -67,7 +86,7 @@ inline void decode(bool &v, bufferlist::iterator& p) {
 // int types
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
-  inline void encode(type v, bufferlist& bl) {			\
+  inline void encode(type v, bufferlist& bl, uint64_t features=0) {	\
     __##etype e = init_##etype(v);					\
     encode_raw(e, bl);							\
   }									\
@@ -87,11 +106,15 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 #define WRITE_CLASS_ENCODER(cl) \
-  inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { c.encode(bl); } \
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
-#define WRITE_CLASS_ENCODER_MEMBER(cl) \
+#define WRITE_CLASS_MEMBER_ENCODER(cl) \
   inline void encode(const cl &c, bufferlist &bl) const { c.encode(bl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
+
+#define WRITE_CLASS_ENCODER_FEATURES(cl)				\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features) { c.encode(bl, features); } \
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
@@ -441,6 +464,16 @@ inline void encode(const std::map<T,U>& m, bufferlist& bl)
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
+  }
+}
+template<class T, class U>
+inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
+{
+  __u32 n = m.size();
+  encode(n, bl);
+  for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl, features);
+    encode(p->second, bl, features);
   }
 }
 template<class T, class U>

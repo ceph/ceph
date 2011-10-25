@@ -38,6 +38,7 @@
 #include "common/LogClient.h"
 
 #include "auth/cephx/CephxKeyServer.h"
+#include "auth/AuthSupported.h"
 
 #include "perfglue/heap_profiler.h"
 
@@ -71,6 +72,8 @@ public:
 
   LogClient clog;
   KeyServer key_server;
+
+  AuthSupported auth_supported;
 
 private:
   void new_tick();
@@ -235,9 +238,6 @@ private:
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
-extern const CompatSet::Feature ceph_mon_feature_compat[];
-extern const CompatSet::Feature ceph_mon_feature_ro_compat[];
-extern const CompatSet::Feature ceph_mon_feature_incompat[];
 
 
 #endif

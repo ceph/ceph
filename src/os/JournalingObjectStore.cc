@@ -47,6 +47,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     return err;
   }
 
+  replaying = true;
+
   int count = 0;
   while (1) {
     bufferlist bl;
@@ -80,6 +82,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     assert(op_seq == seq);
     seq++;  // we expect the next op
   }
+
+  replaying = false;
 
   applied_seq = op_seq;
 

@@ -48,10 +48,12 @@ int rgw_store_user_info(RGWUserInfo& info)
   int ret;
   map<string,bufferlist> attrs;
 
-  if (info.swift_name.size()) {
+  map<string, RGWAccessKey>::iterator iter;
+  for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
+    RGWAccessKey& k = iter->second;
     /* check if swift mapping exists */
     RGWUserInfo inf;
-    int r = rgw_get_user_info_by_swift(info.swift_name, inf);
+    int r = rgw_get_user_info_by_swift(k.id, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
       dout(0) << "can't store user info, swift id already mapped to another user" << dendl;
       return -EEXIST;
@@ -98,8 +100,13 @@ int rgw_store_user_info(RGWUserInfo& info)
     }
   }
 
-  if (info.swift_name.size())
-    ret = rgw_put_obj(info.user_id, ui_swift_bucket, info.swift_name, uid_bl.c_str(), uid_bl.length());
+  map<string, RGWAccessKey>::iterator siter;
+  for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
+    RGWAccessKey& k = siter->second;
+    ret = rgw_put_obj(info.user_id, ui_swift_bucket, k.id, uid_bl.c_str(), uid_bl.length());
+    if (ret < 0)
+      return ret;
+  }
 
   return ret;
 }

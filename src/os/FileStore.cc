@@ -642,6 +642,39 @@ FileStore::FileStore(const std::string &base, const std::string &jdev) :
   ostringstream sss;
   sss << basedir << "/current/commit_op_seq";
   current_op_seq_fn = sss.str();
+
+  // initialize logger
+  PerfCountersBuilder plb(g_ceph_context, "filestore", l_os_first, l_os_last);
+
+  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
+  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
+  plb.add_u64_counter(l_os_j_ops, "journal_ops");
+  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
+  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
+  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
+  plb.add_fl_avg(l_os_j_lat, "journal_latency");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops");
+  plb.add_u64_counter(l_os_ops, "ops");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
+  plb.add_u64_counter(l_os_bytes, "bytes");
+  plb.add_fl_avg(l_os_apply_lat, "apply_latency");
+  plb.add_u64(l_os_committing, "committing");
+
+  plb.add_u64_counter(l_os_commit, "commitcycle");
+  plb.add_fl_avg(l_os_commit_len, "commitcycle_interval");
+  plb.add_fl_avg(l_os_commit_lat, "commitcycle_latency");
+  plb.add_u64_counter(l_os_j_full, "journal_full");
+
+  logger = plb.create_perf_counters();
+}
+
+FileStore::~FileStore()
+{
+  if (journal)
+    journal->logger = NULL;
+  delete logger;
 }
 
 static void get_attrname(const char *name, char *buf, int len)
@@ -719,6 +752,8 @@ int FileStore::open_journal()
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
     journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    if (journal)
+      journal->logger = logger;
   }
   return 0;
 }
@@ -1475,6 +1510,7 @@ int FileStore::mount()
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
       char s[PATH_MAX];
+      uint64_t curr_seq = 0;
 
       if (m_osd_rollback_to_cluster_snap.length()) {
 	derr << TEXT_RED
@@ -1485,57 +1521,61 @@ int FileStore::mount()
 	snprintf(s, sizeof(s), "%s/" CLUSTER_SNAP_ITEM, basedir.c_str(),
 		 m_osd_rollback_to_cluster_snap.c_str());
       } else {
-	uint64_t curr_seq;
 	{
 	  int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-	  assert(fd >= 0);
-	  TEMP_FAILURE_RETRY(::close(fd));
+	  if (fd >= 0) {
+	    TEMP_FAILURE_RETRY(::close(fd));
+	  }
 	}
-	dout(10) << " current/ seq was " << curr_seq << dendl;
+	if (curr_seq)
+	  dout(10) << " current/ seq was " << curr_seq << dendl;
+	else
+	  dout(10) << " current/ missing entirely (unusual, but okay)" << dendl;
 
 	uint64_t cp = snaps.back();
 	dout(10) << " most recent snap from " << snaps << " is " << cp << dendl;
 	
 	if (cp != curr_seq) {
 	  if (!m_osd_use_stale_snap) { 
-	    derr << TEXT_RED
-		 << " ** ERROR: current volume data version is not equal to snapshotted version\n"
-		 << "           which can lead to data inconsistency. \n"
-		 << "           Current version " << curr_seq << ", last snap " << cp << "\n"
-		 << "           Startup with snapshotted version can be forced using the\n"
-		 <<"            'osd use stale snap = true' config option.\n"
-		 << TEXT_NORMAL << dendl;
+	    derr << "ERROR: current/ volume data version is not equal to snapshotted version." << dendl;
+	    derr << "Current version " << curr_seq << ", last snap " << cp << dendl;
+	    derr << "Force rollback to snapshotted version with 'osd use stale snap = true'" << dendl;
+	    derr << "config option for --osd-use-stale-snap startup argument." << dendl;
 	    ret = -ENOTSUP;
 	    goto close_basedir_fd;
 	  }
 	  derr << "WARNING: user forced start with data sequence mismatch: current was " << curr_seq
 	       << ", newest snap is " << cp << dendl;
 	  cerr << TEXT_YELLOW
-	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
+	       << " ** WARNING: forcing the use of stale snapshot data **"
+	       << TEXT_NORMAL << std::endl;
 	}
 
         dout(10) << "mount rolling back to consistent snap " << cp << dendl;
 	snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
       }
 
-      // drop current
       btrfs_ioctl_vol_args vol_args;
       vol_args.fd = 0;
       strcpy(vol_args.name, "current");
-      ret = ::ioctl(basedir_fd,
+
+      // drop current?
+      if (curr_seq > 0) {
+	ret = ::ioctl(basedir_fd,
 		      BTRFS_IOC_SNAP_DESTROY,
 		      &vol_args);
-      if (ret) {
-	ret = errno;
-	derr << "FileStore::mount: error removing old current subvol: "
-	     << cpp_strerror(ret) << dendl;
-	char s[PATH_MAX];
-	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	if (::rename(current_fn.c_str(), s)) {
-	  ret = -errno;
-	  derr << "FileStore::mount: error renaming old current subvol: "
+	if (ret) {
+	  ret = errno;
+	  derr << "FileStore::mount: error removing old current subvol: "
 	       << cpp_strerror(ret) << dendl;
-	  goto close_basedir_fd;
+	  char s[PATH_MAX];
+	  snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
+	  if (::rename(current_fn.c_str(), s)) {
+	    ret = -errno;
+	    derr << "FileStore::mount: error renaming old current subvol: "
+		 << cpp_strerror(ret) << dendl;
+	    goto close_basedir_fd;
+	  }
 	}
       }
 
@@ -1659,6 +1699,8 @@ int FileStore::mount()
 
   timer.init();
 
+  g_ceph_context->GetPerfCountersCollection()->add(logger);
+
   // all okay.
   return 0;
 
@@ -1692,7 +1734,8 @@ int FileStore::umount()
   flusher_thread.join();
 
   journal_stop();
-  stop_logger();
+
+  g_ceph_context->GetPerfCountersCollection()->remove(logger);
 
   op_finisher.stop();
   ondisk_finisher.stop();
@@ -1744,55 +1787,6 @@ int FileStore::get_max_object_name_length()
   return ret;
 }
 
-void FileStore::start_logger(int whoami, utime_t tare)
-{
-  dout(10) << "start_logger" << dendl;
-  assert(!logger);
-
-  char name[80];
-  snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
-  PerfCountersBuilder plb(g_ceph_context, name, l_os_first, l_os_last);
-
-  plb.add_u64_counter(l_os_in_ops, "in_o");
-  //plb.add_u64_counter(l_os_in_bytes, "in_b");
-  plb.add_u64_counter(l_os_readable_ops, "or_o");
-  plb.add_u64_counter(l_os_readable_bytes, "or_b");
-  //plb.add_u64_counter(l_os_commit_bytes, "com_o");
-  //plb.add_u64_counter(l_os_commit_bytes, "com_b");
-
-  plb.add_u64(l_os_jq_max_ops, "jq_mo");
-  plb.add_u64(l_os_jq_ops, "jq_o");
-  plb.add_u64_counter(l_os_j_ops, "j_o");
-  plb.add_u64(l_os_jq_max_bytes, "jq_mb");
-  plb.add_u64(l_os_jq_bytes, "jq_b");
-  plb.add_u64_counter(l_os_j_bytes, "j_b");
-  plb.add_u64(l_os_oq_max_ops, "oq_mo");
-  plb.add_u64(l_os_oq_ops, "oq_o");
-  plb.add_u64_counter(l_os_ops, "o");
-  plb.add_u64(l_os_oq_max_bytes, "oq_mb");
-  plb.add_u64(l_os_oq_bytes, "oq_b");
-  plb.add_u64_counter(l_os_bytes, "b");
-  plb.add_u64(l_os_committing, "comitng");
-
-  logger = plb.create_perf_counters();
-  if (journal)
-    journal->logger = logger;
-  g_ceph_context->GetPerfCountersCollection()->logger_add(logger);
-}
-
-void FileStore::stop_logger()
-{
-  dout(10) << "stop_logger" << dendl;
-  if (logger) {
-    if (journal)
-      journal->logger = NULL;
-    g_ceph_context->GetPerfCountersCollection()->logger_remove(logger);
-    delete logger;
-    logger = NULL;
-  }
-}
-
-
 
 
 /// -----------------------------
@@ -1809,6 +1803,7 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
   }
 
   Op *o = new Op;
+  o->start = ceph_clock_now(g_ceph_context);
   o->tls.swap(tls);
   o->onreadable = onreadable;
   o->onreadable_sync = onreadable_sync;
@@ -1834,12 +1829,10 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   osr->queue(o);
 
-  if (logger) {
-    logger->inc(l_os_ops);
-    logger->inc(l_os_bytes, o->bytes);
-    logger->set(l_os_oq_ops, op_queue_len);
-    logger->set(l_os_oq_bytes, op_queue_bytes);
-  }
+  logger->inc(l_os_ops);
+  logger->inc(l_os_bytes, o->bytes);
+  logger->set(l_os_oq_ops, op_queue_len);
+  logger->set(l_os_oq_bytes, op_queue_bytes);
 
   op_tp.unlock();
 
@@ -1867,10 +1860,8 @@ void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
     max_bytes += m_filestore_queue_committing_max_bytes;
   }
 
-  if (logger) {
-    logger->set(l_os_oq_max_ops, max_ops);
-    logger->set(l_os_oq_max_bytes, max_bytes);
-  }
+  logger->set(l_os_oq_max_ops, max_ops);
+  logger->set(l_os_oq_max_bytes, max_bytes);
 
   while ((max_ops && (op_queue_len + 1) > max_ops) ||
 	 (max_bytes && op_queue_bytes      // let single large ops through!
@@ -1919,10 +1910,9 @@ void FileStore::_finish_op(OpSequencer *osr)
   // called with tp lock held
   _op_queue_release_throttle(o);
 
-  if (logger) {
-    logger->inc(l_os_readable_ops);
-    logger->inc(l_os_readable_bytes, o->bytes);
-  }
+  utime_t lat = ceph_clock_now(g_ceph_context);
+  lat -= o->start;
+  logger->finc(l_os_apply_lat, lat);
 
   if (next_finish == o->op) {
     dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
@@ -1995,11 +1985,6 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     dout(5) << "queue_transactions new osr " << osr << "/" << osr->parent << dendl;
   }
 
-  if (logger) {
-    logger->inc(l_os_in_ops);
-    //logger->inc(l_os_in_bytes, 1); 
-  }
-
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync);
     op_queue_reserve_throttle(o);
@@ -2047,11 +2032,6 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   op_submit_finish(op);
   op_apply_finish(op);
-
-  if (logger) {
-    logger->inc(l_os_readable_ops);
-    //fixme logger->inc(l_os_readable_bytes, 1);
-  }
 
   return r;
 }
@@ -2389,18 +2369,20 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0);
     }
 
-    if (r == -ENOENT && 
-	(op == Transaction::OP_CLONERANGE ||
-	 op == Transaction::OP_CLONE ||
-	 op == Transaction::OP_CLONERANGE2)) {
-      // Halt before we incorrectly mark the pg clean
-      assert(0 == "ENOENT on clone suggests osd bug");
+    if (r == -ENOENT) {
+      if (op == Transaction::OP_CLONERANGE ||
+	  op == Transaction::OP_CLONE ||
+	  op == Transaction::OP_CLONERANGE2) {
+	// Halt before we incorrectly mark the pg clean
+	assert(0 == "ENOENT on clone suggests osd bug");
+      } else {
+	// -ENOENT is normally okay
+      }
     }
-      
-    if (r == -ENOTEMPTY) {
-      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
+    else if (r == -ENODATA) {
+      // -ENODATA is okay
     }
-    if (r == -ENOSPC) {
+    else if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.
 
@@ -2411,8 +2393,18 @@ unsigned FileStore::_do_transaction(Transaction& t)
       else
 	assert(0 == "ENOSPC handling not implemented");
     }
-    if (r == -EIO) {
-      assert(0 == "EIO handling not implemented");
+    else if (r == -ENOTEMPTY) {
+      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
+    }
+    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !m_filestore_btrfs_snap) {
+      dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
+    }
+    else if (r == -EEXIST && op == Transaction::OP_COLL_ADD && replaying && !m_filestore_btrfs_snap) {
+      dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
+    }
+    else if (r < 0) {
+      dout(0) << " error " << cpp_strerror(r) << " not handled" << dendl;
+      assert(0 == "unexpected error");
     }
   }
   return 0;  // FIXME count errors
@@ -2986,8 +2978,7 @@ void FileStore::sync_entry()
       timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
-      if (logger)
-	logger->set(l_os_committing, 1);
+      logger->set(l_os_committing, 1);
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;
@@ -3068,12 +3059,17 @@ void FileStore::sync_entry()
       }
       
       utime_t done = ceph_clock_now(g_ceph_context);
-      done -= start;
-      dout(10) << "sync_entry commit took " << done << dendl;
+      utime_t lat = done - start;
+      utime_t dur = done - startwait;
+      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+
+      logger->inc(l_os_commit);
+      logger->finc(l_os_commit_lat, lat);
+      logger->finc(l_os_commit_len, dur);
+
       commit_finish();
 
-      if (logger)
-	logger->set(l_os_committing, 0);
+      logger->set(l_os_committing, 0);
 
       // remove old snaps?
       if (do_snap) {

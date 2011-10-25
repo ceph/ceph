@@ -10,7 +10,12 @@
 
 #include <curl/curl.h>
 
-#include "fcgiapp.h"
+#include "acconfig.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -243,7 +248,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   global_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS | CINIT_FLAG_NO_BANNER);
-  g_conf->set_val("daemonize", false);
 
   pid_t childpid = 0;
   if (g_conf->daemonize) {
@@ -262,9 +266,9 @@ int main(int argc, const char **argv)
     close(0);
     close(1);
     close(2);
-    int r = chdir("/");
+    int r = chdir(g_conf->chdir.c_str());
     if (r < 0) {
-      dout(0) << "weird, i couldn't chdir to /" << dendl;
+      dout(0) << "weird, i couldn't chdir to '" << g_conf->chdir << "'" << dendl;
     }
   }
   
