@@ -1092,6 +1092,9 @@ public:
   void handle_sub_op_reply(class MOSDSubOpReply *m);
 
 private:
+  /// check if op has sufficient caps
+  bool op_has_sufficient_caps(PG *pg, class MOSDOp *m);
+
   /*
    * these locked helpers assume pg is locked, and will do fina
    * checks before enqueuing the given operation.

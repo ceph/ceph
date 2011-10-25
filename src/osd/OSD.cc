@@ -5203,6 +5203,37 @@ void OSD::handle_op(MOSDOp *op)
   pg->put();
 }
 
+bool OSD::op_has_sufficient_caps(PG *pg, MOSDOp *op)
+{
+  Session *session = (Session *)op->get_connection()->get_priv();
+  if (!session) {
+    dout(0) << "op_has_sufficient_caps: no session for op " << *op << dendl;
+    return false;
+  }
+  OSDCaps& caps = session->caps;
+  session->put();
+
+  int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
+  dout(20) << "op_has_sufficient_caps pool=" << pg->pool->id << " (" << pg->pool->name
+	   << ") owner=" << pg->pool->auid << " perm=" << perm
+	   << " may_read=" << op->may_read()
+	   << " may_write=" << op->may_write()
+	   << " may_exec=" << op->may_exec()
+           << " require_exec_caps=" << op->require_exec_caps() << dendl;
+
+  if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
+    dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
+    return false;
+  } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
+    dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
+    return false;
+  } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
+    dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
+    return false;
+  }
+  return true;
+}
+
 /*
  * queue an operation, or discard it.  avoid side-effects or any "real" work.
  */
@@ -5211,38 +5242,8 @@ void OSD::_handle_op(PG *pg, MOSDOp *op)
   dout(10) << *pg << " _handle_op " << op << " " << *op << dendl;
   assert(pg->is_locked());
 
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session) {
-    dout(0) << "WARNING: no session for op" << dendl;
+  if (!op_has_sufficient_caps(pg, op)) {
     reply_op_error(op, -EPERM);
-    return;
-  }
-
-  OSDCaps& caps = session->caps;
-  session->put();
-
-  int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
-  dout(20) << " request for pool=" << pg->pool->id << " (" << pg->pool->name
-	   << ") owner=" << pg->pool->auid
-	   << " perm=" << perm
-	   << " may_read=" << op->may_read()
-           << " may_write=" << op->may_write()
-	   << " may_exec=" << op->may_exec()
-           << " require_exec_caps=" << op->require_exec_caps() << dendl;
-
-  int err = -EPERM;
-  if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
-    dout(10) << " no READ permission to access pool " << pg->pool->name << dendl;
-  } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
-    dout(10) << " no WRITE permission to access pool " << pg->pool->name << dendl;
-  } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
-    dout(10) << " no EXEC permission to access pool " << pg->pool->name << dendl;
-  } else {
-    err = 0;
-  }
-
-  if (err < 0) {
-    reply_op_error(op, err);
     return;
   }
 
