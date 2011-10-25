@@ -215,7 +215,6 @@ struct ltstr
 WRITE_RAW_ENCODER(ceph_fsid)
 WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_dir_layout)
-WRITE_RAW_ENCODER(ceph_pg_pool)
 WRITE_RAW_ENCODER(ceph_mds_session_head)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
 WRITE_RAW_ENCODER(ceph_mds_request_release)
@@ -296,10 +295,15 @@ struct inodeno_t {
   inodeno_t(_inodeno_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator _inodeno_t() const { return val; }
-} __attribute__ ((__may_alias__));
 
-inline void encode(inodeno_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void decode(inodeno_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+  void encode(bufferlist& bl) const {
+    ::encode(val, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    ::decode(val, p);
+  }
+} __attribute__ ((__may_alias__));
+WRITE_CLASS_ENCODER(inodeno_t)
 
 inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;

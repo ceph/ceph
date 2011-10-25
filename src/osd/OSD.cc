@@ -1019,7 +1019,7 @@ PGPool* OSD::_get_pool(int id)
     }
 
     p = new PGPool(id, osdmap->get_pool_name(id),
-		   osdmap->get_pg_pool(id)->v.auid );
+		   osdmap->get_pg_pool(id)->auid);
     pool_map[id] = p;
     p->get();
     
@@ -1058,7 +1058,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   PG *pg;
   hobject_t logoid = make_pg_log_oid(pgid);
   hobject_t infooid = make_pg_biginfo_oid(pgid);
-  if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
+  if (osdmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
     pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
   else 
     assert(0);
@@ -3516,7 +3516,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     PGPool *pool = p->second;
     
     // make sure auid stays up to date
-    pool->auid = pi->v.auid;
+    pool->auid = pi->auid;
     
     if (pi->get_snap_epoch() == osdmap->get_epoch()) {
       pi->build_removed_snaps(pool->newly_removed_snaps);

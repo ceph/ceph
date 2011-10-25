@@ -38,19 +38,18 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
 
 struct ACLID {
   char id[ID_SIZE + 1];
+
+  void encode(bufferlist& bl) const {
+    bl.append((const char *)id, ID_SIZE);
+  }
+  void decode(bufferlist::iterator& iter) {
+    iter.copy(ID_SIZE, (char *)id);
+  }
 };
+WRITE_CLASS_ENCODER(ACLID)
 
 typedef __u32 ACLFlags;
 
-void encode(const ACLID& id, bufferlist& bl)
-{
-  bl.append((const char *)id.id, ID_SIZE);
-}
-
-void decode(ACLID& id, bufferlist::iterator& iter)
-{
-  iter.copy(ID_SIZE, (char *)id.id);
-}
 
 inline bool operator<(const ACLID& l, const ACLID& r)
 {

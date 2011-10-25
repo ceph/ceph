@@ -1365,7 +1365,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
 	   p != osdmap.pools.end();
 	   ++p) {
-	if (!uid_pools || p->second.v.auid == uid_pools) {
+	if (!uid_pools || p->second.auid == uid_pools) {
 	  ss << p->first << ' ' << osdmap.pool_name[p->first] << ',';
 	}
       }
@@ -1423,20 +1423,20 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
   int64_t pool = ++pending_inc.new_pool_max;
-  pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
+  pending_inc.new_pools[pool].type = pg_pool_t::TYPE_REP;
 
-  pending_inc.new_pools[pool].v.size = g_conf->osd_pool_default_size;
+  pending_inc.new_pools[pool].size = g_conf->osd_pool_default_size;
   if (crush_rule >= 0)
-    pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
+    pending_inc.new_pools[pool].crush_ruleset = crush_rule;
   else
-    pending_inc.new_pools[pool].v.crush_ruleset = g_conf->osd_pool_default_crush_rule;
-  pending_inc.new_pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].v.pg_num = g_conf->osd_pool_default_pg_num;
-  pending_inc.new_pools[pool].v.pgp_num = g_conf->osd_pool_default_pgp_num;
-  pending_inc.new_pools[pool].v.lpg_num = 0;
-  pending_inc.new_pools[pool].v.lpgp_num = 0;
-  pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
-  pending_inc.new_pools[pool].v.auid = auid;
+    pending_inc.new_pools[pool].crush_ruleset = g_conf->osd_pool_default_crush_rule;
+  pending_inc.new_pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
+  pending_inc.new_pools[pool].pg_num = g_conf->osd_pool_default_pg_num;
+  pending_inc.new_pools[pool].pgp_num = g_conf->osd_pool_default_pgp_num;
+  pending_inc.new_pools[pool].lpg_num = 0;
+  pending_inc.new_pools[pool].lpgp_num = 0;
+  pending_inc.new_pools[pool].last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool].auid = auid;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -1929,13 +1929,24 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  err = -ENOENT;
 	} else {
 	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
-	  unsigned n = atoi(m->cmd[5].c_str());
-	  if (n) {
+	  const char *start = m->cmd[5].c_str();
+	  char *end = (char *)start;
+	  unsigned n = strtol(start, &end, 10);
+	  if (*end == '\0') {
 	    if (m->cmd[4] == "size") {
-	      pending_inc.new_pools[pool] = *p;
-	      pending_inc.new_pools[pool].v.size = n;
-	      pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+	      if (pending_inc.new_pools.count(pool) == 0)
+		pending_inc.new_pools[pool] = *p;
+	      pending_inc.new_pools[pool].size = n;
+	      pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 	      ss << "set pool " << pool << " size to " << n;
+	      getline(ss, rs);
+	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	      return true;
+	    } else if (m->cmd[4] == "crash_replay_interval") {
+	      if (pending_inc.new_pools.count(pool) == 0)
+		pending_inc.new_pools[pool] = *p;
+	      pending_inc.new_pools[pool].crash_replay_interval = n;
+	      ss << "set pool " << pool << " to crash_replay_interval to " << n;
 	      getline(ss, rs);
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
@@ -1946,9 +1957,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "currently creating pgs, wait";
 		err = -EAGAIN;
 	      } else {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
-		pending_inc.new_pools[pool].v.pg_num = n;
-		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
+		pending_inc.new_pools[pool].pg_num = n;
+		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pg_num to " << n;
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1963,9 +1975,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "still creating pgs, wait";
 		err = -EAGAIN;
 	      } else {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
-		pending_inc.new_pools[pool].v.pgp_num = n;
-		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
+		pending_inc.new_pools[pool].pgp_num = n;
+		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " pgp_num to " << n;
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1973,9 +1986,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      }
 	    } else if (m->cmd[4] == "crush_ruleset") {
 	      if (osdmap.crush.rule_exists(n)) {
-		pending_inc.new_pools[pool] = osdmap.pools[pool];
-		pending_inc.new_pools[pool].v.crush_ruleset = n;
-		pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+		if (pending_inc.new_pools.count(pool) == 0)
+		  pending_inc.new_pools[pool] = *p;
+		pending_inc.new_pools[pool].crush_ruleset = n;
+		pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 		ss << "set pool " << pool << " crush_ruleset to " << n;
 		getline(ss, rs);
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -2262,12 +2276,12 @@ bool OSDMonitor::prepare_pool_op_auid(MPoolOp *m)
     goto fail;
   if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
     // check that current user can write to old auid
-    int old_auid = osdmap.get_pg_pool(m->pool)->v.auid;
+    int old_auid = osdmap.get_pg_pool(m->pool)->auid;
     if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, old_auid)) {
       // update pg_pool_t with new auid
       if (pending_inc.new_pools.count(m->pool) == 0)
 	pending_inc.new_pools[m->pool] = *(osdmap.get_pg_pool(m->pool));
-      pending_inc.new_pools[m->pool].v.auid = m->auid;
+      pending_inc.new_pools[m->pool].auid = m->auid;
       paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
       return true;
     }

@@ -90,39 +90,12 @@ struct osd_info_t {
 		 up_from(0), up_thru(0), down_at(0), lost_at(0) {}
 
   void dump(Formatter *f) const;
-
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(last_clean_begin, bl);
-    ::encode(last_clean_end, bl);
-    ::encode(up_from, bl);
-    ::encode(up_thru, bl);
-    ::encode(down_at, bl);
-    ::encode(lost_at, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(last_clean_begin, bl);
-    ::decode(last_clean_end, bl);
-    ::decode(up_from, bl);
-    ::decode(up_thru, bl);
-    ::decode(down_at, bl);
-    ::decode(lost_at, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
-inline ostream& operator<<(ostream& out, const osd_info_t& info) {
-  out << "up_from " << info.up_from
-      << " up_thru " << info.up_thru
-      << " down_at " << info.down_at
-      << " last_clean_interval [" << info.last_clean_begin << "," << info.last_clean_end << ")";
-  if (info.lost_at)
-    out << " lost_at " << info.lost_at;
-  return out;
-}
+ostream& operator<<(ostream& out, const osd_info_t& info);
 
 
 /** OSDMap
@@ -162,173 +135,9 @@ public:
 
     string cluster_snapshot;
 
-    void encode_client_old(bufferlist& bl) {
-      __u16 v = 5;
-      ::encode(v, bl);
-      ::encode(fsid, bl);
-      ::encode(epoch, bl);
-      ::encode(modified, bl);
-      int32_t new_t = new_pool_max;
-      ::encode(new_t, bl);
-      ::encode(new_flags, bl);
-      ::encode(fullmap, bl);
-      ::encode(crush, bl);
-
-      ::encode(new_max_osd, bl);
-      // for ::encode(new_pools, bl);
-      __u32 n = new_pools.size();
-      ::encode(n, bl);
-      for (map<int64_t,pg_pool_t>::iterator p = new_pools.begin();
-	   p != new_pools.end();
-	   ++p) {
-	n = p->first;
-	::encode(n, bl);
-	::encode(p->second, bl);
-      }
-      // for ::encode(new_pool_names, bl);
-      n = new_pool_names.size();
-      ::encode(n, bl);
-      for (map<int64_t, string>::iterator p = new_pool_names.begin(); p != new_pool_names.end(); ++p) {
-	n = p->first;
-	::encode(n, bl);
-	::encode(p->second, bl);
-      }
-      // for ::encode(old_pools, bl);
-      n = old_pools.size();
-      ::encode(n, bl);
-      for (set<int64_t>::iterator p = old_pools.begin(); p != old_pools.end(); ++p) {
-	n = *p;
-	::encode(n, bl);
-      }
-      ::encode(new_up_client, bl);
-      ::encode(new_state, bl);
-      ::encode(new_weight, bl);
-      // for ::encode(new_pg_temp, bl);
-      n = new_pg_temp.size();
-      ::encode(n, bl);
-      for (map<pg_t,vector<int32_t> >::iterator p = new_pg_temp.begin();
-	   p != new_pg_temp.end();
-	   ++p) {
-	old_pg_t opg = p->first.get_old_pg();
-	::encode(opg, bl);
-	::encode(p->second, bl);
-      }
-    }
-
-    void encode(bufferlist& bl) {
-      // base
-      __u16 v = 6;
-      ::encode(v, bl);
-      ::encode(fsid, bl);
-      ::encode(epoch, bl); 
-      ::encode(modified, bl);
-      ::encode(new_pool_max, bl);
-      ::encode(new_flags, bl);
-      ::encode(fullmap, bl);
-      ::encode(crush, bl);
-
-      ::encode(new_max_osd, bl);
-      ::encode(new_pools, bl);
-      ::encode(new_pool_names, bl);
-      ::encode(old_pools, bl);
-      ::encode(new_up_client, bl);
-      ::encode(new_state, bl);
-      ::encode(new_weight, bl);
-      ::encode(new_pg_temp, bl);
-
-      // extended
-      __u16 ev = CEPH_OSDMAP_INC_VERSION_EXT;
-      ::encode(ev, bl);
-      ::encode(new_hb_up, bl);
-      ::encode(new_up_thru, bl);
-      ::encode(new_last_clean_interval, bl);
-      ::encode(new_lost, bl);
-      ::encode(new_blacklist, bl);
-      ::encode(old_blacklist, bl);
-      ::encode(new_up_internal, bl);
-      ::encode(cluster_snapshot, bl);
-    }
-    void decode(bufferlist::iterator &p) {
-      __u32 n, t;
-      // base
-      __u16 v;
-      ::decode(v, p);
-      ::decode(fsid, p);
-      ::decode(epoch, p);
-      ::decode(modified, p);
-      if (v == 4 || v == 5) {
-	::decode(n, p);
-	new_pool_max = n;
-      } else if (v >= 6)
-	::decode(new_pool_max, p);	
-      ::decode(new_flags, p);
-      ::decode(fullmap, p);
-      ::decode(crush, p);
-
-      ::decode(new_max_osd, p);
-      if (v < 6) {
-	new_pools.clear();
-	::decode(n, p);
-	while (n--) {
-	  ::decode(t, p);
-	  ::decode(new_pools[t], p);
-	}
-      } else {
-	::decode(new_pools, p);
-      }
-      if (v == 5) {
-	new_pool_names.clear();
-	::decode(n, p);
-	while (n--) {
-	  ::decode(t, p);
-	  ::decode(new_pool_names[t], p);
-	}
-      } else if (v >= 6) {
-	::decode(new_pool_names, p);
-      }
-      if (v < 6) {
-	old_pools.clear();
-	::decode(n, p);
-	while (n--) {
-	  ::decode(t, p);
-	  old_pools.insert(t);
-	}
-      } else {
-	::decode(old_pools, p);
-      }
-      ::decode(new_up_client, p);
-      ::decode(new_state, p);
-      ::decode(new_weight, p);
-
-      if (v < 6) {
-	new_pg_temp.clear();
-	::decode(n, p);
-	while (n--) {
-	  old_pg_t opg;
-	  ::decode_raw(opg, p);
-	  ::decode(new_pg_temp[pg_t(opg)], p);
-	}
-      } else {
-	::decode(new_pg_temp, p);
-      }
-
-      // extended
-      __u16 ev = 0;
-      if (v >= 5)
-	::decode(ev, p);
-      ::decode(new_hb_up, p);
-      if (v < 5)
-	::decode(new_pool_names, p);
-      ::decode(new_up_thru, p);
-      ::decode(new_last_clean_interval, p);
-      ::decode(new_lost, p);
-      ::decode(new_blacklist, p);
-      ::decode(old_blacklist, p);
-      if (ev >= 6)
-        ::decode(new_up_internal, p);
-      if (ev >= 7)
-	::decode(cluster_snapshot, p);
-    }
+    void encode_client_old(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features=-1) const;
+    void decode(bufferlist::iterator &p);
 
     Incremental(epoch_t e=0) :
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1) {
@@ -397,27 +206,14 @@ private:
     for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
 	 p != pools.end();
 	 p++)
-      p->second.v.last_change = e;
+      p->second.last_change = e;
   }
 
   /* stamps etc */
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blacklisted(const entity_addr_t& a) {
-    if (blacklist.empty())
-      return false;
-
-    // this specific instance?
-    if (blacklist.count(a))
-      return true;
-
-    // is entire ip blacklisted?
-    entity_addr_t b = a;
-    b.set_port(0);
-    b.set_nonce(0);
-    return blacklist.count(b);
-  }
+  bool is_blacklisted(const entity_addr_t& a);
 
   string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -428,33 +224,12 @@ private:
   /***** cluster state *****/
   /* osds */
   int get_max_osd() const { return max_osd; }
-  void set_max_osd(int m) { 
-    int o = max_osd;
-    max_osd = m;
-    osd_state.resize(m);
-    osd_weight.resize(m);
-    for (; o<max_osd; o++) {
-      osd_state[o] = 0;
-      osd_weight[o] = CEPH_OSD_OUT;
-    }
-    osd_info.resize(m);
-    osd_addr.resize(m);
-    osd_cluster_addr.resize(m);
-    osd_hb_addr.resize(m);
-
-    calc_num_osds();
-  }
+  void set_max_osd(int m);
 
   int get_num_osds() const {
     return num_osd;
   }
-  int calc_num_osds() {
-    num_osd = 0;
-    for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS)
-	num_osd++;
-    return num_osd;
-  }
+  int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) { 
     for (int i=0; i<max_osd; i++)
@@ -505,21 +280,7 @@ private:
   float get_weightf(int o) const {
     return (float)get_weight(o) / (float)CEPH_OSD_IN;
   }
-  void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const {
-    float max = 0;
-    for (map<int,double>::const_iterator p = weights.begin();
-	 p != weights.end(); ++p) {
-      if (p->second > max)
-	max = p->second;
-    }
-
-    for (map<int,double>::const_iterator p = weights.begin();
-	 p != weights.end(); ++p) {
-      inc.new_weight[p->first] = (unsigned)((p->second / max) * CEPH_OSD_IN);
-    }
-  }
-
-
+  void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const;
 
   bool exists(int osd) const {
     //assert(osd >= 0);
@@ -616,332 +377,14 @@ private:
     return -1;
   }
 
-
-  int apply_incremental(Incremental &inc) {
-    if (inc.epoch == 1)
-      fsid = inc.fsid;
-    else
-      if (ceph_fsid_compare(&inc.fsid, &fsid) != 0) {
-	return -EINVAL;
-      }
-    assert(inc.epoch == epoch+1);
-    epoch++;
-    modified = inc.modified;
-
-    // full map?
-    if (inc.fullmap.length()) {
-      decode(inc.fullmap);
-      return 0;
-    }
-
-    // nope, incremental.
-    if (inc.new_flags >= 0)
-      flags = inc.new_flags;
-
-    if (inc.new_max_osd >= 0) 
-      set_max_osd(inc.new_max_osd);
-
-    if (inc.new_pool_max != -1)
-      pool_max = inc.new_pool_max;
-
-    for (set<int64_t>::iterator p = inc.old_pools.begin();
-	 p != inc.old_pools.end();
-	 p++) {
-      pools.erase(*p);
-      name_pool.erase(pool_name[*p]);
-      pool_name.erase(*p);
-    }
-    for (map<int64_t,pg_pool_t>::iterator p = inc.new_pools.begin();
-	 p != inc.new_pools.end();
-	 p++) {
-      pools[p->first] = p->second;
-      pools[p->first].v.last_change = epoch;
-    }
-    for (map<int64_t,string>::iterator p = inc.new_pool_names.begin();
-	 p != inc.new_pool_names.end();
-	 p++) {
-      pool_name[p->first] = p->second;
-      name_pool[p->second] = p->first;
-    }
-
-    for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
-         i != inc.new_weight.end();
-         i++)
-      set_weight(i->first, i->second);
-
-    // up/down
-    for (map<int32_t,uint8_t>::iterator i = inc.new_state.begin();
-         i != inc.new_state.end();
-         i++) {
-      int s = i->second ? i->second : CEPH_OSD_UP;
-      if ((osd_state[i->first] & CEPH_OSD_UP) &&
-	  (s & CEPH_OSD_UP)) {
-	osd_info[i->first].down_at = epoch;
-      }
-      osd_state[i->first] ^= s;
-    }
-    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
-         i != inc.new_up_client.end();
-         i++) {
-      osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
-      osd_addr[i->first] = i->second;
-      if (inc.new_hb_up.empty())
-	osd_hb_addr[i->first] = i->second;	//this is a backward-compatibility hack
-      else
-	osd_hb_addr[i->first] = inc.new_hb_up[i->first];
-      osd_info[i->first].up_from = epoch;
-    }
-    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
-         i != inc.new_up_internal.end();
-         i++)
-      osd_cluster_addr[i->first] = i->second;
-    // info
-    for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
-         i != inc.new_up_thru.end();
-         i++)
-      osd_info[i->first].up_thru = i->second;
-    for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
-         i != inc.new_last_clean_interval.end();
-         i++) {
-      osd_info[i->first].last_clean_begin = i->second.first;
-      osd_info[i->first].last_clean_end = i->second.second;
-    }
-    for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
-      osd_info[p->first].lost_at = p->second;
-
-    // pg rebuild
-    for (map<pg_t, vector<int> >::iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
-      if (p->second.empty())
-	pg_temp.erase(p->first);
-      else
-	pg_temp[p->first] = p->second;
-    }
-
-    // blacklist
-    for (map<entity_addr_t,utime_t>::iterator p = inc.new_blacklist.begin();
-	 p != inc.new_blacklist.end();
-	 p++)
-      blacklist[p->first] = p->second;
-    for (vector<entity_addr_t>::iterator p = inc.old_blacklist.begin();
-	 p != inc.old_blacklist.end();
-	 p++)
-      blacklist.erase(*p);
-
-    // cluster snapshot?
-    if (inc.cluster_snapshot.length()) {
-      cluster_snapshot = inc.cluster_snapshot;
-      cluster_snapshot_epoch = inc.epoch;
-    } else {
-      cluster_snapshot.clear();
-      cluster_snapshot_epoch = 0;
-    }
-
-    // do new crush map last (after up/down stuff)
-    if (inc.crush.length()) {
-      bufferlist::iterator blp = inc.crush.begin();
-      crush.decode(blp);
-    }
-
-    calc_num_osds();
-    return 0;
-  }
+  int apply_incremental(Incremental &inc);
 
   // serialize, unserialize
-  void encode_client_old(bufferlist& bl) {
-    __u16 v = 5;
-    ::encode(v, bl);
-
-    // base
-    ::encode(fsid, bl);
-    ::encode(epoch, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-
-    // for ::encode(pools, bl);
-    __u32 n = pools.size();
-    ::encode(n, bl);
-    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
-	 p != pools.end();
-	 ++p) {
-      n = p->first;
-      ::encode(n, bl);
-      ::encode(p->second, bl);
-    }
-    // for ::encode(pool_name, bl);
-    n = pool_name.size();
-    ::encode(n, bl);
-    for (map<int64_t, string>::iterator p = pool_name.begin();
-	 p != pool_name.end();
-	 ++p) {
-      n = p->first;
-      ::encode(n, bl);
-      ::encode(p->second, bl);
-    }
-    // for ::encode(pool_max, bl);
-    n = pool_max;
-    ::encode(n, bl);
-
-    ::encode(flags, bl);
-    
-    ::encode(max_osd, bl);
-    ::encode(osd_state, bl);
-    ::encode(osd_weight, bl);
-    ::encode(osd_addr, bl);
-
-    // for ::encode(pg_temp, bl);
-    n = pg_temp.size();
-    ::encode(n, bl);
-    for (map<pg_t,vector<int32_t> >::iterator p = pg_temp.begin();
-	 p != pg_temp.end();
-	 ++p) {
-      old_pg_t opg = p->first.get_old_pg();
-      ::encode(opg, bl);
-      ::encode(p->second, bl);
-    }
-
-    // crush
-    bufferlist cbl;
-    crush.encode(cbl);
-    ::encode(cbl, bl);
-  }
-
-  void encode(bufferlist& bl) {
-    __u16 v = 6;
-    ::encode(v, bl);
-
-    // base
-    ::encode(fsid, bl);
-    ::encode(epoch, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-
-    ::encode(pools, bl);
-    ::encode(pool_name, bl);
-    ::encode(pool_max, bl);
-
-    ::encode(flags, bl);
-    
-    ::encode(max_osd, bl);
-    ::encode(osd_state, bl);
-    ::encode(osd_weight, bl);
-    ::encode(osd_addr, bl);
-
-    ::encode(pg_temp, bl);
-
-    // crush
-    bufferlist cbl;
-    crush.encode(cbl);
-    ::encode(cbl, bl);
-
-    // extended
-    __u16 ev = CEPH_OSDMAP_VERSION_EXT;
-    ::encode(ev, bl);
-    ::encode(osd_hb_addr, bl);
-    ::encode(osd_info, bl);
-    ::encode(blacklist, bl);
-    ::encode(osd_cluster_addr, bl);
-    ::encode(cluster_snapshot_epoch, bl);
-    ::encode(cluster_snapshot, bl);
-  }
-  
-  void decode(bufferlist& bl) {
-    __u32 n, t;
-    bufferlist::iterator p = bl.begin();
-    __u16 v;
-    ::decode(v, p);
-
-    // base
-    ::decode(fsid, p);
-    ::decode(epoch, p);
-    ::decode(created, p);
-    ::decode(modified, p);
-
-    int32_t max_pools = 0;
-    if (v < 4) {
-      ::decode(max_pools, p);
-    }
-    if (v < 6) {
-      pools.clear();
-      ::decode(n, p);
-      while (n--) {
-	::decode(t, p);
-	::decode(pools[t], p);
-      }
-    } else {
-      ::decode(pools, p);
-    }
-    if (v == 5) {
-      pool_name.clear();
-      ::decode(n, p);
-      while (n--) {
-	::decode(t, p);
-	::decode(pool_name[t], p);
-      }
-    } else if (v >= 6) {
-      ::decode(pool_name, p);
-    }
-    if (v == 4 || v == 5) {
-      ::decode(n, p);
-      pool_max = n;
-    } else if (v >= 6) {
-      ::decode(pool_max, p);
-    } else {
-      pool_max = max_pools;
-    }
-
-    ::decode(flags, p);
-
-    ::decode(max_osd, p);
-    ::decode(osd_state, p);
-    ::decode(osd_weight, p);
-    ::decode(osd_addr, p);
-    if (v <= 5) {
-      pg_temp.clear();
-      ::decode(n, p);
-      while (n--) {
-	old_pg_t opg;
-	::decode_raw(opg, p);
-	::decode(pg_temp[pg_t(opg)], p);
-      }
-    } else {
-      ::decode(pg_temp, p);
-    }
-
-    // crush
-    bufferlist cbl;
-    ::decode(cbl, p);
-    bufferlist::iterator cblp = cbl.begin();
-    crush.decode(cblp);
-
-    // extended
-    __u16 ev = 0;
-    if (v >= 5)
-      ::decode(ev, p);
-    ::decode(osd_hb_addr, p);
-    ::decode(osd_info, p);
-    if (v < 5)
-      ::decode(pool_name, p);
-   
-    ::decode(blacklist, p);
-    if (ev >= 6)
-      ::decode(osd_cluster_addr, p);
-    else
-      osd_cluster_addr.resize(osd_addr.size());
-
-    if (ev >= 7) {
-      ::decode(cluster_snapshot_epoch, p);
-      ::decode(cluster_snapshot, p);
-    }      
-
-    // index pool names
-    name_pool.clear();
-    for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
-      name_pool[i->second] = i->first;
-    
-    calc_num_osds();
-  }
- 
-
+private:
+  void encode_client_old(bufferlist& bl) const;
+public:
+  void encode(bufferlist& bl, uint64_t features=-1) const;
+  void decode(bufferlist& bl);
 
 
   /****   mapping facilities   ****/
@@ -952,9 +395,9 @@ private:
       return -ENOENT;
     ps_t ps;
     if (loc.key.length())
-      ps = ceph_str_hash(pool->v.object_hash, loc.key.c_str(), loc.key.length());
+      ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
     else
-      ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
+      ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
     if (loc.get_preferred() >= 0)

@@ -1370,7 +1370,7 @@ int librados::RadosClient::pool_get_auid(rados_ioctx_t io, unsigned long long *a
   const pg_pool_t *pg = osdmap.get_pg_pool(pool_id);
   if (!pg)
     return -ENOENT;
-  *auid = pg->v.auid;
+  *auid = pg->auid;
   return 0;
 }
 
