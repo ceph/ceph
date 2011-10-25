@@ -535,9 +535,6 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  bool is_write_in_progress() {
-    return !object_contexts.empty();
-  }
 
 
   
