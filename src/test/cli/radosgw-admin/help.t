@@ -49,6 +49,8 @@
                                json
      --purge-data              when specified, user removal will also purge all the
                                user data
+     --show-log-entries=<flag> enable/disable dump of log entries on log show
+     --show-log-sum=<flag>     enable/disable dump of log summation on log show
   --conf/-c        Read configuration from the given configuration file
   -d               Run in foreground, log to stderr.
   -f               Run in foreground, log to usual location.

@@ -77,6 +77,8 @@ void _usage()
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
   cerr << "                             user data\n";
+  cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
+  cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   generic_client_usage();
 }
 
@@ -482,16 +484,18 @@ int main(int argc, char **argv)
   RGWAccess *store;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
-  bool gen_secret = false;
-  bool gen_key = false;
+  int gen_secret = false;
+  int gen_key = false;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
   int64_t bucket_id = -1;
   Formatter *formatter = NULL;
-  bool purge_data = false;
+  int purge_data = false;
   RGWBucketInfo bucket_info;
-  bool pretty_format = false;
+  int pretty_format = false;
+  int show_log_entries = true;
+  int show_log_sum = true;
 
   std::string val;
   std::ostringstream errs;
@@ -530,10 +534,14 @@ int main(int argc, char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         return usage();
       }
-    } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
-      gen_key = true;
-    } else if (ceph_argparse_flag(args, i, "--gen-secret", (char*)NULL)) {
-      gen_secret = true;
+    } else if (ceph_argparse_binary_flag(args, i, &gen_key, NULL, "--gen-access-key", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &gen_secret, NULL, "--gen-secret", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
 	cerr << errs.str() << std::endl;
@@ -559,10 +567,10 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
-      pretty_format = true;
-    } else if (ceph_argparse_flag(args, i, "--purge-data", (char*)NULL)) {
-      purge_data = true;
+    } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
+      // do nothing
     } else {
       ++i;
     }
@@ -1056,30 +1064,44 @@ int main(int argc, char **argv)
       formatter->dump_string("bucket_owner", entry.bucket_owner);
       formatter->dump_string("bucket", entry.bucket);
 
-      formatter->open_array_section("log_entries");
+      uint64_t agg_time = 0;
+      uint64_t agg_bytes_sent = 0;
+      uint64_t agg_bytes_received = 0;
+      uint64_t total_entries = 0;
+
+      if (show_log_entries)
+        formatter->open_array_section("log_entries");
+
       do {
 	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
-	
-	formatter->open_object_section("log_entry");
-	formatter->dump_string("bucket", entry.bucket.c_str());
-	entry.time.gmtime(formatter->dump_stream("time"));      // UTC
-	entry.time.localtime(formatter->dump_stream("time_local"));
-	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-	if (entry.object_owner.length())
-	  formatter->dump_string("object_owner", entry.object_owner.c_str());
-	formatter->dump_string("user", entry.user.c_str());
-	formatter->dump_string("operation", entry.op.c_str());
-	formatter->dump_string("uri", entry.uri.c_str());
-	formatter->dump_string("http_status", entry.http_status.c_str());
-	formatter->dump_string("error_code", entry.error_code.c_str());
-	formatter->dump_int("bytes_sent", entry.bytes_sent);
-	formatter->dump_int("bytes_received", entry.bytes_received);
-	formatter->dump_int("object_size", entry.obj_size);
-	formatter->dump_int("total_time", total_time);
-	formatter->dump_string("user_agent",  entry.user_agent.c_str());
-	formatter->dump_string("referrer",  entry.referrer.c_str());
-	formatter->close_section();
-	formatter->flush(cout);
+
+        agg_time += total_time;
+        agg_bytes_sent += entry.bytes_sent;
+        agg_bytes_received += entry.bytes_received;
+        total_entries++;
+
+        if (show_log_entries) {
+	  formatter->open_object_section("log_entry");
+	  formatter->dump_string("bucket", entry.bucket.c_str());
+	  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
+	  entry.time.localtime(formatter->dump_stream("time_local"));
+	  formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+	  if (entry.object_owner.length())
+	    formatter->dump_string("object_owner", entry.object_owner.c_str());
+	  formatter->dump_string("user", entry.user.c_str());
+	  formatter->dump_string("operation", entry.op.c_str());
+	  formatter->dump_string("uri", entry.uri.c_str());
+	  formatter->dump_string("http_status", entry.http_status.c_str());
+	  formatter->dump_string("error_code", entry.error_code.c_str());
+	  formatter->dump_int("bytes_sent", entry.bytes_sent);
+	  formatter->dump_int("bytes_received", entry.bytes_received);
+	  formatter->dump_int("object_size", entry.obj_size);
+	  formatter->dump_int("total_time", total_time);
+	  formatter->dump_string("user_agent",  entry.user_agent.c_str());
+	  formatter->dump_string("referrer",  entry.referrer.c_str());
+	  formatter->close_section();
+	  formatter->flush(cout);
+        }
 
 	r = store->log_show_next(h, &entry);
       } while (r > 0);
@@ -1088,8 +1110,17 @@ int main(int argc, char **argv)
       	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
+      if (show_log_entries)
+        formatter->close_section();
 
-      formatter->close_section();
+      if (show_log_sum) {
+        formatter->open_object_section("log_sum");
+	formatter->dump_int("bytes_sent", agg_bytes_sent);
+	formatter->dump_int("bytes_received", agg_bytes_received);
+	formatter->dump_int("total_time", agg_time);
+	formatter->dump_int("total_entries", total_entries);
+        formatter->close_section();
+      }
       formatter->close_section();
       formatter->flush(cout);
     }
