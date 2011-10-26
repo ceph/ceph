@@ -79,6 +79,8 @@ void _usage()
   cerr << "                             user data\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
+  cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
+  cerr << "                             in one of the numeric field\n";
   generic_client_usage();
 }
 
@@ -498,6 +500,7 @@ int main(int argc, char **argv)
   int pretty_format = false;
   int show_log_entries = true;
   int show_log_sum = true;
+  int skip_zero_entries = false;  // log show
 
   std::string val;
   std::ostringstream errs;
@@ -543,6 +546,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
@@ -1082,6 +1087,10 @@ int main(int argc, char **argv)
         agg_bytes_received += entry.bytes_received;
         total_entries++;
 
+        if (skip_zero_entries && entry.bytes_sent == 0 &&
+            entry.bytes_received == 0)
+          goto next;
+
         if (show_log_entries) {
 	  formatter->open_object_section("log_entry");
 	  formatter->dump_string("bucket", entry.bucket.c_str());
@@ -1104,7 +1113,7 @@ int main(int argc, char **argv)
 	  formatter->close_section();
 	  formatter->flush(cout);
         }
-
+next:
 	r = store->log_show_next(h, &entry);
       } while (r > 0);
 
