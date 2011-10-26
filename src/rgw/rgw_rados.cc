@@ -1780,8 +1780,8 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
     dout(0) << "iter->first=" << aiter->first << dendl;
   }
 
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   try {
     ::decode(size, oiter);
     utime_t ut;
