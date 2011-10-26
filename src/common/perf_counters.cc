@@ -147,7 +147,7 @@ void PerfCounters::fset(int idx, double amt)
     return;
   data.u.dbl = amt;
   if (data.type & PERFCOUNTER_LONGRUNAVG)
-    data.avgcount++;
+    assert(0);
 }
 
 double PerfCounters::fget(int idx) const
