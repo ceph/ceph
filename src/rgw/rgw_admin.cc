@@ -1218,10 +1218,7 @@ int main(int argc, char **argv)
       RGWBucketEnt obj = iter->second;
       bucket_names.push_back(obj.bucket);
     }
-    if (disable)
-      ret = rgwstore->disable_buckets(bucket_names);
-    else
-      ret = rgwstore->enable_buckets(bucket_names, info.auid);
+    ret = rgwstore->set_buckets_enabled(bucket_names, !disable);
     if (ret < 0) {
       cerr << "ERROR: failed to change pool" << std::endl;
       return 1;

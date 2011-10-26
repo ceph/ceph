@@ -63,6 +63,7 @@ public:
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info);
 };
 
 #endif

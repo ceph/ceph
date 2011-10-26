@@ -667,3 +667,8 @@ int RGWFS::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info)
 {
   return -ENOTSUP;
 }
+
+int RGWFS::put_bucket_info(string& bucket_name, RGWBucketInfo& info)
+{
+  return -ENOTSUP;
+}

@@ -939,56 +939,51 @@ int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
   return ret;
 }
 
-int RGWRados::set_buckets_auid(vector<rgw_bucket>& buckets, uint64_t auid)
+int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 {
-  librados::IoCtx ctx;
-  vector<librados::PoolAsyncCompletion *> completions;
+  int ret = 0;
 
   vector<rgw_bucket>::iterator iter;
+
   for (iter = buckets.begin(); iter != buckets.end(); ++iter) {
     rgw_bucket& bucket = *iter;
-    int r = open_bucket_ctx(bucket, ctx);
-    if (r < 0)
-      return r;
+    if (enabled)
+      dout(20) << "enabling bucket name=" << bucket.name << dendl;
+    else
+      dout(20) << "disabling bucket name=" << bucket.name << dendl;
 
-    librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
-    completions.push_back(c);
-    ctx.set_auid_async(auid, c);
+    RGWBucketInfo info;
+    int r = get_bucket_info(NULL, bucket.name, info);
+    if (r < 0) {
+      dout(0) << "get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
+      ret = r;
+      continue;
+    }
+    if (enabled) {
+      info.flags &= ~BUCKET_SUSPENDED;
+    } else {
+      info.flags |= BUCKET_SUSPENDED;
+    }
+
+    r = put_bucket_info(bucket.name, info);
+    if (r < 0) {
+      dout(0) << "put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
+      ret = r;
+      continue;
+    }
   }
-
-  vector<librados::PoolAsyncCompletion *>::iterator citer;
-  for (citer = completions.begin(); citer != completions.end(); ++citer) {
-    PoolAsyncCompletion *c = *citer;
-    c->wait();
-    c->release();
-  }
-
   return 0;
-}
-
-int RGWRados::disable_buckets(vector<rgw_bucket>& buckets)
-{
-  return set_buckets_auid(buckets, RGW_SUSPENDED_USER_AUID);
-}
-
-int RGWRados::enable_buckets(vector<rgw_bucket>& buckets, uint64_t auid)
-{
-  return set_buckets_auid(buckets, auid);
 }
 
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
-  librados::IoCtx ctx;
-  int r = open_bucket_ctx(bucket, ctx);
-  if (r < 0)
-    return r;
-
-  uint64_t auid;
-  int ret = ctx.get_auid(&auid);
-  if (ret < 0)
+  RGWBucketInfo bucket_info;
+  int ret = rgwstore->get_bucket_info(NULL, bucket.name, bucket_info);
+  if (ret < 0) {
     return ret;
+  }
 
-  *suspended = (auid == RGW_SUSPENDED_USER_AUID);
+  *suspended = ((bucket_info.flags & BUCKET_SUSPENDED) != 0);
   return 0;
 }
 
@@ -1789,6 +1784,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
     mtime = ut.sec();
   } catch (buffer::error& err) {
     dout(0) << "ERROR: failed decoding object (obj=" << obj << ") info (either size or mtime), aborting" << dendl;
+    return -EIO;
   }
   if (psize)
     *psize = size;
@@ -1848,6 +1844,18 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
+int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info)
+{
+  bufferlist bl;
+
+  ::encode(info, bl);
+
+  string unused;
+
+  int ret = rgw_put_obj(unused, pi_buckets_rados, bucket_name, bl.c_str(), bl.length());
+
+  return ret;
+}
 
 int RGWRados::tmap_get(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
 {

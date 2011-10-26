@@ -172,21 +172,16 @@ static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferli
   return ret;
 }
 
-int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
+static int read_acls(struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
   url_decode(s->args.get("uploadId"), upload_id);
   string oid = object;
   rgw_obj obj;
 
-  if (!oid.empty()) {
-    bool suspended;
-    int ret = rgwstore->bucket_suspended(bucket, &suspended);
-    if (ret < 0)
-      return ret;
-
-    if (suspended)
-      return -ERR_USER_SUSPENDED;
+  if (bucket_info.flags & BUCKET_SUSPENDED) {
+    dout(0) << "bucket " << bucket_info.bucket.name << " is suspended" << dendl;
+    return -ERR_USER_SUSPENDED;
   }
 
   if (!oid.empty() && !upload_id.empty()) {
@@ -224,7 +219,7 @@ int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, rgw_bucket& b
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int read_acls(struct req_state *s, bool only_bucket)
+static int read_acls(struct req_state *s, bool only_bucket)
 {
   int ret = 0;
   string obj_str;
@@ -242,8 +237,8 @@ int read_acls(struct req_state *s, bool only_bucket)
     rgwstore->set_atomic(s->obj_ctx, obj);
   }
 
+  RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
-    RGWBucketInfo bucket_info;
     ret = rgwstore->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);
     if (ret < 0) {
       dout(0) << "couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
@@ -253,7 +248,7 @@ int read_acls(struct req_state *s, bool only_bucket)
     s->bucket_owner = bucket_info.owner;
   }
 
-  ret = read_acls(s, s->acl, s->bucket, obj_str);
+  ret = read_acls(s, bucket_info, s->acl, s->bucket, obj_str);
 
   return ret;
 }
@@ -926,7 +921,7 @@ int RGWCopyObj::verify_permission()
   src_bucket = bucket_info.bucket;
 
   /* just checking the bucket's permission */
-  ret = read_acls(s, &src_policy, src_bucket, empty_str);
+  ret = read_acls(s, bucket_info, &src_policy, src_bucket, empty_str);
   if (ret < 0)
     return ret;
 
@@ -1008,7 +1003,7 @@ int RGWGetACLs::verify_permission()
 
 void RGWGetACLs::execute()
 {
-  ret = read_acls(s);
+  ret = read_acls(s, false);
 
   if (ret < 0) {
     send_response();

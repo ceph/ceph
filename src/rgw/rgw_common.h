@@ -430,24 +430,34 @@ inline ostream& operator<<(ostream& out, const rgw_bucket b) {
 
 extern rgw_bucket rgw_root_bucket;
 
+enum RGWBucketFlags {
+  BUCKET_SUSPENDED = 0x1,
+};
+
 struct RGWBucketInfo
 {
   rgw_bucket bucket;
   string owner;
+  uint32_t flags;
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 2;
+     __u32 ver = 3;
      ::encode(ver, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
+     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(bucket, bl);
-     if (ver > 1)
+     if (ver >= 2)
        ::decode(owner, bl);
+     if (ver >= 3)
+       ::decode(flags, bl);
   }
+
+  RGWBucketInfo() : flags(0) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -545,12 +555,11 @@ struct RGWObjEnt {
   }
 };
 
-/** Store basic data on an object */
+/** Store basic data on bucket */
 struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   time_t mtime;
-  string etag;
   uint64_t count;
 
   void encode(bufferlist& bl) const {
@@ -583,7 +592,6 @@ struct RGWBucketEnt {
     bucket.clear();
     size = 0;
     mtime = 0;
-    etag = "";
     count = 0;
   }
 };

@@ -239,8 +239,7 @@ public:
   virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
   virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets);
 
-  virtual int disable_buckets(std::vector<rgw_bucket>& buckets);
-  virtual int enable_buckets(std::vector<rgw_bucket>& buckets, uint64_t auid);
+  virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
@@ -309,6 +308,7 @@ public:
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats);
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info);
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info);
 
   int cls_rgw_init_index(rgw_bucket& bucket, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,

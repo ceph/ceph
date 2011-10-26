@@ -128,8 +128,7 @@ public:
   virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool) = 0;
   virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets) { return -ENOTSUP; }
 
-  virtual int disable_buckets(std::vector<rgw_bucket>& buckets) { return -ENOTSUP; }
-  virtual int enable_buckets(std::vector<rgw_bucket>& buckets, uint64_t auid) { return -ENOTSUP; }
+  virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled) { return -ENOTSUP; }
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended) {
     *suspended = false;
     return 0;
@@ -271,6 +270,7 @@ public:
   /* The bucket here can either be the bucket name identifier, or the ID
    * in period format: ".123" */
   virtual int get_bucket_info(void *ctx, string& bucket, RGWBucketInfo& info) = 0;
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info) = 0;
 
 
   virtual int remove_temp_objects(string date, string time) {
