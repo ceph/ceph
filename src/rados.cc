@@ -1202,8 +1202,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret != 0)
       cerr << "error calling notify: " << ret << std::endl;
   } else if (strcmp(nargs[0], "load-gen") == 0) {
-    if (!pool_name)
+    if (!pool_name) {
+      cerr << "error: must specify pool" << std::endl;
       usage_exit();
+    }
     LoadGen lg(&rados);
     if (min_obj_len)
       lg.min_obj_len = min_obj_len;
