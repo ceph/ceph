@@ -486,6 +486,8 @@ int main(int argc, char **argv)
   bool need_more;
   int gen_secret = false;
   int gen_key = false;
+  bool implicit_gen_secret = true;
+  bool implicit_gen_key = true;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
@@ -535,9 +537,9 @@ int main(int argc, char **argv)
         return usage();
       }
     } else if (ceph_argparse_binary_flag(args, i, &gen_key, NULL, "--gen-access-key", (char*)NULL)) {
-      // do nothing
+      implicit_gen_key = false;
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret, NULL, "--gen-secret", (char*)NULL)) {
-      // do nothing
+      implicit_gen_secret = false;
     } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
@@ -721,7 +723,7 @@ int main(int argc, char **argv)
       return 0;
     }
 
-    if (secret_key.empty() || gen_secret) {
+    if ((secret_key.empty() && implicit_gen_secret) || gen_secret) {
       ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
@@ -729,7 +731,7 @@ int main(int argc, char **argv)
       }
       secret_key = secret_key_buf;
     }
-    if (access_key.empty() || gen_key) {
+    if ((access_key.empty() && implicit_gen_key) || gen_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
@@ -802,7 +804,7 @@ int main(int argc, char **argv)
         info.swift_keys[access_key] = k;
       else
         info.access_keys[access_key] = k;
-   } else if ((!access_key.empty()) || (!secret_key.empty())) {
+   } else if (opt_cmd == OPT_KEY_CREATE && (!access_key.empty()) || (!secret_key.empty())) {
       if (key_type == KEY_TYPE_SWIFT)
         cerr << "swift key modification requires both subuser and secret key" << std::endl;
       else
