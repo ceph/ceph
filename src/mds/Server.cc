@@ -73,7 +73,7 @@ void Server::create_logger()
   plb.add_u64_counter(l_mdss_dcreq, "dcreq"); // dispatch client req
   plb.add_u64_counter(l_mdss_dsreq, "dsreq"); // slave
   logger = plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 

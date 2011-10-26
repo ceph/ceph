@@ -584,7 +584,7 @@ OSD::~OSD()
   delete authorize_handler_registry;
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context->GetPerfCountersCollection()->remove(logger);
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
   delete logger;
   delete store;
 }
@@ -802,7 +802,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
 
   logger = osd_plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 int OSD::shutdown()

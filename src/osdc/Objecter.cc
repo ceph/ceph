@@ -196,7 +196,7 @@ void Objecter::init()
     pcb.add_u64(l_osdc_osd_laggy, "osd_laggy");
 
     logger = pcb.create_perf_counters();
-    cct->GetPerfCountersCollection()->add(logger);
+    cct->get_perfcounters_collection()->add(logger);
   }
 
   timer.add_event_after(cct->_conf->objecter_tick_interval, new C_Tick(this));
@@ -212,7 +212,7 @@ void Objecter::shutdown()
   }
 
   if (logger) {
-    cct->GetPerfCountersCollection()->remove(logger);
+    cct->get_perfcounters_collection()->remove(logger);
     delete logger;
     logger = NULL;
   }

@@ -1710,7 +1710,7 @@ int FileStore::mount()
 
   timer.init();
 
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 
   // all okay.
   return 0;
@@ -1746,7 +1746,7 @@ int FileStore::umount()
 
   journal_stop();
 
-  g_ceph_context->GetPerfCountersCollection()->remove(logger);
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
 
   op_finisher.stop();
   ondisk_finisher.stop();

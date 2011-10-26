@@ -75,7 +75,7 @@ static PerfCounters* setup_test_perfcounters1(CephContext *cct)
 }
 
 TEST(PerfCounters, SinglePerfCounters) {
-  PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
+  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
   PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
   coll->add(fake_pf);
   g_ceph_context->_conf->set_val_or_die("admin_socket", get_rand_socket_path());
@@ -115,7 +115,7 @@ static PerfCounters* setup_test_perfcounter2(CephContext *cct)
 }
 
 TEST(PerfCounters, MultiplePerfCounters) {
-  PerfCountersCollection *coll = g_ceph_context->GetPerfCountersCollection();
+  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
   coll->clear();
   PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
   PerfCounters* fake_pf2 = setup_test_perfcounter2(g_ceph_context);

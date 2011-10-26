@@ -57,7 +57,7 @@ public:
     terminating_sessions(false) {
   }
   ~Server() {
-    g_ceph_context->GetPerfCountersCollection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
   }
 
