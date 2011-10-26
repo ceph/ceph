@@ -41,8 +41,24 @@ enum perfcounter_type_d
  * It contains counters which we modify to track performance and throughput
  * over time. 
  *
- * This object is thread-safe. However, it is better to avoid sharing
- * a PerfCounters object between multiple threads to avoid cacheline ping-pong.
+ * PerfCounters can track several different types of values:
+ * 1) integer values & counters
+ * 2) floating-point values & counters
+ * 3) floating-point averages
+ *
+ * The difference between values and counters is in how they are initialized
+ * and accessed. For a counter, use the inc(counter, amount) function (note
+ * that amount defaults to 1 if you don't set it). For a value, use the
+ * set(index, value) function.
+ * (For floats, use the finc and fset variants.)
+ *
+ * If for some reason you would like to reset your counters, you can do so using
+ * the set functions even if they are counters, and you can also
+ * increment your values if for some reason you wish to.
+ *
+ * For the floating-point average, it returns the current value and
+ * the "avgcount" member when read off. avgcount is incremented when you call
+ * finc. Calling fset on an average is an error and will assert out.
  */
 class PerfCounters
 {
