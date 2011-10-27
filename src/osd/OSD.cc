@@ -5172,27 +5172,6 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  // full?
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
-      !op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-    reply_op_error(op, -ENOSPC);
-    return;
-  }
-
-  // invalid?
-  if (op->get_snapid() != CEPH_NOSNAP) {
-    reply_op_error(op, -EINVAL);
-    return;
-  }
-
-  // too big?
-  if (g_conf->osd_max_write_size &&
-      op->get_data_len() > g_conf->osd_max_write_size << 20) {
-    // journal can't hold commit!
-    reply_op_error(op, -OSD_WRITETOOBIG);
-    return;
-  }
-
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
 		      (Session *)op->get_connection()->get_priv());
@@ -5201,6 +5180,29 @@ void OSD::handle_op(MOSDOp *op)
   if (r) {
     reply_op_error(op, r);
     return;
+  }
+
+  if (op->may_write()) {
+    // full?
+    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+      reply_op_error(op, -ENOSPC);
+      return;
+    }
+
+    // invalid?
+    if (op->get_snapid() != CEPH_NOSNAP) {
+      reply_op_error(op, -EINVAL);
+      return;
+    }
+
+    // too big?
+    if (g_conf->osd_max_write_size &&
+	op->get_data_len() > g_conf->osd_max_write_size << 20) {
+      // journal can't hold commit!
+      reply_op_error(op, -OSD_WRITETOOBIG);
+      return;
+    }
   }
 
   // calc actual pgid
