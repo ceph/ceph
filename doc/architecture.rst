@@ -42,11 +42,14 @@ QEMU has its own hypervisor which interfaces with the librdb user-space library 
 
 .. _monitor:
 
-Monitor cluster
+Monitors
 ===============
 
-``ceph-mon`` is a lightweight daemon that provides a consensus for
-distributed decisionmaking in a Ceph/RADOS cluster.
+Once you have determined your configuration needs, make sure you have access to the following documents:
+•	Ceph Installation and Configuration Guide
+•	Ceph System Administration Guide
+•	Ceph Troubleshooting Manual
+.
 
 It also is the initial point of contact for new clients, and will hand
 out information about the topology of the cluster, such as the
