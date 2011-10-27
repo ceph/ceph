@@ -238,6 +238,7 @@ protected:
   off_t ofs;
   char *data;
   const char *supplied_md5_b64;
+  const char *supplied_etag;
   string etag;
 
 public:
@@ -249,6 +250,7 @@ public:
     ofs = 0;
     data = NULL;
     supplied_md5_b64 = NULL;
+    supplied_etag = NULL;
     etag = "";
   }
   int verify_permission();

@@ -62,7 +62,7 @@ public:
   RGWPutObj_REST() {}
   ~RGWPutObj_REST() {}
 
-  int get_params();
+  virtual int get_params();
   int get_data();
 };
 

@@ -236,6 +236,12 @@ void RGWDeleteBucket_REST_SWIFT::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+int RGWPutObj_REST_SWIFT::get_params()
+{
+  supplied_etag = s->env->get("HTTP_ETAG");
+  return 0;
+}
+
 void RGWPutObj_REST_SWIFT::send_response()
 {
   if (!ret)

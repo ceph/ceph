@@ -77,6 +77,7 @@ public:
   RGWPutObj_REST_SWIFT() {}
   ~RGWPutObj_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 

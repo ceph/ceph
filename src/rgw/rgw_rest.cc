@@ -65,6 +65,7 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
     { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
     { ERR_BAD_URL, 412, "Bad URL" },
+    { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
 };
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))

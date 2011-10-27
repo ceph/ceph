@@ -655,6 +655,10 @@ void RGWPutObj::execute()
       dout(15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
+    if (supplied_etag) {
+      strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5));
+    }
+
     MD5 hash;
     string oid;
     multipart = s->args.exists("uploadId");
@@ -748,6 +752,11 @@ void RGWPutObj::execute()
     policy.encode(aclbl);
 
     etag = calc_md5;
+
+    if (supplied_etag && etag.compare(supplied_etag) != 0) {
+      ret = -ERR_UNPROCESSABLE_ENTITY;
+      goto done_err;
+    }
     map<string, bufferlist> attrs;
     bufferlist bl;
     bl.append(etag.c_str(), etag.size() + 1);
