@@ -4547,7 +4547,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     }
 
     dirp->set_end();
-    return 1;
+    return 0;
   }
   assert(0);
   return 0;

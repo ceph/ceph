@@ -518,6 +518,15 @@ public:
   int opendir(const char *name, dir_result_t **dirpp);
   int closedir(dir_result_t *dirp);
 
+  /**
+   * Fill a directory listing from dirp, invoking cb for each entry
+   * with the given pointer, the dirent, the struct stat, the stmask,
+   * and the offset.
+   *
+   * Returns 0 if it reached the end of the directory,
+   * or -errno if one of its callees returns an error (including
+   * the callback you provide).
+   */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
   struct dirent * readdir(dir_result_t *d);
