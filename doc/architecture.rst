@@ -42,15 +42,23 @@ QEMU has its own hypervisor which interfaces with the librdb user-space library 
 
 .. _monitor:
 
-Monitor cluster
+Monitors
 ===============
 
-``ceph-mon`` is a lightweight daemon that provides a consensus for
-distributed decisionmaking in a Ceph/RADOS cluster.
+Once you have determined your configuration needs, make sure you have access to the following documents:
+•	Ceph Installation and Configuration Guide
+•	Ceph System Administration Guide
+•	Ceph Troubleshooting Manual
+.
 
-It also is the initial point of contact for new clients, and will hand
-out information about the topology of the cluster, such as the
-``osdmap``.
+Glossary
+KVM - Kernel-based Virtual Machine virtualization infrastructure for the Linux kernel.  KVM requires the QEMU hypervisor for virtualization.
+QEMU - A virtualizer used to execute guest code directly on the host CPU. QEMU supports virtualization when executing under the XEN hypervisor or the KVM kernel module in Linux. 
+RBD - RADOS Block Device.  See the Ceph Product Overview for more on RADOS.
+REST - Representational State Transfer architecture for distributed hypermedia systems. 
+XEN - A virtual-machine monitor that uses a thin software layer known as the XEN hypervisor to allow each physical server to run one or more virtual servers.
+
+
 
 You normally run 3 ``ceph-mon`` daemons, on 3 separate physical machines,
 isolated from each other; for example, in different racks or rows.
