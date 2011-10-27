@@ -2,10 +2,14 @@
  Ceph Product Overview
 ======================
 
-======================About this Document======================
+======================
+About this Document
+======================
 This document describes the features and benefits of using the Ceph Unified Distributed Storage System, and why it is superior to other  systems.  
 The audience for this document consists of sales and marketing personnel, new customers, and all persons who need to get a basic overview of the features and functionality of the system.
-======================Introduction to Ceph======================
+======================
+Introduction to Ceph
+======================
 Ceph is a unified, distributed  file system that operates on a large number of hosts connected by a network.  Ceph has been designed to accommodate multiple  petabytes of storage with ease.  Since file sizes and network systems are always increasing, Ceph is perfectly positioned to accommodate these new technologies with its unique, self-healing and self-replicating architecture.   Customers that need to move large amounts of metadata, such as media and entertainment companies, can greatly benefit from this product. Ceph is also dynamic;  no need to cache data like those old-fashioned client-servers!
 Benefits of Using Ceph
 Ceph’s flexible and scalable architecture translates into cost savings for users.  Its powerful load balancing technology ensures the highest performance in terms of both speed and 
@@ -21,15 +25,21 @@ when recovering from failures or migrating data to expand clusters.   RADOS empl
 The RADOS Block Device (RBD) provides a block device interface to a Linux machine, while striping the data across multiple RADOS objects for improved performance.  
 RDB is supported for Linux kernels 2.6.37 and higher.  Each RDB device contains a directory with files and information
 
-======================RADOS GATEWAY======================
-``radosgw`` is an S3-compatible RESTful HTTP service for object
+======================
+RADOS GATEWAY
+======================
+The RADOS Gateway, ``radosgw``, is an S3-compatible RESTful HTTP service for object
 storage, using RADOS storage.
-
+======================
+RBD
+======================
 The RADOS Block Device (RBD) provides a block device interface to a Linux machine.  To the user, RDB is transparent, which means that the entire Ceph system looks like a single, 
 limitless hard drive that is always up and has no size limitations.  .
 
 
-======================Hypervisor Support======================
+
+Hypervisor Support
+======================
 RBD supports the QEMU processor emulator and the Kernel-based Virtual Machine (KVM) virtualization infrastructure for the Linux kernel.  Normally, these hypervisors would not be used 
 together in a single configuration.
 KVM RBD
@@ -40,8 +50,7 @@ QEMU RBD
 QEMU-RBD facilitates striping a VM block device over objects stored in the Ceph distributed object store. This provides shared block storage to facilitate VM migration between hosts. 
 QEMU has its own hypervisor which interfaces with the librdb user-space library to store its virtual machines
 
-.. _monitor:
-
+===============
 Monitors
 ===============
 
@@ -57,27 +66,15 @@ QEMU - A virtualizer used to execute guest code directly on the host CPU. QEMU s
 RBD - RADOS Block Device.  See the Ceph Product Overview for more on RADOS.
 REST - Representational State Transfer architecture for distributed hypermedia systems. 
 XEN - A virtual-machine monitor that uses a thin software layer known as the XEN hypervisor to allow each physical server to run one or more virtual servers.
+===============
+RBD Snapshots
+===============
+RBD provides the ability to create snapshots of any image for backup purposes.  These images can then be exported to any file on the cluster.  The following drawing shows how this feature 
+can be used to create clones of an image called the Golden Master Snapshot.  
+<img> snapshots.jpg
+These clones can then be ready to be used as backups any time an image goes down or needs to be duplicated for a new configuration.
 
 
-
-You normally run 3 ``ceph-mon`` daemons, on 3 separate physical machines,
-isolated from each other; for example, in different racks or rows.
-
-You could run just 1 instance, but that means giving up on high
-availability.
-
-You may use the same hosts for ``ceph-mon`` and other purposes.
-
-``ceph-mon`` processes talk to each other using a Paxos_\-style
-protocol. They discover each other via the ``[mon.X] mon addr`` fields
-in ``ceph.conf``.
-
-.. todo:: What about ``monmap``? Fact check.
-
-Any decision requires the majority of the ``ceph-mon`` processes to be
-healthy and communicating with each other. For this reason, you never
-want an even number of ``ceph-mon``\s; there is no unambiguous majority
-subgroup for an even number.
 
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_algorithm
 
