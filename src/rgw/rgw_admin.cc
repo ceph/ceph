@@ -809,7 +809,7 @@ int main(int argc, char **argv)
         info.swift_keys[access_key] = k;
       else
         info.access_keys[access_key] = k;
-   } else if (opt_cmd == OPT_KEY_CREATE && (!access_key.empty()) || (!secret_key.empty())) {
+   } else if (opt_cmd == OPT_KEY_CREATE && (access_key.empty() || secret_key.empty())) {
       if (key_type == KEY_TYPE_SWIFT)
         cerr << "swift key modification requires both subuser and secret key" << std::endl;
       else
