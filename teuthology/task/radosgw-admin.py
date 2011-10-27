@@ -260,6 +260,22 @@ def task(ctx, config):
 
     # TODO: show log by bucket+date
 
+    # user suspension
+    (err, out) = rgwadmin(ctx, client, ['user', 'suspend', '--uid', user])
+    assert not err
+
+    try:
+        key = boto.s3.key.Key(bucket)
+        key.set_contents_from_string('two')
+    except boto.exception.S3ResponseError as e:
+        assert e.status == 403
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'enable', '--uid', user])
+    assert not err
+
+    key = boto.s3.key.Key(bucket)
+    key.set_contents_from_string('three')
+
     # remove user
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
     assert not err
