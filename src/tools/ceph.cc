@@ -28,6 +28,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <vector>
+#include <sys/socket.h>
+#include <linux/un.h>
+#include <unistd.h>
+#include <string.h>
 
 using std::vector;
 
@@ -52,7 +56,8 @@ static void usage()
 
 static void parse_cmd_args(vector<const char*> &args,
 		std::string *in_file, std::string *out_file,
-		ceph_tool_mode_t *mode, bool *concise)
+			   ceph_tool_mode_t *mode, bool *concise,
+			   string *pc_socket, string *pc_schema_socket)
 {
   std::vector<const char*>::iterator i;
   std::string val;
@@ -63,6 +68,10 @@ static void parse_cmd_args(vector<const char*> &args,
       *in_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--out-file", (char*)NULL)) {
       *out_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters", (char*)NULL)) {
+      *pc_socket = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters-schema", (char*)NULL)) {
+      *pc_schema_socket = val;
     } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
       *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
@@ -109,6 +118,56 @@ static int get_indata(const char *in_file, bufferlist &indata)
   return 0;
 }
 
+int dump_perf_counters(string path, uint32_t cmd)
+{
+  struct sockaddr_un address;
+  int fd;
+  int r;
+  
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  if(fd < 0) {
+    cerr << "socket() failed with " << cpp_strerror(errno) << std::endl;
+    return -1;
+  }
+
+  memset(&address, 0, sizeof(struct sockaddr_un));
+  address.sun_family = AF_UNIX;
+  snprintf(address.sun_path, UNIX_PATH_MAX, path.c_str());
+
+  if (connect(fd, (struct sockaddr *) &address, 
+	      sizeof(struct sockaddr_un)) != 0) {
+    cerr << "connect to " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    return -1;
+  }
+  
+  char *buf;
+  uint32_t len;
+  cmd = htonl(cmd);
+  r = safe_write(fd, &cmd, sizeof(cmd));
+  if (r < 0) {
+    cerr << "write to " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    goto out;
+  }
+  
+  r = safe_read(fd, &len, sizeof(len));
+  len = ntohl(len);
+
+  buf = new char[len+1];
+  r = safe_read(fd, buf, len);
+  if (r < 0) {
+    cerr << "read " << len << "bytes from " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    goto out;
+  }
+  buf[len] = '\0';
+
+  cout << buf << std::endl;
+  r = 0;
+
+ out:
+  ::close(fd);
+  return r;
+}
+
 int main(int argc, const char **argv)
 {
   std::string in_file, out_file;
@@ -123,7 +182,18 @@ int main(int argc, const char **argv)
 
   // parse user input
   bool concise = false;
-  parse_cmd_args(args, &in_file, &out_file, &mode, &concise);
+  string pc_socket, pc_schema_socket;
+  parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &pc_socket, &pc_schema_socket);
+
+  // dump perfcounters?
+  if (pc_socket.length()) {
+    return dump_perf_counters(pc_socket, 1);
+  }
+
+  // dump perfcounters?
+  if (pc_schema_socket.length()) {
+    return dump_perf_counters(pc_schema_socket, 2);
+  }
 
   // input
   bufferlist indata;
