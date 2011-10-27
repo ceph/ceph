@@ -14,7 +14,7 @@ reliability.  Nodes can be added “on the fly” with no impact to the system. In t
 Manageability
 Ceph is easy to manage, requiring little or no system administrative intervention.  Its powerful placement algorithm and intelligent nodes manage data seamlessly across any node
 configuration.  It also features multiple access methods to its object storage, block storage, and file systems.  Figure 1 displays this configuration.
-<img> CephConfig.jpg.
+. image:: /images/CEPHconfig.jpg..
 ======================RADOS======================
 The Reliable Autonomic Distributed Object Store (RADOS) provides a scalable object storage management platform.  RADOS allows the Object Storage Devices (OSD) to operate autonomously 
 when recovering from failures or migrating data to expand clusters.   RADOS employs existing node device intelligence to maximized scalability.
