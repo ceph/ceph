@@ -26,7 +26,7 @@ def rgwadmin(ctx, client, cmd):
         '/tmp/cephtest/archive/coverage',
         '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
         '-c', '/tmp/cephtest/ceph.conf',
-        '--log-to-stderr', '0',
+        '--log-to-stderr',
         '--format', 'json',
         ]
     pre.extend(cmd)
