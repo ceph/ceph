@@ -2112,6 +2112,7 @@ void PG::read_log(ObjectStore *store)
 	// We need to find the object in the store to get the hash
 	if (!listed_collection) {
 	  store->collection_list(coll, ls);
+	  listed_collection = true;
 	}
 	bool found = false;
 	for (vector<hobject_t>::iterator i = ls.begin();
