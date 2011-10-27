@@ -86,6 +86,7 @@ public:
   RGWPutObjMetadata_REST_SWIFT() {}
   ~RGWPutObjMetadata_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 

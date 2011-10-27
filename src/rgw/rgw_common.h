@@ -511,6 +511,7 @@ struct req_state {
    string bucket_owner;
 
    map<string, string> x_meta_map;
+   bool has_bad_meta;
 
    RGWUserInfo user; 
    RGWAccessControlPolicy *acl;

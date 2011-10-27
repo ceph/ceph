@@ -238,8 +238,11 @@ void RGWDeleteBucket_REST_SWIFT::send_response()
 
 int RGWPutObj_REST_SWIFT::get_params()
 {
+  if (s->has_bad_meta)
+    return -EINVAL;
+
   supplied_etag = s->env->get("HTTP_ETAG");
-  return 0;
+  return RGWPutObj_REST::get_params();
 }
 
 void RGWPutObj_REST_SWIFT::send_response()
@@ -251,6 +254,13 @@ void RGWPutObj_REST_SWIFT::send_response()
   dump_errno(s);
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
+}
+
+int RGWPutObjMetadata_REST_SWIFT::get_params()
+{
+  if (s->has_bad_meta)
+    return -EINVAL;
+  return 0;
 }
 
 void RGWPutObjMetadata_REST_SWIFT::send_response()

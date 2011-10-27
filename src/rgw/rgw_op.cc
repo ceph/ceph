@@ -112,7 +112,7 @@ static void format_xattr(std::string &xattr)
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
  *
  */
-void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
+static void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
   for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {

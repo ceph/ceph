@@ -20,9 +20,6 @@ using namespace std;
 
 struct req_state;
 
-/** Get the HTTP request metadata */
-extern void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
-
 /**
  * Provide the base class for all ops.
  */
@@ -275,6 +272,7 @@ public:
   int verify_permission();
   void execute();
 
+  virtual int get_params() = 0;
   virtual void send_response() = 0;
 };
 

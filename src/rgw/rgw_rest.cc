@@ -56,6 +56,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ENOTEMPTY, 409, "BucketNotEmpty" },
     { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
+    { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
@@ -65,7 +66,6 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
     { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
     { ERR_BAD_URL, 412, "Bad URL" },
-    { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
 };
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
@@ -598,7 +598,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    {NULL, 0} };
 
-static void init_auth_info(struct req_state *s)
+static int init_auth_info(struct req_state *s)
 {
   const char *p;
 
@@ -614,9 +614,13 @@ static void init_auth_info(struct req_state *s)
         const char *eq = strchr(name, '=');
         if (!eq) /* shouldn't happen! */
           continue;
-        int name_len = eq - name + 1;
+        int name_len = eq - name;
+
+        if (strncmp(name, "_META_", name_len) == 0)
+          s->has_bad_meta = true;
+
         char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
         for (j = 0; name_low[j]; j++) {
           if (name_low[j] != '_')
@@ -648,6 +652,7 @@ static void init_auth_info(struct req_state *s)
     dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 
+  return 0;
 }
 
 static bool looks_like_ip_address(const char *bucket)
