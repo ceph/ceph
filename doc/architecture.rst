@@ -84,17 +84,24 @@ These clones can then be ready to be used as backups any time an image goes down
 .. index:: RADOS, OSD, ceph-osd, object
 .. _rados:
 
-RADOS
+Object Storage Devices
 =====
 
-``ceph-osd`` is the storage daemon that provides the RADOS service. It
-uses ``ceph-mon`` for cluster membership, services object read/write/etc
-request from clients, and peers with other ``ceph-osd``\s for data
-replication.
+The OSDs store the actual data on the disks. A minimum of two is required. 
+Hardware Requirements: 
+•	As many disks as possible for faster performance and scalability
+•	An SSD or NVRAM for a journal, or a RAID controller with a battery-backed NVRAM. 
+•	Ample RAM for better file system caching 
+•	Fast network for replication
 
-The data model is fairly simple on this level. There are multiple
-named pools, and within each pool there are named objects, in a flat
-namespace (no directories). Each object has both data and metadata.
+
+CRUSH
+=====
+The Controlled Replication Under Scalable Hashing (CRUSH) data distribution algorithm contains a powerful algorithm for reliability and scalability. 
+It provides a flexible rule language that can be configured for any data center. CRUSH describes the storage cluster in a hierarchy that represents its physical organization. 
+This allows it to maintain a uniform distribution of all data across the organization to avoid imbalanced loads and underutilized resources.
+The following drawing displays a hierarchy of racks, hosts, and devices that can benefit by using CRUSH’s decentralized data mapping to provide rules for its organization.
+
 
 The data for an object is a single, potentially big, series of
 bytes. Additionally, the series may be sparse, it may have holes that
