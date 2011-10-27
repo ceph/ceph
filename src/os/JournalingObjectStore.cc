@@ -29,9 +29,17 @@ void JournalingObjectStore::journal_stop()
 int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
+
+  if (g_conf->journal_replay_from) {
+    dout(0) << "journal_replay forcing replay from " << g_conf->journal_replay_from
+	    << " instead of " << fs_op_seq << dendl;
+    // the previous op is the last one committed
+    fs_op_seq = g_conf->journal_replay_from - 1;
+  }
+
   op_seq = fs_op_seq;
   committed_seq = op_seq;
-	committing_seq = op_seq;
+  committing_seq = op_seq;
   applied_seq = fs_op_seq;
 
   if (!journal)
