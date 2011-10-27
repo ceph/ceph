@@ -4633,7 +4633,7 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de, struct stat *st, i
   sr.full = false;
 
   int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
-  if (r < 0)
+  if (r < -1)
     return r;
   if (sr.full)
     return 1;
