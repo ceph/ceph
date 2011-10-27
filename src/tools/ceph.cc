@@ -57,7 +57,7 @@ static void usage()
 static void parse_cmd_args(vector<const char*> &args,
 		std::string *in_file, std::string *out_file,
 			   ceph_tool_mode_t *mode, bool *concise,
-			   string *pc_socket, string *pc_schema_socket)
+			   string *admin_socket, uint32_t *admin_socket_cmd)
 {
   std::vector<const char*>::iterator i;
   std::string val;
@@ -69,9 +69,20 @@ static void parse_cmd_args(vector<const char*> &args,
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--out-file", (char*)NULL)) {
       *out_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters", (char*)NULL)) {
-      *pc_socket = val;
+      *admin_socket = val;
+      *admin_socket_cmd = 1;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-perf-counters-schema", (char*)NULL)) {
-      *pc_schema_socket = val;
+      *admin_socket = val;
+      *admin_socket_cmd = 2;
+    } else if (ceph_argparse_witharg(args, i, &val, "--admin-daemon", (char*)NULL)) {
+      *admin_socket = val;
+      if (i == args.end())
+	usage();
+      const char *start = *i;
+      char *end = (char *)start;
+      *admin_socket_cmd = strtol(start, &end, 10);
+      if (*end != '\0')
+	usage();
     } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
       *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
     } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
@@ -118,7 +129,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
   return 0;
 }
 
-int dump_perf_counters(string path, uint32_t cmd)
+int do_admin_socket(string path, uint32_t cmd)
 {
   struct sockaddr_un address;
   int fd;
@@ -126,7 +137,7 @@ int dump_perf_counters(string path, uint32_t cmd)
   
   fd = socket(PF_UNIX, SOCK_STREAM, 0);
   if(fd < 0) {
-    cerr << "socket() failed with " << cpp_strerror(errno) << std::endl;
+    cerr << "socket failed with " << cpp_strerror(errno) << std::endl;
     return -1;
   }
 
@@ -150,12 +161,20 @@ int dump_perf_counters(string path, uint32_t cmd)
   }
   
   r = safe_read(fd, &len, sizeof(len));
+  if (r < 0) {
+    cerr << "read " << len << " length from " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    goto out;
+  }
+  if (r < 4) {
+    cerr << "read only got " << r << " bytes of 4 expected for response length; invalid command?" << std::endl;
+    goto out;
+  }
   len = ntohl(len);
 
   buf = new char[len+1];
   r = safe_read(fd, buf, len);
   if (r < 0) {
-    cerr << "read " << len << "bytes from " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    cerr << "read " << len << " bytes from " << path << " failed with " << cpp_strerror(errno) << std::endl;
     goto out;
   }
   buf[len] = '\0';
@@ -182,17 +201,13 @@ int main(int argc, const char **argv)
 
   // parse user input
   bool concise = false;
-  string pc_socket, pc_schema_socket;
-  parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &pc_socket, &pc_schema_socket);
+  string admin_socket;
+  uint32_t admin_socket_cmd = 0;
+  parse_cmd_args(args, &in_file, &out_file, &mode, &concise, &admin_socket, &admin_socket_cmd);
 
-  // dump perfcounters?
-  if (pc_socket.length()) {
-    return dump_perf_counters(pc_socket, 1);
-  }
-
-  // dump perfcounters?
-  if (pc_schema_socket.length()) {
-    return dump_perf_counters(pc_schema_socket, 2);
+  // daemon admin socket?
+  if (admin_socket.length()) {
+    return do_admin_socket(admin_socket, admin_socket_cmd);
   }
 
   // input
