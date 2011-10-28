@@ -2268,10 +2268,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     _make_clone(t, soid, coid, snap_oi);
     
     // add to snap bound collections
-    coll_t fc = make_snap_collection(t, snaps[0]);
+    coll_t fc = make_snap_collection(ctx->local_t, snaps[0]);
     t.collection_add(fc, coll, coid);
     if (snaps.size() > 1) {
-      coll_t lc = make_snap_collection(t, snaps[snaps.size()-1]);
+      coll_t lc = make_snap_collection(ctx->local_t, snaps[snaps.size()-1]);
       t.collection_add(lc, coll, coid);
     }
     
@@ -3382,11 +3382,11 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ::decode(log, p);
       
       info.stats = op->pg_stats;
-      update_snap_collections(log);
+      update_snap_collections(log, rm->localt);
       append_log(log, op->pg_trim_to, rm->localt);
 
-      rm->tls.push_back(&rm->opt);
       rm->tls.push_back(&rm->localt);
+      rm->tls.push_back(&rm->opt);
 
     } else {
       // do op
