@@ -4286,7 +4286,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
 
-  if (first)
+  if (first && complete && soid.snap != CEPH_NOSNAP)
+    remove_object_with_snap_hardlinks(*t, soid);
+  else if (first)
     t->remove(target, soid);  // in case old version exists
 
   // write data
@@ -4302,8 +4304,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
   
   if (complete) {
+    // Clear out old snapdir contents
     if (!first) {
-      t->remove(coll, soid);
+      if (soid.snap != CEPH_NOSNAP) {
+	remove_object_with_snap_hardlinks(*t, soid);
+      } else {
+	t->remove(coll, soid);
+      }
       t->collection_add(coll, target, soid);
       t->collection_remove(target, soid);
     }
@@ -5130,9 +5137,9 @@ void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t
     if (r >= 0) {
       // grr, need first snap bound, too.
       object_info_t oi(ba);
-      if (oi.snaps[0] != soid.snap)
-	t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
-      t.remove(coll_t(info.pgid, soid.snap), soid);
+      if (oi.snaps.size() > 1)
+	t.remove(coll_t(info.pgid, oi.snaps[oi.snaps.size() - 1]), soid);
+      t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
     }
   }
 }
