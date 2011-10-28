@@ -1017,9 +1017,15 @@ bool ReplicatedPG::snap_trimmer()
     if (snap_trimmer_machine.need_share_pg_info) {
       dout(10) << "snap_trimmer share_pg_info" << dendl;
       snap_trimmer_machine.need_share_pg_info = false;
+      epoch_t cur_epoch = osd->osdmap->get_epoch();
       unlock();
       osd->map_lock.get_read();
       lock();
+      if (last_peering_reset > cur_epoch) {
+	osd->map_lock.put_read();
+	unlock();
+	return true;
+      }
       share_pg_info();
       osd->map_lock.put_read();
     }
