@@ -350,20 +350,8 @@ if [ $preparemon -eq 1 ]; then
 	echo "Using osdmap $useosdmap"
 	cp $useosdmap $dir/osdmap
     else
-        # build osdmap
-	echo "Building generic osdmap"
-
-        # find highest osd id - assumes the conf file complies with osd numbering requirements
-	maxosd=`$CCONF -c $conf -l osd | grep -v ^osd\$ | cut -c 5- | sort -n | tail -1`
-	echo " highest numbered osd in $conf is osd.$maxosd"
-	lastosd=$(($maxosd + 1))
-
-	if [ -z "$numosd" ]; then
-	    get_conf numosd "$lastosd" "num osd" mon global
-	fi
-	echo " num osd = $numosd"
-
-	$BINDIR/osdmaptool --createsimple $numosd $dir/osdmap -c $conf
+	echo "Building generic osdmap from $conf"
+	$BINDIR/osdmaptool --create-from-conf $dir/osdmap -c $conf
     fi
 
     # import crush map?
