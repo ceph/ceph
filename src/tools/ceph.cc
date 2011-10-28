@@ -143,7 +143,7 @@ int do_admin_socket(string path, uint32_t cmd)
 
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
-  snprintf(address.sun_path, UNIX_PATH_MAX, path.c_str());
+  snprintf(address.sun_path, UNIX_PATH_MAX, "%s", path.c_str());
 
   if (connect(fd, (struct sockaddr *) &address, 
 	      sizeof(struct sockaddr_un)) != 0) {
