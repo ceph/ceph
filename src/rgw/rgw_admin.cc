@@ -397,7 +397,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 
   if (!old_info.user_email.empty() &&
       old_info.user_email.compare(new_info.user_email) != 0) {
-    ret = rgw_remove_email_index(new_info.user_id, old_info.user_email);
+    ret = rgw_remove_email_index(old_info.user_email);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: could not remove index for email " << old_info.user_email << " return code: " << ret << std::endl;
       success = false;
@@ -409,7 +409,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
     RGWAccessKey& swift_key = old_iter->second;
     map<string, RGWAccessKey>::iterator new_iter = new_info.swift_keys.find(swift_key.id);
     if (new_iter == new_info.swift_keys.end()) {
-      ret = rgw_remove_swift_name_index(new_info.user_id, swift_key.id);
+      ret = rgw_remove_swift_name_index(swift_key.id);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not remove index for swift_name " << swift_key.id << " return code: " << ret << std::endl;
         success = false;
@@ -901,7 +901,6 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
-    string id;
     RGWAccessHandle handle;
 
     formatter->reset();
@@ -920,11 +919,11 @@ int main(int argc, char **argv)
         }
       }
     } else {
-      if (store->list_buckets_init(id, &handle) < 0) {
+      if (store->list_buckets_init(&handle) < 0) {
         cerr << "list buckets: no buckets found" << std::endl;
       } else {
         RGWObjEnt obj;
-        while (store->list_buckets_next(id, obj, &handle) >= 0) {
+        while (store->list_buckets_next(obj, &handle) >= 0) {
           formatter->dump_string("bucket", obj.name);
         }
       }

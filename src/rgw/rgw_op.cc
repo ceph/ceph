@@ -462,7 +462,7 @@ void RGWListBucket::execute()
   if (ret < 0)
     goto done;
 
-  ret = rgwstore->list_objects(s->user.user_id, s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
+  ret = rgwstore->list_objects(s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, &is_truncated, NULL);
 
 done:
@@ -541,7 +541,7 @@ void RGWDeleteBucket::execute()
   ret = -EINVAL;
 
   if (s->bucket_name) {
-    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket, false);
+    ret = rgwstore->delete_bucket(s->bucket, false);
 
     if (ret == 0) {
       ret = rgw_remove_user_bucket_info(s->user.user_id, s->bucket, false);
@@ -700,7 +700,7 @@ void RGWPutObj::execute()
 	// For the first call to put_obj_data, pass -1 as the offset to
 	// do a write_full.
         void *handle;
-        ret = rgwstore->aio_put_obj_data(s->obj_ctx, s->user.user_id, obj,
+        ret = rgwstore->aio_put_obj_data(s->obj_ctx, obj,
 				     data,
 				     ((ofs == 0) ? -1 : ofs), len, &handle);
         if (ret < 0)
@@ -778,12 +778,12 @@ void RGWPutObj::execute()
       if (ret < 0)
         goto done_err;
       if (created_obj) {
-        ret = rgwstore->delete_obj(NULL, s->user.user_id, obj, false);
+        ret = rgwstore->delete_obj(NULL, obj, false);
         if (ret < 0)
           goto done;
       }
     } else {
-      ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
+      ret = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
       if (ret < 0)
         goto done_err;
 
@@ -809,7 +809,7 @@ done:
 
 done_err:
   if (created_obj)
-    rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+    rgwstore->delete_obj(s->obj_ctx, obj);
   drain_pending(pending);
   send_response();
 }
@@ -849,7 +849,7 @@ void RGWPutObjMetadata::execute()
     }
   }
 
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, &rmattrs);
 
 done:
   send_response();
@@ -869,7 +869,7 @@ void RGWDeleteObj::execute()
   rgw_obj obj(s->bucket, s->object_str);
   if (s->object) {
     rgwstore->set_atomic(s->obj_ctx, obj);
-    ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+    ret = rgwstore->delete_obj(s->obj_ctx, obj);
   }
 
   send_response();
@@ -988,7 +988,7 @@ void RGWCopyObj::execute()
   rgwstore->set_atomic(s->obj_ctx, src_obj);
   rgwstore->set_atomic(s->obj_ctx, dst_obj);
 
-  ret = rgwstore->copy_obj(s->obj_ctx, s->user.user_id,
+  ret = rgwstore->copy_obj(s->obj_ctx,
                         dst_obj,
                         src_obj,
                         &mtime,
@@ -1056,7 +1056,7 @@ static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAcces
     ACLGranteeType& type = src_grant->get_type();
     ACLGrant new_grant;
     bool grant_ok = false;
-    string id;
+    string uid;
     RGWUserInfo grant_user;
     switch (type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
@@ -1067,19 +1067,19 @@ static int rebuild_policy(ACLOwner *owner, RGWAccessControlPolicy& src, RGWAcces
           dout(10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
-        id = grant_user.user_id;
+        uid = grant_user.user_id;
       }
     case ACL_TYPE_CANON_USER:
       {
         if (type.get_type() == ACL_TYPE_CANON_USER)
-          id = src_grant->get_id();
+          uid = src_grant->get_id();
     
-        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(id, grant_user) < 0) {
-          dout(10) << "grant user does not exist:" << id << dendl;
+        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(uid, grant_user) < 0) {
+          dout(10) << "grant user does not exist:" << uid << dendl;
           return -EINVAL;
         } else {
           ACLPermission& perm = src_grant->get_permission();
-          new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
+          new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
           dout(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << dendl;
         }
@@ -1261,7 +1261,7 @@ void RGWInitMultipart::execute()
 
     obj.init(s->bucket, tmp_obj_name, s->object_str, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL);
+    ret = rgwstore->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL);
   } while (ret == -EEXIST);
 done:
   send_response();
@@ -1410,7 +1410,7 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, target_obj);
-  ret = rgwstore->put_obj_meta(s->obj_ctx, s->user.user_id, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
+  ret = rgwstore->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL);
   if (ret < 0)
     goto done;
   
@@ -1435,11 +1435,11 @@ void RGWCompleteMultipart::execute()
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
     rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
-    rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+    rgwstore->delete_obj(s->obj_ctx, obj);
   }
   // and also remove the metadata obj
   meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
-  rgwstore->delete_obj(s->obj_ctx, s->user.user_id, meta_obj);
+  rgwstore->delete_obj(s->obj_ctx, meta_obj);
 
 done:
   send_response();
@@ -1480,13 +1480,13 @@ void RGWAbortMultipart::execute()
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
     rgw_obj obj(s->bucket, oid, s->object_str, mp_ns);
-    ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, obj);
+    ret = rgwstore->delete_obj(s->obj_ctx, obj);
     if (ret < 0 && ret != -ENOENT)
       goto done;
   }
   // and also remove the metadata obj
   meta_obj.init(s->bucket, meta_oid, s->object_str, mp_ns);
-  ret = rgwstore->delete_obj(s->obj_ctx, s->user.user_id, meta_obj);
+  ret = rgwstore->delete_obj(s->obj_ctx, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -1552,7 +1552,7 @@ void RGWListBucketMultiparts::execute()
     }
   }
   marker_meta = marker.get_meta();
-  ret = rgwstore->list_objects(s->user.user_id, s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
+  ret = rgwstore->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, &is_truncated, &mp_filter);
   if (objs.size()) {
     vector<RGWObjEnt>::iterator iter;

@@ -34,9 +34,9 @@ public:
   virtual int initialize(CephContext *cct) = 0;
   virtual void finalize() {}
   /** prepare a listing of all buckets. */
-  virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle) = 0;
+  virtual int list_buckets_init(RGWAccessHandle *handle) = 0;
   /** get the next bucket in the provided listing context. */
-  virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
+  virtual int list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle) = 0;
   
   virtual int log_list_init(const string& prefix, RGWAccessHandle *handle) { return -ENOENT; }
   virtual int log_list_next(RGWAccessHandle handle, string *name) { return -ENOENT; }
@@ -46,7 +46,6 @@ public:
 
   /** 
    * get listing of the objects in a bucket.
-   * id: ignored in current implementations
    * bucket: bucket to list contents of
    * max: maximum number of results to return
    * prefix: only return results that match this prefix
@@ -58,33 +57,33 @@ public:
    * common_prefixes: if delim is filled in, any matching prefixes are placed
    *     here.
    */
-  virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
+  virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                            std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                            bool get_content_type, std::string& ns, bool *is_truncated, RGWAccessListFilter *filter) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket,
+  virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             map<std::string, bufferlist>& attrs,
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0) = 0;
   virtual int add_bucket_placement(std::string& new_placement) { return 0; }
-  virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
+  virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0) { return -ENOTSUP; }
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                       map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                       map<std::string, bufferlist>* rmattrs) = 0;
-  virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len) = 0;
-  virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                       off_t ofs, size_t len, void **handle) { return -ENOTSUP; }
 
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
-  int put_obj(void *ctx, std::string& id, rgw_obj& obj, const char *data, size_t len,
+  int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len,
               time_t *mtime, map<std::string, bufferlist>& attrs) {
-    int ret = put_obj_data(ctx, id, obj, data, -1, len);
+    int ret = put_obj_data(ctx, obj, data, -1, len);
     if (ret >= 0) {
-      ret = put_obj_meta(ctx, id, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false, NULL);
+      ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, false, NULL);
     }
     return ret;
   }
@@ -98,7 +97,6 @@ public:
 
   /**
    * Copy an object.
-   * id: unused (well, it's passed to put_obj)
    * dest_bucket: the bucket to copy into
    * dest_obj: the object to copy into
    * src_bucket: the bucket to copy from
@@ -109,7 +107,7 @@ public:
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
+  virtual int copy_obj(void *ctx, rgw_obj& dest_obj,
                       rgw_obj& src_obj,
                       time_t *mtime,
                       const time_t *mod_ptr,
@@ -121,12 +119,11 @@ public:
                       struct rgw_err *err) = 0;
   /**
    * Delete a bucket.
-   * id: unused in implementations
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool) = 0;
-  virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets) { return -ENOTSUP; }
+  virtual int delete_bucket(rgw_bucket& bucket, bool remove_pool) = 0;
+  virtual int purge_buckets(vector<rgw_bucket>& buckets) { return -ENOTSUP; }
 
   virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled) { return -ENOTSUP; }
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended) {
@@ -136,12 +133,11 @@ public:
 
   /**
    * Delete an object.
-   * id: unused in current implementations
    * bucket: name of the bucket storing the object
    * obj: name of the object to delete
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync = true) = 0;
+  virtual int delete_obj(void *ctx, rgw_obj& obj, bool sync = true) = 0;
 
 /**
  * Get data about an object out of RADOS and into memory.

@@ -172,11 +172,10 @@ int RGWRados::open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx)
 
 /**
  * set up a bucket listing.
- * id is ignored
  * handle is filled in.
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
+int RGWRados::list_buckets_init(RGWAccessHandle *handle)
 {
   librados::ObjectIterator *state = new librados::ObjectIterator(root_pool_ctx.objects_begin());
   *handle = (RGWAccessHandle)state;
@@ -185,12 +184,11 @@ int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
 
 /** 
  * get the next bucket in the listing.
- * id is ignored
  * obj is filled in,
  * handle is updated.
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
+int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 {
   librados::ObjectIterator *state = (librados::ObjectIterator *)*handle;
 
@@ -333,7 +331,6 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
 
 /** 
  * get listing of the objects in a bucket.
- * id: ignored.
  * bucket: bucket to list contents of
  * max: maximum number of results to return
  * prefix: only return results that match this prefix
@@ -345,7 +342,7 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
  * common_prefixes: if delim is filled in, any matching prefixes are placed
  *     here.
  */
-int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix, string& delim,
+int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
@@ -398,10 +395,9 @@ int RGWRados::list_objects(string& id, rgw_bucket& bucket, int max, string& pref
 
 /**
  * create a bucket with name bucket and the given list of attrs
- * if auid is set, it sets the auid of the underlying rados io_ctx
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket, 
+int RGWRados::create_bucket(string& owner, rgw_bucket& bucket, 
 			    map<std::string, bufferlist>& attrs, 
 			    bool system_bucket,
 			    bool exclusive, uint64_t auid)
@@ -470,11 +466,11 @@ int RGWRados::create_bucket(std::string& id, rgw_bucket& bucket,
 
       RGWBucketInfo info;
       info.bucket = bucket;
-      info.owner = id;
+      info.owner = owner;
       ret = store_bucket_info(info);
       if (ret < 0) {
         dout(0) << "failed to store bucket info, removing bucket" << dendl;
-        delete_bucket(id, bucket, true);
+        delete_bucket(bucket, true);
         return ret;
       }
     }
@@ -488,15 +484,14 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info)
   bufferlist bl;
   ::encode(info, bl);
 
-  string unused;
-  int ret = rgw_put_obj(unused, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length());
+  int ret = rgw_put_obj(info.owner, pi_buckets_rados, info.bucket.name, bl.c_str(), bl.length());
   if (ret < 0)
     return ret;
 
   char bucket_char[16];
   snprintf(bucket_char, sizeof(bucket_char), ".%lld", (long long unsigned)info.bucket.bucket_id);
   string bucket_id_string(bucket_char);
-  ret = rgw_put_obj(unused, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
+  ret = rgw_put_obj(info.owner, pi_buckets_rados, bucket_id_string, bl.c_str(), bl.length());
 
   dout(0) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
   return 0;
@@ -512,12 +507,11 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
   rgw_obj obj(pi_buckets_rados, avail_pools);
   int ret = tmap_get(obj, header, m);
   if (ret < 0 || !m.size()) {
-    string id;
     vector<string> names;
     names.push_back(default_storage_pool);
     vector<int> retcodes;
     bufferlist bl;
-    ret = create_pools(id, names, retcodes);
+    ret = create_pools(names, retcodes);
     if (ret < 0)
       return ret;
     ret = tmap_set(obj, default_storage_pool, bl);
@@ -558,7 +552,7 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
   return ret;
 }
 
-int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid)
+int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes, int auid)
 {
   vector<string>::iterator iter;
   vector<librados::PoolAsyncCompletion *> completions;
@@ -594,7 +588,6 @@ int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& 
 
 /**
  * Write/overwrite an object to the bucket storage.
- * id: ignored
  * bucket: the bucket to store the object in
  * obj: the object name/key
  * data: the object contents/value
@@ -604,7 +597,7 @@ int RGWRados::create_pools(std::string& id, vector<string>& names, vector<int>& 
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t size,
+int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                   map<string, bufferlist>* rmattrs)
 {
@@ -682,7 +675,6 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
 
 /**
  * Write/overwrite an object to the bucket storage.
- * id: ignored
  * bucket: the bucket to store the object in
  * obj: the object name/key
  * data: the object contents/value
@@ -692,17 +684,17 @@ int RGWRados::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,  uint64_t s
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_data(void *ctx, std::string& id, rgw_obj& obj,
+int RGWRados::put_obj_data(void *ctx, rgw_obj& obj,
 			   const char *data, off_t ofs, size_t len)
 {
   void *handle;
-  int r = aio_put_obj_data(ctx, id, obj, data, ofs, len, &handle);
+  int r = aio_put_obj_data(ctx, obj, data, ofs, len, &handle);
   if (r < 0)
     return r;
   return aio_wait(handle);
 }
 
-int RGWRados::aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj,
+int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj,
 			       const char *data, off_t ofs, size_t len,
                                void **handle)
 {
@@ -755,7 +747,6 @@ bool RGWRados::aio_completed(void *handle)
 }
 /**
  * Copy an object.
- * id: unused (well, it's passed to put_obj)
  * dest_bucket: the bucket to copy into
  * dest_obj: the object to copy into
  * src_bucket: the bucket to copy from
@@ -766,7 +757,7 @@ bool RGWRados::aio_completed(void *handle)
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(void *ctx, std::string& id,
+int RGWRados::copy_obj(void *ctx,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
@@ -812,7 +803,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
 
     // In the first call to put_obj_data, we pass ofs == -1 so that it will do
     // a write_full, wiping out whatever was in the object before this
-    r = put_obj_data(ctx, id, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret);
+    r = put_obj_data(ctx, tmp_obj, data, ((ofs == 0) ? -1 : ofs), ret);
     free(data);
     if (r < 0)
       goto done_err;
@@ -829,7 +820,7 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
   if (mtime)
     obj_stat(ctx, tmp_obj, NULL, mtime, NULL);
 
-  r = rgwstore->delete_obj(ctx, id, tmp_obj, false);
+  r = rgwstore->delete_obj(ctx, tmp_obj, false);
   if (r < 0)
     dout(0) << "ERROR: could not remove " << tmp_obj << dendl;
 
@@ -837,18 +828,17 @@ int RGWRados::copy_obj(void *ctx, std::string& id,
 
   return ret;
 done_err:
-  rgwstore->delete_obj(ctx, id, tmp_obj, false);
+  rgwstore->delete_obj(ctx, tmp_obj, false);
   finish_get_obj(&handle);
   return r;
 }
 
 /**
  * Delete a bucket.
- * id: unused
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool)
+int RGWRados::delete_bucket(rgw_bucket& bucket, bool remove_pool)
 {
   librados::IoCtx list_ctx;
   int r = open_bucket_ctx(bucket, list_ctx);
@@ -884,7 +874,7 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
   }
 
   rgw_obj obj(rgw_root_bucket, bucket.name);
-  r = delete_obj(NULL, id, obj, true);
+  r = delete_obj(NULL, obj, true);
   if (r < 0)
     return r;
 
@@ -893,11 +883,10 @@ int RGWRados::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_poo
 
 /**
  * Delete buckets, don't care about content
- * id: unused
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
+int RGWRados::purge_buckets(vector<rgw_bucket>& buckets)
 {
   librados::IoCtx list_ctx;
   vector<rgw_bucket>::iterator iter;
@@ -916,7 +905,7 @@ int RGWRados::purge_buckets(std::string& id, vector<rgw_bucket>& buckets)
     }
 
     rgw_obj obj(rgw_root_bucket, bucket.name);
-    r = delete_obj(NULL, id, obj, true);
+    r = delete_obj(NULL, obj, true);
     if (r < 0) {
       dout(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
       ret = r;
@@ -989,12 +978,11 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 
 /**
  * Delete an object.
- * id: unused
  * bucket: name of the bucket storing the object
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1045,11 +1033,11 @@ int RGWRados::delete_obj_impl(void *ctx, std::string& id, rgw_obj& obj, bool syn
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWRados::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
   int r;
   do {
-    r = delete_obj_impl(ctx, id, obj, sync);
+    r = delete_obj_impl(ctx, obj, sync);
   } while (r == -ECANCELED);
   return r;
 }
@@ -2360,13 +2348,12 @@ int RGWRados::remove_temp_objects(string date, string time)
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
   string ns;
-  string id;
   
   int max = 1000;
   bool is_truncated;
   IntentLogNameFilter filter(date.c_str(), &tm);
   do {
-    int r = store->list_objects(id, bucket, max, prefix, delim, marker,
+    int r = store->list_objects(bucket, max, prefix, delim, marker,
 				objs, common_prefixes, false, ns,
 				&is_truncated, &filter);
     if (r == -ENOENT)
@@ -2404,7 +2391,6 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   }
 
   bufferlist::iterator iter = bl.begin();
-  string id;
   bool complete = true;
   try {
     while (!iter.end()) {
@@ -2427,7 +2413,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
           complete = false;
           break;
         }
-        r = rgwstore->delete_obj(NULL, id, entry.obj);
+        r = rgwstore->delete_obj(NULL, entry.obj);
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove obj: " << entry.obj << std::endl;
           complete = false;
@@ -2438,7 +2424,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
           complete = false;
           break;
         }
-        r = delete_bucket(id, entry.obj.bucket, true);
+        r = delete_bucket(entry.obj.bucket, true);
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
           complete = false;
@@ -2457,7 +2443,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     rgw_obj obj(bucket, oid);
     cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
     if (purge) {
-      r = delete_obj(NULL, id, obj, true);
+      r = delete_obj(NULL, obj, true);
       if (r < 0)
         cerr << "failed to remove obj: " << obj << std::endl;
     }

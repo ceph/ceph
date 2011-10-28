@@ -131,7 +131,7 @@ class RGWRados  : public RGWAccess
                  bool truncate_dest,
                  bool exclusive,
                  pair<string, bufferlist> *cmp_xattr);
-  int delete_obj_impl(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
+  int delete_obj_impl(void *ctx, rgw_obj& src_obj, bool sync);
 
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   int store_bucket_info(RGWBucketInfo& info);
@@ -143,13 +143,13 @@ public:
 
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int initialize(CephContext *cct);
-  /** set up a bucket listing. id is ignored, handle is filled in. */
-  virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle);
+  /** set up a bucket listing. handle is filled in. */
+  virtual int list_buckets_init(RGWAccessHandle *handle);
   /** 
-   * get the next bucket in the listing. id is ignored, obj is filled in,
+   * get the next bucket in the listing. obj is filled in,
    * handle is updated.
    */
-  virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
+  virtual int list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle);
 
   /// list logs
   int log_list_init(const string& prefix, RGWAccessHandle *handle);
@@ -164,7 +164,7 @@ public:
 
 
   /** get listing of the objects in a bucket */
-  virtual int list_objects(std::string& id, rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
+  virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
 		   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter);
 
@@ -172,20 +172,20 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int create_bucket(std::string& id, rgw_bucket& bucket,
+  virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             map<std::string,bufferlist>& attrs,
                             bool system_bucket, bool exclusive = true,
                             uint64_t auid = 0);
   virtual int add_bucket_placement(std::string& new_pool);
-  virtual int create_pools(std::string& id, vector<string>& names, vector<int>& retcodes, int auid = 0);
+  virtual int create_pools(vector<string>& names, vector<int>& retcodes, int auid = 0);
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
               map<std::string, bufferlist>* rmattrs);
-  virtual int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
-  virtual int aio_put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                                off_t ofs, size_t len, void **handle);
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
@@ -225,7 +225,7 @@ public:
   }
 
   /** Copy an object, with many extra options */
-  virtual int copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
+  virtual int copy_obj(void *ctx, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -236,14 +236,14 @@ public:
                RGWObjCategory category,
                struct rgw_err *err);
   /** delete a bucket*/
-  virtual int delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool);
-  virtual int purge_buckets(std::string& id, vector<rgw_bucket>& buckets);
+  virtual int delete_bucket(rgw_bucket& bucket, bool remove_pool);
+  virtual int purge_buckets(vector<rgw_bucket>& buckets);
 
   virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, std::string& id, rgw_obj& src_obj, bool sync);
+  virtual int delete_obj(void *ctx, rgw_obj& src_obj, bool sync);
 
   /** Get the attributes for an object.*/
   virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest);

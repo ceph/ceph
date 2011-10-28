@@ -33,7 +33,7 @@ int RGWFS::initialize(CephContext *cct)
   return 0;
 }
 
-int RGWFS::list_buckets_init(string& id, RGWAccessHandle *handle)
+int RGWFS::list_buckets_init(RGWAccessHandle *handle)
 {
   DIR *dir = opendir(DIR_NAME);
   struct rgwfs_state *state;
@@ -54,7 +54,7 @@ int RGWFS::list_buckets_init(string& id, RGWAccessHandle *handle)
   return 0;
 }
 
-int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
+int RGWFS::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 {
   struct rgwfs_state *state;
   struct dirent *dirent;
@@ -96,7 +96,7 @@ int RGWFS::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, ma
   return -ENOTSUP;
 }
 
-int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix, string& delim,
+int RGWFS::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
                        string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
                        bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
@@ -172,7 +172,7 @@ int RGWFS::list_objects(string& id, rgw_bucket& bucket, int max, string& prefix,
 }
 
 
-int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool system_bucket, bool exclusive, uint64_t auid)
+int RGWFS::create_bucket(std::string& owner, rgw_bucket& bucket, map<std::string, bufferlist>& attrs, bool system_bucket, bool exclusive, uint64_t auid)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.name.size() + 1;
   char buf[len];
@@ -204,7 +204,7 @@ int RGWFS::create_bucket(std::string& id, rgw_bucket& bucket, map<std::string, b
   return 0;
 }
 
-int RGWFS::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj,
+int RGWFS::put_obj_meta(void *ctx, rgw_obj& obj,
                   uint64_t size, time_t *mtime, map<string, bufferlist>& attrs,
                   RGWObjCategory category, bool exclusive,
 	          map<std::string, bufferlist> *rmattrs)
@@ -253,7 +253,7 @@ done_err:
   return -errno;
 }
 
-int RGWFS::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+int RGWFS::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
                   off_t ofs, size_t size)
 {
   rgw_bucket& bucket = obj.bucket;
@@ -294,7 +294,7 @@ done_err:
   return r;
 }
 
-int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
+int RGWFS::copy_obj(void *ctx, rgw_obj& dest_obj,
                rgw_obj& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -331,12 +331,12 @@ int RGWFS::copy_obj(void *ctx, std::string& id, rgw_obj& dest_obj,
   }
   attrs = attrset;
 
-  ret = put_obj(ctx, id, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(ctx, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
 
-int RGWFS::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool)
+int RGWFS::delete_bucket(rgw_bucket& bucket, bool remove_pool)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.name.size() + 1;
   char buf[len];
@@ -349,7 +349,7 @@ int RGWFS::delete_bucket(std::string& id, rgw_bucket& bucket, bool remove_pool)
 }
 
 
-int RGWFS::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWFS::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
   rgw_bucket& bucket = obj.bucket;
   std::string& oid = obj.object;

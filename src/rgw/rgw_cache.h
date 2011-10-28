@@ -171,29 +171,29 @@ public:
   RGWCache() {}
 
   int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
-  int put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+  int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                    map<std::string, bufferlist>* rmattrs);
 
-  int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
   int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
-  int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
+  int delete_obj(void *ctx, rgw_obj& obj, bool sync);
 };
 
 
 template <class T>
-int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.')
-    return T::delete_obj(ctx, id, obj, sync);
+    return T::delete_obj(ctx, obj, sync);
 
   string name = normal_name(obj);
   cache.remove(name);
@@ -201,7 +201,7 @@ int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
   ObjectCacheInfo info;
   distribute(obj, info, REMOVE_OBJ);
 
-  return T::delete_obj(ctx, id, obj, sync);
+  return T::delete_obj(ctx, obj, sync);
 }
 
 template <class T>
@@ -277,7 +277,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
 }
 
 template <class T>
-int RGWCache<T>::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t size, time_t *mtime,
+int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                               map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
                               map<std::string, bufferlist>* rmattrs)
 {
@@ -292,7 +292,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t
     info.status = 0;
     info.flags = CACHE_FLAG_XATTRS;
   }
-  int ret = T::put_obj_meta(ctx, id, obj, size, mtime, attrs, category, exclusive, rmattrs);
+  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, exclusive, rmattrs);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
@@ -309,7 +309,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, std::string& id, rgw_obj& obj, uint64_t
 }
 
 template <class T>
-int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len)
 {
   rgw_bucket bucket;
@@ -327,7 +327,7 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
     info.status = 0;
     info.flags = CACHE_FLAG_DATA;
   }
-  int ret = T::put_obj_data(ctx, id, obj, data, ofs, len);
+  int ret = T::put_obj_data(ctx, obj, data, ofs, len);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
