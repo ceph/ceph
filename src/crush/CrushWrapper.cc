@@ -60,7 +60,7 @@ int CrushWrapper::remove_item(int item)
   return ret;
 }
 
-int CrushWrapper::insert_item(int item, int weight, string name,
+int CrushWrapper::insert_item(int item, float weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
   cout << "insert_item item " << item << " weight " << weight
@@ -118,7 +118,7 @@ int CrushWrapper::insert_item(int item, int weight, string name,
     crush_bucket_add_item(b, cur, 0);
 
     // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
-    adjust_item_weight(item, weight);
+    adjust_item_weightf(item, weight);
     return 0;
   }
 
