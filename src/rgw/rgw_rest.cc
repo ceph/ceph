@@ -758,12 +758,12 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 
   s->fcgx = fcgx;
   s->path_name = s->env->get("SCRIPT_NAME");
-  s->path_name_url = s->env->get("REQUEST_URI");
-  url_decode(s->path_name_url, s->path_name_url);
-  int pos = s->path_name_url.find('?');
+  s->request_uri = s->env->get("REQUEST_URI");
+  int pos = s->request_uri.find('?');
   if (pos >= 0) {
-    s->path_name_url = s->path_name_url.substr(0, pos);
+    s->request_uri = s->request_uri.substr(0, pos);
   }
+  url_decode(s->request_uri, s->path_name_url);
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
   s->query = s->env->get("QUERY_STRING");

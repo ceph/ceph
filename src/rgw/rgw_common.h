@@ -482,6 +482,7 @@ struct req_state {
    ceph::Formatter *formatter;
    const char *path_name;
    string path_name_url;
+   string request_uri;
    const char *host;
    const char *method;
    const char *query;

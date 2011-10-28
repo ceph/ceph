@@ -525,7 +525,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
     dest.append(s->host_bucket);
   }
 
-  dest.append(s->path_name_url.c_str());
+  dest.append(s->request_uri.c_str());
 
   map<string, string>& sub = s->args.get_sub_resources();
   map<string, string>::iterator iter;
