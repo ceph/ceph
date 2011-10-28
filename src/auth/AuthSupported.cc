@@ -47,5 +47,5 @@ int AuthSupported::pick(const set<__u32>& supp)
   for (set<__u32>::const_reverse_iterator p = supp.rbegin(); p != supp.rend(); ++p)
     if (is_supported_auth(*p))
       return *p;
-  return CEPH_AUTH_NONE;
+  return CEPH_AUTH_UNKNOWN;
 }
