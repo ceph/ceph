@@ -4680,12 +4680,17 @@ int Client::_getdents(dir_result_t *dir, char *buf, int buflen, bool fullent)
   gr.pos = 0;
 
   int r = readdir_r_cb(dir, _readdir_getdent_cb, (void *)&gr);
-  if (r < 0) 
-    return r;
 
-  if (gr.pos == 0)
-    return -ERANGE;
-
+  if (r < 0) { // some error
+    if (r == -1) { // buffer ran out of space
+      if (gr.pos) { // but we got some entries already!
+        return gr.pos;
+      } // or we need a larger buffer
+      return -ERANGE;
+    } else { // actual error, return it
+      return r;
+    }
+  }
   return gr.pos;
 }
 

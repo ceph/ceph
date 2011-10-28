@@ -535,6 +535,11 @@ public:
 
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
+  /**
+   * Returns the length of the buffer that got filled in, or -errno.
+   * If it returns -ERANGE you just need to increase the size of the
+   * buffer and try again.
+   */
   int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
   int getdents(dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, true);
