@@ -22,6 +22,8 @@
 #endif
 
 #include <stdlib.h>
+#include <stdio.h>
+
 #ifdef DARWIN
 
 #ifndef MAP_ANON
