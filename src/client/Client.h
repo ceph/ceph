@@ -523,9 +523,8 @@ public:
    * with the given pointer, the dirent, the struct stat, the stmask,
    * and the offset.
    *
-   * Returns 0 if it reached the end of the directory,
-   * or -errno if one of its callees returns an error (including
-   * the callback you provide).
+   * Returns 0 if it reached the end of the directory.
+   * If @cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
