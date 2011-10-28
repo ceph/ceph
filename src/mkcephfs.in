@@ -303,6 +303,12 @@ if [ -n "$prepareosdfs" ]; then
     get_conf osd_journal "" "osd journal"
     get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
     get_conf btrfs_devs "" "btrfs devs"
+
+    if [ -z "$btrfs_devs" ]; then
+	echo "no btrfs devs defined for $name"
+	exit 0
+    fi
+
     first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     get_conf btrfs_opt "noatime" "btrfs options"
     [ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
