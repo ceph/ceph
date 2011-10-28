@@ -74,6 +74,9 @@ public:
     if (header.version > 1) {
       ::decode(oldest_map, p);
       ::decode(newest_map, p);
+    } else {
+      oldest_map = 0;
+      newest_map = 0;
     }
   }
   void encode_payload(CephContext *cct) {
