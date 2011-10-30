@@ -1040,7 +1040,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     loc["rack"] = rack;
     loc["pool"] = "root";
 
-    dout(0) << " adding osd." << o << " at " << loc << dendl;
+    ldout(cct, 0) << " adding osd." << o << " at " << loc << dendl;
     crush.insert_item(o, 1.0, *i, loc);
   }
 
