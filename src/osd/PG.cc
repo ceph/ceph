@@ -3475,6 +3475,8 @@ void PG::start_peering_interval(const OSDMap *lastmap,
   // -- there was a change! --
   kick();
 
+  set_last_peering_reset();
+
   vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
@@ -3885,14 +3887,14 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
 }
 
 void PG::RecoveryState::Initial::exit() {
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Started-------*/
 PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
   state_name = "Started";
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_enter(state_name);
 }
 
