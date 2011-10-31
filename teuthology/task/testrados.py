@@ -46,40 +46,31 @@ def task(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         remotes.append(remote)
 
-        remote.run(
-            args=[
-                'cp',
-                '/tmp/cephtest/ceph.conf',
-                '/tmp/cephtest/data/ceph.conf',
-                ],
-            logger=log.getChild('testrados.{id}'.format(id=id_)),
-            wait=True,
-            )
-
-        commandstring = ""
+        args = []
         if not config.get('snaps', False):
-            commandstring = " ".join([
-                    'cd', '/tmp/cephtest/data;',
-                    'export CEPH_CLIENT_ID={id_}; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/testreadwrite'.format(
-                        id_=id_),
-                    str(config.get('ops', '10000')),
-                    str(config.get('objects', '500')),
-                    str(50),
-                    str(config.get('maxinflight', '16')),
-                    ])
+            args = [
+                'CEPH_CLIENT_ID={id_};'.format(id_=id_),
+                'CEPH_CONF=/tmp/cephtest/ceph.conf',
+                'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
+                '/tmp/cephtest/binary/usr/local/bin/testreadwrite',
+                str(config.get('ops', '10000')),
+                str(config.get('objects', '500')),
+                str(50),
+                str(config.get('maxinflight', '16'))
+                ]
         else:
-            commandstring = " ".join([
-                    'cd', '/tmp/cephtest/data;',
-                    'export CEPH_CLIENT_ID={id_}; LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2 /tmp/cephtest/binary/usr/local/bin/testsnaps'.format(
-                        id_=id_),
-                    str(config.get('ops', '1000')),
-                    str(config.get('objects', '25')),
-                    str(config.get('maxinflight', '16')),
-                    ])
-
+            args = [
+                'CEPH_CLIENT_ID={id_};'.format(id_=id_),
+                'CEPH_CONF=/tmp/cephtest/ceph.conf',
+                'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
+                '/tmp/cephtest/binary/usr/local/bin/testsnaps',
+                str(config.get('ops', '10000')),
+                str(config.get('objects', '500')),
+                str(config.get('maxinflight', '16'))
+                ]
 
         proc = remote.run(
-            args=['/bin/sh', '-c', commandstring],
+            args=args,
             logger=log.getChild('testrados.{id}'.format(id=id_)),
             stdin=run.PIPE,
             wait=False
@@ -89,15 +80,5 @@ def task(ctx, config):
     try:
         yield
     finally:
-        for i in remotes:
-            i.run(
-                args=[
-                    'rm',
-                    '/tmp/cephtest/data/ceph.conf'
-                    ],
-                logger=log.getChild('testrados.{id}'.format(id=id_)),
-                wait=True,
-                )
-
         log.info('joining testrados')
         run.wait(testrados.itervalues())
