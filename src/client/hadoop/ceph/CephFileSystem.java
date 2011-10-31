@@ -435,9 +435,8 @@ public class CephFileSystem extends FileSystem {
    * Get the FileStatus for each listing in a directory.
    * @param path The directory to get listings from.
    * @return FileStatus[] containing one FileStatus for each directory listing;
-   * null if path is not a directory.
+   *         null if path does not exist.
    * @throws IOException if initialize() hasn't been called.
-   * @throws FileNotFoundException if the input path can't be found.
    */
   public FileStatus[] listStatus(Path path) throws IOException {
     if (!initialized) {
@@ -458,11 +457,12 @@ public class CephFileSystem extends FileSystem {
       ceph.debug("listStatus:exit", ceph.DEBUG);
       return statuses;
     }
-    if (!isFile(path)) {
-      throw new FileNotFoundException();
-    } // if we get here, listPaths returned null
-    // which means that the input wasn't a directory, so throw an Exception if it's not a file
-    return null; // or return null if it's a file
+
+    if (isFile(path)) {
+      return new FileStatus[] { getFileStatus(path) };
+    }
+
+    return null;
   }
 
   @Override
