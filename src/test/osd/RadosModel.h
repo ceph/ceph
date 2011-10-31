@@ -101,7 +101,8 @@ public:
     cont_gen(cont_gen), seq_num(0), seq(0)
   {
     rados.init(id);
-    rados.conf_read_file("ceph.conf");
+    rados.conf_read_file(NULL);
+    rados.conf_parse_env(NULL);
     rados.connect();
     rados.ioctx_create(pool_name.c_str(), io_ctx);
     char hostname_cstr[100];
