@@ -820,8 +820,6 @@ public:
 				  utime_t mtime, int what);
   void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
 
-  void on_osd_failure(int o);
-  void on_acker_change();
   void on_role_change();
   void on_change();
   void on_activate();

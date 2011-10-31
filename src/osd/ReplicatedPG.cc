@@ -4687,11 +4687,6 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
  * pg status change notification
  */
 
-void ReplicatedPG::on_osd_failure(int o)
-{
-  //dout(10) << "on_osd_failure " << o << dendl;
-}
-
 void ReplicatedPG::apply_and_flush_repops(bool requeue)
 {
   list<Message*> rq;

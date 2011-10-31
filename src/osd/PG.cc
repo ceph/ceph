@@ -3550,13 +3550,6 @@ void PG::start_peering_interval(const OSDMap *lastmap,
 
     
   // pg->on_*
-  /* TODO on_osd_failure does NOTHING! */
-#if 0
-  for (unsigned i=0; i<oldacting.size(); i++)
-    if (osdmap->is_down(oldacting[i]))
-      ->on_osd_failure(oldacting[i]);
-#endif
-
   on_change();
 
   if (deleting) {
