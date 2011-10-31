@@ -1583,6 +1583,8 @@ public:
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
   bool       is_replica() const { return role > 0; }
+
+  epoch_t get_last_peering_reset() const { return last_peering_reset; }
   
   //int  get_state() const { return state; }
   bool state_test(int m) const { return (state & m) != 0; }

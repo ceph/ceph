@@ -3442,17 +3442,23 @@ bool PG::may_need_replay(const OSDMap *osdmap) const
 bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
 {
   if (acting != newacting || up != newup) {
+    dout(20) << "acting_up_affected newup " << newup << " newacting " << newacting << dendl;
     return true;
   } else {
     return false;
   }
 }
 
-bool PG::old_peering_msg(epoch_t reply_epoch,
-			 epoch_t query_epoch)
+bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
-  return (last_peering_reset > reply_epoch ||
-	  last_peering_reset > query_epoch);
+  if (last_peering_reset > reply_epoch ||
+      last_peering_reset > query_epoch) {
+    dout(10) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch " << query_epoch
+	     << " last_peering_reset " << last_peering_reset
+	     << dendl;
+    return true;
+  }
+  return false;
 }
 
 
@@ -3469,7 +3475,9 @@ void PG::on_removal()
   remove_watchers_and_notifies();
 }
 
-void PG::set_last_peering_reset() {
+void PG::set_last_peering_reset()
+{
+  dout(20) << "set_last_peering_reset " << osd->osdmap->get_epoch() << dendl;
   last_peering_reset = osd->osdmap->get_epoch();
 }
 
@@ -3777,6 +3785,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.acting != pg.up)
     out << "/" << pg.acting;
   out << " r=" << pg.get_role();
+  out << " lpr=" << pg.get_last_peering_reset();
 
   if (pg.is_active() &&
       pg.last_update_ondisk != pg.info.last_update)
