@@ -30,7 +30,7 @@ We regularly build Debian and Ubuntu packages for the `amd64` and
 - ``sid`` (Debian unstable)
 - ``squeeze`` (Debian 6.0)
 - ``lenny`` (Debian 5.0)
-- ``oneiric`` (Ubuntu 11.11)
+- ``oneiric`` (Ubuntu 11.10)
 - ``natty`` (Ubuntu 11.04)
 - ``maverick`` (Ubuntu 10.10)
 
