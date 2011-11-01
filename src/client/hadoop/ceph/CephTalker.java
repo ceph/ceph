@@ -32,7 +32,6 @@ class CephTalker extends CephFS {
 
   // we write a constructor so we can load the libraries
   public CephTalker(Configuration conf, Log log) {
-    super(conf, log);
     System.load(conf.get("fs.ceph.libDir") + "/libcephfs.so");
     System.load(conf.get("fs.ceph.libDir") + "/libhadoopcephfs.so");
     cluster = 0;
