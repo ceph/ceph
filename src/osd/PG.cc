@@ -3911,6 +3911,8 @@ void PG::RecoveryState::Started::exit() {
 PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_last_peering_reset();
 }
 
 boost::statechart::result 
