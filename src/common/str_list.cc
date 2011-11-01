@@ -26,16 +26,21 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
   if (start < 0)
     return false;
 
-  if (s[start]== ',')
+  if (s[start] == ',') {
     end = start + 1;
-  else
+    pos = end;
+  } else {
     end = s.find_first_of(";,= \t", start+1);
+    if (end >= 0)
+      pos = end + 1;
+  }
 
-  if (end < 0)
+  if (end < 0) {
     end = s.size();
+    pos = end;
+  }
 
   token = s.substr(start, end - start);
-  pos = end;
   return true;
 }
 
@@ -48,7 +53,7 @@ bool get_str_list(const std::string& str, std::list<string>& str_list)
 
   while (pos < str.size()) {
     if (get_next_token(str, pos, token)) {
-      if (token.compare(",") != 0 && token.size() > 0) {
+      if (token.size() > 0) {
         str_list.push_back(token);
       }
     }
@@ -66,7 +71,7 @@ bool get_str_set(const std::string& str, std::set<std::string>& str_set)
 
   while (pos < str.size()) {
     if (get_next_token(str, pos, token)) {
-      if (token.compare(",") != 0 && token.size() > 0) {
+      if (token.size() > 0) {
         str_set.insert(token);
       }
     }
