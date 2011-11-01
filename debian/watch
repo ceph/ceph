@@ -1,0 +1,2 @@
+version=3
+http://ceph.newdream.net/download/ceph-(\d.*)\.tar\.gz
