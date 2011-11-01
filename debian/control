@@ -88,6 +88,8 @@ Description: debugging symbols for ceph-fuse
 Package: ceph-common
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
+Conflicts: ceph-client-tools
+Replaces: ceph-client-tools
 Suggests: ceph
 Description: common utilities to mount and interact with a ceph filesystem
  Ceph is a distributed network file system designed to provide
@@ -98,6 +100,8 @@ Description: common utilities to mount and interact with a ceph filesystem
 Package: ceph-common-dbg
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
+Conflicts: ceph-client-tools-dbg
+Replaces: ceph-client-tools-dbg
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-common
@@ -189,8 +193,8 @@ Description: RADOS block device client library (development files)
  link against librbd1.
 
 Package: libcephfs1
-Conflicts: libcephfs
-Replaces: libcephfs
+Conflicts: libcephfs, libceph, libceph1
+Replaces: libcephfs, libceph, libceph1
 Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -205,6 +209,8 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
+Conflicts: libceph1-dbg
+Replaces: libceph1-dbg
 Description: debugging symbols for libcephfs1
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -217,8 +223,8 @@ Package: libcephfs-dev
 Architecture: linux-any
 Section: libdevel
 Depends: ${misc:Depends}, libcephfs1 (= ${binary:Version})
-Conflicts: libcephfs1-dev
-Replaces: libcephfs1-dev
+Conflicts: libcephfs1-dev, libceph1-dev, libceph-dev
+Replaces: libcephfs1-dev, libceph1-dev, libceph-dev
 Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
