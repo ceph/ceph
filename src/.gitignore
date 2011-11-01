@@ -43,6 +43,7 @@
 /test_librgw_build
 /testsnaps
 /testreadwrite
+/test_str_list
 /test_stress_watch
 /multi_stress_watch
 /test_store
