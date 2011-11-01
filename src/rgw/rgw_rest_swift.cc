@@ -78,13 +78,24 @@ int RGWListBucket_REST_SWIFT::get_params()
   url_decode(s->args.get("delimiter"), delimiter);
 
   string path_args;
-  url_decode(s->args.get("path"), path_args);
-  if (!path_args.empty()) {
+  if (s->args.exists("path")) { // should handle empty path
+    url_decode(s->args.get("path"), path_args);
     if (!delimiter.empty() || !prefix.empty()) {
       return -EINVAL;
     }
-    url_decode(path_args, prefix);
+    prefix = path_args;
     delimiter="/";
+
+    path = prefix;
+    if (path.size() && path[path.size() - 1] != '/')
+      path.append("/");
+  }
+
+  int len = prefix.size();
+  int delim_size = delimiter.size();
+  if (len >= delim_size) {
+    if (prefix.substr(len - delim_size).compare(delimiter) != 0)
+      prefix.append(delimiter);
   }
 
   return 0;
@@ -115,6 +126,9 @@ void RGWListBucket_REST_SWIFT::send_response()
       do_pref = true;
 
     if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
+      if (iter->name.compare(path) == 0)
+        goto next;
+
       s->formatter->open_object_section("object");
       s->formatter->dump_format("name", iter->name.c_str());
       s->formatter->dump_format("hash", "\"%s\"", iter->etag.c_str());
@@ -136,10 +150,16 @@ void RGWListBucket_REST_SWIFT::send_response()
     }
 
     if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
+      const string& name = pref_iter->first;
+dout(0) << "name=" << name << " prefix=" << prefix << dendl;
+      if (name.compare(delimiter) == 0)
+        goto next;
+
       s->formatter->open_object_section("object");
       s->formatter->dump_format("name", pref_iter->first.c_str());
       s->formatter->close_section();
     }
+next:
     if (do_objs)
       iter++;
     else

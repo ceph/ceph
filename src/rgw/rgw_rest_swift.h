@@ -29,6 +29,7 @@ public:
 };
 
 class RGWListBucket_REST_SWIFT : public RGWListBucket_REST {
+  string path;
 public:
   RGWListBucket_REST_SWIFT() {
     default_max = 10000;
