@@ -14,21 +14,28 @@ public:
 };
 
 class RGWListBuckets_REST_SWIFT : public RGWListBuckets_REST {
+  int limit_max;
+  int limit;
+  string marker;
 public:
-  RGWListBuckets_REST_SWIFT() {}
+  RGWListBuckets_REST_SWIFT() {
+    limit_max = 10000;
+    limit = limit_max;
+  }
   ~RGWListBuckets_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 
 class RGWListBucket_REST_SWIFT : public RGWListBucket_REST {
 public:
   RGWListBucket_REST_SWIFT() {
-    limit_opt_name = "limit";
     default_max = 10000;
   }
   ~RGWListBucket_REST_SWIFT() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -70,6 +77,16 @@ public:
   RGWPutObj_REST_SWIFT() {}
   ~RGWPutObj_REST_SWIFT() {}
 
+  int get_params();
+  void send_response();
+};
+
+class RGWPutObjMetadata_REST_SWIFT : public RGWPutObjMetadata_REST {
+public:
+  RGWPutObjMetadata_REST_SWIFT() {}
+  ~RGWPutObjMetadata_REST_SWIFT() {}
+
+  int get_params();
   void send_response();
 };
 
@@ -113,7 +130,7 @@ protected:
   RGWOp *get_retrieve_op(bool get_data);
   RGWOp *get_create_op();
   RGWOp *get_delete_op();
-  RGWOp *get_post_op() { return NULL; }
+  RGWOp *get_post_op();
 
 public:
   RGWHandler_REST_SWIFT() : RGWHandler_REST() {}

@@ -2112,6 +2112,7 @@ void PG::read_log(ObjectStore *store)
 	// We need to find the object in the store to get the hash
 	if (!listed_collection) {
 	  store->collection_list(coll, ls);
+	  listed_collection = true;
 	}
 	bool found = false;
 	for (vector<hobject_t>::iterator i = ls.begin();
@@ -2413,7 +2414,8 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
-void PG::update_snap_collections(vector<Log::Entry> &log_entries)
+void PG::update_snap_collections(vector<Log::Entry> &log_entries,
+				 ObjectStore::Transaction &t)
 {
   for (vector<Log::Entry>::iterator i = log_entries.begin();
        i != log_entries.end();
@@ -2422,12 +2424,9 @@ void PG::update_snap_collections(vector<Log::Entry> &log_entries)
       vector<snapid_t> snaps;
       bufferlist::iterator p = i->snaps.begin();
       ::decode(snaps, p);
-      if (!snap_collections.contains(*snaps.begin())) {
-	snap_collections.insert(*snaps.begin());
-      }
-      if (snaps.size() > 1 && !snap_collections.contains(*(snaps.end() - 1))) {
-	snap_collections.insert(*(snaps.end() - 1));
-      }
+      make_snap_collection(t, snaps[0]);
+      if (snaps.size() > 1)
+	make_snap_collection(t, *(snaps.rbegin()));
     }
   }
 }
@@ -3476,6 +3475,8 @@ void PG::start_peering_interval(const OSDMap *lastmap,
   // -- there was a change! --
   kick();
 
+  set_last_peering_reset();
+
   vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
@@ -3549,13 +3550,6 @@ void PG::start_peering_interval(const OSDMap *lastmap,
 
     
   // pg->on_*
-  /* TODO on_osd_failure does NOTHING! */
-#if 0
-  for (unsigned i=0; i<oldacting.size(); i++)
-    if (osdmap->is_down(oldacting[i]))
-      ->on_osd_failure(oldacting[i]);
-#endif
-
   on_change();
 
   if (deleting) {
@@ -3886,14 +3880,14 @@ PG::RecoveryState::Initial::react(const MLogRec& i) {
 }
 
 void PG::RecoveryState::Initial::exit() {
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Started-------*/
 PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
   state_name = "Started";
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->set_last_peering_reset();
   context< RecoveryMachine >().log_enter(state_name);
 }
 
@@ -3917,6 +3911,8 @@ void PG::RecoveryState::Started::exit() {
 PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_last_peering_reset();
 }
 
 boost::statechart::result 

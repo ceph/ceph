@@ -300,7 +300,7 @@ private:
     std::vector<char> buffer;
     buffer.reserve(512);
 
-    PerfCountersCollection *coll = m_parent->m_cct->GetPerfCountersCollection();
+    PerfCountersCollection *coll = m_parent->m_cct->get_perfcounters_collection();
     if (coll) {
       coll->write_json_to_buf(buffer, schema);
     }

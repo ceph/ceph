@@ -8,6 +8,6 @@
 
 
 int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size);
-int rgw_get_obj(rgw_bucket& bucket, string& key, bufferlist& bl);
+int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl);
 
 #endif

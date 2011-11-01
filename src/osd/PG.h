@@ -1620,7 +1620,8 @@ public:
   std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
-  void update_snap_collections(vector<Log::Entry> &log_entries);
+  void update_snap_collections(vector<Log::Entry> &log_entries,
+			       ObjectStore::Transaction& t);
   void adjust_local_snaps();
 
   void log_weirdness();
@@ -1690,7 +1691,6 @@ public:
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
-  virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
   virtual void on_activate() = 0;

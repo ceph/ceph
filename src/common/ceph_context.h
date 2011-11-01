@@ -64,7 +64,7 @@ public:
   uint32_t get_module_type() const;
 
   /* Get the PerfCountersCollection of this CephContext */
-  PerfCountersCollection *GetPerfCountersCollection();
+  PerfCountersCollection *get_perfcounters_collection();
 
   ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;

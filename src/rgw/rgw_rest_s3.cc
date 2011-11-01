@@ -72,7 +72,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
   }
 
   if (range_str && !ret)
-    ret = 206; /* partial content */
+    ret = STATUS_PARTIAL_CONTENT;
 done:
   set_req_state_err(s, ret);
 
@@ -113,6 +113,19 @@ void RGWListBuckets_REST_S3::send_response()
   dump_content_length(s, s->formatter->get_len());
   end_header(s, "application/xml");
   flush_formatter_to_req_state(s, s->formatter);
+}
+
+int RGWListBucket_REST_S3::get_params()
+{
+  url_decode(s->args.get("prefix"), prefix);
+  url_decode(s->args.get("marker"), marker);
+  url_decode(s->args.get("max-keys"), max_keys);
+  ret = parse_max_keys();
+  if (ret < 0) {
+    return ret;
+  }
+  url_decode(s->args.get("delimiter"), delimiter);
+  return 0;
 }
 
 void RGWListBucket_REST_S3::send_response()
@@ -165,6 +178,8 @@ void RGWListBucket_REST_S3::send_response()
 
 void RGWCreateBucket_REST_S3::send_response()
 {
+  if (ret == -ERR_BUCKET_EXISTS)
+    ret = 0;
   if (ret)
     set_req_state_err(s, ret);
   dump_errno(s);
@@ -175,7 +190,7 @@ void RGWDeleteBucket_REST_S3::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -197,8 +212,10 @@ void RGWPutObj_REST_S3::send_response()
 void RGWDeleteObj_REST_S3::send_response()
 {
   int r = ret;
+  if (r == -ENOENT)
+    r = 0;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -289,7 +306,7 @@ void RGWAbortMultipart_REST_S3::send_response()
 {
   int r = ret;
   if (!r)
-    r = 204;
+    r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -508,7 +525,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
     dest.append(s->host_bucket);
   }
 
-  dest.append(s->path_name_url.c_str());
+  dest.append(s->request_uri.c_str());
 
   map<string, string>& sub = s->args.get_sub_resources();
   map<string, string>::iterator iter;
@@ -524,39 +541,6 @@ static void get_canon_resource(struct req_state *s, string& dest)
     }
   }
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-}
-
-static bool check_str_end(const char *s)
-{
-  if (!s)
-    return false;
-
-  while (*s) {
-    if (!isspace(*s))
-      return false;
-    s++;
-  }
-  return true;
-}
-
-static bool parse_rfc850(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%A, %d-%b-%y %H:%M:%S GMT", t));
-}
-
-static bool parse_asctime(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
-}
-
-static bool parse_rfc1123(const char *s, struct tm *t)
-{
-  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
-}
-
-static bool parse_rfc2616(const char *s, struct tm *t)
-{
-  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
 }
 
 static inline bool is_base64_for_content_md5(unsigned char c) {

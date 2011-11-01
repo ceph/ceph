@@ -56,6 +56,7 @@ int main(int argc, const char **argv)
   bool print_json = false;
   bool tree = false;
   bool createsimple = false;
+  bool create_from_conf = false;
   int num_osd = 0, num_dom = 0;
   int pg_bits = g_conf->osd_pg_bits;
   int pgp_bits = g_conf->osd_pgp_bits;
@@ -85,6 +86,13 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
+    } else if (ceph_argparse_withint(args, i, &num_dom, &err, "--num_dom", (char*)NULL)) {
+      if (!err.str().empty()) {
+       cerr << err.str() << std::endl;
+       exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
+      create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
     } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
@@ -98,11 +106,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
     } else if (ceph_argparse_withint(args, i, &lpg_bits, &err, "--lpg_bits", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
-    } else if (ceph_argparse_withint(args, i, &num_dom, &err, "--num_dom", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -138,7 +141,7 @@ int main(int argc, const char **argv)
   
   int r = 0;
   struct stat st;
-  if (!createsimple && !clobber) {
+  if (!createsimple && !create_from_conf && !clobber) {
     std::string error;
     r = bl.read_file(fn.c_str(), &error);
     if (r == 0) {
@@ -155,7 +158,7 @@ int main(int argc, const char **argv)
       return -1;
     }
   }
-  else if (createsimple && !clobber && ::stat(fn.c_str(), &st) == 0) {
+  else if ((createsimple || create_from_conf) && !clobber && ::stat(fn.c_str(), &st) == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
   }
@@ -168,6 +171,12 @@ int main(int argc, const char **argv)
     ceph_fsid_t fsid;
     memset(&fsid, 0, sizeof(ceph_fsid_t));
     osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
+    modified = true;
+  }
+  if (create_from_conf) {
+    ceph_fsid_t fsid;
+    memset(&fsid, 0, sizeof(ceph_fsid_t));
+    osdmap.build_simple_from_conf(g_ceph_context, 0, fsid, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }
 

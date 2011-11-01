@@ -96,21 +96,32 @@ using ceph::crypto::MD5;
   state->bytes_received += olen; \
 } while (0)
 
-#define ERR_INVALID_BUCKET_NAME 2000
-#define ERR_INVALID_OBJECT_NAME 2001
-#define ERR_NO_SUCH_BUCKET      2002
-#define ERR_METHOD_NOT_ALLOWED  2003
-#define ERR_INVALID_DIGEST      2004
-#define ERR_BAD_DIGEST          2005
-#define ERR_UNRESOLVABLE_EMAIL  2006
-#define ERR_INVALID_PART        2007
-#define ERR_INVALID_PART_ORDER  2008
-#define ERR_NO_SUCH_UPLOAD      2009
-#define ERR_REQUEST_TIMEOUT     2010
-#define ERR_LENGTH_REQUIRED     2011
-#define ERR_REQUEST_TIME_SKEWED 2012
-#define ERR_USER_SUSPENDED      2100
-#define ERR_INTERNAL_ERROR      2200
+#define STATUS_CREATED           1900
+#define STATUS_ACCEPTED          1901
+#define STATUS_NO_CONTENT        1902
+#define STATUS_PARTIAL_CONTENT   1903
+
+#define ERR_INVALID_BUCKET_NAME  2000
+#define ERR_INVALID_OBJECT_NAME  2001
+#define ERR_NO_SUCH_BUCKET       2002
+#define ERR_METHOD_NOT_ALLOWED   2003
+#define ERR_INVALID_DIGEST       2004
+#define ERR_BAD_DIGEST           2005
+#define ERR_UNRESOLVABLE_EMAIL   2006
+#define ERR_INVALID_PART         2007
+#define ERR_INVALID_PART_ORDER   2008
+#define ERR_NO_SUCH_UPLOAD       2009
+#define ERR_REQUEST_TIMEOUT      2010
+#define ERR_LENGTH_REQUIRED      2011
+#define ERR_REQUEST_TIME_SKEWED  2012
+#define ERR_BUCKET_EXISTS        2013
+#define ERR_BAD_URL              2014
+#define ERR_PRECONDITION_FAILED  2015
+#define ERR_NOT_MODIFIED         2016
+#define ERR_INVALID_UTF8         2017
+#define ERR_UNPROCESSABLE_ENTITY 2018
+#define ERR_USER_SUSPENDED       2100
+#define ERR_INTERNAL_ERROR       2200
 
 typedef void *RGWAccessHandle;
 
@@ -420,24 +431,34 @@ inline ostream& operator<<(ostream& out, const rgw_bucket b) {
 
 extern rgw_bucket rgw_root_bucket;
 
+enum RGWBucketFlags {
+  BUCKET_SUSPENDED = 0x1,
+};
+
 struct RGWBucketInfo
 {
   rgw_bucket bucket;
   string owner;
+  uint32_t flags;
 
   void encode(bufferlist& bl) const {
-     __u32 ver = 2;
+     __u32 ver = 3;
      ::encode(ver, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
+     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
      ::decode(ver, bl);
      ::decode(bucket, bl);
-     if (ver > 1)
+     if (ver >= 2)
        ::decode(owner, bl);
+     if (ver >= 3)
+       ::decode(flags, bl);
   }
+
+  RGWBucketInfo() : flags(0) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -461,6 +482,7 @@ struct req_state {
    ceph::Formatter *formatter;
    const char *path_name;
    string path_name_url;
+   string request_uri;
    const char *host;
    const char *method;
    const char *query;
@@ -490,6 +512,7 @@ struct req_state {
    string bucket_owner;
 
    map<string, string> x_meta_map;
+   bool has_bad_meta;
 
    RGWUserInfo user; 
    RGWAccessControlPolicy *acl;
@@ -535,12 +558,11 @@ struct RGWObjEnt {
   }
 };
 
-/** Store basic data on an object */
+/** Store basic data on bucket */
 struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   time_t mtime;
-  string etag;
   uint64_t count;
 
   void encode(bufferlist& bl) const {
@@ -573,7 +595,6 @@ struct RGWBucketEnt {
     bucket.clear();
     size = 0;
     mtime = 0;
-    etag = "";
     count = 0;
   }
 };
@@ -774,9 +795,15 @@ public:
   }
 
   bool operator<(const rgw_obj& o) const {
-    return  (bucket.name.compare(o.bucket.name) < 0) ||
-            (object.compare(o.object) < 0) ||
-            (ns.compare(o.ns) < 0);
+    int r = bucket.name.compare(o.bucket.name);
+    if (r == 0) {
+     r = object.compare(o.object);
+     if (r == 0) {
+       r = ns.compare(o.ns);
+     }
+    }
+
+    return (r < 0);
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)
@@ -864,8 +891,10 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   return "unknown";
 }
 
-/** */
+/** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
+extern bool parse_rfc2616(const char *s, struct tm *t);
+
 /** Check if a user has a permission on that ACL */
 extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int user_perm_mask, int perm);
 /** Check if the req_state's user has the necessary permissions

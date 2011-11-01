@@ -176,12 +176,12 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) {
-    g_ceph_context->GetPerfCountersCollection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
     logger = 0;
   }
   if (mlogger) {
-    g_ceph_context->GetPerfCountersCollection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete mlogger;
     mlogger = 0;
   }
@@ -252,7 +252,7 @@ void MDS::create_logger()
     mds_plb.add_u64_counter(l_mds_im, "im");
     mds_plb.add_u64_counter(l_mds_iim, "iim");
     logger = mds_plb.create_perf_counters();
-    g_ceph_context->GetPerfCountersCollection()->add(logger);
+    g_ceph_context->get_perfcounters_collection()->add(logger);
   }
 
   {
@@ -274,7 +274,7 @@ void MDS::create_logger()
     mdm_plb.add_u64(l_mdm_malloc, "malloc");
     mdm_plb.add_u64(l_mdm_buf, "buf");
     mlogger = mdm_plb.create_perf_counters();
-    g_ceph_context->GetPerfCountersCollection()->add(mlogger);
+    g_ceph_context->get_perfcounters_collection()->add(mlogger);
   }
 
   mdlog->create_logger();

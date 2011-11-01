@@ -83,6 +83,9 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
 
 bool rgw_verify_os_token(req_state *s)
 {
+  if (!s->os_auth_token)
+    return false;
+
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
     int ret = rgw_swift_verify_signed_token(s->os_auth_token, s->user);
     if (ret < 0)

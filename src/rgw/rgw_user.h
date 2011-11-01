@@ -144,6 +144,6 @@ extern int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool 
   */
 extern int rgw_remove_key_index(RGWAccessKey& access_key);
 extern int rgw_remove_uid_index(string& uid);
-extern int rgw_remove_email_index(string& uid, string& email);
-extern int rgw_remove_swift_name_index(string& uid, string& swift_name);
+extern int rgw_remove_email_index(string& email);
+extern int rgw_remove_swift_name_index(string& swift_name);
 #endif

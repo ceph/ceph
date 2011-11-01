@@ -42,6 +42,8 @@ class MPoolOpReply;
 class MGetPoolStatsReply;
 class MStatfsReply;
 
+class PerfCounters;
+
 // -----------------------------------------
 
 struct ObjectOperation {
@@ -330,6 +332,8 @@ class Objecter {
 
   Mutex &client_lock;
   SafeTimer &timer;
+
+  PerfCounters *logger;
   
   class C_Tick : public Context {
     Objecter *ob;
@@ -672,10 +676,13 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
+    logger(NULL),
     num_homeless_ops(0),
     op_throttler(cct->_conf->objecter_inflight_op_bytes)
   { }
-  ~Objecter() { }
+  ~Objecter() {
+    assert(!logger);
+  }
 
   void init();
   void shutdown();

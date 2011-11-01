@@ -77,6 +77,10 @@ void _usage()
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
   cerr << "                             user data\n";
+  cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
+  cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
+  cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
+  cerr << "                             in one of the numeric field\n";
   generic_client_usage();
 }
 
@@ -351,7 +355,7 @@ static int create_bucket(string bucket_str, string& user_id, string& display_nam
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
-  ret = rgwstore->get_bucket_info(bucket_str, bucket_info);
+  ret = rgwstore->get_bucket_info(NULL, bucket_str, bucket_info);
   if (ret < 0)
     return ret;
 
@@ -393,7 +397,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 
   if (!old_info.user_email.empty() &&
       old_info.user_email.compare(new_info.user_email) != 0) {
-    ret = rgw_remove_email_index(new_info.user_id, old_info.user_email);
+    ret = rgw_remove_email_index(old_info.user_email);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: could not remove index for email " << old_info.user_email << " return code: " << ret << std::endl;
       success = false;
@@ -405,7 +409,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
     RGWAccessKey& swift_key = old_iter->second;
     map<string, RGWAccessKey>::iterator new_iter = new_info.swift_keys.find(swift_key.id);
     if (new_iter == new_info.swift_keys.end()) {
-      ret = rgw_remove_swift_name_index(new_info.user_id, swift_key.id);
+      ret = rgw_remove_swift_name_index(swift_key.id);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not remove index for swift_name " << swift_key.id << " return code: " << ret << std::endl;
         success = false;
@@ -423,7 +427,7 @@ static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo new_info)
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  int r = rgwstore->get_bucket_info(bucket.name, bucket_info);
+  int r = rgwstore->get_bucket_info(NULL, bucket.name, bucket_info);
   if (r < 0)
     return r;
 
@@ -482,16 +486,21 @@ int main(int argc, char **argv)
   RGWAccess *store;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
-  bool gen_secret = false;
-  bool gen_key = false;
+  int gen_secret = false;
+  int gen_key = false;
+  bool implicit_gen_secret = true;
+  bool implicit_gen_key = true;
   char secret_key_buf[SECRET_KEY_LEN + 1];
   char public_id_buf[PUBLIC_ID_LEN + 1];
   bool user_modify_op;
   int64_t bucket_id = -1;
   Formatter *formatter = NULL;
-  bool purge_data = false;
+  int purge_data = false;
   RGWBucketInfo bucket_info;
-  bool pretty_format = false;
+  int pretty_format = false;
+  int show_log_entries = true;
+  int show_log_sum = true;
+  int skip_zero_entries = false;  // log show
 
   std::string val;
   std::ostringstream errs;
@@ -530,10 +539,16 @@ int main(int argc, char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         return usage();
       }
-    } else if (ceph_argparse_flag(args, i, "--gen-access-key", (char*)NULL)) {
-      gen_key = true;
-    } else if (ceph_argparse_flag(args, i, "--gen-secret", (char*)NULL)) {
-      gen_secret = true;
+    } else if (ceph_argparse_binary_flag(args, i, &gen_key, NULL, "--gen-access-key", (char*)NULL)) {
+      implicit_gen_key = false;
+    } else if (ceph_argparse_binary_flag(args, i, &gen_secret, NULL, "--gen-secret", (char*)NULL)) {
+      implicit_gen_secret = false;
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
 	cerr << errs.str() << std::endl;
@@ -559,10 +574,10 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
-      pretty_format = true;
-    } else if (ceph_argparse_flag(args, i, "--purge-data", (char*)NULL)) {
-      purge_data = true;
+    } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
+      // do nothing
     } else {
       ++i;
     }
@@ -713,7 +728,7 @@ int main(int argc, char **argv)
       return 0;
     }
 
-    if (secret_key.empty() || gen_secret) {
+    if ((secret_key.empty() && implicit_gen_secret) || gen_secret) {
       ret = gen_rand_base64(secret_key_buf, sizeof(secret_key_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
@@ -721,7 +736,7 @@ int main(int argc, char **argv)
       }
       secret_key = secret_key_buf;
     }
-    if (access_key.empty() || gen_key) {
+    if ((access_key.empty() && implicit_gen_key) || gen_key) {
       RGWUserInfo duplicate_check;
       string duplicate_check_id;
       do {
@@ -746,7 +761,7 @@ int main(int argc, char **argv)
       snprintf(bucket_char, sizeof(bucket_char), ".%lld",
                (long long unsigned)bucket_id);
       string bucket_string(bucket_char);
-      int ret = rgwstore->get_bucket_info(bucket_string, bucket_info);
+      int ret = rgwstore->get_bucket_info(NULL, bucket_string, bucket_info);
 
       if (ret < 0) {
         cerr << "could not retrieve bucket info for bucket_id=" << bucket_id << std::endl;
@@ -760,7 +775,7 @@ int main(int argc, char **argv)
     } else {
       string bucket_name_str = bucket_name;
       RGWBucketInfo bucket_info;
-      int r = rgwstore->get_bucket_info(bucket_name_str, bucket_info);
+      int r = rgwstore->get_bucket_info(NULL, bucket_name_str, bucket_info);
       if (r < 0) {
         cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
         return r;
@@ -794,7 +809,7 @@ int main(int argc, char **argv)
         info.swift_keys[access_key] = k;
       else
         info.access_keys[access_key] = k;
-   } else if ((!access_key.empty()) || (!secret_key.empty())) {
+   } else if (opt_cmd == OPT_KEY_CREATE && (access_key.empty() || secret_key.empty())) {
       if (key_type == KEY_TYPE_SWIFT)
         cerr << "swift key modification requires both subuser and secret key" << std::endl;
       else
@@ -886,7 +901,6 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
-    string id;
     RGWAccessHandle handle;
 
     formatter->reset();
@@ -905,11 +919,11 @@ int main(int argc, char **argv)
         }
       }
     } else {
-      if (store->list_buckets_init(id, &handle) < 0) {
+      if (store->list_buckets_init(&handle) < 0) {
         cerr << "list buckets: no buckets found" << std::endl;
       } else {
         RGWObjEnt obj;
-        while (store->list_buckets_next(id, obj, &handle) >= 0) {
+        while (store->list_buckets_next(obj, &handle) >= 0) {
           formatter->dump_string("bucket", obj.name);
         }
       }
@@ -1056,31 +1070,49 @@ int main(int argc, char **argv)
       formatter->dump_string("bucket_owner", entry.bucket_owner);
       formatter->dump_string("bucket", entry.bucket);
 
-      formatter->open_array_section("log_entries");
+      uint64_t agg_time = 0;
+      uint64_t agg_bytes_sent = 0;
+      uint64_t agg_bytes_received = 0;
+      uint64_t total_entries = 0;
+
+      if (show_log_entries)
+        formatter->open_array_section("log_entries");
+
       do {
 	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
-	
-	formatter->open_object_section("log_entry");
-	formatter->dump_string("bucket", entry.bucket.c_str());
-	entry.time.gmtime(formatter->dump_stream("time"));      // UTC
-	entry.time.localtime(formatter->dump_stream("time_local"));
-	formatter->dump_string("remote_addr", entry.remote_addr.c_str());
-	if (entry.object_owner.length())
-	  formatter->dump_string("object_owner", entry.object_owner.c_str());
-	formatter->dump_string("user", entry.user.c_str());
-	formatter->dump_string("operation", entry.op.c_str());
-	formatter->dump_string("uri", entry.uri.c_str());
-	formatter->dump_string("http_status", entry.http_status.c_str());
-	formatter->dump_string("error_code", entry.error_code.c_str());
-	formatter->dump_int("bytes_sent", entry.bytes_sent);
-	formatter->dump_int("bytes_received", entry.bytes_received);
-	formatter->dump_int("object_size", entry.obj_size);
-	formatter->dump_int("total_time", total_time);
-	formatter->dump_string("user_agent",  entry.user_agent.c_str());
-	formatter->dump_string("referrer",  entry.referrer.c_str());
-	formatter->close_section();
-	formatter->flush(cout);
 
+        agg_time += total_time;
+        agg_bytes_sent += entry.bytes_sent;
+        agg_bytes_received += entry.bytes_received;
+        total_entries++;
+
+        if (skip_zero_entries && entry.bytes_sent == 0 &&
+            entry.bytes_received == 0)
+          goto next;
+
+        if (show_log_entries) {
+	  formatter->open_object_section("log_entry");
+	  formatter->dump_string("bucket", entry.bucket.c_str());
+	  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
+	  entry.time.localtime(formatter->dump_stream("time_local"));
+	  formatter->dump_string("remote_addr", entry.remote_addr.c_str());
+	  if (entry.object_owner.length())
+	    formatter->dump_string("object_owner", entry.object_owner.c_str());
+	  formatter->dump_string("user", entry.user.c_str());
+	  formatter->dump_string("operation", entry.op.c_str());
+	  formatter->dump_string("uri", entry.uri.c_str());
+	  formatter->dump_string("http_status", entry.http_status.c_str());
+	  formatter->dump_string("error_code", entry.error_code.c_str());
+	  formatter->dump_int("bytes_sent", entry.bytes_sent);
+	  formatter->dump_int("bytes_received", entry.bytes_received);
+	  formatter->dump_int("object_size", entry.obj_size);
+	  formatter->dump_int("total_time", total_time);
+	  formatter->dump_string("user_agent",  entry.user_agent.c_str());
+	  formatter->dump_string("referrer",  entry.referrer.c_str());
+	  formatter->close_section();
+	  formatter->flush(cout);
+        }
+next:
 	r = store->log_show_next(h, &entry);
       } while (r > 0);
 
@@ -1088,8 +1120,17 @@ int main(int argc, char **argv)
       	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
       }
+      if (show_log_entries)
+        formatter->close_section();
 
-      formatter->close_section();
+      if (show_log_sum) {
+        formatter->open_object_section("log_sum");
+	formatter->dump_int("bytes_sent", agg_bytes_sent);
+	formatter->dump_int("bytes_received", agg_bytes_received);
+	formatter->dump_int("total_time", agg_time);
+	formatter->dump_int("total_entries", total_entries);
+        formatter->close_section();
+      }
       formatter->close_section();
       formatter->flush(cout);
     }
@@ -1218,10 +1259,7 @@ int main(int argc, char **argv)
       RGWBucketEnt obj = iter->second;
       bucket_names.push_back(obj.bucket);
     }
-    if (disable)
-      ret = rgwstore->disable_buckets(bucket_names);
-    else
-      ret = rgwstore->enable_buckets(bucket_names, info.auid);
+    ret = rgwstore->set_buckets_enabled(bucket_names, !disable);
     if (ret < 0) {
       cerr << "ERROR: failed to change pool" << std::endl;
       return 1;

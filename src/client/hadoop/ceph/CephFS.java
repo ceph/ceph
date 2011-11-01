@@ -199,23 +199,13 @@ abstract class CephFS {
   abstract protected boolean ceph_stat(String path, CephFileSystem.Stat fill);
 
   /*
-   * Statfs a filesystem in a custom format defined in CephFileSystem.
-   * Inputs:
-   *  String path: A path on the filesystem that you wish to stat.
-   *  CephStat fill: The CephStat object to fill.
-   * Returns: 0 if successful and the CephStat is filled; a negative
-   *  error code otherwise.
-   */
-  abstract protected int ceph_statfs(String path, CephFileSystem.CephStat fill);
-
-  /*
    * Check how many times a file should be replicated. If it is,
    * degraded it may not actually be replicated this often.
    * Inputs:
    *  int fh: a file descriptor
    * Returns: an int containing the number of times replicated.
    */
-  abstract protected int ceph_replication(int fh);
+  abstract protected int ceph_replication(String path);
 
   /*
    * Find the IP address of the primary OSD for a given file and offset.

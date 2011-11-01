@@ -28,9 +28,11 @@ struct rgw_html_errors {
 
 const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { 0, 200, "" },
-    { 201, 201, "Created" },
-    { 204, 204, "NoContent" },
-    { 206, 206, "" },
+    { STATUS_CREATED, 201, "Created" },
+    { STATUS_ACCEPTED, 202, "Accepted" },
+    { STATUS_NO_CONTENT, 204, "NoContent" },
+    { STATUS_PARTIAL_CONTENT, 206, "" },
+    { ERR_NOT_MODIFIED, 304, "NotModified" },
     { EINVAL, 400, "InvalidArgument" },
     { ERR_INVALID_DIGEST, 400, "InvalidDigest" },
     { ERR_BAD_DIGEST, 400, "BadDigest" },
@@ -52,22 +54,51 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
     { ENOTEMPTY, 409, "BucketNotEmpty" },
+    { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
+    { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
+const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
+    { EACCES, 401, "AccessDenied" },
+    { EPERM, 401, "AccessDenied" },
+    { ERR_USER_SUSPENDED, 401, "UserSuspended" },
+    { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
+    { ERR_BAD_URL, 412, "Bad URL" },
+};
+
+#define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
+static const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
+{
+  for (int i = 0; i < len; ++i, ++errs) {
+    if (err_no == errs->err_no)
+      return errs;
+  }
+  return NULL;
+}
+
 void set_req_state_err(struct req_state *s, int err_no)
 {
+  const struct rgw_html_errors *r;
+
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = err_no;
-  for (size_t i = 0; i < sizeof(RGW_HTML_ERRORS)/sizeof(RGW_HTML_ERRORS[0]); ++i) {
-    const struct rgw_html_errors *r = RGW_HTML_ERRORS + i;
-    if (err_no == r->err_no) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    r = search_err(err_no, RGW_HTML_SWIFT_ERRORS, ARRAY_LEN(RGW_HTML_SWIFT_ERRORS));
+    if (r) {
       s->err.http_ret = r->http_ret;
       s->err.s3_code = r->s3_code;
       return;
     }
+  }
+  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  if (r) {
+    s->err.http_ret = r->http_ret;
+    s->err.s3_code = r->s3_code;
+    return;
   }
   dout(0) << "set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
@@ -154,24 +185,29 @@ void dump_start(struct req_state *s)
 
 void end_header(struct req_state *s, const char *content_type)
 {
+  string ctype;
+
   if (!content_type || s->err.is_err()) {
     switch (s->format) {
     case RGW_FORMAT_XML:
-      content_type = "application/xml";
+      ctype = "application/xml";
       break;
     case RGW_FORMAT_JSON:
-      content_type = "application/json";
+      ctype = "application/json";
       break;
     default:
-      content_type = "text/plain";
+      ctype = "text/plain";
       break;
     }
+    if (s->prot_flags & RGW_REST_SWIFT)
+      ctype.append("; charset=utf-8");
+    content_type = ctype.c_str();
   }
   if (s->err.is_err()) {
     dump_start(s);
     s->formatter->open_object_section("Error");
     if (!s->err.s3_code.empty())
-      s->formatter->dump_format("Code", "%s", s->err.s3_code.c_str());
+      s->formatter->dump_string("Code", s->err.s3_code.c_str());
     if (!s->err.message.empty())
       s->formatter->dump_format("Message", s->err.message.c_str());
     s->formatter->close_section();
@@ -365,7 +401,7 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-void init_entities_from_header(struct req_state *s)
+static int init_entities_from_header(struct req_state *s)
 {
   string req;
   string first;
@@ -399,7 +435,8 @@ void init_entities_from_header(struct req_state *s)
     } else {
       s->host_bucket = NULL;
     }
-  } else s->host_bucket = NULL;
+  } else
+    s->host_bucket = NULL;
 
   const char *req_name = s->path_name;
   const char *p;
@@ -434,10 +471,25 @@ void init_entities_from_header(struct req_state *s)
       }
     }
   } else {
+    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
+      s->prot_flags |= RGW_REST_SWIFT;
+      delete s->formatter;
+      s->format = 0;
+      s->formatter = new RGWFormatter_Plain;
+      return -ERR_BAD_URL;
+    }
     first = req;
   }
 
   if (s->prot_flags & RGW_REST_SWIFT) {
+    /* verify that the request_uri conforms with what's expected */
+    char buf[g_conf->rgw_swift_url_prefix.length() + 16];
+    int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+    if (s->path_name_url[0] != '/' ||
+        s->path_name_url.compare(0, blen, buf) !=  0) {
+      return -ENOENT;
+    }
+
     s->format = 0;
     delete s->formatter;
     s->formatter = new RGWFormatter_Plain;
@@ -465,11 +517,11 @@ void init_entities_from_header(struct req_state *s)
     if (first.size() == 0)
       goto done;
 
-    url_decode(first, s->bucket_name_str);
+    s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
    
     if (req.size()) {
-      url_decode(req, s->object_str);
+      s->object_str = req;
       s->object = strdup(s->object_str.c_str());
     }
 
@@ -477,10 +529,10 @@ void init_entities_from_header(struct req_state *s)
   }
 
   if (!s->bucket_name) {
-    url_decode(first, s->bucket_name_str);
+    s->bucket_name_str = first;
     s->bucket_name = strdup(s->bucket_name_str.c_str());
   } else {
-    url_decode(req, s->object_str);
+    s->object_str = first;
     s->object = strdup(s->object_str.c_str());
     goto done;
   }
@@ -490,7 +542,7 @@ void init_entities_from_header(struct req_state *s)
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
-    url_decode(encoded_obj_str, s->object_str);
+    s->object_str = encoded_obj_str;
 
     if (s->object_str.size() > 0) {
       s->object = strdup(s->object_str.c_str());
@@ -498,6 +550,7 @@ void init_entities_from_header(struct req_state *s)
   }
 done:
   s->formatter->reset();
+  return 0;
 }
 
 static void line_unfold(const char *line, string& sdest)
@@ -542,9 +595,10 @@ struct str_len {
 struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_GOOG"),
                                    STR_LEN_ENTRY("HTTP_X_DHO"),
+                                   STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    {NULL, 0} };
 
-static void init_auth_info(struct req_state *s)
+static int init_auth_info(struct req_state *s)
 {
   const char *p;
 
@@ -556,16 +610,22 @@ static void init_auth_info(struct req_state *s)
       int len = meta_prefixes[prefix_num].len;
       if (strncmp(p, prefix, len) == 0) {
         dout(10) << "meta>> " << p << dendl;
-        const char *name = p+5; /* skip the HTTP_ part */
+        const char *name = p+len; /* skip the prefix */
         const char *eq = strchr(name, '=');
         if (!eq) /* shouldn't happen! */
           continue;
-        int len = eq - name;
-        char name_low[len + 1];
+        int name_len = eq - name;
+
+        if (strncmp(name, "_META_", name_len) == 0)
+          s->has_bad_meta = true;
+
+        char name_low[meta_prefixes[0].len + name_len + 1];
+        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
-        for (j=0; j<len; j++) {
-          name_low[j] = tolower(name[j]);
-          if (name_low[j] == '_')
+        for (j = 0; name_low[j]; j++) {
+          if (name_low[j] != '_')
+            name_low[j] = tolower(name_low[j]);
+          else
             name_low[j] = '-';
         }
         name_low[j] = 0;
@@ -592,6 +652,7 @@ static void init_auth_info(struct req_state *s)
     dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 
+  return 0;
 }
 
 static bool looks_like_ip_address(const char *bucket)
@@ -619,7 +680,7 @@ static bool looks_like_ip_address(const char *bucket)
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-static int validate_bucket_name(const char *bucket)
+static int validate_bucket_name(const char *bucket, int flags)
 {
   int len = strlen(bucket);
   if (len < 3) {
@@ -628,16 +689,31 @@ static int validate_bucket_name(const char *bucket)
       return 0;
     }
     // Name too short
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
   else if (len > 255) {
     // Name too long
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  if (flags & RGW_REST_SWIFT) {
+    if (*bucket == '.')
+      return -ERR_INVALID_BUCKET_NAME;
+
+    if (check_utf8(bucket, len))
+      return -ERR_INVALID_UTF8;
+
+    for (int i = 0; i < len; ++i) {
+      if ((unsigned char)bucket[i] == 0xff)
+        return -ERR_INVALID_BUCKET_NAME;
+    }
+
+    return 0;
   }
 
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
 
   for (const char *s = bucket; *s; ++s) {
@@ -649,11 +725,11 @@ static int validate_bucket_name(const char *bucket)
     if ((c == '-') || (c == '_'))
       continue;
     // Invalid character
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   }
 
   if (looks_like_ip_address(bucket))
-    return ERR_INVALID_BUCKET_NAME;
+    return -ERR_INVALID_BUCKET_NAME;
   return 0;
 }
 
@@ -666,12 +742,12 @@ static int validate_object_name(const char *object)
   int len = strlen(object);
   if (len > 1024) {
     // Name too long
-    return ERR_INVALID_OBJECT_NAME;
+    return -ERR_INVALID_OBJECT_NAME;
   }
 
   if (check_utf8(object, len)) {
     // Object names must be valid UTF-8.
-    return ERR_INVALID_OBJECT_NAME;
+    return -ERR_INVALID_OBJECT_NAME;
   }
   return 0;
 }
@@ -682,11 +758,12 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 
   s->fcgx = fcgx;
   s->path_name = s->env->get("SCRIPT_NAME");
-  s->path_name_url = s->env->get("REQUEST_URI");
-  int pos = s->path_name_url.find('?');
+  s->request_uri = s->env->get("REQUEST_URI");
+  int pos = s->request_uri.find('?');
   if (pos >= 0) {
-    s->path_name_url = s->path_name_url.substr(0, pos);
+    s->request_uri = s->request_uri.substr(0, pos);
   }
+  url_decode(s->request_uri, s->path_name_url);
   s->method = s->env->get("REQUEST_METHOD");
   s->host = s->env->get("HTTP_HOST");
   s->query = s->env->get("QUERY_STRING");
@@ -709,7 +786,10 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   else
     s->op = OP_UNKNOWN;
 
-  init_entities_from_header(s);
+  ret = init_entities_from_header(s);
+  if (ret)
+    return ret;
+
   switch (s->op) {
   case OP_PUT:
     if (s->object && !s->args.sub_resource_exists("acl")) {
@@ -730,7 +810,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   if (ret)
     return ret;
 
-  ret = validate_bucket_name(s->bucket_name_str.c_str());
+  ret = validate_bucket_name(s->bucket_name_str.c_str(), s->prot_flags);
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str.c_str());

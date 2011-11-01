@@ -638,8 +638,13 @@ public:
   void build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
 		    int num_osd, int num_dom,
 		    int pg_bits, int pgp_bits, int lpg_bits);
+  void build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+			      int pg_bits, int pgp_bits, int lpg_bits);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 		map<int, const char*>& poolsets, int num_osd, int num_dom=0);
+  static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
+					       map<int, const char*>& rulesets);
+
 
 private:
   void print_osd_line(int cur, ostream& out) const;

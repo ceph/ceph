@@ -169,6 +169,11 @@ test_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 test_addrs_LDADD = libglobal.la -lpthread -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_addrs
 
+test_str_list_SOURCES = test/test_str_list.cc
+test_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+test_str_list_LDADD = libglobal.la -lpthread -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_str_list
+
 test_mutate_SOURCES = test/test_mutate.cc
 test_mutate_LDADD = libglobal.la librados.la -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += test_mutate

@@ -181,7 +181,6 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     abort_early(s, init_error);
     goto done;
   }
-
   ret = handler->authorize();
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;

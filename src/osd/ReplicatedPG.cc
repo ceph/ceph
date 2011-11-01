@@ -1018,9 +1018,15 @@ bool ReplicatedPG::snap_trimmer()
     if (snap_trimmer_machine.need_share_pg_info) {
       dout(10) << "snap_trimmer share_pg_info" << dendl;
       snap_trimmer_machine.need_share_pg_info = false;
+      epoch_t cur_epoch = osd->osdmap->get_epoch();
       unlock();
       osd->map_lock.get_read();
       lock();
+      if (last_peering_reset > cur_epoch) {
+	osd->map_lock.put_read();
+	unlock();
+	return true;
+      }
       share_pg_info();
       osd->map_lock.put_read();
     }
@@ -2269,10 +2275,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     _make_clone(t, soid, coid, snap_oi);
     
     // add to snap bound collections
-    coll_t fc = make_snap_collection(t, snaps[0]);
+    coll_t fc = make_snap_collection(ctx->local_t, snaps[0]);
     t.collection_add(fc, coll, coid);
     if (snaps.size() > 1) {
-      coll_t lc = make_snap_collection(t, snaps[snaps.size()-1]);
+      coll_t lc = make_snap_collection(ctx->local_t, snaps[snaps.size()-1]);
       t.collection_add(lc, coll, coid);
     }
     
@@ -3383,11 +3389,11 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ::decode(log, p);
       
       info.stats = op->pg_stats;
-      update_snap_collections(log);
+      update_snap_collections(log, rm->localt);
       append_log(log, op->pg_trim_to, rm->localt);
 
-      rm->tls.push_back(&rm->opt);
       rm->tls.push_back(&rm->localt);
+      rm->tls.push_back(&rm->opt);
 
     } else {
       // do op
@@ -4287,7 +4293,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
 
-  if (first)
+  if (first && complete && soid.snap != CEPH_NOSNAP)
+    remove_object_with_snap_hardlinks(*t, soid);
+  else if (first)
     t->remove(target, soid);  // in case old version exists
 
   // write data
@@ -4303,8 +4311,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
   
   if (complete) {
+    // Clear out old snapdir contents
     if (!first) {
-      t->remove(coll, soid);
+      if (soid.snap != CEPH_NOSNAP) {
+	remove_object_with_snap_hardlinks(*t, soid);
+      } else {
+	t->remove(coll, soid);
+      }
       t->collection_add(coll, target, soid);
       t->collection_remove(target, soid);
     }
@@ -4674,11 +4687,6 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
 /*
  * pg status change notification
  */
-
-void ReplicatedPG::on_osd_failure(int o)
-{
-  //dout(10) << "on_osd_failure " << o << dendl;
-}
 
 void ReplicatedPG::apply_and_flush_repops(bool requeue)
 {
@@ -5131,9 +5139,9 @@ void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t
     if (r >= 0) {
       // grr, need first snap bound, too.
       object_info_t oi(ba);
-      if (oi.snaps[0] != soid.snap)
-	t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
-      t.remove(coll_t(info.pgid, soid.snap), soid);
+      if (oi.snaps.size() > 1)
+	t.remove(coll_t(info.pgid, oi.snaps[oi.snaps.size() - 1]), soid);
+      t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
     }
   }
 }

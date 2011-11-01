@@ -585,7 +585,7 @@ OSD::~OSD()
   delete authorize_handler_registry;
   delete map_in_progress_cond;
   delete class_handler;
-  g_ceph_context->GetPerfCountersCollection()->remove(logger);
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
   delete logger;
   delete store;
 }
@@ -803,7 +803,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
 
   logger = osd_plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 int OSD::shutdown()
@@ -5173,27 +5173,6 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  // full?
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
-      !op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-    reply_op_error(op, -ENOSPC);
-    return;
-  }
-
-  // invalid?
-  if (op->get_snapid() != CEPH_NOSNAP) {
-    reply_op_error(op, -EINVAL);
-    return;
-  }
-
-  // too big?
-  if (g_conf->osd_max_write_size &&
-      op->get_data_len() > g_conf->osd_max_write_size << 20) {
-    // journal can't hold commit!
-    reply_op_error(op, -OSD_WRITETOOBIG);
-    return;
-  }
-
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
 		      (Session *)op->get_connection()->get_priv());
@@ -5202,6 +5181,29 @@ void OSD::handle_op(MOSDOp *op)
   if (r) {
     reply_op_error(op, r);
     return;
+  }
+
+  if (op->may_write()) {
+    // full?
+    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+      reply_op_error(op, -ENOSPC);
+      return;
+    }
+
+    // invalid?
+    if (op->get_snapid() != CEPH_NOSNAP) {
+      reply_op_error(op, -EINVAL);
+      return;
+    }
+
+    // too big?
+    if (g_conf->osd_max_write_size &&
+	op->get_data_len() > g_conf->osd_max_write_size << 20) {
+      // journal can't hold commit!
+      reply_op_error(op, -OSD_WRITETOOBIG);
+      return;
+    }
   }
 
   // calc actual pgid

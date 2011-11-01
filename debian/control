@@ -87,7 +87,7 @@ Description: debugging symbols for ceph-fuse
 
 Package: ceph-common
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version}), librbd1 (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
 Suggests: ceph
 Description: common utilities to mount and interact with a ceph filesystem
  Ceph is a distributed network file system designed to provide
@@ -267,7 +267,7 @@ Description: RGW distributed object store client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version}), ceph-common
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the

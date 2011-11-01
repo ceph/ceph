@@ -189,7 +189,7 @@ uint32_t CephContext::get_module_type() const
   return _module_type;
 }
 
-PerfCountersCollection *CephContext::GetPerfCountersCollection()
+PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
 }

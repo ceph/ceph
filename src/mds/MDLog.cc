@@ -38,7 +38,7 @@ MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
   if (logger) {
-    g_ceph_context->GetPerfCountersCollection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
     logger = 0;
   }
@@ -70,7 +70,7 @@ void MDLog::create_logger()
 
   // logger
   logger = plb.create_perf_counters();
-  g_ceph_context->GetPerfCountersCollection()->add(logger);
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 void MDLog::init_journaler()

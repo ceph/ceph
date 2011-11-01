@@ -33,8 +33,8 @@ class CephTalker extends CephFS {
   // we write a constructor so we can load the libraries
   public CephTalker(Configuration conf, Log log) {
     super(conf, log);
-    System.load(conf.get("fs.ceph.libDir") + "/libhadoopcephfs.so");
     System.load(conf.get("fs.ceph.libDir") + "/libcephfs.so");
+    System.load(conf.get("fs.ceph.libDir") + "/libhadoopcephfs.so");
     cluster = 0;
   }
 
@@ -76,9 +76,7 @@ class CephTalker extends CephFS {
 
   protected native boolean ceph_stat(String path, CephFileSystem.Stat fill);
 
-  protected native int ceph_statfs(String Path, CephFileSystem.CephStat fill);
-
-  protected native int ceph_replication(int fh);
+  protected native int ceph_replication(String Path);
 
   protected native String ceph_hosts(int fh, long offset);
 

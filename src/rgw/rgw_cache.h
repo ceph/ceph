@@ -12,9 +12,10 @@ enum {
   REMOVE_OBJ,
 };
 
-#define CACHE_FLAG_DATA   0x1
-#define CACHE_FLAG_XATTRS 0x2
-#define CACHE_FLAG_META   0x4
+#define CACHE_FLAG_DATA           0x1
+#define CACHE_FLAG_XATTRS         0x2
+#define CACHE_FLAG_META           0x4
+#define CACHE_FLAG_APPEND_XATTRS  0x8
 
 struct ObjectMetaInfo {
   uint64_t size;
@@ -115,6 +116,17 @@ public:
   void remove(std::string& name);
 };
 
+static inline void normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
+{
+  if (src_obj.size()) {
+    dst_bucket = src_bucket;
+    dst_obj = src_obj;
+  } else {
+    dst_bucket = rgw_root_bucket;
+    dst_obj = src_bucket.name;
+  }
+}
+
 template <class T>
 class RGWCache  : public T
 {
@@ -158,23 +170,30 @@ class RGWCache  : public T
 public:
   RGWCache() {}
 
-  int put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
+  int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
+  int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
+                   map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                   map<std::string, bufferlist>* rmattrs);
+
+  int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len);
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs);
 
-  int delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync);
+  int delete_obj(void *ctx, rgw_obj& obj, bool sync);
 };
 
 
 template <class T>
-int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
+int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj, bool sync)
 {
-  string& bucket_name = obj.bucket.name;
-  if (bucket_name[0] != '.')
-    return T::delete_obj(ctx, id, obj, sync);
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  if (bucket.name[0] != '.')
+    return T::delete_obj(ctx, obj, sync);
 
   string name = normal_name(obj);
   cache.remove(name);
@@ -182,17 +201,18 @@ int RGWCache<T>::delete_obj(void *ctx, std::string& id, rgw_obj& obj, bool sync)
   ObjectCacheInfo info;
   distribute(obj, info, REMOVE_OBJ);
 
-  return T::delete_obj(ctx, id, obj, sync);
+  return T::delete_obj(ctx, obj, sync);
 }
 
 template <class T>
 int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, off_t ofs, off_t end)
 {
-  string& bucket_name = obj.bucket.name;
-  if (bucket_name[0] != '.' || ofs != 0)
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  if (bucket.name[0] != '.' || ofs != 0)
     return T::get_obj(ctx, handle, obj, data, ofs, end);
 
-  string& oid = obj.object;
   string name = normal_name(obj.bucket, oid);
 
   ObjectCacheInfo info;
@@ -227,26 +247,22 @@ int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, char **data, of
 }
 
 template <class T>
-int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const char *data,
-              off_t ofs, size_t len)
+int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, bufferlist& bl)
 {
-  string& bucket_name = obj.bucket.name;
-  string& oid = obj.object;
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
-  if ((bucket_name[0] == '.') && ((ofs == 0) || (ofs == -1))) {
+  if (bucket.name[0] == '.') {
     cacheable = true;
-    bufferptr p(len);
-    memcpy(p.c_str(), data, len);
-    bufferlist& bl = info.data;
-    bl.append(p);
-    info.meta.size = bl.length();
+    info.xattrs[attr_name] = bl;
     info.status = 0;
-    info.flags = CACHE_FLAG_DATA;
+    info.flags = CACHE_FLAG_APPEND_XATTRS;
   }
-  int ret = T::put_obj_data(ctx, id, obj, data, ofs, len);
+  int ret = T::set_attr(ctx, obj, attr_name, bl);
   if (cacheable) {
-    string name = normal_name(obj.bucket, oid);
+    string name = normal_name(bucket, oid);
     if (ret >= 0) {
       cache.put(name, info);
       int r = distribute(obj, info, UPDATE_OBJ);
@@ -261,20 +277,88 @@ int RGWCache<T>::put_obj_data(void *ctx, std::string& id, rgw_obj& obj, const ch
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
+                              map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                              map<std::string, bufferlist>* rmattrs)
 {
-  if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, bucket, obj, psize, pmtime);
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  ObjectCacheInfo info;
+  bool cacheable = false;
+  if (bucket.name[0] == '.') {
+    cacheable = true;
+    info.xattrs = attrs;
+    info.status = 0;
+    info.flags = CACHE_FLAG_XATTRS;
+  }
+  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, exclusive, rmattrs);
+  if (cacheable) {
+    string name = normal_name(bucket, oid);
+    if (ret >= 0) {
+      cache.put(name, info);
+      int r = distribute(obj, info, UPDATE_OBJ);
+      if (r < 0)
+        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+    } else {
+     cache.remove(name);
+    }
+  }
 
-  string name = normal_name(bucket, obj);
+  return ret;
+}
+
+template <class T>
+int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
+              off_t ofs, size_t len)
+{
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  ObjectCacheInfo info;
+  bool cacheable = false;
+  if ((bucket.name[0] == '.') && ((ofs == 0) || (ofs == -1))) {
+    cacheable = true;
+    bufferptr p(len);
+    memcpy(p.c_str(), data, len);
+    bufferlist& bl = info.data;
+    bl.append(p);
+    info.meta.size = bl.length();
+    info.status = 0;
+    info.flags = CACHE_FLAG_DATA;
+  }
+  int ret = T::put_obj_data(ctx, obj, data, ofs, len);
+  if (cacheable) {
+    string name = normal_name(bucket, oid);
+    if (ret >= 0) {
+      cache.put(name, info);
+      int r = distribute(obj, info, UPDATE_OBJ);
+      if (r < 0)
+        dout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+    } else {
+     cache.remove(name);
+    }
+  }
+
+  return ret;
+}
+
+template <class T>
+int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs)
+{
+  rgw_bucket bucket;
+  string oid;
+  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  if (bucket.name[0] != '.')
+    return T::obj_stat(ctx, obj, psize, pmtime, attrs);
+
+  string name = normal_name(bucket, oid);
 
   uint64_t size;
   time_t mtime;
-  int64_t t;
 
   ObjectCacheInfo info;
-  bufferlist& bl = info.data;
-  int r = cache.get(name, info, CACHE_FLAG_META);
+  int r = cache.get(name, info, CACHE_FLAG_META | CACHE_FLAG_XATTRS);
   if (r == 0) {
     if (info.status < 0)
       return info.status;
@@ -283,7 +367,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint6
     mtime = info.meta.mtime;
     goto done;
   }
-  r = T::obj_stat(ctx, bucket, obj, &size, &mtime);
+  r = T::obj_stat(ctx, obj, &size, &mtime, &info.xattrs);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
@@ -294,13 +378,15 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_bucket& bucket, std::string& obj, uint6
   info.status = 0;
   info.meta.mtime = mtime;
   info.meta.size = size;
-  info.flags = CACHE_FLAG_META;
+  info.flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
   cache.put(name, info);
 done:
   if (psize)
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
+  if (attrs)
+    *attrs = info.xattrs;
   return 0;
 }
 

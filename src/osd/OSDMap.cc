@@ -919,6 +919,155 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
   }
 }
 
+void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+				    int pg_bits, int pgp_bits, int lpg_bits)
+{
+  ldout(cct, 10) << "build_simple_from_conf with "
+		 << pg_bits << " pg bits per osd, "
+		 << lpg_bits << " lpg bits" << dendl;
+  epoch = e;
+  set_fsid(fsid);
+  created = modified = ceph_clock_now(cct);
+
+  const md_config_t *conf = cct->_conf;
+
+  // count osds
+  int nosd = 1;
+
+  vector<string> sections;
+  conf->get_all_sections(sections);
+  for (vector<string>::iterator i = sections.begin(); i != sections.end(); ++i) {
+    if (i->find("osd.") != 0)
+      continue;
+
+    const char *begin = i->c_str() + 4;
+    char *end = (char*)begin;
+    int o = strtol(begin, &end, 10);
+    if (*end != '\0')
+      continue;
+
+    if (o > nosd)
+      nosd = o;
+  }
+
+  set_max_osd(nosd);
+
+  // pgp_num <= pg_num
+  if (pgp_bits > pg_bits)
+    pgp_bits = pg_bits;
+
+  // crush map
+  map<int, const char*> rulesets;
+  rulesets[CEPH_DATA_RULE] = "data";
+  rulesets[CEPH_METADATA_RULE] = "metadata";
+  rulesets[CEPH_RBD_RULE] = "rbd";
+
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+    int64_t pool = ++pool_max;
+    pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].size = cct->_conf->osd_pool_default_size;
+    pools[pool].crush_ruleset = p->first;
+    pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
+    pools[pool].pg_num = nosd << pg_bits;
+    pools[pool].pgp_num = nosd << pgp_bits;
+    pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].last_change = epoch;
+    if (p->first == CEPH_DATA_RULE)
+      pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
+    pool_name[pool] = p->second;
+  }
+
+  build_simple_crush_map_from_conf(cct, crush, rulesets);
+
+  for (int i=0; i<nosd; i++) {
+    set_state(i, 0);
+    set_weight(i, CEPH_OSD_OUT);
+  }
+}
+
+void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
+					      map<int, const char*>& rulesets)
+{
+  crush.create();
+
+  crush.set_type_name(0, "osd");
+  crush.set_type_name(1, "host");
+  crush.set_type_name(2, "rack");
+  crush.set_type_name(3, "pool");
+
+  const md_config_t *conf = cct->_conf;
+  int minrep = conf->osd_min_rep;
+  int maxrep = conf->osd_max_rep;
+
+  set<string> hosts, racks;
+
+  // root
+  int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 3 /* pool */, 0, NULL, NULL);
+  crush.set_item_name(rootid, "root");
+
+  // add osds
+  vector<string> sections;
+  conf->get_all_sections(sections);
+  for (vector<string>::iterator i = sections.begin(); i != sections.end(); ++i) {
+    if (i->find("osd.") != 0)
+      continue;
+
+    const char *begin = i->c_str() + 4;
+    char *end = (char*)begin;
+    int o = strtol(begin, &end, 10);
+    if (*end != '\0')
+      continue;
+
+    string host;
+    string rack;
+    vector<string> sections;
+    sections.push_back("osd");
+    sections.push_back(*i);
+    conf->get_val_from_conf_file(sections, "host", host, false);
+    conf->get_val_from_conf_file(sections, "rack", rack, false);
+
+    if (host.length() == 0)
+      host = "unknownhost";
+    if (rack.length() == 0)
+      rack = "unknownrack";
+
+    hosts.insert(host);
+    racks.insert(rack);
+
+    map<string,string> loc;
+    loc["host"] = host;
+    loc["rack"] = rack;
+    loc["pool"] = "root";
+
+    ldout(cct, 0) << " adding osd." << o << " at " << loc << dendl;
+    crush.insert_item(o, 1.0, *i, loc);
+  }
+
+  // rules
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+    int ruleset = p->first;
+    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+
+    if (racks.size() > 3) {
+      // spread replicas across hosts
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
+    } else if (hosts.size() > 1) {
+      // spread replicas across hosts
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+    } else {
+      // just spread across osds
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
+    }
+    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+    int rno = crush_add_rule(crush.crush, rule, -1);
+    crush.set_rule_name(rno, p->second);
+  }
+
+}
+
+
 void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 	map<int, const char*>& rulesets, int nosd, int ndom)
 {

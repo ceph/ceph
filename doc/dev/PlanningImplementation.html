@@ -1,6 +1,6 @@
- About this Document
+ <big>About this Document</big>
 This document contains planning and implementation procedures for Ceph.  The audience for this document includes technical support personnel, installation engineers, system administrators, and quality assurance.  
-Prerequisites
+<B>Prerequisites<b>
 Users of this document must be familiar with Linux command line options.  They must also be familiar with the overall Ceph product. 
 Before You Begin
 Before implementing a new Ceph System, first answer the questions in the Ceph Getting Started Guide to determine your configuration needs.  Once you have determined your hardware and configuration needs, the following decisions must be made:
@@ -41,8 +41,3 @@ Hardware Requirements:
 •	At least two servers for redundancy and load balancing
 TIPS: If you have just a few nodes, put cmon, cmds, and cosd on the same node.  For moderate node configurations, put cmon and cmds together, and cosd on the disk nodes.  For large node configurations, put cmon, cmds, and cosd each on their own dedicated machine. 
 
-
-.. toctree::
-   :glob:
-
-   *

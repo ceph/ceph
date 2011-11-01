@@ -116,7 +116,7 @@ int rgw_get_user_info_from_index(string& key, rgw_bucket& bucket, RGWUserInfo& i
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_obj(bucket, key, bl);
+  int ret = rgw_get_obj(NULL, bucket, key, bl);
   if (ret < 0)
     return ret;
 
@@ -381,7 +381,7 @@ int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_d
   if (ret == 0 && purge_data) {
     vector<rgw_bucket> buckets_vec;
     buckets_vec.push_back(bucket);
-    ret = rgwstore->purge_buckets(user_id, buckets_vec);
+    ret = rgwstore->purge_buckets(buckets_vec);
   }
 
 
@@ -391,28 +391,28 @@ int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_d
 int rgw_remove_key_index(RGWAccessKey& access_key)
 {
   rgw_obj obj(ui_key_bucket, access_key.id);
-  int ret = rgwstore->delete_obj(NULL, access_key.id, obj);
+  int ret = rgwstore->delete_obj(NULL, obj);
   return ret;
 }
 
 int rgw_remove_uid_index(string& uid)
 {
   rgw_obj obj(ui_uid_bucket, uid);
-  int ret = rgwstore->delete_obj(NULL, uid, obj);
+  int ret = rgwstore->delete_obj(NULL, obj);
   return ret;
 }
 
-int rgw_remove_email_index(string& uid, string& email)
+int rgw_remove_email_index(string& email)
 {
   rgw_obj obj(ui_email_bucket, email);
-  int ret = rgwstore->delete_obj(NULL, uid, obj);
+  int ret = rgwstore->delete_obj(NULL, obj);
   return ret;
 }
 
-int rgw_remove_swift_name_index(string& uid, string& swift_name)
+int rgw_remove_swift_name_index(string& swift_name)
 {
   rgw_obj obj(ui_swift_bucket, swift_name);
-  int ret = rgwstore->delete_obj(NULL, uid, obj);
+  int ret = rgwstore->delete_obj(NULL, obj);
   return ret;
 }
 
@@ -448,7 +448,7 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
 
   rgw_obj email_obj(ui_email_bucket, info.user_email);
   dout(0) << "removing email index: " << info.user_email << dendl;
-  ret = rgwstore->delete_obj(NULL, info.user_id, email_obj);
+  ret = rgwstore->delete_obj(NULL, email_obj);
   if (ret < 0 && ret != -ENOENT) {
     dout(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -456,7 +456,7 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
 
   if (purge_data) {
     dout(0) << "purging user buckets" << dendl;
-    ret = rgwstore->purge_buckets(info.user_id, buckets_vec);
+    ret = rgwstore->purge_buckets(buckets_vec);
     if (ret < 0 && ret != -ENOENT) {
       dout(0) << "ERROR: delete_buckets returned " << ret << dendl;
       return ret;
@@ -467,7 +467,7 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
   get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_obj uid_bucks(ui_uid_bucket, buckets_obj_id);
   dout(0) << "removing user buckets index" << dendl;
-  ret = rgwstore->delete_obj(NULL, info.user_id, uid_bucks);
+  ret = rgwstore->delete_obj(NULL, uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
     dout(0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -475,7 +475,7 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
   
   rgw_obj uid_obj(ui_uid_bucket, info.user_id);
   dout(0) << "removing user index: " << info.user_id << dendl;
-  ret = rgwstore->delete_obj(NULL, info.user_id, uid_obj);
+  ret = rgwstore->delete_obj(NULL, uid_obj);
   if (ret < 0 && ret != -ENOENT) {
     dout(0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
