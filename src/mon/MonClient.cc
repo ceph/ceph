@@ -440,6 +440,13 @@ void MonClient::handle_auth(MAuthReply *m)
       delete auth;
       auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
       if (!auth) {
+	ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
+	if (m->result == -ENOTSUP) {
+	  ldout(cct, 10) << "none of our auth protocols are supported by the server"
+			 << dendl;
+	  authenticate_err = m->result;
+	  auth_cond.SignalAll();
+	}
 	m->put();
 	return;
       }
