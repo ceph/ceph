@@ -421,8 +421,9 @@ int MonClient::authenticate(double timeout)
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
       }
-    } else
+    } else {
       auth_cond.Wait(monc_lock);
+    }
   }
 
   if (state == MC_STATE_HAVE_SESSION) {
