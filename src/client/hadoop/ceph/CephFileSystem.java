@@ -281,7 +281,7 @@ public class CephFileSystem extends FileSystem {
     if (result != 0) {
       LOG.warn(
           "mkdirs: make directory " + abs_path + "Failing with result " + result);
-      if (ceph.ENOTDIR == result) {
+      if (-ceph.ENOTDIR == result) {
         throw new IOException("Parent path is not a directory");
       }
       return false;
