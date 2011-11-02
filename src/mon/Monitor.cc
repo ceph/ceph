@@ -216,16 +216,14 @@ void Monitor::shutdown()
 }
 
 
-void Monitor::call_election(bool is_new)
+void Monitor::call_election()
 {
   if (monmap->size() == 1)
     return;
 
   rank = monmap->get_rank(name);
   
-  if (is_new) {
-    clog.info() << "mon." << name << " calling new monitor election\n";
-  }
+  clog.info() << "mon." << name << " calling new monitor election\n";
 
   dout(10) << "call_election" << dendl;
 

@@ -180,7 +180,7 @@ void Elector::handle_propose(MMonElection *m)
       // a mon just started up, call a new election so they can rejoin!
       dout(5) << " got propose from old epoch, quorum is " << mon->quorum 
 	      << ", " << m->get_source() << " must have just started" << dendl;
-      mon->call_election(false);//start();
+      start();
     } else {
       dout(5) << " ignoring old propose" << dendl;
       m->put();
@@ -196,7 +196,7 @@ void Elector::handle_propose(MMonElection *m)
     } else {
       // wait, i should win!
       if (!electing_me)
-	mon->call_election(false);//start();
+	start();
     }
   } else {
     // they would win over me
@@ -222,7 +222,7 @@ void Elector::handle_ack(MMonElection *m)
   if (m->epoch > epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
-    mon->call_election(false);//start();
+    start();
     m->put();
     return;
   }
@@ -259,7 +259,7 @@ void Elector::handle_victory(MMonElection *m)
   if (m->epoch != epoch + 1) { 
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
-    mon->call_election(true);//start();
+    start();
     m->put();
     return;
   }
