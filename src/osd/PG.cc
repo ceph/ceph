@@ -784,16 +784,25 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     /*
      * we can skip an object if
      *  - is already in the log AND
-     *    - it is a totally new object OR
-     *    - the prior_version is also already in the log
+     *    - it is a totally new object
      * otherwise, if we have the object, include a prior_version backlog entry.
      */
     if (log.objects.count(be.soid)) {
       Log::Entry *le = log.objects[be.soid];
-      
-      // note the prior version
-      if (le->prior_version == eversion_t() ||  // either new object, or
-	  le->prior_version > log.tail) {      // prior_version also already in log
+
+      for (list<Log::Entry>::iterator j = --log.log.end(); ;--j) {
+	if (j->soid == le->soid) {
+	  le = &(*j);
+	}
+
+	if (j->prior_version <= log.tail ||
+	    j == log.log.begin() ||
+	    j->version <= log.tail) {
+	  break;
+	}
+      }
+
+      if (le->prior_version == eversion_t()) { // new object
 	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
 	omap.erase(i++);
 	continue;
@@ -3703,7 +3712,7 @@ eversion_t PG::Missing::have_old(const hobject_t& oid) const
 void PG::Missing::add_next_event(const Log::Entry& e)
 {
   if (e.is_update()) {
-    if (e.prior_version == eversion_t()) {
+    if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
       if (missing.count(e.soid))  // already missing divergent item
