@@ -49,7 +49,7 @@ def task(ctx, config):
         args = []
         if not config.get('snaps', False):
             args = [
-                'CEPH_CLIENT_ID={id_};'.format(id_=id_),
+                'CEPH_CLIENT_ID={id_}'.format(id_=id_),
                 'CEPH_CONF=/tmp/cephtest/ceph.conf',
                 'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
                 '/tmp/cephtest/binary/usr/local/bin/testreadwrite',
@@ -60,7 +60,7 @@ def task(ctx, config):
                 ]
         else:
             args = [
-                'CEPH_CLIENT_ID={id_};'.format(id_=id_),
+                'CEPH_CLIENT_ID={id_}'.format(id_=id_),
                 'CEPH_CONF=/tmp/cephtest/ceph.conf',
                 'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
                 '/tmp/cephtest/binary/usr/local/bin/testsnaps',
