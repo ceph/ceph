@@ -415,7 +415,7 @@ public class CephFileSystem extends FileSystem {
       status = new FileStatus(lstat.size, lstat.is_dir,
           ceph.ceph_replication(abs_path.toString()), lstat.block_size,
           lstat.mod_time, lstat.access_time,
-          new FsPermission((short) lstat.mode), null, null,
+          new FsPermission((short) lstat.mode), System.getProperty("user.name"), null,
           new Path(fs_default_name + abs_path.toString()));
     } else { // fail out
       throw new FileNotFoundException(
