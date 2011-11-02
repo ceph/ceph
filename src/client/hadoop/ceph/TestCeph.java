@@ -41,6 +41,5 @@ public class TestCeph extends FileSystemContractBaseTest {
 
     cephfs.initialize(URI.create("ceph://null"), conf);
     fs = cephfs;
-    cephfs.setWorkingDirectory(new Path(getDefaultWorkingDirectory()));
   }
 }
