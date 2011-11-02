@@ -74,13 +74,8 @@ bool MonmapMonitor::update_from_paxos()
     mon->messenger->set_myname(entity_name_t::MON(rank));
     mon->rank = rank;
   }
-
-  // call election?
-  if (mon->monmap->size() > 1) {
-    mon->call_election();
-  } else {
-    mon->win_standalone_election();
-  }
+  
+  mon->bootstrap();
   return true;
 }
 

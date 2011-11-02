@@ -332,7 +332,7 @@ void Paxos::collect_timeout()
   dout(5) << "collect timeout, calling fresh election" << dendl;
   collect_timeout_event = 0;
   assert(mon->is_leader());
-  mon->call_election();
+  mon->bootstrap();
 }
 
 
@@ -484,7 +484,7 @@ void Paxos::accept_timeout()
   accept_timeout_event = 0;
   assert(mon->is_leader());
   assert(is_updating());
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::commit()
@@ -689,7 +689,7 @@ void Paxos::lease_ack_timeout()
   assert(is_active());
 
   lease_ack_timeout_event = 0;
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::lease_timeout()
@@ -698,7 +698,7 @@ void Paxos::lease_timeout()
   assert(mon->is_peon());
 
   lease_timeout_event = 0;
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::lease_renew_timeout()
@@ -812,9 +812,9 @@ void Paxos::peon_init()
   finish_contexts(g_ceph_context, waiting_for_commit, -1);
 }
 
-void Paxos::election_starting()
+void Paxos::restart()
 {
-  dout(10) << "election_starting -- canceling timeouts" << dendl;
+  dout(10) << "restart -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
 

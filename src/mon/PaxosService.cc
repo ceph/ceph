@@ -143,15 +143,15 @@ void PaxosService::propose_pending()
 
 
 
-void PaxosService::election_starting()
+void PaxosService::restart()
 {
-  dout(10) << "election_starting" << dendl;
+  dout(10) << "restart" << dendl;
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
-  on_election_start();
+  on_restart();
 }
 
 void PaxosService::election_finished()

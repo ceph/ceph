@@ -83,7 +83,7 @@ PGMonitor::~PGMonitor()
  Tick function to update the map based on performance every N seconds
 */
 
-void PGMonitor::on_election_start()
+void PGMonitor::on_restart()
 {
   // clear leader state
   last_sent_pg_create.clear();

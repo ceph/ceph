@@ -100,7 +100,7 @@ public:
   PGMonitor(Monitor *mn, Paxos *p);
   virtual ~PGMonitor();
 
-  virtual void on_election_start();
+  virtual void on_restart();
 
   /* Courtesy function provided by PaxosService, called when an election
    * finishes and the cluster goes active. We use it here to make sure we

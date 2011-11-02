@@ -184,12 +184,7 @@ void Monitor::init()
   timer.init();
   new_tick();
 
-  // call election?
-  if (monmap->size() > 1) {
-    call_election();
-  } else {
-    win_standalone_election();
-  }
+  bootstrap();
   
   lock.Unlock();
 
@@ -216,16 +211,28 @@ void Monitor::shutdown()
 }
 
 
-void Monitor::call_election()
+void Monitor::bootstrap()
 {
-  if (monmap->size() == 1)
+  dout(10) << "bootstrap" << dendl;
+
+  // reset
+  state = STATE_STARTING;
+  leader_since = utime_t();
+
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->restart();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->restart();
+
+  // avoid election?
+  if (monmap->size() == 1) {
+    win_standalone_election();
     return;
+  }
 
   rank = monmap->get_rank(name);
   
   clog.info() << "mon." << name << " calling new monitor election\n";
-
-  dout(10) << "call_election" << dendl;
 
   // call a new election
   elector.call_election();
@@ -239,19 +246,6 @@ void Monitor::win_standalone_election()
   set<int> q;
   q.insert(rank);
   win_election(1, q);
-}
-
-void Monitor::starting_election()
-{
-  dout(10) << "starting_election " << get_epoch() << dendl;
-  state = STATE_STARTING;
-  leader_since = utime_t();
-
-  // tell paxos
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->election_starting();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
-    (*p)->election_starting();
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -832,7 +826,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
 	// sanitize
 	if (pm->epoch > get_epoch()) 
-	  call_election();
+	  bootstrap();
 	if (pm->epoch != get_epoch()) {
 	  pm->put();
 	  break;

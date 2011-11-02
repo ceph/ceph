@@ -113,10 +113,10 @@ public:
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
 
-  void call_election();  // initiate election
-  void starting_election();                              // start election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
+  void bootstrap();
+
   void win_standalone_election();
+  void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
 
 

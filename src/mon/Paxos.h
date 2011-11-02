@@ -251,7 +251,7 @@ public:
 
   void init();
 
-  void election_starting();
+  void restart();
   void leader_init();
   void peon_init();
 

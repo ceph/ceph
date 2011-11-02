@@ -71,8 +71,6 @@ void Elector::start()
   electing_me = true;
   acked_me.insert(mon->rank);
 
-  mon->starting_election();
-  
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
