@@ -932,7 +932,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fs
   const md_config_t *conf = cct->_conf;
 
   // count osds
-  int nosd = 1;
+  int maxosd = 0;
 
   vector<string> sections;
   conf->get_all_sections(sections);
@@ -946,11 +946,11 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fs
     if (*end != '\0')
       continue;
 
-    if (o > nosd)
-      nosd = o;
+    if (o > maxosd)
+      maxosd = o;
   }
 
-  set_max_osd(nosd);
+  set_max_osd(maxosd + 1);
 
   // pgp_num <= pg_num
   if (pgp_bits > pg_bits)
@@ -968,8 +968,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fs
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = nosd << pg_bits;
-    pools[pool].pgp_num = nosd << pgp_bits;
+    pools[pool].pg_num = maxosd << pg_bits;
+    pools[pool].pgp_num = maxosd << pgp_bits;
     pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
@@ -980,7 +980,7 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fs
 
   build_simple_crush_map_from_conf(cct, crush, rulesets);
 
-  for (int i=0; i<nosd; i++) {
+  for (int i=0; i<=maxosd; i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
