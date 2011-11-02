@@ -451,6 +451,8 @@ private:
       if (preferred >= max_osd || preferred >= crush.get_max_devices())
 	preferred = -1;
 
+      assert(get_max_osd() >= crush.get_max_devices());
+
       // what crush rule?
       int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
       if (ruleno >= 0)
