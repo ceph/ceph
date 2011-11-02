@@ -28,12 +28,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, i
 			const char *machine_name, int state,
 			version_t first_committed, version_t last_committed) {
   return *_dout << "mon." << name << "@" << rank
-		<< (mon->is_starting() ?
-		    (const char*)"(starting)" :
-		    (mon->is_leader() ?
-		     (const char*)"(leader)" : 
-		     (mon->is_peon() ?
-		      (const char*)"(peon)" : (const char*)"(?\?)"))) 
+		<< "(" << mon->get_state_name() << ")"
 		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state)
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
@@ -825,7 +820,7 @@ void Paxos::restart()
 void Paxos::dispatch(PaxosServiceMessage *m)
 {
   // election in progress?
-  if (mon->is_starting()) {
+  if (!mon->is_leader() && !mon->is_peon()) {
     dout(5) << "election in progress, dropping " << *m << dendl;
     m->put();
     return;    

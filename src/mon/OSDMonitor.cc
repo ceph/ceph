@@ -48,8 +48,8 @@
 #define dout_prefix _prefix(_dout, mon, osdmap)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".osd e" << osdmap.get_epoch() << " ";
+		<< "(" << mon->get_state_name()
+		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
 

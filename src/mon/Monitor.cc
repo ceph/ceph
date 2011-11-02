@@ -71,15 +71,7 @@
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ?
-		    (const char*)"(starting)" : 
-		    (mon->is_leader() ?
-		     (const char*)"(leader)" :
-		     (mon->is_peon() ? 
-		      (const char*)"(peon)" : 
-		      (const char*)"(?\?)")))
-		<< " e" << mon->monmap->get_epoch()
-		<< " ";
+		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
 }
 
 CompatSet get_ceph_mon_feature_compat_set()
@@ -112,7 +104,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   auth_supported(cct),
   store(s),
   
-  state(STATE_STARTING), stopping(false),
+  state(STATE_PROBING),
   
   elector(this),
   leader(0),
@@ -215,8 +207,11 @@ void Monitor::bootstrap()
 {
   dout(10) << "bootstrap" << dendl;
 
+  // note my rank
+  rank = monmap->get_rank(name);
+
   // reset
-  state = STATE_STARTING;
+  state = STATE_PROBING;
   leader_since = utime_t();
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -230,11 +225,9 @@ void Monitor::bootstrap()
     return;
   }
 
-  rank = monmap->get_rank(name);
-  
-  clog.info() << "mon." << name << " calling new monitor election\n";
-
   // call a new election
+  state = STATE_ELECTING;
+  clog.info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
 
@@ -688,7 +681,6 @@ void Monitor::send_command(const entity_inst_t& inst,
 void Monitor::stop_cluster()
 {
   dout(0) << "stop_cluster -- initiating shutdown" << dendl;
-  stopping = true;
   mdsmon()->do_stop();
 }
 

@@ -25,8 +25,8 @@
 #define dout_prefix _prefix(_dout, mon, paxos, paxos->machine_id)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, int machine_id) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".paxosservice(" << get_paxos_name(machine_id) << ") ";
+		<< "(" << mon->get_state_name()
+		<< ").paxosservice(" << get_paxos_name(machine_id) << ") ";
 }
 
 const char *PaxosService::get_machine_name()

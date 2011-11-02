@@ -85,17 +85,32 @@ public:
 
   // -- monitor state --
 private:
-  const static int STATE_STARTING = 0; // electing
-  const static int STATE_LEADER =   1;
-  const static int STATE_PEON =     2;
+  enum {
+    STATE_PROBING = 1,
+    STATE_ELECTING,
+    STATE_LEADER,
+    STATE_PEON
+  };
   int state;
-  bool stopping;
 
 public:
-  bool is_starting() const { return state == STATE_STARTING; }
+  static const char *get_state_name(int s) {
+    switch (s) {
+    case STATE_PROBING: return "probing";
+    case STATE_ELECTING: return "electing";
+    case STATE_LEADER: return "leader";
+    case STATE_PEON: return "peon";
+    default: return "???";
+    }
+  }
+  const char *get_state_name() {
+    return get_state_name(state);
+  }
+
+  bool is_probing() const { return state == STATE_PROBING; }
+  bool is_electing() const { return state == STATE_ELECTING; }
   bool is_leader() const { return state == STATE_LEADER; }
   bool is_peon() const { return state == STATE_PEON; }
-  bool is_stopping() const { return stopping; }
 
   const utime_t &get_leader_since() const;
 
