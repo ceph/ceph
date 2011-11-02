@@ -314,29 +314,6 @@ public class CephFileSystem extends FileSystem {
   }
 
   /**
-   * Check if a path is a directory. This is moderately faster than
-   * the generic implementation.
-   * @param path The path to check
-   * @return true if the path is definitely a directory, false otherwise.
-   */
-  @Override
-  public boolean isDirectory(Path path) throws IOException {
-    LOG.debug("isDirectory:enter with path " + path);
-    Path abs_path = makeAbsolute(path);
-    boolean result;
-
-    if (abs_path.equals(root)) {
-      result = true;
-    } else {
-      LOG.trace("calling ceph_isdirectory from Java");
-      result = ceph.ceph_isdirectory(getCephPath(abs_path));
-      LOG.trace("Returned from ceph_isdirectory to Java");
-    }
-    LOG.debug("isDirectory:exit with result " + result);
-    return result;
-  }
-
-  /**
    * Get stat information on a file. This does not fill owner or group, as
    * Ceph's support for these is a bit different than HDFS'.
    * @param path The path to stat.
@@ -471,7 +448,7 @@ public class CephFileSystem extends FileSystem {
     boolean exists = exists(abs_path);
 
     if (exists) {
-      if (isDirectory(abs_path)) {
+      if (getFileStatus(abs_path).isDir()) {
         throw new IOException(
             "create: Cannot overwrite existing directory \"" + path.toString()
             + "\" with a file");
@@ -550,7 +527,7 @@ public class CephFileSystem extends FileSystem {
       }
     }
 
-    if (isDirectory(abs_path)) { // yes, it is possible to open Ceph directories
+    if (getFileStatus(abs_path).isDir()) { // yes, it is possible to open Ceph directories
       // but that doesn't mean you should in Hadoop!
       ceph.ceph_close(fh);
       throw new IOException(
@@ -591,7 +568,7 @@ public class CephFileSystem extends FileSystem {
     boolean result = ceph.ceph_rename(getCephPath(abs_src), getCephPath(abs_dst));
 
     if (!result) {
-      if (isDirectory(abs_dst)) { // move the srcdir into destdir
+      if (getFileStatus(abs_dst).isDir()) { // move the srcdir into destdir
         LOG.debug("ceph_rename failed but dst is a directory!");
         Path new_dst = new Path(abs_dst, abs_src.getName());
 
