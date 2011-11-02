@@ -72,8 +72,6 @@ public class CephFileSystem extends FileSystem {
   private final Path root;
   private CephFS ceph = null;
 
-  private String fs_default_name;
-
   /**
    * Create a new CephFileSystem.
    */
@@ -86,11 +84,10 @@ public class CephFileSystem extends FileSystem {
    * sets the given CephFS instead of defaulting to a
    * CephTalker (with its assumed real Ceph instance to talk to).
    */
-  public CephFileSystem(CephFS ceph_fs, String default_path) {
+  public CephFileSystem(CephFS ceph_fs) {
     super();
     root = new Path("/");
     ceph = ceph_fs;
-    fs_default_name = default_path;
   }
 
   /**
@@ -117,9 +114,6 @@ public class CephFileSystem extends FileSystem {
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
     if (ceph == null) {
       ceph = new CephTalker(conf, LOG);
-    }
-    if (null == fs_default_name) {
-      fs_default_name = conf.get("fs.default.name");
     }
     // build up the arguments for Ceph
     String arguments = "CephFSInterface";
