@@ -32,6 +32,7 @@
 
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
+#include "auth/AuthSupported.h"
 
 #include "include/str_list.h"
 #include "include/addr_parsing.h"
@@ -53,6 +54,7 @@ MonClient::MonClient(CephContext *cct_) :
   timer(cct_, monc_lock), finisher(cct_),
   initialized(false),
   log_client(NULL),
+  auth_supported(NULL),
   hunting(true),
   want_monmap(true),
   want_keys(0), global_id(0),
@@ -66,6 +68,7 @@ MonClient::MonClient(CephContext *cct_) :
 
 MonClient::~MonClient()
 {
+  delete auth_supported;
   delete auth;
   delete keyring;
   delete rotating_secrets;
@@ -341,7 +344,7 @@ void MonClient::handle_monmap(MMonMap *m)
 
 int MonClient::init()
 {
-  ldout(cct, 10) << "init" << dendl;
+  ldout(cct, 10) << "init auth_supported " << cct->_conf->auth_supported << dendl;
 
   messenger->add_dispatcher_head(this);
 
@@ -362,21 +365,8 @@ int MonClient::init()
   // seed rng so we choose a different monitor each time
   srand(getpid());
 
-  auth_supported.clear();
-  string str = cct->_conf->auth_supported;
-  list<string> sup_list;
-  get_str_list(str, sup_list);
-  for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
-    if (iter->compare("cephx") == 0) {
-      ldout(cct, 10) << "supporting cephx auth protocol" << dendl;
-      auth_supported.insert(CEPH_AUTH_CEPHX);
-    } else if (iter->compare("none") == 0) {
-      auth_supported.insert(CEPH_AUTH_NONE);
-      ldout(cct, 10) << "supporting *none* auth protocol" << dendl;
-    } else {
-      ldout(cct, 0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
-    }
-  }
+  auth_supported = new AuthSupported(cct);
+  ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << dendl;
 
   initialized = true;
   return 0;
@@ -567,7 +557,7 @@ void MonClient::_reopen_session()
   m->protocol = 0;
   __u8 struct_v = 1;
   ::encode(struct_v, m->auth_payload);
-  ::encode(auth_supported, m->auth_payload);
+  ::encode(auth_supported->get_supported_set(), m->auth_payload);
   ::encode(entity_name, m->auth_payload);
   ::encode(global_id, m->auth_payload);
   _send_mon_message(m, true);

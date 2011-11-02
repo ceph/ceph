@@ -21,12 +21,16 @@
 class CephContext;
 
 class AuthSupported {
-  std::set<int> auth_supported;
+  std::set<__u32> auth_supported;
 public:
   AuthSupported(CephContext *cct);
 
   bool is_supported_auth(int auth_type);
   int pick(const std::set<__u32>& supported);
+
+  const std::set<__u32>& get_supported_set() const {
+    return auth_supported;
+  }
 };
 
 
