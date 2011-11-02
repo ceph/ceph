@@ -646,6 +646,7 @@ public class CephFileSystem extends FileSystem {
     return locations;
   }
 
+  @Deprecated
 	public boolean delete(Path path) throws IOException {
 		return delete(path, false);
 	}
