@@ -568,7 +568,11 @@ public class CephFileSystem extends FileSystem {
     boolean result = ceph.ceph_rename(getCephPath(abs_src), getCephPath(abs_dst));
 
     if (!result) {
-      if (getFileStatus(abs_dst).isDir()) { // move the srcdir into destdir
+      boolean isDir = false;
+      try {
+        isDir = getFileStatus(abs_dst).isDir();
+      } catch (FileNotFoundException e) {}
+      if (isDir) { // move the srcdir into destdir
         LOG.debug("ceph_rename failed but dst is a directory!");
         Path new_dst = new Path(abs_dst, abs_src.getName());
 
