@@ -32,7 +32,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 
-#ifndef DARWIN
+#if !defined(DARWIN) && !defined(__FreeBSD__)
 #include <envz.h>
 #endif // DARWIN
 

@@ -17,7 +17,13 @@ check_PROGRAMS =
 TESTS = $(check_PROGRAMS)
 
 
-EXTRALIBS = -lrt
+EXTRALIBS =
+if FREEBSD
+EXTRALIBS += -lexecinfo
+endif
+if LINUX
+EXTRALIBS += -lrt
+endif
 if WITH_PROFILER
 EXTRALIBS += -lprofiler
 endif
@@ -34,7 +40,10 @@ bin_PROGRAMS += ceph-mon
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA) -ldl
+ceph_osd_LDADD = libosd.la libos.la $(LIBGLOBAL_LDA)
+if LINUX
+ceph_osd_LDADD += -ldl
+endif
 bin_PROGRAMS += ceph-osd
 ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -99,7 +108,9 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
+if LINUX
 sbin_PROGRAMS += mount.ceph
+endif
 
 # user tools
 cephfs_SOURCES = cephfs.cc
@@ -312,7 +323,9 @@ bin_DEBUGPROGRAMS += scratchtool scratchtoolpp radosacl
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = libglobal.la librbd.la librados.la -lpthread -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
+if LINUX
 bin_PROGRAMS += rbd
+endif
 
 if WITH_RADOSGW
 my_libradosgw_src = \
@@ -856,6 +869,7 @@ libcommon_files = \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
 	common/armor.c \
+	common/xattr.c \
 	common/safe_io.c \
 	common/str_list.cc \
 	common/errno.cc \
@@ -1051,6 +1065,7 @@ noinst_HEADERS = \
 	common/WorkQueue.h\
 	common/ceph_argparse.h\
 	common/ceph_context.h\
+	common/xattr.h\
 	common/compiler_extensions.h\
 	common/debug.h\
 	common/dout.h\
@@ -1125,6 +1140,7 @@ noinst_HEADERS = \
         include/ceph_fs.h\
         include/ceph_hash.h\
 	include/color.h\
+	include/compat.h\
 	include/crc32c.h\
         include/cstring.h\
         include/encoding.h\

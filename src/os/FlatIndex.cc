@@ -12,6 +12,11 @@
  * 
  */
 
+#if defined(__FreeBSD__)
+#include <sys/cdefs.h>
+#include <sys/param.h>
+#endif
+
 #include "FlatIndex.h"
 #include "CollectionIndex.h"
 #include "common/ceph_crypto.h"

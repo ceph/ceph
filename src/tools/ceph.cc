@@ -20,6 +20,8 @@
 #include "common/config.h"
 #include "tools/common.h"
 
+#include "include/compat.h"
+
 #include <limits.h>
 #include <errno.h>
 #include <fcntl.h>

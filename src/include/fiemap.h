@@ -13,7 +13,11 @@
 # include "linux_fiemap.h"
 #endif
 
+#if defined(__linux__)
 #include <linux/ioctl.h>
+#elif defined(__FreeBSD__)
+#include <sys/ioctl.h>
+#endif
 #ifndef FS_IOC_FIEMAP
 # define FS_IOC_FIEMAP                        _IOWR('f', 11, struct fiemap)
 #endif

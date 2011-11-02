@@ -15,7 +15,12 @@
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
 
+#if defined(__linux__)
 #include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
 
 #ifndef _XOPEN_SOURCE
 # define _XOPEN_SOURCE 600
@@ -34,13 +39,14 @@
 void	*valloc(size_t);
 #endif
 
+#endif
 
-
-#else
-
+#if defined(__linux__)	// For malloc(2).
 #include <malloc.h>
 #endif
+
 #include <stdint.h>
+#include <stdio.h>	// snprintf
 #include <string.h>
 
 #ifndef __CYGWIN__
@@ -162,8 +168,8 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const;
 
-    bool is_page_aligned() const { return ((long)c_str() & ~PAGE_MASK) == 0; }
-    bool is_n_page_sized() const { return (length() & ~PAGE_MASK) == 0; }
+    bool is_page_aligned() const { return ((long)c_str() & ~CEPH_PAGE_MASK) == 0; }
+    bool is_n_page_sized() const { return (length() & ~CEPH_PAGE_MASK) == 0; }
 
     // accessors
     raw *get_raw() const { return _raw; }

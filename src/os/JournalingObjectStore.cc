@@ -265,7 +265,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
       if (t->get_data_length() > data_len &&
 	  (int)t->get_data_length() >= g_conf->journal_align_min_size) {
 	data_len = t->get_data_length();
-	data_align = (t->get_data_alignment() - tbl.length()) & ~PAGE_MASK;
+	data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
       }
       t->encode(tbl);
     }

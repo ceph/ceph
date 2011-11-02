@@ -1602,7 +1602,17 @@ void MDS::respawn()
   }
   new_argv[orig_argc] = NULL;
 
+#if defined(__linux__)
   dout(1) << " cwd " << get_current_dir_name() << dendl;
+#else
+  {
+#include <sys/param.h>
+    char buf[PATH_MAX];
+    
+    getcwd(buf, sizeof(buf));
+    dout(1) << " cwd " << buf << dendl;
+  }
+#endif
 
   unblock_all_signals(NULL);
   execv(orig_argv[0], new_argv);

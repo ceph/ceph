@@ -146,12 +146,16 @@ namespace __gnu_cxx {
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
+#if !defined(__FreeBSD__)
   ss.ss_family = htons(ss.ss_family);
+#endif
   ::encode_raw(ss, bl);
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::decode_raw(a, bl);
+#if !defined(__FreeBSD__)
   a.ss_family = ntohs(a.ss_family);
+#endif
 }
 
 struct entity_addr_t {
@@ -163,6 +167,18 @@ struct entity_addr_t {
     sockaddr_in6 addr6;
   };
 
+  unsigned int addr_size() const {
+    switch (addr.ss_family) {
+    case AF_INET:
+      return sizeof(addr4);
+      break;
+    case AF_INET6:
+      return sizeof(addr6);
+      break;
+    }
+    return sizeof(addr);
+  }
+
   entity_addr_t() : type(0), nonce(0) { 
     memset(&addr, 0, sizeof(addr));
   }
@@ -170,7 +186,9 @@ struct entity_addr_t {
     type = o.type;
     nonce = o.nonce;
     addr = o.in_addr;
+#if !defined(__FreeBSD__)
     addr.ss_family = ntohs(addr.ss_family);
+#endif
   }
 
   __u32 get_nonce() const { return nonce; }
@@ -227,7 +245,9 @@ struct entity_addr_t {
     a.type = 0;
     a.nonce = nonce;
     a.in_addr = addr;
+#if !defined(__FreeBSD__)
     a.in_addr.ss_family = htons(addr.ss_family);
+#endif
     return a;
   }
 

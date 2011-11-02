@@ -37,6 +37,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "include/compat.h"
+
 using std::ostringstream;
 
 /*

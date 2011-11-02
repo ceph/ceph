@@ -23,6 +23,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#include "include/compat.h"
+
 #define dout_prefix *_dout
 
 static char pid_file[PATH_MAX] = "";

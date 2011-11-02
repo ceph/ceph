@@ -8,6 +8,10 @@
 
 #include <map>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
 #include "common/config.h"
 
 #define DOUT_SUBSYS osd

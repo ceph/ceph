@@ -364,6 +364,12 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_SIZE  32
 #define CEPH_SETATTR_CTIME 64
 
+/*
+ * Ceph setxattr request flags.
+ */
+#define CEPH_XATTR_CREATE  1
+#define CEPH_XATTR_REPLACE 2
+
 union ceph_mds_request_args {
 	struct {
 		__le32 mask;                 /* CEPH_CAP_* */

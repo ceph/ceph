@@ -21,7 +21,7 @@
 
 int pipe_cloexec(int pipefd[2])
 {
-#ifdef O_CLOEXEC
+#if defined(O_CLOEXEC) && !defined(__FreeBSD__)
 	int ret;
 	ret = pipe2(pipefd, O_CLOEXEC);
 	if (ret) {

@@ -23,7 +23,11 @@
 #include "common/debug.h"
 #include "include/utime.h"
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#else
 #include <values.h>
+#endif
 #include <errno.h>
 #include <fstream>
 #include <iostream>
@@ -35,6 +39,7 @@
 #include <syslog.h>
 
 #include "include/assert.h"
+#include "include/compat.h"
 
 ///////////////////////////// Constants /////////////////////////////
 #define TIME_FMT "%04d-%02d-%02d %02d:%02d:%02d.%06ld"
