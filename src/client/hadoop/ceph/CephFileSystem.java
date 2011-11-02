@@ -72,7 +72,6 @@ public class CephFileSystem extends FileSystem {
   private final Path root;
   private CephFS ceph = null;
 
-  private boolean debug = false;
   private String fs_default_name;
 
   /**
