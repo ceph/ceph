@@ -12,6 +12,17 @@
  * 
  */
 
+#include <fstream>
+#include <iostream>
+#include <errno.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <boost/scoped_ptr.hpp>
+
+#ifdef DARWIN
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif // DARWIN
 
 #include "osd/PG.h"
 
@@ -88,20 +99,9 @@
 
 #include "common/errno.h"
 
-#include <fstream>
-#include <iostream>
-#include <errno.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <boost/scoped_ptr.hpp>
-
-#ifdef DARWIN
-#include <sys/param.h>
-#include <sys/mount.h>
-#endif // DARWIN
-
 #include "objclass/objclass.h"
 
+#include "include/assert.h"
 #include "common/config.h"
 
 #define DOUT_SUBSYS osd
