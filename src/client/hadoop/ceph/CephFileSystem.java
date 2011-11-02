@@ -70,7 +70,6 @@ public class CephFileSystem extends FileSystem {
 
   private Path workingDir;
   private final Path root;
-  private boolean initialized = false;
   private CephFS ceph = null;
 
   private boolean debug = false;
@@ -100,9 +99,6 @@ public class CephFileSystem extends FileSystem {
    * @return the URI.
    */
   public URI getUri() {
-    if (!initialized) {
-      return null;
-    }
     LOG.debug("getUri:exit with return " + uri);
     return uri;
   }
@@ -113,14 +109,10 @@ public class CephFileSystem extends FileSystem {
    * Starts up the connection to Ceph, reads in configuraton options, etc.
    * @param uri The URI for this filesystem.
    * @param conf The Hadoop Configuration to retrieve properties from.
-   * @throws IOException if the Ceph client initialization fails
-   * or necessary properties are unset.
+   * @throws IOException if necessary properties are unset.
    */
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    if (initialized) {
-      return;
-    }
     super.initialize(uri, conf);
     setConf(conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
@@ -163,7 +155,6 @@ public class CephFileSystem extends FileSystem {
       LOG.fatal("initialize:Ceph initialization failed!");
       throw new IOException("Ceph initialization failed!");
     }
-    initialized = true;
     LOG.info("initialize:Ceph initialized client. Setting cwd to /");
     ceph.ceph_setcwd("/");
     LOG.debug("initialize:exit");
@@ -174,15 +165,9 @@ public class CephFileSystem extends FileSystem {
   /**
    * Close down the CephFileSystem. Runs the base-class close method
    * and then kills the Ceph client itself.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public void close() throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("close:enter");
     super.close(); // this method does stuff, make sure it's run!
     LOG.trace("close: Calling ceph_kill_client from Java");
@@ -197,15 +182,10 @@ public class CephFileSystem extends FileSystem {
    * @param progress The Progressable to report progress to.
    * Reporting is limited but exists.
    * @return An FSDataOutputStream that connects to the file on Ceph.
-   * @throws IOException If initialize() hasn't been called or the file cannot be found or appended to.
+   * @throws IOException If the file cannot be found or appended to.
    */
   public FSDataOutputStream append(Path file, int bufferSize,
       Progressable progress) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("append:enter with path " + file + " bufferSize " + bufferSize);
     Path abs_path = makeAbsolute(file);
 
@@ -236,24 +216,17 @@ public class CephFileSystem extends FileSystem {
    * @return the directory Path
    */
   public Path getWorkingDirectory() {
-    if (!initialized) {
-      return null;
-    }
     return workingDir;
   }
 
   /**
    * Set the current working directory for the given file system. All relative
-   * paths will be resolved relative to it. You need to have initialized the
-   * filesystem prior to calling this method.
+   * paths will be resolved relative to it.
    *
    * @param dir The directory to change to.
    */
   @Override
   public void setWorkingDirectory(Path dir) {
-    if (!initialized) {
-      return;
-    }
     workingDir = makeAbsolute(dir);
   }
 
@@ -272,15 +245,9 @@ public class CephFileSystem extends FileSystem {
    * Overriden because it's moderately faster than the generic implementation.
    * @param path The file to check existence on.
    * @return true if the file exists, false otherwise.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public boolean exists(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("exists:enter with path " + path);
     boolean result;
     Path abs_path = makeAbsolute(path);
@@ -303,16 +270,10 @@ public class CephFileSystem extends FileSystem {
    * @param path The directory path to create
    * @param perms The permissions to apply to the created directories.
    * @return true if successful, false otherwise
-   * @throws IOException if initialize() hasn't been called or the path
-   *         is a child of a file.
+   * @throws IOException if the path is a child of a file.
    */
   @Override
   public boolean mkdirs(Path path, FsPermission perms) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("mkdirs:enter with path " + path);
     Path abs_path = makeAbsolute(path);
 
@@ -337,15 +298,9 @@ public class CephFileSystem extends FileSystem {
    * generic implementation.
    * @param path The path to check.
    * @return true if the path is definitely a file, false otherwise.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public boolean isFile(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("isFile:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     boolean result;
@@ -365,15 +320,9 @@ public class CephFileSystem extends FileSystem {
    * the generic implementation.
    * @param path The path to check
    * @return true if the path is definitely a directory, false otherwise.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public boolean isDirectory(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("isDirectory:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     boolean result;
@@ -394,15 +343,9 @@ public class CephFileSystem extends FileSystem {
    * Ceph's support for these is a bit different than HDFS'.
    * @param path The path to stat.
    * @return FileStatus object containing the stat information.
-   * @throws IOException if initialize() hasn't been called
    * @throws FileNotFoundException if the path could not be resolved.
    */
   public FileStatus getFileStatus(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("getFileStatus:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     // sadly, Ceph doesn't really do uids/gids just yet, but
@@ -432,14 +375,8 @@ public class CephFileSystem extends FileSystem {
    * @param path The directory to get listings from.
    * @return FileStatus[] containing one FileStatus for each directory listing;
    *         null if path does not exist.
-   * @throws IOException if initialize() hasn't been called.
    */
   public FileStatus[] listStatus(Path path) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.warn("listStatus:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     Path[] paths = listPaths(abs_path);
@@ -463,11 +400,6 @@ public class CephFileSystem extends FileSystem {
 
   @Override
   public void setPermission(Path p, FsPermission permission) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug(
         "setPermission:enter with path " + p + " and permissions " + permission);
     Path abs_path = makeAbsolute(p);
@@ -485,11 +417,6 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public void setTimes(Path p, long mtime, long atime) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug(
         "setTimes:enter with path " + p + " mtime:" + mtime + " atime:" + atime);
     Path abs_path = makeAbsolute(p);
@@ -520,7 +447,7 @@ public class CephFileSystem extends FileSystem {
    * @param progress A Progressable to report back to.
    * Reporting is limited but exists.
    * @return An FSDataOutputStream pointing to the created file.
-   * @throws IOException if initialize() hasn't been called, or the path is an
+   * @throws IOException if the path is an
    * existing directory, or the path exists but overwrite is false, or there is a
    * failure in attempting to open for append with Ceph.
    */
@@ -531,11 +458,6 @@ public class CephFileSystem extends FileSystem {
       short replication,
       long blockSize,
       Progressable progress) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("create:enter with path " + path);
     Path abs_path = makeAbsolute(path);
 
@@ -611,15 +533,10 @@ public class CephFileSystem extends FileSystem {
    * @param bufferSize Ceph does internal buffering; but you can buffer in
    *   the Java code too if you like.
    * @return FSDataInputStream reading from the given path.
-   * @throws IOException if initialize() hasn't been called, the path DNE or is a
+   * @throws IOException if the path DNE or is a
    * directory, or there is an error getting data to set up the FSDataInputStream.
    */
   public FSDataInputStream open(Path path, int bufferSize) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("open:enter with path " + path);
     Path abs_path = makeAbsolute(path);
 
@@ -665,15 +582,9 @@ public class CephFileSystem extends FileSystem {
    * @param src The current path of the file/directory
    * @param dst The new name for the path.
    * @return true if the rename succeeded, false otherwise.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public boolean rename(Path src, Path dst) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("rename:enter with src:" + src + " and dest:" + dst);
     Path abs_src = makeAbsolute(src);
     Path abs_dst = makeAbsolute(dst);
@@ -708,15 +619,9 @@ public class CephFileSystem extends FileSystem {
    * @param len The amount of the file past the offset you are interested in.
    * @return A BlockLocation[] where each object corresponds to a block within
    * the given range.
-   * @throws IOException if initialize() hasn't been called.
    */
   @Override
   public BlockLocation[] getFileBlockLocations(FileStatus file, long start, long len) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug(
         "getFileBlockLocations:enter with path " + file.getPath()
         + ", start pos " + start + ", length " + len);
@@ -777,16 +682,10 @@ public class CephFileSystem extends FileSystem {
    * delete will throw an IOException. If path is a file this is ignored.
    * @return true if the delete succeeded, false otherwise (including if
    * path doesn't exist).
-   * @throws IOException if initialize() hasn't been called,
-   * or you attempt to non-recursively delete a directory,
+   * @throws IOException if you attempt to non-recursively delete a directory,
    * or you attempt to delete the root directory.
    */
   public boolean delete(Path path, boolean recursive) throws IOException {
-    if (!initialized) {
-      throw new IOException(
-          "You have to initialize the "
-              + "CephFileSystem before calling other methods.");
-    }
     LOG.debug("delete:enter with path " + path + " and recursive=" + recursive);
     Path abs_path = makeAbsolute(path);
 
