@@ -115,7 +115,6 @@ public class CephFileSystem extends FileSystem {
     super.initialize(uri, conf);
     setConf(conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
-    statistics = getStatistics(uri.getScheme(), getClass());
     if (ceph == null) {
       ceph = new CephTalker(conf, LOG);
     }
