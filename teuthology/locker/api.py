@@ -82,18 +82,20 @@ class Lock:
         tries = 0
         while True:
             try:
+                # transaction will be rolled back if an exception is raised
                 with DB.transaction():
                     results = list(DB.select('machine', what='name, sshpubkey',
-                                             where='locked = false and up = true',
+                                             where='locked = false AND up = true',
                                              limit=num))
                     if len(results) < num:
                         raise web.HTTPError(status='503 Service Unavailable')
                     name_keys = {}
                     for row in results:
                         name_keys[row.name] = row.sshpubkey
+                    where_cond = web.db.sqlors('name = ', name_keys.keys()) \
+                        + ' AND locked = false AND up = true'
                     num_locked = DB.update('machine',
-                                           where=web.db.sqlors('name = ',
-                                                               name_keys.keys()),
+                                           where=where_cond,
                                            locked=True,
                                            locked_by=user,
                                            locked_since=web.db.SQLLiteral('NOW()'))
