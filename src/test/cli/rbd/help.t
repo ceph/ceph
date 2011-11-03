@@ -4,10 +4,8 @@
     <ls | list> [pool-name]                   list rbd images
     info <--snap=name> [image-name]           show information about image size,
                                               striping, etc.
-    create [image-name]                       create an empty image (requires size
-                                              param)
-    resize [image-name]                       resize (expand or contract) image
-                                              (requires size param)
+    create <--order=bits> [--size MB] [name]  create an empty image
+    resize [--size MB] [image-name]           resize (expand or contract) image
     rm [image-name]                           delete an image
     export <--snap=name> [image-name] [path]  export image to file
     import [path] [dst-image]                 import image from file (dest defaults
@@ -32,6 +30,8 @@
     --dest-pool <name>           destination pool name
     --path <path-name>           path name for import/export (if not specified)
     --size <size in MB>          size parameter for create and resize commands
+    --order <bits>               the object size in bits, such that the objects
+                                 are (1 << order) bytes. Default is 22 (4 MB).
   
   For the map command:
     --user <username>            rados user to authenticate as
