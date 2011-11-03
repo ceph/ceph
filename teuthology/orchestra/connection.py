@@ -18,7 +18,8 @@ def create_key(keytype, key):
     else:
         raise ValueError('keytype must be ssh-rsa or ssh-dsa')
 
-def connect(user_at_host, host_key=None, _SSHClient=None, _create_key=None):
+def connect(user_at_host, host_key=None, keep_alive=False,
+            _SSHClient=None, _create_key=None):
     user, host = split_user(user_at_host)
     if _SSHClient is None:
         _SSHClient = paramiko.SSHClient
@@ -41,4 +42,5 @@ def connect(user_at_host, host_key=None, _SSHClient=None, _create_key=None):
         username=user,
         timeout=60,
         )
+    ssh.get_transport().set_keepalive(keep_alive)
     return ssh
