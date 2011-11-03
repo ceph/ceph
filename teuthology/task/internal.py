@@ -120,7 +120,9 @@ def connect(ctx, config):
         log.debug('connecting to %s', t)
         remotes.append(
             remote.Remote(name=t,
-                          ssh=connection.connect(user_at_host=t, host_key=key)))
+                          ssh=connection.connect(user_at_host=t,
+                                                 host_key=key,
+                                                 keep_alive=True)))
     ctx.cluster = orchestra.cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):

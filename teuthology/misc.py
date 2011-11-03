@@ -331,6 +331,7 @@ def reconnect(ctx, timeout):
                 remote.ssh = connection.connect(
                     user_at_host=remote.name,
                     host_key=ctx.config['targets'][remote.name],
+                    keep_alive=True,
                     )
             except socket.timeout:
                 pass
