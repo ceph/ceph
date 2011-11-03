@@ -183,6 +183,7 @@ class CephManager:
 
     def get_num_pgs(self):
         status = self.raw_cluster_status()
+        self.log(status)
         return int(re.search(
                 "\d* pgs:",
                 status).group(0).split()[0])
