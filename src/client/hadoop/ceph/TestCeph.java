@@ -37,10 +37,9 @@ public class TestCeph extends FileSystemContractBaseTest {
   protected void setUp() throws IOException {
     Configuration conf = new Configuration();
     CephFaker cephfaker = new CephFaker(conf, FileSystem.LOG);
-    CephFileSystem cephfs = new CephFileSystem(cephfaker, "ceph://null");
+    CephFileSystem cephfs = new CephFileSystem(cephfaker);
 
     cephfs.initialize(URI.create("ceph://null"), conf);
     fs = cephfs;
-    cephfs.setWorkingDirectory(new Path(getDefaultWorkingDirectory()));
   }
 }

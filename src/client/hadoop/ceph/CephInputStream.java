@@ -23,6 +23,8 @@ package org.apache.hadoop.fs.ceph;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSInputStream;
 
@@ -33,7 +35,7 @@ import org.apache.hadoop.fs.FSInputStream;
  * Ceph instance.
  */
 public class CephInputStream extends FSInputStream {
-
+  private static final Log LOG = LogFactory.getLog(CephInputStream.class);
   private boolean closed;
 
   private int fileHandle;
@@ -63,10 +65,9 @@ public class CephInputStream extends FSInputStream {
     closed = false;
     ceph = cephfs;
     buffer = new byte[bufferSize];
-    ceph.debug(
+    LOG.debug(
         "CephInputStream constructor: initializing stream with fh " + fh
-        + " and file length " + flength,
-        ceph.DEBUG);
+        + " and file length " + flength);
       
   }
 
@@ -114,10 +115,9 @@ public class CephInputStream extends FSInputStream {
   }
 
   public synchronized void seek(long targetPos) throws IOException {
-    ceph.debug(
+    LOG.trace(
         "CephInputStream.seek: Seeking to position " + targetPos + " on fd "
-        + fileHandle,
-        ceph.TRACE);
+        + fileHandle);
     if (targetPos > fileLength) {
       throw new IOException(
           "CephInputStream.seek: failed seek to position " + targetPos
@@ -150,10 +150,9 @@ public class CephInputStream extends FSInputStream {
    */
   @Override
   public synchronized int read() throws IOException {
-    ceph.debug(
+    LOG.trace(
         "CephInputStream.read: Reading a single byte from fd " + fileHandle
-        + " by calling general read function",
-        ceph.TRACE);
+        + " by calling general read function");
 
     byte result[] = new byte[1];
 
@@ -181,9 +180,8 @@ public class CephInputStream extends FSInputStream {
   @Override
   public synchronized int read(byte buf[], int off, int len)
     throws IOException {
-    ceph.debug(
-        "CephInputStream.read: Reading " + len + " bytes from fd " + fileHandle,
-        ceph.TRACE);
+    LOG.trace(
+        "CephInputStream.read: Reading " + len + " bytes from fd " + fileHandle);
       
     if (closed) {
       throw new IOException(
@@ -193,11 +191,10 @@ public class CephInputStream extends FSInputStream {
 			
     // ensure we're not past the end of the file
     if (getPos() >= fileLength) {
-      ceph.debug(
+      LOG.debug(
           "CephInputStream.read: cannot read " + len + " bytes from fd "
           + fileHandle + ": current position is " + getPos()
-          + " and file length is " + fileLength,
-          ceph.DEBUG);
+          + " and file length is " + fileLength);
 				
       return -1;
     }
@@ -230,10 +227,9 @@ public class CephInputStream extends FSInputStream {
       totalRead += read;
     } while (len > 0 && fillBuffer());
 
-    ceph.debug(
+    LOG.trace(
         "CephInputStream.read: Reading " + initialLen + " bytes from fd "
-        + fileHandle + ": succeeded in reading " + totalRead + " bytes",
-        ceph.TRACE);
+        + fileHandle + ": succeeded in reading " + totalRead + " bytes");
     return totalRead;
   }
 
@@ -242,7 +238,7 @@ public class CephInputStream extends FSInputStream {
    */
   @Override
   public void close() throws IOException {
-    ceph.debug("CephOutputStream.close:enter", ceph.TRACE);
+    LOG.trace("CephOutputStream.close:enter");
     if (!closed) {
       int result = ceph.ceph_close(fileHandle);
 
@@ -252,7 +248,7 @@ public class CephInputStream extends FSInputStream {
             "Close somehow failed!"
                 + "Don't try and use this stream again, though");
       }
-      ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
+      LOG.trace("CephOutputStream.close:exit");
     }
   }
 }

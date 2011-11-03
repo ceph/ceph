@@ -25,6 +25,8 @@ package org.apache.hadoop.fs.ceph;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.Progressable;
 
@@ -35,7 +37,7 @@ import org.apache.hadoop.util.Progressable;
  * Ceph instance.
  */
 public class CephOutputStream extends OutputStream {
-
+  private static final Log LOG = LogFactory.getLog(CephOutputStream.class);
   private boolean closed;
 
   private CephFS ceph;
@@ -87,9 +89,8 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(int b) throws IOException {
-    ceph.debug(
-        "CephOutputStream.write: writing a single byte to fd " + fileHandle,
-        ceph.TRACE);
+    LOG.trace(
+        "CephOutputStream.write: writing a single byte to fd " + fileHandle);
 
     if (closed) {
       throw new IOException(
@@ -115,9 +116,8 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(byte buf[], int off, int len) throws IOException {
-    ceph.debug(
-        "CephOutputStream.write: writing " + len + " bytes to fd " + fileHandle,
-        ceph.TRACE);
+    LOG.trace(
+        "CephOutputStream.write: writing " + len + " bytes to fd " + fileHandle);
     // make sure stream is open
     if (closed) {
       throw new IOException(
@@ -203,7 +203,7 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void close() throws IOException {
-    ceph.debug("CephOutputStream.close:enter", ceph.TRACE);
+    LOG.trace("CephOutputStream.close:enter");
     if (!closed) {
       flush();
       int result = ceph.ceph_close(fileHandle);
@@ -213,7 +213,7 @@ public class CephOutputStream extends OutputStream {
       }
 				
       closed = true;
-      ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
+      LOG.trace("CephOutputStream.close:exit");
     }
   }
 }

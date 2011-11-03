@@ -29,6 +29,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -40,7 +41,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 
 
 class CephFaker extends CephFS {
-	
+  private static final Log LOG = LogFactory.getLog(CephFaker.class);
   FileSystem localFS;
   String localPrefix;
   int blockSize;
@@ -51,7 +52,6 @@ class CephFaker extends CephFS {
   boolean initialized = false;
 	
   public CephFaker(Configuration con, Log log) {
-    super(con, log);
     conf = con;
     files = new Hashtable<Integer, Object>();
     filenames = new Hashtable<Integer, String>();
@@ -254,7 +254,7 @@ class CephFaker extends CephFS {
       stream = localFS.open(new Path(path));
       files.put(new Integer(fileCount), stream);
       filenames.put(new Integer(fileCount), path);
-      debug("ceph_open_for_read fh:" + fileCount + ", pathname:" + path, INFO);
+      LOG.info("ceph_open_for_read fh:" + fileCount + ", pathname:" + path);
       return fileCount++;
     } catch (IOException e) {}
     return -1; // failure
@@ -268,15 +268,14 @@ class CephFaker extends CephFS {
       stream = localFS.create(new Path(path));
       files.put(new Integer(fileCount), stream);
       filenames.put(new Integer(fileCount), path);
-      debug("ceph_open_for_overwrite fh:" + fileCount + ", pathname:" + path,
-          INFO);
+      LOG.info("ceph_open_for_overwrite fh:" + fileCount + ", pathname:" + path);
       return fileCount++;
     } catch (IOException e) {}
     return -1; // failure
   }
 
   protected int ceph_close(int filehandle) {
-    debug("ceph_close(filehandle " + filehandle + ")", INFO);
+    LOG.info("ceph_close(filehandle " + filehandle + ")");
     try {
       ((Closeable) files.get(new Integer(filehandle))).close();
       if (null == files.get(new Integer(filehandle))) {
@@ -285,10 +284,10 @@ class CephFaker extends CephFS {
       }
       return 0; // hurray, success
     } catch (NullPointerException ne) {
-      debug("ceph_close caught NullPointerException!" + ne, WARN);
+      LOG.warn("ceph_close caught NullPointerException!" + ne);
     } // err, how?
     catch (IOException ie) {
-      debug("ceph_close caught IOException!" + ie, WARN);
+      LOG.warn("ceph_close caught IOException!" + ie);
     }
     return -1; // failure
   }
@@ -391,24 +390,23 @@ class CephFaker extends CephFS {
 
   protected int ceph_write(int fh, byte[] buffer,
       int buffer_offset, int length) {
-    debug(
+    LOG.info(
         "ceph_write fh:" + fh + ", buffer_offset:" + buffer_offset + ", length:"
-        + length,
-        INFO);
+        + length);
     long ret = -1; // generic fail
 
     try {
       FSDataOutputStream os = (FSDataOutputStream) files.get(new Integer(fh));
 
-      debug("ceph_write got outputstream", INFO);
+      LOG.info("ceph_write got outputstream");
       long startPos = os.getPos();
 
       os.write(buffer, buffer_offset, length);
       ret = os.getPos() - startPos;
     } catch (IOException e) {
-      debug("ceph_write caught IOException!", WARN);
+      LOG.warn("ceph_write caught IOException!");
     } catch (NullPointerException f) {
-      debug("ceph_write caught NullPointerException!", WARN);
+      LOG.warn("ceph_write caught NullPointerException!");
     }
     return (int) ret;
   }
@@ -428,24 +426,23 @@ class CephFaker extends CephFS {
   }
 
   protected long ceph_seek_from_start(int fh, long pos) {
-    debug("ceph_seek_from_start(fh " + fh + ", pos " + pos + ")", INFO);
+    LOG.info("ceph_seek_from_start(fh " + fh + ", pos " + pos + ")");
     long ret = -1; // generic fail
 
     try {
-      debug("ceph_seek_from_start filename is " + filenames.get(new Integer(fh)),
-          INFO);
+      LOG.info("ceph_seek_from_start filename is " + filenames.get(new Integer(fh)));
       if (null == files.get(new Integer(fh))) {
-        debug("ceph_seek_from_start: is is null!", WARN);
+        LOG.warn("ceph_seek_from_start: is is null!");
       }
       FSDataInputStream is = (FSDataInputStream) files.get(new Integer(fh));
 
-      debug("ceph_seek_from_start retrieved is!", INFO);
+      LOG.info("ceph_seek_from_start retrieved is!");
       is.seek(pos);
       ret = is.getPos();
     } catch (IOException e) {
-      debug("ceph_seek_from_start caught IOException!", WARN);
+      LOG.warn("ceph_seek_from_start caught IOException!");
     } catch (NullPointerException f) {
-      debug("ceph_seek_from_start caught NullPointerException!", WARN);
+      LOG.warn("ceph_seek_from_start caught NullPointerException!");
     }
     return (int) ret;
   }

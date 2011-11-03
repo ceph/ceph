@@ -22,32 +22,13 @@
  */
 package org.apache.hadoop.fs.ceph;
 
-
 import org.apache.hadoop.conf.Configuration;
-import org.apache.commons.logging.Log;
-
 
 abstract class CephFS {
-
-  protected static final int FATAL = 0;
-  protected static final int ERROR = 1;
-  protected static final int WARN = 2;
-  protected static final int INFO = 3;
-  protected static final int DEBUG = 4;
-  protected static final int TRACE = 5;
-  protected static final int NOLOG = 6;
 
   protected static final int ENOTDIR = 20;
   protected static final int EEXIST = 17;
   protected static final int ENOENT = 2;
-
-  private boolean debug = false;
-  private Log LOG;
-
-  public CephFS(Configuration conf, Log log) {
-    debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
-    LOG = log;
-  }
 
   /*
    * Performs any necessary setup to allow general use of the filesystem.
@@ -266,41 +247,4 @@ abstract class CephFS {
    * Returns: the new position (as a long) of the filehandle on success,
    *  or a negative error code on failure.	 */
   abstract protected long ceph_seek_from_start(int fh, long pos);
-    
-  protected void debug(String statement, int priority) {
-    if (debug) {
-      System.err.println(statement);
-    }
-    switch (priority) {
-    case FATAL:
-      LOG.fatal(statement);
-      break;
-
-    case ERROR:
-      LOG.error(statement);
-      break;
-
-    case WARN:
-      LOG.warn(statement);
-      break;
-
-    case INFO:
-      LOG.info(statement);
-      break;
-
-    case DEBUG:
-      LOG.debug(statement);
-      break;
-
-    case TRACE:
-      LOG.trace(statement);
-      break;
-
-    case NOLOG:
-      break;
-
-    default:
-      break;
-    }
-  }
 }
