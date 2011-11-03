@@ -741,10 +741,18 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1statfs
  * Returns: an int containing the number of times replicated.
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replication
-(JNIEnv *env, jobject obj, jint fh)
+(JNIEnv *env, jobject obj, jstring j_path)
 {
-  struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
-  int replication = ceph_get_file_replication(cmount, (int)fh);
+  //get c-string of path, send off to libceph, release c-string, return
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
+  if (c_path == NULL)
+    return -ENOMEM;
+  ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
+  int fh = 0;
+  fh = ceph_open(cmount, c_path, O_RDONLY, 0);
+  int replication = ceph_get_file_replication(cmount, fh);
+  ceph_close(cmount, fh);
+  env->ReleaseStringUTFChars(j_path, c_path);
   return replication;
 }
 

@@ -91,6 +91,10 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
 		       struct stat *st, int *stmask);
 int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, char *name, int buflen);
+/**
+ * This returns the used buffer space on success, -ERANGE if the buffer
+ * is not large enough to hold a name, or -errno on other issues.
+ */
 int ceph_getdnames(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, char *name, int buflen);
 void ceph_rewinddir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
 loff_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);

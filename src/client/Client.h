@@ -518,6 +518,14 @@ public:
   int opendir(const char *name, dir_result_t **dirpp);
   int closedir(dir_result_t *dirp);
 
+  /**
+   * Fill a directory listing from dirp, invoking cb for each entry
+   * with the given pointer, the dirent, the struct stat, the stmask,
+   * and the offset.
+   *
+   * Returns 0 if it reached the end of the directory.
+   * If @cb returns a negative error code, stop and return that.
+   */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
 
   struct dirent * readdir(dir_result_t *d);
@@ -526,6 +534,11 @@ public:
 
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
+  /**
+   * Returns the length of the buffer that got filled in, or -errno.
+   * If it returns -ERANGE you just need to increase the size of the
+   * buffer and try again.
+   */
   int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
   int getdents(dir_result_t *dirp, char *buf, int buflen) {
     return _getdents(dirp, buf, buflen, true);

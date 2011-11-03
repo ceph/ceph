@@ -4371,7 +4371,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
   if (!dir) {
     ldout(cct, 10) << " dir is empty" << dendl;
     dirp->set_end();
-    return 1;
+    return 0;
   }
 
   map<string,Dentry*>::iterator pd;
@@ -4419,7 +4419,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino << " at end" << dendl;
   dirp->set_end();
-  return 1;
+  return 0;
 }
 
 int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
@@ -4552,7 +4552,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     }
 
     dirp->set_end();
-    return 1;
+    return 0;
   }
   assert(0);
   return 0;
@@ -4580,12 +4580,13 @@ struct single_readdir {
   bool full;
 };
 
-static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st,
+				     int stmask, off_t off)
 {
   single_readdir *c = (single_readdir *)p;
 
   if (c->full)
-    return -1;
+    return -1;  // already filled this dirent
 
   *c->de = *de;
   if (c->st)
@@ -4596,7 +4597,7 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
   return 0;  
 }
 
-struct dirent * Client::readdir(dir_result_t *d)
+struct dirent *Client::readdir(dir_result_t *d)
 {
   int ret;
   static int stmask;
@@ -4608,19 +4609,11 @@ struct dirent * Client::readdir(dir_result_t *d)
   sr.stmask = &stmask;
   sr.full = false;
 
-  /*
-   * Return mechanisms are non-obvious (callback appears intended for multi-read mechanism like ceph-fuse)
-   * readdir_r_cb=0 end of directory reached on prior call
-   * readdir_r_cb=0 entry filled and offset now at end of the directory
-   * readdir_r_cb=-1 entry is filled successfully, not end of dir
-   * readdir_r_cb=-(other) on error
-   * callback leaves sr.full=false when 'offset is at end of directory'
-   * callback may leave sr.full=false on error
-   * callback sets sr.full=true on 'successfully read dirent'
-   */
+  // our callback fills the dirent and sets sr.full=true on first
+  // call, and returns -1 the second time around.
   ret = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
   if (ret < -1) {
-    errno = -ret;
+    errno = -ret;  // this sucks.
     return (dirent *) NULL;
   }
   if (sr.full) {
@@ -4637,8 +4630,10 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de, struct stat *st, i
   sr.stmask = stmask;
   sr.full = false;
 
+  // our callback fills the dirent and sets sr.full=true on first
+  // call, and returns -1 the second time around.
   int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
-  if (r < 0)
+  if (r < -1)
     return r;
   if (sr.full)
     return 1;
@@ -4685,12 +4680,17 @@ int Client::_getdents(dir_result_t *dir, char *buf, int buflen, bool fullent)
   gr.pos = 0;
 
   int r = readdir_r_cb(dir, _readdir_getdent_cb, (void *)&gr);
-  if (r < 0) 
-    return r;
 
-  if (gr.pos == 0)
-    return -ERANGE;
-
+  if (r < 0) { // some error
+    if (r == -1) { // buffer ran out of space
+      if (gr.pos) { // but we got some entries already!
+        return gr.pos;
+      } // or we need a larger buffer
+      return -ERANGE;
+    } else { // actual error, return it
+      return r;
+    }
+  }
   return gr.pos;
 }
 
