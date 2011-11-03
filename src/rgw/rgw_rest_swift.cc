@@ -151,7 +151,6 @@ void RGWListBucket_REST_SWIFT::send_response()
 
     if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
       const string& name = pref_iter->first;
-dout(0) << "name=" << name << " prefix=" << prefix << dendl;
       if (name.compare(delimiter) == 0)
         goto next;
 
@@ -263,10 +262,8 @@ int RGWPutObj_REST_SWIFT::get_params()
 
   if (!s->length) {
     const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
-dout(0) << "encoding=" << (void *)encoding << dendl;
-    if (strcmp(encoding, "chunked") != 0)
+    if (encoding && strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
-dout(0) << "encoding=" << encoding << dendl;
 
     chunked_upload = true;
   }
