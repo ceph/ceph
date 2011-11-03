@@ -56,6 +56,7 @@ public:
   RGWPutObj_REST_S3() {}
   ~RGWPutObj_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 

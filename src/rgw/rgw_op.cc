@@ -734,7 +734,7 @@ void RGWPutObj::execute()
     } while ( len > 0);
     drain_pending(pending);
 
-    if ((uint64_t)ofs != s->content_length) {
+    if (!chunked_upload && (uint64_t)ofs != s->content_length) {
       ret = -ERR_REQUEST_TIMEOUT;
       goto done_err;
     }

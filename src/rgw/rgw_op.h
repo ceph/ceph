@@ -237,6 +237,7 @@ protected:
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
+  bool chunked_upload;
 
 public:
   RGWPutObj() {}
@@ -249,6 +250,7 @@ public:
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
     etag = "";
+    chunked_upload = false;
   }
   int verify_permission();
   void execute();

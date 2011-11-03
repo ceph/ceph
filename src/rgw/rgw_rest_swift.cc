@@ -261,6 +261,16 @@ int RGWPutObj_REST_SWIFT::get_params()
   if (s->has_bad_meta)
     return -EINVAL;
 
+  if (!s->length) {
+    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
+dout(0) << "encoding=" << (void *)encoding << dendl;
+    if (strcmp(encoding, "chunked") != 0)
+      return -ERR_LENGTH_REQUIRED;
+dout(0) << "encoding=" << encoding << dendl;
+
+    chunked_upload = true;
+  }
+
   supplied_etag = s->env->get("HTTP_ETAG");
   return RGWPutObj_REST::get_params();
 }

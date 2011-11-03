@@ -197,6 +197,14 @@ void RGWDeleteBucket_REST_S3::send_response()
   end_header(s);
 }
 
+int RGWPutObj_REST_S3::get_params()
+{
+  if (!s->length)
+    return -ERR_LENGTH_REQUIRED;
+
+  return RGWPutObj_REST::get_params();
+}
+
 void RGWPutObj_REST_S3::send_response()
 {
   if (ret) {
@@ -718,6 +726,7 @@ int RGWHandler_REST_S3::authorize()
   dout(15) << "b64=" << b64 << dendl;
   dout(15) << "auth_sign=" << auth_sign << dendl;
   dout(15) << "compare=" << auth_sign.compare(b64) << dendl;
+
   if (auth_sign.compare(b64) != 0)
     return -EPERM;
 

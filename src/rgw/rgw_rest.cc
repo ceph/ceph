@@ -793,9 +793,7 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
   switch (s->op) {
   case OP_PUT:
     if (s->object && !s->args.sub_resource_exists("acl")) {
-      if (!s->length)
-        ret = -ERR_LENGTH_REQUIRED;
-      else if (*s->length == '\0')
+      if (s->length && *s->length == '\0')
         ret = -EINVAL;
     }
     if (s->length)
