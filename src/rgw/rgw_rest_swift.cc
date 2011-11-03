@@ -262,7 +262,7 @@ int RGWPutObj_REST_SWIFT::get_params()
 
   if (!s->length) {
     const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
-    if (encoding && strcmp(encoding, "chunked") != 0)
+    if (!encoding || strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
 
     chunked_upload = true;
