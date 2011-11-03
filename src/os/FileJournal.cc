@@ -842,23 +842,26 @@ void FileJournal::do_write(bufferlist& bl)
 
   if (!directio) {
     dout(20) << "do_write fsync" << dendl;
+
+    /*
+     * We'd really love to have a fsync_range or fdatasync_range and do a:
+     *
+     *  if (split) {
+     *    ::fsync_range(fd, header.max_size - split, split)l
+     *    ::fsync_range(fd, get_top(), bl.length() - split);
+     *  else
+     *    ::fsync_range(fd, write_pos, bl.length())
+     *
+     * NetBSD and AIX apparently have it, and adding it to Linux wouldn't be
+     * too hard given all the underlying infrastructure already exist.
+     *
+     * NOTE: using sync_file_range here would not be safe as it does not
+     * flush disk caches or commits any sort of metadata.
+     */
 #if defined(DARWIN) || defined(__FreeBSD__)
     ::fsync(fd);
 #else
-# ifdef HAVE_SYNC_FILE_RANGE
-    if (is_bdev) {
-      if (split) {
-	::sync_file_range(fd, header.max_size - split, split, SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE);
-	::sync_file_range(fd, get_top(), bl.length() - split, SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE);
-	::sync_file_range(fd, header.max_size - split, split, SYNC_FILE_RANGE_WAIT_AFTER);
-	::sync_file_range(fd, get_top(), bl.length() - split, SYNC_FILE_RANGE_WAIT_AFTER);
-      } else {
-	::sync_file_range(fd, write_pos, bl.length(),
-			  SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
-      }
-    } else
-# endif
-      ::fdatasync(fd);
+    ::fdatasync(fd);
 #endif
   }
 
