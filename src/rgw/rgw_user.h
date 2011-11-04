@@ -68,7 +68,7 @@ extern int rgw_get_user_info_by_access_key(string& access_key, RGWUserInfo& info
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
-extern int rgw_delete_user(RGWUserInfo& user, bool purge_data);
+extern int rgw_delete_user(RGWUserInfo& user);
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
@@ -137,7 +137,7 @@ extern int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool n
 extern int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets);
 
 extern int rgw_add_bucket(string user_id, rgw_bucket& bucket);
-extern int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_data);
+extern int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket);
 
 /*
  * remove the different indexes

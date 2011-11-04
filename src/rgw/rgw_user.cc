@@ -351,7 +351,7 @@ int rgw_add_bucket(string user_id, rgw_bucket& bucket)
   return ret;
 }
 
-int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_data)
+int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket)
 {
   int ret;
 
@@ -377,13 +377,6 @@ int rgw_remove_user_bucket_info(string user_id, rgw_bucket& bucket, bool purge_d
       ret = rgw_write_buckets_attr(user_id, buckets);
     }
   }
-
-  if (ret == 0 && purge_data) {
-    vector<rgw_bucket> buckets_vec;
-    buckets_vec.push_back(bucket);
-    ret = rgwstore->purge_buckets(buckets_vec);
-  }
-
 
   return ret;
 }
@@ -422,7 +415,7 @@ int rgw_remove_swift_name_index(string& swift_name)
  * from the user and user email pools. This leaves the pools
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
-int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
+int rgw_delete_user(RGWUserInfo& info) {
   RGWUserBuckets user_buckets;
   int ret = rgw_read_user_buckets(info.user_id, user_buckets, false);
   if (ret < 0)
@@ -452,15 +445,6 @@ int rgw_delete_user(RGWUserInfo& info, bool purge_data) {
   if (ret < 0 && ret != -ENOENT) {
     dout(0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
-  }
-
-  if (purge_data) {
-    dout(0) << "purging user buckets" << dendl;
-    ret = rgwstore->purge_buckets(buckets_vec);
-    if (ret < 0 && ret != -ENOENT) {
-      dout(0) << "ERROR: delete_buckets returned " << ret << dendl;
-      return ret;
-    }
   }
 
   string buckets_obj_id;

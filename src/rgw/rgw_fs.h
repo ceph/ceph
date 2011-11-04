@@ -34,7 +34,7 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                struct rgw_err *err);
-  int delete_bucket(rgw_bucket& bucket, bool remove_pool);
+  int delete_bucket(rgw_bucket& bucket);
   int delete_obj(void *ctx, rgw_obj& obj, bool sync);
 
   int get_attr(const char *name, int fd, char **attr);

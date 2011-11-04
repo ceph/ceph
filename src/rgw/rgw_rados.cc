@@ -477,7 +477,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
       ret = store_bucket_info(info);
       if (ret < 0) {
         dout(0) << "failed to store bucket info, removing bucket" << dendl;
-        delete_bucket(bucket, true);
+        delete_bucket(bucket);
         return ret;
       }
     }
@@ -845,7 +845,7 @@ done_err:
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(rgw_bucket& bucket, bool remove_pool)
+int RGWRados::delete_bucket(rgw_bucket& bucket)
 {
   librados::IoCtx list_ctx;
   int r = open_bucket_ctx(bucket, list_ctx);
@@ -874,65 +874,12 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, bool remove_pool)
     }
   } while (is_truncated);
 
-  if (remove_pool) {
-    r = rados->pool_delete(bucket.pool.c_str());
-    if (r < 0)
-      return r;
-  }
-
   rgw_obj obj(rgw_root_bucket, bucket.name);
   r = delete_obj(NULL, obj, true);
   if (r < 0)
     return r;
 
   return 0;
-}
-
-/**
- * Delete buckets, don't care about content
- * bucket: the name of the bucket to delete
- * Returns 0 on success, -ERR# otherwise.
- */
-int RGWRados::purge_buckets(vector<rgw_bucket>& buckets)
-{
-  librados::IoCtx list_ctx;
-  vector<rgw_bucket>::iterator iter;
-  vector<librados::PoolAsyncCompletion *> completions;
-  int ret = 0, r;
-
-  for (iter = buckets.begin(); iter != buckets.end(); ++iter) {
-    rgw_bucket& bucket = *iter;
-    librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
-    r = rados->pool_delete_async(bucket.pool.c_str(), c);
-    if (r < 0) {
-      dout(0) << "WARNING: rados->pool_delete_async(bucket=" << bucket << ") returned err=" << r << dendl;
-      ret = r;
-    } else {
-      completions.push_back(c);
-    }
-
-    rgw_obj obj(rgw_root_bucket, bucket.name);
-    r = delete_obj(NULL, obj, true);
-    if (r < 0) {
-      dout(0) << "WARNING: could not remove bucket object: " << RGW_ROOT_BUCKET << ":" << bucket << dendl;
-      ret = r;
-      continue;
-    }
-  }
-
-  vector<librados::PoolAsyncCompletion *>::iterator citer;
-  for (citer = completions.begin(); citer != completions.end(); ++citer) {
-    PoolAsyncCompletion *c = *citer;
-    c->wait();
-    r = c->get_return_value();
-    if (r < 0) {
-      dout(0) << "WARNING: async pool_removal returned " << r << dendl;
-      ret = r;
-    }
-    c->release();
-  }
-
-  return ret;
 }
 
 int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
@@ -2059,7 +2006,7 @@ int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<stri
     const string &oid = *iter;
 
     // fill it in with initial values; we may correct later
-    e.name = *iter;
+    e.name = oid;
     m[e.name] = e;
     dout(0) << " got " << e.name << dendl;
   }
@@ -2471,7 +2418,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
           complete = false;
           break;
         }
-        r = delete_bucket(entry.obj.bucket, true);
+        r = delete_bucket(entry.obj.bucket);
         if (r < 0 && r != -ENOENT) {
           cerr << "failed to remove pool: " << entry.obj.bucket.pool << std::endl;
           complete = false;

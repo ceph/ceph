@@ -236,8 +236,7 @@ public:
                RGWObjCategory category,
                struct rgw_err *err);
   /** delete a bucket*/
-  virtual int delete_bucket(rgw_bucket& bucket, bool remove_pool);
-  virtual int purge_buckets(vector<rgw_bucket>& buckets);
+  virtual int delete_bucket(rgw_bucket& bucket);
 
   virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
