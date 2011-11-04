@@ -355,6 +355,13 @@ public:
                        RGWObjEnt& object,
                        bufferlist& suggested_updates);
 
+  bool bucket_is_system(rgw_bucket& bucket) {
+    return (bucket.name[0] == '.');
+  }
+
+  int pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
+                bool *is_truncated, string *last_entry);
+
 };
 
 #endif

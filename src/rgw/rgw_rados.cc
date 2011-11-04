@@ -354,8 +354,15 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, max - count, ent_map,
+    int r;
+
+    if (bucket_is_system(bucket)) {
+        r = pool_list(bucket, cur_marker, max - count, ent_map,
+                      &truncated, &cur_marker);
+    } else {
+        r = cls_bucket_list(bucket, cur_marker, max - count, ent_map,
                             &truncated, &cur_marker);
+    }
     if (r < 0)
       return r;
 
@@ -2026,12 +2033,52 @@ int RGWRados::distribute(bufferlist& bl)
   return r;
 }
 
+int RGWRados::pool_list(rgw_bucket& bucket, string start, uint32_t num, map<string, RGWObjEnt>& m,
+			bool *is_truncated, string *last_entry)
+{
+  librados::IoCtx io_ctx;
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectIterator iter = io_ctx.objects_begin();
+  while (iter != io_ctx.objects_end()) {
+    const std::string& oid = *iter;
+    if (oid.compare(start) >= 0)
+      break;
+
+    ++iter;
+  }
+  if (iter == io_ctx.objects_end())
+    return -ENOENT;
+
+  uint32_t i;
+
+  for (i = 0; i < num && iter != io_ctx.objects_end(); ++i, ++iter) {
+    RGWObjEnt e;
+    const string &oid = *iter;
+
+    // fill it in with initial values; we may correct later
+    e.name = *iter;
+    m[e.name] = e;
+    dout(0) << " got " << e.name << dendl;
+  }
+
+  if (m.size()) {
+    *last_entry = m.rbegin()->first;
+  }
+  if (is_truncated)
+    *is_truncated = (iter != io_ctx.objects_end());
+
+  return m.size();
+}
+
 int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
 {
-  if (bucket.marker.empty()) {
-    if (bucket.name[0] == '.')
-      return 0;
+  if (bucket_is_system(bucket))
+    return 0;
 
+  if (bucket.marker.empty()) {
     dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
@@ -2049,10 +2096,10 @@ int RGWRados::cls_rgw_init_index(rgw_bucket& bucket, string& oid)
 int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
                                  string& name, string& locator)
 {
-  if (bucket.marker.empty()) {
-    if (bucket.name[0] == '.')
-      return 0;
+  if (bucket_is_system(bucket))
+    return 0;
 
+  if (bucket.marker.empty()) {
     dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
@@ -2078,10 +2125,10 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
 
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
 {
-  if (bucket.marker.empty()) {
-    if (bucket.name[0] == '.')
-      return 0;
+  if (bucket_is_system(bucket))
+    return 0;
 
+  if (bucket.marker.empty()) {
     dout(0) << "ERROR: empty marker for cls_rgw bucket operation" << dendl;
     return -EIO;
   }
