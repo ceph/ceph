@@ -972,7 +972,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, bool sync)
     }
   } else {
     librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-    r = io_ctx.aio_operate(obj.object, completion, &op);
+    r = io_ctx.aio_operate(oid, completion, &op);
     completion->release();
   }
 
