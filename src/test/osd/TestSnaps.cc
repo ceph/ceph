@@ -53,7 +53,7 @@ struct SnapTestGenerator : public TestOpGenerator
       return retval;
     }
 		
-    int switchval = rand() % 50;
+    int switchval = rand() % 60;
     if (switchval < 20) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Reading " << oid << std::endl;
@@ -73,6 +73,11 @@ struct SnapTestGenerator : public TestOpGenerator
       int snap = rand_choose(context.snaps)->first;
       cout << "RemovingSnap " << snap << std::endl;
       return new SnapRemoveOp(&context, snap, stats);
+    } else if (switchval < 57) {
+      string oid = *(rand_choose(context.oid_not_in_use));
+      cout << "Deleting " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new DeleteOp(&context, oid, stats);
     } else {
       cout << "Snapping" << std::endl;
       return new SnapCreateOp(&context, stats);

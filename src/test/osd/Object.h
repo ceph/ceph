@@ -276,6 +276,10 @@ public:
     return iterator(*this, this->cont_gen);
   }
 
+  bool deleted() {
+    return !layers.size(); // No layers indicates missing object
+  }
+
   void update(const ContDesc &next);
   bool check(bufferlist &to_check);
   const ContDesc &most_recent();

@@ -52,16 +52,21 @@ struct ReadWriteGenerator : public TestOpGenerator
       nextop = 0;
       return retval;
     }
-    int switchval = rand() % 100;
+    int switchval = rand() % 110;
     if (switchval < read_percent) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Reading " << oid << std::endl;
       return new ReadOp(&context, oid, 0);
-    } else {
+    } else if (switchval < 100) {
       string oid = *(rand_choose(context.oid_not_in_use));
       cout << "Writing " << oid << " current snap is "
 	   << context.current_snap << std::endl;
       return new WriteOp(&context, oid, 0);
+    } else {
+      string oid = *(rand_choose(context.oid_not_in_use));
+      cout << "Deleting " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new DeleteOp(&context, oid, 0);
     }
   }
 };

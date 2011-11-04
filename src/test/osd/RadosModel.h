@@ -11,6 +11,7 @@
 #include <string>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <time.h>
 #include "Object.h"
 #include "TestOpStat.h"
@@ -183,6 +184,13 @@ public:
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
+  void remove_object(const string &oid)
+  {
+    ObjectDesc new_obj(&cont_gen);
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+  }
+
   bool find_object(const string &oid, ObjectDesc *contents, int snap = -1) const
   {
     for (map<int, map<string,ObjectDesc> >::const_reverse_iterator i = 
@@ -351,6 +359,81 @@ public:
   }
 };
 
+class DeleteOp : public TestOp {
+public:
+  string oid;
+
+  DeleteOp(RadosTestContext *context,
+	   const string &oid,
+	   TestOpStat *stat = 0) :
+    TestOp(context, stat), oid(oid)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+    done = 0;
+    stringstream acc;
+
+    ObjectDesc contents(&context->cont_gen);
+    bool present = context->find_object(oid, &contents);
+    if (present) {
+      present = !contents.deleted();
+    }
+
+    context->oid_in_use.insert(oid);
+    if (context->oid_not_in_use.count(oid) != 0) {
+      context->oid_not_in_use.erase(oid);
+    }
+    context->seq_num++;
+
+    context->remove_object(oid);
+
+    vector<uint64_t> snapset(context->snaps.size());
+    int j = 0;
+    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
+	 i != context->snaps.rend();
+	 ++i, ++j) {
+      snapset[j] = i->second;
+    }
+    interval_set<uint64_t> ranges;
+    context->state_lock.Unlock();
+
+    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
+    if (r) {
+      cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
+      assert(0);
+    }
+
+    r = context->io_ctx.remove(context->prefix+oid);
+    if (r && !(r == -ENOENT && !present)) {
+      cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
+      assert(0);
+    }
+
+    context->state_lock.Lock();
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->state_lock.Unlock();
+    finish();
+  }
+
+  void _finish()
+  {
+    return;
+  }
+
+  bool finished()
+  {
+    return true;
+  }
+
+  string getType()
+  {
+    return "DeleteOp";
+  }
+};
+
 class ReadOp : public TestOp {
 public:
   librados::AioCompletion *completion;
@@ -386,7 +469,8 @@ public:
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
     context->io_ctx.aio_read(context->prefix+oid, completion,
-			     &result, context->cont_gen.get_length(old_value.most_recent()), 0);
+			     &result,
+			     old_value.deleted() ? 0 : context->cont_gen.get_length(old_value.most_recent()), 0);
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
     }
@@ -399,9 +483,12 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     if (int err = completion->get_return_value()) {
-      cerr << "Error: oid " << oid << " read returned error code "
-	   << err << std::endl;
+      if (!(err == -ENOENT && old_value.deleted())) {
+	cerr << "Error: oid " << oid << " read returned error code "
+	     << err << std::endl;
+      }
     } else {
+      assert(!old_value.deleted());
       ContDesc to_check;
       bufferlist::iterator p = result.begin();
       if (!context->cont_gen.read_header(p, to_check)) {
