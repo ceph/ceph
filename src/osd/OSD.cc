@@ -4872,11 +4872,6 @@ void OSD::generate_backlog(PG *pg)
   dout(10) << *pg << " generate_backlog" << dendl;
 
   int tr;
-  map< int, map<pg_t,PG::Query> > query_map;
-  map< int, MOSDPGInfo* > info_map;
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts(g_ceph_context);
-  PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
 
   if (!pg->generate_backlog_epoch) {
     dout(10) << *pg << " generate_backlog was canceled" << dendl;
@@ -4886,7 +4881,16 @@ void OSD::generate_backlog(PG *pg)
   if (!pg->build_backlog_map(omap))
     goto out;
 
-  pg->assemble_backlog(omap);
+  {
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    pg->assemble_backlog(omap);
+    pg->write_info(*t);
+    pg->write_log(*t);
+    tr = store->queue_transaction(&pg->osr, t,
+				  new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(!tr);
+  }
   
   // take osd_lock, map_log (read)
   pg->unlock();
@@ -4895,19 +4899,19 @@ void OSD::generate_backlog(PG *pg)
 
   if (!pg->generate_backlog_epoch) {
     dout(10) << *pg << " generate_backlog aborting" << dendl;
-    goto out2;
+  } else {
+    map< int, map<pg_t,PG::Query> > query_map;
+    map< int, MOSDPGInfo* > info_map;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts(g_ceph_context);
+    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
+    pg->handle_backlog_generated(&rctx);
+    do_queries(query_map);
+    do_infos(info_map);
+    tr = store->queue_transaction(&pg->osr, t,
+				  new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(!tr);
   }
-
-  pg->handle_backlog_generated(&rctx);
-  do_queries(query_map);
-  do_infos(info_map);
-  pg->write_info(*t);
-  pg->write_log(*t);
-  tr = store->queue_transaction(&pg->osr, t, 
-				new ObjectStore::C_DeleteTransaction(t), fin);
-  assert(!tr);
-
- out2:
   map_lock.put_read();
 
  out:
