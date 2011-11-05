@@ -674,7 +674,7 @@ bin_DEBUGPROGRAMS += test_rados_api_misc
 
 test_libcephfs_readdir_SOURCES = test/libcephfs/readdir_r_cb.cc
 test_libcephfs_readdir_LDFLAGS = -pthread ${AM_LDFLAGS}
-test_libcephfs_readdir_LDADD =  ${UNITTEST_LDADD} libcephfs.la
+test_libcephfs_readdir_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
 test_libcephfs_readdir_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_libcephfs_readdir
 
