@@ -22,6 +22,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -62,6 +64,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -102,6 +106,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -142,6 +148,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -182,6 +190,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -222,6 +232,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -262,6 +274,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -302,6 +316,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name
@@ -342,6 +358,8 @@
                                               using the kernel
     unmap [device]                            unmap a rbd device that was
                                               mapped by the kernel
+    showmapped                                show the rbd images mapped
+                                              by the kernel
   
   Other input options:
     -p, --pool <pool>            source pool name

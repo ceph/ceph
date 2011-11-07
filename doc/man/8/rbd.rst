@@ -114,6 +114,8 @@ Commands
 :command:`unmap` [*device-path*]
   Unmaps the block device that was mapped via the rbd kernel module.
 
+:command:`showmapped`
+  Show the rbd images that are mapped via the rbd kernel module.
 
 Image name
 ==========
