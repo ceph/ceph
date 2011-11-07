@@ -618,12 +618,14 @@ CephToolCtx* ceph_tool_common_init(ceph_tool_mode_t mode, bool concise)
   ctx->dispatcher = new Admin(ctx.get());
   messenger->add_dispatcher_head(ctx->dispatcher);
 
+  ctx->mc.set_messenger(messenger);
+  int r = ctx->mc.init();
+  if (r < 0)
+    return NULL;
+
   ctx->lock.Lock();
   ctx->timer.init();
   ctx->lock.Unlock();
-
-  ctx->mc.set_messenger(messenger);
-  ctx->mc.init();
 
   // in case we 'tell ...'
   ctx->mc.set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
