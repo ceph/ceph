@@ -36,7 +36,7 @@ _rbd()
                 return 0
                 ;;
             *)
-                COMPREPLY=( $(compgen -W "ls list info create resize rm export import cp copy mv rename snap watch map unmap" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "ls list info create resize rm export import cp copy mv rename snap watch map unmap showmapped" -- ${cur}) )
                 return 0
             ;;
         esac

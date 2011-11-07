@@ -83,6 +83,8 @@ void usage()
        << "                                            using the kernel\n"
        << "  unmap [device]                            unmap a rbd device that was\n"
        << "                                            mapped by the kernel\n"
+       << "  showmapped                                show the rbd images mapped\n"
+       << "                                            by the kernel\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
