@@ -114,7 +114,7 @@ def check_lock(ctx, config):
 def connect(ctx, config):
     log.info('Opening connections...')
     from ..orchestra import connection, remote
-    import orchestra.cluster
+    from ..orchestra import cluster
     remotes = []
     for t, key in ctx.config['targets'].iteritems():
         log.debug('connecting to %s', t)
@@ -123,7 +123,7 @@ def connect(ctx, config):
                           ssh=connection.connect(user_at_host=t,
                                                  host_key=key,
                                                  keep_alive=True)))
-    ctx.cluster = orchestra.cluster.Cluster()
+    ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):
             assert all(isinstance(role, str) for role in roles), \
