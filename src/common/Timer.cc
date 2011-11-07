@@ -38,7 +38,7 @@ public:
     parent->timer_thread();
     return NULL;
   }
-} *thread;
+};
 
 
 
