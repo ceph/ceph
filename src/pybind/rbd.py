@@ -149,7 +149,7 @@ class RBD(object):
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images')
-        return c_names.raw.rstrip('\0').split('\0')
+        return filter(lambda name: name != '', c_names.raw.split('\0'))
 
     def remove(self, ioctx, name):
         """

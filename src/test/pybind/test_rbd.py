@@ -54,6 +54,9 @@ def test_context_manager():
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
+def test_list_empty():
+    eq([], RBD().list(ioctx))
+
 @with_setup(create_image, remove_image)
 def test_list():
     eq([IMG_NAME], RBD().list(ioctx))
