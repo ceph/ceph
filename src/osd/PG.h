@@ -746,6 +746,13 @@ protected:
   OSD *osd;
   PGPool *pool;
 
+  OSDMapRef osdmap_ref;
+  OSDMapRef get_osdmap() const {
+    assert(is_locked());
+    assert(osdmap_ref);
+    return osdmap_ref;
+  }
+
   /** locking and reference counting.
    * I destroy myself when the reference count hits zero.
    * lock() should be called before doing anything.
@@ -760,18 +767,21 @@ protected:
 public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
-  void lock(bool no_lockdep=false) {
-    //generic_dout(0) << this << " " << info.pgid << " lock" << dendl;
-    _lock.Lock(no_lockdep);
-  }
+  void lock(bool no_lockdep = false);
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    osdmap_ref.reset();
     _lock.Unlock();
   }
+
+  /* During handle_osd_map, the osd holds a write lock to the osdmap.
+   * *_with_map_lock_held assume that the map_lock is already held */
+  void lock_with_map_lock_held();
+
   void assert_locked() {
     assert(_lock.is_locked());
   }
-  bool is_locked() {
+  bool is_locked() const {
     return _lock.is_locked();
   }
   void wait() {
