@@ -111,6 +111,7 @@ public:
   }
 
   bool is_probing() const { return state == STATE_PROBING; }
+  bool is_slurping() const { return state == STATE_SLURPING; }
   bool is_electing() const { return state == STATE_ELECTING; }
   bool is_leader() const { return state == STATE_LEADER; }
   bool is_peon() const { return state == STATE_PEON; }
@@ -130,7 +131,20 @@ private:
   entity_inst_t slurp_source;
   map<string,version_t> slurp_versions;
 
-  void clear_probe_info();
+  Context *probe_timeout_event;  // for probing and slurping states
+
+  struct C_ProbeTimeout : public Context {
+    Monitor *mon;
+    C_ProbeTimeout(Monitor *m) : mon(m) {}
+    void finish(int r) {
+      mon->probe_timeout(r);
+    }
+  };
+
+  void reset_probe_timeout();
+  void cancel_probe_timeout();
+  void probe_timeout(int r);
+
   void slurp();
   
 public:

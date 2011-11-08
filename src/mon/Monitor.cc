@@ -108,6 +108,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   
   elector(this),
   leader(0),
+  probe_timeout_event(NULL),
+
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
   routed_request_tid(0)
 {
@@ -218,6 +220,8 @@ void Monitor::bootstrap()
 {
   dout(10) << "bootstrap" << dendl;
 
+  cancel_probe_timeout();
+
   // note my rank
   rank = monmap->get_rank(name);
 
@@ -225,7 +229,7 @@ void Monitor::bootstrap()
   state = STATE_PROBING;
   leader_since = utime_t();
   quorum.clear();
-  clear_probe_info();
+  outside_quorum.clear();
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
@@ -238,6 +242,8 @@ void Monitor::bootstrap()
     return;
   }
 
+  reset_probe_timeout();
+
   // i'm outside the quorum
   outside_quorum.insert(name);
 
@@ -249,9 +255,33 @@ void Monitor::bootstrap()
   }
 }
 
-void Monitor::clear_probe_info()
+void Monitor::cancel_probe_timeout()
 {
-  outside_quorum.clear();
+  if (probe_timeout_event) {
+    dout(10) << "cancel_probe_timeout " << probe_timeout_event << dendl;
+    timer.cancel_event(probe_timeout_event);
+    probe_timeout_event = NULL;
+  } else {
+    dout(10) << "cancel_probe_timeout (none scheduled)" << dendl;
+  }
+}
+
+void Monitor::reset_probe_timeout()
+{
+  cancel_probe_timeout();
+  probe_timeout_event = new C_ProbeTimeout(this);
+  double t = is_probing() ? g_conf->mon_probe_timeout : g_conf->mon_slurp_timeout;
+  timer.add_event_after(t, probe_timeout_event);
+  dout(10) << "reset_probe_timeout " << probe_timeout_event << " after " << t << " seconds" << dendl;
+}
+
+void Monitor::probe_timeout(int r)
+{
+  dout(4) << "probe_timeout " << probe_timeout_event << dendl;
+  assert(is_probing() || is_slurping());
+  assert(probe_timeout_event);
+  probe_timeout_event = NULL;
+  bootstrap();
 }
 
 void Monitor::handle_probe(MMonProbe *m)
@@ -388,6 +418,8 @@ void Monitor::slurp()
 {
   dout(10) << "slurp " << slurp_source << " " << slurp_versions << dendl;
 
+  reset_probe_timeout();
+
   state = STATE_SLURPING;
 
   map<string,version_t>::iterator p = slurp_versions.begin();
@@ -446,7 +478,7 @@ void Monitor::handle_probe_slurp(MMonProbe *m)
 	 ++p) {
       len += store->get_bl_sn(r->paxos_values[*p][v], p->c_str(), v);      
     }
-    if (len >= g_conf->paxos_slurp_bytes)
+    if (len >= g_conf->mon_slurp_bytes)
       break;
   }
 
@@ -513,6 +545,8 @@ void Monitor::handle_probe_data(MMonProbe *m)
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+
+  cancel_probe_timeout();
 
   // call a new election
   state = STATE_ELECTING;
