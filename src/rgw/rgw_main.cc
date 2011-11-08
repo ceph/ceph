@@ -186,6 +186,13 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     abort_early(s, init_error);
     goto done;
   }
+
+  op = handler->get_op();
+  if (!op) {
+    abort_early(s, -ERR_METHOD_NOT_ALLOWED);
+    goto done;
+  }
+
   ret = handler->authorize();
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
@@ -203,21 +210,16 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
     goto done;
   }
 
-  op = handler->get_op();
-  if (op) {
-    ret = op->verify_permission();
-    if (ret < 0) {
-      abort_early(s, ret);
-      goto done;
-    }
-
-    if (s->expect_cont)
-      dump_continue(s);
-
-    op->execute();
-  } else {
-    abort_early(s, -ERR_METHOD_NOT_ALLOWED);
+  ret = op->verify_permission();
+  if (ret < 0) {
+    abort_early(s, ret);
+    goto done;
   }
+
+  if (s->expect_cont)
+    dump_continue(s);
+
+  op->execute();
 done:
   rgw_log_op(s);
 
