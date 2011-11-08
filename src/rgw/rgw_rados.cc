@@ -1409,7 +1409,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
       r = -ERANGE;
       goto done_err;
     }
-    if (end >= astate->size) {
+    if (end >= (off_t)astate->size) {
       end = astate->size - 1;
     }
   }
