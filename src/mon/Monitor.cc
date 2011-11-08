@@ -1210,7 +1210,10 @@ bool Monitor::_ms_dispatch(Message *m)
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
       }
-      elector.dispatch(m);
+      if (!is_probing() && !is_slurping())
+	elector.dispatch(m);
+      else
+	m->put();
       break;
 
     case MSG_FORWARD:
