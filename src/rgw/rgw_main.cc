@@ -96,7 +96,9 @@ class RGWProcess {
       return req;
     }
     void _process(FCGX_Request *fcgx) {
+      perfcounter->inc(l_rgw_qactive);
       process->handle_request(fcgx);
+      perfcounter->inc(l_rgw_qactive, -1);
     }
     void _dump_queue() {
       deque<FCGX_Request *>::iterator iter;
