@@ -121,6 +121,7 @@ protected:
   uint32_t buckets_count;
   uint64_t buckets_objcount;
   uint64_t buckets_size;
+  uint64_t buckets_size_rounded;
 
 public:
   virtual void init(struct req_state *s) {
@@ -129,6 +130,7 @@ public:
     buckets_count = 0;
     buckets_objcount = 0;
     buckets_size = 0;
+    buckets_size_rounded = 0;
   }
   RGWStatAccount() {}
 

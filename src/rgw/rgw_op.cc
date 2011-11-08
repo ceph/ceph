@@ -296,15 +296,12 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
-dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
-
   obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, obj);
   ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, &ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
     goto done;
-dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
 
   start = ofs;
 
@@ -314,7 +311,6 @@ dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << "
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
   while (ofs <= end) {
-dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
     data = NULL;
     ret = rgwstore->get_obj(s->obj_ctx, &handle, obj, &data, ofs, end);
     if (ret < 0) {
@@ -421,6 +417,7 @@ void RGWStatAccount::execute()
     for (iter = m.begin(); iter != m.end(); ++iter) {
       RGWBucketEnt& bucket = iter->second;
       buckets_size += bucket.size;
+      buckets_size_rounded += bucket.size_rounded;
       buckets_objcount += bucket.count;
     }
     buckets_count = m.size();

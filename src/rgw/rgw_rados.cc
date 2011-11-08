@@ -1779,7 +1779,8 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
     RGWBucketStats& s = stats[category];
     struct rgw_bucket_category_stats& stats = iter->second;
     s.category = (RGWObjCategory)iter->first;
-    s.num_kb = ((stats.total_size_rounded + 1023) / 1024);
+    s.num_kb = ((stats.total_size + 1023) / 1024);
+    s.num_kb_rounded = ((stats.total_size_rounded + 1023) / 1024);
     s.num_objects = stats.num_entries;
   }
 
@@ -1975,7 +1976,8 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     if (iter != header.stats.end()) {
       struct rgw_bucket_category_stats& stats = iter->second;
       ent.count = stats.num_entries;
-      ent.size = stats.total_size_rounded;
+      ent.size = stats.total_size;
+      ent.size_rounded = stats.total_size_rounded;
     }
   }
 

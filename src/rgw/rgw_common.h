@@ -498,6 +498,7 @@ struct RGWBucketStats
 {
   RGWObjCategory category;
   uint64_t num_kb;
+  uint64_t num_kb_rounded;
   uint64_t num_objects;
 };
 
@@ -594,11 +595,12 @@ struct RGWObjEnt {
 struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
+  size_t size_rounded;
   time_t mtime;
   uint64_t count;
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 3;
+    __u8 struct_v = 4;
     ::encode(struct_v, bl);
     uint64_t s = size;
     __u32 mt = mtime;
@@ -607,6 +609,8 @@ struct RGWBucketEnt {
     ::encode(mt, bl);
     ::encode(count, bl);
     ::encode(bucket, bl);
+    s = size_rounded;
+    ::encode(s, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -622,10 +626,14 @@ struct RGWBucketEnt {
       ::decode(count, bl);
     if (struct_v >= 3)
       ::decode(bucket, bl);
+    if (struct_v >= 4)
+      ::decode(s, bl);
+    size_rounded = s;
   }
   void clear() {
     bucket.clear();
     size = 0;
+    size_rounded = 0;
     mtime = 0;
     count = 0;
   }

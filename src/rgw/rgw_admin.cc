@@ -451,6 +451,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
     formatter->dump_int("size_kb", s.num_kb);
+    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
     formatter->dump_int("num_objects", s.num_objects);
     formatter->close_section();
     formatter->flush(cout);

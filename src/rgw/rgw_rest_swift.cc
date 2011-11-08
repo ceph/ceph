@@ -189,10 +189,12 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   CGI_PRINTF(s,"X-Container-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
   CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
+  CGI_PRINTF(s,"X-Container-Bytes-Used-Actual: %s\n", buf);
 }
 
 static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size)
+                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
@@ -201,13 +203,15 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
   CGI_PRINTF(s,"X-Account-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
   CGI_PRINTF(s,"X-Account-Bytes-Used: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
+  CGI_PRINTF(s,"X-Account-Bytes-Used-Actual: %s\n", buf);
 }
 
 void RGWStatAccount_REST_SWIFT::send_response()
 {
   if (ret >= 0) {
     ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size);
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
   }
 
   set_req_state_err(s, ret);
