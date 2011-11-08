@@ -30,7 +30,7 @@
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonObserve.h"
 #include "messages/MMonObserveNotify.h"
-
+#include "messages/MMonProbe.h"
 #include "messages/MMonPaxos.h"
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
@@ -133,6 +133,17 @@ Paxos *Monitor::add_paxos(int type)
   return p;
 }
 
+Paxos *Monitor::get_paxos_by_name(const string& name)
+{
+  for (vector<Paxos*>::iterator p = paxos.begin();
+       p != paxos.end();
+       ++p) {
+    if ((*p)->machine_name == name)
+      return *p;
+  }
+  return NULL;
+}
+
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -213,17 +224,295 @@ void Monitor::bootstrap()
   // reset
   state = STATE_PROBING;
   leader_since = utime_t();
+  quorum.clear();
+  clear_probe_info();
 
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->restart();
 
-  // avoid election?
-  if (monmap->size() == 1) {
+  // singleton monitor?
+  if (monmap->size() == 1 && rank == 0) {
     win_standalone_election();
     return;
   }
+
+  // i'm outside the quorum
+  outside_quorum.insert(name);
+
+  // probe monitors
+  dout(10) << "probing other monitors" << dendl;
+  for (unsigned i = 0; i < monmap->size(); i++) {
+    if ((int)i != rank)
+      messenger->send_message(new MMonProbe(MMonProbe::OP_PROBE, name), monmap->get_inst(i));
+  }
+}
+
+void Monitor::clear_probe_info()
+{
+  outside_quorum.clear();
+}
+
+void Monitor::handle_probe(MMonProbe *m)
+{
+  dout(10) << "handle_probe " << *m << dendl;
+  switch (m->op) {
+  case MMonProbe::OP_PROBE:
+    handle_probe_probe(m);
+    break;
+
+  case MMonProbe::OP_REPLY:
+    handle_probe_reply(m);
+    break;
+
+  case MMonProbe::OP_SLURP:
+    handle_probe_slurp(m);
+    break;
+
+  case MMonProbe::OP_SLURP_LATEST:
+    handle_probe_slurp_latest(m);
+    break;
+
+  case MMonProbe::OP_DATA:
+    handle_probe_data(m);
+    break;
+
+  default:
+    m->put();
+  }
+}
+
+void Monitor::handle_probe_probe(MMonProbe *m)
+{
+  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
+  MMonProbe *r = new MMonProbe(MMonProbe::OP_REPLY, name);
+  r->name = name;
+  r->quorum = quorum;
+  monmap->encode(r->monmap_bl);
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
+    r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
+  messenger->send_message(r, m->get_connection());
+  m->put();
+}
+
+void Monitor::handle_probe_reply(MMonProbe *m)
+{
+  dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
+
+  if (!is_probing()) {
+    m->put();
+    return;
+  }
+
+  // newer map?
+  MonMap *newmap = new MonMap;
+  newmap->decode(m->monmap_bl);
+  if (newmap->get_epoch() > monmap->get_epoch()) {
+    dout(10) << " got new monmap epoch " << newmap->get_epoch()
+	     << " > my " << monmap->get_epoch() << dendl;
+    delete monmap;
+    monmap = newmap;
+    m->put();
+
+    bootstrap();
+    return;
+  }
+
+  // is there an existing quorum?
+  if (m->quorum.size()) {
+    dout(10) << " existing quorum " << m->quorum << dendl;
+
+    // do i need to catch up?
+    bool ok = true;
+    for (map<string,version_t>::iterator p = m->paxos_versions.begin();
+	 p != m->paxos_versions.end();
+	 ++p) {
+      Paxos *pax = get_paxos_by_name(p->first);
+      if (!pax) {
+	dout(0) << " peer has paxos machine " << p->first << " but i don't... weird" << dendl;
+	continue;  // weird!
+      }
+      if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
+	dout(10) << " peer paxos machine " << p->first << " v " << p->second
+		 << " vs my v " << pax->get_version()
+		 << " (too far ahead)"
+		 << dendl;
+	ok = false;
+      } else {
+	dout(10) << " peer paxos machine " << p->first << " v " << p->second
+		 << " vs my v " << pax->get_version()
+		 << " (ok)"
+		 << dendl;
+      }
+    }
+    if (ok) {
+      start_election();
+    } else {
+      slurp_source = m->get_source_inst();
+      slurp_versions = m->paxos_versions;
+      slurp();
+    }
+  } else {
+    // not part of a quorum
+    outside_quorum.insert(m->name);
+
+    unsigned need = monmap->size() / 2 + 1;
+    dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
+
+    if (outside_quorum.size() >= need) {
+      dout(10) << " that's enough to form a new quorum, calling election" << dendl;
+      start_election();
+    } else {
+      dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
+    }
+  }
+
+  m->put();
+}
+
+/*
+ * The whole slurp process is currently a bit of a hack.  Given the
+ * current storage model, we should be sharing code with Paxos to make
+ * sure we copy the right content.  But that model sucks and will
+ * hopefully soon change, and it's less work to kludge around it here
+ * than it is to make the current model clean.
+ *
+ * So: more or less duplicate the work of resyncing each paxos state
+ * machine here.  And move the monitor storage refactor stuff up the
+ * todo list.
+ *
+ */
+
+void Monitor::slurp()
+{
+  dout(10) << "slurp " << slurp_source << " " << slurp_versions << dendl;
+
+  state = STATE_SLURPING;
+
+  map<string,version_t>::iterator p = slurp_versions.begin();
+  while (p != slurp_versions.end()) {
+    Paxos *pax = get_paxos_by_name(p->first);
+    if (!pax) {
+      p++;
+      continue;
+    }
+    dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
+    if (p->second > pax->get_version()) {
+      MMonProbe *m = new MMonProbe(MMonProbe::OP_SLURP, name);
+      m->machine_name = p->first;
+      m->oldest_version = pax->get_first_committed();
+      m->newest_version = pax->get_version();
+      messenger->send_message(m, slurp_source);
+      return;
+    }
+
+    // latest?
+    if (pax->get_first_committed() > 1 &&   // don't need it!
+	pax->get_latest_version() < pax->get_first_committed()) {
+      MMonProbe *m = new MMonProbe(MMonProbe::OP_SLURP_LATEST, name);
+      m->machine_name = p->first;
+      m->oldest_version = pax->get_first_committed();
+      m->newest_version = pax->get_version();
+      messenger->send_message(m, slurp_source);
+      return;
+    }
+
+    slurp_versions.erase(p++);
+  }
+
+  dout(10) << "done slurping" << dendl;
+  bootstrap();
+}
+
+void Monitor::handle_probe_slurp(MMonProbe *m)
+{
+  dout(10) << "handle_probe_slurp " << *m << dendl;
+
+  Paxos *pax = get_paxos_by_name(m->machine_name);
+  assert(pax);
+
+  MMonProbe *r = new MMonProbe(MMonProbe::OP_DATA, name);
+  r->machine_name = m->machine_name;
+  r->oldest_version = pax->get_first_committed();
+  r->newest_version = pax->get_version();
+
+  version_t v = MAX(pax->get_first_committed(), m->newest_version + 1);
+  int len = 0;
+  for (; v <= pax->get_version(); v++) {
+    len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    for (list<string>::iterator p = pax->extra_state_dirs.begin();
+	 p != pax->extra_state_dirs.end();
+	 ++p) {
+      len += store->get_bl_sn(r->paxos_values[*p][v], p->c_str(), v);      
+    }
+    if (len >= g_conf->paxos_slurp_bytes)
+      break;
+  }
+
+  messenger->send_message(r, m->get_connection());
+  
+  m->put();
+}
+
+void Monitor::handle_probe_slurp_latest(MMonProbe *m)
+{
+  dout(10) << "handle_probe_slurp_latest " << *m << dendl;
+
+  Paxos *pax = get_paxos_by_name(m->machine_name);
+  assert(pax);
+
+  MMonProbe *r = new MMonProbe(MMonProbe::OP_DATA, name);
+  r->machine_name = m->machine_name;
+  r->oldest_version = pax->get_first_committed();
+  r->newest_version = pax->get_version();
+  r->latest_version = pax->get_latest(r->latest_value);
+
+  messenger->send_message(r, m->get_connection());
+  
+  m->put();
+}
+
+void Monitor::handle_probe_data(MMonProbe *m)
+{
+  dout(10) << "handle_probe_data " << *m << dendl;
+
+  Paxos *pax = get_paxos_by_name(m->machine_name);
+  assert(pax);
+
+  // trim old cruft?
+  if (m->oldest_version > pax->get_first_committed())
+    pax->trim_to(m->oldest_version, true);
+
+  // store any new stuff
+  if (m->paxos_values.size()) {
+    for (map<string, map<version_t, bufferlist> >::iterator p = m->paxos_values.begin();
+	 p != m->paxos_values.end();
+	 ++p) {
+      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
+    }
+
+    pax->first_committed = m->oldest_version;
+    pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
+
+    store->put_int(m->oldest_version, m->machine_name.c_str(), "first_committed");
+    store->put_int(pax->last_committed, m->machine_name.c_str(),
+		   "last_committed");
+  }
+
+  // latest?
+  if (m->latest_version) {
+    pax->stash_latest(m->latest_version, m->latest_value);
+  }
+
+  m->put();
+
+  slurp();
+}
+
+void Monitor::start_election()
+{
+  dout(10) << "start_election" << dendl;
 
   // call a new election
   state = STATE_ELECTING;
@@ -761,6 +1050,10 @@ bool Monitor::_ms_dispatch(Message *m)
     case CEPH_MSG_MON_SUBSCRIBE:
       /* FIXME: check what's being subscribed, filter accordingly */
       handle_subscribe((MMonSubscribe*)m);
+      break;
+
+    case MSG_MON_PROBE:
+      handle_probe((MMonProbe*)m);
       break;
 
       // OSDs

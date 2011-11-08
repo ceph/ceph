@@ -29,7 +29,9 @@ using namespace std;
 #include "messages/MMonObserve.h"
 #include "messages/MMonObserveNotify.h"
 
+#include "messages/MMonProbe.h"
 #include "messages/MMonElection.h"
+
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 
@@ -227,6 +229,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     m = new MMonPaxos;
     break;
 
+  case MSG_MON_PROBE:
+    m = new MMonProbe;
+    break;
   case MSG_MON_ELECTION:
     m = new MMonElection;
     break;

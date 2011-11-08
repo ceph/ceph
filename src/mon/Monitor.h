@@ -50,6 +50,7 @@ class PaxosService;
 
 class MMonGetMap;
 class MMonGetVersion;
+class MMonProbe;
 class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
@@ -87,6 +88,7 @@ public:
 private:
   enum {
     STATE_PROBING = 1,
+    STATE_SLURPING,
     STATE_ELECTING,
     STATE_LEADER,
     STATE_PEON
@@ -97,6 +99,7 @@ public:
   static const char *get_state_name(int s) {
     switch (s) {
     case STATE_PROBING: return "probing";
+    case STATE_SLURPING: return "slurping";
     case STATE_ELECTING: return "electing";
     case STATE_LEADER: return "leader";
     case STATE_PEON: return "peon";
@@ -122,6 +125,13 @@ private:
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
+
+  set<string> outside_quorum;
+  entity_inst_t slurp_source;
+  map<string,version_t> slurp_versions;
+
+  void clear_probe_info();
+  void slurp();
   
 public:
   epoch_t get_epoch();
@@ -129,7 +139,7 @@ public:
   const set<int>& get_quorum() { return quorum; }
 
   void bootstrap();
-
+  void start_election();
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
@@ -140,6 +150,7 @@ public:
   vector<PaxosService*> paxos_service;
 
   Paxos *add_paxos(int type);
+  Paxos *get_paxos_by_name(const string& name);
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
@@ -175,6 +186,13 @@ public:
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+
+  void handle_probe(MMonProbe *m);
+  void handle_probe_probe(MMonProbe *m);
+  void handle_probe_reply(MMonProbe *m);
+  void handle_probe_slurp(MMonProbe *m);
+  void handle_probe_slurp_latest(MMonProbe *m);
+  void handle_probe_data(MMonProbe *m);
 
   // request routing
   struct RoutedRequest {

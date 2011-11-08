@@ -100,6 +100,8 @@ OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-re
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)
+OPTION(paxos_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
+OPTION(paxos_max_join_drift, OPT_INT, 10)       // max paxos iterations before we must first slurp
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_observer_timeout, OPT_DOUBLE, 5*60) // gather updates for this long before proposing a map update

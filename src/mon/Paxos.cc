@@ -157,7 +157,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
 
   dout(10) << "share_state peer has fc " << peer_first_committed << " lc " << peer_last_committed << dendl;
   version_t v = peer_last_committed;
-    
+
   // start with a stashed full copy?
   if (peer_last_committed < first_committed) {
     bufferlist bl;
@@ -177,7 +177,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
       mon->store->get_bl_sn(m->values[v], machine_name, v);
       dout(10) << " sharing " << v << " (" 
 	       << m->values[v].length() << " bytes)" << dendl;
-    }
+   }
   }
 
   m->last_committed = last_committed;
@@ -708,7 +708,7 @@ void Paxos::lease_renew_timeout()
  * trim old states
  */
 
-void Paxos::trim_to(version_t first)
+void Paxos::trim_to(version_t first, bool force)
 {
   dout(10) << "trim_to " << first << " (was " << first_committed << ")"
 	   << ", latest_stashed " << latest_stashed
@@ -718,7 +718,7 @@ void Paxos::trim_to(version_t first)
     return;
 
   while (first_committed < first &&
-	 first_committed < latest_stashed) {
+	 (force || first_committed < latest_stashed)) {
     dout(10) << "trim " << first_committed << dendl;
     mon->store->erase_sn(machine_name, first_committed);
     for (list<string>::iterator p = extra_state_dirs.begin();
