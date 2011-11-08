@@ -43,7 +43,7 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
   first_committed = mon->store->get_int(machine_name, "first_committed");
-  latest_stashed = 0;
+  latest_stashed = mon->store->get_int(machine_name, "last_consumed");
 
   dout(10) << "init" << dendl;
 }
@@ -710,17 +710,15 @@ void Paxos::lease_renew_timeout()
 
 void Paxos::trim_to(version_t first)
 {
-  version_t last_consumed = mon->store->get_int(machine_name, "last_consumed");
-
   dout(10) << "trim_to " << first << " (was " << first_committed << ")"
-	   << ", last_consumed " << last_consumed
+	   << ", latest_stashed " << latest_stashed
 	   << dendl;
 
   if (first_committed >= first)
     return;
 
   while (first_committed < first &&
-	 first_committed < last_consumed) {
+	 first_committed < latest_stashed) {
     dout(10) << "trim " << first_committed << dendl;
     mon->store->erase_sn(machine_name, first_committed);
     for (list<string>::iterator p = extra_state_dirs.begin();
