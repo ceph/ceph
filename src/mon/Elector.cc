@@ -283,7 +283,7 @@ void Elector::dispatch(Message *m)
     {
       MMonElection *em = (MMonElection*)m;
 
-      MonMap *peermap = new MonMap(ceph_clock_now(g_ceph_context));
+      MonMap *peermap = new MonMap;
       peermap->decode(em->monmap_bl);
       if (peermap->epoch > mon->monmap->epoch) {
 	dout(0) << m->get_source_inst() << " has newer monmap epoch " << peermap->epoch
