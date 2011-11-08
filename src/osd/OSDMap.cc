@@ -251,7 +251,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
 // ----------------------------------
 // OSDMap
 
-bool OSDMap::is_blacklisted(const entity_addr_t& a)
+bool OSDMap::is_blacklisted(const entity_addr_t& a) const
 {
   if (blacklist.empty())
     return false;

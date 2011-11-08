@@ -214,7 +214,7 @@ private:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blacklisted(const entity_addr_t& a);
+  bool is_blacklisted(const entity_addr_t& a) const;
 
   string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -232,7 +232,7 @@ private:
   }
   int calc_num_osds();
 
-  void get_all_osds(set<int32_t>& ls) { 
+  void get_all_osds(set<int32_t>& ls) const {
     for (int i=0; i<max_osd; i++)
       if (exists(i))
 	ls.insert(i);
@@ -319,7 +319,7 @@ private:
 	return i;
     return -1;
   }
-  bool have_inst(int osd) {
+  bool have_inst(int osd) const {
     return exists(osd) && is_up(osd); 
   }
   const entity_addr_t &get_addr(int osd) const {
@@ -336,19 +336,19 @@ private:
     assert(exists(osd));
     return osd_hb_addr[osd];
   }
-  entity_inst_t get_inst(int osd) {
+  entity_inst_t get_inst(int osd) const {
     assert(exists(osd));
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), osd_addr[osd]);
   }
-  entity_inst_t get_cluster_inst(int osd) {
+  entity_inst_t get_cluster_inst(int osd) const {
     assert(exists(osd));
     assert(is_up(osd));
     if (osd_cluster_addr[osd] == entity_addr_t())
       return get_inst(osd);
     return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
   }
-  entity_inst_t get_hb_inst(int osd) {
+  entity_inst_t get_hb_inst(int osd) const {
     assert(exists(osd));
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), osd_hb_addr[osd]);
@@ -389,7 +389,7 @@ public:
 
 
   /****   mapping facilities   ****/
-  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) {
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const {
     // calculate ps (placement seed)
     const pg_pool_t *pool = get_pg_pool(loc.get_pool());
     if (!pool)
@@ -407,24 +407,24 @@ public:
     return 0;
   }
 
-  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) {
+  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
     assert(ret == 0);
     return pg;
   }
 
-  object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
+  object_locator_t file_to_object_locator(const ceph_file_layout& layout) const {
     return object_locator_t(layout.fl_pg_pool, layout.fl_pg_preferred);
   }
 
   // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) const {
     return make_object_layout(oid, layout.fl_pg_pool,
 			      layout.fl_pg_preferred);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1) const {
     object_locator_t loc(pg_pool);
     loc.preferred = preferred;
     
@@ -435,7 +435,7 @@ public:
     return ol;
   }
 
-  int get_pg_num(int pg_pool)
+  int get_pg_num(int pg_pool) const
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
     return pool->get_pg_num();
@@ -443,7 +443,7 @@ public:
 
   // pg -> (osd list)
 private:
-  int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) {
+  int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const {
     // map to osds[]
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
@@ -464,7 +464,7 @@ private:
   }
 
   // pg -> (up osd list)
-  void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) {
+  void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const {
     up.clear();
     for (unsigned i=0; i<raw.size(); i++) {
       if (!exists(raw[i]) || is_down(raw[i])) 
@@ -473,9 +473,9 @@ private:
     }
   }
   
-  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) {
+  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const {
     pg = pool.raw_pg_to_pg(pg);
-    map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
+    map<pg_t,vector<int> >::const_iterator p = pg_temp.find(pg);
     if (p != pg_temp.end()) {
       temp.clear();
       for (unsigned i=0; i<p->second.size(); i++) {
@@ -496,7 +496,7 @@ public:
     return _pg_to_osds(*pool, pg, raw);
   }
 
-  int pg_to_acting_osds(pg_t pg, vector<int>& acting) {         // list of osd addr's
+  int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {         // list of osd addr's
     const pg_pool_t *pool = get_pg_pool(pg.pool());
     if (!pool)
       return 0;
@@ -516,7 +516,7 @@ public:
     _raw_to_up_osds(pg, raw, up);
   }
   
-  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
+  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
     const pg_pool_t *pool = get_pg_pool(pg.pool());
     if (!pool)
       return;
@@ -534,17 +534,19 @@ public:
   }
 
   const map<int64_t,pg_pool_t>& get_pools() { return pools; }
-  const char *get_pool_name(int64_t p) {
-    if (pool_name.count(p))
-      return pool_name[p].c_str();
+  const char *get_pool_name(int64_t p) const {
+    map<int64_t, string>::const_iterator i = pool_name.find(p);
+    if (i != pool_name.end())
+      return i->second.c_str();
     return 0;
   }
   bool have_pg_pool(int64_t p) const {
     return pools.count(p);
   }
-  const pg_pool_t* get_pg_pool(int64_t p) {
-    if (pools.count(p))
-      return &pools[p];
+  const pg_pool_t* get_pg_pool(int64_t p) const {
+    map<int64_t, pg_pool_t>::const_iterator i = pools.find(p);
+    if (i != pools.end())
+      return &i->second;
     return NULL;
   }
   unsigned get_pg_size(pg_t pg) const {
@@ -552,17 +554,15 @@ public:
     assert(p != pools.end());
     return p->second.get_size();
   }
-  int get_pg_type(pg_t pg) {
+  int get_pg_type(pg_t pg) const {
     assert(pools.count(pg.pool()));
-    pg_pool_t &pool = pools[pg.pool()];
-    return pool.get_type();
+    return pools.find(pg.pool())->second.get_type();
   }
 
 
-  pg_t raw_pg_to_pg(pg_t pg) {
+  pg_t raw_pg_to_pg(pg_t pg) const {
     assert(pools.count(pg.pool()));
-    pg_pool_t &pool = pools[pg.pool()];
-    return pool.raw_pg_to_pg(pg);
+    return pools.find(pg.pool())->second.raw_pg_to_pg(pg);
   }
 
   // pg -> primary osd
@@ -662,7 +662,7 @@ public:
 
 };
 
-typedef std::tr1::shared_ptr<OSDMap> OSDMapRef;
+typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
 
 inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_summary(out);
