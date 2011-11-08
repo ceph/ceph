@@ -23,10 +23,12 @@ int rgw_perf_start(CephContext *cct)
 
   plb.add_u64_counter(l_rgw_get, "get");
   plb.add_u64_counter(l_rgw_get_b, "get_b");
-  plb.add_fl_avg(l_rgw_get_lat, "get_lat");
+  plb.add_fl_avg(l_rgw_get_lat, "get_initial_lat");
   plb.add_u64_counter(l_rgw_put, "put");
   plb.add_u64_counter(l_rgw_put_b, "put_b");
-  plb.add_fl_avg(l_rgw_put_lat, "put_lat");
+  plb.add_fl_avg(l_rgw_put_lat, "put_initial_lat");
+  plb.add_u64_counter(l_rgw_cache_hit, "cache_hit");
+  plb.add_u64_counter(l_rgw_cache_miss, "cache_miss");
 
   plb.add_u64(l_rgw_qlen, "qlen");
   plb.add_u64(l_rgw_qactive, "qactive");

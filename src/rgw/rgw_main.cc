@@ -74,6 +74,7 @@ class RGWProcess {
 
     bool _enqueue(FCGX_Request *req) {
       process->m_fcgx_queue.push_back(req);
+      perfcounter->inc(l_rgw_qlen);
       dout(20) << "enqueued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
       return true;
@@ -91,6 +92,7 @@ class RGWProcess {
       process->m_fcgx_queue.pop_front();
       dout(20) << "dequeued request fcgx=" << hex << req << dec << dendl;
       _dump_queue();
+      perfcounter->inc(l_rgw_qlen, -1);
       return req;
     }
     void _process(FCGX_Request *fcgx) {
@@ -166,6 +168,7 @@ void RGWProcess::handle_request(FCGX_Request *fcgx)
   RGWEnv rgw_env;
 
   dout(0) << "====== starting new request fcgx=" << hex << fcgx << dec << " =====" << dendl;
+  perfcounter->inc(l_rgw_req);
 
   rgw_env.init(fcgx->envp);
 

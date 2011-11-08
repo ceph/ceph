@@ -284,6 +284,9 @@ void RGWGetObj::execute()
 {
   void *handle = NULL;
   rgw_obj obj;
+  utime_t start_time = s->time;
+
+  perfcounter->inc(l_rgw_get);
 
   ret = get_params();
   if (ret < 0)
@@ -308,6 +311,8 @@ dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << "
   if (!get_data || ofs > end)
     goto done;
 
+  perfcounter->inc(l_rgw_get_b, end - ofs);
+
   while (ofs <= end) {
 dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
     data = NULL;
@@ -319,8 +324,11 @@ dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << "
     ofs += len;
     ret = 0;
 
+    perfcounter->finc(l_rgw_get_lat,
+                     (ceph_clock_now(g_ceph_context) - start_time));
     send_response(handle);
     free(data);
+    start_time = ceph_clock_now(g_ceph_context);
   }
 
   return;
@@ -645,6 +653,8 @@ void RGWPutObj::execute()
   bool created_obj = false;
   rgw_obj obj;
 
+  perfcounter->inc(l_rgw_put);
+
   ret = -EINVAL;
   if (!s->object) {
     goto done;
@@ -763,6 +773,7 @@ void RGWPutObj::execute()
       goto done_err;
     }
     s->obj_size = ofs;
+    perfcounter->inc(l_rgw_put_b, s->obj_size);
 
     hash.Final(m);
 
@@ -828,6 +839,8 @@ void RGWPutObj::execute()
   }
 done:
   drain_pending(pending);
+  perfcounter->finc(l_rgw_put_lat,
+                   (ceph_clock_now(g_ceph_context) - s->time));
   send_response();
   return;
 
@@ -835,6 +848,8 @@ done_err:
   if (created_obj)
     rgwstore->delete_obj(s->obj_ctx, obj);
   drain_pending(pending);
+  perfcounter->finc(l_rgw_put_lat,
+                   (ceph_clock_now(g_ceph_context) - s->time));
   send_response();
 }
 

@@ -224,6 +224,7 @@ void abort_early(struct req_state *s, int err_no)
   dump_errno(s);
   end_header(s);
   flush_formatter_to_req_state(s, s->formatter);
+  perfcounter->inc(l_rgw_failed_req);
 }
 
 void dump_continue(struct req_state *s)

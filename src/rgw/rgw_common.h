@@ -137,6 +137,7 @@ extern void rgw_perf_stop(CephContext *cct);
 enum {
   l_rgw_first = 15000,
   l_rgw_req,
+  l_rgw_failed_req,
 
   l_rgw_get,
   l_rgw_get_b,
@@ -148,6 +149,9 @@ enum {
 
   l_rgw_qlen,
   l_rgw_qactive,
+
+  l_rgw_cache_hit,
+  l_rgw_cache_miss,
 
   l_rgw_last,
 };
