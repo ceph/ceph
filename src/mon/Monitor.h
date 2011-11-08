@@ -131,6 +131,8 @@ private:
   entity_inst_t slurp_source;
   map<string,version_t> slurp_versions;
 
+  list<Context*> waitfor_quorum;
+
   Context *probe_timeout_event;  // for probing and slurping states
 
   struct C_ProbeTimeout : public Context {
@@ -157,6 +159,7 @@ public:
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
+  void finish_election();
 
 
   // -- paxos --
@@ -248,6 +251,16 @@ public:
   };
 
  private:
+  class C_RetryMessage : public Context {
+    Monitor *mon;
+    Message *msg;
+  public:
+    C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
+    void finish(int r) {
+      mon->_ms_dispatch(msg);
+    }
+  };
+
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
   bool _ms_dispatch(Message *m);

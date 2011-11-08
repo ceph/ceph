@@ -592,8 +592,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
 
-  resend_routed_requests();
-} 
+  finish_election();
+}
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
 {
@@ -610,8 +610,15 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
 
-  resend_routed_requests();
+  finish_election();
 }
+
+void Monitor::finish_election()
+{
+  finish_contexts(g_ceph_context, waitfor_quorum);
+  resend_routed_requests();
+} 
+
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 {
@@ -723,9 +730,35 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "quorum_status") {
+
+      // make sure our map is readable and up to date
+      if (!is_leader() && !is_peon()) {
+	dout(10) << " waiting for qorum" << dendl;
+	waitfor_quorum.push_back(new C_RetryMessage(this, m));
+	return;
+      }
+
+      JSONFormatter jf(true);
+      jf.open_object_section("quorum_status");
+      jf.dump_int("monmap_epoch", monmap->get_epoch());
+      jf.dump_int("election_epoch", get_epoch());
+
+      jf.open_array_section("quorum");
+      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+	jf.dump_int("mon", *p);
+      jf.close_section();
+
+      jf.close_section();
+
+      stringstream ss;
+      jf.flush(ss);
+      rs = ss.str();
+      r = 0;
+    }
     if (m->cmd[0] == "mon_status") {
       JSONFormatter jf(true);
-      jf.open_object_section("status");
+      jf.open_object_section("mon_status");
       jf.dump_string("name", name);
       jf.dump_int("rank", rank);
       jf.dump_string("state", get_state_name());
