@@ -14,7 +14,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     dout(10) << "cache get: name=" << name << " : miss" << dendl;
-    perfcounter->inc(l_rgw_cache_miss);
+    if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
 
@@ -23,13 +23,13 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
     dout(10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << dendl;
-    perfcounter->inc(l_rgw_cache_miss);
+    if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
   dout(10) << "cache get: name=" << name << " : hit" << dendl;
 
   info = src;
-  perfcounter->inc(l_rgw_cache_hit);
+  if(perfcounter) perfcounter->inc(l_rgw_cache_hit);
 
   return 0;
 }
