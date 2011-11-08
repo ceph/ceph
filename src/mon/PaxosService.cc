@@ -111,9 +111,10 @@ void PaxosService::_commit()
 
   if (mon->is_leader()) {
     dout(7) << "_commit creating new pending" << dendl;
-    assert(have_pending == false);
-    create_pending();
-    have_pending = true;
+    if (!have_pending) {
+      create_pending();
+      have_pending = true;
+    }
 
     committed();
   }
