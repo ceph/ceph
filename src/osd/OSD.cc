@@ -109,7 +109,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
-static ostream& _prefix(std::ostream* _dout, int whoami, OSDMap *osdmap) {
+static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
   return *_dout << "osd." << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
@@ -543,7 +543,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
-  osdmap(NULL),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   map_cache_lock("OSD::map_cache_lock"),
@@ -574,8 +573,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 
   map_in_progress_cond = new Cond();
   
-  osdmap = 0;
-
   pending_ops = 0;
   waiting_for_no_ops = false;
 }
@@ -922,8 +919,6 @@ int OSD::shutdown()
   delete watch;
 
   clear_map_cache();
-  osdmap = 0;
-
   return r;
 }
 
@@ -1313,7 +1308,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
   dout(15) << "calc_priors_during " << pgid << " [" << start << "," << end << ")" << dendl;
   
   for (epoch_t e = start; e < end; e++) {
-    OSDMap *oldmap = get_map(e);
+    OSDMapRef oldmap = get_map(e);
     vector<int> acting;
     oldmap->pg_to_acting_osds(pgid, acting);
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
@@ -1353,7 +1348,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
        e > from;
        e--) {
     // verify during intermediate epoch (e-1)
-    OSDMap *oldmap = get_map(e-1);
+    OSDMapRef oldmap = get_map(e-1);
 
     vector<int> up, acting;
     oldmap->pg_to_up_acting_osds(pgid, up, acting);
@@ -3241,7 +3236,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap *o = new OSDMap;
       if (e > 1) {
 	bufferlist obl;
-	OSDMap *prev = get_map(e - 1);
+	OSDMapRef prev = get_map(e - 1);
 	prev->encode(obl);
 	o->decode(obl);
       }
@@ -3271,7 +3266,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // check for cluster snapshot
   string cluster_snap;
   for (epoch_t cur = start; cur <= last && cluster_snap.length() == 0; cur++) {
-    OSDMap *newmap = get_map(cur);
+    OSDMapRef newmap = get_map(cur);
     cluster_snap = newmap->get_cluster_snapshot();
   }
 
@@ -3312,7 +3307,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
 
-    OSDMap *newmap = get_map(cur);
+    OSDMapRef newmap = get_map(cur);
     assert(newmap);  // we just cached it above!
 
     // kill connections to newly down osds
@@ -3559,7 +3554,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
   }
 
   // if we skipped a discontinuity and are the first epoch, we won't have a previous map.
-  OSDMap *lastmap = NULL;
+  OSDMapRef lastmap;
   if (osdmap->get_epoch() > superblock.oldest_map)
     lastmap = get_map(osdmap->get_epoch() - 1);
 
@@ -3726,16 +3721,17 @@ bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
   return store->read(coll_t::META_COLL, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
-void OSD::add_map(OSDMap *o)
+OSDMapRef OSD::add_map(OSDMap *o)
 {
   Mutex::Locker l(map_cache_lock);
   epoch_t e = o->get_epoch();
   if (map_cache.count(e) == 0) {
     dout(10) << "add_map " << e << " " << o << dendl;
-    map_cache[e] = o;
+    map_cache.insert(make_pair(e, OSDMapRef(o)));
   } else {
     dout(10) << "add_map " << e << " already have it" << dendl;
   }
+  return map_cache[e];
 }
 
 void OSD::add_map_bl(epoch_t e, bufferlist& bl)
@@ -3752,11 +3748,11 @@ void OSD::add_map_inc_bl(epoch_t e, bufferlist& bl)
   map_inc_bl[e] = bl;
 }
 
-OSDMap *OSD::get_map(epoch_t epoch)
+OSDMapRef OSD::get_map(epoch_t epoch)
 {
   {
     Mutex::Locker l(map_cache_lock);
-    map<epoch_t,OSDMap*>::iterator p = map_cache.find(epoch);
+    map<epoch_t,OSDMapRef>::iterator p = map_cache.find(epoch);
     if (p != map_cache.end()) {
       dout(30) << "get_map " << epoch << " - cached " << p->second << dendl;
       return p->second;
@@ -3772,8 +3768,7 @@ OSDMap *OSD::get_map(epoch_t epoch)
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;
   }
-  add_map(map);
-  return map;
+  return add_map(map);
 }
 
 void OSD::trim_map_bl_cache(epoch_t oldest)
@@ -3794,9 +3789,8 @@ void OSD::trim_map_cache(epoch_t oldest)
 	 (map_cache.begin()->first < oldest ||
 	  (int)map_cache.size() > g_conf->osd_map_cache_max)) {
     epoch_t e = map_cache.begin()->first;
-    OSDMap *o = map_cache.begin()->second;
+    OSDMapRef o = map_cache.begin()->second;
     dout(10) << "trim_map_cache " << e << " " << o << dendl;
-    delete o;
     map_cache.erase(map_cache.begin());
   }
 }
@@ -3804,8 +3798,6 @@ void OSD::trim_map_cache(epoch_t oldest)
 void OSD::clear_map_cache()
 {
   while (!map_cache.empty()) {
-    OSDMap *o = map_cache.begin()->second;
-    delete o;
     map_cache.erase(map_cache.begin());
   }
 }

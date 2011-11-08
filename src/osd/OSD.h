@@ -38,6 +38,7 @@
 
 #include <map>
 #include <memory>
+#include <tr1/memory>
 using namespace std;
 
 #include <ext/hash_map>
@@ -376,7 +377,7 @@ private:
  protected:
 
   // -- osd map --
-  OSDMap         *osdmap;
+  OSDMapRef       osdmap;
   utime_t         had_map_since;
   RWLock          map_lock;
   list<Message*>  waiting_for_osdmap;
@@ -401,13 +402,13 @@ private:
   void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
 
   // osd map cache (past osd maps)
-  map<epoch_t,OSDMap*> map_cache;
+  map<epoch_t,OSDMapRef > map_cache;
   map<epoch_t,bufferlist> map_inc_bl;
   map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
 
-  OSDMap* get_map(epoch_t e);
-  void add_map(OSDMap *o);
+  OSDMapRef get_map(epoch_t e);
+  OSDMapRef add_map(OSDMap *o);
   void add_map_bl(epoch_t e, bufferlist& bl);
   void add_map_inc_bl(epoch_t e, bufferlist& bl);
   void trim_map_cache(epoch_t oldest);

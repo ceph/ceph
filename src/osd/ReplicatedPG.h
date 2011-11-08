@@ -580,7 +580,7 @@ protected:
   void send_push_op_blank(const hobject_t& soid, int peer);
 
   // Cancels/resets pulls from peer
-  void check_recovery_op_pulls(const OSDMap *map);
+  void check_recovery_op_pulls(const OSDMapRef map);
   int pull(const hobject_t& oid, eversion_t v);
   void send_pull_op(const hobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 

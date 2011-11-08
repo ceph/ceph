@@ -36,6 +36,7 @@
 #include <list>
 #include <set>
 #include <map>
+#include <tr1/memory>
 using namespace std;
 
 #include <ext/hash_set>
@@ -660,6 +661,8 @@ public:
   void dump(Formatter *f) const;
 
 };
+
+typedef std::tr1::shared_ptr<OSDMap> OSDMapRef;
 
 inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_summary(out);

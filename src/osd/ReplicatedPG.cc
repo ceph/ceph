@@ -43,7 +43,7 @@
 #define DOUT_PREFIX_ARGS this, osd->whoami, osd->osdmap
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this, osd->whoami, osd->osdmap)
-static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMap *osdmap) {
+static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMapRef osdmap) {
   return *_dout << "osd." << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
@@ -4787,7 +4787,7 @@ void ReplicatedPG::_clear_recovery_state()
   pull_from_peer.clear();
 }
 
-void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
+void ReplicatedPG::check_recovery_op_pulls(const OSDMapRef osdmap)
 {
   for (map<int, set<hobject_t> >::iterator j = pull_from_peer.begin();
        j != pull_from_peer.end();

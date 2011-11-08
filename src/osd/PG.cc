@@ -957,11 +957,11 @@ void PG::generate_past_intervals()
 
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
-  OSDMap *nextmap = osd->get_map(last_epoch);
+  OSDMapRef nextmap = osd->get_map(last_epoch);
   for (;
        last_epoch >= stop;
        last_epoch = first_epoch - 1) {
-    OSDMap *lastmap = nextmap;
+    OSDMapRef lastmap = nextmap;
     vector<int> tup, tacting;
     lastmap->pg_to_up_acting_osds(get_pgid(), tup, tacting);
     
@@ -1034,7 +1034,7 @@ void PG::trim_past_intervals()
 }
 
 
-bool PG::adjust_need_up_thru(const OSDMap *osdmap)
+bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 {
   epoch_t up_thru = osd->osdmap->get_up_thru(osd->whoami);
   if (need_up_thru &&
@@ -1049,7 +1049,7 @@ bool PG::adjust_need_up_thru(const OSDMap *osdmap)
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
-bool PG::all_unfound_are_queried_or_lost(const OSDMap* osdmap) const
+bool PG::all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const
 {
   assert(is_primary());
 
@@ -3372,7 +3372,7 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
 
 // true if all OSDs in prior intervals may have crashed, and we need to replay
 // false positives are okay, false negatives are not.
-bool PG::may_need_replay(const OSDMap *osdmap) const
+bool PG::may_need_replay(const OSDMapRef osdmap) const
 {
   bool crashed = false;
 
@@ -3483,11 +3483,11 @@ void PG::set_last_peering_reset() {
 }
 
 /* Called before initializing peering during advance_map */
-void PG::start_peering_interval(const OSDMap *lastmap,
+void PG::start_peering_interval(const OSDMapRef lastmap,
 				const vector<int>& newup,
 				const vector<int>& newacting)
 {
-  const OSDMap *osdmap = osd->osdmap;
+  const OSDMapRef osdmap = osd->osdmap;
 
   // -- there was a change! --
   kick();
@@ -4017,7 +4017,7 @@ boost::statechart::result
 PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
-  OSDMap *osdmap = advmap.osdmap;
+  OSDMapRef osdmap = advmap.osdmap;
 
   // Remove any downed osds from peer_info
   map<int,PG::Info>::iterator p = pg->peer_info.begin();
@@ -4735,7 +4735,7 @@ void PG::RecoveryState::handle_query(int from, const PG::Query& q,
   end_handle();
 }
 
-void PG::RecoveryState::handle_advance_map(OSDMap *osdmap, OSDMap *lastmap,
+void PG::RecoveryState::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 					   vector<int>& newup, vector<int>& newacting,
 					   RecoveryCtx *rctx)
 {
@@ -4922,7 +4922,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 }
 
 // true if the given map affects the prior set
-bool PG::PriorSet::affected_by_map(const OSDMap *osdmap, const PG *debug_pg) const
+bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) const
 {
   for (set<int>::iterator p = probe.begin();
        p != probe.end();
