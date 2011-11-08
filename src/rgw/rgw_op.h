@@ -58,6 +58,7 @@ protected:
   char *data;
   int ret;
   bool get_data;
+  bool partial_content;
 
   int init_common();
 public:
@@ -82,6 +83,7 @@ public:
     unmod_ptr = NULL;
     attrs.clear();
     data = NULL;
+    partial_content = false;
     ret = 0;
 
     /* get_data should not be initialized here! */

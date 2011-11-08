@@ -49,12 +49,15 @@ public:
 
 static MultipartMetaFilter mp_filter;
 
-static int parse_range(const char *range, off_t& ofs, off_t& end)
+static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_content)
 {
   int r = -ERANGE;
   string s(range);
   string ofs_str;
   string end_str;
+
+  *partial_content = false;
+
   int pos = s.find("bytes=");
   if (pos < 0) {
     pos = 0;
@@ -76,6 +79,8 @@ static int parse_range(const char *range, off_t& ofs, off_t& end)
   pos = s.find('-');
   if (pos < 0)
     goto done;
+
+  *partial_content = true;
 
   ofs_str = s.substr(0, pos);
   end_str = s.substr(pos + 1);
@@ -338,7 +343,7 @@ done:
 int RGWGetObj::init_common()
 {
   if (range_str) {
-    int r = parse_range(range_str, ofs, end);
+    int r = parse_range(range_str, ofs, end, &partial_content);
     if (r < 0)
       return r;
   }

@@ -351,7 +351,7 @@ int RGWGetObj_REST_SWIFT::send_response(void *handle)
     }
   }
 
-  if (range_str && !ret)
+  if (partial_content && !ret)
     ret = -STATUS_PARTIAL_CONTENT;
 
   if (ret)

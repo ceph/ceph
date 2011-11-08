@@ -71,7 +71,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
     }
   }
 
-  if (range_str && !ret)
+  if (partial_content && !ret)
     ret = STATUS_PARTIAL_CONTENT;
 done:
   set_req_state_err(s, ret);
