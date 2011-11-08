@@ -313,7 +313,7 @@ int RGWFS::copy_obj(void *ctx, rgw_obj& dest_obj,
   time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(ctx, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
+  ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &obj_size, &handle, err);
   if (ret < 0)
     return ret;
@@ -459,7 +459,7 @@ int RGWFS::set_attr(void *ctx, rgw_obj& obj,
 
 int RGWFS::prepare_get_obj(void *ctx,
             rgw_obj& obj,
-            off_t ofs, off_t *end,
+            off_t *pofs, off_t *pend,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
@@ -481,6 +481,8 @@ int RGWFS::prepare_get_obj(void *ctx,
   size_t max_len;
   char *etag = NULL;
   off_t size;
+  off_t ofs = 0;
+  off_t end = -1;
 
 
   GetObjState *state = new GetObjState;
@@ -503,11 +505,6 @@ int RGWFS::prepare_get_obj(void *ctx,
     return -errno;
 
   size = st.st_size;
-
-  if (*end < 0)
-    *end = size - 1;
-
-  max_len = *end + 1 - ofs;
 
   r = -ECANCELED;
   if (mod_ptr) {
@@ -552,6 +549,35 @@ int RGWFS::prepare_get_obj(void *ctx,
 
   free(etag);
 
+  if (pofs)
+    ofs = *pofs;
+  if (pend)
+    end = *pend;
+
+  if (ofs < 0) {
+    ofs += size;
+    end = size - 1;
+  } else if (end < 0) {
+    end = size - 1;
+  }
+
+  if (size > 0) {
+    if (ofs >= (off_t)size) {
+      r = -ERANGE;
+      goto done_err;
+    }
+
+    if (end >= size) {
+      end = size - 1;
+    }
+  }
+
+  max_len = end + 1 - ofs;
+
+  if (pofs)
+    *pofs = ofs;
+  if (pend)
+    *pend = end;
   if (total_size)
     *total_size = (max_len > 0 ? max_len : 0);
   if (obj_size)

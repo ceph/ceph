@@ -252,7 +252,7 @@ public:
 
   /** Get data about an object out of RADOS and into memory. */
   virtual int prepare_get_obj(void *ctx, rgw_obj& obj,
-            off_t ofs, off_t *end,
+            off_t *ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,

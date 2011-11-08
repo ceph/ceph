@@ -778,7 +778,6 @@ int RGWRados::copy_obj(void *ctx,
 {
   int ret, r;
   char *data;
-  off_t end = -1;
   uint64_t total_len, obj_size;
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
@@ -796,13 +795,14 @@ int RGWRados::copy_obj(void *ctx,
   void *handle = NULL;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(ctx, src_obj, 0, &end, &attrset,
+  off_t ofs = 0;
+  off_t end = -1;
+  ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset,
                 mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, &handle, err);
 
   if (ret < 0)
     return ret;
 
-  off_t ofs = 0;
   do {
     ret = get_obj(ctx, &handle, src_obj, &data, ofs, end);
     if (ret < 0)
@@ -1276,7 +1276,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
  *          (if get_data==false) length of the object
  */
 int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
-            off_t ofs, off_t *end,
+            off_t *pofs, off_t *pend,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
@@ -1297,6 +1297,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
   RGWRadosCtx *new_ctx = NULL;
   RGWObjState *astate = NULL;
+  off_t ofs = 0;
+  off_t end = -1;
 
   map<string, bufferlist>::iterator iter;
 
@@ -1388,11 +1390,36 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
 
-  if (end && *end < 0)
-    *end = astate->size - 1;
+  if (pofs)
+    ofs = *pofs;
+  if (pend)
+    end = *pend;
 
+  if (ofs < 0) {
+    ofs += astate->size;
+    if (ofs < 0)
+      ofs = 0;
+    end = astate->size - 1;
+  } else if (end < 0) {
+    end = astate->size - 1;
+  }
+
+  if (astate->size > 0) {
+    if (ofs >= (off_t)astate->size) {
+      r = -ERANGE;
+      goto done_err;
+    }
+    if (end >= astate->size) {
+      end = astate->size - 1;
+    }
+  }
+
+  if (pofs)
+    *pofs = ofs;
+  if (pend)
+    *pend = end;
   if (total_size)
-    *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
+    *total_size = (ofs <= end ? end + 1 - ofs : 0);
   if (obj_size)
     *obj_size = astate->size;
   if (lastmod)
@@ -1595,7 +1622,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   GetObjState *state = *(GetObjState **)handle;
   RGWObjState *astate = NULL;
 
-  if (end <= 0)
+  if (end < 0)
     len = 0;
   else
     len = end - ofs + 1;

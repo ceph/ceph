@@ -38,7 +38,7 @@ int rgw_get_obj(void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl)
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(ctx, obj, 0, NULL, NULL, NULL,
+  ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, NULL, NULL,
                                   NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;

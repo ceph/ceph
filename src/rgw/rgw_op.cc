@@ -53,25 +53,44 @@ static int parse_range(const char *range, off_t& ofs, off_t& end)
 {
   int r = -ERANGE;
   string s(range);
-  int pos = s.find("bytes=");
   string ofs_str;
   string end_str;
-
-  if (pos < 0)
-    goto done;
-
-  s = s.substr(pos + 6); /* size of("bytes=")  */
+  int pos = s.find("bytes=");
+  if (pos < 0) {
+    pos = 0;
+    while (isspace(s[pos]))
+      pos++;
+    int end = pos;
+    while (isalpha(s[end]))
+      end++;
+    if (strncasecmp(s.c_str(), "bytes", end - pos) != 0)
+      return 0;
+    while (isspace(s[end]))
+      end++;
+    if (s[end] != '=')
+      return 0;
+    s = s.substr(end + 1);
+  } else {
+    s = s.substr(pos + 6); /* size of("bytes=")  */
+  }
   pos = s.find('-');
   if (pos < 0)
     goto done;
 
   ofs_str = s.substr(0, pos);
   end_str = s.substr(pos + 1);
-  if (ofs_str.length())
-    ofs = atoll(ofs_str.c_str());
-
-  if (end_str.length())
+  if (end_str.length()) {
     end = atoll(end_str.c_str());
+    if (end < 0)
+      goto done;
+  }
+
+  if (ofs_str.length()) {
+    ofs = atoll(ofs_str.c_str());
+  } else { // RFC2616 suffix-byte-range-spec
+    ofs = -end;
+    end = -1;
+  }
 
   dout(10) << "parse_range ofs=" << ofs << " end=" << end << dendl;
 
@@ -166,7 +185,7 @@ static int get_policy_from_attr(void *ctx, RGWAccessControlPolicy *policy, rgw_o
 static int get_obj_attrs(struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
 {
   void *handle;
-  int ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, 0, NULL, &attrs, NULL,
+  int ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, NULL, NULL, &attrs, NULL,
                                       NULL, NULL, NULL, NULL, NULL, NULL, &handle, &s->err);
   rgwstore->finish_get_obj(&handle);
   return ret;
@@ -274,17 +293,23 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done;
 
+dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
+
   obj.init(s->bucket, s->object_str);
   rgwstore->set_atomic(s->obj_ctx, obj);
-  ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, ofs, &end, &attrs, mod_ptr,
+  ret = rgwstore->prepare_get_obj(s->obj_ctx, obj, &ofs, &end, &attrs, mod_ptr,
                                   unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
     goto done;
+dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
+
+  start = ofs;
 
   if (!get_data || ofs > end)
     goto done;
 
   while (ofs <= end) {
+dout(0) << __FILE__ << ":" << __LINE__ << ": ofs=" << ofs << " end=" << end << " total_len=" << total_len << dendl;
     data = NULL;
     ret = rgwstore->get_obj(s->obj_ctx, &handle, obj, &data, ofs, end);
     if (ret < 0) {
@@ -312,7 +337,6 @@ int RGWGetObj::init_common()
     int r = parse_range(range_str, ofs, end);
     if (r < 0)
       return r;
-    start = ofs;
   }
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0)
