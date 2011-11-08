@@ -581,6 +581,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
+  outside_quorum.clear();
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
 
   clog.info() << "mon." << name << "@" << rank
@@ -600,6 +601,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   leader_since = utime_t();
   leader = l;
   quorum = q;
+  outside_quorum.clear();
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << dendl;
   
@@ -720,6 +722,40 @@ void Monitor::handle_command(MMonCommand *m)
     if (m->cmd[0] == "auth") {
       authmon()->dispatch(m);
       return;
+    }
+    if (m->cmd[0] == "mon_status") {
+      JSONFormatter jf(true);
+      jf.open_object_section("status");
+      jf.dump_string("name", name);
+      jf.dump_int("rank", rank);
+      jf.dump_string("state", get_state_name());
+      jf.dump_int("monmap_epoch", monmap->get_epoch());
+      jf.dump_int("election_epoch", get_epoch());
+
+      jf.open_array_section("quorum");
+      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+	jf.dump_int("mon", *p);
+      jf.close_section();
+
+      jf.open_array_section("outside_quorum");
+      for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+	jf.dump_string("mon", *p);
+      jf.close_section();
+
+      if (is_slurping()) {
+	jf.dump_stream("slurp_source") << slurp_source;
+	jf.open_object_section("slurp_version");
+	for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
+	  jf.dump_int(p->first.c_str(), p->second);	  
+	jf.close_section();
+      }
+
+      jf.close_section();
+
+      stringstream ss;
+      jf.flush(ss);
+      rs = ss.str();
+      r = 0;
     }
     if (m->cmd[0] == "health") {
       health_status_t overall = HEALTH_OK;
