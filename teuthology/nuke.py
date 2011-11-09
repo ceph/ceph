@@ -144,7 +144,7 @@ def reboot(ctx, remotes, log):
     if remotes:
         log.info('waiting for nodes to reboot')
         time.sleep(5) #if we try and reconnect too quickly, it succeeds!
-        reconnect(ctx, 300)     #allow 5 minutes for the reboots
+        reconnect(ctx, 480)     #allow 8 minutes for the reboots
 
 def reset_syslog_dir(ctx, log):
     from .orchestra import run
