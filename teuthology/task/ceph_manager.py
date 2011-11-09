@@ -278,3 +278,35 @@ class CephManager:
 
     def mark_in_osd(self, osd):
         self.raw_cluster_cmd('osd', 'in', str(osd))
+
+
+    ## monitors
+
+    def kill_mon(self, mon):
+        self.ctx.daemons.get_daemon('mon', mon).stop()
+
+    def revive_mon(self, mon):
+        self.ctx.daemons.get_daemon('mon', mon).restart()
+
+    def get_mon_status(self, mon):
+        addr = self.ctx.ceph.conf['mon.%s' % mon]['mon addr']
+        out = self.raw_cluster_cmd('-m', addr, 'mon_status')
+        return json.loads(out)
+
+    def get_mon_quorum(self):
+        out = self.raw_cluster_cmd('quorum_status')
+        j = json.loads(out)
+        return j['quorum']
+
+    def wait_for_mon_quorum_size(self, size, timeout=None):
+        self.log('waiting for quorum size %d' % size)
+        start = time.time()
+        while not len(self.get_mon_quorum()) == size:
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to reach quorum size %d before timeout expired' % size
+            time.sleep(3)
+        self.log("quorum is size %d" % size)
+                
+
+
