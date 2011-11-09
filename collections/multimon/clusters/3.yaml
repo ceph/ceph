@@ -1,0 +1,4 @@
+roles:
+- [mon.0, osd.0]
+- [mon.1, mds.a]
+- [mon.2]
