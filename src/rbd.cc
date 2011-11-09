@@ -986,6 +986,9 @@ int main(int argc, const char **argv)
       case OPT_RENAME:
 	set_conf_param(v, &imgname, &destname);
 	break;
+      case OPT_SHOWMAPPED:
+	usage_exit();
+	break;
       default:
 	assert(0);
 	break;
