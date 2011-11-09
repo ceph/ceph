@@ -37,7 +37,11 @@ static ostream& _prefix(std::ostream *_dout, const PG *pg) {
   return *_dout << pg->gen_prefix();
 }
 
-void PG::lock(bool no_lockdep) {
+/*
+ * take osd->map_lock to get a valid osdmap reference
+ */
+void PG::lock(bool no_lockdep)
+{
   osd->map_lock.get_read();
   OSDMapRef map = osd->osdmap;
   osd->map_lock.put_read();
@@ -45,12 +49,18 @@ void PG::lock(bool no_lockdep) {
   osdmap_ref.swap(map);
 }
 
-void PG::lock_with_map_lock_held() {
+/*
+ * caller holds osd->map_lock, no need to take it to get a valid
+ * osdmap reference.
+ */
+void PG::lock_with_map_lock_held()
+{
   _lock.Lock();
   osdmap_ref = osd->osdmap;
 }
 
-std::string PG::gen_prefix() const {
+std::string PG::gen_prefix() const
+{
   stringstream out;
   out << "osd." << osd->whoami 
       << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) 
