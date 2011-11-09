@@ -939,6 +939,13 @@ void PG::generate_past_intervals()
   if (stop < osd->superblock.oldest_map)
     stop = osd->superblock.oldest_map;   // this is a lower bound on last_epoch_clean cluster-wide.     
   epoch_t last_epoch = info.history.same_interval_since - 1;
+
+  if (last_epoch < stop) {
+    dout(10) << __func__ << " last_epoch " << last_epoch << " < oldest " << stop
+	     << ", nothing to do" << dendl;
+    return;
+  }
+
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
   OSDMap *nextmap = osd->get_map(last_epoch);
