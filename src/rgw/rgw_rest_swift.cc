@@ -273,6 +273,18 @@ int RGWPutObj_REST_SWIFT::get_params()
   }
 
   supplied_etag = s->env->get("HTTP_ETAG");
+
+  if (!s->content_type) {
+    dout(0) << "content type wasn't provided, trying to guess" << dendl;
+    const char *suffix = strrchr(s->object, '.');
+    if (suffix) {
+      suffix++;
+      if (*suffix) {
+        string suffix_str(suffix);
+        s->content_type = rgw_find_mime_by_ext(suffix_str);
+      }
+    }
+  }
   return RGWPutObj_REST::get_params();
 }
 

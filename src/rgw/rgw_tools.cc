@@ -12,6 +12,8 @@
 
 #define READ_CHUNK_LEN (16 * 1024)
 
+static map<string, string> ext_mime_map;
+
 int rgw_put_obj(string& uid, rgw_bucket& bucket, string& oid, const char *data, size_t size)
 {
   map<string,bufferlist> attrs;
@@ -62,4 +64,101 @@ done:
   return ret;
 }
 
+void parse_mime_map_line(const char *start, const char *end)
+{
+  char line[end - start + 1];
+  strncpy(line, start, end - start);
+  line[end - start] = '\0';
+  char *l = line;
+#define DELIMS " \t\n\r"
 
+  while (isspace(*l))
+    l++;
+
+  char *mime = strsep(&l, DELIMS);
+  if (!mime)
+    return;
+
+  char *ext;
+  do {
+    ext = strsep(&l, DELIMS);
+    if (ext && *ext) {
+      ext_mime_map[ext] = mime;
+    }
+  } while (ext);
+}
+
+
+void parse_mime_map(const char *buf)
+{
+  const char *start = buf, *end = buf;
+  while (*end) {
+    while (*end && *end != '\n') {
+      end++;
+    }
+    parse_mime_map_line(start, end);
+    end++;
+    start = end;
+  }
+}
+
+static int ext_mime_map_init(const char *ext_map)
+{
+  int fd = open(ext_map, O_RDONLY);
+  char *buf = NULL;
+  int ret;
+  if (fd < 0) {
+    ret = -errno;
+    dout(0) << "ext_mime_map_init(): failed to open file=" << ext_map << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  struct stat st;
+  ret = fstat(fd, &st);
+  if (ret < 0) {
+    ret = -errno;
+    dout(0) << "ext_mime_map_init(): failed to stat file=" << ext_map << " ret=" << ret << dendl;
+    goto done;
+  }
+
+  buf = (char *)malloc(st.st_size + 1);
+  if (!buf) {
+    ret = -ENOMEM;
+    dout(0) << "ext_mime_map_init(): failed to allocate buf" << dendl;
+    goto done;
+  }
+
+  ret = read(fd, buf, st.st_size + 1);
+  if (ret != st.st_size) {
+    // huh? file size has changed, what are the odds?
+    dout(0) << "ext_mime_map_init(): raced! will retry.." << dendl;
+    close(fd);
+    return ext_mime_map_init(ext_map);
+  }
+  buf[st.st_size] = '\0';
+
+  parse_mime_map(buf);
+  ret = 0;
+done:
+  free(buf);
+  close(fd);
+  return ret;
+}
+
+const char *rgw_find_mime_by_ext(string& ext)
+{
+  map<string, string>::iterator iter = ext_mime_map.find(ext);
+  if (iter == ext_mime_map.end())
+    return NULL;
+
+  return iter->second.c_str();
+}
+
+int rgw_tools_init(CephContext *cct)
+{
+  int ret = ext_mime_map_init(cct->_conf->rgw_mime_types_file.c_str());
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
