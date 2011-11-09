@@ -1,9 +1,6 @@
-import contextlib
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
-import time
-import json
 
 
 log = logging.getLogger(__name__)

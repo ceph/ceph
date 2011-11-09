@@ -5,8 +5,6 @@ import nose
 
 from .. import cluster, remote
 
-from .util import assert_raises
-
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
 def test_init_empty():

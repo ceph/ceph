@@ -1,9 +1,5 @@
 from cStringIO import StringIO
-from configobj import ConfigObj
-import base64
-import contextlib
 import logging
-import os
 import json
 
 import boto.exception
@@ -11,9 +7,6 @@ import boto.s3.connection
 import boto.s3.acl
 
 from teuthology import misc as teuthology
-from teuthology import contextutil
-from ..orchestra import run
-from ..orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +62,6 @@ def task(ctx, config):
     subuser2='foo:foo2'
     display_name='Foo'
     email='foo@foo.com'
-    auid='1234'
     access_key='9te6NH5mcdcq0Tc5i8i1'
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'

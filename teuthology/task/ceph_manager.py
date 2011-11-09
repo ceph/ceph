@@ -4,7 +4,6 @@ import time
 import re
 import gevent
 import json
-from ..orchestra import run
 
 class Thrasher(gevent.Greenlet):
     def __init__(self, manager, config, logger=None):
