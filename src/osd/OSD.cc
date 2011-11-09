@@ -798,7 +798,7 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_pg_stray, "numpg_stray");   // num stray pgs
   osd_plb.add_u64(l_osd_hb_to, "heartbeat_to_peers");     // heartbeat peers we send to
   osd_plb.add_u64(l_osd_hb_from, "heartbeat_from_peers"); // heartbeat peers we recv from
-  osd_plb.add_u64_counter(l_osd_map, "map_messagse");           // osdmap messages
+  osd_plb.add_u64_counter(l_osd_map, "map_messages");           // osdmap messages
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
 
