@@ -233,6 +233,9 @@ def main():
         from teuthology.misc import get_user
         ctx.owner = get_user()
 
+    nuke(ctx, log)
+
+def nuke(ctx, log):
     from teuthology.task.internal import check_lock, connect
     check_lock(ctx, None)
     connect(ctx, None)
