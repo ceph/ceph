@@ -171,7 +171,7 @@ public:
 
 
   /*** devices ***/
-  int get_max_devices() {
+  int get_max_devices() const {
     if (!crush) return 0;
     return crush->max_devices;
   }
@@ -382,12 +382,12 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int ruleset, int type, int size) {
+  int find_rule(int ruleset, int type, int size) const {
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
-	       vector<__u32>& weight) {
+	       const vector<__u32>& weight) const {
     int rawout[maxout];
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
 			       forcefeed, &weight[0]);

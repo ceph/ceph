@@ -90,7 +90,7 @@ public:
     pthread_mutex_destroy(&_m); 
   }
 
-  bool is_locked() {
+  bool is_locked() const {
     return (nlock > 0);
   }
 

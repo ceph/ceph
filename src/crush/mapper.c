@@ -32,7 +32,7 @@
  * @type: storage ruleset type (user defined)
  * @size: output set size
  */
-int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
+int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
 	__u32 i;
 
@@ -262,7 +262,7 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
  * true if device is marked "out" (failed, fully offloaded)
  * of the cluster
  */
-static int is_out(struct crush_map *map, __u32 *weight, int item, int x)
+static int is_out(const struct crush_map *map, const __u32 *weight, int item, int x)
 {
 	if (weight[item] >= 0x10000)
 		return 0;
@@ -287,9 +287,9 @@ static int is_out(struct crush_map *map, __u32 *weight, int item, int x)
  * @recurse_to_leaf: true if we want one device under each item of given type
  * @out2: second output vector for leaf items (if @recurse_to_leaf)
  */
-static int crush_choose(struct crush_map *map,
+static int crush_choose(const struct crush_map *map,
 			struct crush_bucket *bucket,
-			__u32 *weight,
+			const __u32 *weight,
 			int x, int numrep, int type,
 			int *out, int outpos,
 			int firstn, int recurse_to_leaf,
@@ -456,9 +456,9 @@ reject:
  * @result_max: maximum result size
  * @force: force initial replica choice; -1 for none
  */
-int crush_do_rule(struct crush_map *map,
+int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
-		  int force, __u32 *weight)
+		  int force, const __u32 *weight)
 {
 	int result_len;
 	int force_context[CRUSH_MAX_DEPTH];

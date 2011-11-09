@@ -746,6 +746,13 @@ protected:
   OSD *osd;
   PGPool *pool;
 
+  OSDMapRef osdmap_ref;
+  OSDMapRef get_osdmap() const {
+    assert(is_locked());
+    assert(osdmap_ref);
+    return osdmap_ref;
+  }
+
   /** locking and reference counting.
    * I destroy myself when the reference count hits zero.
    * lock() should be called before doing anything.
@@ -760,18 +767,21 @@ protected:
 public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
-  void lock(bool no_lockdep=false) {
-    //generic_dout(0) << this << " " << info.pgid << " lock" << dendl;
-    _lock.Lock(no_lockdep);
-  }
+  void lock(bool no_lockdep = false);
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    osdmap_ref.reset();
     _lock.Unlock();
   }
+
+  /* During handle_osd_map, the osd holds a write lock to the osdmap.
+   * *_with_map_lock_held assume that the map_lock is already held */
+  void lock_with_map_lock_held();
+
   void assert_locked() {
     assert(_lock.is_locked());
   }
-  bool is_locked() {
+  bool is_locked() const {
     return _lock.is_locked();
   }
   void wait() {
@@ -886,13 +896,13 @@ public:
 	     const Info &info,
 	     const PG *debug_pg=NULL);
 
-    bool affected_by_map(const OSDMap *osdmap, const PG *debug_pg=0) const;
+    bool affected_by_map(const OSDMapRef osdmap, const PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PriorSet &prior);
 
-  bool may_need_replay(const OSDMap *osdmap) const;
+  bool may_need_replay(const OSDMapRef osdmap) const;
 
 
 public:    
@@ -972,10 +982,10 @@ public:
     };
 
     struct AdvMap : boost::statechart::event< AdvMap > {
-      OSDMap *osdmap;
-      OSDMap *lastmap;
+      OSDMapRef osdmap;
+      OSDMapRef lastmap;
       vector<int> newup, newacting;
-      AdvMap(OSDMap *osdmap, OSDMap *lastmap, vector<int>& newup, vector<int>& newacting):
+      AdvMap(OSDMapRef osdmap, OSDMapRef lastmap, vector<int>& newup, vector<int>& newacting):
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
@@ -1325,7 +1335,7 @@ public:
     void handle_query(int from, const PG::Query& q,
 		      epoch_t query_epoch,
 		      RecoveryCtx *ctx);
-    void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
+    void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
@@ -1401,9 +1411,9 @@ public:
   void build_prior(std::auto_ptr<PriorSet> &prior_set);
   void clear_prior();
 
-  bool adjust_need_up_thru(const OSDMap *osdmap);
+  bool adjust_need_up_thru(const OSDMapRef osdmap);
 
-  bool all_unfound_are_queried_or_lost(const OSDMap* osdmap) const;
+  bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
   virtual void mark_all_unfound_lost(int how) = 0;
 
   bool calc_min_last_complete_ondisk() {
@@ -1488,7 +1498,7 @@ public:
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
-  virtual void check_recovery_op_pulls(const OSDMap *newmap) = 0;
+  virtual void check_recovery_op_pulls(const OSDMapRef newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 
@@ -1636,7 +1646,7 @@ public:
   /// share new pg log entries after a pg is active
   void share_pg_log();
 
-  void start_peering_interval(const OSDMap *lastmap,
+  void start_peering_interval(const OSDMapRef lastmap,
 			      const vector<int>& newup,
 			      const vector<int>& newacting);
   void set_last_peering_reset();
@@ -1664,7 +1674,7 @@ public:
 		    RecoveryCtx *rctx) {
     recovery_state.handle_query(from, q, query_epoch, rctx);
   }
-  void handle_advance_map(OSDMap *osdmap, OSDMap *lastmap, 
+  void handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			  vector<int>& newup, vector<int>& newacting,
 			  RecoveryCtx *rctx) {
     recovery_state.handle_advance_map(osdmap, lastmap, newup, newacting, rctx);
