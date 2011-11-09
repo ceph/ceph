@@ -822,7 +822,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   mds->logger->inc(l_mds_reply);
   double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-  mds->logger->fset(l_mds_replyl, lat);
+  mds->logger->finc(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
 }
 
@@ -864,7 +864,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
     mds->logger->inc(l_mds_reply);
     double lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-    mds->logger->fset(l_mds_replyl, lat);
+    mds->logger->finc(l_mds_replyl, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)

@@ -754,11 +754,11 @@ void ReplicatedPG::log_subop_stats(MOSDSubOp *op, int tag_inb, int tag_lat)
   osd->logger->inc(l_osd_sop);
 
   osd->logger->inc(l_osd_sop_inb, inb);
-  osd->logger->fset(l_osd_sop_lat, latency);
+  osd->logger->finc(l_osd_sop_lat, latency);
 
   if (tag_inb)
     osd->logger->inc(tag_inb, inb);
-  osd->logger->fset(tag_lat, latency);
+  osd->logger->finc(tag_lat, latency);
 
   dout(15) << "log_subop_stats " << *op << " inb " << inb << " latency " << latency << dendl;
 }
