@@ -215,7 +215,6 @@ void Monitor::shutdown()
   messenger->shutdown();
 }
 
-
 void Monitor::bootstrap()
 {
   dout(10) << "bootstrap" << dendl;
@@ -227,14 +226,8 @@ void Monitor::bootstrap()
 
   // reset
   state = STATE_PROBING;
-  leader_since = utime_t();
-  quorum.clear();
-  outside_quorum.clear();
 
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->restart();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
-    (*p)->restart();
+  reset();
 
   // singleton monitor?
   if (monmap->size() == 1 && rank == 0) {
@@ -253,6 +246,20 @@ void Monitor::bootstrap()
     if ((int)i != rank)
       messenger->send_message(new MMonProbe(MMonProbe::OP_PROBE, name), monmap->get_inst(i));
   }
+}
+
+// called by bootstrap(), or on leader|peon -> electing
+void Monitor::reset()
+{
+  dout(10) << "reset" << dendl;
+  leader_since = utime_t();
+  quorum.clear();
+  outside_quorum.clear();
+
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->restart();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->restart();
 }
 
 void Monitor::cancel_probe_timeout()

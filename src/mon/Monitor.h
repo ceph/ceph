@@ -155,6 +155,7 @@ public:
   const set<int>& get_quorum() { return quorum; }
 
   void bootstrap();
+  void reset();
   void start_election();
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)

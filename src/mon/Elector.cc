@@ -178,7 +178,9 @@ void Elector::handle_propose(MMonElection *m)
       // a mon just started up, call a new election so they can rejoin!
       dout(5) << " got propose from old epoch, quorum is " << mon->quorum 
 	      << ", " << m->get_source() << " must have just started" << dendl;
-      start();
+      // we may be active; make sure we reset things in the monitor appropriately.
+      mon->reset();
+      mon->start_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
       m->put();
