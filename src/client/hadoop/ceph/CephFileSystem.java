@@ -346,7 +346,7 @@ public class CephFileSystem extends FileSystem {
    *         null if path does not exist.
    */
   public FileStatus[] listStatus(Path path) throws IOException {
-    LOG.warn("listStatus:enter with path " + path);
+    LOG.debug("listStatus:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     Path[] paths = listPaths(abs_path);
 
