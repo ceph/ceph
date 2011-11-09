@@ -584,21 +584,27 @@ extern "C" int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int
 }
 
 extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fh,
-					    loff_t offset, char *buf, int buflen)
+					    loff_t offset, struct sockaddr_storage *addr, int naddr)
 {
-  string address;
-  int r = cmount->get_client()->get_file_stripe_address(fh, offset, address);
+  vector<entity_addr_t> address;
+  unsigned i;
+  int r;
+
+  if (naddr < 0)
+    return -EINVAL;
+
+  r = cmount->get_client()->get_file_stripe_address(fh, offset, address);
   if (r < 0)
-    return r; 
-  int len = address.size()+1;
-  if (len > buflen) {
-    if (buflen == 0)
-      return len;
+    return r;
+
+  for (i = 0; i < (unsigned)naddr && i < address.size(); i++)
+    memcpy(&addr[i], &address[i].ss_addr(), sizeof(*addr));
+
+  /* naddr == 0: drop through and return actual size */
+  if (naddr && (address.size() > (unsigned)naddr))
     return -ERANGE;
-  }
-  len = address.copy(buf, len, 0);
-  buf[len] = '\0'; // write a null char to terminate c-style string
-  return 0;
+
+  return address.size();
 }
 
 extern "C" int ceph_localize_reads(struct ceph_mount_info *cmount, int val)

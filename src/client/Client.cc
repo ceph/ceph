@@ -6829,7 +6829,7 @@ int Client::get_pool_replication(int64_t pool)
   return osdmap->get_pg_pool(pool)->get_size();
 }
 
-int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
+int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address)
 {
   Mutex::Locker lock(client_lock);
 
@@ -6848,15 +6848,12 @@ int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
   osdmap->pg_to_acting_osds(pg, osds);
   if (!osds.size())
     return -EINVAL;
-  
-  // now we have the osd(s)
-  entity_addr_t addr = osdmap->get_addr(osds[0]);
-  
-  // now we need to turn it into a string
-  char foo[30];
-  __u8 *quad = (__u8*) &addr.in4_addr().sin_addr;
-  snprintf(foo, sizeof(foo), "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
-  address = foo;
+
+  for (unsigned i = 0; i < osds.size(); i++) {
+    entity_addr_t addr = osdmap->get_addr(osds[i]);
+    address.push_back(addr);
+  }
+
   return 0;
 }
 

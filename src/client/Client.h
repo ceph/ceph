@@ -607,7 +607,7 @@ public:
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
-  int get_file_stripe_address(int fd, loff_t offset, string& address);
+  int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
 
   // expose osdmap 
   int get_local_osd();

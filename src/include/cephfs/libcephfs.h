@@ -156,8 +156,8 @@ int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char 
 int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);
 int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh);
 int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh);
-int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd,
-				 loff_t offset, char *buf, int buflen);
+int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t offset,
+				 struct sockaddr_storage *addr, int naddr);
 
 /* set default layout for new files */
 int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount, int stripe);
