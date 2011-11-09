@@ -207,7 +207,7 @@ bool HashIndex::must_merge(const subdir_info_s &info) {
 
 bool HashIndex::must_split(const subdir_info_s &info) {
   return (info.hash_level < (unsigned)MAX_HASH_LEVEL &&
-	  info.objs > ((unsigned)merge_threshold * 32));
+	  info.objs > ((unsigned)merge_threshold * 16 * split_multiplier));
 			    
 }
 

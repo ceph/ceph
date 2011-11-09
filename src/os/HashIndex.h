@@ -56,10 +56,10 @@ private:
   /**
    * Merges occur when the number of object drops below
    * merge_threshold and splits occur when the number of objects
-   * exceeds 16 * merge_threshold * split_threshold.
+   * exceeds 16 * merge_threshold * split_multiplier.
    */
   int merge_threshold;
-  int split_threshold;
+  int split_multiplier;
 
   /// Encodes current subdir state for determining when to split/merge.
   struct subdir_info_s {
@@ -128,10 +128,10 @@ public:
   HashIndex(
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
-    int split_at,	   ///< [in] Split threshhold.
+    int split_multiple,	   ///< [in] Split threshhold.
     uint32_t index_version)///< [in] Index version
     : LFNIndex(base_path, index_version), merge_threshold(merge_at),
-      split_threshold(split_at) {}
+      split_multiplier(split_multiple) {}
 
   /// @see CollectionIndex
   uint32_t collection_version() { return index_version; }
