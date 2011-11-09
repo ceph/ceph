@@ -13,6 +13,7 @@
  */
 
 #include "ceph_crypto.h"
+#include "auth/Crypto.h"
 
 #include <pthread.h>
 
@@ -25,10 +26,12 @@ void ceph::crypto::assert_init() {
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init() {
   crypto_init = true;
+  crypto_init_handlers();
 }
 
 void ceph::crypto::shutdown() {
   crypto_init = false;
+  crypto_shutdown_handlers();
 }
 
 // nothing
@@ -45,6 +48,7 @@ void ceph::crypto::init() {
   SECStatus s;
   s = NSS_NoDB_Init(NULL);
   assert(s == SECSuccess);
+  crypto_init_handlers();
 }
 
 void ceph::crypto::shutdown() {
@@ -54,6 +58,7 @@ void ceph::crypto::shutdown() {
   SECStatus s;
   s = NSS_Shutdown();
   assert(s == SECSuccess);
+  crypto_shutdown_handlers();
 }
 
 ceph::crypto::HMACSHA1::~HMACSHA1()
