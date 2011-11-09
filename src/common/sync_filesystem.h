@@ -17,6 +17,13 @@
 
 #include <unistd.h>
 
+#ifndef __CYGWIN__
+# ifndef DARWIN
+#  include <sys/ioctl.h>
+#  include "../os/btrfs_ioctl.h"
+# endif
+#endif
+
 inline int sync_filesystem(int fd)
 {
   /* On Linux, newer versions of glibc have a function called syncfs that
@@ -24,11 +31,17 @@ inline int sync_filesystem(int fd)
    * have to fall back on sync(), which synchronizes every filesystem on the
    * computer. */
 #ifdef HAVE_SYS_SYNCFS
-  return syncfs(fd);
-#else
+  if (syncfs(fd) == 0)
+    return 0;
+#endif
+
+#ifdef BTRFS_IOC_SYNC
+  if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
+    return 0;
+#endif
+
   sync();
   return 0;
-#endif
 }
 
 #endif
