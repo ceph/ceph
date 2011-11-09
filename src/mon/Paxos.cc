@@ -28,12 +28,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name, i
 			const char *machine_name, int state,
 			version_t first_committed, version_t last_committed) {
   return *_dout << "mon." << name << "@" << rank
-		<< (mon->is_starting() ?
-		    (const char*)"(starting)" :
-		    (mon->is_leader() ?
-		     (const char*)"(leader)" : 
-		     (mon->is_peon() ?
-		      (const char*)"(peon)" : (const char*)"(?\?)"))) 
+		<< "(" << mon->get_state_name() << ")"
 		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state)
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
@@ -48,7 +43,7 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
   first_committed = mon->store->get_int(machine_name, "first_committed");
-  latest_stashed = 0;
+  latest_stashed = mon->store->get_int(machine_name, "last_consumed");
 
   dout(10) << "init" << dendl;
 }
@@ -162,7 +157,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
 
   dout(10) << "share_state peer has fc " << peer_first_committed << " lc " << peer_last_committed << dendl;
   version_t v = peer_last_committed;
-    
+
   // start with a stashed full copy?
   if (peer_last_committed < first_committed) {
     bufferlist bl;
@@ -182,7 +177,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
       mon->store->get_bl_sn(m->values[v], machine_name, v);
       dout(10) << " sharing " << v << " (" 
 	       << m->values[v].length() << " bytes)" << dendl;
-    }
+   }
   }
 
   m->last_committed = last_committed;
@@ -332,7 +327,7 @@ void Paxos::collect_timeout()
   dout(5) << "collect timeout, calling fresh election" << dendl;
   collect_timeout_event = 0;
   assert(mon->is_leader());
-  mon->call_election();
+  mon->bootstrap();
 }
 
 
@@ -484,7 +479,7 @@ void Paxos::accept_timeout()
   accept_timeout_event = 0;
   assert(mon->is_leader());
   assert(is_updating());
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::commit()
@@ -689,7 +684,7 @@ void Paxos::lease_ack_timeout()
   assert(is_active());
 
   lease_ack_timeout_event = 0;
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::lease_timeout()
@@ -698,7 +693,7 @@ void Paxos::lease_timeout()
   assert(mon->is_peon());
 
   lease_timeout_event = 0;
-  mon->call_election();
+  mon->bootstrap();
 }
 
 void Paxos::lease_renew_timeout()
@@ -713,19 +708,17 @@ void Paxos::lease_renew_timeout()
  * trim old states
  */
 
-void Paxos::trim_to(version_t first)
+void Paxos::trim_to(version_t first, bool force)
 {
-  version_t last_consumed = mon->store->get_int(machine_name, "last_consumed");
-
   dout(10) << "trim_to " << first << " (was " << first_committed << ")"
-	   << ", last_consumed " << last_consumed
+	   << ", latest_stashed " << latest_stashed
 	   << dendl;
 
   if (first_committed >= first)
     return;
 
   while (first_committed < first &&
-	 first_committed < last_consumed) {
+	 (force || first_committed < latest_stashed)) {
     dout(10) << "trim " << first_committed << dendl;
     mon->store->erase_sn(machine_name, first_committed);
     for (list<string>::iterator p = extra_state_dirs.begin();
@@ -812,9 +805,9 @@ void Paxos::peon_init()
   finish_contexts(g_ceph_context, waiting_for_commit, -1);
 }
 
-void Paxos::election_starting()
+void Paxos::restart()
 {
-  dout(10) << "election_starting -- canceling timeouts" << dendl;
+  dout(10) << "restart -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
 
@@ -825,7 +818,7 @@ void Paxos::election_starting()
 void Paxos::dispatch(PaxosServiceMessage *m)
 {
   // election in progress?
-  if (mon->is_starting()) {
+  if (!mon->is_leader() && !mon->is_peon()) {
     dout(5) << "election in progress, dropping " << *m << dendl;
     m->put();
     return;    

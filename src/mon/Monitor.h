@@ -50,6 +50,7 @@ class PaxosService;
 
 class MMonGetMap;
 class MMonGetVersion;
+class MMonProbe;
 class MMonObserve;
 class MMonSubscribe;
 class MAuthRotating;
@@ -85,17 +86,35 @@ public:
 
   // -- monitor state --
 private:
-  const static int STATE_STARTING = 0; // electing
-  const static int STATE_LEADER =   1;
-  const static int STATE_PEON =     2;
+  enum {
+    STATE_PROBING = 1,
+    STATE_SLURPING,
+    STATE_ELECTING,
+    STATE_LEADER,
+    STATE_PEON
+  };
   int state;
-  bool stopping;
 
 public:
-  bool is_starting() const { return state == STATE_STARTING; }
+  static const char *get_state_name(int s) {
+    switch (s) {
+    case STATE_PROBING: return "probing";
+    case STATE_SLURPING: return "slurping";
+    case STATE_ELECTING: return "electing";
+    case STATE_LEADER: return "leader";
+    case STATE_PEON: return "peon";
+    default: return "???";
+    }
+  }
+  const char *get_state_name() {
+    return get_state_name(state);
+  }
+
+  bool is_probing() const { return state == STATE_PROBING; }
+  bool is_slurping() const { return state == STATE_SLURPING; }
+  bool is_electing() const { return state == STATE_ELECTING; }
   bool is_leader() const { return state == STATE_LEADER; }
   bool is_peon() const { return state == STATE_PEON; }
-  bool is_stopping() const { return stopping; }
 
   const utime_t &get_leader_since() const;
 
@@ -107,17 +126,41 @@ private:
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
+
+  set<string> outside_quorum;
+  entity_inst_t slurp_source;
+  map<string,version_t> slurp_versions;
+
+  list<Context*> waitfor_quorum;
+
+  Context *probe_timeout_event;  // for probing and slurping states
+
+  struct C_ProbeTimeout : public Context {
+    Monitor *mon;
+    C_ProbeTimeout(Monitor *m) : mon(m) {}
+    void finish(int r) {
+      mon->probe_timeout(r);
+    }
+  };
+
+  void reset_probe_timeout();
+  void cancel_probe_timeout();
+  void probe_timeout(int r);
+
+  void slurp();
   
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
 
-  void call_election(bool is_new=true);  // initiate election
-  void starting_election();                              // start election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
+  void bootstrap();
+  void reset();
+  void start_election();
   void win_standalone_election();
+  void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
+  void finish_election();
 
 
   // -- paxos --
@@ -125,6 +168,7 @@ public:
   vector<PaxosService*> paxos_service;
 
   Paxos *add_paxos(int type);
+  Paxos *get_paxos_by_name(const string& name);
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
@@ -160,6 +204,13 @@ public:
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+
+  void handle_probe(MMonProbe *m);
+  void handle_probe_probe(MMonProbe *m);
+  void handle_probe_reply(MMonProbe *m);
+  void handle_probe_slurp(MMonProbe *m);
+  void handle_probe_slurp_latest(MMonProbe *m);
+  void handle_probe_data(MMonProbe *m);
 
   // request routing
   struct RoutedRequest {
@@ -201,6 +252,16 @@ public:
   };
 
  private:
+  class C_RetryMessage : public Context {
+    Monitor *mon;
+    Message *msg;
+  public:
+    C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
+    void finish(int r) {
+      mon->_ms_dispatch(msg);
+    }
+  };
+
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
   bool _ms_dispatch(Message *m);

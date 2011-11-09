@@ -81,7 +81,7 @@ public:
   const char *get_machine_name();
   
   // i implement and you ignore
-  void election_starting();
+  void restart();
   void election_finished();
   void shutdown();
 
@@ -163,7 +163,7 @@ public:
    * Another courtesy method. Called when the Paxos
    * system enters a leader election.
    */
-  virtual void on_election_start() { }
+  virtual void on_restart() { }
 
   virtual void committed() = 0;            // [leader] called after a proposed value commits
 

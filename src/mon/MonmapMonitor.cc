@@ -31,8 +31,8 @@
 #define dout_prefix _prefix(_dout, mon)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".monmap v" << mon->monmap->epoch << " ";
+		<< "(" << mon->get_state_name()
+		<< ").monmap v" << mon->monmap->epoch << " ";
 }
 
 void MonmapMonitor::create_initial(bufferlist& bl)
@@ -74,13 +74,8 @@ bool MonmapMonitor::update_from_paxos()
     mon->messenger->set_myname(entity_name_t::MON(rank));
     mon->rank = rank;
   }
-
-  // call election?
-  if (mon->monmap->size() > 1) {
-    mon->call_election();
-  } else {
-    mon->win_standalone_election();
-  }
+  
+  mon->bootstrap();
   return true;
 }
 

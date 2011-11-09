@@ -22,6 +22,7 @@
 // monitor internal
 #define MSG_MON_ELECTION           65
 #define MSG_MON_PAXOS              66
+#define MSG_MON_PROBE              67
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50

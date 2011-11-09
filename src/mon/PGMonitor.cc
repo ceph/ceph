@@ -45,8 +45,8 @@
 #define dout_prefix _prefix(_dout, mon, pg_map)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, PGMap& pg_map) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".pg v" << pg_map.version << " ";
+		<< "(" << mon->get_state_name()
+		<< ").pg v" << pg_map.version << " ";
 }
 
 class RatioMonitor : public md_config_obs_t {
@@ -83,7 +83,7 @@ PGMonitor::~PGMonitor()
  Tick function to update the map based on performance every N seconds
 */
 
-void PGMonitor::on_election_start()
+void PGMonitor::on_restart()
 {
   // clear leader state
   last_sent_pg_create.clear();

@@ -48,8 +48,8 @@ class MonMap {
     }
   }
 
-  MonMap(utime_t last_changed_) 
-    : epoch(0), last_changed(last_changed_), created(last_changed_) {
+  MonMap() 
+    : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
 

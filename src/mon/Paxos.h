@@ -251,7 +251,7 @@ public:
 
   void init();
 
-  void election_starting();
+  void restart();
   void leader_init();
   void peon_init();
 
@@ -267,7 +267,7 @@ public:
     waiting_for_active.push_back(c);
   }
 
-  void trim_to(version_t first);
+  void trim_to(version_t first, bool force=false);
   
   // read
   version_t get_version() { return last_committed; }
@@ -299,6 +299,7 @@ public:
   // the latest copy of the complete structure.
   void stash_latest(version_t v, bufferlist& bl);
   version_t get_latest(bufferlist& bl);
+  version_t get_latest_version() { return latest_stashed; }
 
   version_t get_first_committed() { return first_committed; }
 

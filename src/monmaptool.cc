@@ -95,7 +95,7 @@ int main(int argc, const char **argv)
   }
   fn = args[0];
   
-  MonMap monmap(ceph_clock_now(g_ceph_context));
+  MonMap monmap;
 
   cout << me << ": monmap file " << fn << std::endl;
 
@@ -120,6 +120,8 @@ int main(int argc, const char **argv)
   }
 
   if (create) {
+    monmap.created = ceph_clock_now(g_ceph_context);
+    monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
     monmap.generate_fsid();
     cout << me << ": generated fsid " << monmap.fsid << std::endl;

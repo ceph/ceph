@@ -25,8 +25,8 @@
 #define dout_prefix _prefix(_dout, mon, paxos, paxos->machine_id)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, int machine_id) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".paxosservice(" << get_paxos_name(machine_id) << ") ";
+		<< "(" << mon->get_state_name()
+		<< ").paxosservice(" << get_paxos_name(machine_id) << ") ";
 }
 
 const char *PaxosService::get_machine_name()
@@ -111,9 +111,10 @@ void PaxosService::_commit()
 
   if (mon->is_leader()) {
     dout(7) << "_commit creating new pending" << dendl;
-    assert(have_pending == false);
-    create_pending();
-    have_pending = true;
+    if (!have_pending) {
+      create_pending();
+      have_pending = true;
+    }
 
     committed();
   }
@@ -143,15 +144,15 @@ void PaxosService::propose_pending()
 
 
 
-void PaxosService::election_starting()
+void PaxosService::restart()
 {
-  dout(10) << "election_starting" << dendl;
+  dout(10) << "restart" << dendl;
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
-  on_election_start();
+  on_restart();
 }
 
 void PaxosService::election_finished()
