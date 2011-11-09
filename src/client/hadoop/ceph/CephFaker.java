@@ -348,15 +348,15 @@ class CephFaker extends CephFS {
     return ret;
   }
 
-  protected String ceph_hosts(int fh, long offset) {
-    String ret = null;
+  protected String[] ceph_hosts(int fh, long offset) {
+    String[] ret = null;
 
     try {
       BlockLocation[] locs = localFS.getFileBlockLocations(
           localFS.getFileStatus(new Path(filenames.get(new Integer(fh)))),
           offset, 1);
 
-      ret = locs[0].getNames()[0];
+      ret = locs[0].getNames();
     } catch (IOException e) {} catch (NullPointerException f) {}
     return ret;
   }

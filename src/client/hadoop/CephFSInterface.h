@@ -185,9 +185,9 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replicati
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_hosts
- * Signature: (IJ)Ljava/lang/String;
+ * Signature: (IJ)[Ljava/lang/String;
  */
-JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
+JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
   (JNIEnv *, jobject, jint, jlong);
 
 /*

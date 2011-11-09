@@ -626,14 +626,14 @@ public class CephFileSystem extends FileSystem {
       LOG.trace(
           "getFileBlockLocations:call ceph_hosts from Java on fh " + fh
           + " and offset " + offset);
-      String host = ceph.ceph_hosts(fh, offset);
+      String host[] = ceph.ceph_hosts(fh, offset);
 
       LOG.trace(
           "getFileBlockLocations:return from ceph_hosts to Java with host "
-              + host);
+              + host[0]);
       String[] hostArray = new String[1];
 
-      hostArray[0] = host;
+      hostArray[0] = host[0];
       locations[i] = new BlockLocation(hostArray, hostArray,
           start + i * blockSize - (start % blockSize), blockSize);
     }

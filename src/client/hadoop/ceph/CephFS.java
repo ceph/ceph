@@ -193,9 +193,9 @@ abstract class CephFS {
    * Inputs:
    *  int fh: The filehandle for the file.
    *  long offset: The offset to get the location of.
-   * Returns: a String of the location as IP, or NULL if there is an error.
+   * Returns: an array of String of the location as IP, or NULL if there is an error.
    */
-  abstract protected String ceph_hosts(int fh, long offset);
+  abstract protected String[] ceph_hosts(int fh, long offset);
 
   /*
    * Set the mtime and atime for a given path.

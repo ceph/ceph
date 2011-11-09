@@ -759,35 +759,73 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replicati
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_hosts
- * Signature: (IJ)Ljava/lang/String;
+ * Signature: (IJ)[Ljava/lang/String;
  * Find the IP:port addresses of the primary OSD for a given file and offset.
  * Inputs:
  *  jint j_fh: The filehandle for the file.
  *  jlong j_offset: The offset to get the location of.
  * Returns: a jstring of the location as IP, or NULL if there is an error.
  */
-JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
+JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
 (JNIEnv *env, jobject obj, jint j_fh, jlong j_offset)
 {
-  //get the address
-  const static int IP_ADDR_LENGTH = 24;//a buffer size; may want to up for IPv6.
-  char *address = new char[IP_ADDR_LENGTH];
   struct ceph_mount_info *cmount = get_ceph_mount_t(env, obj);
-  int r = ceph_get_file_stripe_address(cmount, j_fh, j_offset,
-				       address, IP_ADDR_LENGTH);
-  if (r == -ERANGE) {//buffer's too small
-    delete [] address;
-    int size = ceph_get_file_stripe_address(cmount, j_fh, j_offset, address, 0);
-    address = new char[size];
-    r = ceph_get_file_stripe_address(cmount, j_fh, j_offset, address, size);
+  struct sockaddr_storage *ss;
+  char address[30];
+  jobjectArray addr_array;
+  jclass string_cls;
+  jstring j_addr;
+  int r, n = 3; /* initial guess at # of replicas */
+
+  for (;;) {
+    ss = new struct sockaddr_storage[n];
+    r = ceph_get_file_stripe_address(cmount, j_fh, j_offset, ss, n);
+    if (r < 0) {
+      if (r == -ERANGE) {
+	delete [] ss;
+	n *= 2;
+	continue;
+      }
+      return NULL;
+    }
+    n = r;
+    break;
   }
-  if (r != 0) { //some rather worse problem
-    if (r == -EINVAL) return NULL; //ceph thinks there are no OSDs
+
+  /* TODO: cache this */
+  string_cls = env->FindClass("java/lang/String");
+  if (!string_cls)
+    goto out;
+
+  addr_array = env->NewObjectArray(n, string_cls, NULL);
+  if (!addr_array)
+    goto out;
+
+  for (r = 0; r < n; r++) {
+    /* Hadoop only deals with IPv4 */
+    if (ss[r].ss_family != AF_INET)
+      goto out;
+
+    memset(address, 0, sizeof(address));
+
+    inet_ntop(ss[r].ss_family, &((struct sockaddr_in *)&ss[r])->sin_addr,
+	      address, sizeof(address));
+
+    j_addr = env->NewStringUTF(address);
+
+    env->SetObjectArrayElement(addr_array, r, j_addr);
+    if (env->ExceptionOccurred())
+      goto out;
+
+    env->DeleteLocalRef(j_addr);
   }
-  //make java String of address
-  jstring j_addr = env->NewStringUTF(address);
-  delete [] address;
-  return j_addr;
+
+  delete [] ss;
+  return addr_array;
+
+out:
+  delete [] ss;
+  return NULL;
 }
 
 /*
