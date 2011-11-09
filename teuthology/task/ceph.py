@@ -317,6 +317,10 @@ def cluster(ctx, config):
                 conf[section] = {}
             conf[section][key] = value
 
+    import argparse
+    ctx.ceph = argparse.Namespace();
+    ctx.ceph.conf = conf;
+
     log.info('Writing configs...')
     conf_fp = StringIO()
     conf.write(conf_fp)
