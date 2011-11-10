@@ -585,7 +585,9 @@ done:
 FileStore::FileStore(const std::string &base, const std::string &jdev) :
   basedir(base), journalpath(jdev),
   fsid(0),
-  btrfs(false), blk_size(0),
+  btrfs(false),
+  btrfs_stable_commits(false),
+  blk_size(0),
   btrfs_trans_start_end(false), btrfs_clone_range(false),
   btrfs_snap_create(false),
   btrfs_snap_destroy(false),
@@ -1125,6 +1127,8 @@ int FileStore::_detect_fs()
     dout(0) << "mount detected btrfs" << dendl;      
     btrfs = true;
 
+    btrfs_stable_commits = btrfs && m_filestore_btrfs_snap;
+
     // clone_range?
     if (m_filestore_btrfs_clone_range) {
       btrfs_clone_range = true;
@@ -1160,13 +1164,13 @@ int FileStore::_detect_fs()
     }
 
     if (m_filestore_btrfs_snap && !btrfs_snap_destroy) {
-      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+)" << dendl;
+      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+); DISABLING" << dendl;
       cerr << TEXT_YELLOW
 	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
 	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
 	   << "             Linux 2.6.32).  Disabling.\n"
 	   << TEXT_NORMAL;
-      m_filestore_btrfs_snap = false;
+      btrfs_stable_commits = false;
     }
 
     // start_sync?
@@ -1241,6 +1245,7 @@ int FileStore::_detect_fs()
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
   }
+
   ::close(fd);
   return 0;
 }
@@ -1503,7 +1508,7 @@ int FileStore::mount()
     goto close_basedir_fd;
   }
 
-  if (btrfs && m_filestore_btrfs_snap) {
+  if (btrfs_stable_commits) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
     } else if (!btrfs) {
@@ -1627,7 +1632,7 @@ int FileStore::mount()
       if (!btrfs) {
 	m_filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
-      } else if (!m_filestore_btrfs_snap) {
+      } else if (!btrfs_stable_commits) {
 	m_filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
       } else if (!btrfs_snap_create_v2) {
@@ -2075,7 +2080,7 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        p++) {
-    r = _do_transaction(**p);
+    r = _do_transaction(**p, op_seq);
     if (r < 0)
       break;
   }
@@ -2161,9 +2166,11 @@ void FileStore::_transaction_finish(int fd)
   ::close(fd);
 }
 
-unsigned FileStore::_do_transaction(Transaction& t)
+unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq)
 {
   dout(10) << "_do_transaction on " << &t << dendl;
+
+  bool idempotent = true;
 
   while (t.have_op()) {
     int op = t.get_op();
@@ -2273,6 +2280,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
       
     case Transaction::OP_CLONE:
       {
+	idempotent = false;   // this operation is non-idempotent
+
 	coll_t cid = t.get_cid();
 	hobject_t oid = t.get_oid();
 	hobject_t noid = t.get_oid();
@@ -2282,6 +2291,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_CLONERANGE:
       {
+	idempotent = false;   // this operation is non-idempotent
+
 	coll_t cid = t.get_cid();
 	hobject_t oid = t.get_oid();
 	hobject_t noid = t.get_oid();
@@ -2293,6 +2304,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_CLONERANGE2:
       {
+	idempotent = false;   // this operation is non-idempotent
+
 	coll_t cid = t.get_cid();
 	hobject_t oid = t.get_oid();
 	hobject_t noid = t.get_oid();
@@ -2305,6 +2318,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_MKCOLL:
       {
+	// this operation is non-idempotent, but we tolerate replay below.
+
 	coll_t cid = t.get_cid();
 	r = _create_collection(cid);
       }
@@ -2312,6 +2327,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_RMCOLL:
       {
+	// this operation is non-idempotent, but we tolerate replay below.
+
 	coll_t cid = t.get_cid();
 	r = _destroy_collection(cid);
       }
@@ -2358,6 +2375,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_COLL_RENAME:
       {
+	idempotent = false;   // this operation is non-idempotent
+	
 	coll_t cid(t.get_cid());
 	coll_t ncid(t.get_cid());
 	r = _collection_rename(cid, ncid);
@@ -2377,6 +2396,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	assert(0 == "ENOENT on clone suggests osd bug");
       } else {
 	// -ENOENT is normally okay
+	// ...including on a replayed OP_RMCOLL with !stable_commits
       }
     }
     else if (r == -ENODATA) {
@@ -2396,10 +2416,10 @@ unsigned FileStore::_do_transaction(Transaction& t)
     else if (r == -ENOTEMPTY) {
       assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
     }
-    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !m_filestore_btrfs_snap) {
+    else if (r == -EEXIST && op == Transaction::OP_MKCOLL && replaying && !btrfs_stable_commits) {
       dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
     }
-    else if (r == -EEXIST && op == Transaction::OP_COLL_ADD && replaying && !m_filestore_btrfs_snap) {
+    else if (r == -EEXIST && op == Transaction::OP_COLL_ADD && replaying && !btrfs_stable_commits) {
       dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
     }
     else if (r < 0) {
@@ -2407,6 +2427,12 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0 == "unexpected error");
     }
   }
+
+  if (!idempotent && !btrfs_stable_commits) {
+    dout(10) << "performed non-idempotent operation and not using btrfs snaps, triggering a commit" << dendl;
+    trigger_commit(op_seq);
+  }
+
   return 0;  // FIXME count errors
 }
 
@@ -2990,9 +3016,7 @@ void FileStore::sync_entry()
 	assert(0);
       }
 
-      bool do_snap = btrfs && m_filestore_btrfs_snap;
-
-      if (do_snap) {
+      if (btrfs_stable_commits) {
 
 	if (btrfs_snap_create_v2) {
 	  // be smart!
@@ -3053,7 +3077,7 @@ void FileStore::sync_entry()
 	  //  this works with ext3, but NOT ext4
 	  ::fsync(op_fd);  
 	} else {
-	  dout(15) << "sync_entry doing a full sync (!)" << dendl;
+	  dout(15) << "sync_entry doing a full sync (syncfs(2) if possible)" << dendl;
 	  sync_filesystem(basedir_fd);
 	}
       }
@@ -3072,7 +3096,7 @@ void FileStore::sync_entry()
       logger->set(l_os_committing, 0);
 
       // remove old snaps?
-      if (do_snap) {
+      if (btrfs_stable_commits) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args vol_args;
 	  vol_args.fd = 0;

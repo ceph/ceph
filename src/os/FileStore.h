@@ -47,7 +47,8 @@ class FileStore : public JournalingObjectStore,
   std::string current_op_seq_fn;
   uint64_t fsid;
   
-  bool btrfs;
+  bool btrfs;                   ///< fs is btrfs
+  bool btrfs_stable_commits;    ///< we are using btrfs snapshots for a stable journal refernce
   uint64_t blk_size;
   bool btrfs_trans_start_end;
   bool btrfs_clone_range;
@@ -283,7 +284,7 @@ public:
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
   int _transaction_start(uint64_t bytes, uint64_t ops);
   void _transaction_finish(int id);
-  unsigned _do_transaction(Transaction& t);
+  unsigned _do_transaction(Transaction& t, uint64_t op_seq);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,

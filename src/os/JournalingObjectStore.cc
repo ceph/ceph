@@ -175,6 +175,25 @@ void JournalingObjectStore::op_submit_finish(uint64_t op)
 
 // ------------------------------------------
 
+/*
+ * this may (will generally) get called by an op_queue thread holding
+ * an open_ops reference.  it should block only long enough for the
+ * commit to _start_ waiting for open_ops, but not longer or else we
+ * will deadlock.
+ */
+void JournalingObjectStore::trigger_commit(uint64_t seq)
+{
+  dout(10) << "trigger_commit " << seq << dendl;
+  journal_lock.Lock();
+  force_commit = true;
+  while (!blocked && committing_seq < seq) {
+    dout(20) << "trigger_commit not blocked and seq " << seq << " > committing " << committing_seq << dendl;
+    cond.Wait(journal_lock);
+  }
+  dout(10) << "trigger_commit triggered, will commit something >= " << seq << dendl;
+  journal_lock.Unlock();
+}
+
 bool JournalingObjectStore::commit_start() 
 {
   bool ret = false;
@@ -184,12 +203,13 @@ bool JournalingObjectStore::commit_start()
 	   << ", applied_seq " << applied_seq
 	   << ", committed_seq " << committed_seq << dendl;
   blocked = true;
+  cond.Signal();  // for trigger_commit() caller
   while (open_ops > 0) {
     dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
     cond.Wait(journal_lock);
   }
   
-  if (applied_seq == committed_seq) {
+  if (applied_seq == committed_seq && !force_commit) {
     dout(10) << "commit_start nothing to do" << dendl;
     blocked = false;
     if (!ops_apply_blocked.empty())
@@ -197,6 +217,8 @@ bool JournalingObjectStore::commit_start()
     assert(commit_waiters.empty());
     goto out;
   }
+
+  force_commit = false;
 
   com_lock.Lock();
   // we can _only_ read applied_seq here because open_ops == 0 (we've
