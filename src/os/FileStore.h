@@ -49,14 +49,14 @@ class FileStore : public JournalingObjectStore,
   
   bool btrfs;                   ///< fs is btrfs
   bool btrfs_stable_commits;    ///< we are using btrfs snapshots for a stable journal refernce
-  uint64_t blk_size;
-  bool btrfs_trans_start_end;
-  bool btrfs_clone_range;
-  bool btrfs_snap_create;
-  bool btrfs_snap_destroy;
-  bool btrfs_snap_create_v2;
-  bool btrfs_wait_sync;
-  bool ioctl_fiemap;
+  uint64_t blk_size;            ///< fs block size
+  bool btrfs_trans_start_end;   ///< btrfs trans start/end ioctls are supported
+  bool btrfs_clone_range;       ///< btrfs clone range ioctl is supported
+  bool btrfs_snap_create;       ///< btrfs snap create ioctl is supported
+  bool btrfs_snap_destroy;      ///< btrfs snap destroy ioctl is supported
+  bool btrfs_snap_create_v2;    ///< btrfs snap create v2 ioctl (async!) is supported
+  bool btrfs_wait_sync;         ///< btrfs wait sync ioctl is supported
+  bool ioctl_fiemap;            ///< fiemap ioctl is supported
   int fsid_fd, op_fd;
 
   int basedir_fd, current_fd;
