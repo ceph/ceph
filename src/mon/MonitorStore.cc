@@ -313,7 +313,7 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
     }
   } else {
     snprintf(tfn, sizeof(tfn), "%s.new", fn);
-    fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
+    fd = ::open(tfn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
     if (fd < 0) {
       err = -errno;
       derr << "failed to open " << tfn << ": " << cpp_strerror(err) << dendl;
