@@ -180,18 +180,19 @@ void JournalingObjectStore::op_submit_finish(uint64_t op)
  * an open_ops reference.  it should block only long enough for the
  * commit to _start_ waiting for open_ops, but not longer or else we
  * will deadlock.
+ *
+ * caller must hold journal_lock.
  */
-void JournalingObjectStore::trigger_commit(uint64_t seq)
+void JournalingObjectStore::_trigger_commit(uint64_t seq)
 {
+  assert(journal_lock.is_locked());
   dout(10) << "trigger_commit " << seq << dendl;
-  journal_lock.Lock();
   force_commit = true;
   while (!blocked && committing_seq < seq) {
     dout(20) << "trigger_commit not blocked and seq " << seq << " > committing " << committing_seq << dendl;
     cond.Wait(journal_lock);
   }
   dout(10) << "trigger_commit triggered, will commit something >= " << seq << dendl;
-  journal_lock.Unlock();
 }
 
 bool JournalingObjectStore::commit_start() 

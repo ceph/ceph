@@ -45,7 +45,8 @@ protected:
   void journal_stop();
   int journal_replay(uint64_t fs_op_seq);
 
-  void trigger_commit(uint64_t op_seq);
+  virtual void trigger_commit(uint64_t op_seq) = 0;
+  void _trigger_commit(uint64_t op_seq);
 
   // --
   uint64_t op_submit_start();
