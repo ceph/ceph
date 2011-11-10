@@ -282,6 +282,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid,
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
       goto free_store;
     }
+    store->sync_and_flush();
     ret = write_meta(dev, fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
