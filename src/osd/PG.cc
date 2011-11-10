@@ -63,7 +63,7 @@ std::string PG::gen_prefix() const
 {
   stringstream out;
   out << "osd." << osd->whoami 
-      << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) 
+      << " " << (osdmap_ref ? osdmap_ref->get_epoch():0)
       << " " << *this << " ";
   return out.str();
 }
