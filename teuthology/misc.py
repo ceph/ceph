@@ -400,7 +400,6 @@ def get_mon_names(ctx):
             if not role.startswith('mon.'):
                 continue
             mons.append(role)
-            break
     return mons
 
 # return the "first" mon (alphanumerically, for lack of anything better)
