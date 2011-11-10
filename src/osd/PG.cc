@@ -3525,13 +3525,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     i.acting = oldacting;
     i.up = oldup;
 
-    if (oldacting != acting || oldup != up) {
-      info.history.same_interval_since = osdmap->get_epoch();
-    }
-    if (oldup != up) {
-      info.history.same_up_since = osdmap->get_epoch();
-    }
-
     if (i.acting.size()) {
       i.maybe_went_rw =
 	lastmap->get_up_thru(i.acting[0]) >= i.first &&
@@ -3540,12 +3533,18 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
       i.maybe_went_rw = 0;
     }
 
-    if (oldprimary != get_primary()) {
-      info.history.same_primary_since = osdmap->get_epoch();
-    }
-
     dout(10) << " noting past " << i << dendl;
     dirty_info = true;
+  }
+
+  if (oldacting != acting || oldup != up) {
+    info.history.same_interval_since = osdmap->get_epoch();
+  }
+  if (oldup != up) {
+    info.history.same_up_since = osdmap->get_epoch();
+  }
+  if (oldprimary != get_primary()) {
+    info.history.same_primary_since = osdmap->get_epoch();
   }
 
   dout(10) << " up " << oldup << " -> " << up 
