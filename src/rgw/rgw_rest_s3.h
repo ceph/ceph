@@ -73,6 +73,7 @@ public:
   RGWCopyObj_REST_S3() {}
   ~RGWCopyObj_REST_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -142,11 +143,13 @@ protected:
   RGWOp *get_create_op();
   RGWOp *get_delete_op();
   RGWOp *get_post_op();
+  RGWOp *get_copy_op() { return NULL; }
 
 public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
+  virtual int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
 };
 

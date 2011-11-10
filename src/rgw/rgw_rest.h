@@ -83,8 +83,6 @@ class RGWCopyObj_REST : public RGWCopyObj {
 public:
   RGWCopyObj_REST() {}
   ~RGWCopyObj_REST() {}
-
-  int get_params();
 };
 
 class RGWGetACLs_REST : public RGWGetACLs {
@@ -150,6 +148,7 @@ protected:
   virtual RGWOp *get_create_op() = 0;
   virtual RGWOp *get_delete_op() = 0;
   virtual RGWOp *get_post_op() = 0;
+  virtual RGWOp *get_copy_op() = 0;
 
 public:
   int read_permissions();

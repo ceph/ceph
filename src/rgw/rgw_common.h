@@ -265,6 +265,7 @@ enum http_op {
   OP_DELETE,
   OP_HEAD,
   OP_POST,
+  OP_COPY,
   OP_UNKNOWN,
 };
 

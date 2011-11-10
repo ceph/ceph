@@ -104,7 +104,8 @@ public:
   RGWCopyObj_REST_SWIFT() {}
   ~RGWCopyObj_REST_SWIFT() {}
 
-  void send_response() {}
+  int get_params();
+  void send_response();
 };
 
 class RGWGetACLs_REST_SWIFT : public RGWGetACLs_REST {
@@ -132,11 +133,13 @@ protected:
   RGWOp *get_create_op();
   RGWOp *get_delete_op();
   RGWOp *get_post_op();
+  RGWOp *get_copy_op();
 
 public:
   RGWHandler_REST_SWIFT() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_SWIFT() {}
 
+  int init(struct req_state *state, FCGX_Request *fcgx);
   int authorize();
 };
 

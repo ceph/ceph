@@ -230,6 +230,28 @@ void RGWDeleteObj_REST_S3::send_response()
   end_header(s);
 }
 
+int RGWCopyObj_REST_S3::get_params()
+{
+  if_mod = s->env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_X_AMZ_COPY_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
+
+  const char *req_src = s->copy_source;
+  const char *req_dest = s->object;
+  if (!req_src || !req_src)
+    return -EINVAL;
+
+  ret = parse_copy_location(req_src, src_bucket_name, src_object);
+  if (!ret)
+     return -EINVAL;
+
+  dest_bucket_name = s->bucket.name;
+  dest_object = s->object_str;
+
+  return 0;
+}
+
 void RGWCopyObj_REST_S3::send_response()
 {
   if (ret)
@@ -505,6 +527,17 @@ RGWOp *RGWHandler_REST_S3::get_post_op()
   }
 
   return NULL;
+}
+
+int RGWHandler_REST_S3::init(struct req_state *state, FCGX_Request *fcgx)
+{
+  const char *cacl = state->env->get("HTTP_X_AMZ_ACL");
+  if (cacl)
+    state->canned_acl = cacl;
+
+  state->copy_source = state->env->get("HTTP_X_AMZ_COPY_SOURCE");
+
+  return RGWHandler_REST::init(state, fcgx);
 }
 
 /*

@@ -328,6 +328,48 @@ void RGWDeleteObj_REST_SWIFT::send_response()
   flush_formatter_to_req_state(s, s->formatter);
 }
 
+int RGWCopyObj_REST_SWIFT::get_params()
+{
+  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->env->get("HTTP_COPY_IF_MATCH");
+  if_nomatch = s->env->get("HTTP_COPY_IF_NONE_MATCH");
+
+  if (s->op == OP_COPY) {
+    const char *req_dest = s->env->get("HTTP_DESTINATION");
+    if (!req_dest)
+      return -EINVAL;
+
+    ret = parse_copy_location(req_dest, dest_bucket_name, dest_object);
+    if (!ret)
+       return -EINVAL;
+    src_bucket_name = s->bucket_name;
+    src_object = s->object_str;
+  } else {
+    const char *req_src = s->copy_source;
+    if (!req_src)
+      return -EINVAL;
+
+    ret = parse_copy_location(req_src, src_bucket_name, src_object);
+    if (!ret)
+       return -EINVAL;
+
+    dest_bucket_name = s->bucket_name;
+    dest_object = s->object_str;
+  }
+
+  return 0;
+}
+
+void RGWCopyObj_REST_SWIFT::send_response()
+{
+  if (!ret)
+    ret = STATUS_CREATED;
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 int RGWGetObj_REST_SWIFT::send_response(void *handle)
 {
   const char *content_type = NULL;
@@ -453,6 +495,14 @@ RGWOp *RGWHandler_REST_SWIFT::get_post_op()
   return NULL;
 }
 
+RGWOp *RGWHandler_REST_SWIFT::get_copy_op()
+{
+  if (s->object)
+    return new RGWCopyObj_REST_SWIFT;
+
+  return NULL;
+}
+
 int RGWHandler_REST_SWIFT::authorize()
 {
   bool authorized = rgw_verify_os_token(s);
@@ -462,4 +512,11 @@ int RGWHandler_REST_SWIFT::authorize()
   s->perm_mask = RGW_PERM_FULL_CONTROL;
 
   return 0;
+}
+
+int RGWHandler_REST_SWIFT::init(struct req_state *state, FCGX_Request *fcgx)
+{
+  state->copy_source = state->env->get("HTTP_X_COPY_FROM");
+
+  return RGWHandler_REST::init(state, fcgx);
 }

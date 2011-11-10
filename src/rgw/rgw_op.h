@@ -313,11 +313,19 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
+  string src_bucket_name;
   rgw_bucket src_bucket;
   string src_object;
+  string dest_bucket_name;
+  rgw_bucket dest_bucket;
+  string dest_object;
   time_t mtime;
 
   int init_common();
+
+protected:
+  bool parse_copy_location(const char *src, string& bucket_name, string& object);
+
 public:
   RGWCopyObj() {}
 

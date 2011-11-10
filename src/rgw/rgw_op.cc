@@ -916,7 +916,7 @@ void RGWDeleteObj::execute()
   send_response();
 }
 
-static bool parse_copy_source(const char *src, string& bucket_name, string& object)
+bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, string& object)
 {
   string url_src(src);
   string dec_src;
@@ -924,7 +924,7 @@ static bool parse_copy_source(const char *src, string& bucket_name, string& obje
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
 
-  dout(15) << "decoded src=" << src << dendl;
+  dout(15) << "decoded obj=" << src << dendl;
 
   if (*src == '/') ++src;
 
@@ -947,36 +947,54 @@ int RGWCopyObj::verify_permission()
 {
   string empty_str;
   RGWAccessControlPolicy src_policy;
-  RGWAccessControlPolicy dest_policy;
-
-  if (!::verify_permission(s, RGW_PERM_WRITE))
-    return -EACCES;
-
-  ret = dest_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-  if (!ret)
-     return -EINVAL;
-
-  string src_bucket_name;
-
-  ret = parse_copy_source(s->copy_source, src_bucket_name, src_object);
-  if (!ret)
-     return -EINVAL;
-
-  RGWBucketInfo bucket_info;
-
-  ret = rgwstore->get_bucket_info(s->obj_ctx, src_bucket_name, bucket_info);
+  ret = get_params();
   if (ret < 0)
     return ret;
 
-  src_bucket = bucket_info.bucket;
+  RGWBucketInfo src_bucket_info, dest_bucket_info;
 
-  /* just checking the bucket's permission */
-  ret = read_acls(s, bucket_info, &src_policy, src_bucket, empty_str);
+  /* get buckets info (source and dest) */
+
+  ret = rgwstore->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info);
+  if (ret < 0)
+    return ret;
+
+  src_bucket = src_bucket_info.bucket;
+
+  if (src_bucket_name.compare(dest_bucket_name) == 0) {
+    dest_bucket_info = src_bucket_info;
+  } else {
+    ret = rgwstore->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info);
+    if (ret < 0)
+      return ret;
+  }
+
+  dest_bucket = dest_bucket_info.bucket;
+
+  /* check source object permissions */
+  ret = read_acls(s, src_bucket_info, &src_policy, src_bucket, src_object);
   if (ret < 0)
     return ret;
 
   if (!::verify_permission(&src_policy, s->user.user_id, s->perm_mask, RGW_PERM_READ))
     return -EACCES;
+
+  RGWAccessControlPolicy dest_bucket_policy;
+
+  /* check dest bucket permissions */
+  ret = read_acls(s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
+  if (ret < 0)
+    return ret;
+
+  if (!::verify_permission(&dest_bucket_policy, s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
+    return -EACCES;
+
+  /* build a polict for the target object */
+  RGWAccessControlPolicy dest_policy;
+
+  ret = dest_policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!ret)
+     return -EINVAL;
 
   dest_policy.encode(aclbl);
 
@@ -990,7 +1008,6 @@ int RGWCopyObj::init_common()
   time_t unmod_time;
   time_t *mod_ptr = NULL;
   time_t *unmod_ptr = NULL;
-
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0) {
       ret = -EINVAL;
@@ -1017,15 +1034,11 @@ void RGWCopyObj::execute()
 {
   rgw_obj src_obj, dst_obj;
 
-  ret = get_params();
-  if (ret < 0)
-    goto done;
-
   if (init_common() < 0)
     goto done;
 
   src_obj.init(src_bucket, src_object);
-  dst_obj.init(s->bucket, s->object_str);
+  dst_obj.init(dest_bucket, dest_object);
   rgwstore->set_atomic(s->obj_ctx, src_obj);
   rgwstore->set_atomic(s->obj_ctx, dst_obj);
 

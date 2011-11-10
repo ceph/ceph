@@ -283,16 +283,6 @@ int RGWPutObj_REST::get_data()
   return len;
 }
 
-int RGWCopyObj_REST::get_params()
-{
-  if_mod = s->env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
-  if_unmod = s->env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
-  if_match = s->env->get("HTTP_X_AMZ_COPY_IF_MATCH");
-  if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
-
-  return 0;
-}
-
 int RGWPutACLs_REST::get_params()
 {
   size_t cl = 0;
@@ -784,6 +774,8 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
     s->op = OP_HEAD;
   else if (strcmp(s->method, "POST") == 0)
     s->op = OP_POST;
+  else if (strcmp(s->method, "COPY") == 0)
+    s->op = OP_COPY;
   else
     s->op = OP_UNKNOWN;
 
@@ -819,11 +811,6 @@ int RGWHandler_REST::preprocess(struct req_state *s, FCGX_Request *fcgx)
 
   init_auth_info(s);
 
-  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
-  if (cacl)
-    s->canned_acl = cacl;
-
-  s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
   s->http_auth = s->env->get("HTTP_AUTHORIZATION");
 
   if (g_conf->rgw_print_continue) {
@@ -854,6 +841,8 @@ int RGWHandler_REST::read_permissions()
   case OP_DELETE:
     only_bucket = true;
     break;
+  case OP_COPY: // op itself will read and verify the permissions
+    return 0;
   default:
     return -EINVAL;
   }
@@ -879,6 +868,9 @@ RGWOp *RGWHandler_REST::get_op()
      break;
    case OP_POST:
      op = get_post_op();
+     break;
+   case OP_COPY:
+     op = get_copy_op();
      break;
    default:
      return NULL;
