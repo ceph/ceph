@@ -70,6 +70,10 @@ public:
     Mutex::Locker l(com_lock);
     return committing_seq != committed_seq;
   }
+  uint64_t get_committed_seq() {
+    Mutex::Locker l(com_lock);
+    return committed_seq;
+  }
 
 public:
   JournalingObjectStore() : op_seq(0), 

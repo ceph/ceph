@@ -87,6 +87,8 @@ int main(int argc, const char **argv)
 
     bool committing = false;
     uint64_t committed_at = 0;
+    uint64_t committed_seq = 0;
+    int num_commits = 0;
     while (true) {
       // build buffer
       bufferlist bl;
@@ -116,8 +118,17 @@ int main(int argc, const char **argv)
 	}
       }
       if (committed_at && committed > committed_at + 100) {
-	cout << " have seen several commits since the last journal flush, exiting to fake a crash" << std::endl;
+	cout << " have seen several ops commit since the last journal flush, exiting to fake a crash" << std::endl;
 	_exit(0);
+      }
+
+      if (fs->get_committed_seq() != committed_seq) {
+	num_commits++;
+	committed_seq = fs->get_committed_seq();
+	if (num_commits > 5) {
+	  cout << " have seen several commit cycles, exiting to fake a crash" << std::endl;
+	  _exit(0);
+	}
       }
     }
   }
