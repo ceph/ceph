@@ -97,8 +97,11 @@ int main(int argc, const char **argv)
       
       ObjectStore::Transaction t;
       t.clone(coll, oid, clone);
-      t.write(coll, oid, 0, bl.length(), bl);
       fs->apply_transaction(t, new C_Ondisk(x));
+
+      ObjectStore::Transaction t2;
+      t2.write(coll, oid, 0, bl.length(), bl);
+      fs->apply_transaction(t2, new C_Ondisk(x));
 
       ++x;
       cout << x << "\n";
