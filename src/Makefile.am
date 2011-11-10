@@ -1300,6 +1300,7 @@ noinst_HEADERS = \
         messages/MMonObserve.h\
         messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
+        messages/MMonProbe.h\
         messages/MMonSubscribe.h\
         messages/MMonSubscribeAck.h\
         messages/MOSDAlive.h\
