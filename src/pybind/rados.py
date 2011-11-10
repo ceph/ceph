@@ -1,11 +1,12 @@
 """librados Python ctypes wrapper
 Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
-from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, \
+from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, \
     create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer
 import ctypes
 import errno
 import time
+from datetime import datetime
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -340,11 +341,12 @@ class Snap(object):
 
     def get_timestamp(self):
         snap_time = c_long(0)
-        ret = rados_ioctx_snap_get_stamp(self.ioctx.io, self.snap_id,
-                                        byref(snap_time))
+        ret = self.ioctx.librados.rados_ioctx_snap_get_stamp(
+            self.ioctx.io, self.snap_id,
+            byref(snap_time))
         if (ret != 0):
             raise make_ex(ret, "rados_ioctx_snap_get_stamp error")
-        return date.fromtimestamp(snap_time)
+        return datetime.fromtimestamp(snap_time.value)
 
 class Ioctx(object):
     """rados.Ioctx object"""
