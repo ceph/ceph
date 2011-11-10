@@ -72,28 +72,32 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     }
     assert(op_seq == seq-1);
     
-    dout(3) << "journal_replay: applying op seq " << seq << " (op_seq " << op_seq << ")" << dendl;
+    dout(3) << "journal_replay: applying op seq " << seq << dendl;
     bufferlist::iterator p = bl.begin();
     list<Transaction*> tls;
     while (!p.end()) {
       Transaction *t = new Transaction(p);
       tls.push_back(t);
     }
-    int r = do_transactions(tls, op_seq);
-    op_seq++;
+
+    open_ops++;
+    int r = do_transactions(tls, seq);
+    open_ops--;
+    cond.Signal();
+
+    op_seq = applied_seq = seq;
+
     while (!tls.empty()) {
       delete tls.front(); 
       tls.pop_front();
     }
 
-    dout(3) << "journal_replay: r = " << r << ", op now seq " << op_seq << dendl;
+    dout(3) << "journal_replay: r = " << r << ", op_seq now " << op_seq << dendl;
     assert(op_seq == seq);
     seq++;  // we expect the next op
   }
 
   replaying = false;
-
-  applied_seq = op_seq;
 
   // done reading, make writeable.
   journal->make_writeable();

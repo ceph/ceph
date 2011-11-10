@@ -1683,6 +1683,8 @@ int FileStore::mount()
     }
   }
 
+  sync_thread.create();
+
   ret = journal_replay(initial_op_seq);
   if (ret < 0) {
     derr << "mount failed to open journal " << journalpath << ": "
@@ -1691,12 +1693,19 @@ int FileStore::mount()
       derr << "maybe journal is not pointing to a block device and its size "
 	   << "wasn't configured?" << dendl;
     }
+
+    // stop sync thread
+    lock.Lock();
+    stop = true;
+    sync_cond.Signal();
+    lock.Unlock();
+    sync_thread.join();
+
     goto close_current_fd;
   }
 
   journal_start();
 
-  sync_thread.create();
   op_tp.start();
   flusher_thread.create();
   op_finisher.start();
