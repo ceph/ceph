@@ -226,14 +226,18 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
 int MonitorStore::erase_ss(const char *a, const char *b)
 {
   char fn[1024];
+  char dr[1024];
+  snprintf(dr, sizeof(dr), "%s/%s", dir.c_str(), a);
   if (b) {
     dout(15) << "erase_ss " << a << "/" << b << dendl;
     snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
     dout(15) << "erase_ss " << a << dendl;
-    snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
+    strcpy(fn, dr);
   }
-  return ::unlink(fn);
+  int r = ::unlink(fn);
+  ::rmdir(dr);  // sloppy attempt to clean up empty dirs
+  return r;
 }
 
 int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
