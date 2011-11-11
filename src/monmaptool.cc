@@ -120,6 +120,7 @@ int main(int argc, const char **argv)
   }
 
   if (create) {
+    monmap.epoch = 0;
     monmap.created = ceph_clock_now(g_ceph_context);
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
@@ -151,7 +152,7 @@ int main(int argc, const char **argv)
   if (!print && !modified)
     usage();
 
-  if (modified)
+  if (modified && !create)
     monmap.epoch++;
 
   if (print) 
