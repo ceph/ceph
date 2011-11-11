@@ -1237,8 +1237,11 @@ bool Monitor::_ms_dispatch(Message *m)
 	MMonPaxos *pm = (MMonPaxos*)m;
 
 	// sanitize
-	if (pm->epoch > get_epoch()) 
+	if (pm->epoch > get_epoch()) {
 	  bootstrap();
+	  pm->put();
+	  break;
+	}
 	if (pm->epoch != get_epoch()) {
 	  pm->put();
 	  break;
