@@ -225,9 +225,9 @@ int MonClient::get_monmap_privately()
   
   int attempt = 10;
   
-  ldout(cct, 10) << "have " << monmap.epoch << dendl;
+  ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
   
-  while (monmap.epoch == 0) {
+  while (monmap.fsid.is_zero()) {
     cur_mon = monmap.pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
@@ -239,7 +239,7 @@ int MonClient::get_monmap_privately()
     utime_t interval(1, 0);
     map_cond.WaitInterval(cct, monc_lock, interval);
 
-    if (monmap.epoch == 0) {
+    if (monmap.fsid.is_zero()) {
       messenger->mark_down(cur_con);  // nope, clean that connection up
       cur_con->put();
     }
@@ -263,7 +263,7 @@ int MonClient::get_monmap_privately()
     cur_con = NULL;
   }
 
-  if (monmap.epoch)
+  if (!monmap.fsid.is_zero())
     return 0;
   return -1;
 }
