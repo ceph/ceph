@@ -83,13 +83,14 @@ void OSDMonitor::create_initial()
 bool OSDMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-  if (paxosv == osdmap.epoch) return true;
+  if (paxosv == osdmap.epoch)
+    return true;
   assert(paxosv >= osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << paxosv 
 	   << ", my e " << osdmap.epoch << dendl;
 
-  if (osdmap.epoch == 0 && paxosv > 1) {
+  if (osdmap.epoch == 0 && paxosv > 0) {
     // startup: just load latest full map
     bufferlist latest;
     version_t v = paxos->get_latest(latest);

@@ -62,7 +62,7 @@ bool MonmapMonitor::update_from_paxos()
     }
   }
 
-  while (paxosv > mon->monmap->get_epoch()) {
+  if (paxosv > mon->monmap->get_epoch()) {
     // read and decode
     monmap_bl.clear();
     bool success = paxos->read(paxosv, monmap_bl);

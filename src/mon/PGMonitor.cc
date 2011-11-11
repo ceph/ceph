@@ -114,10 +114,11 @@ void PGMonitor::create_initial()
 bool PGMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-  if (paxosv == pg_map.version) return true;
+  if (paxosv == pg_map.version)
+    return true;
   assert(paxosv >= pg_map.version);
 
-  if (pg_map.version == 0 && paxosv > 1) {
+  if (pg_map.version == 0 && paxosv > 0) {
     // starting up: load latest
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
@@ -130,7 +131,7 @@ bool PGMonitor::update_from_paxos()
 	pg_map = tmp_pg_map;
       }
       catch (const std::exception &e) {
-	dout(0) << "PGMonitor::update_from_paxos: error parsing update: "
+	dout(0) << "update_from_paxos: error parsing update: "
 		<< e.what() << dendl;
 	return false;
       }
@@ -151,7 +152,7 @@ bool PGMonitor::update_from_paxos()
       inc.decode(p);
     }
     catch (const std::exception &e) {
-      dout(0) << "PGMonitor::update_from_paxos: error parsing "
+      dout(0) << "update_from_paxos: error parsing "
 	      << "incremental update: " << e.what() << dendl;
       return false;
     }

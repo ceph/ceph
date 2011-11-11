@@ -93,7 +93,8 @@ void LogMonitor::create_initial()
 bool LogMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-  if (paxosv == summary.version) return true;
+  if (paxosv == summary.version)
+    return true;
   assert(paxosv >= summary.version);
 
   bufferlist blog;
@@ -103,7 +104,7 @@ bool LogMonitor::update_from_paxos()
   bufferlist blogerr;
   bufferlist blogsec;
 
-  if (summary.version == 0 && paxosv > 1) {
+  if (summary.version == 0 && paxosv > 0) {
     // startup: just load latest full map
     bufferlist latest;
     version_t v = paxos->get_latest(latest);

@@ -114,7 +114,8 @@ bool AuthMonitor::update_from_paxos()
   dout(10) << "AuthMonitor::update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
-  if (paxosv == keys_ver) return true;
+  if (paxosv == keys_ver)
+    return true;
   assert(paxosv >= keys_ver);
 
   if (keys_ver == 0 && paxosv > 0) {
