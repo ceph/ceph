@@ -71,6 +71,10 @@ struct KeyServerData {
     return (secrets.find(name) != secrets.end());
   }
 
+  void clear_secrets() {
+    secrets.clear();
+  }
+
   void add_auth(const EntityName& name, EntityAuth& auth) {
     secrets[name] = auth;
   }
@@ -148,6 +152,10 @@ struct KeyServerData {
       }
     }
   };
+
+  void bootstrap_keyring(KeyRing& keyring) {
+    secrets = keyring.get_keys();
+  }
 
   void apply_incremental(Incremental& inc) {
     switch (inc.op) {
@@ -229,6 +237,10 @@ public:
     return data.version;    
   }
 
+  void clear_secrets() {
+    data.clear_secrets();
+  }
+
   void apply_data_incremental(KeyServerData::Incremental& inc) {
     data.apply_incremental(inc);
   }
@@ -271,6 +283,11 @@ public:
   Mutex& get_lock() const { return lock; }
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
+
+  void bootstrap_keyring(KeyRing& keyring) {
+    data.bootstrap_keyring(keyring);
+  }
+
 };
 WRITE_CLASS_ENCODER(KeyServer);
 

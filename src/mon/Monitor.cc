@@ -181,6 +181,18 @@ void Monitor::init()
   for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
     (*ps)->update_from_paxos();
 
+  // we need to bootstrap authentication keys so we can form an
+  // initial quorum.
+  if (authmon()->paxos->get_version() == 0) {
+    dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
+    bufferlist bl;
+    store->get_bl_ss(bl, "mkfs", "keyring");
+    KeyRing keyring;
+    bufferlist::iterator p = bl.begin();
+    ::decode(keyring, p);
+    key_server.bootstrap_keyring(keyring);
+  }
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&clog);
@@ -1526,24 +1538,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist keyringbl;
   ::encode(keyring, keyringbl);
   store->put_bl_ss(keyringbl, "mkfs", "keyring");
-
-
-  // do it
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
-    PaxosService *svc = *p;
-    if (!svc)
-      continue;
-    dout(10) << "initializing " << svc->get_machine_name() << dendl;
-    svc->paxos->init();
-    svc->create_pending();
-    svc->create_initial();
-    // commit to paxos
-    bufferlist bl;
-    svc->encode_pending(bl);
-    store->put_bl_sn(bl, svc->get_machine_name(), 1);
-    store->put_int(1, svc->get_machine_name(), "first_committed");
-    store->put_int(1, svc->get_machine_name(), "last_committed");
-  }
 
   return 0;
 }

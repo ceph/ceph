@@ -137,6 +137,12 @@ bool AuthMonitor::update_from_paxos()
     bool success = paxos->read(keys_ver+1, bl);
     assert(success);
 
+    // reset if we are moving to initial state.  we will normally have
+    // keys in here temporarily for bootstrapping that we need to
+    // clear out.
+    if (keys_ver == 0) 
+      mon->key_server.clear_secrets();
+
     bufferlist::iterator p = bl.begin();
     __u8 v;
     ::decode(v, p);

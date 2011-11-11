@@ -185,6 +185,13 @@ void PaxosService::_active()
       create_pending();
       have_pending = true;
     }
+
+    if (paxos->get_version() == 0) {
+      // create initial state
+      create_initial();
+      propose_pending();
+      return;
+    }
   }
 
   on_active();
