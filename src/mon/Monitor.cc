@@ -1525,6 +1525,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
   monmap->encode(monmapbl);
+  monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
   store->put_bl_ss(osdmapbl, "mkfs", "osdmap");

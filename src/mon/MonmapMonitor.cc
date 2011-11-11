@@ -40,28 +40,42 @@ void MonmapMonitor::create_initial()
   bufferlist bl;
   mon->store->get_bl_ss(bl, "mkfs", "monmap");
   pending_map.decode(bl);
-  dout(10) << "create_initial was fed epoch " << pending_map.epoch << dendl;
+  dout(10) << "create_initial set fed epoch " << pending_map.epoch << dendl;
+  assert(pending_map.epoch == 0);   // fix mkfs()
+  pending_map.epoch = 1;
 }
 
 bool MonmapMonitor::update_from_paxos()
 {
-  //check versions to see if there's an update
   version_t paxosv = paxos->get_version();
-  if (paxosv <= mon->monmap->epoch) return true;
-  //assert(paxosv >= mon->monmap->epoch);
+  if (paxosv <= mon->monmap->epoch)
+    return true;
 
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
-  //read and decode
-  monmap_bl.clear();
-  bool success = paxos->read(paxosv, monmap_bl);
-  assert(success);
-  dout(10) << "update_from_paxos got " << paxosv << dendl;
-  mon->monmap->decode(monmap_bl);
+  if (mon->monmap->get_epoch() == 0 && paxosv > 0) {
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      mon->monmap->decode(latest);
+    }
+  }
 
-  //save the bufferlist version in the paxos instance as well
-  paxos->stash_latest(paxosv, monmap_bl);
+  while (paxosv > mon->monmap->get_epoch()) {
+    // read and decode
+    monmap_bl.clear();
+    bool success = paxos->read(paxosv, monmap_bl);
+    assert(success);
+    dout(10) << "update_from_paxos got " << paxosv << dendl;
+    mon->monmap->decode(monmap_bl);
+
+    // save the bufferlist version in the paxos instance as well
+    paxos->stash_latest(paxosv, monmap_bl);
+
+    if (mon->monmap->get_epoch() == 1)
+      mon->store->erase_ss("mkfs", "monmap");
+  }
 
   int rank = mon->monmap->get_rank(mon->name);
   if (rank < 0) {

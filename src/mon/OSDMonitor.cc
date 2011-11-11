@@ -116,6 +116,9 @@ bool OSDMonitor::update_from_paxos()
 
     // share
     dout(1) << osdmap << dendl;
+
+    if (osdmap.epoch == 1)
+      mon->store->erase_ss("mkfs", "osdmap");
   }
 
   // save latest

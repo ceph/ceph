@@ -117,7 +117,7 @@ bool AuthMonitor::update_from_paxos()
   if (paxosv == keys_ver) return true;
   assert(paxosv >= keys_ver);
 
-  if (keys_ver == 0 && paxosv > 1) {
+  if (keys_ver == 0 && paxosv > 0) {
     // startup: just load latest full map
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
@@ -167,6 +167,10 @@ bool AuthMonitor::update_from_paxos()
 
     keys_ver++;
     mon->key_server.set_ver(keys_ver);
+
+    if (keys_ver == 1) {
+      mon->store->erase_ss("mkfs", "keyring");
+    }
   }
 
   if (last_allocated_id == 0)
