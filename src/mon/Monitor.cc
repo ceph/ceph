@@ -748,12 +748,15 @@ void Monitor::handle_command(MMonCommand *m)
 
       JSONFormatter jf(true);
       jf.open_object_section("quorum_status");
-      jf.dump_int("monmap_epoch", monmap->get_epoch());
       jf.dump_int("election_epoch", get_epoch());
 
       jf.open_array_section("quorum");
       for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
 	jf.dump_int("mon", *p);
+      jf.close_section();
+
+      jf.open_object_section("monmap");
+      monmap->dump(&jf);
       jf.close_section();
 
       jf.close_section();
@@ -769,7 +772,6 @@ void Monitor::handle_command(MMonCommand *m)
       jf.dump_string("name", name);
       jf.dump_int("rank", rank);
       jf.dump_string("state", get_state_name());
-      jf.dump_int("monmap_epoch", monmap->get_epoch());
       jf.dump_int("election_epoch", get_epoch());
 
       jf.open_array_section("quorum");
@@ -789,6 +791,10 @@ void Monitor::handle_command(MMonCommand *m)
 	  jf.dump_int(p->first.c_str(), p->second);	  
 	jf.close_section();
       }
+
+      jf.open_object_section("monmap");
+      monmap->dump(&jf);
+      jf.close_section();
 
       jf.close_section();
 
