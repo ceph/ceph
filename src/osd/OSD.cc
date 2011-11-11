@@ -703,7 +703,9 @@ int OSD::init()
   hbout_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-  monc->init();
+  r = monc->init();
+  if (r < 0)
+    return r;
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
