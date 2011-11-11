@@ -812,6 +812,7 @@ void Paxos::restart()
   new_value.clear();
 
   finish_contexts(g_ceph_context, waiting_for_commit, -1);
+  finish_contexts(g_ceph_context, waiting_for_active, -1);
 }
 
 
