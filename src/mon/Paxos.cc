@@ -159,7 +159,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
   version_t v = peer_last_committed;
 
   // start with a stashed full copy?
-  if (peer_last_committed < first_committed) {
+  if (peer_last_committed + 1 < first_committed) {
     bufferlist bl;
     version_t l = get_latest(bl);
     assert(l <= last_committed);
