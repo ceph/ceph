@@ -26,6 +26,7 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorStore.h"
+#include "mon/MonClient.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -33,6 +34,8 @@ using namespace std;
 
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
+#include "common/errno.h"
+
 #include "global/global_init.h"
 
 extern CompatSet get_ceph_mon_feature_compat_set();
@@ -93,30 +96,36 @@ int main(int argc, const char **argv)
     if (g_conf->monmap.empty() || osdmapfn.empty())
       usage();
 
-    // make sure it doesn't already exist
-        /*
-    struct stat st;
-    if (::lstat(g_conf->mon_data.c_str(), &st) == 0) {
-      cerr << "monfs dir " << g_conf->mon_data << " already exists; remove it first" << std::endl;
-      usage();
-    }
-	*/
-
-    // load monmap
     bufferlist monmapbl, osdmapbl;
     std::string error;
-    int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
-    if (err < 0) {
-      cout << argv[0] << ": error reading " << g_conf->monmap.c_str() << ": "
-	   << error << std::endl;
-      exit(1);
-    }
     MonMap monmap;
-    monmap.decode(monmapbl);
-    
+
+    // load or generate monmap
+    if (g_conf->monmap.length()) {
+      int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
+      if (err < 0) {
+	cerr << argv[0] << ": error reading " << g_conf->monmap << ": " << error << std::endl;
+	exit(1);
+      }
+      try {
+	monmap.decode(monmapbl);
+      }
+      catch (const buffer::error& e) {
+	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
+	exit(1);
+      }      
+    } else {
+      int err = MonClient::build_initial_monmap(g_ceph_context, monmap);
+      if (err < 0) {
+	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
+	exit(1);
+      }
+    }
+
+    // osdmap
     err = osdmapbl.read_file(osdmapfn.c_str(), &error);
     if (err < 0) {
-      cout << argv[0] << ": error reading " << osdmapfn << ": "
+      cerr << argv[0] << ": error reading " << osdmapfn << ": "
 	   << error << std::endl;
       exit(1);
     }
@@ -136,8 +145,7 @@ int main(int argc, const char **argv)
   MonitorStore store(g_conf->mon_data);
   err = store.mount();
   if (err < 0) {
-    char buf[80];
-    cerr << "problem opening monitor store in " << g_conf->mon_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+    cerr << "problem opening monitor store in " << g_conf->mon_data << ": " << cpp_strerror(err) << std::endl;
     exit(1);
   }
 
