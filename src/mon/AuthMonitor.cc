@@ -194,36 +194,6 @@ bool AuthMonitor::should_propose(double& delay)
   return (pending_auth.size() > 0);
 }
 
-void AuthMonitor::init()
-{
-  version_t paxosv = paxos->get_version();
-  version_t keys_ver = mon->key_server.get_ver();
-
-  dout(10) << "AuthMonitor::init() paxosv=" << paxosv << dendl;
-
-  if (paxosv == keys_ver) return;
-  assert(paxosv >= keys_ver);
-
-  if (keys_ver == 0 && paxosv > 1) {
-    // startup: just load latest full map
-    bufferlist latest;
-    version_t v = paxos->get_latest(latest);
-    if (v) {
-      dout(10) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
-      bufferlist::iterator p = latest.begin();
-      __u8 v;
-      ::decode(v, p);
-      ::decode(max_global_id, p);
-      ::decode(mon->key_server, p);
-    }
-  }
-
-  last_allocated_id = max_global_id;
-
-  /* should only happen on the first time */
-  update_from_paxos();
-}
-
 void AuthMonitor::create_pending()
 {
   pending_auth.clear();

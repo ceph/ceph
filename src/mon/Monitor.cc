@@ -179,7 +179,7 @@ void Monitor::init()
     (*p)->init();
 
   for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
-    (*ps)->init();
+    (*ps)->update_from_paxos();
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
