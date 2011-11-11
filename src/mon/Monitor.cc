@@ -256,7 +256,7 @@ void Monitor::bootstrap()
   dout(10) << "probing other monitors" << dendl;
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
-      messenger->send_message(new MMonProbe(MMonProbe::OP_PROBE, name), monmap->get_inst(i));
+      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name), monmap->get_inst(i));
   }
 }
 
@@ -306,6 +306,13 @@ void Monitor::probe_timeout(int r)
 void Monitor::handle_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe " << *m << dendl;
+
+  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_probe ignoring fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    m->put();
+    return;
+  }
+
   switch (m->op) {
   case MMonProbe::OP_PROBE:
     handle_probe_probe(m);
@@ -335,7 +342,7 @@ void Monitor::handle_probe(MMonProbe *m)
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
-  MMonProbe *r = new MMonProbe(MMonProbe::OP_REPLY, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl);
@@ -449,7 +456,7 @@ void Monitor::slurp()
     }
     dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
     if (p->second > pax->get_version()) {
-      MMonProbe *m = new MMonProbe(MMonProbe::OP_SLURP, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -460,7 +467,7 @@ void Monitor::slurp()
     // latest?
     if (pax->get_first_committed() > 1 &&   // don't need it!
 	pax->get_latest_version() < pax->get_first_committed()) {
-      MMonProbe *m = new MMonProbe(MMonProbe::OP_SLURP_LATEST, name);
+      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
       m->newest_version = pax->get_version();
@@ -482,7 +489,7 @@ void Monitor::handle_probe_slurp(MMonProbe *m)
   Paxos *pax = get_paxos_by_name(m->machine_name);
   assert(pax);
 
-  MMonProbe *r = new MMonProbe(MMonProbe::OP_DATA, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
   r->newest_version = pax->get_version();
@@ -512,7 +519,7 @@ void Monitor::handle_probe_slurp_latest(MMonProbe *m)
   Paxos *pax = get_paxos_by_name(m->machine_name);
   assert(pax);
 
-  MMonProbe *r = new MMonProbe(MMonProbe::OP_DATA, name);
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name);
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
   r->newest_version = pax->get_version();

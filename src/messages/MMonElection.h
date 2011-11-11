@@ -35,6 +35,7 @@ public:
     }
   }
   
+  ceph_fsid_t fsid;
   int32_t op;
   epoch_t epoch;
   bufferlist monmap_bl;
@@ -43,7 +44,7 @@ public:
   MMonElection() : Message(MSG_MON_ELECTION) {}
   MMonElection(int o, epoch_t e, MonMap *m) : 
     Message(MSG_MON_ELECTION), 
-    op(o), epoch(e) {
+    fsid(m->fsid), op(o), epoch(e) {
     m->encode(monmap_bl);
   }
 private:
@@ -52,10 +53,12 @@ private:
 public:  
   const char *get_type_name() { return "election"; }
   void print(ostream& out) {
-    out << "election(" << get_opname(op) << " " << epoch << ")";
+    out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   
   void encode_payload(CephContext *cct) {
+    header.version = 2;
+    ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(epoch, payload);
     ::encode(monmap_bl, payload);
@@ -63,6 +66,10 @@ public:
   }
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
+    if (header.version >= 2)
+      ::decode(fsid, p);
+    else
+      memset(&fsid, 0, sizeof(fsid));
     ::decode(op, p);
     ::decode(epoch, p);
     ::decode(monmap_bl, p);

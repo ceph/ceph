@@ -40,6 +40,7 @@ public:
     }
   }
   
+  ceph_fsid_t fsid;
   int32_t op;
   string name;
   set<int32_t> quorum;
@@ -52,8 +53,8 @@ public:
   version_t latest_version, newest_version, oldest_version;
 
   MMonProbe() : Message(MSG_MON_PROBE) {}
-  MMonProbe(int o, const string& n)
-    : Message(MSG_MON_PROBE), op(o), name(n),
+  MMonProbe(const ceph_fsid_t& f, int o, const string& n)
+    : Message(MSG_MON_PROBE), fsid(f), op(o), name(n),
       latest_version(0), newest_version(0), oldest_version(0) {}
 private:
   ~MMonProbe() {}
@@ -61,7 +62,7 @@ private:
 public:  
   const char *get_type_name() { return "mon_probe"; }
   void print(ostream& out) {
-    out << "mon_probe(" << get_opname(op) << " name " << name;
+    out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
     if (paxos_versions.size())
@@ -72,6 +73,7 @@ public:
   }
   
   void encode_payload(CephContext *cct) {
+    ::encode(fsid, payload);
     ::encode(op, payload);
     ::encode(name, payload);
     ::encode(quorum, payload);
@@ -86,6 +88,7 @@ public:
   }
   void decode_payload(CephContext *cct) {
     bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
     ::decode(op, p);
     ::decode(name, p);
     ::decode(quorum, p);
