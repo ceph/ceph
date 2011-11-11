@@ -1,0 +1,59 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+#ifndef CEPH_MMONJOIN_H
+#define CEPH_MMONJOIN_H
+
+#include "messages/PaxosServiceMessage.h"
+
+#include <vector>
+using std::vector;
+
+class MMonJoin : public PaxosServiceMessage {
+ public:
+  ceph_fsid_t fsid;
+  string name;
+  entity_addr_t addr;
+
+  MMonJoin() : PaxosServiceMessage(MSG_MON_JOIN, 0) {}
+  MMonJoin(ceph_fsid_t &f, string n, entity_addr_t a)
+    : PaxosServiceMessage(MSG_MON_JOIN, 0),
+      fsid(f), name(n), addr(a)
+  { }
+  
+private:
+  ~MMonJoin() {}
+
+public:  
+  const char *get_type_name() { return "mon_join"; }
+  void print(ostream& o) {
+    o << "mon_join(" << name << " " << addr << ")";
+  }
+  
+  void encode_payload(CephContext *cct) {
+    paxos_encode();
+    ::encode(fsid, payload);
+    ::encode(name, payload);
+    ::encode(addr, payload);
+  }
+  void decode_payload(CephContext *cct) {
+    bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
+    ::decode(fsid, p);
+    ::decode(name, p);
+    ::decode(addr, p);
+  }
+};
+
+#endif

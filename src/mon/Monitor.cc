@@ -31,6 +31,7 @@
 #include "messages/MMonObserve.h"
 #include "messages/MMonObserveNotify.h"
 #include "messages/MMonProbe.h"
+#include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
@@ -402,7 +403,14 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       }
     }
     if (ok) {
-      start_election();
+      if (monmap->contains(name)) {
+	// i'm part of the cluster; just initiate a new election
+	start_election();
+      } else {
+	dout(10) << " ready to join, but i'm not in the monmap, trying to join" << dendl;
+	messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+				monmap->get_inst(*m->quorum.begin()));
+      }
     } else {
       slurp_source = m->get_source_inst();
       slurp_versions = m->paxos_versions;
@@ -1232,6 +1240,11 @@ bool Monitor::_ms_dispatch(Message *m)
       // log
     case MSG_LOG:
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
+      break;
+
+      // monmap
+    case MSG_MON_JOIN:
+      paxos_service[PAXOS_MONMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // paxos

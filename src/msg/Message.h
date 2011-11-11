@@ -23,6 +23,7 @@
 #define MSG_MON_ELECTION           65
 #define MSG_MON_PAXOS              66
 #define MSG_MON_PROBE              67
+#define MSG_MON_JOIN               68
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50

@@ -33,6 +33,7 @@ using namespace std;
 class MMonGetMap;
 class MMonMap;
 class MMonCommand;
+class MMonJoin;
 
 class MonmapMonitor : public PaxosService {
  public:
@@ -53,6 +54,9 @@ class MonmapMonitor : public PaxosService {
 
   bool preprocess_query(PaxosServiceMessage *m);
   bool prepare_update(PaxosServiceMessage *m);
+
+  bool preprocess_join(MMonJoin *m);
+  bool prepare_join(MMonJoin *m);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);

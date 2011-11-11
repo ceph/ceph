@@ -30,6 +30,7 @@ using namespace std;
 #include "messages/MMonObserveNotify.h"
 
 #include "messages/MMonProbe.h"
+#include "messages/MMonJoin.h"
 #include "messages/MMonElection.h"
 
 #include "messages/MLog.h"
@@ -231,6 +232,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 
   case MSG_MON_PROBE:
     m = new MMonProbe;
+    break;
+  case MSG_MON_JOIN:
+    m = new MMonJoin;
     break;
   case MSG_MON_ELECTION:
     m = new MMonElection;

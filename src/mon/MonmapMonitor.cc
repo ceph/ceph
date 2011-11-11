@@ -17,6 +17,8 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonCommand.h"
+#include "messages/MMonJoin.h"
+
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "mon/MDSMonitor.h"
@@ -123,6 +125,8 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
     // READs
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
+  case MSG_MON_JOIN:
+    return preprocess_join((MMonJoin*)m);
   default:
     assert(0);
     m->put();
@@ -263,6 +267,8 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
+  case MSG_MON_JOIN:
+    return prepare_join((MMonJoin*)m);
   default:
     assert(0);
     m->put();
@@ -327,6 +333,31 @@ out:
   getline(ss, rs);
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
+}
+
+bool MonmapMonitor::preprocess_join(MMonJoin *join)
+{
+  dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
+
+  if (pending_map.contains(join->name)) {
+    dout(10) << " already have " << join->name << dendl;
+    join->put();
+    return true;
+  }
+  if (pending_map.contains(join->addr)) {
+    dout(10) << " already have " << join->addr << dendl;
+    join->put();
+    return true;
+  }
+  return false;
+}
+bool MonmapMonitor::prepare_join(MMonJoin *join)
+{
+  dout(0) << "adding " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
+  pending_map.add(join->name, join->addr);
+  pending_map.last_changed = ceph_clock_now(g_ceph_context);
+  join->put();
+  return true;
 }
 
 bool MonmapMonitor::should_propose(double& delay)
