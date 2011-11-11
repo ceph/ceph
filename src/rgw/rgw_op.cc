@@ -1004,10 +1004,6 @@ int RGWCopyObj::verify_permission()
 
 int RGWCopyObj::init_common()
 {
-  time_t mod_time;
-  time_t unmod_time;
-  time_t *mod_ptr = NULL;
-  time_t *unmod_ptr = NULL;
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0) {
       ret = -EINVAL;

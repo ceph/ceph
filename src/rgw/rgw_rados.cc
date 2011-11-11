@@ -915,7 +915,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       continue;
     }
   }
-  return 0;
+  return ret;
 }
 
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)

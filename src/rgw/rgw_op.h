@@ -309,6 +309,8 @@ protected:
   off_t ofs;
   off_t len;
   off_t end;
+  time_t mod_time;
+  time_t unmod_time;
   time_t *mod_ptr;
   time_t *unmod_ptr;
   int ret;
