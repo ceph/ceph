@@ -226,19 +226,27 @@ int main(int argc, const char **argv)
   // monmap?
   MonMap monmap;
   {
-    bufferlist latest;
-    store.get_bl_ss(latest, "monmap/latest", 0);
-    if (latest.length() == 0) {
-      cerr << "mon fs missing 'monmap'" << std::endl;
-      exit(1);
-    }
-    bufferlist::iterator p = latest.begin();
-    version_t v;
-    ::decode(v, p);
     bufferlist mapbl;
-    ::decode(mapbl, p);
-    monmap.decode(mapbl);
-    assert(v == monmap.get_epoch());
+    bufferlist latest;
+    store.get_bl_ss(latest, "monmap", "latest");
+    if (latest.length() > 0) {
+      bufferlist::iterator p = latest.begin();
+      version_t v;
+      ::decode(v, p);
+      ::decode(mapbl, p);
+    } else {
+      store.get_bl_ss(mapbl, "mkfs", "monmap");
+      if (mapbl.length() == 0) {
+	cerr << "mon fs missing 'monmap/latest' and 'mkfs/monmap'" << std::endl;
+	exit(1);
+      }
+    }
+    try {
+      monmap.decode(mapbl);
+    }
+    catch (const buffer::error& e) {
+      cerr << "can't decode monmap: " << e.what() << std::endl;
+    }
   }
 
   if (!monmap.contains(g_conf->name.get_id())) {
@@ -252,7 +260,7 @@ int main(int argc, const char **argv)
   g_conf->get_my_sections(my_sections);
   std::string mon_addr_str;
   if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
-				    mon_addr_str, true) == 0)
+				     mon_addr_str, true) == 0)
   {
     if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
       cerr << "WARNING: 'mon addr' config option " << conf_addr
