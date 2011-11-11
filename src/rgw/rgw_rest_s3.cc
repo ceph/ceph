@@ -238,7 +238,6 @@ int RGWCopyObj_REST_S3::get_params()
   if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   const char *req_src = s->copy_source;
-  const char *req_dest = s->object;
   if (!req_src || !req_src)
     return -EINVAL;
 
