@@ -595,6 +595,9 @@ epoch_t Monitor::get_epoch()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
+  if (!is_electing())
+    reset();
+
   state = STATE_LEADER;
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
