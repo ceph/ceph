@@ -56,7 +56,8 @@ bool MonmapMonitor::update_from_paxos()
 
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
-
+  
+  version_t orig_latest = paxos->get_latest_version();
   bool need_restart = paxosv != mon->monmap->get_epoch();  
   
   if (paxosv > 0 && (mon->monmap->get_epoch() == 0 ||
@@ -79,7 +80,7 @@ bool MonmapMonitor::update_from_paxos()
     // save the bufferlist version in the paxos instance as well
     paxos->stash_latest(paxosv, monmap_bl);
 
-    if (mon->monmap->get_epoch() == 1)
+    if (orig_latest == 0)
       mon->store->erase_ss("mkfs", "monmap");
   }
 
