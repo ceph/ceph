@@ -55,6 +55,8 @@ bool MonmapMonitor::update_from_paxos()
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
+  bool need_restart = paxosv != mon->monmap->get_epoch();  
+  
   if (paxosv > 0 && (mon->monmap->get_epoch() == 0 ||
 		     paxos->get_latest_version() != paxosv)) {
     bufferlist latest;
@@ -93,7 +95,8 @@ bool MonmapMonitor::update_from_paxos()
     mon->rank = rank;
   }
   
-  mon->bootstrap();
+  if (need_restart)
+    mon->bootstrap();
   return true;
 }
 
