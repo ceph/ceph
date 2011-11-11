@@ -48,13 +48,15 @@ void MonmapMonitor::create_initial()
 bool MonmapMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-  if (paxosv <= mon->monmap->epoch)
+  if (paxosv <= paxos->get_latest_version() &&
+      paxosv <= mon->monmap->get_epoch())
     return true;
 
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
-  if (mon->monmap->get_epoch() == 0 && paxosv > 0) {
+  if (paxosv > 0 && (mon->monmap->get_epoch() == 0 ||
+		     paxos->get_latest_version() != paxosv)) {
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
     if (v) {
