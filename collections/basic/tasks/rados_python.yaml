@@ -1,0 +1,6 @@
+tasks:
+- ceph:
+- cfuse:
+- workunit:
+    client.0:
+      - rados/test_python.sh
