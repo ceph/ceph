@@ -195,8 +195,10 @@ void Elector::handle_propose(MMonElection *m)
       dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
-      if (!electing_me)
-	start();
+      if (!electing_me) {
+	mon->reset();
+	mon->start_election();
+      }
     }
   } else {
     // they would win over me
