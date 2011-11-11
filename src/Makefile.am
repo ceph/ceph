@@ -1018,11 +1018,6 @@ python_PYTHON = pybind/rados.py \
 		pybind/rgw.py \
 		pybind/rbd.py
 
-if WITH_DEBUG
-dist_bin_SCRIPTS += test/ceph-pybind-test.py \
-		    test/ceph-pybind-rgw-test.py
-endif
-
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
