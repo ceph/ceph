@@ -83,7 +83,7 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
   int r;
   if (g_conf->filestore_update_collections) {
     // Need to check the collection generation
-    uint32_t version;
+    uint32_t version = 0;
     r = get_version(path, &version);
     if (r < 0)
       return r;

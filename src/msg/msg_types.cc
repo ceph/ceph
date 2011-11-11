@@ -11,11 +11,9 @@ bool entity_addr_t::parse(const char *s, const char **end)
 
   const char *start = s;
   bool brackets = false;
-  bool ipv6 = false;
   if (*start == '[') {
     start++;
     brackets = true;
-    ipv6 = true;
   }
   
   // inet_pton() requires a null terminated input, so let's fill two

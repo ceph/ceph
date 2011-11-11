@@ -86,7 +86,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 	int word_len;
 	int skip;
 	int pos = 0;
-	char *newdata = 0;
 	char secret[MAX_SECRET_LEN];
 	char *saw_name = NULL;
 	char *saw_secret = NULL;
@@ -99,7 +98,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 		if(*data == 0)
 			break;
 		next_keyword = strchr(data,',');
-		newdata = 0;
 	
 		/* temporarily null terminate end of keyword=value pair */
 		if(next_keyword)

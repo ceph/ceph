@@ -700,7 +700,6 @@ int SimpleMessenger::Pipe::accept()
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
   int reply_tag = 0;
-  bool replace = false;
   uint64_t existing_seq = -1;
   while (1) {
     rc = tcp_read(msgr->cct, sd, (char*)&connect, sizeof(connect), msgr->timeout);
@@ -893,7 +892,6 @@ int SimpleMessenger::Pipe::accept()
   }
   
  replace:
-  replace = true;
   if (connect.features & CEPH_FEATURE_RECONNECT_SEQ) {
     reply_tag = CEPH_MSGR_TAG_SEQ;
     existing_seq = existing->in_seq;

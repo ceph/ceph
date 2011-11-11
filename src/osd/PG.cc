@@ -4870,7 +4870,6 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
     // interesting), or lost (down, but we won't wait for it).
     bool any_up_now = false;    // any candidates up now
     bool any_down_now = false;  // any candidates down now (that might have useful data)
-    bool any_lost_now = false;  // any candidates lost now (that we will ignore)
 
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
@@ -4887,11 +4886,9 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
       } else if (!pinfo) {
 	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
-	any_lost_now = true;
       } else if (pinfo->lost_at > interval.first) {
 	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
 	down.insert(o);
-	any_lost_now = true;
       } else {
 	dout(10) << "build_prior  prior osd." << o << " is down" << dendl;
 	down.insert(o);

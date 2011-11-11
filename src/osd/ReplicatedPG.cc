@@ -2440,7 +2440,6 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	  osd->client_messenger->send_message(notify_msg, s->con);
 	} else {
 	  // unconnected
-	  utime_t now = ceph_clock_now(g_ceph_context);
 	  entity_name_t name = i->first;
 	  notif->add_watcher(name, Watch::WATCHER_PENDING);
 	}
@@ -4576,7 +4575,6 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
 
   utime_t mtime = ceph_clock_now(g_ceph_context);
-  eversion_t old_last_update = info.last_update;
   info.last_update.epoch = get_osdmap()->get_epoch();
   map<hobject_t, Missing::item>::iterator m = missing.missing.begin();
   map<hobject_t, Missing::item>::iterator mend = missing.missing.end();

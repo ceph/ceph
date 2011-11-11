@@ -423,7 +423,11 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   int r;
   r = client->readdir_r_cb(dirp, ceph_ll_add_dirent, &rc);
 
-  fuse_reply_buf(req, rc.buf, rc.pos);
+  if (r == 0) {
+    fuse_reply_buf(req, rc.buf, rc.pos);
+  } else {
+    fuse_reply_err(req, -r);
+  }
   delete[] rc.buf;
 }
 
