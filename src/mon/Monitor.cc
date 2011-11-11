@@ -360,8 +360,7 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   if (newmap->get_epoch() > monmap->get_epoch()) {
     dout(10) << " got new monmap epoch " << newmap->get_epoch()
 	     << " > my " << monmap->get_epoch() << dendl;
-    delete monmap;
-    monmap = newmap;
+    monmap->decode(m->monmap_bl);
     m->put();
 
     bootstrap();
