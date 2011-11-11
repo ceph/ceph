@@ -89,14 +89,17 @@ void AuthMonitor::on_active()
 */
 }
 
-void AuthMonitor::create_initial(bufferlist& bl)
+void AuthMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
 
   KeyRing keyring;
-  if (keyring.load(g_ceph_context, g_conf->keyring) == 0) {
-    import_keyring(keyring);
-  }
+  bufferlist bl;
+  mon->store->get_bl_ss(bl, "mkfs", "keyring");
+  bufferlist::iterator p = bl.begin();
+  ::decode(keyring, p);
+
+  import_keyring(keyring);
 
   max_global_id = MIN_GLOBAL_ID;
 

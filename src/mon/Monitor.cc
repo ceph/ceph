@@ -1510,36 +1510,40 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   mon_features.encode(features);
   store->put_bl_ss(features, COMPAT_SET_LOC, 0);
 
+  // save monmap, osdmap, keyring.
   bufferlist monmapbl;
   monmap->encode(monmapbl);
+  store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
+  store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+
+  KeyRing keyring;
+  r = keyring.load(g_ceph_context, g_conf->keyring);
+  if (r < 0) {
+    derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+    return r;
+  }
+  bufferlist keyringbl;
+  ::encode(keyring, keyringbl);
+  store->put_bl_ss(keyringbl, "mkfs", "keyring");
+
+
+  // do it
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
     if (!svc)
       continue;
-    bufferlist bl;
     dout(10) << "initializing " << svc->get_machine_name() << dendl;
     svc->paxos->init();
     svc->create_pending();
-    if (svc->paxos->machine_id == PAXOS_OSDMAP)
-      svc->create_initial(osdmapbl);
-    else if (svc->paxos->machine_id == PAXOS_MONMAP)
-      svc->create_initial(monmapbl);
-    else
-      svc->create_initial(bl);
+    svc->create_initial();
     // commit to paxos
+    bufferlist bl;
     svc->encode_pending(bl);
     store->put_bl_sn(bl, svc->get_machine_name(), 1);
     store->put_int(1, svc->get_machine_name(), "first_committed");
     store->put_int(1, svc->get_machine_name(), "last_committed");
   }
-
-  // stash latest monmap
-  bufferlist latest;
-  version_t v = monmap->get_epoch();
-  ::encode(v, latest);
-  ::encode(monmapbl, latest);
-  store->put_bl_ss(latest, "monmap", "latest");
 
   return 0;
 }

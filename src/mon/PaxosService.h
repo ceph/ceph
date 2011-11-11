@@ -100,7 +100,7 @@ public:
    * In some of ours the state is actually set up
    * elsewhere so this does nothing.
    */
-  virtual void create_initial(bufferlist& bl) = 0;
+  virtual void create_initial() = 0;
 
   /*
    * Query the Paxos system for the latest state and apply it if

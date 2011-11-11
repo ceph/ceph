@@ -106,7 +106,7 @@ void PGMonitor::tick()
   dout(10) << pg_map << dendl;
 }
 
-void PGMonitor::create_initial(bufferlist& bl)
+void PGMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
 }

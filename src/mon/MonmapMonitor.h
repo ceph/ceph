@@ -42,7 +42,7 @@ class MonmapMonitor : public PaxosService {
   }
   MonMap pending_map; //the pending map awaiting passage
 
-  void create_initial(bufferlist& bl);
+  void create_initial();
 
   bool update_from_paxos();
 

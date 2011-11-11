@@ -51,7 +51,7 @@ private:
   map<int,double> osd_weight;
   // svc
 public:  
-  void create_initial(bufferlist& bl);
+  void create_initial();
 private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending

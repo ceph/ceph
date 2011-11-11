@@ -68,7 +68,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 
 
 // service methods
-void MDSMonitor::create_initial(bufferlist& bl)
+void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
   create_new_fs(pending_mdsmap, CEPH_METADATA_RULE, CEPH_DATA_RULE);

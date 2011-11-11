@@ -63,9 +63,12 @@ OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p)
 }
 
 
-void OSDMonitor::create_initial(bufferlist& bl)
+void OSDMonitor::create_initial()
 {
   dout(10) << "create_initial for " << mon->monmap->fsid << dendl;
+
+  bufferlist bl;
+  mon->store->get_bl_ss(bl, "mkfs", "osdmap");
 
   OSDMap newmap;
   newmap.decode(bl);

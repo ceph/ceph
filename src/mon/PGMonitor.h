@@ -46,7 +46,7 @@ public:
 private:
   PGMap::Incremental pending_inc;
 
-  void create_initial(bufferlist& bl);
+  void create_initial();
   bool update_from_paxos();
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
