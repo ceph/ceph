@@ -1553,7 +1553,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
   store->put_bl_ss(monmapbl, "mkfs", "monmap");
 
-  store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+  if (osdmapbl.length())
+    store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
 
   KeyRing keyring;
   r = keyring.load(g_ceph_context, g_conf->keyring);

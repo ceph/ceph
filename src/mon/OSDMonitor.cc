@@ -67,13 +67,18 @@ void OSDMonitor::create_initial()
 {
   dout(10) << "create_initial for " << mon->monmap->fsid << dendl;
 
+  OSDMap newmap;
+
   bufferlist bl;
   mon->store->get_bl_ss(bl, "mkfs", "osdmap");
-
-  OSDMap newmap;
-  newmap.decode(bl);
+  if (bl.length()) {
+    newmap.decode(bl);
+    newmap.set_fsid(mon->monmap->fsid);
+  } else {
+    newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0, 0,
+			g_conf->osd_pg_bits, g_conf->osd_pgp_bits, g_conf->osd_lpg_bits);
+  }
   newmap.set_epoch(1);
-  newmap.set_fsid(mon->monmap->fsid);
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
@@ -1745,7 +1750,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       int i;
       if (m->cmd.size() > 2) {
 	i = atoi(m->cmd[2].c_str());
-	if (i < 0 || i >= osdmap.get_max_osd()) {
+	if (i < 0) {
 	  ss << i << " is not a valid osd id";
 	  err = -ERANGE;
 	  goto out;
@@ -1754,6 +1759,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << i << " already exists";
 	  err = -EEXIST;
 	  goto out;
+	}
+	if (i >= osdmap.get_max_osd()) {
+	  if (i >= pending_inc.new_max_osd)
+	    pending_inc.new_max_osd = i + 1;
 	}
 	if (pending_inc.new_up_client.count(i) ||
 	    (pending_inc.new_state.count(i) &&

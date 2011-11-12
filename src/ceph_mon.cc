@@ -99,8 +99,6 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     common_init_finish(g_ceph_context);
-    if (g_conf->monmap.empty() || osdmapfn.empty())
-      usage();
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
@@ -124,6 +122,7 @@ int main(int argc, const char **argv)
       int err = MonClient::build_initial_monmap(g_ceph_context, monmap);
       if (err < 0) {
 	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
+	usage();
 	exit(1);
       }
     }
@@ -134,16 +133,18 @@ int main(int argc, const char **argv)
     }
     
     if (monmap.fsid.is_zero()) {
-      cerr << argv[0] << ": generated monmap has no fsid; use --fsid" << std::endl;
+      cerr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'" << std::endl;
       exit(10);
     }
 
     // osdmap
-    err = osdmapbl.read_file(osdmapfn.c_str(), &error);
-    if (err < 0) {
-      cerr << argv[0] << ": error reading " << osdmapfn << ": "
-	   << error << std::endl;
-      exit(1);
+    if (osdmapfn.length()) {
+      err = osdmapbl.read_file(osdmapfn.c_str(), &error);
+      if (err < 0) {
+	cerr << argv[0] << ": error reading " << osdmapfn << ": "
+	     << error << std::endl;
+	exit(1);
+      }
     }
 
     // go
