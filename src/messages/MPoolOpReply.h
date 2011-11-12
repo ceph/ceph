@@ -19,21 +19,21 @@
 
 class MPoolOpReply : public PaxosServiceMessage {
 public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   __u32 replyCode;
   epoch_t epoch;
   bufferlist response_data;
 
   MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
   {}
-  MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
+  MPoolOpReply( uuid_d& f, tid_t t, int rc, int e, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
     set_tid(t);
   }
-  MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v,
+  MPoolOpReply( uuid_d& f, tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
     PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),

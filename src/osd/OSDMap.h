@@ -106,7 +106,7 @@ class OSDMap {
 public:
   class Incremental {
   public:
-    ceph_fsid_t fsid;
+    uuid_d fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     utime_t modified;
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
@@ -154,7 +154,7 @@ public:
   };
   
 private:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t created, modified; // epoch start time
   int32_t pool_max;     // the largest pool num, ever
@@ -196,8 +196,8 @@ private:
   }
 
   // map info
-  const ceph_fsid_t& get_fsid() const { return fsid; }
-  void set_fsid(ceph_fsid_t& f) { fsid = f; }
+  const uuid_d& get_fsid() const { return fsid; }
+  void set_fsid(uuid_d& f) { fsid = f; }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -638,10 +638,10 @@ public:
   /*
    * handy helpers to build simple maps...
    */
-  void build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+  void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		    int num_osd, int num_dom,
 		    int pg_bits, int pgp_bits, int lpg_bits);
-  void build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+  void build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
 			      int pg_bits, int pgp_bits, int lpg_bits);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 		map<int, const char*>& poolsets, int num_osd, int num_dom=0);

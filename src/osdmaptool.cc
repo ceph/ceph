@@ -168,14 +168,14 @@ int main(int argc, const char **argv)
       cerr << me << ": osd count must be > 0" << std::endl;
       exit(1);
     }
-    ceph_fsid_t fsid;
-    memset(&fsid, 0, sizeof(ceph_fsid_t));
+    uuid_d fsid;
+    memset(&fsid, 0, sizeof(uuid_d));
     osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }
   if (create_from_conf) {
-    ceph_fsid_t fsid;
-    memset(&fsid, 0, sizeof(ceph_fsid_t));
+    uuid_d fsid;
+    memset(&fsid, 0, sizeof(uuid_d));
     osdmap.build_simple_from_conf(g_ceph_context, 0, fsid, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }

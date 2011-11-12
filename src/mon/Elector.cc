@@ -286,7 +286,7 @@ void Elector::dispatch(Message *m)
       MMonElection *em = (MMonElection*)m;
 
       // assume an old message encoding would have matched
-      if (em->get_header().version >= 2 && ceph_fsid_compare(&em->fsid, &mon->monmap->fsid)) {
+      if (em->fsid != mon->monmap->fsid) {
 	dout(0) << " ignoring election msg fsid " << em->fsid << " != " << mon->monmap->fsid << dendl;
 	m->put();
 	return;

@@ -1052,7 +1052,7 @@ protected:
   static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
   static int convertfs(const std::string &dev, const std::string &jdev);
   static int mkfs(const std::string &dev, const std::string &jdev,
-		  ceph_fsid_t fsid, int whoami);
+		  uuid_d fsid, int whoami);
   static int mkjournal(const std::string &dev, const std::string &jdev);
   static int flushjournal(const std::string &dev, const std::string &jdev);
   /* remove any non-user xattrs from a map of them */
@@ -1071,9 +1071,9 @@ private:
 			const char *val, size_t vallen);
   static int read_meta(const std::string &base, const std::string &file,
 		       char *val, size_t vallen);
-  static int write_meta(const std::string &base, ceph_fsid_t& fsid, int whoami);
+  static int write_meta(const std::string &base, uuid_d& fsid, int whoami);
 public:
-  static int peek_meta(const std::string &dev, string& magic, ceph_fsid_t& fsid, int& whoami);
+  static int peek_meta(const std::string &dev, string& magic, uuid_d& fsid, int& whoami);
   
 
   // startup/shutdown

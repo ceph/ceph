@@ -281,7 +281,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 
   dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
 
-  if (ceph_fsid_compare(&statfs->fsid, &mon->monmap->fsid)) {
+  if (statfs->fsid != mon->monmap->fsid) {
     dout(0) << "handle_statfs on fsid " << statfs->fsid << " != " << mon->monmap->fsid << dendl;
     goto out;
   }
@@ -314,7 +314,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
 
-  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
+  if (m->fsid != mon->monmap->fsid) {
     dout(0) << "preprocess_getpoolstats on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     goto out;
   }
@@ -396,7 +396,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
   int from = stats->get_orig_source().num();
 
-  if (ceph_fsid_compare(&stats->fsid, &mon->monmap->fsid)) {
+  if (stats->fsid != mon->monmap->fsid) {
     dout(0) << "handle_statfs on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
     stats->put();
     return false;

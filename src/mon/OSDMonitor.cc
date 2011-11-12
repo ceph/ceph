@@ -419,7 +419,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     goto didit;
   }
 
-  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
+  if (m->fsid != mon->monmap->fsid) {
     dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     goto didit;
   }
@@ -554,7 +554,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     goto ignore;
   }
 
-  if (ceph_fsid_compare(&m->sb.fsid, &mon->monmap->fsid)) {
+  if (m->sb.fsid != mon->monmap->fsid) {
     dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
     goto ignore;
   }

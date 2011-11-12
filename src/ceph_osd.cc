@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <uuid/uuid.h>
 
 #include <sys/stat.h>
 #include <iostream>
@@ -212,7 +213,7 @@ int main(int argc, const char **argv)
   }
   
   string magic;
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   int w;
   int r = OSD::peek_meta(g_conf->osd_data, magic, fsid, w);
   if (r < 0) {

@@ -345,7 +345,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(osdmap); 
 
-  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+  if (m->fsid != monc->get_fsid()) {
     ldout(cct, 0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     m->put();
     return;

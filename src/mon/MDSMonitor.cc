@@ -174,7 +174,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
-  if (ceph_fsid_compare(&m->get_fsid(), &mon->monmap->fsid)) {
+  if (m->get_fsid() != mon->monmap->fsid) {
     dout(0) << "preprocess_beacon on fsid " << m->get_fsid() << " != " << mon->monmap->fsid << dendl;
     goto out;
   }

@@ -20,7 +20,7 @@
 
 class MPoolOp : public PaxosServiceMessage {
 public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   __u32 pool;
   string name;
   __u32 op;
@@ -29,12 +29,12 @@ public:
   __s16 crush_rule;
 
   MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
-  MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
+  MPoolOp(const uuid_d& f, tid_t t, int p, string& n, int o, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
     auid(0), snapid(0), crush_rule(0) {
     set_tid(t);
   }
-  MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
+  MPoolOp(const uuid_d& f, tid_t t, int p, string& n,
 	  int o, uint64_t uid, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
     auid(uid), snapid(0), crush_rule(0) {

@@ -23,15 +23,15 @@
  */
 
 struct MOSDScrub : public Message {
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   vector<pg_t> scrub_pgs;
   bool repair;
 
   MOSDScrub() {}
-  MOSDScrub(const ceph_fsid_t& f, bool r) :
+  MOSDScrub(const uuid_d& f, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), repair(r) {}
-  MOSDScrub(const ceph_fsid_t& f, vector<pg_t>& pgs, bool r) :
+  MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), scrub_pgs(pgs), repair(r) {}
 private:

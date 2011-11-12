@@ -16,15 +16,17 @@
 #ifndef CEPH_MGETPOOLSTATS_H
 #define CEPH_MGETPOOLSTATS_H
 
+#include <uuid/uuid.h>
+
 #include "messages/PaxosServiceMessage.h"
 
 class MGetPoolStats : public PaxosServiceMessage {
 public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   list<string> pools;
 
   MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(const ceph_fsid_t& f, tid_t t, list<string>& ls, version_t l) :
+  MGetPoolStats(const uuid_d& f, tid_t t, list<string>& ls, version_t l) :
     PaxosServiceMessage(MSG_GETPOOLSTATS, l),
     fsid(f), pools(ls) {
     set_tid(t);

@@ -308,7 +308,7 @@ void Monitor::handle_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe " << *m << dendl;
 
-  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
+  if (m->fsid != monmap->fsid) {
     dout(0) << "handle_probe ignoring fsid " << m->fsid << " != " << monmap->fsid << dendl;
     m->put();
     return;
@@ -686,7 +686,7 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 
 void Monitor::handle_command(MMonCommand *m)
 {
-  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
+  if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
     reply_command(m, -EPERM, "wrong fsid", 0);
     return;

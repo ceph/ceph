@@ -35,7 +35,7 @@ public:
     }
   }
   
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   int32_t op;
   epoch_t epoch;
   bufferlist monmap_bl;

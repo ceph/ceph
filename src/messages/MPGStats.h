@@ -20,14 +20,14 @@
 
 class MPGStats : public PaxosServiceMessage {
 public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
   epoch_t epoch;
   utime_t had_map_for;
   
   MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
-  MPGStats(const ceph_fsid_t& f, epoch_t e, utime_t had) : 
+  MPGStats(const uuid_d& f, epoch_t e, utime_t had) : 
     PaxosServiceMessage(MSG_PGSTATS, e), fsid(f), epoch(e), had_map_for(had) {}
 
 private:

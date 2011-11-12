@@ -16,17 +16,18 @@
 #define CEPH_MCOMMAND_H
 
 #include <vector>
+#include <uuid/uuid.h>
 
 #include "msg/Message.h"
 
 class MCommand : public Message {
  public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   std::vector<string> cmd;
 
   MCommand()
     : Message(MSG_MON_COMMAND) {}
-  MCommand(ceph_fsid_t &f)
+  MCommand(uuid_d &f)
     : Message(MSG_COMMAND),
       fsid(f) { }
 

@@ -19,14 +19,14 @@
 
 class MMonObserveNotify : public PaxosServiceMessage {
  public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   int32_t machine_id;
   bufferlist bl;
   version_t ver;
   bool is_latest;
   
   MMonObserveNotify() : PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, 0) {}
-  MMonObserveNotify(ceph_fsid_t& f, int id, bufferlist& b, version_t v, bool l) :
+  MMonObserveNotify(uuid_d& f, int id, bufferlist& b, version_t v, bool l) :
     PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, v), fsid(f), machine_id(id), bl(b), ver(v), is_latest(l) {}
 private:
   ~MMonObserveNotify() {}

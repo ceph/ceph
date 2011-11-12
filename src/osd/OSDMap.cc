@@ -314,10 +314,9 @@ int OSDMap::apply_incremental(Incremental &inc)
 {
   if (inc.epoch == 1)
     fsid = inc.fsid;
-  else
-    if (ceph_fsid_compare(&inc.fsid, &fsid) != 0) {
-      return -EINVAL;
-    }
+  else if (inc.fsid != fsid)
+    return -EINVAL;
+  
   assert(inc.epoch == epoch+1);
   epoch++;
   modified = inc.modified;
@@ -873,7 +872,7 @@ void OSDMap::print_summary(ostream& out) const
 }
 
 
-void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 			  int nosd, int ndom, int pg_bits, int pgp_bits, int lpg_bits)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
@@ -919,7 +918,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
   }
 }
 
-void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, ceph_fsid_t &fsid,
+void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
 				    int pg_bits, int pgp_bits, int lpg_bits)
 {
   ldout(cct, 10) << "build_simple_from_conf with "

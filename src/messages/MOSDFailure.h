@@ -21,13 +21,13 @@
 
 class MOSDFailure : public PaxosServiceMessage {
  public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   entity_inst_t target_osd;
   __u8 is_failed;
   epoch_t       epoch;
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0) {}
-  MOSDFailure(const ceph_fsid_t &fs, entity_inst_t f, epoch_t e) : 
+  MOSDFailure(const uuid_d &fs, entity_inst_t f, epoch_t e) : 
     PaxosServiceMessage(MSG_OSD_FAILURE, e),
     fsid(fs), target_osd(f), is_failed(true), epoch(e) {}
 private:

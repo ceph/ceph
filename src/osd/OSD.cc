@@ -258,7 +258,7 @@ int OSD::convertfs(const std::string &dev, const std::string &jdev)
   return r;
 }
 
-int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
+int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int whoami)
 {
   int ret;
   ObjectStore *store = NULL;
@@ -450,7 +450,7 @@ int OSD::read_meta(const  std::string &base, const std::string &file,
 		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
 		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
 
-int OSD::write_meta(const std::string &base, ceph_fsid_t& fsid, int whoami)
+int OSD::write_meta(const std::string &base, uuid_d& fsid, int whoami)
 {
   char val[80];
   
@@ -460,14 +460,15 @@ int OSD::write_meta(const std::string &base, ceph_fsid_t& fsid, int whoami)
   snprintf(val, sizeof(val), "%d\n", whoami);
   write_meta(base, "whoami", val, strlen(val));
 
-  snprintf(val, sizeof(val), FSID_FORMAT "\n", PR_FSID(&fsid));
+  fsid.print(val);
+  strcat(val, "\n");
   write_meta(base, "ceph_fsid", val, strlen(val));
   
   return 0;
 }
 
 int OSD::peek_meta(const std::string &dev, std::string& magic,
-		   ceph_fsid_t& fsid, int& whoami)
+		   uuid_d& fsid, int& whoami)
 {
   char val[80] = { 0 };
 
@@ -486,24 +487,7 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
     return -errno;
   
   memset(&fsid, 0, sizeof(fsid));
-  unsigned o = 0;
-  for (char *p = val; *p && p < (val+sizeof(val)) && o < 2*sizeof(fsid); p++) {
-    int digit = -1;
-    if (*p >= '0' && *p <= '9')
-      digit = *p - '0';
-    else if (*p >= 'a' && *p <= 'f')
-      digit = *p - 'a' + 10;
-    else if (*p >= 'A' && *p <= 'F')
-      digit = *p - 'A' + 10;
-
-    if (digit >= 0) {
-      if (o & 1)
-	fsid.fsid[o/2] = fsid.fsid[o/2] * 16 + digit;
-      else
-	fsid.fsid[o/2] = digit;
-      o++;
-    }    
-  }
+  fsid.parse(val);
   return 0;
 }
 
@@ -1547,7 +1531,7 @@ void OSD::reset_heartbeat_peers()
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
+  if (superblock.fsid != m->fsid) {
     dout(20) << "handle_osd_ping from " << m->get_source_inst()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
     m->put();
@@ -2905,7 +2889,7 @@ void OSD::handle_scrub(MOSDScrub *m)
   dout(10) << "handle_scrub " << *m << dendl;
   if (!require_mon_peer(m))
     return;
-  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+  if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     m->put();
     return;
@@ -3116,7 +3100,7 @@ void OSD::note_up_osd(int peer)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
-  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+  if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     m->put();
     return;

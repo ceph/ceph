@@ -19,6 +19,8 @@
 #include "msg/Message.h"
 #include "mds/MDSMap.h"
 
+#include <uuid/uuid.h>
+
 class MMDSMap : public Message {
  public:
   /*
@@ -45,7 +47,7 @@ class MMDSMap : public Message {
   }
   */
   
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   epoch_t epoch;
   bufferlist encoded;
 
@@ -54,7 +56,7 @@ class MMDSMap : public Message {
 
   MMDSMap() : 
     Message(CEPH_MSG_MDS_MAP) {}
-  MMDSMap(const ceph_fsid_t &f, MDSMap *mm) :
+  MMDSMap(const uuid_d &f, MDSMap *mm) :
     Message(CEPH_MSG_MDS_MAP),
     fsid(f) {
     epoch = mm->get_epoch();

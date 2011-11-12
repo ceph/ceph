@@ -16,8 +16,7 @@ check_PROGRAMS =
 # target by target
 TESTS = $(check_PROGRAMS)
 
-
-EXTRALIBS =
+EXTRALIBS = -luuid
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif

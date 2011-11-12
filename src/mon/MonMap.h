@@ -28,7 +28,7 @@ namespace ceph {
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   map<string, entity_addr_t> mon_addr;
   utime_t last_changed;
   utime_t created;
@@ -53,7 +53,7 @@ class MonMap {
     memset(&fsid, 0, sizeof(fsid));
   }
 
-  ceph_fsid_t& get_fsid() { return fsid; }
+  uuid_d& get_fsid() { return fsid; }
 
   unsigned size() {
     return mon_addr.size();
@@ -192,8 +192,7 @@ class MonMap {
   }
 
   void generate_fsid() {
-    for (int i=0; i<16; i++)
-      fsid.fsid[i] = rand();
+    fsid.generate_random();
   }
 
   // read from/write to a file

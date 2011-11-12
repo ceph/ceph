@@ -40,7 +40,7 @@ public:
     }
   }
   
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   int32_t op;
   string name;
   set<int32_t> quorum;
@@ -53,7 +53,7 @@ public:
   version_t latest_version, newest_version, oldest_version;
 
   MMonProbe() : Message(MSG_MON_PROBE) {}
-  MMonProbe(const ceph_fsid_t& f, int o, const string& n)
+  MMonProbe(const uuid_d& f, int o, const string& n)
     : Message(MSG_MON_PROBE), fsid(f), op(o), name(n),
       latest_version(0), newest_version(0), oldest_version(0) {}
 private:

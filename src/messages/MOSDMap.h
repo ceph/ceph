@@ -22,7 +22,7 @@
 
 class MOSDMap : public Message {
  public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
   epoch_t oldest_map, newest_map;
@@ -54,7 +54,7 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
-  MOSDMap(const ceph_fsid_t &f, OSDMap *oc=0)
+  MOSDMap(const uuid_d &f, OSDMap *oc=0)
     : Message(CEPH_MSG_OSD_MAP), fsid(f),
       oldest_map(0), newest_map(0)
   {

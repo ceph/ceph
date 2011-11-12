@@ -118,7 +118,7 @@ static void handle_notify(CephToolCtx *ctx, MMonObserveNotify *notify)
 	  << (notify->is_latest ? " (latest)" : "")
 	  << dendl;
   
-  if (ceph_fsid_compare(&notify->fsid, &ctx->mc.monmap.fsid)) {
+  if (notify->fsid != ctx->mc.monmap.fsid) {
     dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != "
 	    << ctx->mc.monmap.fsid << dendl;
     notify->put();

@@ -19,6 +19,8 @@
 #include "inttypes.h"
 #include "byteorder.h"
 
+#include "uuid.h"
+
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <string.h>
@@ -255,8 +257,6 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 #define O_LAZY 01000000
 
-typedef struct ceph_fsid ceph_fsid_t;
-
 // --------------------------------------
 // identify individual mount clients by 64bit value
 
@@ -456,14 +456,6 @@ inline ostream& operator<<(ostream& out, const collection_list_handle_t& handle)
 
 
 // --
-
-inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
-  char b[37];
-  snprintf(b, sizeof(b), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-	  f.fsid[0], f.fsid[1], f.fsid[2], f.fsid[3], f.fsid[4], f.fsid[5], f.fsid[6], f.fsid[7],
-	  f.fsid[8], f.fsid[9], f.fsid[10], f.fsid[11], f.fsid[12], f.fsid[13], f.fsid[14], f.fsid[15]);
-  return out << b;
-}
 
 struct prettybyte_t {
   uint64_t v;

@@ -22,12 +22,12 @@ using std::vector;
 
 class MMonObserve : public PaxosServiceMessage {
  public:
-  ceph_fsid_t fsid;
+  uuid_d fsid;
   uint32_t machine_id;
   version_t ver;
 
   MMonObserve() : PaxosServiceMessage(MSG_MON_OBSERVE, 0) {}
-  MMonObserve(ceph_fsid_t &f, int mid, version_t v) : 
+  MMonObserve(uuid_d &f, int mid, version_t v) : 
     PaxosServiceMessage(MSG_MON_OBSERVE, v),
     fsid(f), machine_id(mid), ver(v) { }
 private:

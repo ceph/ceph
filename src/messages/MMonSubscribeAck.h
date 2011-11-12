@@ -19,14 +19,14 @@
 
 struct MMonSubscribeAck : public Message {
   __u32 interval;
-  ceph_fsid fsid;
+  uuid_d fsid;
   
   MMonSubscribeAck() : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 		       interval(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
-  MMonSubscribeAck(ceph_fsid& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
-					  interval(i), fsid(f) { }
+  MMonSubscribeAck(uuid_d& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+				       interval(i), fsid(f) { }
 private:
   ~MMonSubscribeAck() {}
 

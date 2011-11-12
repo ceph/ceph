@@ -200,7 +200,7 @@ public:
     return my_addr;
   }
 
-  const ceph_fsid_t& get_fsid() {
+  const uuid_d& get_fsid() {
     return monmap.fsid;
   }
 
