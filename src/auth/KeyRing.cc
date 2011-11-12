@@ -222,7 +222,8 @@ void KeyRing::print(ostream& out)
        ++p) {
     out << "[" << p->first << "]" << std::endl;
     out << "\tkey = " << p->second.key << std::endl;
-    out << "\tauid = " << p->second.auid << std::endl;
+    if (p->second.auid != CEPH_AUTH_UID_DEFAULT)
+      out << "\tauid = " << p->second.auid << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();
