@@ -1164,16 +1164,16 @@ void ReplicatedPG::remove_watchers_and_notifies()
     obc->ref++;
     for (map<entity_name_t, OSD::Session *>::iterator witer = obc->watchers.begin();
 	 witer != obc->watchers.end();
-	 remove_watcher(obc, (witer++)->first));
+	 remove_watcher(obc, (witer++)->first)) ;
     for (map<entity_name_t, Context *>::iterator iter = obc->unconnected_watchers.begin();
 	 iter != obc->unconnected_watchers.end();
-      ) {
+	 ) {
       map<entity_name_t, Context *>::iterator i = iter++;
       unregister_unconnected_watcher(obc, i->first);
     }
     for (map<Watch::Notification *, bool>::iterator niter = obc->notifs.begin();
 	 niter != obc->notifs.end();
-	 remove_notify(obc, (niter++)->first));
+	 remove_notify(obc, (niter++)->first)) ;
     put_object_context(obc);
   }
   osd->watch_lock.Unlock();
