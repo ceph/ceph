@@ -721,6 +721,12 @@ void Monitor::handle_command(MMonCommand *m)
       monmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "fsid") {
+      stringstream ss;
+      ss << monmap->fsid;
+      reply_command(m, 0, ss.str(), rdata, 0);
+      return;
+    }
     if (m->cmd[0] == "log") {
       stringstream ss;
       for (unsigned i=1; i<m->cmd.size(); i++) {
