@@ -113,6 +113,7 @@ int main(int argc, const char **argv)
     } else if (fn.empty()) {
       fn = *i++;
     } else {
+      cerr << argv[0] << ": unexpected '" << *i << "'" << std::endl;
       usage();
     }
   }
