@@ -17,6 +17,8 @@ const char *tests[][10] = {
   { " foo bar ", "foo", "bar", 0 },
   { "a,b,c", "a", "b", "c", 0 },
   { " a\tb\tc\t", "a", "b", "c", 0 },
+  { "a, b, c", "a", "b", "c", 0 },
+  { "a b c", "a", "b", "c", 0 },
   { 0 },
 };
 
