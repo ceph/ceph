@@ -1503,9 +1503,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
-	if (id >= newcrush.get_max_devices())
-	  newcrush.set_max_devices(id + 1);
-	err = newcrush.insert_item(id, (int)(weight * (float)0x10000), name, loc);
+	err = newcrush.insert_item(id, weight, name, loc);
 	if (err == 0) {
 	  if (newcrush.get_max_devices() > osdmap.get_max_osd()) {
 	    err = -ERANGE;
