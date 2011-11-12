@@ -876,8 +876,8 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 			  int nosd, int ndom, int pg_bits, int pgp_bits, int lpg_bits)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
-	   << " osds with " << pg_bits << " pg bits per osd, "
-	   << lpg_bits << " lpg bits" << dendl;
+		 << " osds with " << pg_bits << " pg bits per osd, "
+		 << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
   created = modified = ceph_clock_now(cct);
@@ -894,14 +894,16 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_RBD_RULE] = "rbd";
 
+  int poolbase = nosd ? nosd : 1;
+
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REP;
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = nosd << pg_bits;
-    pools[pool].pgp_num = nosd << pgp_bits;
+    pools[pool].pg_num = poolbase << pg_bits;
+    pools[pool].pgp_num = poolbase << pgp_bits;
     pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
