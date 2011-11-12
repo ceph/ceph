@@ -87,7 +87,7 @@ struct crush_grammar : public grammar<crush_grammar>
 					    ] ];
       posint     =   leaf_node_d[ lexeme_d[ +digit_p ] ];
       negint     =   leaf_node_d[ lexeme_d[ ch_p('-') >> +digit_p ] ];
-      name = leaf_node_d[ lexeme_d[ +( alnum_p || ch_p('-') || ch_p('_')) ] ];
+      name = leaf_node_d[ lexeme_d[ +( alnum_p || ch_p('-') || ch_p('_') || ch_p('.')) ] ];
 
       // devices
       device = str_p("device") >> posint >> name;
