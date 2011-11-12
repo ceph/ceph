@@ -96,6 +96,13 @@ int MonClient::build_initial_monmap(CephContext *cct, MonMap &monmap)
     return r;
   }
 
+  // fsid from conf?
+  if (cct->_conf->fsid.length()) {
+    if (!monmap.fsid.parse(cct->_conf->fsid.c_str())) {
+      cerr << " failed to parse fsid '" << cct->_conf->fsid << "'" << std::endl;
+    }
+  }
+
   // -m foo?
   if (!conf->mon_host.empty()) {
     vector<entity_addr_t> addrs;

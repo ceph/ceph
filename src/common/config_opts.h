@@ -14,6 +14,7 @@
 
 /* note: no header guard */
 OPTION(host, OPT_STR, "localhost")
+OPTION(fsid, OPT_STR, "")              // used for mkfs
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
 OPTION(num_client, OPT_INT, 1)
