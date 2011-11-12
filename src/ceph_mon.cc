@@ -63,6 +63,7 @@ int main(int argc, const char **argv)
 
   global_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
 
+  uuid_d fsid;
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -76,6 +77,11 @@ int main(int argc, const char **argv)
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
       inject_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--fsid", (char*)NULL)) {
+      if (!fsid.parse(val.c_str())) {
+	cerr << "unable to parse fsid '" << val << "'" << std::endl;
+	exit(1);
+      }
     } else {
       ++i;
     }
@@ -120,6 +126,16 @@ int main(int argc, const char **argv)
 	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
 	exit(1);
       }
+    }
+
+    if (!fsid.is_zero()) {
+      cout << argv[0] << ": setting fsid to " << fsid << std::endl;
+      monmap.fsid = fsid;
+    }
+    
+    if (monmap.fsid.is_zero()) {
+      cerr << argv[0] << ": generated monmap has no fsid; use --fsid" << std::endl;
+      exit(10);
     }
 
     // osdmap

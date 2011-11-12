@@ -15,6 +15,10 @@ extern "C" {
 struct uuid_d {
   uuid_t uuid;
 
+  uuid_d() {
+    memset(&uuid, 0, sizeof(uuid));
+  }
+
   bool is_zero() {
     return uuid_is_null(uuid);
   }
@@ -23,7 +27,7 @@ struct uuid_d {
     uuid_generate(uuid);
   }
   
-  bool parse(char *s) {
+  bool parse(const char *s) {
     return uuid_parse(s, uuid) == 0;
   }
   void print(char *s) {
