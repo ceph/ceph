@@ -57,7 +57,7 @@ int main(int argc, const char **argv)
   bool tree = false;
   bool createsimple = false;
   bool create_from_conf = false;
-  int num_osd = 0, num_dom = 0;
+  int num_osd = 0;
   int pg_bits = g_conf->osd_pg_bits;
   int pgp_bits = g_conf->osd_pgp_bits;
   int lpg_bits = g_conf->osd_lpg_bits;
@@ -86,11 +86,6 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
-    } else if (ceph_argparse_withint(args, i, &num_dom, &err, "--num_dom", (char*)NULL)) {
-      if (!err.str().empty()) {
-       cerr << err.str() << std::endl;
-       exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
@@ -170,7 +165,7 @@ int main(int argc, const char **argv)
     }
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
-    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
+    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }
   if (create_from_conf) {

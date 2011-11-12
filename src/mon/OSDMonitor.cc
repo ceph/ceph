@@ -75,7 +75,7 @@ void OSDMonitor::create_initial()
     newmap.decode(bl);
     newmap.set_fsid(mon->monmap->fsid);
   } else {
-    newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0, 0,
+    newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0,
 			g_conf->osd_pg_bits, g_conf->osd_pgp_bits, g_conf->osd_lpg_bits);
   }
   newmap.set_epoch(1);

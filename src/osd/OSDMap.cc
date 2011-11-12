@@ -871,9 +871,8 @@ void OSDMap::print_summary(ostream& out) const
     out << " nearfull";
 }
 
-
 void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-			  int nosd, int ndom, int pg_bits, int pgp_bits, int lpg_bits)
+			  int nosd, int pg_bits, int pgp_bits, int lpg_bits)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
 		 << " osds with " << pg_bits << " pg bits per osd, "
@@ -912,11 +911,55 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pool_name[pool] = p->second;
   }
 
-  build_simple_crush_map(cct, crush, rulesets, nosd, ndom);
+  build_simple_crush_map(cct, crush, rulesets, nosd);
 
   for (int i=0; i<nosd; i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
+  }
+}
+
+
+void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
+				    map<int, const char*>& rulesets, int nosd)
+{
+  const md_config_t *conf = cct->_conf;
+
+  crush.create();
+
+  crush.set_type_name(0, "osd");
+  crush.set_type_name(1, "host");
+  crush.set_type_name(2, "rack");
+  crush.set_type_name(3, "pool");
+
+  // root
+  int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 3 /* pool */, 0, NULL, NULL);
+  crush.set_item_name(rootid, "default");
+
+  for (int o=0; o<nosd; o++) {
+    map<string,string> loc;
+    loc["host"] = "localhost";
+    loc["rack"] = "localrack";
+    loc["pool"] = "default";
+    ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
+    char name[8];
+    sprintf(name, "osd.%d", o);
+    crush.insert_item(o, 1.0, name, loc);
+  }
+
+  // rules
+  int minrep = conf->osd_min_rep;
+  int maxrep = conf->osd_max_rep;
+  assert(maxrep >= minrep);
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+    int ruleset = p->first;
+    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+    // just spread across osds
+    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
+    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+    int rno = crush_add_rule(crush.crush, rule, -1);
+    crush.set_rule_name(rno, p->second);
   }
 }
 
@@ -990,6 +1033,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
 void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
 					      map<int, const char*>& rulesets)
 {
+  const md_config_t *conf = cct->_conf;
+
   crush.create();
 
   crush.set_type_name(0, "osd");
@@ -997,15 +1042,11 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   crush.set_type_name(2, "rack");
   crush.set_type_name(3, "pool");
 
-  const md_config_t *conf = cct->_conf;
-  int minrep = conf->osd_min_rep;
-  int maxrep = conf->osd_max_rep;
-
   set<string> hosts, racks;
 
   // root
   int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 3 /* pool */, 0, NULL, NULL);
-  crush.set_item_name(rootid, "root");
+  crush.set_item_name(rootid, "default");
 
   // add osds
   vector<string> sections;
@@ -1039,13 +1080,15 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     map<string,string> loc;
     loc["host"] = host;
     loc["rack"] = rack;
-    loc["pool"] = "root";
+    loc["pool"] = "default";
 
     ldout(cct, 0) << " adding osd." << o << " at " << loc << dendl;
     crush.insert_item(o, 1.0, *i, loc);
   }
 
   // rules
+  int minrep = conf->osd_min_rep;
+  int maxrep = conf->osd_max_rep;
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int ruleset = p->first;
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
@@ -1068,101 +1111,4 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
 
 }
 
-
-void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-	map<int, const char*>& rulesets, int nosd, int ndom)
-{
-  // new
-  crush.create();
-
-  crush.set_type_name(0, "osd");
-  crush.set_type_name(1, "domain");
-  crush.set_type_name(2, "pool");
-
-  const md_config_t *conf = cct->_conf;
-  int minrep = conf->osd_min_rep;
-  int maxrep = conf->osd_max_rep;
-  assert(maxrep >= minrep);
-  if (!ndom)
-    ndom = MAX(maxrep, conf->osd_max_raid_width);
-  if (ndom > 1 &&
-      nosd >= ndom*3 &&
-      nosd > 8) {
-    int ritems[ndom];
-    int rweights[ndom];
-
-    int nper = ((nosd - 1) / ndom) + 1;
-    ldout(cct, 0) << ndom << " failure domains, " << nper << " osds each" << dendl;
-
-    int o = 0;
-    for (int i=0; i<ndom; i++) {
-      int items[nper], weights[nper];
-      int j;
-      rweights[i] = 0;
-      for (j=0; j<nper; j++, o++) {
-	if (o == nosd) break;
-	ldout(cct, 20) << "added osd." << o << dendl;
-	items[j] = o;
-	weights[j] = 0x10000;
-	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
-	//rweights[i] += w[j];
-	rweights[i] += 0x10000;
-      }
-
-      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, j, items, weights);
-      ritems[i] = crush_add_bucket(crush.crush, 0, domain);
-      ldout(cct, 20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
-
-      char bname[10];
-      snprintf(bname, sizeof(bname), "dom%d", i);
-      crush.set_item_name(ritems[i], bname);
-    }
-
-    // root
-    crush_bucket *root = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 2, ndom, ritems, rweights);
-    int rootid = crush_add_bucket(crush.crush, 0, root);
-    crush.set_item_name(rootid, "root");
-
-    // rules
-    for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
-      int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      int rno = crush_add_rule(crush.crush, rule, -1);
-      crush.set_rule_name(rno, p->second);
-    }
-
-  } else {
-    // one bucket
-
-    int items[nosd];
-    int weights[nosd];
-    for (int i=0; i<nosd; i++) {
-      items[i] = i;
-      weights[i] = 0x10000;
-    }
-
-    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, nosd, items, weights);
-    int rootid = crush_add_bucket(crush.crush, 0, b);
-    crush.set_item_name(rootid, "root");
-
-    // replication
-    for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
-      int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, conf->osd_min_rep, maxrep);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      int rno = crush_add_rule(crush.crush, rule, -1);
-      crush.set_rule_name(rno, p->second);
-    }
-
-  }
-
-  crush.finalize();
-
-  ldout(cct, 20) << "crush max_devices " << crush.crush->max_devices << dendl;
-}
 
