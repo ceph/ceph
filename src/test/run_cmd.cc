@@ -10,7 +10,7 @@ TEST(RunCommand, StringSimple)
 {
   char temp_file_name[] = "run_cmd_temp_file_XXXXXX";
 
-  int fd = ::mkstemps(temp_file_name, 0);
+  int fd = ::mkstemp(temp_file_name);
   ASSERT_GE(fd, 0);
   ::close(fd);
 
