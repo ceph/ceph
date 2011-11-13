@@ -43,7 +43,6 @@ To display the contents of the keyring:
   $ ceph-authtool -l keyring.bin
   [client.foo]
   \\tkey = [a-zA-Z0-9+/]+=* \(esc\) (re)
-  \\tauid = [0-9]{20} \(esc\) (re)
   \tcaps mds = "allow" (esc)
   \tcaps mon = "allow r" (esc)
   \tcaps osd = "allow rw pool=data" (esc)

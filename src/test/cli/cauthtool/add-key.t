@@ -8,9 +8,7 @@
   $ ceph-authtool kring --list
   [client.admin]
   \tkey = AQAK7yxNeF+nHBAA0SgSdbs8IkJrxroDeJ6SwQ== (esc)
-  \tauid = 18446744073709551615 (esc)
 
   $ cat kring
   [client.admin]
   \tkey = AQAK7yxNeF+nHBAA0SgSdbs8IkJrxroDeJ6SwQ== (esc)
-  \tauid = 18446744073709551615 (esc)
