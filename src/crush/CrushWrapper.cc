@@ -3,6 +3,9 @@
 
 #include "CrushWrapper.h"
 
+#define DOUT_SUBSYS crush
+
+
 void CrushWrapper::find_roots(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -17,9 +20,9 @@ void CrushWrapper::find_roots(set<int>& roots) const
 }
 
 
-int CrushWrapper::remove_item(int item)
+int CrushWrapper::remove_item(CephContext *cct, int item)
 {
-  cout << "remove_item " << item << std::endl;
+  ldout(cct, 5) << "remove_item " << item << dendl;
 
   crush_bucket *was_bucket = 0;
   int ret = -ENOENT;
@@ -35,12 +38,12 @@ int CrushWrapper::remove_item(int item)
 	if (item < 0) {
 	  crush_bucket *t = get_bucket(item);
 	  if (t && t->size) {
-	    cout << "remove_device bucket " << item << " has " << t->size << " items, not empty" << std::endl;
+	    ldout(cct, 1) << "remove_device bucket " << item << " has " << t->size << " items, not empty" << dendl;
 	    return -ENOTEMPTY;
 	  }	    
 	  was_bucket = t;
 	}
-	cout << "remove_device removing item " << item << " from bucket " << b->id << std::endl;
+	ldout(cct, 5) << "remove_device removing item " << item << " from bucket " << b->id << dendl;
 	crush_bucket_remove_item(b, item);
 	ret = 0;
       }
@@ -48,7 +51,7 @@ int CrushWrapper::remove_item(int item)
   }
 
   if (was_bucket) {
-    cout << "remove_device removing bucket " << item << std::endl;
+    ldout(cct, 5) << "remove_device removing bucket " << item << dendl;
     crush_remove_bucket(crush, was_bucket);
   }
   if (item >= 0 && name_map.count(item)) {
@@ -60,15 +63,15 @@ int CrushWrapper::remove_item(int item)
   return ret;
 }
 
-int CrushWrapper::insert_item(int item, float weight, string name,
+int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 				map<string,string>& loc)  // typename -> bucketname
 {
-  cout << "insert_item item " << item << " weight " << weight
-	  << " name " << name << " loc " << loc << std::endl;
+  ldout(cct, 5) << "insert_item item " << item << " weight " << weight
+		<< " name " << name << " loc " << loc << dendl;
 
   if (name_exists(name.c_str())) {
-    cerr << "error: device name '" << name << "' already exists as id "
-	 << get_item_id(name.c_str()) << std::endl;
+    ldout(cct, 1) << "error: device name '" << name << "' already exists as id "
+		  << get_item_id(name.c_str()) << dendl;
     return -EEXIST;
   }
 
@@ -81,15 +84,15 @@ int CrushWrapper::insert_item(int item, float weight, string name,
       continue;
 
     if (loc.count(p->second) == 0) {
-      cerr << "error: did not specify location for '" << p->second << "' level (levels are "
-	   << type_map << ")" << std::endl;
+      ldout(cct, 1) << "error: did not specify location for '" << p->second << "' level (levels are "
+		    << type_map << ")" << dendl;
       return -EINVAL;
     }
 
     int id = get_item_id(loc[p->second].c_str());
     if (!id) {
       // create the bucket
-      cout << "insert_item creating bucket " << loc[p->second] << std::endl;
+      ldout(cct, 5) << "insert_item creating bucket " << loc[p->second] << dendl;
       int empty = 0;
       id = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
       set_item_name(id, loc[p->second].c_str());
@@ -99,7 +102,7 @@ int CrushWrapper::insert_item(int item, float weight, string name,
 
     // add to an existing bucket
     if (!bucket_exists(id)) {
-      cout << "insert_item don't have bucket " << id << std::endl;
+      ldout(cct, 1) << "insert_item don't have bucket " << id << dendl;
       return -EINVAL;
     }
 
@@ -109,26 +112,26 @@ int CrushWrapper::insert_item(int item, float weight, string name,
     // make sure the item doesn't already exist in this bucket
     for (unsigned j=0; j<b->size; j++)
       if (b->items[j] == cur) {
-	cerr << "insert_item " << cur << " already exists in bucket " << b->id << std::endl;
+	ldout(cct, 1) << "insert_item " << cur << " already exists in bucket " << b->id << dendl;
 	return -EEXIST;
       }
     
-    cout << "insert_item adding " << cur << " weight " << weight
-	 << " to bucket " << id << std::endl;
+    ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
+		  << " to bucket " << id << dendl;
     crush_bucket_add_item(b, cur, 0);
 
     // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
-    adjust_item_weightf(item, weight);
+    adjust_item_weightf(cct, item, weight);
     return 0;
   }
 
-  cerr << "error: didn't find anywhere to add item " << item << " in " << loc << std::endl;
+  ldout(cct, 1) << "error: didn't find anywhere to add item " << item << " in " << loc << dendl;
   return -EINVAL;
 }
 
-int CrushWrapper::adjust_item_weight(int id, int weight)
+int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 {
-  cout << "adjust_item_weight " << id << " weight " << weight << std::endl;
+  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
@@ -136,15 +139,15 @@ int CrushWrapper::adjust_item_weight(int id, int weight)
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id) {
 	int diff = crush_bucket_adjust_item_weight(b, id, weight);
-	cout << "adjust_item_weight " << id << " diff " << diff << std::endl;
-	adjust_item_weight(-1 - bidx, b->weight);
+	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff << dendl;
+	adjust_item_weight(cct, -1 - bidx, b->weight);
 	return 0;
       }
   }
   return -ENOENT;
 }
 
-void CrushWrapper::reweight()
+void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
   find_roots(roots);
@@ -152,7 +155,7 @@ void CrushWrapper::reweight()
     if (*p >= 0)
       continue;
     crush_bucket *b = get_bucket(*p);
-    cout << "reweight bucket " << *p << std::endl;
+    ldout(cct, 5) << "reweight bucket " << *p << dendl;
     crush_reweight_bucket(crush, b);
   }
 }

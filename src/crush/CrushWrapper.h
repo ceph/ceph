@@ -39,8 +39,6 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
   ::decode(s.arg2, p);
 }
 
-
-
 using namespace std;
 class CrushWrapper {
 public:
@@ -161,13 +159,13 @@ public:
 
 
   void find_roots(set<int>& roots) const;
-  int insert_item(int id, float weight, string name, map<string,string>& loc);
-  int remove_item(int id);
-  int adjust_item_weight(int id, int weight);
-  int adjust_item_weightf(int id, float weight) {
-    return adjust_item_weight(id, (int)(weight * (float)0x10000));
+  int insert_item(CephContext *cct, int id, float weight, string name, map<string,string>& loc);
+  int remove_item(CephContext *cct, int id);
+  int adjust_item_weight(CephContext *cct, int id, int weight);
+  int adjust_item_weightf(CephContext *cct, int id, float weight) {
+    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
-  void reweight();
+  void reweight(CephContext *cct);
 
 
   /*** devices ***/

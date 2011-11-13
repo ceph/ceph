@@ -1523,7 +1523,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
-	err = newcrush.insert_item(id, weight, name, loc);
+	err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
 	if (err == 0) {
 	  if (newcrush.get_max_devices() > osdmap.get_max_osd()) {
 	    err = -ERANGE;
@@ -1559,7 +1559,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
 	  break;
 	}
-	err = newcrush.remove_item(id);
+	err = newcrush.remove_item(g_ceph_context, id);
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
@@ -1590,7 +1590,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
 	float w = atof(m->cmd[4].c_str());
 
-	err = newcrush.adjust_item_weightf(id, w);
+	err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);

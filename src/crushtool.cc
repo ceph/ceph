@@ -1150,7 +1150,7 @@ int main(int argc, const char **argv)
       r = -ENOENT;
     } else {
       int item = crush.get_item_id(reweight_name.c_str());
-      r = crush.adjust_item_weightf(item, reweight_weight);
+      r = crush.adjust_item_weightf(g_ceph_context, item, reweight_weight);
     }
     if (r == 0)
       modified = true;
@@ -1168,7 +1168,7 @@ int main(int argc, const char **argv)
       r = -ENOENT;
     } else {
       int remove_item = crush.get_item_id(remove_name.c_str());
-      r = crush.remove_item(remove_item);
+      r = crush.remove_item(g_ceph_context, remove_item);
     }
     if (r == 0)
       modified = true;
@@ -1180,7 +1180,7 @@ int main(int argc, const char **argv)
   if (add_item >= 0) {
     cout << me << " adding item " << add_item << " weight " << add_weight
 	 << " at " << add_loc << std::endl;
-    int r = crush.insert_item(add_item, add_weight, add_name.c_str(), add_loc);
+    int r = crush.insert_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
     if (r == 0)
       modified = true;
     else {
@@ -1189,7 +1189,7 @@ int main(int argc, const char **argv)
     }
   }
   if (reweight) {
-    crush.reweight();
+    crush.reweight(g_ceph_context);
     modified = true;
   }
 

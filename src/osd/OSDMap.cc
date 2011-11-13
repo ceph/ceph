@@ -944,7 +944,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
     char name[8];
     sprintf(name, "osd.%d", o);
-    crush.insert_item(o, 1.0, name, loc);
+    crush.insert_item(cct, o, 1.0, name, loc);
   }
 
   // rules
@@ -1083,7 +1083,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     loc["pool"] = "default";
 
     ldout(cct, 0) << " adding osd." << o << " at " << loc << dendl;
-    crush.insert_item(o, 1.0, *i, loc);
+    crush.insert_item(cct, o, 1.0, *i, loc);
   }
 
   // rules
