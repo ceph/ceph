@@ -338,21 +338,21 @@ int RGWCopyObj_REST_SWIFT::get_params()
   if (s->op == OP_COPY) {
     const char *req_dest = s->env->get("HTTP_DESTINATION");
     if (!req_dest)
-      return -EINVAL;
+      return -ERR_BAD_URL;
 
     ret = parse_copy_location(req_dest, dest_bucket_name, dest_object);
     if (!ret)
-       return -EINVAL;
+       return -ERR_BAD_URL;
     src_bucket_name = s->bucket_name;
     src_object = s->object_str;
   } else {
     const char *req_src = s->copy_source;
     if (!req_src)
-      return -EINVAL;
+      return -ERR_BAD_URL;
 
     ret = parse_copy_location(req_src, src_bucket_name, src_object);
     if (!ret)
-       return -EINVAL;
+       return -ERR_BAD_URL;
 
     dest_bucket_name = s->bucket_name;
     dest_object = s->object_str;
