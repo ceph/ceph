@@ -248,7 +248,6 @@ OPTION(osd_pool_default_pgp_num, OPT_INT, 8)
 OPTION(osd_map_cache_max, OPT_INT, 250)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
-OPTION(osd_max_opq, OPT_INT, 10)
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_op_thread_timeout, OPT_INT, 30)

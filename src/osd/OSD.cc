@@ -5517,9 +5517,6 @@ void OSD::dequeue_op(PG *pg)
     dout(10) << "dequeue_op " << op << " finish" << dendl;
     assert(pending_ops > 0);
     
-    if (pending_ops > g_conf->osd_max_opq) 
-      op_queue_cond.Signal();
-    
     pending_ops--;
     logger->set(l_osd_opq, pending_ops);
     if (pending_ops == 0 && waiting_for_no_ops)

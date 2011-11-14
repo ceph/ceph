@@ -359,7 +359,6 @@ private:
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
-  Cond  op_queue_cond;
   
   void wait_for_no_ops();
   void enqueue_op(PG *pg, Message *op);
