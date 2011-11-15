@@ -1,4 +1,5 @@
 #include "common/Clock.h"
+#include "common/utf8.h"
 
 #include "rgw_log.h"
 #include "rgw_acl.h"
@@ -96,6 +97,11 @@ int rgw_log_op(struct req_state *s)
     bucket_id = s->bucket.bucket_id;
   }
   entry.bucket = s->bucket_name;
+
+  if (check_utf8(s->bucket_name, entry.bucket.size()) != 0) {
+    dout(0) << "not logging op on bucket with non-utf8 name" << dendl;
+    return 0;
+  }
 
   if (s->object)
     entry.obj = s->object;
