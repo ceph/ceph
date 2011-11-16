@@ -104,15 +104,12 @@ bool LogMonitor::update_from_paxos()
   bufferlist blogerr;
   bufferlist blogsec;
 
-  if (summary.version == 0 && paxosv > 0) {
-    // startup: just load latest full map
+  if (summary.version != paxos->get_latest_version()) {
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
-    if (v) {
-      dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
-      bufferlist::iterator p = latest.begin();
-      ::decode(summary, p);
-    }
+    dout(7) << "update_from_paxos loading summary e" << v << dendl;
+    bufferlist::iterator p = latest.begin();
+    ::decode(summary, p);
   } 
 
   // walk through incrementals

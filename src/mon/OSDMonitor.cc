@@ -95,14 +95,11 @@ bool OSDMonitor::update_from_paxos()
   dout(15) << "update_from_paxos paxos e " << paxosv 
 	   << ", my e " << osdmap.epoch << dendl;
 
-  if (osdmap.epoch == 0 && paxosv > 0) {
-    // startup: just load latest full map
+  if (osdmap.epoch != paxos->get_latest_version()) {
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
-    if (v) {
-      dout(7) << "update_from_paxos startup: loading latest full map e" << v << dendl;
-      osdmap.decode(latest);
-    }
+    dout(7) << "update_from_paxos loading latest full map e" << v << dendl;
+    osdmap.decode(latest);
   } 
   
   // walk through incrementals

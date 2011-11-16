@@ -118,23 +118,20 @@ bool PGMonitor::update_from_paxos()
     return true;
   assert(paxosv >= pg_map.version);
 
-  if (pg_map.version == 0 && paxosv > 0) {
-    // starting up: load latest
+  if (pg_map.version != paxos->get_latest_version()) {
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
-    if (v) {
-      dout(7) << "update_from_paxos startup: got latest latest full pgmap v" << v << dendl;
-      try {
-	PGMap tmp_pg_map;
-	bufferlist::iterator p = latest.begin();
-	tmp_pg_map.decode(p);
-	pg_map = tmp_pg_map;
-      }
-      catch (const std::exception &e) {
-	dout(0) << "update_from_paxos: error parsing update: "
-		<< e.what() << dendl;
-	return false;
-      }
+    dout(7) << "update_from_paxos loading latest full pgmap v" << v << dendl;
+    try {
+      PGMap tmp_pg_map;
+      bufferlist::iterator p = latest.begin();
+      tmp_pg_map.decode(p);
+      pg_map = tmp_pg_map;
+    }
+    catch (const std::exception &e) {
+      dout(0) << "update_from_paxos: error parsing update: "
+	      << e.what() << dendl;
+      return false;
     }
   } 
 

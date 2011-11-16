@@ -111,25 +111,22 @@ void AuthMonitor::create_initial()
 
 bool AuthMonitor::update_from_paxos()
 {
-  dout(10) << "AuthMonitor::update_from_paxos()" << dendl;
+  dout(10) << "update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
   if (paxosv == keys_ver)
     return true;
   assert(paxosv >= keys_ver);
 
-  if (keys_ver == 0 && paxosv > 0) {
-    // startup: just load latest full map
+  if (keys_ver != paxos->get_latest_version()) {
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
-    if (v) {
-      dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
-      bufferlist::iterator p = latest.begin();
-      __u8 v;
-      ::decode(v, p);
-      ::decode(max_global_id, p);
-      ::decode(mon->key_server, p);
-    }
+    dout(7) << "update_from_paxos loading summary e" << v << dendl;
+    bufferlist::iterator p = latest.begin();
+    __u8 struct_v;
+    ::decode(struct_v, p);
+    ::decode(max_global_id, p);
+    ::decode(mon->key_server, p);
   } 
 
   // walk through incrementals
