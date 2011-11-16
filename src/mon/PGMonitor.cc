@@ -118,9 +118,9 @@ bool PGMonitor::update_from_paxos()
     return true;
   assert(paxosv >= pg_map.version);
 
-  if (pg_map.version != paxos->get_latest_version()) {
+  if (pg_map.version != paxos->get_stashed_version()) {
     bufferlist latest;
-    version_t v = paxos->get_latest(latest);
+    version_t v = paxos->get_stashed(latest);
     dout(7) << "update_from_paxos loading latest full pgmap v" << v << dendl;
     try {
       PGMap tmp_pg_map;

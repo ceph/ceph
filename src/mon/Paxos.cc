@@ -161,7 +161,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
   // start with a stashed full copy?
   if (peer_last_committed + 1 < first_committed) {
     bufferlist bl;
-    version_t l = get_latest(bl);
+    version_t l = get_stashed(bl);
     assert(l <= last_committed);
     dout(10) << "share_state starting with latest " << l << " (" << bl.length() << " bytes)" << dendl;
     m->latest_value.claim(bl);
@@ -914,7 +914,7 @@ void Paxos::update_observers()
     
     if (observer->last_version == 0 ||
 	observer->last_version < first_committed) {
-      ver = get_latest(bl);
+      ver = get_stashed(bl);
       if (ver) {
 	dout(10) << " sending summary state v" << ver << " to " << observer->inst << dendl;
 	mon->messenger->send_message(new MMonObserveNotify(mon->monmap->fsid, machine_id, bl, ver, true),
@@ -1029,11 +1029,11 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
   latest_stashed = v;
 }
 
-version_t Paxos::get_latest(bufferlist& bl)
+version_t Paxos::get_stashed(bufferlist& bl)
 {
   bufferlist full;
   if (mon->store->get_bl_ss(full, machine_name, "latest") <= 0) {
-    dout(10) << "get_latest not found" << dendl;
+    dout(10) << "get_stashed not found" << dendl;
     return 0;
   }
   bufferlist::iterator p = full.begin();
@@ -1042,6 +1042,6 @@ version_t Paxos::get_latest(bufferlist& bl)
   ::decode(bl, p);
 
   latest_stashed = v;
-  dout(10) << "get_latest v" << latest_stashed << " len " << bl.length() << dendl;
+  dout(10) << "get_stashed v" << latest_stashed << " len " << bl.length() << dendl;
   return latest_stashed;  
 }

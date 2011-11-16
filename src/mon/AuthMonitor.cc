@@ -118,9 +118,9 @@ bool AuthMonitor::update_from_paxos()
     return true;
   assert(paxosv >= keys_ver);
 
-  if (keys_ver != paxos->get_latest_version()) {
+  if (keys_ver != paxos->get_stashed_version()) {
     bufferlist latest;
-    keys_ver = paxos->get_latest(latest);
+    keys_ver = paxos->get_stashed(latest);
     dout(7) << "update_from_paxos loading summary e" << keys_ver << dendl;
     bufferlist::iterator p = latest.begin();
     __u8 struct_v;

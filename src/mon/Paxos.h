@@ -298,8 +298,8 @@ public:
   // if state values are incrementals, it is usefult to keep
   // the latest copy of the complete structure.
   void stash_latest(version_t v, bufferlist& bl);
-  version_t get_latest(bufferlist& bl);
-  version_t get_latest_version() { return latest_stashed; }
+  version_t get_stashed(bufferlist& bl);
+  version_t get_stashed_version() { return latest_stashed; }
 
   version_t get_first_committed() { return first_committed; }
 

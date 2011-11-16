@@ -474,7 +474,7 @@ void Monitor::slurp()
 
     // latest?
     if (pax->get_first_committed() > 1 &&   // don't need it!
-	pax->get_latest_version() < pax->get_first_committed()) {
+	pax->get_stashed_version() < pax->get_first_committed()) {
       MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name);
       m->machine_name = p->first;
       m->oldest_version = pax->get_first_committed();
@@ -531,7 +531,7 @@ void Monitor::handle_probe_slurp_latest(MMonProbe *m)
   r->machine_name = m->machine_name;
   r->oldest_version = pax->get_first_committed();
   r->newest_version = pax->get_version();
-  r->latest_version = pax->get_latest(r->latest_value);
+  r->latest_version = pax->get_stashed(r->latest_value);
 
   messenger->send_message(r, m->get_connection());
   

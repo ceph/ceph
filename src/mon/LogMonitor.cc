@@ -104,9 +104,9 @@ bool LogMonitor::update_from_paxos()
   bufferlist blogerr;
   bufferlist blogsec;
 
-  if (summary.version != paxos->get_latest_version()) {
+  if (summary.version != paxos->get_stashed_version()) {
     bufferlist latest;
-    version_t v = paxos->get_latest(latest);
+    version_t v = paxos->get_stashed(latest);
     dout(7) << "update_from_paxos loading summary e" << v << dendl;
     bufferlist::iterator p = latest.begin();
     ::decode(summary, p);
