@@ -120,13 +120,14 @@ bool AuthMonitor::update_from_paxos()
 
   if (keys_ver != paxos->get_latest_version()) {
     bufferlist latest;
-    version_t v = paxos->get_latest(latest);
-    dout(7) << "update_from_paxos loading summary e" << v << dendl;
+    keys_ver = paxos->get_latest(latest);
+    dout(7) << "update_from_paxos loading summary e" << keys_ver << dendl;
     bufferlist::iterator p = latest.begin();
     __u8 struct_v;
     ::decode(struct_v, p);
     ::decode(max_global_id, p);
     ::decode(mon->key_server, p);
+    mon->key_server.set_ver(keys_ver);
   } 
 
   // walk through incrementals
