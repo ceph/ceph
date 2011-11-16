@@ -98,7 +98,7 @@ binary-arch: build install
 	dh_installexamples
 	dh_install --sourcedir=$(DESTDIR) --list-missing
 	dh_installlogrotate
-	dh_installinit
+	dh_installinit --no-start
 	dh_installman
 	dh_lintian
 	dh_link
