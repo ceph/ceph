@@ -3185,6 +3185,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(15) << " will requeue " << *mess << dendl;
     rq.push_front(mess);
   }
+  assert(pending_ops == 0);  // we paused the wq, and just emptied out the queue
   push_waiters(rq);  // requeue under osd_lock!
   op_wq.unlock();
 
