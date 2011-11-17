@@ -188,15 +188,14 @@ void Paxos::store_state(MMonPaxos *m)
   // stash?
   if (m->latest_version && m->latest_version > last_committed) {
     dout(10) << "store_state got stash version " << m->latest_version << ", zapping old states" << dendl;
+
+    // wipe out everything we had previously
+    trim_to(last_committed + 1);
+
     stash_latest(m->latest_version, m->latest_value);
 
-    while (first_committed <= last_committed) {
-      dout(10) << "store_state trim " << first_committed << dendl;
-      mon->store->erase_sn(machine_name, first_committed);
-      first_committed++;
-    }
+    first_committed = m->latest_version;
     last_committed = m->latest_version;
-    first_committed = last_committed;
     mon->store->put_int(first_committed, machine_name, "first_committed");
     mon->store->put_int(last_committed, machine_name, "last_committed");
   }
