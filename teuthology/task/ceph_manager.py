@@ -299,7 +299,7 @@ class CephManager:
         self.log.debug('quorum_status is %s', out)
         return j['quorum']
 
-    def wait_for_mon_quorum_size(self, size, timeout=None):
+    def wait_for_mon_quorum_size(self, size, timeout=300):
         self.log('waiting for quorum size %d' % size)
         start = time.time()
         while not len(self.get_mon_quorum()) == size:
