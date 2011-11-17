@@ -1000,7 +1000,7 @@ def task(ctx, config):
         "task ceph only supports a dictionary for configuration"
 
     overrides = ctx.config.get('overrides', {})
-    config.update(overrides.get('ceph', {}))
+    teuthology.deep_merge(config, overrides.get('ceph', {}))
 
     ctx.daemons = CephState()
     flavor = None
