@@ -395,7 +395,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  logger->inc(l_osdc_map_full);
 	}
 	else {
-	  if (m->get_first() > m->get_oldest() || e == m->get_first()) {
+	  if (e && e > m->get_oldest()) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
 	    maybe_request_map();
 	    break;
