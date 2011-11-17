@@ -1,4 +1,3 @@
-from cStringIO import StringIO
 import logging
 
 from teuthology import misc as teuthology
