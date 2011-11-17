@@ -1,28 +1,9 @@
-import contextlib
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
 
 
 log = logging.getLogger(__name__)
-
-
-def rados(remote, cmd):
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
-        ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False
-        )
-    return proc.exitstatus
 
 def task(ctx, config):
     """
@@ -94,6 +75,3 @@ def task(ctx, config):
         log.info('adding mon %s back in' % mons[rank])
         manager.revive_mon(mons[rank])
         manager.wait_for_mon_quorum_size(len(mons))
-
-
-    
