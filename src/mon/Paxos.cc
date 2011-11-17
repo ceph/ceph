@@ -199,7 +199,6 @@ void Paxos::store_state(MMonPaxos *m)
     first_committed = last_committed;
     mon->store->put_int(first_committed, machine_name, "first_committed");
     mon->store->put_int(last_committed, machine_name, "last_committed");
-    return;
   }
 
   // build map of values to store
