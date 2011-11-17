@@ -343,6 +343,7 @@ void Objecter::dispatch(Message *m)
 
 void Objecter::handle_osd_map(MOSDMap *m)
 {
+  assert(client_lock.is_locked());
   assert(osdmap); 
 
   if (m->fsid != monc->get_fsid()) {
@@ -715,6 +716,7 @@ void Objecter::kick_requests(OSDSession *session)
 void Objecter::tick()
 {
   ldout(cct, 10) << "tick" << dendl;
+  assert(client_lock.is_locked());
 
   set<OSDSession*> toping;
 
@@ -1091,7 +1093,9 @@ void Objecter::throttle_op(Op *op, int op_budget)
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
+
   // get pio
   tid_t tid = m->get_tid();
 
@@ -1483,6 +1487,7 @@ void Objecter::pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
   if (pool_ops.count(tid)) {
@@ -1544,6 +1549,7 @@ void Objecter::poolstat_submit(PoolStatOp *op)
 
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "handle_get_pool_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
@@ -1594,6 +1600,7 @@ void Objecter::fs_stats_submit(StatfsOp *op)
 
 void Objecter::handle_fs_stats_reply(MStatfsReply *m)
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "handle_fs_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
