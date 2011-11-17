@@ -41,8 +41,8 @@ def task(ctx, config):
        0.75).
 
     timeout: (360) the number of seconds to wait for the cluster
-       to become clean before the task exits. If this doesn't happen,
-       an exception will be raised.
+       to become clean after each cluster change. If this doesn't
+       happen within the timeout, an exception will be raised.
 
     example:
 

@@ -116,7 +116,9 @@ class Thrasher(gevent.Greenlet):
                                                 "dead_osds: ", self.dead_osds, "live_osds: ",
                                                 self.live_osds]]))
             if random.uniform(0,1) < (float(delay) / cleanint):
-                self.ceph_manager.wait_till_clean()
+                self.ceph_manager.wait_till_clean(
+                    timeout=self.config.get('timeout')
+                    )
             self.choose_action()()
             time.sleep(delay)
         self.all_up()
