@@ -420,14 +420,11 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   rc.pos = 0;
   rc.snap = fino_snap(ino);
 
-  int r;
-  r = client->readdir_r_cb(dirp, ceph_ll_add_dirent, &rc);
-
-  if (r == 0) {
+  int r = client->readdir_r_cb(dirp, ceph_ll_add_dirent, &rc);
+  if (r == 0 || r == -ENOSPC)  /* ignore ENOSPC from our callback */
     fuse_reply_buf(req, rc.buf, rc.pos);
-  } else {
+  else
     fuse_reply_err(req, -r);
-  }
   delete[] rc.buf;
 }
 
