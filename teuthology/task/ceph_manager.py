@@ -296,6 +296,7 @@ class CephManager:
     def get_mon_quorum(self):
         out = self.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
+        self.log.debug('quorum_status is %s', out)
         return j['quorum']
 
     def wait_for_mon_quorum_size(self, size, timeout=None):
@@ -307,6 +308,3 @@ class CephManager:
                     'failed to reach quorum size %d before timeout expired' % size
             time.sleep(3)
         self.log("quorum is size %d" % size)
-                
-
-
