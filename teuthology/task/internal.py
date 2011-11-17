@@ -94,6 +94,12 @@ def lock_machines(ctx, config):
             for machine in ctx.config['targets'].iterkeys():
                 lock.unlock(ctx, machine, ctx.owner)
 
+def save_config(ctx, config):
+    log.info('Saving configuration')
+    if ctx.archive is not None:
+        with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
+            yaml.safe_dump(ctx.config, f, default_flow_style=False)
+
 def check_lock(ctx, config):
     log.info('Checking locks...')
     for machine in ctx.config['targets'].iterkeys():

@@ -120,9 +120,6 @@ def main():
         handler.setFormatter(formatter)
         logging.getLogger().addHandler(handler)
 
-        with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
-            yaml.safe_dump(ctx.config, f, default_flow_style=False)
-
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(ctx.config, default_flow_style=False).splitlines()))
 
     ctx.summary = dict(success=True)
@@ -146,6 +143,7 @@ def main():
         init_tasks.append({'internal.lock_machines': len(ctx.config['roles'])})
 
     init_tasks.extend([
+            {'internal.save_config': None},
             {'internal.check_lock': None},
             {'internal.connect': None},
             {'internal.check_conflict': None},
