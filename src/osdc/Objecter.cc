@@ -745,7 +745,7 @@ void Objecter::tick()
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
 	 i++)
-      messenger->send_message(new MPing, osdmap->get_inst((*i)->osd));
+      messenger->send_message(new MPing, (*i)->con);
   }
     
   // reschedule
