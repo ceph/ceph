@@ -398,6 +398,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  ldout(cct, 3) << "handle_osd_map missing epoch " << osdmap->get_epoch()+1
 			<< ", jumping to " << m->get_oldest() << dendl;
 	  e = m->get_oldest() - 1;
+	  skipped_map = true;
 	  continue;
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
