@@ -422,3 +422,22 @@ def replace_all_with_clients(cluster, config):
     for client in all_roles_of_type(cluster, 'client'):
         norm_config['client.{id}'.format(id=client)] = config['all']
     return norm_config
+
+def deep_merge(a, b):
+    if a is None:
+        return b
+    if b is None:
+        return a
+    if isinstance(a, list):
+        assert isinstance(b, list)
+        a.extend(b)
+        return a
+    if isinstance(a, dict):
+        assert isinstance(b, dict)
+        for (k, v) in b.iteritems():
+            if k in a:
+                a[k] = deep_merge(a[k], v)
+            else:
+                a[k] = v
+        return a
+    return b
