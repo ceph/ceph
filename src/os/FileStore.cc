@@ -1928,35 +1928,11 @@ void FileStore::_finish_op(OpSequencer *osr)
   lat -= o->start;
   logger->finc(l_os_apply_lat, lat);
 
-  if (next_finish == o->op) {
-    dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
-	     << " queueing " << o->onreadable << " doing " << o->onreadable_sync << dendl;
-    next_finish++;
-    if (o->onreadable_sync) {
-      o->onreadable_sync->finish(0);
-      delete o->onreadable_sync;
-    }
-    op_finisher.queue(o->onreadable);
-
-    while (finish_queue.begin()->first == next_finish) {
-      Context *c = finish_queue.begin()->second.first;
-      Context *s = finish_queue.begin()->second.second;
-      finish_queue.erase(finish_queue.begin());
-      dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
-	       << " queueing delayed " << c << " doing " << s << dendl;
-      if (s) {
-	s->finish(0);
-	delete s;
-      }
-      op_finisher.queue(c);
-      next_finish++;
-    }
-  } else {
-    dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
-	     << ", delaying " << o->onreadable << dendl;
-    finish_queue[o->op] = pair<Context*,Context*>(o->onreadable, o->onreadable_sync);
+  if (o->onreadable_sync) {
+    o->onreadable_sync->finish(0);
+    delete o->onreadable_sync;
   }
-
+  op_finisher.queue(o->onreadable);
   delete o;
 }
 

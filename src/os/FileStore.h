@@ -179,7 +179,6 @@ class FileStore : public JournalingObjectStore,
   Cond op_throttle_cond;
   Finisher op_finisher;
   uint64_t next_finish;
-  map<uint64_t, pair<Context*,Context*> > finish_queue;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
