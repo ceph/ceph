@@ -297,10 +297,18 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
 	const config_option *opt = config_optionsp + o;
 	std::string as_option("--");
 	as_option += opt->name;
-	if ((opt->type == OPT_BOOL) &&
-	    ceph_argparse_flag(args, i, as_option.c_str(), (char*)NULL)) {
-	  set_val_impl("true", opt);
-	  break;
+
+	if (opt->type == OPT_BOOL) {
+	  if (ceph_argparse_flag(args, i, as_option.c_str(), (char*)NULL)) {
+	    set_val_impl("true", opt);
+	    break;
+	  }
+	  std::string no_option("--no-");
+	  no_option += opt->name;
+	  if (ceph_argparse_flag(args, i, no_option.c_str(), (char*)NULL)) {
+	    set_val_impl("false", opt);
+	    break;
+	  }
 	}
 	else if (ceph_argparse_witharg(args, i, &val,
 				       as_option.c_str(), (char*)NULL)) {
