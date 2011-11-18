@@ -145,10 +145,6 @@ def main():
     try:
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)
     finally:
-        if ctx.archive is not None:
-            with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
-                yaml.safe_dump(ctx.summary, f, default_flow_style=False)
-
         if not ctx.summary.get('success') and ctx.config.get('nuke-on-error'):
             from teuthology.parallel import parallel
             with parallel() as p:
@@ -160,6 +156,9 @@ def main():
                         log=log,
                         teuth_config=ctx.teuthology_config,
                         )
+        if ctx.archive is not None:
+            with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
+                yaml.safe_dump(ctx.summary, f, default_flow_style=False)
 
 def nuke_and_unlock(targets, owner, log, teuth_config,
                     synch_clocks=True, reboot_all=True):
