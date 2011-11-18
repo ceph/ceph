@@ -142,7 +142,9 @@ bool OSDMonitor::update_from_paxos()
 
   send_to_waiting();
   check_subs();
-   
+
+  share_map_with_random_osd();
+
   return true;
 }
 
@@ -296,15 +298,16 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
 void OSDMonitor::committed()
 {
+}
+
+void OSDMonitor::share_map_with_random_osd()
+{
   // tell any osd
-  int r = osdmap.get_any_up_osd();
-  if (r >= 0) {
-    MonSession *s = mon->session_map.get_random_osd_session();
-    if (s) {
-      dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
-      MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());  // whatev, they'll request more if they need it
-      mon->messenger->send_message(m, s->inst);
-    }
+  MonSession *s = mon->session_map.get_random_osd_session();
+  if (s) {
+    dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+    MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());  // whatev, they'll request more if they need it
+    mon->messenger->send_message(m, s->inst);
   }
 }
 
