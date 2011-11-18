@@ -1,5 +1,6 @@
 from cStringIO import StringIO
 
+import argparse
 import contextlib
 import errno
 import logging
@@ -33,7 +34,7 @@ class DaemonState(object):
         if self.proc is not None:
             self.proc.stdin.close()
             run.wait([self.proc])
-            self.proc = None;
+            self.proc = None
             self.log("Stopped")
 
     def restart(self):
@@ -317,9 +318,8 @@ def cluster(ctx, config):
                 conf[section] = {}
             conf[section][key] = value
 
-    import argparse
-    ctx.ceph = argparse.Namespace();
-    ctx.ceph.conf = conf;
+    ctx.ceph = argparse.Namespace()
+    ctx.ceph.conf = conf
 
     log.info('Writing configs...')
     conf_fp = StringIO()
