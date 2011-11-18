@@ -2,30 +2,29 @@ ceph-qa-suite
 -------------
 
 clusters/    - some predefined cluster layouts
-tasks/       - some predefined task fragments
-collections/ - collections of tests to actually run
+suites/      - sets of collections
 
-We have several collections, each a subdirectory within collections/.
+We have several collections, each a subdirectory within suites/*/.
 Each collection directory consists of a set facets.  The basic idea is
 that, for each collection, the set of tests to run consists of all
 combinations of taking one yaml fragment from each facet.
 
 For example, given the files
 
-  collections/
-  collections/foo/
-  collections/foo/clusters/
-  collections/foo/clusters/fixed-3.yaml
-  collections/foo/clusters/fixed-9.yaml
-  collections/foo/tasks/
-  collections/foo/tasks/a
-  collections/foo/tasks/b
-  collections/foo/tasks/c
-  collections/bar/
-  collections/bar/clusters/fixed-3.yaml
-  collections/bar/tasks/
-  collections/bar/tasks/d
-  collections/bar/tasks/e
+  suite/collection/
+  suite/collection/foo/
+  suite/collection/foo/clusters/
+  suite/collection/foo/clusters/fixed-3.yaml
+  suite/collection/foo/clusters/fixed-9.yaml
+  suite/collection/foo/tasks/
+  suite/collection/foo/tasks/a
+  suite/collection/foo/tasks/b
+  suite/collection/foo/tasks/c
+  suite/collection/bar/
+  suite/collection/bar/clusters/fixed-3.yaml
+  suite/collection/bar/tasks/
+  suite/collection/bar/tasks/d
+  suite/collection/bar/tasks/e
 
 teuthology-suite would run tasks a, b, and c on both fixed-3 and
 fixed-9 clusters.  It would also run tasks d and e on the fixed-3
@@ -38,6 +37,5 @@ result (optionally combined with any additional fragments passed on
 the command line).
 
 In practice, we can keep common/shared task and cluster definitions in
-the top-level clusters/ and tasks/ directories (which are otherwise
-ignored), and symlink to them from the collections that want to use
-them.
+the top-level clusters/ (which are otherwise ignored), and symlink to
+them from the collections that want to use them.
