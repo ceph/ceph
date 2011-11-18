@@ -1517,6 +1517,7 @@ public:
   int scrub_waiting_on;
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
+  MOSDRepScrub *active_rep_scrub;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -1569,7 +1570,8 @@ public:
     finish_sync_event(NULL),
     finalizing_scrub(false),
     scrub_reserved(false), scrub_reserve_failed(false),
-    scrub_waiting_on(0)
+    scrub_waiting_on(0),
+    active_rep_scrub(0)
   {
     pool->get();
   }
