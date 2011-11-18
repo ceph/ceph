@@ -131,8 +131,8 @@ combination, and will override anything in the suite.
                     '--description', description,
                     '--',
                     ])
-            arg.extend(path for facet, name, path in configs)
             arg.extend(args.config)
+            arg.extend(path for facet, name, path in configs)
             subprocess.check_call(
                 args=arg,
                 )
