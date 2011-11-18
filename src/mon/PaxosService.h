@@ -45,16 +45,6 @@ protected:
 	svc->_active();
     }
   };
-  class C_Commit : public Context {
-    PaxosService *svc;
-  public:
-    C_Commit(PaxosService *s) : svc(s) {}
-    void finish(int r) {
-      if (r >= 0)
-	svc->_commit();
-    }
-  };
-  friend class C_Update;
 
   class C_Propose : public Context {
     PaxosService *ps;
@@ -87,7 +77,6 @@ public:
 
 private:
   void _active();
-  void _commit();
 
 public:
   // i implement and you use
@@ -156,6 +145,8 @@ public:
    * This is called when the Paxos state goes to active.
    * It's a courtesy method if you have things you want/need
    * to do at that time.
+   *
+   * Note that is may get called twice in certain recovery cases.
    */
   virtual void on_active() { }
 
