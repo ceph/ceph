@@ -69,8 +69,6 @@ class MonmapMonitor : public PaxosService {
    */
   bool should_propose(double& delay);
 
-  void committed();
-
   void tick();
 
  private:

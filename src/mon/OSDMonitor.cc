@@ -296,10 +296,6 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 }
 
 
-void OSDMonitor::committed()
-{
-}
-
 void OSDMonitor::share_map_with_random_osd()
 {
   // tell any osd

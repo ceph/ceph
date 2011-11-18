@@ -165,8 +165,6 @@ public:
    */
   virtual void on_restart() { }
 
-  virtual void committed() = 0;            // [leader] called after a proposed value commits
-
   virtual void tick() {}
 
   virtual enum health_status_t get_health(std::ostream& os) const { return HEALTH_OK; }

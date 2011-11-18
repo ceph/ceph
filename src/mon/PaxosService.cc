@@ -115,8 +115,6 @@ void PaxosService::_commit()
       create_pending();
       have_pending = true;
     }
-
-    committed();
   }
 }
 
