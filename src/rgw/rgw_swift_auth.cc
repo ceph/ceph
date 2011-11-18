@@ -8,6 +8,8 @@
 
 #define DOUT_SUBSYS rgw
 
+#define DEFAULT_SWIFT_PREFIX "swift"
+
 using namespace ceph::crypto;
 
 static RGW_SWIFT_Auth_Get rgw_swift_auth_get;
@@ -139,12 +141,40 @@ void RGW_SWIFT_Auth_Get::execute()
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
 
-  if (g_conf->rgw_swift_url.length() == 0 ||
-      g_conf->rgw_swift_url_prefix.length() == 0) {
-    dout(0) << "server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url" << dendl;
-    ret = -EINVAL;
-    goto done;
+  string swift_url = g_conf->rgw_swift_url;
+  string swift_prefix = g_conf->rgw_swift_url_prefix;
+
+  if (swift_prefix.size() == 0) {
+    swift_prefix = DEFAULT_SWIFT_PREFIX;
   }
+
+  if (swift_url.size() == 0) {
+    bool add_port = false;
+    const char *server_port = s->env->get("SERVER_PORT_SECURE");
+    const char *protocol;
+    if (server_port) {
+      add_port = (strcmp(server_port, "443") != 0);
+      protocol = "https";
+    } else {
+      server_port = s->env->get("SERVER_PORT");
+      add_port = (strcmp(server_port, "80") != 0);
+      protocol = "http";
+    }
+    const char *host = s->env->get("HTTP_HOST");
+    if (!host) {
+      dout(0) << "server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
+      ret = -EINVAL;
+      goto done;
+    }
+    swift_url = protocol;
+    swift_url.append("://");
+    swift_url.append(host);
+    if (add_port) {
+      swift_url.append(":");
+      swift_url.append(server_port);
+    }
+  }
+
 
   if (!key || !user)
     goto done;
@@ -167,8 +197,8 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", g_conf->rgw_swift_url.c_str(),
-	     g_conf->rgw_swift_url_prefix.c_str());
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
+	     swift_prefix.c_str());
 
   if ((ret = encode_token(swift_key->id, swift_key->key, bl)) < 0)
     goto done;
