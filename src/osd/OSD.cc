@@ -5096,12 +5096,7 @@ void OSD::reply_op_error(MOSDOp *op, int err)
 void OSD::reply_op_error(MOSDOp *op, int err, eversion_t v)
 {
   int flags;
-  if (err == 0)
-    // reply with whatever ack/safe flags the caller wanted
-    flags = op->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
-  else
-    // just ACK on error
-    flags = CEPH_OSD_FLAG_ACK;
+  flags = op->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
 
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), flags);
   Messenger *msgr = client_messenger;
