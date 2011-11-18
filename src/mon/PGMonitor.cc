@@ -95,6 +95,7 @@ void PGMonitor::on_active()
   if (mon->is_leader()) {
     check_osd_map(mon->osdmon()->osdmap.epoch);
   }
+  send_pg_creates();
 }
 
 void PGMonitor::tick() 
@@ -182,8 +183,6 @@ bool PGMonitor::update_from_paxos()
   if (mon->is_leader() &&
       paxosv > max)
     paxos->trim_to(paxosv - max);
-
-  send_pg_creates();
 
   return true;
 }
@@ -566,8 +565,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   
   if (propose)
     propose_pending();
-
-  send_pg_creates();
 }
 
 void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool)
