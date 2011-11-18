@@ -475,6 +475,10 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 
 void MDSMonitor::committed()
 {
+}
+
+void MDSMonitor::on_active()
+{
   tick();
 }
 

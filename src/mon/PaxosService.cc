@@ -195,7 +195,8 @@ void PaxosService::_active()
     }
   }
 
-  on_active();
+  if (paxos->is_active())
+    on_active();
 }
 
 

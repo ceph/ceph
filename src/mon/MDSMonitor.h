@@ -78,6 +78,7 @@ class MDSMonitor : public PaxosService {
   bool should_propose(double& delay);
 
   void committed();
+  void on_active();
 
   void _note_beacon(class MMDSBeacon *m);
   bool preprocess_beacon(class MMDSBeacon *m);
