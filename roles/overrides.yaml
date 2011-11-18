@@ -1,0 +1,10 @@
+nuke-on-error: true
+kernel:
+  branch: master
+overrides:
+  ceph:
+    branch: BRANCH_NAME
+    log-whitelist:
+    - 'clocks not synchronized'
+tasks:
+- chef:
