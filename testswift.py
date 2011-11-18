@@ -40,9 +40,10 @@ def download(ctx, config):
 
 def _config_user(testswift_conf, account, user, suffix):
     testswift_conf['func_test'].setdefault('account{s}'.format(s=suffix), account);
+    testswift_conf['func_test'].setdefault('username{s}'.format(s=suffix), user);
     testswift_conf['func_test'].setdefault('email{s}'.format(s=suffix), '{account}+test@test.test'.format(account=account))
     testswift_conf['func_test'].setdefault('display_name{s}'.format(s=suffix), 'Mr. {account} {user}'.format(account=account, user=user))
-    testswift_conf['func_test'].setdefault('secret_key{s}'.format(s=suffix), base64.b64encode(os.urandom(40)))
+    testswift_conf['func_test'].setdefault('password{s}'.format(s=suffix), base64.b64encode(os.urandom(40)))
 
 @contextlib.contextmanager
 def create_users(ctx, config):
@@ -63,7 +64,7 @@ def create_users(ctx, config):
                     'user', 'create',
                     '--subuser', '{account}:{user}'.format(account=testswift_conf['func_test']['account{s}'.format(s=suffix)],user=user),
                     '--display-name', testswift_conf['func_test']['display_name{s}'.format(s=suffix)],
-                    '--secret', testswift_conf['func_test']['secret_key{s}'.format(s=suffix)],
+                    '--secret', testswift_conf['func_test']['password{s}'.format(s=suffix)],
                     '--email', testswift_conf['func_test']['email{s}'.format(s=suffix)],
                     '--key-type', 'swift',
                 ],
