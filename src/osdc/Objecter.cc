@@ -1159,7 +1159,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     num_unacked--;
     logger->inc(l_osdc_op_ack);
   }
-  if (op->oncommit && m->is_ondisk()) {
+  if (op->oncommit && (m->is_ondisk() || rc)) {
     ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
     oncommit = op->oncommit;
     op->oncommit = 0;
@@ -1183,9 +1183,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // do callbacks
   if (onack) {
-    ldout(cct, 20) << "Calling onack->finish with rc " << rc << dendl;
     onack->finish(rc);
-    ldout(cct, 20) << "Finished onack-finish" << dendl;
     delete onack;
   }
   if (oncommit) {
