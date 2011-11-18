@@ -109,7 +109,7 @@ void PaxosService::_commit()
   dout(7) << "_commit" << dendl;
   update_from_paxos();   // notify service of new paxos state
 
-  if (mon->is_leader()) {
+  if (mon->is_leader() && paxos->is_active()) {
     dout(7) << "_commit creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
@@ -180,7 +180,8 @@ void PaxosService::_active()
   update_from_paxos();
 
   // create pending state?
-  if (mon->is_leader()) {
+  if (mon->is_leader() && paxos->is_active()) {
+    dout(7) << "_active creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
       have_pending = true;
