@@ -1141,7 +1141,7 @@ void OSDMonitor::tick()
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     unsigned min = g_conf->mon_min_osdmap_epochs;
     if (floor + min > paxos->get_version()) {
-      if (min > paxos->get_version())
+      if (min < paxos->get_version())
 	floor = paxos->get_version() - min;
       else
 	floor = 0;
