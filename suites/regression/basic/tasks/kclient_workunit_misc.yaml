@@ -1,5 +1,9 @@
 tasks:
 - ceph:
+    conf:
+      mds:
+        debug mds: 10
+        debug ms: 1
 - kclient:
 - workunit:
     all:
