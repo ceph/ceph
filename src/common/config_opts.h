@@ -17,6 +17,8 @@ OPTION(host, OPT_STR, "localhost")
 OPTION(fsid, OPT_STR, "")              // used for mkfs
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
+OPTION(public_network, OPT_STR, "")
+OPTION(cluster_network, OPT_STR, "")
 OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")

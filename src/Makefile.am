@@ -916,6 +916,7 @@ libcommon_files = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/ipaddr.cc \
+	common/pick_address.cc \
 	include/addr_parsing.c \
 	$(crush_files)
 
