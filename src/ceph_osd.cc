@@ -54,7 +54,6 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  vector<const char *>::iterator args_iter;
 
   global_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
