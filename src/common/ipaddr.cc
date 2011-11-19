@@ -1,5 +1,7 @@
 #include "include/ipaddr.h"
 
+#include <arpa/inet.h>
+#include <stdlib.h>
 #include <string.h>
 
 
@@ -97,4 +99,53 @@ const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
     }
 
   return NULL;
+}
+
+
+bool parse_network(const char *s, struct sockaddr *network, unsigned int *prefix_len) {
+  char *slash = strchr((char*)s, '/');
+  if (!slash) {
+    // no slash
+    return false;
+  }
+  if (*(slash+1) == '\0') {
+    // slash is the last character
+    return false;
+  }
+
+  char *end;
+  long int num = strtol(slash+1, &end, 10);
+  if (*end != '\0') {
+    // junk after the prefix_len
+    return false;
+  }
+  if (num < 0) {
+    return false;
+  }
+  *prefix_len = num;
+
+  // copy the part before slash to get nil termination
+  char *addr = (char*)alloca(slash-s + 1);
+  strncpy(addr, s, slash-s);
+  addr[slash-s] = '\0';
+
+  // caller expects ports etc to be zero
+  memset(network, 0, sizeof(*network));
+
+  // try parsing as ipv4
+  int ok;
+  ok = inet_pton(AF_INET, addr, &((struct sockaddr_in*)network)->sin_addr);
+  if (ok) {
+    network->sa_family = AF_INET;
+    return true;
+  }
+
+  // try parsing as ipv6
+  ok = inet_pton(AF_INET6, addr, &((struct sockaddr_in6*)network)->sin6_addr);
+  if (ok) {
+    network->sa_family = AF_INET6;
+    return true;
+  }
+
+  return false;
 }
