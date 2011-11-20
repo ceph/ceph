@@ -157,9 +157,14 @@ static bool parse_rfc1123(const char *s, struct tm *t)
   return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S GMT", t));
 }
 
+static bool parse_rfc1123_alt(const char *s, struct tm *t)
+{
+  return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S %z", t));
+}
+
 bool parse_rfc2616(const char *s, struct tm *t)
 {
-  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t);
+  return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t) || parse_rfc1123_alt(s,t);
 }
 
 int parse_time(const char *time_str, time_t *time)
