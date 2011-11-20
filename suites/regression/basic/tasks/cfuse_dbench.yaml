@@ -1,8 +1,9 @@
 tasks:
 - ceph:
     conf:
-      debug client: 20
-      debug ms: 1
+      client:
+        debug client: 20
+        debug ms: 1
 - cfuse:
 - autotest:
     all: [dbench]
