@@ -3175,17 +3175,18 @@ void OSD::handle_osd_map(MOSDMap *m)
   list<Message*> rq;
   while (!op_queue.empty()) {
     PG *pg = op_queue.back();
+    pg->lock();
     op_queue.pop_back();
     pending_ops--;
-    logger->set(l_osd_opq, pending_ops);
-
     Message *mess = pg->op_queue.back();
     pg->op_queue.pop_back();
+    pg->unlock();
     pg->put();
     dout(15) << " will requeue " << *mess << dendl;
     rq.push_front(mess);
   }
   assert(pending_ops == 0);  // we paused the wq, and just emptied out the queue
+  logger->set(l_osd_opq, pending_ops);
   push_waiters(rq);  // requeue under osd_lock!
   op_wq.unlock();
 
