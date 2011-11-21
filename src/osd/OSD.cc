@@ -2240,6 +2240,14 @@ void OSD::handle_command(MMonCommand *m)
 {
   if (!require_mon_peer(m))
     return;
+
+  // special case shutdown, since shutdown() stops the command_tp
+  if (m->cmd[0] == "stop") {
+    shutdown();
+    m->put();
+    return;
+  }
+
   Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), NULL);
   command_wq.queue(c);
   m->put();
@@ -2260,6 +2268,13 @@ void OSD::handle_command(MCommand *m)
 
   if (!caps.allow_all || m->get_source().is_mon()) {
     client_messenger->send_message(new MCommandReply(m, -EPERM), con);
+    m->put();
+    return;
+  }
+
+  // special case shutdown, since shutdown() stops the command_tp
+  if (m->cmd[0] == "stop") {
+    shutdown();
     m->put();
     return;
   }
