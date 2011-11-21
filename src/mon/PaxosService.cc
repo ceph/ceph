@@ -156,8 +156,12 @@ void PaxosService::election_finished()
 
 void PaxosService::_active()
 {
+  if (!paxos->is_active()) {
+    dout(10) << "_active - not active" << dendl;
+    paxos->wait_for_active(new C_Active(this));
+    return;
+  }
   dout(10) << "_active" << dendl;
-  assert(paxos->is_active());
 
   // pull latest from paxos
   update_from_paxos();
