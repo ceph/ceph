@@ -577,9 +577,6 @@ public:
   //void set_listen_addr(tcpaddr_t& a);
 
   int bind(entity_addr_t bind_addr, int64_t nonce);
-  int bind(uint64_t nonce) {
-    return bind(cct->_conf->public_addr, nonce);
-  }
   int start_with_nonce(uint64_t nonce);  // if we didn't bind
   int start() {                 // if we did
     assert(did_bind);
