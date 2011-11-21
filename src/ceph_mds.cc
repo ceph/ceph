@@ -34,6 +34,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/pick_address.h"
 
 #include "mon/MonClient.h"
 
@@ -193,6 +194,8 @@ int main(int argc, const char **argv)
       usage();
     }
   }
+
+  pick_addresses(g_ceph_context);
 
   // Check for special actions
   if (!action.empty()) {

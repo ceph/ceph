@@ -29,6 +29,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/pick_address.h"
 
 #if !defined(DARWIN) && !defined(__FreeBSD__)
 #include <envz.h>
@@ -50,6 +51,8 @@ int main(int argc, const char **argv, char *envp[])
   common_init_finish(g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient
+
+  pick_addresses(g_ceph_context);
 
   vec_to_argv(args, argc, argv);
 
