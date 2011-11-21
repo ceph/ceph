@@ -324,30 +324,21 @@ private:
   
   // -- op queue --
   deque<PG*> op_queue;
-  
+  int op_queue_len;
+
   struct OpWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
     OpWQ(OSD *o, time_t ti, ThreadPool *tp)
       : ThreadPool::WorkQueue<PG>("OSD::OpWQ", ti, ti*10, tp), osd(o) {}
 
-    bool _enqueue(PG *pg) {
-      pg->get();
-      osd->op_queue.push_back(pg);
-      return true;
-    }
+    bool _enqueue(PG *pg);
     void _dequeue(PG *pg) {
       assert(0);
     }
     bool _empty() {
       return osd->op_queue.empty();
     }
-    PG *_dequeue() {
-      if (osd->op_queue.empty())
-	return NULL;
-      PG *pg = osd->op_queue.front();
-      osd->op_queue.pop_front();
-      return pg;
-    }
+    PG *_dequeue();
     void _process(PG *pg) {
       osd->dequeue_op(pg);
     }
@@ -356,11 +347,6 @@ private:
     }
   } op_wq;
 
-  int   pending_ops;
-  bool  waiting_for_no_ops;
-  Cond  no_pending_ops;
-  
-  void wait_for_no_ops();
   void enqueue_op(PG *pg, Message *op);
   void requeue_ops(PG *pg, list<Message*>& ls);
   void dequeue_op(PG *pg);
