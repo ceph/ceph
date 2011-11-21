@@ -340,7 +340,9 @@ class Objecter {
   public:
     C_Tick(Objecter *o) : ob(o) {}
     void finish(int r) { ob->tick(); }
-  };
+  } *tick_event;
+
+  void schedule_tick();
   void tick();
 
 public:
@@ -676,7 +678,7 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
-    logger(NULL),
+    logger(NULL), tick_event(NULL),
     num_homeless_ops(0),
     op_throttler(cct->_conf->objecter_inflight_op_bytes)
   { }

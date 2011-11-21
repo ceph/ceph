@@ -199,7 +199,7 @@ void Objecter::init()
     cct->get_perfcounters_collection()->add(logger);
   }
 
-  timer.add_event_after(cct->_conf->objecter_tick_interval, new C_Tick(this));
+  schedule_tick();
   maybe_request_map();
 }
 
@@ -209,6 +209,11 @@ void Objecter::shutdown()
   while (!osd_sessions.empty()) {
     p = osd_sessions.begin();
     close_session(p->second);
+  }
+
+  if (tick_event) {
+    timer.cancel_event(tick_event);
+    tick_event = NULL;
   }
 
   if (logger) {
@@ -713,11 +718,21 @@ void Objecter::kick_requests(OSDSession *session)
   }
 }
 
+void Objecter::schedule_tick()
+{
+  assert(tick_event == NULL);
+  tick_event = new C_Tick(this);
+  timer.add_event_after(cct->_conf->objecter_tick_interval, tick_event);
+}
 
 void Objecter::tick()
 {
   ldout(cct, 10) << "tick" << dendl;
   assert(client_lock.is_locked());
+
+  // we are only called by C_Tick
+  assert(tick_event);
+  tick_event = NULL;
 
   set<OSDSession*> toping;
 
@@ -752,7 +767,7 @@ void Objecter::tick()
   }
     
   // reschedule
-  timer.add_event_after(cct->_conf->objecter_tick_interval, new C_Tick(this));
+  schedule_tick();
 }
 
 void Objecter::resend_mon_ops()
