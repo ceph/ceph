@@ -2765,11 +2765,6 @@ void PG::build_scrub_map(ScrubMap &map)
 
   dout(10) << "PG relocked, finalizing" << dendl;
 
-  // Catch up
-  ScrubMap incr;
-  build_inc_scrub_map(incr, map.valid_through);
-  map.merge_incr(incr);
-
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 
