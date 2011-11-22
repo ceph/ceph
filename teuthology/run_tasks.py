@@ -48,6 +48,11 @@ def run_tasks(tasks, ctx):
                     if 'failure_reason' not in ctx.summary:
                         ctx.summary['failure_reason'] = str(e)
                     log.exception('Manager failed: %s', manager)
+
+                    if exc_info == (None, None, None):
+                        # if first failure is in an __exit__, we don't
+                        # have exc_info set yet
+                        exc_info = sys.exc_info()
                 else:
                     if suppress:
                         sys.exc_clear()
