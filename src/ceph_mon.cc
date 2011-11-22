@@ -33,6 +33,7 @@ using namespace std;
 #include "include/CompatSet.h"
 
 #include "common/ceph_argparse.h"
+#include "common/pick_address.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 
@@ -87,7 +88,7 @@ int main(int argc, const char **argv)
     }
   }
   if (!args.empty()) {
-    cerr << "too many arguments" << std::endl;
+    cerr << "too many arguments: " << args << std::endl;
     usage();
   }
 
@@ -266,24 +267,34 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!monmap.contains(g_conf->name.get_id())) {
-    cerr << g_conf->name << " does not exist in monmap" << std::endl;
-    exit(1);
-  }
+  // this is what i will bind to
+  entity_addr_t ipaddr;
 
-  entity_addr_t ipaddr = monmap.get_addr(g_conf->name.get_id());
-  entity_addr_t conf_addr;
-  std::vector <std::string> my_sections;
-  g_conf->get_my_sections(my_sections);
-  std::string mon_addr_str;
-  if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
-				     mon_addr_str, true) == 0)
-  {
-    if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
-      cerr << "WARNING: 'mon addr' config option " << conf_addr
-	   << " does not match monmap file" << std::endl
-	   << "         continuing with monmap configuration" << std::endl;
+  if (monmap.contains(g_conf->name.get_id())) {
+    ipaddr = monmap.get_addr(g_conf->name.get_id());
+
+    // print helpful warning if the conf file doesn't match
+    entity_addr_t conf_addr;
+    std::vector <std::string> my_sections;
+    g_conf->get_my_sections(my_sections);
+    std::string mon_addr_str;
+    if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
+				       mon_addr_str, true) == 0) {
+      if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
+	cerr << "WARNING: 'mon addr' config option " << conf_addr
+	     << " does not match monmap file" << std::endl
+	     << "         continuing with monmap configuration" << std::endl;
+      }
     }
+  } else {
+    dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
+
+    pick_addresses(g_ceph_context);
+    if (g_conf->public_addr.is_blank_ip()) {
+      derr << "no public_addr or public_network specified, and " << g_conf->name
+	   << " not present in monmap" << dendl;
+      exit(1);
+    }    
   }
 
   // bind
@@ -291,11 +302,12 @@ int main(int argc, const char **argv)
   int rank = monmap.get_rank(g_conf->name.get_id());
 
   cout << "starting " << g_conf->name << " rank " << rank
-       << " at " << monmap.get_addr(g_conf->name.get_id())
+       << " at " << ipaddr
        << " mon_data " << g_conf->mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  err = messenger->bind(monmap.get_addr(g_conf->name.get_id()), 0);
+
+  err = messenger->bind(ipaddr, 0);
   if (err < 0)
     return 1;
 
