@@ -103,6 +103,13 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
 {
   while (lru.size() > (size_t)g_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
+    if ((*iter).compare(name) == 0) {
+      /*
+       * if the entry we're touching happens to be at the lru end, don't remove it,
+       * lru shrinking can wait for next time
+       */
+      break;
+    }
     map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
     dout(10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
     if (map_iter != cache_map.end())
