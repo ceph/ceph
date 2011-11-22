@@ -33,18 +33,24 @@ class MonMap {
   utime_t last_changed;
   utime_t created;
 
+  map<entity_addr_t,string> addr_name;
   vector<string> rank_name;
   vector<entity_addr_t> rank_addr;
   
   void calc_ranks() {
     rank_name.resize(mon_addr.size());
     rank_addr.resize(mon_addr.size());
-    unsigned i = 0;
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
+	 p++) {
+      addr_name[p->second] = p->first;
+    }
+    unsigned i = 0;
+    for (map<entity_addr_t,string>::iterator p = addr_name.begin();
+	 p != addr_name.end();
 	 p++, i++) {
-      rank_name[i] = p->first;
-      rank_addr[i] = p->second;
+      rank_name[i] = p->second;
+      rank_addr[i] = p->first;
     }
   }
 
@@ -109,14 +115,10 @@ class MonMap {
     return -1;
   }
   bool get_addr_name(entity_addr_t a, string& name) {
-    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
-	 p != mon_addr.end();
-	 p++)
-      if (p->second == a) {
-	name = p->first;
-	return true;
-      }
-    return false;
+    if (addr_name.count(a) == 0)
+      return false;
+    name = addr_name[a];
+    return true;
   }
 
   void rename(string oldname, string newname) {
