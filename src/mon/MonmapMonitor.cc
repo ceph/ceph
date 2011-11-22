@@ -367,11 +367,6 @@ bool MonmapMonitor::should_propose(double& delay)
   return true;
 }
 
-void MonmapMonitor::committed()
-{
-  //Nothing useful to do here.
-}
-
 void MonmapMonitor::tick()
 {
   update_from_paxos();

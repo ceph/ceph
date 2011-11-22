@@ -112,6 +112,7 @@ private:
   utime_t last_commit_time;
   version_t accepted_pn;
   version_t accepted_pn_from;
+  map<int,version_t> peer_first_committed, peer_last_committed;
 
   // active (phase 2)
   utime_t lease_expire;

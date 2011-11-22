@@ -226,11 +226,6 @@ bool LogMonitor::prepare_update(PaxosServiceMessage *m)
   }
 }
 
-void LogMonitor::committed()
-{
-
-}
-
 bool LogMonitor::preprocess_log(MLog *m)
 {
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;

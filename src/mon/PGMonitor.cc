@@ -258,11 +258,6 @@ bool PGMonitor::prepare_update(PaxosServiceMessage *m)
   }
 }
 
-void PGMonitor::committed()
-{
-
-}
-
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
   // check caps

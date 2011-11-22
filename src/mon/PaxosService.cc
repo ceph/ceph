@@ -104,23 +104,6 @@ bool PaxosService::should_propose(double& delay)
   return true;
 }
 
-void PaxosService::_commit()
-{
-  dout(7) << "_commit" << dendl;
-  update_from_paxos();   // notify service of new paxos state
-
-  if (mon->is_leader() && paxos->is_active()) {
-    dout(7) << "_commit creating new pending" << dendl;
-    if (!have_pending) {
-      create_pending();
-      have_pending = true;
-    }
-
-    committed();
-  }
-}
-
-
 void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
@@ -138,7 +121,7 @@ void PaxosService::propose_pending()
   have_pending = false;
 
   // apply to paxos
-  paxos->wait_for_commit_front(new C_Commit(this));
+  paxos->wait_for_commit_front(new C_Active(this));
   paxos->propose_new_value(bl);
 }
 
@@ -173,8 +156,12 @@ void PaxosService::election_finished()
 
 void PaxosService::_active()
 {
+  if (!paxos->is_active()) {
+    dout(10) << "_active - not active" << dendl;
+    paxos->wait_for_active(new C_Active(this));
+    return;
+  }
   dout(10) << "_active" << dendl;
-  assert(paxos->is_active());
 
   // pull latest from paxos
   update_from_paxos();
@@ -195,7 +182,10 @@ void PaxosService::_active()
     }
   }
 
-  on_active();
+  // NOTE: it's possible that this will get called twice if we commit
+  // an old paxos value.  Implementations should be mindful of that.
+  if (paxos->is_active())
+    on_active();
 }
 
 

@@ -260,11 +260,6 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
   }
 }
 
-void AuthMonitor::committed()
-{
-
-}
-
 void AuthMonitor::election_finished()
 {
   dout(10) << "AuthMonitor::election_starting" << dendl;

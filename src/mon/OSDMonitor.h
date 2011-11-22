@@ -57,7 +57,7 @@ private:
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);
 
-  void committed();
+  void share_map_with_random_osd();
 
   void handle_query(PaxosServiceMessage *m);
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
