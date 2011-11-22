@@ -64,7 +64,6 @@ public:
   // me
   string name;
   int rank;
-  entity_addr_t myaddr;
   Messenger *messenger;
   Mutex lock;
   SafeTimer timer;

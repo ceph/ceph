@@ -126,7 +126,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
   mon_caps->text = "allow *";
-  myaddr = map->get_addr(name);
 }
 
 Paxos *Monitor::add_paxos(int type)
