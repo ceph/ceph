@@ -126,6 +126,27 @@ int main(int argc, const char **argv)
 	usage();
 	exit(1);
       }
+
+      pick_addresses(g_ceph_context);
+
+      // am i part of the initial quorum?
+      if (monmap.contains(g_conf->name.get_id())) {
+	// hmm, make sure the ip listed exists on the current host?
+	// maybe later.
+      } else if (!g_conf->public_addr.is_blank_ip()) {
+	if (monmap.contains(g_conf->public_addr)) {
+	  string name;
+	  monmap.get_addr_name(g_conf->public_addr, name);
+	  monmap.rename(name, g_conf->name.get_id());
+	  cout << argv[0] << ": renaming mon." << name << " " << g_conf->public_addr
+	       << " to mon." << g_conf->name << std::endl;
+	}
+      } else {
+	// is a local address listed without a name?  if so, name myself.
+	
+	// *******
+
+      }
     }
 
     if (!fsid.is_zero()) {
@@ -137,6 +158,8 @@ int main(int argc, const char **argv)
       cerr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'" << std::endl;
       exit(10);
     }
+
+    //monmap.print(cout);
 
     // osdmap
     if (osdmapfn.length()) {
@@ -294,7 +317,7 @@ int main(int argc, const char **argv)
       derr << "no public_addr or public_network specified, and " << g_conf->name
 	   << " not present in monmap" << dendl;
       exit(1);
-    }    
+    }
   }
 
   // bind

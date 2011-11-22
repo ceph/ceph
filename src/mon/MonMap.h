@@ -119,6 +119,13 @@ class MonMap {
     return false;
   }
 
+  void rename(string oldname, string newname) {
+    assert(contains(oldname));
+    assert(!contains(newname));
+    mon_addr[newname] = mon_addr[oldname];
+    mon_addr.erase(oldname);
+  }
+
   const entity_addr_t& get_addr(const string& n) {
     assert(mon_addr.count(n));
     return mon_addr[n];
