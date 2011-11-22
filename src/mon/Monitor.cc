@@ -243,6 +243,9 @@ void Monitor::bootstrap()
     dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
     messenger->set_myname(entity_name_t::MON(newrank));
     rank = newrank;
+
+    // reset all connections, or else our peers will think we are someone else.
+    messenger->mark_down_all();
   }
 
   // reset
