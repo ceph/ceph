@@ -29,6 +29,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/pick_address.h"
 
 #if !defined(DARWIN) && !defined(__FreeBSD__)
 #include <envz.h>
@@ -51,6 +52,8 @@ int main(int argc, const char **argv, char *envp[])
 
   parse_syn_options(args);   // for SyntheticClient
 
+  pick_addresses(g_ceph_context);
+
   vec_to_argv(args, argc, argv);
 
   // get monmap
@@ -67,7 +70,7 @@ int main(int argc, const char **argv, char *envp[])
   for (int i=0; i<g_conf->num_client; i++) {
     messengers[i] = new SimpleMessenger(g_ceph_context);
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
-    messengers[i]->bind(i * 1000000 + getpid());
+    messengers[i]->bind(g_conf->public_addr, i * 1000000 + getpid());
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
     Client *client = new Client(messengers[i], mclients[i]);

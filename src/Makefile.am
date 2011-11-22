@@ -618,6 +618,11 @@ unittest_interval_tree_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_interval_tree_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_interval_tree
 
+unittest_ipaddr_SOURCES = test/test_ipaddr.cc
+unittest_ipaddr_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
+unittest_ipaddr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_ipaddr
+
 test_librbd_SOURCES = test/test_librbd.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -910,6 +915,8 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
+	common/ipaddr.cc \
+	common/pick_address.cc \
 	include/addr_parsing.c \
 	$(crush_files)
 

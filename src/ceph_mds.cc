@@ -34,6 +34,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/pick_address.h"
 
 #include "mon/MonClient.h"
 
@@ -63,7 +64,7 @@ static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  messenger->bind(getpid());
+  messenger->bind(g_conf->public_addr, getpid());
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
     return -1;
@@ -194,6 +195,8 @@ int main(int argc, const char **argv)
     }
   }
 
+  pick_addresses(g_ceph_context);
+
   // Check for special actions
   if (!action.empty()) {
     return do_cmds_special_action(action, dump_file, rank);
@@ -206,7 +209,7 @@ int main(int argc, const char **argv)
   }
 
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
-  messenger->bind(getpid());
+  messenger->bind(g_conf->public_addr, getpid());
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()
        << std::endl;
   messenger->register_entity(entity_name_t::MDS(-1));

@@ -38,6 +38,7 @@ using namespace std;
 
 #include "include/color.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 
 #include "perfglue/heap_profiler.h"
 
@@ -54,7 +55,6 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  vector<const char *>::iterator args_iter;
 
   global_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
@@ -235,6 +235,8 @@ int main(int argc, const char **argv)
 	 << dendl;
     exit(1);
   }
+
+  pick_addresses(g_ceph_context);
 
   if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
     derr << TEXT_YELLOW
