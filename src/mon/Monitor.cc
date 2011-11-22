@@ -234,7 +234,16 @@ void Monitor::bootstrap()
   cancel_probe_timeout();
 
   // note my rank
-  rank = monmap->get_rank(name);
+  int newrank = monmap->get_rank(name);
+  if (newrank < 0 && rank >= 0) {
+    dout(0) << " removed from monmap, suicide." << dendl;
+    exit(0);
+  }
+  if (newrank != rank) {
+    dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
+    messenger->set_myname(entity_name_t::MON(newrank));
+    rank = newrank;
+  }
 
   // reset
   state = STATE_PROBING;

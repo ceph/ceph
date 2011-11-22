@@ -84,17 +84,6 @@ bool MonmapMonitor::update_from_paxos()
       mon->store->erase_ss("mkfs", "monmap");
   }
 
-  int rank = mon->monmap->get_rank(mon->name);
-  if (rank < 0 && mon->rank >= 0) {
-    dout(0) << " removed from monmap, suicide." << dendl;
-    exit(0);
-  }
-  if (rank != mon->rank) {
-    dout(0) << " my rank is now " << rank << " (was " << mon->rank << ")" << dendl;
-    mon->messenger->set_myname(entity_name_t::MON(rank));
-    mon->rank = rank;
-  }
-  
   if (need_restart)
     mon->bootstrap();
   return true;
