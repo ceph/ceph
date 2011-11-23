@@ -84,20 +84,6 @@ bool MonmapMonitor::update_from_paxos()
       mon->store->erase_ss("mkfs", "monmap");
   }
 
-  int rank = mon->monmap->get_rank(mon->name);
-  if (rank < 0) {
-    dout(10) << "Assuming temporary id=mon." << mon->monmap->size() << " for shutdown purposes" << dendl;
-    mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
-    mon->monmap->add(mon->name, mon->myaddr);
-    mon->shutdown();
-    return true;
-  }
-
-  if (rank != mon->rank) {
-    mon->messenger->set_myname(entity_name_t::MON(rank));
-    mon->rank = rank;
-  }
-  
   if (need_restart)
     mon->bootstrap();
   return true;

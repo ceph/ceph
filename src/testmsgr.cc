@@ -97,7 +97,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_ceph_context->_conf->set_val("public_addr", sss.c_str());
   g_ceph_context->_conf->apply_changes(NULL);
   SimpleMessenger *rank = new SimpleMessenger(g_ceph_context);
-  int err = rank->bind(getpid());
+  int err = rank->bind(g_ceph_context->_conf->public_addr, getpid());
   if (err < 0)
     return 1;
 

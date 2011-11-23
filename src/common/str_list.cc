@@ -44,7 +44,7 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
   return true;
 }
 
-bool get_str_list(const std::string& str, std::list<string>& str_list)
+void get_str_list(const std::string& str, std::list<string>& str_list)
 {
   size_t pos = 0;
   string token;
@@ -58,11 +58,9 @@ bool get_str_list(const std::string& str, std::list<string>& str_list)
       }
     }
   }
-
-  return true;
 }
 
-bool get_str_set(const std::string& str, std::set<std::string>& str_set)
+void get_str_set(const std::string& str, std::set<std::string>& str_set)
 {
   size_t pos = 0;
   string token;
@@ -76,6 +74,4 @@ bool get_str_set(const std::string& str, std::set<std::string>& str_set)
       }
     }
   }
-
-  return true;
 }
