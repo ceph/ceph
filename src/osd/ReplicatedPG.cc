@@ -5226,7 +5226,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
        p++) {
     const hobject_t& soid = p->first;
     object_stat_sum_t stat;
-    stat.num_objects++;
+    if (soid.snap != CEPH_SNAPDIR)
+      stat.num_objects++;
 
     // new snapset?
     if (soid.snap == CEPH_SNAPDIR ||
@@ -5267,8 +5268,11 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	}	  
       }
     }
-    if (soid.snap == CEPH_SNAPDIR)
+    if (soid.snap == CEPH_SNAPDIR) {
+      string cat;
+      cstat.add(stat, cat);
       continue;
+    }
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
