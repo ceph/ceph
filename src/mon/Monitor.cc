@@ -114,7 +114,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
   routed_request_tid(0)
 {
-  rank = map->get_rank(name);
+  rank = -1;
 
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
@@ -171,6 +171,8 @@ Monitor::~Monitor()
 void Monitor::init()
 {
   lock.Lock();
+
+  rank = monmap->get_rank(messenger->get_myaddr());
   
   dout(1) << "init fsid " << monmap->fsid << dendl;
   
@@ -234,7 +236,7 @@ void Monitor::bootstrap()
   cancel_probe_timeout();
 
   // note my rank
-  int newrank = monmap->get_rank(name);
+  int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
     dout(0) << " removed from monmap, suicide." << dendl;
     exit(0);

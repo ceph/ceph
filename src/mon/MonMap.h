@@ -114,6 +114,12 @@ class MonMap {
 	return i;
     return -1;
   }
+  int get_rank(entity_addr_t a) {
+    for (unsigned i=0; i<rank_addr.size(); i++)
+      if (rank_addr[i] == a)
+	return i;
+    return -1;
+  }
   bool get_addr_name(entity_addr_t a, string& name) {
     if (addr_name.count(a) == 0)
       return false;
