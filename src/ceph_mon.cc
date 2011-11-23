@@ -126,20 +126,24 @@ int main(int argc, const char **argv)
 	usage();
 	exit(1);
       }
-
+      
+      // resolve public_network -> public_addr
       pick_addresses(g_ceph_context);
-
+      
       // am i part of the initial quorum?
       if (monmap.contains(g_conf->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
       } else if (!g_conf->public_addr.is_blank_ip()) {
-	if (monmap.contains(g_conf->public_addr)) {
+	entity_addr_t a = g_conf->public_addr;
+	if (a.get_port() == 0)
+	  a.set_port(CEPH_MON_PORT);
+	if (monmap.contains(a)) {
 	  string name;
-	  monmap.get_addr_name(g_conf->public_addr, name);
+	  monmap.get_addr_name(a, name);
 	  monmap.rename(name, g_conf->name.get_id());
-	  cout << argv[0] << ": renaming mon." << name << " " << g_conf->public_addr
-	       << " to mon." << g_conf->name << std::endl;
+	  cout << argv[0] << ": renaming mon." << name << " " << a
+	       << " to mon." << g_conf->name.get_id() << std::endl;
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
