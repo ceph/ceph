@@ -31,7 +31,7 @@ Then you open an "IO context", a :c:type:`rados_ioctx_t`, with :c:func:`rados_io
 	err = rados_ioctx_create(cluster, poolname, &io);
 	if (err < 0) {
 		fprintf(stderr, "%s: cannot open rados pool %s: %s\n", argv[0], poolname, strerror(-err));
-		rados_shutdown(conn);
+		rados_shutdown(cluster);
 		exit(1);
 	}
 
@@ -45,14 +45,14 @@ write into an object called ``greeting`` with
 	if (err < 0) {
 		fprintf(stderr, "%s: cannot write pool %s: %s\n", argv[0], poolname, strerror(-err));
 		rados_ioctx_destroy(io);
-		rados_shutdown(conn);
+		rados_shutdown(cluster);
 		exit(1);
 	}
 
 In the end, you'll want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
 
 	rados_ioctx_destroy(io);
-	rados_shutdown(conn);
+	rados_shutdown(cluster);
 
 
 
