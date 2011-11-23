@@ -41,12 +41,21 @@ static void fill_in_one_address(CephContext *cct,
   }
 
   char buf[INET6_ADDRSTRLEN];
-  const char *ok = inet_ntop(found->sa_family, found, buf, sizeof(buf));
-  if (!ok) {
-    string err = cpp_strerror(errno);
-    lderr(cct) << "unable to convert chosen address to string: " << err << dendl;
+  int err;
+
+  err = getnameinfo(found,
+		    (found->sa_family == AF_INET)
+		    ? sizeof(struct sockaddr_in)
+		    : sizeof(struct sockaddr_in6),
+
+		    buf, sizeof(buf),
+		    NULL, 0,
+		    NI_NUMERICHOST);
+  if (err != 0) {
+    lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
     exit(1);
   }
+
   cct->_conf->set_val_or_die(conf_var, buf);
   cct->_conf->apply_changes(NULL);
 }
