@@ -99,6 +99,9 @@ int main(int argc, const char **argv)
 
   // -- mkfs --
   if (mkfs) {
+    // resolve public_network -> public_addr
+    pick_addresses(g_ceph_context);
+
     common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
@@ -126,9 +129,6 @@ int main(int argc, const char **argv)
 	usage();
 	exit(1);
       }
-      
-      // resolve public_network -> public_addr
-      pick_addresses(g_ceph_context);
       
       // am i part of the initial quorum?
       if (monmap.contains(g_conf->name.get_id())) {
