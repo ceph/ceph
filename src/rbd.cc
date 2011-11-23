@@ -567,7 +567,9 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   return 0;
 }
 
-static int do_kernel_add(const char *poolname, const char *imgname, const char *secretfile, const char *user)
+static int do_kernel_add(const char *poolname, const char *imgname,
+			 const char *snapname, const char *secretfile,
+			 const char *user)
 {
   MonMap monmap;
   int r = MonClient::build_initial_monmap(g_ceph_context, monmap);
@@ -601,6 +603,10 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
   }
 
   oss << " " << poolname << " " << imgname;
+
+  if (snapname) {
+    oss << " " << snapname;
+  }
 
   // write to /sys/bus/rbd/add
   int fd = open("/sys/bus/rbd/add", O_WRONLY);
@@ -1022,7 +1028,8 @@ int main(int argc, const char **argv)
 		      (char **)&imgname, (char **)&snapname);
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
-      opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY) {
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_COPY &&
+      opt_cmd != OPT_MAP) {
     cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
     usage_exit();
   }
@@ -1250,7 +1257,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_MAP:
-    r = do_kernel_add(poolname, imgname, secretfile, user);
+    r = do_kernel_add(poolname, imgname, snapname, secretfile, user);
     if (r < 0) {
       cerr << "add failed: " << cpp_strerror(-r) << std::endl;
       exit(1);
