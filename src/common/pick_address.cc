@@ -9,7 +9,8 @@
 
 static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 						     const struct ifaddrs *ifa,
-						     const std::string networks) {
+						     const std::string networks)
+{
   std::list<string> nets;
   get_str_list(networks, nets);
 
@@ -33,7 +34,8 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 static void fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
 				const string networks,
-				const char *conf_var) {
+				const char *conf_var)
+{
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks: " << networks << dendl;
@@ -60,7 +62,8 @@ static void fill_in_one_address(CephContext *cct,
   cct->_conf->apply_changes(NULL);
 }
 
-void pick_addresses(CephContext *cct) {
+void pick_addresses(CephContext *cct)
+{
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
   if (r<0) {
