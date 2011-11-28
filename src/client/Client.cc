@@ -5144,12 +5144,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   Cond cond;
   bool done = false;
   Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
-  if (in->snapid == CEPH_NOSNAP)
-    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				off, len, bl, 0, onfinish);
-  else
-    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				off, len, bl, 0, onfinish);
+  r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+                              off, len, bl, 0, onfinish);
   if (r == 0) {
     while (!done) 
       cond.Wait(client_lock);
