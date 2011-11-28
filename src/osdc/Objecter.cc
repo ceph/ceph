@@ -825,15 +825,12 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   }
 
   // add to gather set(s)
-  int flags = op->flags;
   if (op->onack) {
-    flags |= CEPH_OSD_FLAG_ACK;
     ++num_unacked;
   } else {
     ldout(cct, 20) << " note: not requesting ack" << dendl;
   }
   if (op->oncommit) {
-    flags |= CEPH_OSD_FLAG_ONDISK;
     ++num_uncommitted;
   } else {
     ldout(cct, 20) << " note: not requesting commit" << dendl;
