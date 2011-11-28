@@ -129,7 +129,7 @@ int main(int argc, const char **argv)
 	usage();
 	exit(1);
       }
-      
+
       // am i part of the initial quorum?
       if (monmap.contains(g_conf->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
@@ -147,9 +147,23 @@ int main(int argc, const char **argv)
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
-	
-	// *******
+	list<entity_addr_t> ls;
+	monmap.list_addrs(ls);
+	entity_addr_t local;
 
+	if (have_local_addr(g_ceph_context, ls, &local)) {
+	  string name;
+	  monmap.get_addr_name(local, name);
+
+	  if (name.find("noname-") == 0) {
+	    cout << argv[0] << ": mon." << name << " " << local
+		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
+	    monmap.rename(name, g_conf->name.get_id());
+	  } else {
+	    cout << argv[0] << ": mon." << name << " " << local
+		 << " is local, but not 'noname-' + something; not assuming it's me" << std::endl;
+	  }
+	}
       }
     }
 

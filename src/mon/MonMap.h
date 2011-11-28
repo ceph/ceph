@@ -83,6 +83,13 @@ class MonMap {
   epoch_t get_epoch() { return epoch; }
   void set_epoch(epoch_t e) { epoch = e; }
 
+  void list_addrs(list<entity_addr_t>& ls) const {
+    for (map<string,entity_addr_t>::const_iterator p = mon_addr.begin();
+	 p != mon_addr.end();
+	 ++p)
+      ls.push_back(p->second);
+  }
+
   void add(const string &name, const entity_addr_t &addr) {
     assert(mon_addr.count(name) == 0);
     mon_addr[name] = addr;
