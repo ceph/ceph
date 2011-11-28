@@ -300,8 +300,6 @@ protected:
   //  - protects Client and buffer cache both!
   Mutex                  client_lock;
 
-  int filer_flags;
-
   // helpers
   void wake_inode_waiters(int mds);
   void wait_on_list(list<Cond*>& ls);
