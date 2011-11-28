@@ -26,4 +26,15 @@ class CephContext;
  */
 void pick_addresses(CephContext *cct);
 
+/**
+ * check for a locally configured address
+ *
+ * check if any of the listed addresses is configured on the local host.
+ *
+ * @cct context
+ * @ls list of addresses
+ * @match [out] pointer to match, if an item in @ls is found configured locally.
+ */
+bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match);
+
 #endif

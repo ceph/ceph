@@ -82,3 +82,30 @@ void pick_addresses(CephContext *cct)
 
   freeifaddrs(ifa);
 }
+
+bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match)
+{
+  struct ifaddrs *ifa;
+  int r = getifaddrs(&ifa);
+  if (r < 0) {
+    lderr(cct) << "unable to fetch interfaces and addresses: " << cpp_strerror(errno) << dendl;
+    exit(1);
+  }
+
+  bool found = false;
+  for (struct ifaddrs *addrs = ifa; addrs != NULL; addrs = addrs->ifa_next) {
+    entity_addr_t a;
+    a.set_sockaddr(addrs->ifa_addr);
+    for (list<entity_addr_t>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      if (a.is_same_host(*p)) {
+	*match = *p;
+	found = true;
+	goto out;
+      }
+    }
+  }
+
+ out:
+  freeifaddrs(ifa);
+  return found;
+}

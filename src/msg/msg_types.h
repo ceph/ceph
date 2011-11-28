@@ -211,6 +211,21 @@ struct entity_addr_t {
     return addr6;
   }
 
+  bool set_sockaddr(struct sockaddr *sa)
+  {
+    switch (sa->sa_family) {
+    case AF_INET:
+      memcpy(&addr4, sa, sizeof(sockaddr_in));
+      break;
+    case AF_INET6:
+      memcpy(&addr6, sa, sizeof(sockaddr_in6));
+      break;
+    default:
+      return false;
+    }
+    return true;
+  }
+
   void set_in4_quad(int pos, int val) {
     addr4.sin_family = AF_INET;
     unsigned char *ipq = (unsigned char*)&addr4.sin_addr.s_addr;
