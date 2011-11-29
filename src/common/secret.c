@@ -73,6 +73,13 @@ static int add_secret_to_kernel(const char *secret, const char *key_name)
   return ret;
 }
 
+int is_kernel_secret(const char *key_name)
+{
+  key_serial_t serial;
+  serial = request_key("ceph", key_name, NULL, KEY_SPEC_USER_KEYRING);
+  return serial != -1;
+}
+
 int get_secret_option(const char *secret, const char *key_name, char *secret_option, size_t max_len)
 {
   int ret;
