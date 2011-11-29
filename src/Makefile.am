@@ -1177,6 +1177,7 @@ noinst_HEADERS = \
         include/utime.h\
         include/dlist.h\
         include/elist.h\
+	include/uuid.h\
         include/xlist.h\
 	include/rados/librados.h\
 	include/rados/librados.hpp\
