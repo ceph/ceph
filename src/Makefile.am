@@ -1118,6 +1118,7 @@ noinst_HEADERS = \
 	common/ceph_crypto.h\
 	common/utf8.h\
 	common/mime.h\
+	common/pick_address.h\
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
@@ -1160,6 +1161,7 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
+	include/ipaddr.h\
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
