@@ -966,7 +966,7 @@ int Objecter::recalc_op_target(Op *op)
 	// look for a local replica
 	unsigned i;
 	for (i = acting.size()-1; i > 0; i++)
-	  if (osdmap->get_addr(i).is_same_host(messenger->get_myaddr())) {
+	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
 	    op->used_replica = true;
 	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
 	    break;
