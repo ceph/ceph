@@ -66,10 +66,8 @@ static int add_secret_to_kernel(const char *secret, const char *key_name)
   }
 
   serial = add_key("ceph", key_name, payload, sizeof(payload), KEY_SPEC_USER_KEYRING);
-  if (serial < 0) {
+  if (serial == -1) {
     ret = -errno;
-    fprintf(stderr, "error adding secret to kernel, key name %s: %s.\n",
-	    key_name, strerror_r(-ret, error_buf, sizeof(error_buf)));
   }
 
   return ret;
