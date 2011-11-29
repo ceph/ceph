@@ -1,5 +1,10 @@
 #!/bin/sh
 
-echo -n `cat /sys/devices/rbd/$1/pool`
-echo -n " "
-echo -n `cat /sys/devices/rbd/$1/name`
+POOL=`cat /sys/devices/rbd/$1/pool`
+IMAGE=`cat /sys/devices/rbd/$1/name`
+SNAP=`cat /sys/devices/rbd/$1/current_snap`
+if [ "$SNAP" = "-" ]; then
+	echo -n "$POOL $IMAGE"
+else
+	echo -n "$POOL $IMAGE@$SNAP"
+fi
