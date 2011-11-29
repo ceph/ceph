@@ -3633,6 +3633,12 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   update_heartbeat_peers();
 
   send_pg_temp();
+
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
+    monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
+    monc->renew_subs();
+  }
 }
 
 
