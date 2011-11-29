@@ -586,19 +586,23 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   oss << " name=" << user;
 
+  char key_name[strlen(user) + strlen("client.")];
+  snprintf(key_name, sizeof(key_name), "client.%s", user);
+  char secret_buf[MAX_SECRET_LEN];
+  char *secret = NULL;
   if (secretfile) {
-    char secret[MAX_SECRET_LEN];
-    r = read_secret_from_file(secretfile, secret, sizeof(secret));
+    r = read_secret_from_file(secretfile, secret_buf, sizeof(secret_buf));
     if (r < 0)
       return r;
+    secret = secret_buf;
+  }
 
+  if (secret || is_kernel_secret(key_name)) {
     char option[MAX_SECRET_LEN + 7];
-    char key_name[strlen(user) + strlen("client.")];
-    snprintf(key_name, sizeof(key_name), "client.%s", user);
     r = get_secret_option(secret, key_name, option, sizeof(option));
-    if (r < 0)
+    if (r < 0) {
       return r;
-
+    }
     oss << "," << option;
   }
 

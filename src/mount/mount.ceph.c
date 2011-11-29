@@ -86,6 +86,9 @@ static char *parse_options(const char *data, int *filesys_flags)
 	int word_len;
 	int skip;
 	int pos = 0;
+	char *name = NULL;
+	int name_len = 0;
+	int name_pos = 0;
 	char secret[MAX_SECRET_LEN];
 	char *saw_name = NULL;
 	char *saw_secret = NULL;
@@ -219,24 +222,22 @@ static char *parse_options(const char *data, int *filesys_flags)
 		data = next_keyword;
 	} while (data);
 
-	if (saw_secret) {
+	name_pos = safe_cat(&name, &name_len, name_pos, "client.");
+	if (!saw_name) {
+		name_pos = safe_cat(&name, &name_len, name_pos, CEPH_AUTH_NAME_DEFAULT);
+	} else {
+		name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
+	}
+	if (saw_secret || is_kernel_secret(name)) {
 		int ret;
 		char secret_option[MAX_SECRET_OPTION_LEN];
-		char *name = NULL;
-		int name_len = 0;
-		int name_pos = 0;
-		name_pos = safe_cat(&name, &name_len, name_pos, "client.");
-		if (!saw_name) {
-			name_pos = safe_cat(&name, &name_len, name_pos, CEPH_AUTH_NAME_DEFAULT);
-		} else {
-			name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
-		}
 		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
 		if (ret < 0) {
 			return NULL;
 		} else {
-			if (pos)
+			if (pos) {
 				pos = safe_cat(&out, &out_len, pos, ",");
+			}
 			pos = safe_cat(&out, &out_len, pos, secret_option);
 		}
 	}

@@ -49,7 +49,7 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   return 0;
 }
 
-static int add_secret_to_kernel(const char *secret, const char *key_name)
+static int set_kernel_secret(const char *secret, const char *key_name)
 {
   /* try to submit key to kernel via the keys api */
   key_serial_t serial;
@@ -80,27 +80,41 @@ int is_kernel_secret(const char *key_name)
   return serial != -1;
 }
 
-int get_secret_option(const char *secret, const char *key_name, char *secret_option, size_t max_len)
+int get_secret_option(const char *secret, const char *key_name,
+		      char *secret_option, size_t max_len)
 {
-  int ret;
-  int olen = strlen(secret) + strlen(key_name) + 7;
+  int ret = 0;
+  int olen = strlen(key_name) + 7;
+  if (secret) {
+    olen += strlen(secret);
+  }
   char option[olen+1];
   char error_buf[80];
+  int use_key = 1;
 
   option[olen] = '\0';
 
-  ret = add_secret_to_kernel(secret, key_name);
-  if (ret < 0) {
-    if (ret == -ENODEV || ret == -ENOSYS) {
-      /* running against older kernel; fall back to secret= in options */
-      snprintf(option, olen, "secret=%s", secret);
-      ret = 0;
-    } else {
-      fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n",
-	      strerror_r(-ret, error_buf, sizeof(error_buf)));
-      return ret;
+  if (!key_name) {
+    return -EINVAL;
+  }
+
+  if (secret) {
+    ret = set_kernel_secret(secret, key_name);
+    if (ret < 0) {
+      if (ret == -ENODEV || ret == -ENOSYS) {
+	/* running against older kernel; fall back to secret= in options */
+	snprintf(option, olen, "secret=%s", secret);
+	ret = 0;
+	use_key = 0;
+      } else {
+	fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n",
+		strerror_r(-ret, error_buf, sizeof(error_buf)));
+	return ret;
+      }
     }
-  } else {
+  }
+
+  if (use_key) {
     /* add key= option to identify key to use */
     snprintf(option, olen, "key=%s", key_name);
   }
