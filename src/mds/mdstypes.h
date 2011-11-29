@@ -476,7 +476,7 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 4;
+    __u8 v = 5;
     ::encode(v, bl);
 
     ::encode(ino, bl);
@@ -496,6 +496,7 @@ struct inode_t {
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
     ::encode(truncate_from, bl);
+    ::encode(truncate_pending, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
@@ -534,6 +535,10 @@ struct inode_t {
     ::decode(truncate_seq, p);
     ::decode(truncate_size, p);
     ::decode(truncate_from, p);
+    if (v >= 5)
+      ::decode(truncate_pending, p);
+    else
+      truncate_pending = 0;
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);
