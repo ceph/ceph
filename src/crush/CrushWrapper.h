@@ -114,7 +114,7 @@ public:
     build_rmaps();
     return name_rmap.count(name);
   }
-  bool item_exists(int i) {
+  bool item_exists(int i) const {
     return name_map.count(i);
   }
   int get_item_id(const char *s) {
@@ -387,10 +387,14 @@ public:
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
-			       forcefeed, &weight[0]);
-    if (numrep < 0)
-      numrep = 0;   // e.g., when forcefed device dne.
+    int numrep = -1;
+    if (item_exists(forcefeed))
+      numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			     forcefeed, &weight[0]);
+    else
+      numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			     -1, &weight[0]);
+    assert(numrep >= 0);
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
