@@ -259,6 +259,7 @@ namespace __gnu_cxx {
   };
 }
 
+typedef uint32_t filestore_hobject_key_t;
 struct hobject_t {
   object_t oid;
   snapid_t snap;
@@ -287,6 +288,15 @@ public:
     hobject_t h;
     h.max = true;
     return h;
+  }
+
+  filestore_hobject_key_t get_filestore_key() const {
+    uint32_t retval = hash;
+    // reverse nibbles
+    retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
+    retval = ((retval & 0x00ff00ff) << 8) | ((retval & 0xff00ff00) >> 8);
+    retval = ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
+    return retval;
   }
 
   /* Do not use when a particular hash function is needed */
@@ -341,7 +351,7 @@ namespace __gnu_cxx {
   };
 }
 
-// sort hobject_t's by <hash,name,snapid>
+// sort hobject_t's by <get_filestore_key,name,snapid>
 inline bool operator==(const hobject_t &l, const hobject_t &r) {
   return l.oid == r.oid && l.snap == r.snap && l.hash == r.hash && l.max == r.max;
 }
@@ -350,26 +360,26 @@ inline bool operator!=(const hobject_t &l, const hobject_t &r) {
 }
 inline bool operator>(const hobject_t &l, const hobject_t &r) {
   return l.max > r.max ||
-    (l.max == r.max && (l.hash > r.hash ||
-			(l.hash == r.hash && (l.oid > r.oid || 
+    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid || 
 					      (l.oid == r.oid && l.snap > r.snap)))));
 }
 inline bool operator<(const hobject_t &l, const hobject_t &r) {
   return l.max < r.max ||
-    (l.max == r.max && (l.hash < r.hash ||
-			(l.hash == r.hash && (l.oid < r.oid ||
+    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
 					      (l.oid == r.oid && l.snap < r.snap)))));
 }
 inline bool operator>=(const hobject_t &l, const hobject_t &r) {
   return l.max > r.max ||
-    (l.max == r.max && (l.hash > r.hash ||
-			(l.hash == r.hash && (l.oid > r.oid ||
+    (l.max == r.max && (l.get_filestore_key() > r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid > r.oid ||
 					      (l.oid == r.oid && l.snap >= r.snap)))));
 }
 inline bool operator<=(const hobject_t &l, const hobject_t &r) {
   return l.max < r.max ||
-    (l.max == r.max && (l.hash < r.hash ||
-			(l.hash == r.hash && (l.oid < r.oid ||
+    (l.max == r.max && (l.get_filestore_key() < r.get_filestore_key() ||
+			(l.get_filestore_key() == r.get_filestore_key() && (l.oid < r.oid ||
 					      (l.oid == r.oid && l.snap <= r.snap)))));
 }
 
