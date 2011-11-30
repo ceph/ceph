@@ -332,7 +332,7 @@ int FileJournal::create()
     goto done;
 
   // write empty header
-  memset(&header, 0, sizeof(header));
+  header = header_t();
   header.clear();
   header.fsid = fsid;
   header.max_size = max_size;
@@ -523,17 +523,23 @@ void FileJournal::print_header()
 
 int FileJournal::read_header()
 {
-  int r;
   dout(10) << "read_header" << dendl;
-  if (directio) {
-    buffer::ptr bp = buffer::create_page_aligned(block_size);
-    bp.zero();
-    r = ::pread(fd, bp.c_str(), bp.length(), 0);
-    memcpy(&header, bp.c_str(), sizeof(header));
-  } else {
-    memset(&header, 0, sizeof(header));  // zero out (read may fail)
-    r = ::pread(fd, &header, sizeof(header), 0);
+  bufferlist bl;
+
+  buffer::ptr bp = buffer::create_page_aligned(block_size);
+  bp.zero();
+  int r = ::pread(fd, bp.c_str(), bp.length(), 0);
+  bl.push_back(bp);
+
+  try {
+    bufferlist::iterator p = bl.begin();
+    ::decode(header, p);
   }
+  catch (buffer::error& e) {
+    derr << "read_header error decoding journal header" << dendl;
+    return -EINVAL;
+  }
+
   if (r < 0) {
     char buf[80];
     dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
@@ -546,9 +552,11 @@ int FileJournal::read_header()
 
 bufferptr FileJournal::prepare_header()
 {
+  bufferlist bl;
+  ::encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
   bp.zero();
-  memcpy(bp.c_str(), &header, sizeof(header));
+  memcpy(bp.c_str(), bl.c_str(), bl.length());
   return bp;
 }
 
@@ -728,7 +736,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   h.pre_pad = pre_pad;
   h.len = ebl.length();
   h.post_pad = post_pad;
-  h.make_magic(queue_pos, header.fsid);
+  h.make_magic(queue_pos, header.get_fsid64());
 
   bl.append((const char*)&h, sizeof(h));
   if (pre_pad) {
@@ -1144,7 +1152,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   wrap_read_bl(pos, sizeof(*h), hbl);
   h = (entry_header_t *)hbl.c_str();
 
-  if (!h->check_magic(read_pos, header.fsid)) {
+  if (!h->check_magic(read_pos, header.get_fsid64())) {
     dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;
     return false;
   }

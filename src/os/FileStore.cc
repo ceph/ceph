@@ -752,7 +752,7 @@ int FileStore::open_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(*(uint64_t*)&fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
     if (journal)
       journal->logger = logger;
   }
