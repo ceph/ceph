@@ -525,7 +525,7 @@ void OSDSuperblock::encode(bufferlist &bl) const
   __u8 v = 3;
   ::encode(v, bl);
 
-  ::encode(fsid, bl);
+  ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
   ::encode(oldest_map, bl);
@@ -545,7 +545,7 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     string magic;
     ::decode(magic, bl);
   }
-  ::decode(fsid, bl);
+  ::decode(cluster_fsid, bl);
   ::decode(whoami, bl);
   ::decode(current_epoch, bl);
   ::decode(oldest_map, bl);

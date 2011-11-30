@@ -1107,7 +1107,7 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 
 class OSDSuperblock {
 public:
-  uuid_d fsid;
+  uuid_d cluster_fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
@@ -1123,7 +1123,6 @@ public:
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
     mounted(0), clean_thru(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
 
   void encode(bufferlist &bl) const;
@@ -1133,7 +1132,7 @@ WRITE_CLASS_ENCODER(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 {
-  return out << "sb(" << sb.fsid
+  return out << "sb(" << sb.cluster_fsid
              << " osd." << sb.whoami
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"

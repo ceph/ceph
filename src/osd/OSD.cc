@@ -263,7 +263,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
   int ret;
   ObjectStore *store = NULL;
   OSDSuperblock sb;
-  sb.fsid = fsid;
+  sb.cluster_fsid = fsid;
   sb.whoami = whoami;
 
   try {
@@ -1530,9 +1530,9 @@ void OSD::reset_heartbeat_peers()
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
-  if (superblock.fsid != m->fsid) {
+  if (superblock.cluster_fsid != m->fsid) {
     dout(20) << "handle_osd_ping from " << m->get_source_inst()
-	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
+	     << " bad fsid " << m->fsid << " != " << superblock.cluster_fsid << dendl;
     m->put();
     return;
   }
