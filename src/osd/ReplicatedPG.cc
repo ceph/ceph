@@ -1699,7 +1699,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       // falling through
 
     case CEPH_OSD_OP_TRUNCATE:
-      { // truncate
+      if (op.extent.truncate_size > (1ULL << 63)) {
+	dout(10) << " truncate to huge size probably a client bug" << dendl;
+	result = -EINVAL;
+      } else {
+	// truncate
 	if (!obs.exists) {
 	  dout(10) << " object dne, truncate is a no-op" << dendl;
 	  break;
