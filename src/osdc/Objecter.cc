@@ -964,13 +964,15 @@ int Objecter::recalc_op_target(Op *op)
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting << dendl;
       } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
 	// look for a local replica
-	unsigned i;
-	for (i = acting.size()-1; i > 0; i++)
+	int i;
+	for (i = acting.size()-1; i >= 0; --i) {
 	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
-	    op->used_replica = true;
+	    op->used_replica = i; /* only set used_replica if
+	                             local copy is not primary */
 	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
 	    break;
 	  }
+	}
 	osd = acting[i];
       } else
 	osd = acting[0];
