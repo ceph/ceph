@@ -1058,7 +1058,9 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  bool talk_to_cluster = (opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP);
+  bool talk_to_cluster = (opt_cmd != OPT_MAP &&
+			  opt_cmd != OPT_UNMAP &&
+			  opt_cmd != OPT_SHOWMAPPED);
   if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
