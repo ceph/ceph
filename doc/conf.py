@@ -28,6 +28,7 @@ extensions = [
     'breathe',
     ]
 todo_include_todos = True
+graphviz_output_format = 'svg'
 
 def _get_manpages():
     import os

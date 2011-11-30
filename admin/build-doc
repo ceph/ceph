@@ -13,6 +13,8 @@ dia --filter=png-libart --export=doc/overview.png.tmp doc/overview.dia
 
 mv -- doc/overview.png.tmp doc/overview.png
 
+cat src/osd/PG.h src/osd/PG.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
+
 cd build-doc
 
 if [ ! -e virtualenv ]; then
