@@ -65,6 +65,8 @@ int main(int argc, const char **argv)
   bool mkkey = false;
   bool flushjournal = false;
   bool convertfilestore = false;
+  bool get_osd_fsid = false;
+  bool get_cluster_fsid = false;
   std::string dump_pg_log;
 
   std::string val;
@@ -86,6 +88,10 @@ int main(int argc, const char **argv)
       convertfilestore = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-pg-log", (char*)NULL)) {
       dump_pg_log = val;
+    } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid", (char*)NULL)) {
+      get_cluster_fsid = true;
+    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", (char*)NULL)) {
+      get_osd_fsid = true;
     } else {
       ++i;
     }
@@ -213,9 +219,9 @@ int main(int argc, const char **argv)
   }
   
   string magic;
-  uuid_d fsid;
+  uuid_d cluster_fsid, osd_fsid;
   int w;
-  int r = OSD::peek_meta(g_conf->osd_data, magic, fsid, w);
+  int r = OSD::peek_meta(g_conf->osd_data, magic, cluster_fsid, osd_fsid, w);
   if (r < 0) {
     derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
 	 << g_conf->osd_data << ": " << cpp_strerror(-r)
@@ -234,6 +240,15 @@ int main(int argc, const char **argv)
     derr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC
 	 << dendl;
     exit(1);
+  }
+
+  if (get_cluster_fsid) {
+    cout << cluster_fsid << std::endl;
+    exit(0);
+  }
+  if (get_osd_fsid) {
+    cout << osd_fsid << std::endl;
+    exit(0);
   }
 
   pick_addresses(g_ceph_context);
@@ -262,7 +277,7 @@ int main(int argc, const char **argv)
   global_print_banner();
 
   cout << "starting osd." << whoami
-       << " at " << client_messenger->get_ms_addr() 
+       << " at " << client_messenger->get_ms_addr()
        << " osd_data " << g_conf->osd_data
        << " " << ((g_conf->osd_journal.empty()) ?
 		    "(no journal)" : g_conf->osd_journal)
