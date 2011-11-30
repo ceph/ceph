@@ -5234,6 +5234,9 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 	   << " on " << *in << dendl;
 
   assert(pi->is_truncating());
+  assert(pi->truncate_size < (1ULL << 63));
+  assert(pi->truncate_from < (1ULL << 63));
+  assert(pi->truncate_size < pi->truncate_from);
 
   in->auth_pin(this);
 
