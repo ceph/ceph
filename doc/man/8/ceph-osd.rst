@@ -69,6 +69,21 @@ Options
    resize the journal or need to otherwise destroy it: this guarantees
    you won't lose data.
 
+.. option:: --get-cluster-fsid
+
+   Print the cluster fsid (uuid) and exit.
+
+.. option:: --get-osd-fsid
+
+   Print the OSD's fsid and exit.  The OSD's uuid is generated at
+   --mkfs time and is thus unique to a particular instantiation of
+   this OSD.
+
+.. option:: --get-journal-fsid
+
+   Print the journal's uuid.  The journal fsid is set to match the OSD
+   fsid at --mkfs time.
+
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default

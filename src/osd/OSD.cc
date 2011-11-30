@@ -35,6 +35,7 @@
 
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
+#include "os/FileJournal.h"
 
 #include "ReplicatedPG.h"
 
@@ -495,6 +496,13 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
 
   return 0;
 }
+
+int OSD::peek_journal_fsid(string path, uuid_d& fsid)
+{
+  FileJournal j(fsid, 0, 0, path.c_str());
+  return j.peek_fsid(fsid);
+}
+
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, osdmap)

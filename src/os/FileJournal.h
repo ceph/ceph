@@ -30,24 +30,6 @@ public:
   /*
    * journal header
    */
-#if 0
-  struct old_header_t {
-    __u32 version;
-    __u32 flags;
-    uint64_t fsid;
-    __u32 block_size;
-    __u32 alignment;
-    int64_t max_size;   // max size of journal ring buffer
-    int64_t start;      // offset of first entry
-
-    old_header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), start(0) {}
-
-    void clear() {
-      start = block_size;
-    }
-  } __attribute__((__packed__, aligned(4)));
-#endif
-
   struct header_t {
     uint64_t flags;
     uuid_d fsid;
@@ -83,7 +65,7 @@ public:
       ::decode(v, bl);
       if (v < 2) {  // normally 0, but concievably 1
 	// decode old header_t struct (pre v0.40).
-	bl.advance(4); // skip flags (was unused by old code)
+	bl.advance(4); // skip __u32 flags (it was unused by any old code)
 	flags = 0;
 	uint64_t tfsid;
 	::decode(tfsid, bl);
@@ -254,6 +236,7 @@ private:
   int create();
   int open(uint64_t fs_op_seq);
   void close();
+  int peek_fsid(uuid_d& fsid);
 
   void flush();
 
