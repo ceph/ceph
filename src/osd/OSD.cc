@@ -263,8 +263,11 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
   int ret;
   ObjectStore *store = NULL;
   OSDSuperblock sb;
+
   sb.cluster_fsid = fsid;
+
   sb.whoami = whoami;
+  sb.osd_fsid.generate_random();
 
   try {
     store = create_object_store(dev, jdev);

@@ -1107,7 +1107,7 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 
 class OSDSuperblock {
 public:
-  uuid_d cluster_fsid;
+  uuid_d cluster_fsid, osd_fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
@@ -1134,6 +1134,7 @@ inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 {
   return out << "sb(" << sb.cluster_fsid
              << " osd." << sb.whoami
+	     << " " << sb.osd_fsid
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
