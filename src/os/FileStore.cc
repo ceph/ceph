@@ -584,7 +584,6 @@ done:
 
 FileStore::FileStore(const std::string &base, const std::string &jdev) :
   basedir(base), journalpath(jdev),
-  fsid(0),
   btrfs(false),
   btrfs_stable_commits(false),
   blk_size(0),
@@ -753,7 +752,7 @@ int FileStore::open_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
+    journal = new FileJournal(*(uint64_t*)&fsid, &finisher, &sync_cond, journalpath.c_str(), m_journal_dio);
     if (journal)
       journal->logger = logger;
   }
@@ -892,10 +891,13 @@ int FileStore::mkfs()
   }
 
   // fsid
-  srand(time(0) + getpid());
-  fsid = rand();
-  ret = safe_write(fsid_fd, &fsid, sizeof(fsid));
-  if (ret) {
+  fsid.generate_random();
+
+  char fsid_str[40];
+  fsid.print(fsid_str);
+  strcat(fsid_str, "\n");
+  ret = safe_write(fsid_fd, fsid_str, strlen(fsid_str));
+  if (ret < 0) {
     derr << "FileStore::mkfs: failed to write fsid: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
@@ -1002,7 +1004,7 @@ int FileStore::mkjournal()
     derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
     return -err;
   }
-  ret = safe_read(fd, &fsid, sizeof(fsid));
+  ret = read_fsid(fd);
   if (ret < 0) {
     derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
@@ -1027,6 +1029,26 @@ int FileStore::mkjournal()
     journal = 0;
   }
   return ret;
+}
+
+int FileStore::read_fsid(int fd)
+{
+  char fsid_str[40];
+  int ret = safe_read(fd, fsid_str, sizeof(fsid_str));
+  if (ret < 0)
+    return ret;
+  if (ret == 8) {
+    // old 64-bit fsid... mirror it.
+    *(uint64_t*)&fsid.uuid[0] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&fsid.uuid[8] = *(uint64_t*)fsid_str;
+    return 0;
+  }
+
+  if (ret > 36)
+    fsid_str[36] = 0;
+  if (!fsid.parse(fsid_str))
+    return -EINVAL;
+  return 0;
 }
 
 int FileStore::lock_fsid()
@@ -1433,7 +1455,7 @@ int FileStore::mount()
 
   // get fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_RDWR|O_CREAT, 0644);
+  fsid_fd = ::open(buf, O_RDWR, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << "FileStore::mount: error opening '" << buf << "': "
@@ -1441,9 +1463,8 @@ int FileStore::mount()
     goto done;
   }
 
-  fsid = 0;
-  ret = safe_read_exact(fsid_fd, &fsid, sizeof(fsid));
-  if (ret) {
+  ret = read_fsid(fsid_fd);
+  if (ret < 0) {
     derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
 	 << dendl;
     goto close_fsid_fd;
@@ -1725,7 +1746,6 @@ close_basedir_fd:
   TEMP_FAILURE_RETRY(::close(basedir_fd));
   basedir_fd = -1;
 close_fsid_fd:
-  fsid = 0;
   TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
 done:

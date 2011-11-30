@@ -265,9 +265,7 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
   OSDSuperblock sb;
 
   sb.cluster_fsid = fsid;
-
   sb.whoami = whoami;
-  sb.osd_fsid.generate_random();
 
   try {
     store = create_object_store(dev, jdev);
@@ -280,6 +278,8 @@ int OSD::mkfs(const std::string &dev, const std::string &jdev, uuid_d fsid, int 
       derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
+    sb.osd_fsid = store->get_fsid();
+
     ret = store->mount();
     if (ret) {
       derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
@@ -460,10 +460,6 @@ int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_f
   strcat(val, "\n");
   write_meta(base, "ceph_fsid", val, strlen(val));
 
-  osd_fsid.print(val);
-  strcat(val, "\n");
-  write_meta(base, "osd_fsid", val, strlen(val));  
-  
   return 0;
 }
 
@@ -489,7 +485,7 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
     val[36] = 0;
   cluster_fsid.parse(val);
 
-  if (read_meta(dev, "osd_fsid", val, sizeof(val)) < 0)
+  if (read_meta(dev, "fsid", val, sizeof(val)) < 0)
     osd_fsid = uuid_d();
   else {
     if (strlen(val) > 36)

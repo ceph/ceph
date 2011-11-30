@@ -325,7 +325,7 @@ int FileJournal::create()
   int64_t needed_space;
   int ret;
   buffer::ptr bp;
-  dout(2) << "create " << fn << dendl;
+  dout(2) << "create " << fn << " fsid " << fsid << dendl;
 
   ret = _open(true, true);
   if (ret < 0)
@@ -396,7 +396,7 @@ done:
 
 int FileJournal::open(uint64_t fs_op_seq)
 {
-  dout(2) << "open " << fn << " fs_op_seq " << fs_op_seq << dendl;
+  dout(2) << "open " << fn << " fsid " << fsid << " fs_op_seq " << fs_op_seq << dendl;
 
   last_committed_seq = fs_op_seq;
   uint64_t next_seq = fs_op_seq + 1;
@@ -417,8 +417,8 @@ int FileJournal::open(uint64_t fs_op_seq)
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
   if (header.fsid != fsid) {
-    derr << "FileJournal::open: open fsid doesn't match, invalid "
-         << "(someone else's?) journal" << dendl;
+    derr << "FileJournal::open: ondisk fsid " << header.fsid << " doesn't match expected " << fsid
+         << ", invalid (someone else's?) journal" << dendl;
     return -EINVAL;
   }
   if (header.max_size > max_size) {

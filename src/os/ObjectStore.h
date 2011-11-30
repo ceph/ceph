@@ -665,6 +665,7 @@ public:
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};
 
+  virtual uuid_d get_fsid() = 0;
 };
 
 
