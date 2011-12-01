@@ -289,6 +289,9 @@ public:
     h.max = true;
     return h;
   }
+  bool is_max() const {
+    return max;
+  }
 
   filestore_hobject_key_t get_filestore_key() const {
     uint32_t retval = hash;
@@ -317,10 +320,6 @@ public:
     hash = temp.hash;
   }
 
-  operator sobject_t() const {
-    return sobject_t(oid, snap);
-  }
-
   void encode(bufferlist& bl) const {
     __u8 version = 1;
     ::encode(version, bl);
@@ -343,12 +342,22 @@ WRITE_CLASS_ENCODER(hobject_t)
 
 namespace __gnu_cxx {
   template<> struct hash<hobject_t> {
-    size_t operator()(const sobject_t &r) const {
+    size_t operator()(const hobject_t &r) const {
       static hash<object_t> H;
       static rjhash<uint64_t> I;
       return H(r.oid) ^ I(r.snap);
     }
   };
+}
+
+inline ostream& operator<<(ostream& out, const hobject_t& o)
+{
+  if (o.is_max())
+    return out << "MAX";
+  out << o.oid << "/" << o.snap << "/" << std::hex << o.hash << std::dec;
+  if (o.get_key().length())
+    out << "@" << o.get_key();
+  return out;
 }
 
 // sort hobject_t's by <get_filestore_key,name,snapid>
