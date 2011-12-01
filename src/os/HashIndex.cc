@@ -18,6 +18,9 @@
 
 #include "HashIndex.h"
 
+#include "common/debug.h"
+#define DOUT_SUBSYS filestore
+
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";
 
@@ -170,6 +173,7 @@ int HashIndex::_collection_list_partial(const hobject_t &start,
 					hobject_t *next) {
   vector<string> path;
   *next = start;
+  dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
   return list_by_hash(path, min_count, max_count, next, ls);
 }
 
@@ -484,6 +488,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
 				    &objects);
   if (r < 0)
     return r;
+  dout(20) << " prefixes " << hash_prefixes << dendl;
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
