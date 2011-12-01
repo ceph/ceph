@@ -191,6 +191,20 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
   return out;
 }
 
+template<class A,class B>
+inline ostream& operator<<(ostream& out, const multimap<A,B>& m) 
+{
+  out << "{{";
+  for (typename multimap<A,B>::const_iterator it = m.begin();
+       it != m.end();
+       it++) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}}";
+  return out;
+}
+
 
 
 
