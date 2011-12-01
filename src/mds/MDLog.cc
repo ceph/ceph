@@ -497,8 +497,10 @@ void MDLog::_replay_thread()
           int err = 0;
           journaler->reread_head(new C_SafeCond(&mylock, &cond, &done, &err));
           mds->mds_lock.Unlock();
+	  mylock.Lock();
           while (!done)
             cond.Wait(mylock);
+	  mylock.Unlock();
           if (err) { // well, crap
             dout(0) << "got error while reading head: " << cpp_strerror(err)
                     << dendl;
