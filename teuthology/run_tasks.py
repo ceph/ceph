@@ -53,6 +53,11 @@ def run_tasks(tasks, ctx):
                         # if first failure is in an __exit__, we don't
                         # have exc_info set yet
                         exc_info = sys.exc_info()
+
+                    if ctx.config.get('interactive-on-error'):
+                        from .task import interactive
+                        log.warning('Saw failure, going into interactive mode...')
+                        interactive.task(ctx=ctx, config=None)
                 else:
                     if suppress:
                         sys.exc_clear()
