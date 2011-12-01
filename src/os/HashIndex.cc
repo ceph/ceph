@@ -385,7 +385,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 void HashIndex::get_path_components(const hobject_t &hoid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, hoid.get_filestore_key());
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)hoid.get_filestore_key());
 
   // Path components are the hex characters of hoid.hash, least
   // significant first

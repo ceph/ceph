@@ -259,7 +259,7 @@ namespace __gnu_cxx {
   };
 }
 
-typedef uint32_t filestore_hobject_key_t;
+typedef uint64_t filestore_hobject_key_t;
 struct hobject_t {
   object_t oid;
   snapid_t snap;
@@ -293,13 +293,22 @@ public:
     return max;
   }
 
-  filestore_hobject_key_t get_filestore_key() const {
-    uint32_t retval = hash;
+  static uint32_t _reverse_nibbles(uint32_t retval) {
     // reverse nibbles
     retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
     retval = ((retval & 0x00ff00ff) << 8) | ((retval & 0xff00ff00) >> 8);
     retval = ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
     return retval;
+  }
+
+  filestore_hobject_key_t get_filestore_key() const {
+    if (max)
+      return 0x100000000ull;
+    else
+      return _reverse_nibbles(hash);
+  }
+  void set_filestore_key(uint32_t v) {
+    hash = _reverse_nibbles(v);
   }
 
   /* Do not use when a particular hash function is needed */
