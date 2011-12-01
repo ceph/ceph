@@ -48,7 +48,7 @@ void usage()
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
        << "  --dump-journal rank filename\n"
-       << "        dump the MDS journal for rank. Defaults to mds.journal.dump\n"
+       << "        dump the MDS journal for rank.\n"
        << "  --journal-check rank\n"
        << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
