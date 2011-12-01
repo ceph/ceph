@@ -2,26 +2,9 @@
  Architecture of Ceph
 ======================
 
-Ceph is a distributed file system that provides:
+Ceph is a distributed network storage and file system with distributed
+metadata management and POSIX semantics.
 
-  * peta-byte scalability
-  * high availability
-  * high reliability
-  * automatic load and capacity balancing
-  * near-POSIX semantics
-
-and can be accessed via:
-
-  * a kernel mode client (much like NFS)
-  * a user-mode (FUSE) client
-  * a user-mode client library
-
-Ceph is built on top of a Reliable Autonomic Distributed Object Store (RADOS),
-which can be accessed through:
-
-  * 
-
-Both Ceph and RADOS can be accessed:
 RADOS is a reliable object store, used by Ceph, but also directly
 accessible.
 
