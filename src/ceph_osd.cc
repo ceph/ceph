@@ -259,6 +259,8 @@ int main(int argc, const char **argv)
     hb_addr.set_port(0);
   messenger_hbout->bind(hb_addr, getpid());
 
+  global_print_banner();
+
   cout << "starting osd." << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf->osd_data

@@ -208,6 +208,8 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  global_print_banner();
+
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   messenger->bind(g_conf->public_addr, getpid());
   cout << "starting " << g_conf->name << " at " << messenger->get_ms_addr()

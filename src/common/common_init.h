@@ -34,9 +34,6 @@ enum common_init_flags_t {
 
   // Don't close stderr (in daemonize)
   CINIT_FLAG_NO_CLOSE_STDERR = 0x4,
-
-  // no banner on startup
-  CINIT_FLAG_NO_BANNER = 0x8,
 };
 
 /*

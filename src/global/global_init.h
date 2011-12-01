@@ -56,4 +56,9 @@ void global_init_chdir(const CephContext *cct);
  */
 int global_init_shutdown_stderr(CephContext *cct);
 
+/**
+ * print daemon startup banner/warning
+ */
+void global_print_banner(void);
+
 #endif

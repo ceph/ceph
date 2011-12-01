@@ -100,21 +100,22 @@ void global_init(std::vector < const char* >& args,
   block_signals(siglist, NULL);
   install_standard_sighandlers();
 
-  if (code_env == CODE_ENVIRONMENT_DAEMON &&
-      (flags & CINIT_FLAG_NO_BANNER) == 0) {
-    cout << TEXT_YELLOW
-	 << " ** WARNING: Ceph is still under development.  Any feedback can be directed  **"
-	 << TEXT_NORMAL << "\n" << TEXT_YELLOW
-	 << " **          at ceph-devel@vger.kernel.org or http://ceph.newdream.net/.     **"
-	 << TEXT_NORMAL << std::endl;
-    output_ceph_version();
-  }
   if (g_lockdep) {
     cout << TEXT_YELLOW << "*** lockdep is enabled (" << g_lockdep
 	 << ") ***" << TEXT_NORMAL << std::endl;
     lockdep_register_ceph_context(cct);
   }
   register_assert_context(cct);
+}
+
+void global_print_banner(void)
+{
+  cout << TEXT_YELLOW
+       << " ** WARNING: Ceph is still under development.  Any feedback can be directed  **"
+       << TEXT_NORMAL << "\n" << TEXT_YELLOW
+       << " **          at ceph-devel@vger.kernel.org or http://ceph.newdream.net/.     **"
+       << TEXT_NORMAL << std::endl;
+  output_ceph_version();
 }
 
 static void pidfile_remove_void(void)

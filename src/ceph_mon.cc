@@ -342,6 +342,8 @@ int main(int argc, const char **argv)
   SimpleMessenger *messenger = new SimpleMessenger(g_ceph_context);
   int rank = monmap.get_rank(g_conf->name.get_id());
 
+  global_print_banner();
+
   cout << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
        << " mon_data " << g_conf->mon_data
