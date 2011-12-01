@@ -117,8 +117,7 @@ dir_result_t::dir_result_t(Inode *in)
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
-    client_lock("Client::client_lock"),
-  filer_flags(0)
+    client_lock("Client::client_lock")
 {
   // which client am i?
   whoami = m->get_myname().num();
@@ -5144,12 +5143,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   Cond cond;
   bool done = false;
   Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
-  if (in->snapid == CEPH_NOSNAP)
-    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				off, len, bl, 0, onfinish);
-  else
-    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				off, len, bl, 0, onfinish);
+  r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+                              off, len, bl, 0, onfinish);
   if (r == 0) {
     while (!done) 
       cond.Wait(client_lock);
@@ -5180,7 +5175,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     
     int wanted = left;
     filer->read_trunc(in->ino, &in->layout, in->snapid,
-		      pos, left, &tbl, filer_flags,
+		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
 		      onfinish);
     while (!done)
@@ -5349,7 +5344,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		       offset, size, bl, ceph_clock_now(cct), filer_flags,
+		       offset, size, bl, ceph_clock_now(cct), 0,
 		       in->truncate_size, in->truncate_seq,
 		       onfinish, onsafe);
     
@@ -6928,11 +6923,13 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
-  filer_flags |= flags;
+  assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  objecter->add_global_op_flags(flags);
 }
 
 void Client::clear_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
-  filer_flags &= ~flags;
+  assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  objecter->clear_global_op_flag(flags);
 }
