@@ -495,10 +495,9 @@ int crush_do_rule(const struct crush_map *map,
 		if (force >= map->max_devices ||
 		    map->device_parents[force] == 0) {
 			/*dprintk("CRUSH: forcefed device dne\n");*/
-			rc = -1;  /* force fed device dne */
-			goto out;
+			force = -1;  /* force fed device dne */
 		}
-		if (!is_out(map, weight, force, x)) {
+		else if (!is_out(map, weight, force, x)) {
 			while (1) {
 				force_context[++force_pos] = force;
 				if (force >= 0)
