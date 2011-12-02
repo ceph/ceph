@@ -1176,7 +1176,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
   last_update_applied = info.last_update;
 
-  assert(info.last_complete >= log.tail || log.backlog);
+  assert(info.last_complete >= log.tail && !info.is_incomplete());
 
   need_up_thru = false;
 
@@ -1244,9 +1244,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      bool need_old_log_entries = pi.log_tail > pi.last_complete && !pi.log_backlog;
-
-      if (pi.last_update == info.last_update && !need_old_log_entries) {
+      if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.is_empty() && activator_map) {
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
@@ -1260,26 +1258,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       } 
       else {
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
-	if (need_old_log_entries) {
-	  // the replica's tail is after it's last_complete and it has no backlog.
-	  // ick, this shouldn't normally happen.  but we can compensate!
-	  dout(10) << "activate peer osd." << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
-	  if (log.tail <= pi.last_complete) {
-	    // _our_ log is sufficient, phew!
-	    m->log.copy_after(log, pi.last_complete);
-	  } else {
-	    assert(log.backlog);
-	    m->log = log;
-	  }
-	} else if (log.tail > pi.last_update) {
-	  // our tail is too new; send the full backlog.
-	  assert(log.backlog);
-	  m->log = log;
-	} else {
-	  // send new stuff to append to replicas log
-	  assert(info.last_update > pi.last_update);
-	  m->log.copy_after(log, pi.last_update);
-	}
+	assert(log.tail <= pi.last_update);
+	// send new stuff to append to replicas log
+	assert(info.last_update > pi.last_update);
+	m->log.copy_after(log, pi.last_update);
       }
 
       Missing& pm = peer_missing[peer];
