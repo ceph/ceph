@@ -5151,6 +5151,35 @@ int ReplicatedPG::recover_replicas(int max)
   return started;
 }
 
+void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterval *bi)
+{
+  assert(is_locked());
+  dout(10) << "scan_range from " << begin << dendl;
+  bi->begin = begin;
+
+  vector<hobject_t> ls(max);
+  int r = osd->store->collection_list_partial(coll, begin, min, max, &ls, &bi->end);
+  assert(r >= 0);
+
+  for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    ObjectContext *obc = NULL;
+    if (is_primary())
+      obc = _lookup_object_context(*p);
+    if (obc) {
+      bi->objects[*p] = obc->obs.oi.version;
+      dout(20) << "  " << *p << " " << obc->obs.oi.version << dendl;
+    } else {
+      bufferlist bl;
+      int r = osd->store->getattr(coll, *p, OI_ATTR, bl);
+      assert(r >= 0);
+      object_info_t oi(bl);
+      bi->objects[*p] = oi.version;
+      dout(20) << "  " << *p << " " << oi.version << dendl;
+    }
+  }
+}
+
+
 void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid)
 {
   t.remove(coll, soid);
