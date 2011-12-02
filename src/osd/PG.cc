@@ -382,11 +382,10 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   // Check preconditions
 
-  // If our log is empty, the incoming log either needs to have a backlog
-  // or have not been trimmed
-  assert(!log.null() || olog.backlog || olog.tail == eversion_t());
-  // If the logs don't overlap, we need both backlogs
-  assert(log.head >= olog.tail || ((log.backlog || log.null()) && olog.backlog));
+  // If our log is empty, the incoming log needs to have not been trimmed.
+  assert(!log.null() || olog.tail == eversion_t());
+  // The logs must overlap.
+  assert(log.head >= olog.tail && olog.head >= log.tail);
 
   for (map<hobject_t, Missing::item>::iterator i = missing.missing.begin();
        i != missing.missing.end();
@@ -396,168 +395,102 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   bool changed = false;
 
-  if (log.head < olog.tail) {
-    // We need to throw away our log and process the backlogs
-    hash_map<hobject_t, Log::Entry*> old_objects;
-    old_objects.swap(log.objects);
-
-    // swap in other log and index
-    log.log.swap(olog.log);
-    log.index();
-
-    // first, find split point (old log.head) in new log.
-    list<Log::Entry>::iterator p = log.log.end();
-    while (p != log.log.begin()) {
-      p--;
-      if (p->version <= log.head) {
-	dout(10) << "merge_log split point is " << *p << dendl;
-
-	hash_map<hobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
-	if (oldobj != old_objects.end() &&
-	    oldobj->second->version == p->version)
-	  p++;       // move past the split point, if it also exists in our old log...
+  // extend on tail?
+  //  this is just filling in history.  it does not affect our
+  //  missing set, as that should already be consistent with our
+  //  current log.
+  if (olog.tail < log.tail) {
+    dout(10) << "merge_log extending tail to " << olog.tail << dendl;
+    list<Log::Entry>::iterator from = olog.log.begin();
+    list<Log::Entry>::iterator to;
+    for (to = from;
+	 to != olog.log.end();
+	 to++) {
+      if (to->version > log.tail)
+	break;
+      log.index(*to);
+      dout(15) << *to << dendl;
+    }
+    assert(to != olog.log.end() ||
+	   (olog.head == info.last_update));
+      
+    // splice into our log.
+    log.log.splice(log.log.begin(),
+		   olog.log, from, to);
+      
+    info.log_tail = log.tail = olog.tail;
+    info.log_backlog = log.backlog = olog.backlog;
+    changed = true;
+  }
+    
+  // extend on head?
+  if (olog.head > log.head) {
+    dout(10) << "merge_log extending head to " << olog.head << dendl;
+      
+    // find start point in olog
+    list<Log::Entry>::iterator to = olog.log.end();
+    list<Log::Entry>::iterator from = olog.log.end();
+    eversion_t lower_bound = olog.tail;
+    while (1) {
+      if (from == olog.log.begin())
+	break;
+      from--;
+      dout(20) << "  ? " << *from << dendl;
+      if (from->version <= log.head) {
+	dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
+	lower_bound = from->version;
+	from++;
 	break;
       }
     }
-    
-    // then add all new items (_after_ split) to missing
-    for (; p != log.log.end(); p++) {
+
+    // index, update missing, delete deleted
+    for (list<Log::Entry>::iterator p = from; p != to; p++) {
       Log::Entry &ne = *p;
-      dout(20) << "merge_log merging " << ne << dendl;
+      dout(20) << "merge_log " << ne << dendl;
+      log.index(ne);
       missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(coll, ne.soid);
     }
-
-    // find any divergent or removed items in old log.
-    //  skip anything not in the index.
-    for (p = olog.log.begin();
-	 p != olog.log.end();
-	 p++) {
-      Log::Entry &oe = *p;                      // old entry
-      if (old_objects.count(oe.soid) &&
-	  old_objects[oe.soid] == &oe)
-	merge_old_entry(t, oe);
+      
+    // move aside divergent items
+    list<Log::Entry> divergent;
+    while (!log.empty()) {
+      Log::Entry &oe = *log.log.rbegin();
+      /*
+       * look at eversion.version here.  we want to avoid a situation like:
+       *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+       *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+       *  lower_bound = 100'9
+       * i.e, same request, different version.  If the eversion.version is > the
+       * lower_bound, we it is divergent.
+       */
+      if (oe.version.version <= lower_bound.version)
+	break;
+      dout(10) << "merge_log divergent " << oe << dendl;
+      divergent.push_front(oe);
+      log.log.pop_back();
     }
 
-    // Remove objects whose removals we missed
-    for (hash_map<hobject_t, Log::Entry*>::iterator i = old_objects.begin();
-	 i != old_objects.end();
-	 ++i) {
-      if (!log.objects.count(i->first)) {
-	t.remove(coll, i->first);
-      }
-    }
+    // splice
+    log.log.splice(log.log.end(), 
+		   olog.log, from, to);
+    log.index();   
 
+      
     info.last_update = log.head = olog.head;
-    info.log_tail = log.tail = olog.tail;
-    info.log_backlog = log.backlog = olog.backlog;
     if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
       oinfo.stats.reported = info.stats.reported;
     info.stats = oinfo.stats;
+
+    // process divergent items
+    if (!divergent.empty()) {
+      for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+	merge_old_entry(t, *d);
+    }
+
     changed = true;
-  } else {
-    // log.head >= olog.tail, we can do a normal merge
-
-    // extend on tail?
-    //  this is just filling in history.  it does not affect our
-    //  missing set, as that should already be consistent with our
-    //  current log.
-    if (olog.tail < log.tail && !log.backlog) {
-      dout(10) << "merge_log extending tail to " << olog.tail
-               << (olog.backlog ? " +backlog":"")
-	       << dendl;
-      list<Log::Entry>::iterator from = olog.log.begin();
-      list<Log::Entry>::iterator to;
-      for (to = from;
-           to != olog.log.end();
-           to++) {
-        if (to->version > log.tail)
-	  break;
-        log.index(*to);
-        dout(15) << *to << dendl;
-      }
-      assert(to != olog.log.end() ||
-	     (olog.head == info.last_update));
-      
-      // splice into our log.
-      log.log.splice(log.log.begin(),
-                     olog.log, from, to);
-      
-      info.log_tail = log.tail = olog.tail;
-      info.log_backlog = log.backlog = olog.backlog;
-      changed = true;
-    }
-    
-    // extend on head?
-    if (olog.head > log.head) {
-      dout(10) << "merge_log extending head to " << olog.head << dendl;
-      
-      // find start point in olog
-      list<Log::Entry>::iterator to = olog.log.end();
-      list<Log::Entry>::iterator from = olog.log.end();
-      eversion_t lower_bound = olog.tail;
-      while (1) {
-        if (from == olog.log.begin())
-	  break;
-        from--;
-        dout(20) << "  ? " << *from << dendl;
-        if (from->version <= log.head) {
-	  dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
-	  lower_bound = from->version;
-          from++;
-          break;
-        }
-      }
-
-      // index, update missing, delete deleted
-      for (list<Log::Entry>::iterator p = from; p != to; p++) {
-	Log::Entry &ne = *p;
-        dout(20) << "merge_log " << ne << dendl;
-	log.index(ne);
-	missing.add_next_event(ne);
-	if (ne.is_delete())
-	  t.remove(coll, ne.soid);
-      }
-      
-      // move aside divergent items
-      list<Log::Entry> divergent;
-      while (!log.empty()) {
-	Log::Entry &oe = *log.log.rbegin();
-	/*
-	 * look at eversion.version here.  we want to avoid a situation like:
-	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-	 *  lower_bound = 100'9
-	 * i.e, same request, different version.  If the eversion.version is > the
-	 * lower_bound, we it is divergent.
-	 */
-	if (oe.version.version <= lower_bound.version)
-	  break;
-	dout(10) << "merge_log divergent " << oe << dendl;
-	divergent.push_front(oe);
-	log.log.pop_back();
-      }
-
-      // splice
-      log.log.splice(log.log.end(), 
-                     olog.log, from, to);
-      log.index();   
-
-      
-      info.last_update = log.head = olog.head;
-      if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
-	oinfo.stats.reported = info.stats.reported;
-      info.stats = oinfo.stats;
-
-      // process divergent items
-      if (!divergent.empty()) {
-	for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
-	  merge_old_entry(t, *d);
-      }
-
-      changed = true;
-    }
   }
   
   dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
