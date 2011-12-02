@@ -23,6 +23,31 @@ class TestPool(object):
         self.rados.create_pool('foo')
         assert_raises(ObjectExists, self.rados.create_pool, 'foo')
 
+    def list_non_default_pools(self):
+        pools = self.rados.list_pools()
+        pools.remove('data')
+        pools.remove('metadata')
+        pools.remove('rbd')
+        return set(pools)
+
+    def test_list_pools(self):
+        eq(set(), self.list_non_default_pools())
+        self.rados.create_pool('foo')
+        eq(set(['foo']), self.list_non_default_pools())
+        self.rados.create_pool('bar')
+        eq(set(['foo', 'bar']), self.list_non_default_pools())
+        self.rados.create_pool('baz')
+        eq(set(['foo', 'bar', 'baz']), self.list_non_default_pools())
+        self.rados.delete_pool('foo')
+        eq(set(['bar', 'baz']), self.list_non_default_pools())
+        self.rados.delete_pool('baz')
+        eq(set(['bar']), self.list_non_default_pools())
+        self.rados.delete_pool('bar')
+        eq(set(), self.list_non_default_pools())
+        self.rados.create_pool('a' * 500)
+        eq(set(['a' * 500]), self.list_non_default_pools())
+        self.rados.delete_pool('a' * 500)
+
 class TestIoctx(object):
 
     def setUp(self):

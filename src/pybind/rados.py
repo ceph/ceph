@@ -227,6 +227,19 @@ Rados object in state %s." % (self.state))
         if ret < 0:
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
+    def list_pools(self):
+        self.require_state("connected")
+        size = c_size_t(512)
+        while True:
+            c_names = create_string_buffer(size.value)
+            ret = self.librados.rados_pool_list(self.cluster,
+                                                byref(c_names), size)
+            if ret > size.value:
+                size = c_size_t(ret)
+            else:
+                break
+        return filter(lambda name: name != '', c_names.raw.split('\0'))
+
     def open_ioctx(self, ioctx_name):
         self.require_state("connected")
         if not isinstance(ioctx_name, str):
