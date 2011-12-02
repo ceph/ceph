@@ -740,6 +740,7 @@ public:
   void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
+  void do_scan(MOSDPGScan *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);

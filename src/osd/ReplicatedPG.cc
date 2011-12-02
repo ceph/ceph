@@ -28,6 +28,7 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGScan.h"
 
 #include "messages/MOSDPing.h"
 #include "messages/MWatchNotify.h"
@@ -833,6 +834,40 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
   }
 
   sub_op_modify_reply(r);
+}
+
+void ReplicatedPG::do_scan(MOSDPGScan *m)
+{
+  dout(10) << "do_scan " << *m << dendl;
+
+  switch (m->op) {
+  case MOSDPGScan::OP_SCAN_GET_DIGEST:
+    {
+      BackfillInterval bi;
+      scan_range(m->begin, 100, 200, &bi);
+      MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
+					 get_osdmap()->get_epoch(), m->query_epoch,
+					 info.pgid, bi.begin, bi.end);
+      ::encode(bi.objects, reply->get_data());
+      osd->cluster_messenger->send_message(reply, m->get_connection());
+    }
+    break;
+
+  case MOSDPGScan::OP_SCAN_DIGEST:
+    {
+      int from = m->get_source().num();
+      BackfillInterval& bi = peer_backfill_info[from];
+      bi.begin = m->begin;
+      bi.end = m->end;
+      bufferlist::iterator p = m->get_data().begin();
+      ::decode(bi.objects, p);
+
+      finish_recovery_op(bi.begin);
+    }
+    break;
+  }
+  
+  m->put();
 }
 
 /* Returns head of snap_trimq as snap_to_trim and the relevant objects as 

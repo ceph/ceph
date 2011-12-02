@@ -55,6 +55,7 @@ class OSD;
 class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
+class MOSDPGScan;
 class MOSDPGInfo;
 class MOSDPGLog;
 
@@ -1714,6 +1715,7 @@ public:
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
+  virtual void do_scan(MOSDPGScan *op) = 0;
   virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;

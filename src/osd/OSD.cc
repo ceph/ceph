@@ -67,6 +67,7 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGMissing.h"
 
 #include "messages/MOSDAlive.h"
@@ -2871,6 +2872,9 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_PG_MISSING:
 	handle_pg_missing((MOSDPGMissing*)m);
 	break;
+      case MSG_OSD_PG_SCAN:
+	handle_pg_scan((MOSDPGScan*)m);
+	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -4506,6 +4510,44 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
   m->put();
 }
 
+void OSD::handle_pg_scan(MOSDPGScan *m)
+{
+  dout(10) << "handle_pg_scan " << *m << " from " << m->get_source() << dendl;
+  
+  if (!require_osd_peer(m))
+    return;
+  if (!require_same_or_newer_map(m, m->query_epoch))
+    return;
+
+  PG *pg;
+  
+  if (!_have_pg(m->pgid)) {
+    m->put();
+    return;
+  }
+
+  pg = _lookup_lock_pg(m->pgid);
+  assert(pg);
+
+  pg->get();
+  enqueue_op(pg, m);
+  pg->unlock();
+  pg->put();
+}
+
+bool OSD::scan_is_queueable(PG *pg, MOSDPGScan *m)
+{
+  assert(pg->is_locked());
+
+  if (m->query_epoch < pg->info.history.same_interval_since) {
+    dout(10) << *pg << " got old scan, ignoring" << dendl;
+    m->put();
+    return false;
+  }
+
+  return true;
+}
+
 void OSD::handle_pg_missing(MOSDPGMissing *m)
 {
   assert(0); // MOSDPGMissing is fantastical
@@ -5435,6 +5477,11 @@ void OSD::enqueue_op(PG *pg, Message *op)
     // don't care.
     break;
 
+  case MSG_OSD_PG_SCAN:
+    if (!scan_is_queueable(pg, (MOSDPGScan*)op))
+      return;
+    break;
+
   default:
     assert(0 == "enqueued an illegal message type");
   }
@@ -5525,16 +5572,27 @@ void OSD::dequeue_op(PG *pg)
   }
   osd_lock.Unlock();
 
-  if (op->get_type() == CEPH_MSG_OSD_OP) {
+  switch (op->get_type()) {
+  case CEPH_MSG_OSD_OP:
     if (op_is_discardable((MOSDOp*)op))
       op->put();
     else
       pg->do_op((MOSDOp*)op); // do it now
-  } else if (op->get_type() == MSG_OSD_SUBOP) {
+    break;
+
+  case MSG_OSD_SUBOP:
     pg->do_sub_op((MOSDSubOp*)op);
-  } else if (op->get_type() == MSG_OSD_SUBOPREPLY) {
+    break;
+    
+  case MSG_OSD_SUBOPREPLY:
     pg->do_sub_op_reply((MOSDSubOpReply*)op);
-  } else {
+    break;
+
+  case MSG_OSD_PG_SCAN:
+    pg->do_scan((MOSDPGScan*)op);
+    break;
+
+  default:
     assert(0 == "bad message type in dequeue_op");
   }
 
