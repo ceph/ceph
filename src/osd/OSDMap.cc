@@ -1012,8 +1012,8 @@ void OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].crush_ruleset = p->first;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].pg_num = maxosd << pg_bits;
-    pools[pool].pgp_num = maxosd << pgp_bits;
+    pools[pool].pg_num = (maxosd + 1) << pg_bits;
+    pools[pool].pgp_num = (maxosd + 1) << pgp_bits;
     pools[pool].lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].last_change = epoch;
