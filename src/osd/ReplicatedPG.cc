@@ -29,6 +29,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGBackfill.h"
 
 #include "messages/MOSDPing.h"
 #include "messages/MWatchNotify.h"
@@ -844,6 +845,7 @@ void ReplicatedPG::do_scan(MOSDPGScan *m)
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
       BackfillInterval bi;
+      osr.flush();
       scan_range(m->begin, 100, 200, &bi);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
@@ -866,7 +868,57 @@ void ReplicatedPG::do_scan(MOSDPGScan *m)
     }
     break;
   }
-  
+
+  m->put();
+}
+
+void ReplicatedPG::do_backfill(MOSDPGBackfill *m)
+{
+  dout(10) << "do_backfill " << *m << dendl;
+
+  switch (m->op) {
+  case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
+    {
+      assert(get_role() < 0);
+
+      info.incomplete = m->incomplete;
+
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      write_info(*t);
+      int tr = osd->store->queue_transaction(&osr, t);
+      assert(tr == 0);
+    }
+    break;
+
+  case MOSDPGBackfill::OP_BACKFILL_FINISH:
+    {
+      assert(get_role() < 0);
+      info.last_complete = info.last_update;
+      info.incomplete.clear();
+      
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      log.clear();
+      log.head = info.last_update;
+      log.tail = info.last_update;
+      write_log(*t);
+      write_info(*t);
+      int tr = osd->store->queue_transaction(&osr, t);
+      assert(tr == 0);
+
+      MOSDPGBackfill *reply = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
+						 get_osdmap()->get_epoch(), m->query_epoch, info.pgid);
+      osd->cluster_messenger->send_message(reply, m->get_connection());
+    }
+    break;
+
+  case MOSDPGBackfill::OP_BACKFILL_FINISH_ACK:
+    {
+      assert(is_primary());
+      finish_recovery_op(hobject_t::get_max());
+    }
+    break;
+  }
+
   m->put();
 }
 
@@ -3812,6 +3864,21 @@ void ReplicatedPG::send_pull_op(const hobject_t& soid, eversion_t v, bool first,
   osd->logger->inc(l_osd_pull);
 }
 
+void ReplicatedPG::send_remove_op(const hobject_t& oid, eversion_t v, int peer)
+{
+  tid_t tid = osd->get_tid();
+  osd_reqid_t rid(osd->cluster_messenger->get_myname(), 0, tid);
+
+  dout(10) << "send_remove_op " << oid << " from osd." << peer
+	   << " tid " << tid << dendl;
+  
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, oid, false, CEPH_OSD_FLAG_ACK,
+				   get_osdmap()->get_epoch(), tid, v);
+  subop->ops = vector<OSDOp>(1);
+  subop->ops[0].op.op = CEPH_OSD_OP_DELETE;
+
+  osd->cluster_messenger->send_message(subop, get_osdmap()->get_cluster_inst(peer));
+}
 
 /*
  * intelligently push an object to a replica.  make use of existing
@@ -4035,7 +4102,8 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
-      peer_missing[peer].got(soid, pi->version);
+      if (pi->version > peer_info[peer].log_tail)
+	peer_missing[peer].got(soid, pi->version);
       
       pushing[soid].erase(peer);
       pi = NULL;
@@ -4893,13 +4961,23 @@ int ReplicatedPG::start_recovery_ops(int max)
     // second chance to recovery replicas
     started = recover_replicas(max);
   }
+  if (!backfill.empty() && started < max) {
+    started += recover_backfill(max - started);
+  }
 
   dout(10) << " started " << started << dendl;
-
   osd->logger->inc(l_osd_rop, started);
 
-  if (started)
+  if (started || recovery_ops_active > 0)
     return started;
+
+  assert(recovery_ops_active == 0);
+
+  if (backfill.size()) {
+    PG::RecoveryCtx rctx(0, 0, 0, 0, 0);
+    handle_backfill_complete(&rctx);
+    return 0;
+  }
 
   if (is_all_uptodate()) {
     dout(10) << __func__ << ": all OSDs in the PG are up-to-date!" << dendl;
@@ -5186,15 +5264,173 @@ int ReplicatedPG::recover_replicas(int max)
   return started;
 }
 
+int ReplicatedPG::recover_backfill(int max)
+{
+  dout(10) << "recover_backfill (" << max << ")" << dendl;
+  assert(!backfill.empty());
+  
+  // initially just backfill one peer at a time.  FIXME.
+  int peer = *backfill.begin();
+  Info& pinfo = peer_info[peer];
+  BackfillInterval& pbi = peer_backfill_info[peer];
+
+  dout(10) << " peer osd." << peer << " " << pinfo
+	   << " interval " << pbi.begin << "-" << pbi.end << " " << pbi.objects.size() << " objects" << dendl;
+
+  // does the pg exist yet on the peer?
+  if (pinfo.dne()) {
+    // ok, we know they have no objects.
+    pbi.end = hobject_t::get_max();
+
+    // fill in pinfo
+    pinfo.last_update = info.last_update;
+    pinfo.log_tail = info.last_update;
+    pinfo.incomplete.insert(0, 0x100000000ull);
+    pinfo.history = info.history;
+    dout(10) << " peer osd." << peer << " pg dne; setting info to " << pinfo << dendl;
+
+    // create pg on remote
+    MOSDPGInfo *mp = new MOSDPGInfo(get_osdmap()->get_epoch());
+    mp->pg_info.push_back(pinfo);
+    osd->cluster_messenger->send_message(mp, get_osdmap()->get_cluster_inst(peer));
+  }
+
+  int ops = 0;
+  while (ops < max) {
+    if (!backfill_info.at_end() && (backfill_info.end <= pbi.begin ||
+				    backfill_info.empty())) {
+      osr.flush();
+      scan_range(backfill_info.end, 10, 20, &backfill_info);
+    }
+
+    dout(20) << "   my backfill " << backfill_info.begin << "-" << backfill_info.end
+	     << " " << backfill_info.objects << dendl;
+    dout(20) << " peer backfill " << pbi.begin << "-" << pbi.end << " " << pbi.objects << dendl;
+
+    if (!pbi.at_end() && (pbi.end <= backfill_info.begin ||
+			  pbi.empty())) {
+      epoch_t e = get_osdmap()->get_epoch();
+      MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
+				     pbi.end, hobject_t());
+      osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+      start_recovery_op(pbi.end);
+      ops++;
+      break;
+    }
+    
+    if (backfill_info.empty()) {
+      // this only happens when we reach the end of the collection.
+      assert(backfill_info.at_end());
+      if (pbi.empty()) {
+	assert(pbi.at_end());
+	dout(10) << " reached end for both local and peer" << dendl;
+	if (pbi.begin != hobject_t::get_max()) {
+	  pbi.begin = hobject_t::get_max();
+
+	  pinfo.incomplete.clear();
+
+	  epoch_t e = get_osdmap()->get_epoch();
+	  MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
+	  osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+	  start_recovery_op(hobject_t::get_max());
+	  ops++;
+	}
+	return ops;
+      }
+
+      // remove peer objects < backfill_info.end
+      const hobject_t& pf = pbi.objects.begin()->first;
+      eversion_t pv = pbi.objects.begin()->second;
+      assert(pf < backfill_info.end);
+      
+      dout(20) << " removing peer " << pf << " <= local end " << backfill_info.end << dendl;
+      send_remove_op(pf, pv, peer);
+      pbi.pop_front();
+      continue;
+    }
+
+    const hobject_t& my_first = backfill_info.objects.begin()->first;
+    eversion_t mv = backfill_info.objects.begin()->second;
+
+    if (pbi.empty()) {
+      assert(pbi.at_end());
+      dout(20) << " pushing local " << my_first << " " << backfill_info.objects.begin()->second
+	       << " to peer osd." << peer << dendl;
+      push_backfill_object(my_first, mv, peer);
+      backfill_info.pop_front();
+      pbi.begin = my_first;
+      ++ops;
+      continue;
+    }
+
+    const hobject_t& peer_first = pbi.objects.begin()->first;
+    eversion_t pv = pbi.objects.begin()->second;
+
+    if (peer_first < my_first) {
+      dout(20) << " removing peer " << peer_first << " <= local " << my_first << dendl;
+      send_remove_op(peer_first, pv, peer);
+      pbi.pop_front();
+    } else if (peer_first == my_first) {
+      if (pv == mv) {
+	dout(20) << " keeping peer " << peer_first << " " << pv << dendl;
+      } else {
+	dout(20) << " replacing peer " << peer_first << " with local " << mv << dendl;
+	push_backfill_object(my_first, mv, peer);
+	++ops;
+      }
+      pbi.pop_front();
+      backfill_info.pop_front();
+    } else {
+      // peer_first > my_first
+      dout(20) << " pushing local " << my_first << " " << mv
+	       << " to peer osd." << peer << dendl;
+      push_backfill_object(my_first, mv, peer);
+      backfill_info.pop_front();
+      ++ops;
+    }
+  }
+
+  if (!pinfo.incomplete.empty()) {
+    hobject_t b;
+    b.set_filestore_key(pinfo.incomplete.range_start());
+    dout(20) << " b " << b << " pbi.begin " << pbi.begin << " " << pinfo << dendl;
+    if (b < pbi.begin) {
+      pinfo.incomplete.erase(b.get_filestore_key(), pbi.begin.get_filestore_key() - b.get_filestore_key());
+      dout(10) << " peer osd." << peer << " info.incomplete now "
+	       << std::hex << pinfo.incomplete << std::dec << dendl;
+      
+      epoch_t e = get_osdmap()->get_epoch();
+      MOSDPGBackfill *m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
+      m->incomplete = pinfo.incomplete;
+      osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+    }
+  }
+  return ops;
+}
+
+void ReplicatedPG::push_backfill_object(hobject_t oid, eversion_t v, int peer)
+{
+  dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
+  start_recovery_op(oid);
+  ObjectContext *obc = get_object_context(oid, OLOC_BLANK, false);
+  obc->ondisk_read_lock();
+  push_to_replica(obc, oid, peer);
+  obc->ondisk_read_unlock();
+  put_object_context(obc);
+}
+
 void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterval *bi)
 {
   assert(is_locked());
   dout(10) << "scan_range from " << begin << dendl;
   bi->begin = begin;
 
-  vector<hobject_t> ls(max);
+  vector<hobject_t> ls;
+  ls.reserve(max);
   int r = osd->store->collection_list_partial(coll, begin, min, max, &ls, &bi->end);
   assert(r >= 0);
+  dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
+  dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     ObjectContext *obc = NULL;

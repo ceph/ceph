@@ -68,6 +68,7 @@
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGMissing.h"
 
 #include "messages/MOSDAlive.h"
@@ -2875,6 +2876,9 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_PG_SCAN:
 	handle_pg_scan((MOSDPGScan*)m);
 	break;
+      case MSG_OSD_PG_BACKFILL:
+	handle_pg_backfill((MOSDPGBackfill*)m);
+	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -4548,6 +4552,46 @@ bool OSD::scan_is_queueable(PG *pg, MOSDPGScan *m)
   return true;
 }
 
+void OSD::handle_pg_backfill(MOSDPGBackfill *m)
+{
+  dout(10) << "handle_pg_backfill " << *m << " from " << m->get_source() << dendl;
+  
+  if (!require_osd_peer(m))
+    return;
+  if (!require_same_or_newer_map(m, m->query_epoch))
+    return;
+
+  PG *pg;
+  
+  if (!_have_pg(m->pgid)) {
+    m->put();
+    return;
+  }
+
+  pg = _lookup_lock_pg(m->pgid);
+  assert(pg);
+
+  pg->get();
+  enqueue_op(pg, m);
+  pg->unlock();
+  pg->put();
+}
+
+bool OSD::backfill_is_queueable(PG *pg, MOSDPGBackfill *m)
+{
+  assert(pg->is_locked());
+
+  if (m->query_epoch < pg->info.history.same_interval_since) {
+    dout(10) << *pg << " got old backfill, ignoring" << dendl;
+    m->put();
+    return false;
+  }
+
+  return true;
+}
+
+
+
 void OSD::handle_pg_missing(MOSDPGMissing *m)
 {
   assert(0); // MOSDPGMissing is fantastical
@@ -4946,7 +4990,8 @@ void OSD::generate_backlog(PG *pg)
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts(g_ceph_context);
     PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
-    pg->handle_backlog_generated(&rctx);
+    //pg->handle_backlog_generated(&rctx);
+#warning dead code
     do_queries(query_map);
     do_infos(info_map);
     tr = store->queue_transaction(&pg->osr, t,
@@ -5482,6 +5527,11 @@ void OSD::enqueue_op(PG *pg, Message *op)
       return;
     break;
 
+  case MSG_OSD_PG_BACKFILL:
+    if (!backfill_is_queueable(pg, (MOSDPGBackfill*)op))
+      return;
+    break;
+
   default:
     assert(0 == "enqueued an illegal message type");
   }
@@ -5590,6 +5640,10 @@ void OSD::dequeue_op(PG *pg)
 
   case MSG_OSD_PG_SCAN:
     pg->do_scan((MOSDPGScan*)op);
+    break;
+
+  case MSG_OSD_PG_BACKFILL:
+    pg->do_backfill((MOSDPGBackfill*)op);
     break;
 
   default:

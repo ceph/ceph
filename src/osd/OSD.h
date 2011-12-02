@@ -589,6 +589,9 @@ protected:
   void handle_pg_scan(class MOSDPGScan *m);
   bool scan_is_queueable(PG *pg, MOSDPGScan *m);
 
+  void handle_pg_backfill(class MOSDPGBackfill *m);
+  bool backfill_is_queueable(PG *pg, MOSDPGBackfill *m);
+
   void handle_pg_remove(class MOSDPGRemove *m);
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);

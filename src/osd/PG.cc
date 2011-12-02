@@ -3666,8 +3666,8 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
 void PG::proc_primary_info(ObjectStore::Transaction &t, const Info &oinfo)
 {
-  assert(is_replica());
-  assert(is_active());
+  assert(!is_primary());
+  assert(is_stray() || is_active());
   info.stats = oinfo.stats;
 
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
@@ -4093,7 +4093,8 @@ void PG::RecoveryState::Peering::exit() {
 }
 
 /*---------Active---------*/
-PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx)
+{
   state_name = "Started/Primary/Active";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -4108,8 +4109,8 @@ PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx) {
   dout(10) << "Activate Finished" << dendl;
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active advmap" << dendl;
   if (!pg->pool->newly_removed_snaps.empty()) {
@@ -4120,8 +4121,8 @@ PG::RecoveryState::Active::react(const AdvMap& advmap) {
   return forward_event();
 }
     
-boost::statechart::result 
-PG::RecoveryState::Active::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active: handling ActMap" << dendl;
   assert(pg->is_active());
@@ -4157,8 +4158,8 @@ PG::RecoveryState::Active::react(const ActMap&) {
   return forward_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const MNotifyRec& notevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& notevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_active());
   assert(pg->is_primary());
@@ -4178,8 +4179,8 @@ PG::RecoveryState::Active::react(const MNotifyRec& notevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->is_active());
   assert(pg->is_primary());
@@ -4203,8 +4204,8 @@ PG::RecoveryState::Active::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Active::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt)
+{
   dout(10) << "searching osd." << logevt.from
            << " log for unfound items" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
@@ -4215,7 +4216,22 @@ PG::RecoveryState::Active::react(const MLogRec& logevt) {
   return discard_event();
 }
 
-void PG::RecoveryState::Active::exit() {
+boost::statechart::result PG::RecoveryState::Active::react(const BackfillComplete& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+
+  int newest_update_osd;
+  if (!pg->choose_acting(newest_update_osd, pg->backfill)) {
+    post_event(NeedNewMap());
+  } else {
+    assert(0 == "we shouldn't get here");
+  }
+
+  return discard_event();
+}
+
+void PG::RecoveryState::Active::exit()
+ {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -4294,14 +4310,13 @@ boost::statechart::result
 PG::RecoveryState::Stray::react(const MLogRec& logevt) {
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
-  dout(10) << "received log from " << logevt.from << dendl;
+  dout(10) << "got log from osd." << logevt.from << dendl;
   pg->merge_log(*context<RecoveryMachine>().get_cur_transaction(),
 		msg->info, msg->log, logevt.from);
 
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
   assert(pg->log.head == pg->info.last_update);
 
-  dout(10) << "activating!" << dendl;
   post_event(Activate());
   return discard_event();
 }
@@ -4309,12 +4324,22 @@ PG::RecoveryState::Stray::react(const MLogRec& logevt) {
 boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "received info from " << infoevt.from << dendl;
-  assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
-  assert(pg->log.head == pg->info.last_update);
+  dout(10) << "got info from osd." << infoevt.from << dendl;
 
-  dout(10) << "activating!" << dendl;
-  post_event(Activate());
+  if (pg->is_replica()) {
+    assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+    assert(pg->log.head == pg->info.last_update);
+    post_event(Activate());
+  } else {
+    // pg creation for backfill
+    dout(10) << "updating info to " << infoevt.info << dendl;
+    pg->info = infoevt.info;
+
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    pg->write_info(*t);
+    int tr = pg->osd->store->queue_transaction(&pg->osr, t);
+    assert(tr == 0);
+  }
   return discard_event();
 }
 
@@ -4742,11 +4767,11 @@ void PG::RecoveryState::handle_activate_map(RecoveryCtx *rctx)
   end_handle();
 }
 
-void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
+void PG::RecoveryState::handle_backfill_complete(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_backlog_generated" << dendl;
+  dout(10) << "handle_backfill_complete" << dendl;
   start_handle(rctx);
-  //machine.process_event(BacklogComplete());
+  machine.process_event(BackfillComplete());
   end_handle();
 }
 

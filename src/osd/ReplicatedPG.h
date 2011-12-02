@@ -611,6 +611,7 @@ protected:
   int start_recovery_ops(int max);
   int recover_primary(int max);
   int recover_replicas(int max);
+  int recover_backfill(int max);
 
   /**
    * scan a (hash) range of objects in the current pg
@@ -621,6 +622,10 @@ protected:
    * @bi [out] resulting map of objects to eversion_t's
    */
   void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
+
+  void push_backfill_object(hobject_t oid, eversion_t v, int peer);
+  void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
+
 
   void dump_watchers(ObjectContext *obc);
   void remove_watcher(ObjectContext *obc, entity_name_t entity);
@@ -741,6 +746,7 @@ public:
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
   void do_scan(MOSDPGScan *op);
+  void do_backfill(MOSDPGBackfill *op);
   bool get_obs_to_trim(snapid_t &snap_to_trim,
 		       coll_t &col_to_trim,
 		       vector<hobject_t> &obs_to_trim);

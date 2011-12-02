@@ -56,6 +56,7 @@ class MOSDOp;
 class MOSDSubOp;
 class MOSDSubOpReply;
 class MOSDPGScan;
+class MOSDPGBackfill;
 class MOSDPGInfo;
 class MOSDPGLog;
 
@@ -175,7 +176,7 @@ public:
     eversion_t log_tail;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
-    interval_set<__u32> incomplete;  // incomplete hash ranges prior to last_complete
+    interval_set<uint64_t> incomplete;  // incomplete hash ranges prior to last_complete
 
     interval_set<snapid_t> purged_snaps;
 
@@ -997,6 +998,9 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
+    struct BackfillComplete : boost::statechart::event< BackfillComplete > {
+      BackfillComplete() : boost::statechart::event< BackfillComplete >() {}
+    };
     struct ActMap : boost::statechart::event< ActMap > {
       ActMap() : boost::statechart::event< ActMap >() {}
     };
@@ -1205,13 +1209,15 @@ public:
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::custom_reaction< MLogRec >
+	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< BackfillComplete >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const BackfillComplete&);
     };
 
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started >, NamedState {
@@ -1336,7 +1342,7 @@ public:
 			    vector<int>& newup, vector<int>& newacting, 
 			    RecoveryCtx *ctx);
     void handle_activate_map(RecoveryCtx *ctx);
-    void handle_backlog_generated(RecoveryCtx *ctx);
+    void handle_backfill_complete(RecoveryCtx *ctx);
     void handle_create(RecoveryCtx *ctx);
     void handle_loaded(RecoveryCtx *ctx);
   } recovery_state;
@@ -1361,14 +1367,15 @@ protected:
     // info about a backfill interval on a peer
     map<hobject_t,eversion_t> objects;
     hobject_t begin, end;
-
+    
+    /// true if there are no objects in this interval
     bool empty() {
       return objects.empty();
     }
 
-    /// true if interval starts at end of range
+    /// true if interval extends to the end of the range
     bool at_end() {
-      return begin == hobject_t::get_max();
+      return end == hobject_t::get_max();
     }
 
     /// drop first entry, and adjust @begin accordingly
@@ -1381,6 +1388,9 @@ protected:
 	begin = objects.begin()->first;
     }
   };
+  
+  BackfillInterval backfill_info;
+  map<int,BackfillInterval> peer_backfill_info;
 
   epoch_t last_peering_reset;
 
@@ -1700,8 +1710,8 @@ public:
   void handle_activate_map(RecoveryCtx *rctx) {
     recovery_state.handle_activate_map(rctx);
   }
-  void handle_backlog_generated(RecoveryCtx *rctx) {
-    recovery_state.handle_backlog_generated(rctx);
+  void handle_backfill_complete(RecoveryCtx *rctx) {
+    recovery_state.handle_backfill_complete(rctx);
   }
   void handle_create(RecoveryCtx *rctx) {
     recovery_state.handle_create(rctx);
@@ -1716,6 +1726,7 @@ public:
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
   virtual void do_scan(MOSDPGScan *op) = 0;
+  virtual void do_backfill(MOSDPGBackfill *op) = 0;
   virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
@@ -1769,7 +1780,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
     if (!pgi.incomplete.empty())
-      out << " incomp " << pgi.incomplete;
+      out << " incomp " << std::hex << pgi.incomplete << std::dec;
   }
   //out << " c " << pgi.epoch_created;
   out << " n=" << pgi.stats.stats.sum.num_objects;
