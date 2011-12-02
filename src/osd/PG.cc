@@ -3578,7 +3578,9 @@ std::ostream& operator<<(std::ostream& oss,
 		     << "state<" << get_state_name() << ">: ")
 
 /*------Crashed-------*/
-PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Crashed::Crashed(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Crashed";
   context< RecoveryMachine >().log_enter(state_name);
   assert(0 == "we got a bad state machine event");
@@ -3586,48 +3588,53 @@ PG::RecoveryState::Crashed::Crashed(my_context ctx) : my_base(ctx) {
 
 
 /*------Initial-------*/
-PG::RecoveryState::Initial::Initial(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Initial::Initial(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Initial";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MNotifyRec& notify) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(notify.from, notify.info);
   return transit< Primary >();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MInfoRec& i) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MInfoRec& i)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Initial::react(const MLogRec& i) {
+boost::statechart::result PG::RecoveryState::Initial::react(const MLogRec& i)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-void PG::RecoveryState::Initial::exit() {
+void PG::RecoveryState::Initial::exit()
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->set_last_peering_reset();
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Started-------*/
-PG::RecoveryState::Started::Started(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Started::Started(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Started";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Started::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap)
+{
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
@@ -3638,20 +3645,23 @@ PG::RecoveryState::Started::react(const AdvMap& advmap) {
   return discard_event();
 }
 
-void PG::RecoveryState::Started::exit() {
+void PG::RecoveryState::Started::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*--------Reset---------*/
-PG::RecoveryState::Reset::Reset(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Reset::Reset(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->set_last_peering_reset();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Reset::react(const AdvMap& advmap) {
+boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Reset advmap" << dendl;
   if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
@@ -3662,8 +3672,8 @@ PG::RecoveryState::Reset::react(const AdvMap& advmap) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Reset::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -3672,12 +3682,15 @@ PG::RecoveryState::Reset::react(const ActMap&) {
   return transit< Started >();
 }
 
-void PG::RecoveryState::Reset::exit() {
+void PG::RecoveryState::Reset::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*-------Start---------*/
-PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Start::Start(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Start";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -3691,7 +3704,8 @@ PG::RecoveryState::Start::Start(my_context ctx) : my_base(ctx) {
   }
 }
 
-void PG::RecoveryState::Start::exit() {
+void PG::RecoveryState::Start::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -3717,16 +3731,15 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
+{
   dout(7) << "handle ActMap primary" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   pg->update_stats();
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Primary::react(const AdvMap& advmap) 
+boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap& advmap) 
 {
   PG *pg = context< RecoveryMachine >().pg;
   OSDMapRef osdmap = advmap.osdmap;
@@ -3744,13 +3757,15 @@ PG::RecoveryState::Primary::react(const AdvMap& advmap)
   return forward_event();
 }
 
-void PG::RecoveryState::Primary::exit() {
+void PG::RecoveryState::Primary::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
-  : my_base(ctx) {
+  : my_base(ctx)
+{
   state_name = "Started/Primary/Peering";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -3777,13 +3792,15 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   return forward_event();
 }
 
-void PG::RecoveryState::Peering::exit() {
+void PG::RecoveryState::Peering::exit()
+{
   dout(10) << "Leaving Peering" << dendl;
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*---------Active---------*/
-PG::RecoveryState::Active::Active(my_context ctx) : my_base(ctx)
+PG::RecoveryState::Active::Active(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Active";
   context< RecoveryMachine >().log_enter(state_name);
@@ -3927,7 +3944,8 @@ void PG::RecoveryState::Active::exit()
 
 /*------ReplicaActive-----*/
 PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
-  : my_base(ctx) {
+  : my_base(ctx)
+{
   state_name = "Started/ReplicaActive";
 
   context< RecoveryMachine >().log_enter(state_name);
@@ -3940,16 +3958,16 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   dout(10) << "Activate Finished" << dendl;
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
 			infoevt.info);
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
   dout(10) << "received log from " << logevt.from << dendl;
@@ -3962,8 +3980,8 @@ PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt) {
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::ReplicaActive::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -3972,15 +3990,16 @@ PG::RecoveryState::ReplicaActive::react(const ActMap&) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::ReplicaActive::react(const MQuery& query) {
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& query)
+{
   PG *pg = context< RecoveryMachine >().pg;
   assert(query.query.type == Query::MISSING);
   pg->fulfill_log(query.from, query.query, query.query_epoch);
   return discard_event();
 }
 
-void PG::RecoveryState::ReplicaActive::exit() {
+void PG::RecoveryState::ReplicaActive::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -3996,8 +4015,8 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_primary());
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   MOSDPGLog *msg = logevt.msg;
   dout(10) << "got log from osd." << logevt.from << dendl;
@@ -4046,8 +4065,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
   return discard_event();
 }
 
-boost::statechart::result
-PG::RecoveryState::Stray::react(const ActMap&) {
+boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_stray() && pg->get_primary() >= 0) {
     context< RecoveryMachine >().send_notify(pg->get_primary(),
@@ -4056,12 +4075,14 @@ PG::RecoveryState::Stray::react(const ActMap&) {
   return discard_event();
 }
 
-void PG::RecoveryState::Stray::exit() {
+void PG::RecoveryState::Stray::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*--------GetInfo---------*/
-PG::RecoveryState::GetInfo::GetInfo(my_context ctx) : my_base(ctx) 
+PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
+  : my_base(ctx) 
 {
   state_name = "Started/Primary/Peering/GetInfo";
   context< RecoveryMachine >().log_enter(state_name);
@@ -4135,7 +4156,8 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
-void PG::RecoveryState::GetInfo::exit() {
+void PG::RecoveryState::GetInfo::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
@@ -4185,8 +4207,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 					Query(Query::LOG, request_log_from, pg->info.history));
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
+{
   assert(!msg);
   if (logevt.from != newest_update_osd) {
     dout(10) << "GetLog: discarding log from "
@@ -4201,8 +4223,8 @@ PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const GotLog&) {
+boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
+{
   dout(10) << "leaving GetLog" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (msg) {
@@ -4214,44 +4236,51 @@ PG::RecoveryState::GetLog::react(const GotLog&) {
   return transit< GetMissing >();
 }
 
-void PG::RecoveryState::GetLog::exit() {
+void PG::RecoveryState::GetLog::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
-PG::RecoveryState::GetLog::~GetLog() {
+PG::RecoveryState::GetLog::~GetLog()
+{
   if (msg)
     msg->put();
 }
 
 /*------WaitActingChange--------*/
-PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx) : my_base(ctx)
+PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt) {
+boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)
+{
   dout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
   return discard_event();
 }
 
-void PG::RecoveryState::WaitActingChange::exit() {
+void PG::RecoveryState::WaitActingChange::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------Incomplete--------*/
-PG::RecoveryState::Incomplete::Incomplete(my_context ctx) : my_base(ctx)
+PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/Incomplete";
   context< RecoveryMachine >().log_enter(state_name);
 }
-void PG::RecoveryState::Incomplete::exit() {
+void PG::RecoveryState::Incomplete::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------GetMissing--------*/
-PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
+PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/GetMissing";
   context< RecoveryMachine >().log_enter(state_name);
@@ -4320,18 +4349,21 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   return discard_event();
 };
 
-void PG::RecoveryState::GetMissing::exit() {
+void PG::RecoveryState::GetMissing::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
 /*------WaitUpThru--------*/
-PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx) : my_base(ctx)
+PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
+  : my_base(ctx)
 {
   state_name = "Started/Primary/Peering/WaitUpThru";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am) {
+boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (!pg->need_up_thru) {
     post_event(Activate());
@@ -4356,7 +4388,8 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
   return discard_event();
 }
 
-void PG::RecoveryState::WaitUpThru::exit() {
+void PG::RecoveryState::WaitUpThru::exit()
+{
   context< RecoveryMachine >().log_exit(state_name, enter_time);
 }
 
