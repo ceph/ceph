@@ -4727,8 +4727,8 @@ void ReplicatedPG::on_change()
   context_registry_on_change();
 
   // take object waiters
-  take_object_waiters(waiting_for_missing_object);
-  take_object_waiters(waiting_for_degraded_object);
+  requeue_object_waiters(waiting_for_missing_object);
+  requeue_object_waiters(waiting_for_degraded_object);
 
   // clear pushing/pulling maps
   pushing.clear();

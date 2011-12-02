@@ -2468,7 +2468,7 @@ void PG::adjust_local_snaps()
   }
 }
 
-void PG::take_object_waiters(map<hobject_t, list<Message*> >& m)
+void PG::requeue_object_waiters(map<hobject_t, list<Message*> >& m)
 {
   for (map<hobject_t, list<Message*> >::iterator it = m.begin();
        it != m.end();

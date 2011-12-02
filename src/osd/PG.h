@@ -1373,7 +1373,7 @@ protected:
   map<eversion_t,list<Message*> > waiting_for_ondisk;
   map<eversion_t,class MOSDOp*>   replay_queue;
 
-  void take_object_waiters(map<hobject_t, list<Message*> >& m);
+  void requeue_object_waiters(map<hobject_t, list<Message*> >& m);
   
   bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
