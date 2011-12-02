@@ -585,6 +585,12 @@ int read_header_bl(IoCtx& io_ctx, const string& md_oid, bufferlist& header, uint
     header.claim_append(bl);
    } while (r == READ_SIZE);
 
+  if (memcmp(RBD_HEADER_TEXT, header.c_str(), sizeof(RBD_HEADER_TEXT))) {
+    CephContext *cct = io_ctx.cct();
+    lderr(cct) << "unrecognized header format" << dendl;
+    return -ENXIO;
+  }
+
   if (ver)
     *ver = io_ctx.get_last_version();
 
