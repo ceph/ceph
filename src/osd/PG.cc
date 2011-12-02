@@ -132,25 +132,6 @@ A     B     C
   return true;
 }
 
-void PG::Log::copy_non_backlog(const Log &other)
-{
-  if (other.backlog) {
-    head = other.head;
-    tail = other.tail;
-    for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
-         i != other.log.rend();
-         i++) 
-      if (i->version > tail)
-        log.push_front(*i);
-      else
-        break;
-  } else {
-    *this = other;
-  }
-}
-
-
-
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
 {
   if (backlog && s < tail)
@@ -3191,7 +3172,7 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
   }
   else if (query.type == PG::Query::FULLLOG) {
     dout(10) << " sending info+missing+full log" << dendl;
-    mlog->log.copy_non_backlog(log);
+    mlog->log = log;
   }
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
