@@ -4406,7 +4406,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
     const Info& pi = pg->peer_info[*i];
 
     if (pi.is_empty())
-      continue;                                // Does not have the PG yet
+      continue;                                // no pg data, nothing divergent
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
 	pi.last_update == pg->info.last_update) {  // peer is up to date
@@ -4423,20 +4423,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx) : my_base(ctx)
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
     eversion_t since(pi.history.last_epoch_started, 0);
-    if (pi.last_update < pg->info.log_tail) {
-      // Replica needs to generate a backlog for merge_log to catch deletions
-      dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
-    } else if (pi.log_tail <= since) {
+    assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
+    if (pi.log_tail <= since) {
       dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
       context< RecoveryMachine >().send_query(*i, Query(Query::LOG, since, pg->info.history));
-    } else if (pi.log_backlog) {
-      dout(10) << " requesting backlog+missing from osd." << *i
-	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
-	       << dendl;
-      context< RecoveryMachine >().send_query(*i, Query(Query::BACKLOG, pg->info.history));
     } else {
-      // hmm, is this case valid?
       dout(10) << " requesting fulllog+missing from osd." << *i
 	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
 	       << dendl;
