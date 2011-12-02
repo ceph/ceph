@@ -1126,7 +1126,6 @@ void PG::clear_primary_state()
   dout(10) << "clear_primary_state" << dendl;
 
   // clear peering state
-  have_master_log = false;
   stray_set.clear();
   peer_log_requested.clear();
   peer_backlog_requested.clear();
@@ -1155,50 +1154,174 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 }
 
-bool PG::choose_acting(int newest_update_osd) const
+/**
+ * calculate the desired acting set.
+ *
+ * Choose an appropriate acting set.  Prefer up[0], unless it is
+ * incomplete, or another osd has a longer tail that allows us to
+ * bring other up nodes up to date.
+ */
+void PG::calc_acting(int& newest_update_osd_id, vector<int>& want, set<int>& backfill) const
 {
-  vector<int> want;
-
   map<int, Info> all_info(peer_info.begin(), peer_info.end());
   all_info[osd->whoami] = info;
 
-  const Info &best_info = all_info.find(newest_update_osd)->second;
-  dout(10) << "choose_acting best_info is " << best_info
-	   << " from osd." << newest_update_osd << dendl;
-  for (vector<int>::const_iterator i = up.begin();
-       i != up.end();
-       ++i) {
-    const Info &cur_info = all_info.find(*i)->second;
-    if (best_info.log_tail <= cur_info.last_update || best_info.log_backlog) {
-      // Can be brought up to date without stopping to generate a backlog
-      want.push_back(*i);
-      dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
-    } else {
-      dout(10) << " osd." << *i << " (up) REJECTED " << cur_info << dendl;
+  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
+    dout(10) << "choose_acting osd." << p->first << " " << p->second << dendl;
+  }
+
+  // find osd with newest last_update.  if there are multiples, prefer
+  //  - a longer tail, if it brings another peer into log contiguity
+  //  - the current primary
+  map<int,Info>::iterator newest_update_osd = all_info.find(osd->whoami);
+  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
+    if (p->second.last_update < newest_update_osd->second.last_update)
+      continue;
+    if (p->second.last_update > newest_update_osd->second.last_update) {
+      newest_update_osd = p;
+      continue;
+    }
+    // prefer longer tail, if it will bring another peer in log contiguity
+    if (p->second.log_tail < newest_update_osd->second.log_tail) {
+      bool worse = false;
+      for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
+	if (q->second.is_incomplete())
+	  continue;  // don't care about log contiguity
+	if (q->second.last_update < newest_update_osd->second.log_tail &&
+	    q->second.last_update >= p->second.log_tail) {
+	  dout(10) << "choose_acting prefer osd." << p->first
+		   << " because it brings osd." << q->first << " into log contiguity" << dendl;
+	  newest_update_osd = p;
+	  continue;
+	}
+	if (q->second.last_update < p->second.log_tail &&
+	    q->second.last_update >= newest_update_osd->second.log_tail) {
+	  worse = true;
+	  break;
+	}
+      }
+      if (worse)
+	continue;
+    }
+    // prefer current primary (usually the caller), all things being equal
+    if (p->first == acting[0]) {
+      dout(10) << "choose_acting prefer osd." << p->first
+	       << " because it is current primary" << dendl;
+      newest_update_osd = p;
+      continue;
+    }
+  }
+  dout(10) << "choose_acting newest update on osd." << newest_update_osd->first
+	   << " with " << newest_update_osd->second << dendl;
+  newest_update_osd_id = newest_update_osd->first;
+  
+  // select primary
+  map<int,Info>::iterator primary;
+  if (up.size()) {
+    primary = all_info.find(up[0]);         // prefer up[0], all thing being equal
+  } else {
+    assert(acting.size());
+    primary = all_info.find(acting[0]);     // or the status quo
+  }
+  for (map<int,Info>::iterator p = all_info.begin(); p != all_info.end(); ++p) {
+    if (p == primary)
+      continue;
+    // require complete
+    if (p->second.is_incomplete())
+      continue;
+    if (primary->second.is_incomplete()) {
+      dout(10) << "choose_acting prefer osd." << p->first << " because not incomplete" << dendl;
+      primary = p;
+      continue;
+    }
+    // require log continuity with newest_update_osd
+    if (p->second.last_update < newest_update_osd->second.log_tail)
+      continue;
+    if (primary->second.last_update < newest_update_osd->second.log_tail) {
+      dout(10) << "choose_acting prefer osd." << p->first
+	       << " because log contiguous with newest osd." << newest_update_osd->first << dendl;
+      primary = p;
+      continue;
+    }
+    // prefer longer tail, if it will bring another peer in log contiguity
+    if (p->second.log_tail < primary->second.log_tail) {
+      for (map<int,Info>::iterator q = all_info.begin(); q != all_info.end(); ++q) {
+	if (!q->second.is_incomplete() &&
+	    q->second.last_update < primary->second.log_tail &&
+	    q->second.last_update >= p->second.log_tail) {
+	  dout(10) << "choose_acting prefer osd." << p->first
+		   << " because it brings osd." << q->first << " into log contiguity" << dendl;
+	  primary = p;
+	  continue;
+	}
+      }
     }
   }
 
-  for (map<int, Info>::const_iterator i = all_info.begin();
+  if (primary->second.is_incomplete() ||
+      primary->second.last_update < newest_update_osd->second.log_tail) {
+    dout(10) << "choose_acting no acceptable primary, reverting to up " << up << dendl;
+    want = up;
+    return;
+  }
+
+  dout(10) << "choose_acting primary is osd." << primary->first
+	   << " with " << primary->second << dendl;
+  want.push_back(primary->first);
+
+  // select replicas that have log contiguity with primary
+  for (vector<int>::const_iterator i = up.begin();
+       i != up.end();
+       ++i) {
+    if (want.size() >= get_osdmap()->get_pg_size(info.pgid))
+      break;
+    if (*i == primary->first)
+      continue;
+    const Info &cur_info = all_info.find(*i)->second;
+    if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
+      dout(10) << " osd." << *i << " (up) REJECTED " << cur_info << dendl;
+      backfill.insert(*i);
+    } else {
+      want.push_back(*i);
+      dout(10) << " osd." << *i << " (up) accepted " << cur_info << dendl;
+    }
+  }
+
+  for (map<int,Info>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
     if (want.size() >= get_osdmap()->get_pg_size(info.pgid))
       break;
 
+    // skip up osds we already considered above
+    if (i->first == primary->first)
+      continue;
     vector<int>::const_iterator up_it = find(up.begin(), up.end(), i->first);
     if (up_it != up.end())
       continue;
 
-    if (best_info.log_tail <= i->second.last_update || best_info.log_backlog) {
-      // Can be brought up to date without stopping to generate a backlog
+    if (i->second.is_incomplete() || i->second.last_update < primary->second.log_tail) {
+      dout(10) << " osd." << i->first << " (stray) REJECTED " << i->second << dendl;
+    } else {
       want.push_back(i->first);
       dout(10) << " osd." << i->first << " (stray) accepted " << i->second << dendl;
-    } else {
-      dout(10) << " osd." << i->first << " (stray) REJECTED " << i->second << dendl;
     }
   }
+}
+
+/**
+ * choose acting
+ *
+ * calculate the desired acting, and request a change with the monitor
+ * if it differs from the current acting.
+ */
+bool PG::choose_acting(int& newest_update_osd, set<int>& backfill)
+{
+  vector<int> want;
+  calc_acting(newest_update_osd, want, backfill);
 
   if (want != acting) {
-    dout(10) << "choose_acting  want " << want << " != acting " << acting
+    dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     if (want == up) {
       vector<int> empty;
@@ -1208,116 +1331,6 @@ bool PG::choose_acting(int newest_update_osd) const
     return false;
   }
   dout(10) << "choose_acting want " << want << " (== acting)" << dendl;
-  return true;
-}
-
-bool PG::choose_log_location(const PriorSet &prior_set,
-			     bool &need_backlog,
-			     bool &wait_on_backlog,
-			     int &pull_from,
-			     eversion_t &newest_update,
-			     eversion_t &oldest_update) const
-{
-  pull_from = -1;
-  const Info *best_info = NULL;
-  need_backlog = false;
-  wait_on_backlog = false;
-  map<int, Info> all_info(peer_info.begin(), peer_info.end());
-  all_info[osd->whoami] = info;
-
-  for (map<int, Info>::const_iterator i = all_info.begin();
-       i != all_info.end();
-       ++i) {
-    if (prior_set.probe.find(i->first) == prior_set.probe.end()) {
-      dout(10) << "osd." << i->first << " not in current prior set, skipping" << dendl;
-      continue;
-    }
-
-    // We always want the latest last update, but we prefer one that
-    // has a backlog. If last update and backlog status are the same,
-    // prefer the one with the longer log.
-    if (!best_info ||
-	i->second.last_update > best_info->last_update ||
-	((i->second.last_update == best_info->last_update) &&
-	 (((i->second.log_tail < best_info->log_tail &&
-	   (i->second.log_backlog || !best_info->log_backlog))) ||
-	  (i->second.log_backlog && !best_info->log_backlog)))) {
-      best_info = &(i->second);
-      pull_from = i->first;
-      newest_update = i->second.last_update;
-    }
-    if (oldest_update > i->second.last_update) {
-      oldest_update = i->second.last_update;
-    }
-  }
-
-  dout(10) << "choose_log_location newest_update " << newest_update
-	   << " on osd." << pull_from << dendl;
-
-  if (!choose_acting(pull_from)) {
-    return false;
-  }
-
-  for (vector<int>::const_iterator it = ++acting.begin();
-       it != acting.end();
-       ++it) {
-    const Info &pi = peer_info.find(*it)->second;
-    if (best_info->log_tail > pi.last_update) {
-      wait_on_backlog = true;
-      need_backlog = true;
-    }
-  }
-
-  for (vector<int>::const_iterator it = up.begin();
-       it != up.end();
-       ++it) {
-    if (*it == osd->whoami) continue;
-    const Info &pi = peer_info.find(*it)->second;
-
-    vector<int>::const_iterator acting_it = find(acting.begin(), acting.end(), *it);
-    if (acting_it != acting.end())
-      continue;
-
-    if (pi.last_update < best_info->log_tail) {
-      dout(10) << "must generate backlog for up but !acting peer osd." << *it
-	       << " whose last_update " << pi.last_update
-	       << " < best_info->tail " << best_info->log_tail << dendl;
-      need_backlog = true;
-    }
-  }
-
-  // check our own info -- we aren't in peer_info
-  if (best_info->log_tail > info.last_update) {
-    wait_on_backlog = true;
-    need_backlog = true;
-  }
-
-  // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
-  if (info.last_complete < info.log_tail && !info.log_backlog) {
-    dout(10) << "must generate backlog because my last_complete " << info.last_complete
-	     << " < log.tail " << info.log_tail << " and no backlog" << dendl;
-    need_backlog = true;
-    wait_on_backlog = true;
-  }
-  for (vector<int>::const_iterator it = ++acting.begin();
-       it != acting.end();
-       ++it) {
-    const Info& pi = peer_info.find(*it)->second;
-    if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
-	pi.last_complete < info.log_tail) {
-      dout(10) << "must generate backlog for replica peer osd." << *it
-	       << " who has a last_complete " << pi.last_complete
-	       << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
-      need_backlog = true;
-      wait_on_backlog = true;
-      break;
-    }
-  }
-
-  dout(10) << "choose_log_location"
-	   << (need_backlog ? " need_backlog" : "")
-	   << (wait_on_backlog ? " wait_on_backlog" : "")
-	   << dendl;
   return true;
 }
 
@@ -3616,7 +3629,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     } else {
       // i am now replica|stray.  we need to send a notify.
       state_set(PG_STATE_STRAY);
-      have_master_log = false;
     }
       
   } else {
@@ -3833,8 +3845,6 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (pg.get_role() == 0) {
     out << " mlcod " << pg.min_last_complete_ondisk;
-    if (!pg.have_master_log)
-      out << " !hml";
   }
 
   out << " " << pg_state_string(pg.get_state());
@@ -3992,21 +4002,15 @@ void PG::RecoveryState::Start::exit() {
 }
 
 /*---------Primary--------*/
-PG::RecoveryState::Primary::Primary(my_context ctx) : my_base(ctx) {
+PG::RecoveryState::Primary::Primary(my_context ctx)
+  : my_base(ctx)
+{
   state_name = "Started/Primary";
   context< RecoveryMachine >().log_enter(state_name);
 }
 
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const BacklogComplete&) {
-  PG *pg = context< RecoveryMachine >().pg;
-  dout(10) << "BacklogComplete" << dendl;
-  pg->choose_acting(pg->osd->whoami);
-  return discard_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::Primary::react(const MNotifyRec& notevt) {
+boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
+{
   dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->peer_info.count(notevt.from) &&
@@ -4145,8 +4149,6 @@ PG::RecoveryState::Active::react(const ActMap&) {
     pg->finish_recovery(*context< RecoveryMachine >().get_cur_transaction(),
 			*context< RecoveryMachine >().get_context_list());
   }
-
-  pg->choose_acting(pg->osd->whoami);
 
   return forward_event();
 }
@@ -4300,8 +4302,8 @@ PG::RecoveryState::Stray::react(const MLogRec& logevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
+{
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "received info from " << infoevt.from << dendl;
   assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
@@ -4312,23 +4314,8 @@ PG::RecoveryState::Stray::react(const MInfoRec& infoevt) {
   return discard_event();
 }
 
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const BacklogComplete&) {
-  PG *pg = context< RecoveryMachine >().pg;
-  assert(backlog_requested);
-  dout(10) << "BacklogComplete" << dendl;
-  for (map<int, pair<Query, epoch_t> >::iterator i = pending_queries.begin();
-       i != pending_queries.end();
-       pending_queries.erase(i++)) {
-    dout(10) << "sending log to " << i->first << dendl;
-    pg->fulfill_log(i->first, i->second.first, i->second.second);
-  }
-  backlog_requested = false;
-  return discard_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::Stray::react(const MQuery& query) {
+boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
+{
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == Query::BACKLOG) {
     if (!pg->log.backlog) {
@@ -4451,46 +4438,49 @@ void PG::RecoveryState::GetInfo::exit() {
 
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
-  my_base(ctx), newest_update_osd(-1), need_backlog(false),
-  wait_on_backlog(false), msg(0)
+  my_base(ctx), newest_update_osd(-1), msg(0)
 {
   state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
 
-  eversion_t newest_update;
-  eversion_t oldest_update;
-  if (!pg->choose_log_location(*context< Peering >().prior_set.get(),
-			       need_backlog,
-			       wait_on_backlog,
-			       newest_update_osd,
-			       newest_update,
-			       oldest_update)) {
+  // adjust acting?
+  if (!pg->choose_acting(newest_update_osd, pg->backfill)) {
     post_event(NeedNewMap());
-  } else {
-    if (need_backlog && !pg->log.backlog) {
-      pg->osd->queue_generate_backlog(pg);
-    }
-
-    if (newest_update_osd != pg->osd->whoami) {
-      dout(10) << " requesting master log from osd." << newest_update_osd << dendl;
-      context<RecoveryMachine>().send_query(newest_update_osd,
-					    wait_on_backlog ? 
-					    Query(Query::BACKLOG, pg->info.history) :
-					    Query(Query::LOG, oldest_update, pg->info.history));
-    }
-
-    if (pg->log.backlog) {
-      wait_on_backlog = false;
-    }
-
-    if (!wait_on_backlog && newest_update_osd == pg->osd->whoami) {
-      dout(10) << " neither backlog nor master log needed, "
-	       << "moving to GetMissing" << dendl;
-      post_event(GotLog());
-    }
+    return;
   }
+
+  const Info& best = pg->peer_info[newest_update_osd];
+
+  // am i broken?
+  if (pg->info.last_update < best.log_tail) {
+    dout(10) << " not contiguous with osd." << newest_update_osd << ", down" << dendl;
+    /*post_event(...something...); */
+#warning fixme need an event here?
+    return;
+  }
+
+  // am i the best?
+  if (newest_update_osd == pg->osd->whoami) {
+    post_event(GotLog());
+    return;
+  }
+
+  // how much log to request?
+  eversion_t request_log_from = pg->info.last_update;
+  for (vector<int>::iterator p = pg->acting.begin() + 1; p != pg->acting.end(); ++p) {
+    Info& ri = pg->peer_info[*p];
+    assert(!ri.is_incomplete());
+    assert(ri.last_update >= best.log_tail);
+    if (ri.last_update < request_log_from)
+      request_log_from = ri.last_update;
+  }
+
+  // how much?
+  dout(10) << " requesting log from osd." << newest_update_osd << dendl;
+  context<RecoveryMachine>().send_query(newest_update_osd,
+					Query(Query::LOG, request_log_from, pg->info.history));
 }
 
 boost::statechart::result 
@@ -4505,27 +4495,8 @@ PG::RecoveryState::GetLog::react(const MLogRec& logevt) {
 	   << logevt.from << dendl;
   msg = logevt.msg;
   msg->get();
-  if (!wait_on_backlog) {
-    dout(10) << "GetLog: already have/don't need backlog." 
-	     << "moving on to GetMissing" << dendl;
-    post_event(GotLog());
-  }
-  dout(10) << "GetLog: Still need backlog" << dendl;
+  post_event(GotLog());
   return discard_event();
-}
-
-boost::statechart::result 
-PG::RecoveryState::GetLog::react(const BacklogComplete&) {
-  wait_on_backlog = false;
-  PG *pg = context< RecoveryMachine >().pg;
-  if (msg || newest_update_osd == pg->osd->whoami) {
-    dout(10) << "GetLog: already have/don't need master log." 
-	     << "moving on to GetMissing" << dendl;
-    post_event(GotLog());
-  } else {
-    dout(10) << "GetLog: Still need master log" << dendl;
-  }
-  return forward_event();
 }
 
 boost::statechart::result 
@@ -4771,7 +4742,7 @@ void PG::RecoveryState::handle_backlog_generated(RecoveryCtx *rctx)
 {
   dout(10) << "handle_backlog_generated" << dendl;
   start_handle(rctx);
-  machine.process_event(BacklogComplete());
+  //machine.process_event(BacklogComplete());
   end_handle();
 }
 

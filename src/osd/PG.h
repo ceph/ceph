@@ -174,6 +174,8 @@ public:
     eversion_t log_tail;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
+    interval_set<__u32> incomplete;  // incomplete hash ranges prior to last_complete
+
     interval_set<snapid_t> purged_snaps;
 
     pg_stat_t stats;
@@ -251,8 +253,10 @@ public:
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }
 
+    bool is_incomplete() const { return !incomplete.empty(); }
+
     void encode(bufferlist &bl) const {
-      __u8 v = 23;
+      __u8 v = 24;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
@@ -260,6 +264,7 @@ public:
       ::encode(last_complete, bl);
       ::encode(log_tail, bl);
       ::encode(log_backlog, bl);
+      ::encode(incomplete, bl);
       ::encode(stats, bl);
       history.encode(bl);
       ::encode(purged_snaps, bl);
@@ -279,6 +284,8 @@ public:
       ::decode(last_complete, bl);
       ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
+      if (v >= 24)
+	::decode(incomplete, bl);
       ::decode(stats, bl);
       history.decode(bl);
       if (v >= 22)
@@ -874,12 +881,12 @@ public:
   // primary state
  public:
   vector<int> up, acting;
+  set<int> backfill;      // up - acting
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
 
   // [primary only] content recovery state
-  bool        have_master_log;
  protected:
   bool prior_set_built;
 
@@ -989,9 +996,6 @@ public:
 	osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     };
 
-    struct BacklogComplete : boost::statechart::event< BacklogComplete > {
-      BacklogComplete() : boost::statechart::event< BacklogComplete >() {}
-    };
     struct ActMap : boost::statechart::event< ActMap > {
       ActMap() : boost::statechart::event< ActMap >() {}
     };
@@ -1156,12 +1160,10 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::transition< NeedNewMap, WaitActingChange >
 	> reactions;
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -1238,12 +1240,10 @@ public:
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MInfoRec >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::transition< Activate, ReplicaActive >
 	> reactions;
       boost::statechart::result react(const MQuery& query);
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const MLogRec& logevt);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const ActMap&);
@@ -1272,8 +1272,6 @@ public:
 
     struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
       int newest_update_osd;
-      bool need_backlog;
-      bool wait_on_backlog;
       MOSDPGLog *msg;
 
       GetLog(my_context ctx);
@@ -1282,11 +1280,9 @@ public:
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< MLogRec >,
-	boost::statechart::custom_reaction< BacklogComplete >,
 	boost::statechart::custom_reaction< GotLog >
 	> reactions;
       boost::statechart::result react(const MLogRec& logevt);
-      boost::statechart::result react(const BacklogComplete&);
       boost::statechart::result react(const GotLog&);
     };
 
@@ -1455,13 +1451,8 @@ public:
   
   void trim_write_ahead();
 
-  bool choose_acting(int newest_update_osd) const;
-  bool recover_master_log(map< int, map<pg_t,Query> >& query_map,
-			  eversion_t &oldest_update);
-  eversion_t calc_oldest_known_update() const;
-  void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
-	       map< int, map<pg_t,Query> >& query_map,
-	       map<int, MOSDPGInfo*> *activator_map=0);
+  void calc_acting(int& newest_update_osd, vector<int>& want, set<int>& backfill) const;
+  bool choose_acting(int& newest_update_osd, set<int>& backfill);
   bool choose_log_location(const PriorSet &prior_set,
 			   bool &need_backlog,
 			   bool &wait_on_backlog,
@@ -1562,7 +1553,6 @@ public:
     generate_backlog_epoch(0),
     role(0),
     state(0),
-    have_master_log(true),
     recovery_state(this),
     need_up_thru(false),
     last_peering_reset(0),
@@ -1752,6 +1742,8 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
       out << " lc " << pgi.last_complete;
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
+    if (!pgi.incomplete.empty())
+      out << " incomp " << pgi.incomplete;
   }
   //out << " c " << pgi.epoch_created;
   out << " n=" << pgi.stats.stats.sum.num_objects;
