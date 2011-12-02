@@ -330,6 +330,7 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(hobject_t)
+
 namespace __gnu_cxx {
   template<> struct hash<hobject_t> {
     size_t operator()(const sobject_t &r) const {
@@ -339,6 +340,39 @@ namespace __gnu_cxx {
     }
   };
 }
+
+// sort hobject_t's by <hash,name,snapid>
+inline bool operator==(const hobject_t &l, const hobject_t &r) {
+  return l.oid == r.oid && l.snap == r.snap && l.hash == r.hash && l.max == r.max;
+}
+inline bool operator!=(const hobject_t &l, const hobject_t &r) {
+  return l.oid != r.oid || l.snap != r.snap || l.hash != r.hash || l.max != r.max;
+}
+inline bool operator>(const hobject_t &l, const hobject_t &r) {
+  return l.max > r.max ||
+    (l.max == r.max && (l.hash > r.hash ||
+			(l.hash == r.hash && (l.oid > r.oid || 
+					      (l.oid == r.oid && l.snap > r.snap)))));
+}
+inline bool operator<(const hobject_t &l, const hobject_t &r) {
+  return l.max < r.max ||
+    (l.max == r.max && (l.hash < r.hash ||
+			(l.hash == r.hash && (l.oid < r.oid ||
+					      (l.oid == r.oid && l.snap < r.snap)))));
+}
+inline bool operator>=(const hobject_t &l, const hobject_t &r) {
+  return l.max > r.max ||
+    (l.max == r.max && (l.hash > r.hash ||
+			(l.hash == r.hash && (l.oid > r.oid ||
+					      (l.oid == r.oid && l.snap >= r.snap)))));
+}
+inline bool operator<=(const hobject_t &l, const hobject_t &r) {
+  return l.max < r.max ||
+    (l.max == r.max && (l.hash < r.hash ||
+			(l.hash == r.hash && (l.oid < r.oid ||
+					      (l.oid == r.oid && l.snap <= r.snap)))));
+}
+
 
 // ---------------------------
 
