@@ -3085,6 +3085,14 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
   eval_repop(repop);
 }
 
+ReplicatedPG::ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_t& oid)
+{
+  map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(oid);
+  if (p != object_contexts.end())
+    return p->second;
+  return NULL;
+}
+
 ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
 							      bool can_create)
