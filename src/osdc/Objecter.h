@@ -675,6 +675,7 @@ public:
     messenger(m), monc(mc), osdmap(om), cct(cct_),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
+    global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
