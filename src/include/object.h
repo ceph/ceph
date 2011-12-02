@@ -263,6 +263,7 @@ struct hobject_t {
   object_t oid;
   snapid_t snap;
   uint32_t hash;
+  bool max;
 
 private:
   string key;
@@ -271,15 +272,22 @@ public:
   const string &get_key() const {
     return key;
   }
-
-  hobject_t() : snap(0), hash(0) {}
-  hobject_t(object_t oid, const string &key, snapid_t snap, uint32_t hash) : 
-    oid(oid), snap(snap), hash(hash), 
+  
+  hobject_t() : snap(0), hash(0), max(false) {}
+  hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash) : 
+    oid(oid), snap(snap), hash(hash), max(false),
     key(oid.name == key ? string() : key) {}
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash) : 
-    oid(soid.oid), snap(soid.snap), hash(hash),
+    oid(soid.oid), snap(soid.snap), hash(hash), max(false),
     key(soid.oid.name == key ? string() : key) {}
+
+  // maximum sorted value.
+  static hobject_t get_max() {
+    hobject_t h;
+    h.max = true;
+    return h;
+  }
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
