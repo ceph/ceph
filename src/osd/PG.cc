@@ -2084,7 +2084,7 @@ void PG::read_log(ObjectStore *store)
 
   dout(10) << "read_log " << ondisklog.tail << "~" << ondisklog.length() << dendl;
 
-  log.backlog = info.log_backlog;
+  log.backlog = false;
   log.tail = info.log_tail;
 
   // In case of sobject_t based encoding, may need to list objects in the store
@@ -2139,7 +2139,7 @@ void PG::read_log(ObjectStore *store)
 	reorder = true;
       }
 
-      if (e.version <= log.tail && !log.backlog) {
+      if (e.version <= log.tail) {
 	dout(20) << "read_log  ignoring entry at " << pos << " below log.tail" << dendl;
 	continue;
       }
@@ -2390,12 +2390,7 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
 
-    
-    map<eversion_t,Log::Entry> omap;
-    generate_backlog_epoch = get_osdmap()->get_epoch();
-    if (build_backlog_map(omap))
-      assemble_backlog(omap);
-    generate_backlog_epoch = 0;
+    info.incomplete.insert(0, 1<<32);
   }
 
   // log any weirdness
