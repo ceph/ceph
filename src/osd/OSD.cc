@@ -540,7 +540,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   pg_stat_tid(0), pg_stat_tid_flushed(0),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
-  backlog_wq(this, g_conf->osd_backlog_thread_timeout, &disk_tp),
   command_wq(this, g_conf->osd_command_thread_timeout, &command_tp),
   recovery_ops_active(0),
   recovery_wq(this, g_conf->osd_recovery_thread_timeout, &recovery_tp),
@@ -4911,102 +4910,6 @@ void OSD::_remove_pg(PG *pg)
 
 // =========================================================
 // RECOVERY
-
-
-/*
-
-  there are a few places we need to build a backlog.
-
-  on a primary:
-    - during peering 
-      - if osd with newest update has log.bottom > our log.top
-      - if other peers have log.tops below our log.bottom
-        (most common case is they are a fresh osd with no pg info at all)
-
-  on a replica or stray:
-    - when queried by the primary (handle_pg_query)
-
-  on a replica:
-    - when activated by the primary (handle_pg_log -> merge_log)
-    
-*/
-	
-void OSD::queue_generate_backlog(PG *pg)
-{
-  if (pg->generate_backlog_epoch) {
-    dout(10) << *pg << " queue_generate_backlog - already queued epoch " 
-	     << pg->generate_backlog_epoch << dendl;
-  } else {
-    pg->generate_backlog_epoch = osdmap->get_epoch();
-    dout(10) << *pg << " queue_generate_backlog epoch " << pg->generate_backlog_epoch << dendl;
-    backlog_wq.queue(pg);
-  }
-}
-
-void OSD::cancel_generate_backlog(PG *pg)
-{
-  dout(10) << *pg << " cancel_generate_backlog" << dendl;
-  pg->generate_backlog_epoch = 0;
-  backlog_wq.dequeue(pg);
-}
-
-void OSD::generate_backlog(PG *pg)
-{
-  map<eversion_t,PG::Log::Entry> omap;
-  pg->lock();
-  dout(10) << *pg << " generate_backlog" << dendl;
-
-  int tr;
-
-  if (!pg->generate_backlog_epoch) {
-    dout(10) << *pg << " generate_backlog was canceled" << dendl;
-    goto out;
-  }
-
-  if (!pg->build_backlog_map(omap))
-    goto out;
-
-  {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    pg->assemble_backlog(omap);
-    pg->write_info(*t);
-    pg->write_log(*t);
-    tr = store->queue_transaction(&pg->osr, t,
-				  new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-  }
-  
-  // take osd_lock, map_log (read)
-  pg->unlock();
-  map_lock.get_read();
-  pg->lock();
-
-  if (!pg->generate_backlog_epoch) {
-    dout(10) << *pg << " generate_backlog aborting" << dendl;
-  } else {
-    map< int, map<pg_t,PG::Query> > query_map;
-    map< int, MOSDPGInfo* > info_map;
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts(g_ceph_context);
-    PG::RecoveryCtx rctx(&query_map, &info_map, 0, &fin->contexts, t);
-    //pg->handle_backlog_generated(&rctx);
-#warning dead code
-    do_queries(query_map);
-    do_infos(info_map);
-    tr = store->queue_transaction(&pg->osr, t,
-				  new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(!tr);
-  }
-  map_lock.put_read();
-
- out:
-  pg->generate_backlog_epoch = 0;
-  pg->unlock();
-  pg->put();
-}
-
-
 
 void OSD::check_replay_queue()
 {

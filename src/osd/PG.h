@@ -862,13 +862,12 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, backlog_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
   set<hobject_t> recovering_oids;
 #endif
 
-  epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
   utime_t replay_until;
 
 protected:
@@ -1491,10 +1490,6 @@ public:
 
   void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
   
-  bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
-  void assemble_backlog(map<eversion_t,Log::Entry>& omap);
-  void drop_backlog();
-  
   void trim_write_ahead();
 
   void calc_acting(int& newest_update_osd, vector<int>& want, set<int>& backfill) const;
@@ -1594,9 +1589,8 @@ public:
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
-    recovery_item(this), backlog_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
+    recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
-    generate_backlog_epoch(0),
     role(0),
     state(0),
     recovery_state(this),

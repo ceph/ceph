@@ -715,169 +715,6 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
   }
 }
 
-// ===============================================================
-// BACKLOG
-
-bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
-{
-  dout(10) << "build_backlog_map requested epoch " << generate_backlog_epoch << dendl;
-
-  unlock();
-
-  vector<hobject_t> olist;
-  osd->store->collection_list(coll, olist);
-
-  for (vector<hobject_t>::iterator it = olist.begin();
-       it != olist.end();
-       it++) {
-    hobject_t poid = *it;
-
-    Log::Entry e;
-    e.soid = poid;
-    bufferlist bv;
-    int r = osd->store->getattr(coll, poid, OI_ATTR, bv);
-    if (r < 0)
-      continue;  // musta just been deleted!
-    object_info_t oi(bv);
-    e.version = oi.version;
-    e.prior_version = oi.prior_version;
-    e.reqid = oi.last_reqid;
-    e.mtime = oi.mtime;
-    if (e.soid.snap && e.soid.snap < CEPH_NOSNAP) {
-      e.op = Log::Entry::CLONE;
-      ::encode(oi.snaps, e.snaps);
-    } else {
-      e.op = Log::Entry::BACKLOG;           // FIXME if/when we do smarter op codes!
-    }
-
-    omap[e.version] = e;
-
-    lock();
-    dout(10) << "build_backlog_map  " << e << dendl;
-    if (!generate_backlog_epoch || osd->is_stopping()) {
-      dout(10) << "build_backlog_map aborting" << dendl;
-      return false;
-    }
-    unlock();
-  }
-  lock();
-  dout(10) << "build_backlog_map done: " << omap.size() << " objects" << dendl;
-  if (!generate_backlog_epoch) {
-    dout(10) << "build_backlog_map aborting" << dendl;
-    return false;
-  }
-  return true;
-}
-
-void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
-{
-  dout(10) << "assemble_backlog for " << log << ", " << omap.size() << " objects" << dendl;
-  
-  assert(!log.backlog);
-  log.backlog = true;
-  info.log_backlog = true;
-
-  /*
-   * note that we don't create prior_version backlog entries for
-   * objects that no longer exist (i.e., those for which there is a
-   * delete entry in the log).  that's maybe a bit sloppy, but not a
-   * problem, since we mainly care about generating an accurate
-   * missing map, and an object that was deleted should obviously not
-   * end up as missing.
-   */
-
-  /*
-   * first pass inserts any prior_version backlog entries into the
-   * ordered map.  second pass adds it to the log.
-   */
-
-  map<eversion_t,Log::Entry>::iterator i = omap.begin();
-  while (i != omap.end()) {
-    Log::Entry& be = i->second;
-
-    dout(15) << " " << be << dendl;
-
-    /*
-     * we can skip an object if
-     *  - is already in the log AND
-     *    - it is a totally new object
-     * otherwise, if we have the object, include a prior_version backlog entry.
-     */
-    if (log.objects.count(be.soid)) {
-      Log::Entry *le = log.objects[be.soid];
-
-      for (list<Log::Entry>::iterator j = --log.log.end(); ;--j) {
-	if (j->soid == le->soid) {
-	  le = &(*j);
-	}
-
-	if (j->prior_version <= log.tail ||
-	    j == log.log.begin() ||
-	    j->version <= log.tail) {
-	  break;
-	}
-      }
-
-      if (le->prior_version == eversion_t()) { // new object
-	dout(15) << " dropping " << be << " (have " << *le << ")" << dendl;
-	omap.erase(i++);
-	continue;
-      }
-
-      be.reqid = osd_reqid_t();
-      if (be.version == le->prior_version) {
-	dout(15) << "   keeping prior_version " << be << " (have " << *le << ")" << dendl;
-	i++;
-	continue;
-      }
-
-      be.version = le->prior_version;
-      dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
-      omap[be.version] = be;
-      omap.erase(i++);
-    } else {
-      i++;
-    }
-  }
-
-  for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
-       i != omap.rend();
-       i++) {
-    Log::Entry& be = i->second;
-    dout(15) << "   adding " << be << dendl;
-    log.log.push_front(be);
-    if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
-      log.index( *log.log.begin() );
-  }
-
-  dout(25) << "result:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-}
-
-
-void PG::drop_backlog()
-{
-  dout(10) << "drop_backlog for " << log << dendl;
-  //log.print(cout);
-
-  assert(log.backlog);
-  log.backlog = false;
-  info.log_backlog = false;
-  
-  while (!log.empty()) {
-    Log::Entry &e = *log.log.begin();
-    if (e.version > log.tail) break;
-
-    dout(15) << "drop_backlog trimming " << e << dendl;
-    log.unindex(e);
-    log.log.pop_front();
-  }
-}
-
-
-
-
 
 ostream& PG::Log::print(ostream& out) const 
 {
@@ -1443,10 +1280,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   need_up_thru = false;
 
-  // if we are building a backlog, cancel it!
-  if (up == acting)
-    osd->cancel_generate_backlog(this);
-
   // write pg info, log
   write_info(t);
   write_log(t);
@@ -1740,13 +1573,6 @@ void PG::_finish_recovery(Context *c)
     if (state_test(PG_STATE_INCONSISTENT)) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       queue_scrub();
-    } else if (log.backlog) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      drop_backlog();
-      write_info(*t);
-      write_log(*t);
-      int tr = osd->store->queue_transaction(&osr, t);
-      assert(tr == 0);
     }
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
@@ -2390,7 +2216,7 @@ void PG::read_state(ObjectStore *store)
     write_info(t);
     store->apply_transaction(t);
 
-    info.incomplete.insert(0, 1<<32);
+    info.incomplete.insert(0, 1ull << 32);
   }
 
   // log any weirdness
@@ -3489,7 +3315,6 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 void PG::on_removal()
 {
   osd->recovery_wq.dequeue(this);
-  osd->backlog_wq.dequeue(this);
   osd->scrub_wq.dequeue(this);
   osd->scrub_finalize_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
@@ -3573,8 +3398,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   state_clear(PG_STATE_PEERING);  // we'll need to restart peering
   state_clear(PG_STATE_DEGRADED);
   state_clear(PG_STATE_REPLAY);
-
-  osd->cancel_generate_backlog(this);
 
   peer_missing.clear();
 
@@ -4350,8 +4173,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
       if (!backlog_requested) {
 	dout(10) << "Stray, generating a backlog!" 
 		 << dendl;
-	backlog_requested = true;
-	pg->osd->queue_generate_backlog(pg);
+#warning dead code
       }
       return discard_event();
     }

@@ -596,53 +596,6 @@ protected:
   void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
 
-  // backlogs
-  xlist<PG*> backlog_queue;
-
-  struct BacklogWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    BacklogWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", ti, 0, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->backlog_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (!pg->backlog_item.is_on_list()) {
-	pg->get();
-	osd->backlog_queue.push_back(&pg->backlog_item);
-	return true;
-      }
-      return false;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->backlog_item.remove_myself())
-	pg->put();
-    }
-    PG *_dequeue() {
-      if (osd->backlog_queue.empty())
-	return NULL;
-      PG *pg = osd->backlog_queue.front();
-      osd->backlog_queue.pop_front();
-      return pg;
-    }
-    void _process(PG *pg) {
-      osd->generate_backlog(pg);
-    }
-    void _clear() {
-      while (!osd->backlog_queue.empty()) {
-	PG *pg = osd->backlog_queue.front();
-	osd->backlog_queue.pop_front();
-	pg->put();
-      }
-    }
-  } backlog_wq;
-
-  void queue_generate_backlog(PG *pg);
-  void cancel_generate_backlog(PG *pg);
-  void generate_backlog(PG *pg);
-
-
   // -- commands --
   struct Command {
     vector<string> cmd;
