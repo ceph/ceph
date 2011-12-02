@@ -1127,6 +1127,7 @@ void PG::clear_primary_state()
 
   // clear peering state
   stray_set.clear();
+  backfill.clear();
   peer_log_requested.clear();
   peer_backlog_requested.clear();
   peer_missing_requested.clear();
@@ -3812,6 +3813,9 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << "/" << pg.acting;
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
+
+  if (pg.backfill.size())
+    out << " backfill=" << pg.backfill;
 
   if (pg.is_active() &&
       pg.last_update_ondisk != pg.info.last_update)
