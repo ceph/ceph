@@ -4747,7 +4747,7 @@ void ReplicatedPG::on_role_change()
   for (map<eversion_t, list<Message*> >::iterator p = waiting_for_ondisk.begin();
        p != waiting_for_ondisk.end();
        p++)
-    osd->take_waiters(p->second);
+    osd->requeue_ops(this, p->second);
   waiting_for_ondisk.clear();
 }
 
