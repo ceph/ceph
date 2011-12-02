@@ -48,6 +48,8 @@ class MonitorStore;
 
 class PaxosService;
 
+class PerfCounters;
+
 class MMonGetMap;
 class MMonGetVersion;
 class MMonProbe;
@@ -67,6 +69,12 @@ public:
   Messenger *messenger;
   Mutex lock;
   SafeTimer timer;
+  
+  PerfCounters *logger, *cluster_logger;
+  bool cluster_logger_registered;
+
+  void register_cluster_logger();
+  void unregister_cluster_logger();
 
   MonMap *monmap;
 

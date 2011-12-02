@@ -47,6 +47,8 @@
 #include "common/Clock.h"
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+
 #include "include/color.h"
 #include "include/ceph_fs.h"
 
@@ -99,6 +101,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   messenger(m),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  logger(NULL), cluster_logger(NULL),
   monmap(map),
   clog(cct_, messenger, monmap, NULL, LogClient::FLAG_MON),
   key_server(cct),
@@ -168,6 +171,16 @@ Monitor::~Monitor()
   delete mon_caps;
 }
 
+enum {
+  l_mon_first = 456000,
+  l_mon_last,
+};
+
+enum {
+  l_cluster_first = 555000,
+  l_cluster_last,
+};
+
 void Monitor::init()
 {
   lock.Lock();
@@ -176,6 +189,21 @@ void Monitor::init()
   
   dout(1) << "init fsid " << monmap->fsid << dendl;
   
+  assert(!logger);
+  {
+    PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
+    // ...
+    logger = pcb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(logger);
+  }
+
+  assert(!cluster_logger);
+  {
+    PerfCountersBuilder pcb(g_ceph_context, "cluster", l_cluster_first, l_cluster_last);
+    // ...
+    cluster_logger = pcb.create_perf_counters();
+  }
+
   // init paxos
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->init();
@@ -213,11 +241,45 @@ void Monitor::init()
 
 }
 
+void Monitor::register_cluster_logger()
+{
+  if (!cluster_logger_registered) {
+    dout(10) << "register_cluster_logger" << dendl;
+    cluster_logger_registered = true;
+    cct->get_perfcounters_collection()->add(cluster_logger);
+  } else {
+    dout(10) << "register_cluster_logger - already registered" << dendl;
+  }
+}
+
+void Monitor::unregister_cluster_logger()
+{
+  if (cluster_logger_registered) {
+    dout(10) << "unregister_cluster_logger" << dendl;
+    cluster_logger_registered = false;
+    cct->get_perfcounters_collection()->remove(cluster_logger);
+  } else {
+    dout(10) << "unregister_cluster_logger - not registered" << dendl;
+  }
+}
+
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   
   elector.shutdown();
+
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = NULL;
+  }
+  if (cluster_logger) {
+    if (cluster_logger_registered)
+      cct->get_perfcounters_collection()->remove(cluster_logger);
+    delete cluster_logger;
+    cluster_logger = NULL;
+  }
   
   // clean up
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -233,6 +295,7 @@ void Monitor::bootstrap()
 {
   dout(10) << "bootstrap" << dendl;
 
+  unregister_cluster_logger();
   cancel_probe_timeout();
 
   // note my rank
@@ -666,6 +729,7 @@ void Monitor::finish_election()
 {
   finish_contexts(g_ceph_context, waitfor_quorum);
   resend_routed_requests();
+  register_cluster_logger();
 } 
 
 
