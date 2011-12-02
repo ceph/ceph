@@ -601,11 +601,6 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	       << ": in peer_log_requested" << dendl;
       continue;
     }
-    if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
-      dout(20) << __func__ << ": osd." << peer
-	       << ": in peer_backlog_requested" << dendl;
-      continue;
-    }
     if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
       dout(20) << __func__ << ": osd." << peer
 	       << ": in peer_missing_requested" << dendl;
@@ -872,7 +867,6 @@ void PG::clear_primary_state()
   stray_set.clear();
   backfill.clear();
   peer_log_requested.clear();
-  peer_backlog_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
   peer_missing.clear();
@@ -1572,7 +1566,6 @@ void PG::purge_strays()
   // clear _requested maps; we may have to peer() again if we discover
   // (more) stray content
   peer_log_requested.clear();
-  peer_backlog_requested.clear();
   peer_missing_requested.clear();
 }
 
@@ -4011,7 +4004,7 @@ void PG::RecoveryState::ReplicaActive::exit() {
 
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
-  : my_base(ctx), backlog_requested(false) {
+  : my_base(ctx) {
   state_name = "Started/Stray";
   context< RecoveryMachine >().log_enter(state_name);
 

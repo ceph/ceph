@@ -1243,7 +1243,6 @@ public:
     };
 
     struct Stray : boost::statechart::state< Stray, Started >, NamedState {
-      bool backlog_requested;
       map<int, pair<Query, epoch_t> > pending_queries;
 
       Stray(my_context ctx);
@@ -1361,7 +1360,6 @@ protected:
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
-  set<int>             peer_backlog_requested;
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
   set<int>             peer_activated;
