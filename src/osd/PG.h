@@ -306,13 +306,11 @@ public:
    * Query - used to ask a peer for information about a pg.
    *
    * note: if version=0, type=LOG, then we just provide our full log.
-   *   only if type=BACKLOG do we generate a backlog and provide that too.
    */
   struct Query {
     enum {
       INFO = 0,
       LOG = 1,
-      BACKLOG = 3,
       MISSING = 4,
       FULLLOG = 5,
     };
@@ -320,7 +318,6 @@ public:
       switch (type) {
       case INFO: return "info";
       case LOG: return "log";
-      case BACKLOG: return "backlog";
       case MISSING: return "missing";
       case FULLLOG: return "fulllog";
       default: return "???";

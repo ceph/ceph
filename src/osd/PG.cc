@@ -3172,42 +3172,33 @@ void PG::fulfill_log(int from, const Query &query, epoch_t query_epoch)
   assert(!acting.empty());
   assert(from == acting[0]);
   assert(query.type != PG::Query::INFO);
-  if (query.type == PG::Query::BACKLOG &&
-      !log.backlog) {
-    assert(0); // generated in the state machine
-  } else {
-    MOSDPGLog *mlog = new MOSDPGLog(get_osdmap()->get_epoch(),
-				    info, query_epoch);
-    mlog->missing = missing;
 
-    // primary -> other, when building master log
-    if (query.type == PG::Query::LOG) {
-      dout(10) << " sending info+missing+log since " << query.since
-	       << dendl;
-      if (query.since != eversion_t() && query.since < log.tail) {
-	osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
-			  << " when my log.tail is " << log.tail
-			  << ", sending full log instead\n";
-	mlog->log = log;           // primary should not have requested this!!
-      } else
-	mlog->log.copy_after(log, query.since);
-    }
-    else if (query.type == PG::Query::BACKLOG) {
-      dout(10) << "sending info+missing+backlog" << dendl;
-      assert(log.backlog);
-      mlog->log = log;
-    } 
-    else if (query.type == PG::Query::FULLLOG) {
-      dout(10) << " sending info+missing+full log" << dendl;
-      mlog->log.copy_non_backlog(log);
-    }
+  MOSDPGLog *mlog = new MOSDPGLog(get_osdmap()->get_epoch(),
+				  info, query_epoch);
+  mlog->missing = missing;
 
-    dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
-
-    osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
-    osd->cluster_messenger->send_message(mlog, 
-					 get_osdmap()->get_cluster_inst(from));
+  // primary -> other, when building master log
+  if (query.type == PG::Query::LOG) {
+    dout(10) << " sending info+missing+log since " << query.since
+	     << dendl;
+    if (query.since != eversion_t() && query.since < log.tail) {
+      osd->clog.error() << info.pgid << " got broken Query::LOG since " << query.since
+			<< " when my log.tail is " << log.tail
+			<< ", sending full log instead\n";
+      mlog->log = log;           // primary should not have requested this!!
+    } else
+      mlog->log.copy_after(log, query.since);
   }
+  else if (query.type == PG::Query::FULLLOG) {
+    dout(10) << " sending info+missing+full log" << dendl;
+    mlog->log.copy_non_backlog(log);
+  }
+
+  dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
+
+  osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from));
+  osd->cluster_messenger->send_message(mlog, 
+				       get_osdmap()->get_cluster_inst(from));
 }
 
 
@@ -4164,21 +4155,6 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
 boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  if (query.query.type == Query::BACKLOG) {
-    if (!pg->log.backlog) {
-      dout(10) << "Stray, need a backlog!" 
-	       << dendl;
-      pending_queries[query.from] = pair<Query, epoch_t>(query.query,
-							 query.query_epoch);
-      if (!backlog_requested) {
-	dout(10) << "Stray, generating a backlog!" 
-		 << dendl;
-#warning dead code
-      }
-      return discard_event();
-    }
-  }
-
   if (query.query.type == Query::INFO) {
     pair<int, Info> notify_info;
     pg->fulfill_info(query.from, query.query, notify_info);

@@ -4661,7 +4661,6 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << " pg " << pgid << " dne" << dendl;
       PG::Info empty(pgid);
       if (it->second.type == PG::Query::LOG ||
-	  it->second.type == PG::Query::BACKLOG ||
 	  it->second.type == PG::Query::FULLLOG) {
 	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
 					m->get_epoch());
