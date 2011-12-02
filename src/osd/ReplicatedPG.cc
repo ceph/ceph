@@ -119,6 +119,11 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, Message *m)
   waiting_for_missing_object[soid].push_back(m);
 }
 
+void ReplicatedPG::wait_for_all_missing(Message *m)
+{
+  waiting_for_all_missing.push_back(m);
+}
+
 bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (missing.missing.count(soid))
@@ -227,6 +232,20 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 
 // ==========================================================
+bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
+{
+  if (missing.missing.empty())
+    return false;
+  for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
+    if (p->op.op == CEPH_OSD_OP_PGLS) {
+      if (op->get_snapid() != CEPH_NOSNAP) {
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
 void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
   dout(10) << "do_pg_op " << *op << dendl;
@@ -400,8 +419,13 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
  */
 void ReplicatedPG::do_op(MOSDOp *op) 
 {
-  if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
+  if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP)) {
+    if (pg_op_must_wait(op)) {
+      wait_for_all_missing(op);
+      return;
+    }
     return do_pg_op(op);
+  }
 
   dout(10) << "do_op " << *op << (op->may_write() ? " may_write" : "") << dendl;
 
@@ -4447,6 +4471,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(20) << " kicking waiters on " << soid << dendl;
       osd->requeue_ops(this, waiting_for_missing_object[soid]);
       waiting_for_missing_object.erase(soid);
+      if (missing.missing.size() == 0) {
+	osd->requeue_ops(this, waiting_for_all_missing);
+	waiting_for_all_missing.clear();
+      }
     } else {
       dout(20) << " no waiters on " << soid << dendl;
       /*for (hash_map<hobject_t,list<class Message*> >::iterator p = waiting_for_missing_object.begin();
@@ -4654,8 +4682,12 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
 void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
 {
-  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
   lock();
+  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
+
+  osd->requeue_ops(this, waiting_for_all_missing);
+  waiting_for_all_missing.clear();
+
   while (!obcs.empty()) {
     ObjectContext *obc = obcs.front();
     put_object_context(obc);
@@ -4733,6 +4765,8 @@ void ReplicatedPG::on_change()
   // take object waiters
   requeue_object_waiters(waiting_for_missing_object);
   requeue_object_waiters(waiting_for_degraded_object);
+  osd->requeue_ops(this, waiting_for_all_missing);
+  waiting_for_all_missing.clear();
 
   // clear pushing/pulling maps
   pushing.clear();

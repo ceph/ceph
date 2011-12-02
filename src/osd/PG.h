@@ -1368,6 +1368,7 @@ protected:
 
   // pg waiters
   list<class Message*>            waiting_for_active;
+  list<class Message*>            waiting_for_all_missing;
   map<hobject_t, list<class Message*> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
   map<eversion_t,list<Message*> > waiting_for_ondisk;
