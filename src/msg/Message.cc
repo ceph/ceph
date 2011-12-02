@@ -66,6 +66,7 @@ using namespace std;
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGBackfill.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -356,6 +357,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_OSD_PG_SCAN:
     m = new MOSDPGScan;
+    break;
+  case MSG_OSD_PG_BACKFILL:
+    m = new MOSDPGBackfill;
     break;
    // auth
   case CEPH_MSG_AUTH:

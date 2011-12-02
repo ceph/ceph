@@ -79,6 +79,7 @@
 #define MSG_OSD_REP_SCRUB      93
 
 #define MSG_OSD_PG_SCAN        94
+#define MSG_OSD_PG_BACKFILL    95
 
 #define MSG_COMMAND            97
 #define MSG_COMMAND_REPLY      98

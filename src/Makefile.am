@@ -1314,6 +1314,7 @@ noinst_HEADERS = \
         messages/MOSDMap.h\
         messages/MOSDOp.h\
         messages/MOSDOpReply.h\
+	messages/MOSDPGBackfill.h\
         messages/MOSDPGCreate.h\
         messages/MOSDPGInfo.h\
         messages/MOSDPGLog.h\
